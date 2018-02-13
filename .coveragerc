@@ -1,0 +1,13 @@
+[run]
+source = prysm
+
+[report]
+exclude_lines =
+    # enable standard pragma
+    pragma: no cover
+
+    # ignore caught importerrors
+    except ImportError:
+
+    # ignore asserts used to silence pyflakes
+    assert
