@@ -417,7 +417,7 @@ def diffraction_limited_mtf(fno, wavelength, frequencies=None, num_pts=128):
     if frequencies is None:
         normalized_frequency = np.linspace(0, 1, num_pts)
     else:
-        normalized_frequency = frequencies / extinction
+        normalized_frequency = np.asarray(frequencies) / extinction
 
     mtf = _difflim_mtf_core(normalized_frequency)
 

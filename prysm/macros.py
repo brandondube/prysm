@@ -72,7 +72,6 @@ def thrufocus_mtf_from_wavefront(focused_wavefront, sim_params):
         mtf = MTF.from_pupil(focused_wavefront + defocus, efl=s.efl)
         tan, sag = mtf_ts_extractor(mtf, s.freqs)
         dfs.append(mtf_ts_to_dataframe(tan, sag, s.freqs, focus=displacement))
-
     return pd.concat(dfs)
 
 
@@ -102,7 +101,6 @@ def thrufocus_mtf_from_wavefront_array(focused_wavefront, sim_params):
     s = sim_params
     focusdiv_wvs = np.linspace(-s.focus_range_waves, s.focus_range_waves, s.focus_planes)
     tt, ss = np.empty((s.focus_planes, len(s.freqs))), np.empty((s.focus_planes, len(s.freqs)))
-    print(focusdiv_wvs)
     for idx, focus in enumerate(focusdiv_wvs):
         if s.focus_zernike:
             defocus = FringeZernike(base=1, Z4=focus, rms_norm=s.focus_normed, samples=s.samples,
