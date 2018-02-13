@@ -1,0 +1,2 @@
+[pydocstyle]
+ignore = D103, D200, D203, D204, D210, D213, D300
