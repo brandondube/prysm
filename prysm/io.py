@@ -86,9 +86,9 @@ def read_trioptics_mtf_vs_field(file_path):
         # lastly, extract the floating point tan and sag data
         # also take fields, to the 4th decimal place (nearest .1um)
         # reformat T/S to 2D arrays with indices of (freq, field)
-        tan = np.asarray([[float(v) for v in s.split('=09')[1:-1]] for s in tan])
-        sag = np.asarray([[float(v) for v in s.split('=09')[1:-1]] for s in sag])
-        fields = np.asarray([round(float(f.strip()), 4) for f in fields.split('=09')[0:-1]])
+        tan = np.asarray([s.split('=09')[1:-1] for s in tan], dtype=config.precision)
+        sag = np.asarray([s.split('=09')[1:-1] for s in sag], dtype=config.precision)
+        fields = np.asarray(fields.split('=09')[0:-1], dtype=config.precision).round(4)
         return {
             'freq': freqs,
             'field': fields,
