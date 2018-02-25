@@ -6,7 +6,6 @@ import codecs
 import numpy as np
 
 from prysm.conf import config
-from prysm.mtf_utils import MTFvFvF
 
 
 def read_trioptics_MTFvFvF(file_path):
@@ -46,7 +45,13 @@ def read_trioptics_MTFvFvF(file_path):
     imghts = np.unique(np.asarray(imghts, dtype=config.precision))
     freqs = np.arange(len(mtfs[0]), dtype=config.precision) * float(freqpitch)
     data = np.swapaxes(np.asarray(mtfs).reshape(len(focuses), len(imghts), len(freqs)), 0, 1)
-    return MTFvFvF(data=data, focus=focuses, field=imghts, freq=freqs, azimuth=azimuth)
+    return {
+        'data': data,
+        'focus': focuses,
+        'field': imghts,
+        'freq': freqs,
+        'azimuth': azimuth
+    }
 
 
 def read_trioptics_mtf_vs_field(file_path):

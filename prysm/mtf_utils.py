@@ -6,7 +6,7 @@ import pandas as pd
 from scipy.interpolate import CloughTocher2DInterpolator
 from prysm.mathops import floor, ceil, sin, cos
 from prysm.util import correct_gamma, share_fig_ax
-from prysm.io import read_trioptics_mtf_vs_field
+from prysm.io import read_trioptics_mtf_vs_field, read_trioptics_MTFvFvF
 
 
 class MTFvFvF(object):
@@ -211,6 +211,23 @@ class MTFvFvF(object):
         t_cube = MTFvFvF(data=t_mat, focus=focus, field=fields, freq=freqs, azimuth='Tan')
         s_cube = MTFvFvF(data=s_mat, focus=focus, field=fields, freq=freqs, azimuth='Sag')
         return t_cube, s_cube
+
+    @staticmethod
+    def from_trioptics_file(file_path):
+        """Create a new MTFvFvF object from a trioptics file.
+
+        Parameters
+        ----------
+        file_path : path_like
+            path to a file
+
+        Returns
+        -------
+        `MTFvFvF`
+            new MTFvFvF object
+
+        """
+        return MTFvFvF(**read_trioptics_MTFvFvF(file_path))
 
 
 def mtf_ts_extractor(mtf, freqs):
