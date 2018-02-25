@@ -6,10 +6,8 @@ back to more widely available options in the case that they do not.
 """
 
 from math import (
-    floor,
-    ceil,
-    pi,
     nan,
+    pi,
 )
 import numpy as np
 from numpy import (
@@ -19,12 +17,13 @@ from numpy import (
     tan,
     arctan,
     arctan2,
+    arccos,
+    arcsin,
     sinc,
+    radians,
     exp,
     log,
     log10,
-    arccos,
-    arcsin,
 )
 from numpy.fft import fftshift, ifftshift, fftfreq
 
@@ -75,23 +74,6 @@ except ImportError:
 
 fft2, ifft2 = np.fft.fft2, np.fft.ifft2
 
-
-# stop pyflakes import errors
-assert floor
-assert ceil
-assert pi
-assert nan
-assert sin
-assert cos
-assert tan
-assert sinc
-assert exp
-assert log
-assert log10
-assert arccos
-assert arcsin
-assert arctan
-assert fftfreq
-assert fftshift
-assert ifftshift
-assert sqrt
+# silence pyflakes
+assert [nan, pi, sqrt, sin, cos, tan, arccos, arcsin, sinc, radians, exp, log, log10]
+assert [fftshift, ifftshift, fft2, ifft2, fftfreq]
