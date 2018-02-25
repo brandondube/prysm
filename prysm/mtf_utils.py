@@ -367,7 +367,7 @@ class MTFFFD(object):
         # return MTFFFD(data=dat, field_x=x, field_y=y, freq=freqs)
 
     @staticmethod
-    def trioptics_files_to_FFDs(*paths, azimuths, ret=('tan', 'sag')):
+    def from_trioptics_files(*paths, azimuths, ret=('tan', 'sag')):
         """Convert a set of trioptics files to MTF FFD object(s).
 
         Parameters
