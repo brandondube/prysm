@@ -24,6 +24,8 @@ from numpy import (
     exp,
     log,
     log10,
+    floor,
+    ceil,
 )
 from numpy.fft import fftshift, ifftshift, fftfreq
 
@@ -77,3 +79,4 @@ fft2, ifft2 = np.fft.fft2, np.fft.ifft2
 # silence pyflakes
 assert [nan, pi, sqrt, sin, cos, tan, arccos, arcsin, sinc, radians, exp, log, log10]
 assert [fftshift, ifftshift, fft2, ifft2, fftfreq]
+assert [floor, ceil]
