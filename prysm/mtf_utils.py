@@ -3,8 +3,10 @@
 import numpy as np
 import pandas as pd
 
-from prysm.mathops import floor, ceil
+from scipy.interpolate import CloughTocher2DInterpolator
+from prysm.mathops import floor, ceil, sin, cos
 from prysm.util import correct_gamma, share_fig_ax
+from prysm.io import read_trioptics_mtf_vs_field
 
 
 class MTFvFvF(object):
@@ -69,7 +71,6 @@ class MTFvFvF(object):
         -------
         fig : `matplotlib.figure.Figure`
             figure containing the plot
-
         axis : `matplotlib.axes.Axis`
             axis containing the plot
 
@@ -272,3 +273,134 @@ def mtf_ts_to_dataframe(tan, sag, freqs, field=0, focus=0):
             'MTF': s,
         }})
     return pd.DataFrame(data=rows)
+
+
+class MTFFFD(object):
+    """An MTF Full-Field Display; stores MTF vs Field vs Frequency and supports plotting."""
+
+    def __init__(self, data, field_x, field_y, freq):
+        """Create a new MTFFFD object.
+
+        Parameters
+        ----------
+        data : `numpy.ndarray`
+            3D ndarray of data with axes field_x, field_y, freq
+        field_x : `numpy.ndarray`
+            1D array of x fields
+        field_y : `numpy.ndarray`
+            1D array of y fields
+        freq : `numpy.ndarray`
+            1D array of frequencies
+
+        """
+        self.data = data
+        self.field_x = field_x
+        self.field_y = field_y
+        self.freq = freq
+
+    def plot2d(self, freq, fig=None, ax=None):
+        """Plot the MTF FFD.
+
+        Parameters
+        ----------
+        freq : `float`
+            frequency to plot at
+        fig : `matplotlib.figure.Figure`
+            figure containing the plot
+        axis : `matplotlib.axes.Axis`
+            axis containing the plot
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            figure containing the plot
+        axis : `matplotlib.axes.Axis`
+            axis containing the plot
+
+        """
+        idx = np.searchsorted(self.freq, freq)
+        extx = (self.field_x[0], self.field_x[-1])
+        exty = (self.field_y[0], self.field_y[-1])
+        fig, ax = share_fig_ax(fig, ax)
+        im = ax.imshow(self.data[:, :, idx],
+                       extent=[*extx, *exty],
+                       origin='lower',
+                       interpolation='lanczos')
+        fig.colorbar(im)
+        return fig, ax
+
+    @staticmethod
+    def from_dataframe(df, azimuth):
+        """Create a new MTFFFD from a DataFrame.
+
+        Parameters
+        ----------
+        df : `pandas.DataFrame`
+            a pandas df
+        azimuth : `str`
+            which azimuth to extract
+
+        Returns
+        -------
+        `MTFFFD`
+            a new MTFFD object
+
+        """
+        raise NotImplemented('not yet complete, df schema needs to be designed')
+        # return MTFFFD(data=dat, field_x=x, field_y=y, freq=freqs)
+
+    @staticmethod
+    def trioptics_files_to_FFDs(*paths, azimuths, ret=('tan', 'sag')):
+        """Convert a set of trioptics files to MTF FFD object(s).
+
+        Parameters
+        ----------
+        *paths : path_like
+            paths to trioptics files
+        azimuths : iterable of `strs`
+            azimuths, one per path
+        ret : tuple, optional
+            strings representing outputs, {'tan', 'sag'} are the only currently implemented options
+
+        Returns
+        -------
+        `MTFFFD`
+            MTF FFD object
+
+        Raises
+        ------
+        NotImplemented
+            return option is not available
+
+        """
+        ret = (r.lower() for r in ret)
+        # extract data from files
+        azimuths = np.asarray(azimuths, dtype=np.float64)
+        freqs, xs, ys, ts, ss = [], [], [], [], []
+        for path, angle in zip(paths, azimuths):
+            d = read_trioptics_mtf_vs_field(path)
+            imght, freq, t, s = d['field'], d['freq'], d['tan'], d['sag']
+            x, y = imght * cos(angle), imght * sin(angle)
+            freqs.append(freq)
+            xs.append(x)
+            ys.append(y)
+            ts.append(t)
+            ss.append(s)
+
+        # convert to arrays and interpolate onto a regular 2D grid via a cubic interpolator
+        xarr, yarr, farr = np.asarray(xs), np.asarray(ys), np.asarray(freqs)
+        # eq1, eq2, eq3 = np.all(xarr, axis=1), np.all(yarr, axis=1), np.all(farr, axis=1)
+        pts = (xarr, yarr)
+        val_tan, val_sag = np.asarray(ts), np.asarray(ss)
+        interpf_tan = CloughTocher2DInterpolator(pts, val_tan)
+        interpf_sag = CloughTocher2DInterpolator(pts, val_sag)
+        npts = len(xs[0])
+        xmin, xmax, ymin, ymax = xarr.min(), xarr.max(), yarr.min(), yarr.max()
+        out_x, out_y = np.linspace(xmin, xmax, npts), np.linspace(ymin, ymax, npts)
+        xx, yy = np.meshgrid(out_x, out_y)
+        tan = interpf_tan((xx, yy))
+        sag = interpf_sag((xx, yy))
+        if ret in set([('tan', 'sag'), ('t', 's')]):
+            return MTFFFD(tan, out_x, out_y, farr[:, 0]), MTFFFD(sag, out_x, out_y, farr[:, 0])
+        else:
+            raise NotImplemented('other returns not implemented')
