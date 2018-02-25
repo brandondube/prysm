@@ -3,8 +3,8 @@
 import numpy as np
 import pandas as pd
 
-from scipy.interpolate import CloughTocher2DInterpolator
-from prysm.mathops import floor, ceil, sin, cos
+from scipy.interpolate import griddata
+from prysm.mathops import floor, ceil, sin, cos, radians
 from prysm.util import correct_gamma, share_fig_ax
 from prysm.io import read_trioptics_mtf_vs_field, read_trioptics_MTFvFvF
 
@@ -342,8 +342,11 @@ class MTFFFD(object):
         im = ax.imshow(self.data[:, :, idx],
                        extent=[*extx, *exty],
                        origin='lower',
-                       interpolation='lanczos')
-        fig.colorbar(im)
+                       interpolation='gaussian',
+                       cmap='inferno',
+                       clim=(0, 1))
+        ax.set(xlim=(-11, 11), xlabel='Image Plane X [mm]', ylim=(-8, 8), ylabel='Image Plane Y [mm]')
+        fig.colorbar(im, label='MTF [Rel 1.0]', ax=ax, fraction=0.046)
         return fig, ax
 
     @staticmethod
@@ -367,12 +370,12 @@ class MTFFFD(object):
         # return MTFFFD(data=dat, field_x=x, field_y=y, freq=freqs)
 
     @staticmethod
-    def from_trioptics_files(*paths, azimuths, ret=('tan', 'sag')):
+    def from_trioptics_files(paths, azimuths, upsample=10, ret=('tan', 'sag')):
         """Convert a set of trioptics files to MTF FFD object(s).
 
         Parameters
         ----------
-        *paths : path_like
+        paths : path_like
             paths to trioptics files
         azimuths : iterable of `strs`
             azimuths, one per path
@@ -390,9 +393,9 @@ class MTFFFD(object):
             return option is not available
 
         """
-        ret = (r.lower() for r in ret)
+        # ret = (r.lower() for r in ret)
         # extract data from files
-        azimuths = np.asarray(azimuths, dtype=np.float64)
+        azimuths = radians(np.asarray(azimuths, dtype=np.float64))
         freqs, xs, ys, ts, ss = [], [], [], [], []
         for path, angle in zip(paths, azimuths):
             d = read_trioptics_mtf_vs_field(path)
@@ -406,18 +409,23 @@ class MTFFFD(object):
 
         # convert to arrays and interpolate onto a regular 2D grid via a cubic interpolator
         xarr, yarr, farr = np.asarray(xs), np.asarray(ys), np.asarray(freqs)
-        # eq1, eq2, eq3 = np.all(xarr, axis=1), np.all(yarr, axis=1), np.all(farr, axis=1)
-        pts = (xarr, yarr)
         val_tan, val_sag = np.asarray(ts), np.asarray(ss)
-        interpf_tan = CloughTocher2DInterpolator(pts, val_tan)
-        interpf_sag = CloughTocher2DInterpolator(pts, val_sag)
-        npts = len(xs[0])
+        npts = len(xs[0]) * upsample
         xmin, xmax, ymin, ymax = xarr.min(), xarr.max(), yarr.min(), yarr.max()
+
+        # loop through the frequencies and interpolate them all onto the regular output grid
         out_x, out_y = np.linspace(xmin, xmax, npts), np.linspace(ymin, ymax, npts)
         xx, yy = np.meshgrid(out_x, out_y)
-        tan = interpf_tan((xx, yy))
-        sag = interpf_sag((xx, yy))
-        if ret in set([('tan', 'sag'), ('t', 's')]):
+        sample_pts = np.stack([xarr.ravel(), yarr.ravel()], axis=1)
+        interpt, interps = [], []
+        for idx in range(val_tan.shape[1]):
+            datt = griddata(sample_pts, val_tan[:, idx, :].ravel(), (xx, yy), method='linear')
+            dats = griddata(sample_pts, val_sag[:, idx, :].ravel(), (xx, yy), method='linear')
+            interpt.append(datt)
+            interps.append(dats)
+
+        tan, sag = np.rollaxis(np.asarray(interpt), 0, 3), np.rollaxis(np.asarray(interps), 0, 3)
+        if ret == ('tan', 'sag'):
             return MTFFFD(tan, out_x, out_y, farr[:, 0]), MTFFFD(sag, out_x, out_y, farr[:, 0])
         else:
             raise NotImplemented('other returns not implemented')
