@@ -8,6 +8,8 @@ back to more widely available options in the case that they do not.
 from math import (
     nan,
     pi,
+    floor,
+    ceil,
 )
 import numpy as np
 from numpy import (
@@ -24,8 +26,6 @@ from numpy import (
     exp,
     log,
     log10,
-    floor,
-    ceil,
 )
 from numpy.fft import fftshift, ifftshift, fftfreq
 
