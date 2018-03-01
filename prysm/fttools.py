@@ -32,7 +32,14 @@ def pad2d(array, Q=2, value=0):
     factor_x = (out_x - x) / 2
     factor_y = (out_y - x) / 2
     pad_shape = ((floor(factor_x), ceil(factor_x)), (floor(factor_y), ceil(factor_y)))
-    return np.pad(array, pad_width=pad_shape, mode='constant', constant_values=value)
+    if value is 0:
+        out = np.zeros((out_x, out_y), dtype=array.dtype)
+    else:
+        out = np.ones((out_x, out_y), dtype=array.dtype) * value
+    x_idx1, x_idx2 = pad_shape[0][0], pad_shape[0][1]
+    y_idx1, y_idx2 = pad_shape[1][0], pad_shape[1][1]
+    out[x_idx1:x_idx2 + x, y_idx1:y_idx2 + y] = array
+    return out
 
 
 def forward_ft_unit(sample_spacing, samples):
