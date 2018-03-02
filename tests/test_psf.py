@@ -17,7 +17,7 @@ def tpsf():
     xx, yy = np.meshgrid(x, y)
     rho, phi = cart_to_polar(xx, yy)
     dat = psf.airydisk(rho, 10, 0.55)
-    return psf.PSF(dat, x[1] - x[0])
+    return psf.PSF(dat, x, y)
 
 
 def test_psf_plot2d_functions(tpsf):
