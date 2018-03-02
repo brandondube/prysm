@@ -33,6 +33,9 @@ class Convolvable(object):
         self.unit_y = unit_y
         self.has_analytic_ft = has_analytic_ft
         self.sample_spacing = unit_x[1] - unit_x[0]
+        if data is not None:
+            self.samples_x, self.samples_y = data.shape
+            self.center_x, self.center_y = self.samples_x // 2, self.samples_y // 2
 
     def conv(self, other):
         """Convolves this convolvable with another.
