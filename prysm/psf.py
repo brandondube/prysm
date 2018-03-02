@@ -8,11 +8,11 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1.axes_rgb import make_rgb_axes
 
 from prysm.conf import config
-from prysm.mathops import pi, fft2, fftshift, ifftshift, floor
-from prysm.fttools import pad2d
+from prysm.mathops import pi, floor
 from prysm.coordinates import uniform_cart_to_polar
-from prysm.util import pupil_sample_to_psf_sample, correct_gamma, share_fig_ax
+from prysm.util import correct_gamma, share_fig_ax
 from prysm.convolution import Convolvable
+from prysm.propagation import prop_pupil_plane_to_psf_plane
 
 
 class PSF(Convolvable):
@@ -34,26 +34,23 @@ class PSF(Convolvable):
         y Cartesian axis locations of samples, 1D ndarray
 
     """
-    def __init__(self, data, sample_spacing):
+    def __init__(self, data, unit_x, unit_y):
         """Create a PSF object.
 
         Parameters
         ----------
         data : `numpy.ndarray`
             intensity data for the PSF
+        unit_x : `numpy.ndarray`
+            1D ndarray defining x data grid
+        unit_y  : `numpy.ndarray`
+            1D ndarray defining y data grid
         sample_spacing : `float`
             center-to-center spacing of samples, expressed in microns
 
         """
-        self.data = data
-        self.sample_spacing = sample_spacing
-        self.samples_x, self.samples_y = data.shape
-        self.center_x = self.samples_x // 2
-        self.center_y = self.samples_y // 2
-
-        # compute ordinate axes
-        self.unit_x = np.arange(-1 * (self.samples_x // 2), self.samples_x // 2) * sample_spacing
-        self.unit_y = np.arange(-1 * (self.samples_y // 2), self.samples_y // 2) * sample_spacing
+        super().__init__(data, unit_x, unit_y, has_analytic_ft=False)
+        self.data /= self.data.max()
 
     # quick-access slices ------------------------------------------------------
 
@@ -305,16 +302,8 @@ class PSF(Convolvable):
             A new PSF instance
 
         """
-        # padded pupil contains 1 pupil width on each side for a width of 3
-        psf_samples = pupil.samples * Q
-        sample_spacing = pupil_sample_to_psf_sample(pupil_sample=pupil.sample_spacing * 1000,
-                                                    num_samples=psf_samples,
-                                                    wavelength=pupil.wavelength,
-                                                    efl=efl)
-        padded_wavefront = pad2d(pupil.fcn, Q)
-        impulse_response = ifftshift(fft2(fftshift(padded_wavefront)))
-        psf = abs(impulse_response)**2
-        return PSF(psf / psf.max(), sample_spacing)
+        data, ux, uy = prop_pupil_plane_to_psf_plane(pupil.fcn, pupil.sample_spacing, efl, pupil.wavelength, Q)
+        return PSF(data, ux, uy)
 
 
 class MultispectralPSF(PSF):
