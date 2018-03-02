@@ -7,11 +7,17 @@ from prysm.fttools import forward_ft_unit
 class Convolvable(object):
     """A base class for convolvable objects to inherit from.
     """
-    def __init__(self, has_analytic_ft=False):
+    def __init__(self, data, unit_x, unit_y, has_analytic_ft=False):
         """Create a new Convolvable object.
 
         Parameters
         ----------
+        data : `numpy.ndarray`
+            2D ndarray of data
+        unit_x : `numpy.ndarray`
+            1D ndarray defining x data grid
+        unit_y  : `numpy.ndarray`
+            1D ndarray defining y data grid
         has_analytic_ft : `bool`, optional
             Whether this convolvable overrides self.analytic_ft, and has a known
             analytical fourier tansform
@@ -22,7 +28,11 @@ class Convolvable(object):
             New convolvable object.
 
         """
+        self.data = data
+        self.unit_x = unit_x
+        self.unit_y = unit_y
         self.has_analytic_ft = has_analytic_ft
+        self.sample_spacing = unit_x[1] - unit_x[0]
 
     def conv(self, other):
         """Convolves this convolvable with another.
@@ -117,11 +127,7 @@ class ConvolutionResult(Convolvable):
             A convolution result
 
         """
-        self.data = data
-        self.unit_x = unit_x
-        self.unit_y = unit_y
-        self.sample_spacing = self.unit_x[1] - self.unit_x[0]
-        super().__init__(has_analytic_ft=False)
+        super().__init__(data, unit_x, unit_y, has_analytic_ft=False)
 
 
 def double_analytical_ft_convolution(convolvable1, convolvable2):
