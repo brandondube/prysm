@@ -1,6 +1,8 @@
 """Defines behavior of convolvable items and a base class to encapsulate that behavior.
 """
-from prysm.mathops import fft2, ifft2, fftshift, ifftshift
+import numpy as np
+
+from prysm.mathops import fft2, ifft2, fftshift, ifftshift, fftfreq
 from prysm.fttools import forward_ft_unit
 
 
@@ -93,44 +95,14 @@ class Convolvable(object):
                 present at nyquist in the worse-sampled input.
 
         """
-        if self.has_analytic_ft and not other.has_analytic_ft:
+        if self.has_analytic_ft and other.has_analytic_ft:
+            return double_analytical_ft_convolution(self, other)
+        elif self.has_analytic_ft and not other.has_analytic_ft:
             return single_analytical_ft_convolution(other, self)
         elif not self.has_analytic_ft and other.has_analytic_ft:
             return single_analytical_ft_convolution(self, other)
         else:
             raise NotImplementedError('Other convolutional cases not implemented')
-
-
-class ConvolutionResult(Convolvable):
-    """The result of a convolution.
-
-    Subclasses of Convolvable may choose to override conv and add a cast_to
-    argument to cast the result back to their own type.
-
-    This is simply a minimal container that contains the data and the grid it is defined on.
-
-    The data is assumed to be centered about the origin.
-
-    """
-    def __init__(self, data, unit_x, unit_y):
-        """Create a new ConvolutionResult.
-
-        Parameters
-        ----------
-        data : `numpy.ndarray`
-            array of output data
-        unit_x : `numpy.ndarray`
-            array of x sample locations
-        unnit_y : `numpy.ndarray`
-            array of y sample locations
-
-        Returns
-        -------
-        `ConvolutionResult`
-            A convolution result
-
-        """
-        super().__init__(data, unit_x, unit_y, has_analytic_ft=False)
 
 
 def double_analytical_ft_convolution(convolvable1, convolvable2):
@@ -145,11 +117,18 @@ def double_analytical_ft_convolution(convolvable1, convolvable2):
 
     Returns
     -------
-    Image
-        A prysm image.
+    `Convolvable`
+        Another convolvable
 
     """
-    raise NotImplementedError()
+    spatial_x, spatial_y = _compute_output_grid(convolvable1, convolvable2)
+    fourier_x = fftfreq(spatial_x.shape[0], spatial_x[1] - spatial_x[0])
+    fourier_y = fftfreq(spatial_y.shape[0], spatial_y[0] - spatial_y[0])
+    gridx, gridy = np.meshgrid(fourier_x, fourier_y)
+    c1_part = convolvable1.analytic_ft(gridx, gridy)
+    c2_part = convolvable2.analytic_ft(gridx, gridy)
+    out_data = abs(fftshift(ifft2(c1_part * c2_part)))
+    return Convolvable(out_data, spatial_x, spatial_y, has_analytic_ft=False)
 
 
 def single_analytical_ft_convolution(without_analytic, with_analytic):
@@ -173,7 +152,7 @@ def single_analytical_ft_convolution(without_analytic, with_analytic):
     fourier_unit_y = forward_ft_unit(without_analytic.sample_spacing, without_analytic.samples_x)
     a_ft = with_analytic.analytic_ft(fourier_unit_x, fourier_unit_y)
     result = abs(fftshift(ifft2(fourier_data * a_ft)))
-    return ConvolutionResult(result, without_analytic.unit_x, without_analytic.unit_y)
+    return Convolvable(result, without_analytic.unit_x, without_analytic.unit_y, False)
 
 
 def pure_numerical_ft_convolution(convolvable1, convolvable2):
@@ -193,3 +172,37 @@ def pure_numerical_ft_convolution(convolvable1, convolvable2):
 
     """
     raise NotImplementedError()
+
+
+def _compute_output_grid(convolvable1, convolvable2):
+    if convolvable1.sample_spacing < convolvable2.sample_spacing:
+        output_spacing = convolvable1.sample_spacing
+    else:
+        output_spacing = convolvable2.sample_spacing
+
+    if convolvable1.unit_x[0] < convolvable2.unit_x[0]:
+        output_x_left = convolvable1.unit_x[0]
+    else:
+        output_x_right = convolvable2.unit_x[0]
+
+    if convolvable1.unit_y[0] < convolvable2.unit_y[0]:
+        output_y_left = convolvable1.unit_y[0]
+    else:
+        output_y_right = convolvable2.unit_y[0]
+
+    x_rem = (output_x_right - output_x_left) % output_spacing
+    y_rem = (output_y_right - output_y_left) % output_spacing
+    if x_rem > 1e-3:
+        adj = x_rem / 2
+        output_x_left -= adj
+        output_x_right += adj
+    if y_rem > 1e-3:
+        adj = y_rem / 2
+        output_y_left -= adj
+        output_y_right += adj
+
+    samples_x = (output_x_right - output_x_left) // output_spacing
+    samples_y = (output_y_right - output_y_left) // output_spacing
+    unit_out_x = np.linspace(output_x_left, output_x_right, samples_x)
+    unit_out_y = np.linspace(output_y_left, output_y_right, samples_y)
+    return unit_out_x, unit_out_y
