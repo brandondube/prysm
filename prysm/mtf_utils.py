@@ -150,7 +150,8 @@ class MTFvFvF(object):
             ax.plot(xaxis_pts, data, label=freq)
 
         ax.legend(title=r'$\nu$ [cy/mm]')
-        ax.set(xlabel=r'Focus [$\mu m$]', ylabel='MTF [Rel. 1.0]')
+        ax.set(xlim=(xaxis_pts[0], xaxis_pts[-1]), xlabel=r'Focus [$\mu m$]',
+               ylim=(0, 1), ylabel='MTF [Rel. 1.0]')
         return fig, ax
 
     def trace_focus(self, algorithm='avg'):
