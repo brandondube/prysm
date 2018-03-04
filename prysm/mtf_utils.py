@@ -346,7 +346,7 @@ class MTFFFD(object):
                        cmap='inferno',
                        clim=(0, 1))
         ax.set(xlim=(-11, 11), xlabel='Image Plane X [mm]', ylim=(-8, 8), ylabel='Image Plane Y [mm]')
-        fig.colorbar(im, label='MTF [Rel 1.0]', ax=ax, fraction=0.046)
+        fig.colorbar(im, label=f'MTF @ {freq} cy/mm', ax=ax, fraction=0.046)
         return fig, ax
 
     @staticmethod
@@ -426,6 +426,52 @@ class MTFFFD(object):
 
         tan, sag = np.rollaxis(np.asarray(interpt), 0, 3), np.rollaxis(np.asarray(interps), 0, 3)
         if ret == ('tan', 'sag'):
-            return MTFFFD(tan, out_x, out_y, farr[:, 0]), MTFFFD(sag, out_x, out_y, farr[:, 0])
+            return MTFFFD(tan, out_x, out_y, farr[0, :]), MTFFFD(sag, out_x, out_y, farr[0, :])
         else:
             raise NotImplemented('other returns not implemented')
+
+
+def plot_mtf_vs_field(data_dict, fig=None, ax=None):
+    """Plot MTF vs Field.
+
+    Parameters
+    ----------
+    data_dict : `dict`
+        dictionary with keys tan, sag, fields, frequencies
+    fig : `matplotlib.figure.Figure`
+        figure containing the plot
+    axis : `matplotlib.axes.Axis`
+        axis containing the plot
+
+    Returns
+    -------
+    fig : `matplotlib.figure.Figure`
+        figure containing the plot
+    axis : `matplotlib.axes.Axis`
+        axis containing the plot
+
+    """
+    tan_mtf_array, sag_mtf_array = data_dict['tan'], data_dict['sag']
+    fields, frequencies = data_dict['field'], data_dict['freq']
+    freqs = _int_check_frequencies(frequencies)
+
+    fig, ax = share_fig_ax(fig, ax)
+
+    for idx in range(tan_mtf_array.shape[0]):
+        l, = ax.plot(fields, tan_mtf_array[idx, :], label=freqs[idx])
+        ax.plot(fields, sag_mtf_array[idx, :], c=l.get_color(), ls='--')
+
+    ax.legend(title=r'$\nu$ [cy/mm]')
+    ax.set(xlim=(0, 14), xlabel='Image Height [mm]',
+           ylim=(0, 1), ylabel='MTF [Rel. 1.0]')
+    return fig, ax
+
+
+def _int_check_frequencies(frequencies):
+    freqs = []
+    for freq in frequencies:
+        if freq % 1 == 0:
+            freqs.append(int(freq))
+        else:
+            freqs.append(freq)
+    return freqs
