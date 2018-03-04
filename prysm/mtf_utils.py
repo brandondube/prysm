@@ -111,6 +111,48 @@ class MTFvFvF(object):
                ylim=(ext_y[0], ext_y[1]), ylabel=r'Focus [$\mu$m]')
         return fig, ax
 
+    def plot_thrufocus_singlefield(self, field, freqs=(10, 20, 30, 40, 50), _range=100, fig=None, ax=None):
+        """Create a plot of Thru-Focus MTF for a single field point.
+
+        Parameters
+        ----------
+        field : `float`
+            which field point to plot, in same units as self.field
+        freqs : `iterable`
+            frequencies to plot, will be rounded to the closest values present in the self.freq iterable
+        _range : `float`
+            +/- focus range to plot, symmetric
+        fig : `matplotlib.figure.Figure`
+            Figure to plot inside
+        ax : `matplotlib.axes.Axis`
+            Axis to plot inside
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            figure containing the plot
+        axis : `matplotlib.axes.Axis`
+            axis containing the plot
+
+        """
+        field_idx = np.searchsorted(self.field, field)
+        freq_idxs = [np.searchsorted(self.freq, f) for f in freqs]
+        range_idxs = [np.searchsorted(self.focus, r) for r in (-_range, _range)]
+        xaxis_pts = self.focus[range_idxs[0]:range_idxs[1]]
+
+        mtf_arrays = []
+        for idx, freq in zip(freq_idxs, freqs):
+            data = self.data[range_idxs[0]:range_idxs[1], field_idx, idx]
+            mtf_arrays.append(data)
+
+        fig, ax = share_fig_ax(fig, ax)
+        for data, freq in zip(mtf_arrays, freqs):
+            ax.plot(xaxis_pts, data, label=freq)
+
+        ax.legend(title=r'$\nu$ [cy/mm]')
+        ax.set(xlabel=r'Focus [$\mu m$]', ylabel='MTF [Rel. 1.0]')
+        return fig, ax
+
     def trace_focus(self, algorithm='avg'):
         """Find the focus position in each field.
 
