@@ -58,4 +58,4 @@ def forward_ft_unit(sample_spacing, samples):
         array of sample frequencies in the output of an fft
 
     """
-    return fftshift(fftfreq(samples, sample_spacing / 1e3))
+    return fftshift(fftfreq(samples, sample_spacing))

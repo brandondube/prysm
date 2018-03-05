@@ -38,10 +38,10 @@ def prop_pupil_plane_to_psf_plane(wavefunction, input_sample_spacing, prop_dist,
 
     s = wavefunction.shape
     samples_x, samples_y = s[0] * Q, s[1] * Q
-    sample_spacing = pupil_sample_to_psf_sample(pupil_sample=input_sample_spacing * 1000,
-                                                num_samples=samples_x,
-                                                wavelength=wavelength,
-                                                efl=prop_dist)
+    sample_spacing = pupil_sample_to_psf_sample(pupil_sample=input_sample_spacing,  # factor of
+                                                num_samples=samples_x,              # 1e3 corrects
+                                                wavelength=wavelength,              # for unit
+                                                efl=prop_dist) / 1e3                # translation
     unit_x = np.arange(-1 * (samples_x // 2), samples_x // 2) * sample_spacing
     unit_y = np.arange(-1 * (samples_y // 2), samples_y // 2) * sample_spacing
     return psf, unit_x, unit_y
