@@ -1,14 +1,14 @@
-"""Defines behavior of convolvable items and a base class to encapsulate that behavior.
-"""
+"""Defines behavior of convolvable items and a base class to encapsulate that behavior."""
 import numpy as np
 
-from prysm.mathops import fft2, ifft2, fftshift, ifftshift, fftfreq
+from scipy.interpolate import interp2d
+
+from prysm.mathops import fft2, ifft2, fftshift, fftfreq
 from prysm.fttools import forward_ft_unit
 
 
 class Convolvable(object):
-    """A base class for convolvable objects to inherit from.
-    """
+    """A base class for convolvable objects to inherit from."""
     def __init__(self, data, unit_x, unit_y, has_analytic_ft=False):
         """Create a new Convolvable object.
 
@@ -27,7 +27,7 @@ class Convolvable(object):
         Returns
         -------
         `Convolvable`
-            New convolvable object.
+            New convolvable object
 
         """
         self.data = data
@@ -44,13 +44,13 @@ class Convolvable(object):
 
         Parameters
         ----------
-        other : Convolvable
-            A convolvable object.
+        other : `Convolvable`
+            A convolvable object
 
         Returns
         -------
-        `ConvolutionResult`
-            A prysm image.
+        `Convolvable`
+            a convolvable that lacks an analytical fourier transform
 
         Notes
         -----
@@ -59,7 +59,8 @@ class Convolvable(object):
                 - The analytic forms will be used to compute the output directly.
                 - The output sample spacing will be the finer of the two inputs.
                 - The output window will cover the same extent as the "wider"
-                  input.
+                  input.  If this window is not an integer number of samples
+                  wide, it will be enlarged symmetrically such that it is.
                 - This may mean the output array is not of the same size as
                   either input.
                 - An input which contains a sample at (0,0) may produce an output
@@ -147,7 +148,7 @@ def single_analytical_ft_convolution(without_analytic, with_analytic):
         A convolution result
 
     """
-    fourier_data = fftshift(fft2(ifftshift(without_analytic.data)))
+    fourier_data = fftshift(fft2(fftshift(without_analytic.data)))
     fourier_unit_x = forward_ft_unit(without_analytic.sample_spacing, without_analytic.samples_x)
     fourier_unit_y = forward_ft_unit(without_analytic.sample_spacing, without_analytic.samples_x)
     a_ft = with_analytic.analytic_ft(fourier_unit_x, fourier_unit_y)
@@ -160,9 +161,9 @@ def pure_numerical_ft_convolution(convolvable1, convolvable2):
 
     Parameters
     ----------
-    convolvable1 : Convolvable
+    convolvable1 : `Convolvable`
         A Convolvable object which lacks an analytic fourier transform
-    convolvable2 : Convolvable
+    convolvable2 : `Convolvable`
         A Convolvable object which lacks an analytic fourier transform
 
     Returns
@@ -171,7 +172,38 @@ def pure_numerical_ft_convolution(convolvable1, convolvable2):
         A convolution result
 
     """
-    raise NotImplementedError()
+    if (convolvable1.sample_spacing - convolvable2.sample_spacing) < 1e-4:
+        s1, s2 = convolvable1.data.shape, convolvable2.data.shape
+        if s1[0] > s2[0]:
+            return _numerical_ft_convolution_core_equalspacing_unequalsamplecount(convolvable1, convolvable2)
+        elif s1[0] < s2[0]:
+            return _numerical_ft_convolution_core_equalspacing_unequalsamplecount(convolvable2, convolvable1)
+        else:
+            return _numerical_ft_convolution_core_equalspacing(convolvable1, convolvable2)
+    else:
+        raise NotImplementedError()
+
+
+def _numerical_ft_convolution_core_equalspacing(convolvable1, convolvable2):
+    ft1 = fftshift(fft2(fftshift(convolvable1.data)))
+    ft2 = fftshift(fft2(fftshift(convolvable2.data)))
+    data = abs(fftshift(ifft2(ft1 * ft2)))
+    return Convolvable(data, convolvable1.unit_x, convolvable2.unit_y, False)
+
+
+def _numerical_ft_convolution_core_equalspacing_unequalsamplecount(more_samples, less_samples):
+    output_x = forward_ft_unit(more_samples.sample_spacing, more_samples.data.shape[0])
+    output_y = forward_ft_unit(more_samples.sample_spacing, more_samples.data.shape[1])
+
+    in_x = forward_ft_unit(less_samples.sample_spacing, less_samples.data.shape[0])
+    in_y = forward_ft_unit(less_samples.sample_spacing, less_samples.data.shape[1])
+    less_fourier = fftshift(fft2(fftshift(less_samples.data)))
+    interpf = interp2d(in_x, in_y, less_fourier, kind='linear')
+
+    resampled_less = interpf(output_x, output_y)
+    more_fourier = fftshift(fft2(fftshift(more_samples.data)))
+    data = abs(fftshift(ifft2(resampled_less * more_fourier)))
+    return Convolvable(data, more_samples.unit_x, more_samples.unit_y, False)
 
 
 def _compute_output_grid(convolvable1, convolvable2):
