@@ -222,7 +222,7 @@ class PSF(Convolvable):
                ylabel=label_str,
                xlim=(-axlim, axlim),
                ylim=lims)
-        plt.legend(loc='upper right')
+        ax.legend(loc='upper right')
         return fig, ax
 
     def plot_encircled_energy(self, azimuth=None, axlim=20, fig=None, ax=None):

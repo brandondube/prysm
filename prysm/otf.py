@@ -299,7 +299,7 @@ class MTF(object):
                ylabel='MTF [Rel 1.0]',
                xlim=(0, max_freq),
                ylim=(0, 1))
-        plt.legend(loc='lower left')
+        ax.legend(loc='lower left')
         return fig, ax
 
     # plotting -----------------------------------------------------------------

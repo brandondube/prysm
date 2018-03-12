@@ -223,7 +223,7 @@ class Pupil(object):
         ax.plot(u, y, lw=3, label='Slice Y')
         ax.set(xlabel=r'Pupil $\rho$ [mm]',
                ylabel=f'OPD [{self._opd_str}]')
-        plt.legend()
+        ax.legend()
         return fig, ax
 
     def interferogram(self, visibility=1, passes=2, fig=None, ax=None):
