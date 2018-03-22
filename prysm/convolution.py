@@ -218,6 +218,7 @@ def _numerical_ft_convolution_core_equalspacing_unequalsamplecount(more_samples,
     data = abs(fftshift(ifft2(resampled_less * more_fourier)))
     return Convolvable(data, more_samples.unit_x, more_samples.unit_y, False)
 
+
 def _numerical_ft_convolution_core_unequalspacing(finer_sampled, coarser_sampled):
     # compute the ordinate axes of the input of each
     in_x_more = forward_ft_unit(finer_sampled.sample_spacing, finer_sampled.data.shape[0])
