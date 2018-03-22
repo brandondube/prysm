@@ -135,7 +135,7 @@ class PSF(Convolvable):
             the oversampled domain
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
         show_axlabels : `bool`
             whether or not to show the axis labels
@@ -146,7 +146,7 @@ class PSF(Convolvable):
         -------
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         """
@@ -204,7 +204,7 @@ class PSF(Convolvable):
         -------
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         """
@@ -235,14 +235,14 @@ class PSF(Convolvable):
             limits of axis, will plot [0, axlim]
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         Returns
         -------
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         """
@@ -477,14 +477,14 @@ class RGBPSF(object):
             the oversampled domain
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         Returns
         -------
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         '''
@@ -535,12 +535,12 @@ class RGBPSF(object):
             the oversampled domain
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         Notes

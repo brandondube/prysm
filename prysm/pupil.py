@@ -171,7 +171,7 @@ class Pupil(object):
         -------
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         """
@@ -204,7 +204,7 @@ class Pupil(object):
         -------
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         """
@@ -241,7 +241,7 @@ class Pupil(object):
         -------
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         """

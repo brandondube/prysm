@@ -188,14 +188,14 @@ class ShackHartmann(object):
         ----------
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         Returns
         -------
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         """
@@ -218,7 +218,7 @@ class ShackHartmann(object):
             NotImplementedError
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         Returns
@@ -305,14 +305,14 @@ class ShackHartmann(object):
             what type of plot to make
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         Returns
         -------
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`:
+        ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         '''
