@@ -60,40 +60,45 @@ class Convolvable(object):
                 - The output sample spacing will be the finer of the two inputs.
                 - The output window will cover the same extent as the "wider"
                   input.  If this window is not an integer number of samples
-                  wide, it will be enlarged symmetrically such that it is.
-                - This may mean the output array is not of the same size as
-                  either input.
-                - An input which contains a sample at (0,0) may produce an output
-                  without a sample at (0,0) if the input samplings are not ideal.
-                  To ensure this does not happen if it is undesireable, ensure
-                  the inputs are computed over identical grids containing 0 to
+                  wide, it will be enlarged symmetrically such that it is.  This
+                  may mean the output array is not of the same size as either
+                  input.
+                - An input which contains a sample at (0,0) may not produce an
+                  output with a sample at (0,0) if the input samplings are not
+                  favorable.  To ensure this does not happen confirm that the
+                  inputs are computed over identical grids containing 0 to
                   begin with.
             2.  One of self and other have analytical fourier transforms:
                 - The input which does NOT have an analytical fourier transform
                   will define the output grid.
                 - The available analytic FT will be used to do the convolution
-                  in fourier space.
+                  in Fourier space.
             3.  Neither input has an analytic fourier transform:
                 3.1, the two convolvables have the same sample spacing to within
                      a numerical precision of 0.1 nm:
                     - the fourier transform of both will be taken.  If one has
                       fewer samples, it will be upsampled in Fourier space
                 3.2, the two convolvables have different sample spacing:
-                    - The fourier transform of both inputs will be taken.  That
-                      which has a lower nyquist frequency will have a linear
-                      taper applied between its final value and 0 to extent its
-                      frequency range to that of the finer grid.  Interpolation
-                      will also be used to match the sample points in fourier
-                      space.
+                    - The fourier transform of both inputs will be taken.  It is
+                      assumed that the more coarsely sampled signal is Nyquist
+                      sampled or better, and thus acts as a low-pass filter; the
+                      more finaly sampled input will be interpolated onto the
+                      same grid as the more coarsely sampled input.  The higher
+                      frequency energy would be eliminated by multiplication with
+                      the Fourier spectrum of the more coarsely sampled input
+                      anyway.
 
         The subroutines have the following properties with regard to accuracy:
             1.  Computes a perfect numerical representation of the continuous
-                output.
+                output, provided the output grid is capable of Nyquist sampling
+                the result.
             2.  If the input that does not have an analytic FT is unaliased,
                 computes a perfect numerical representation of the continuous
                 output.  If it does not, the input aliasing limits the output.
             3.  Accuracy of computation is dependent on how much energy is
-                present at nyquist in the worse-sampled input.
+                present at nyquist in the worse-sampled input; if this input
+                is worse than Nyquist sampled, then the result will not be
+                correct.
 
         """
         if self.has_analytic_ft and other.has_analytic_ft:
@@ -182,7 +187,10 @@ def pure_numerical_ft_convolution(convolvable1, convolvable2):
         else:
             return _numerical_ft_convolution_core_equalspacing(convolvable1, convolvable2)
     else:
-        raise NotImplementedError()
+        if convolvable1.sample_spacing < convolvable2.sample_spacing:
+            return _numerical_ft_convolution_core_unequalspacing(convolvable1, convolvable2)
+        else:
+            return _numerical_ft_convolution_core_unequalspacing(convolvable2, convolvable1)
 
 
 def _numerical_ft_convolution_core_equalspacing(convolvable1, convolvable2):
@@ -209,6 +217,26 @@ def _numerical_ft_convolution_core_equalspacing_unequalsamplecount(more_samples,
     more_fourier = fftshift(fft2(fftshift(more_samples.data)))
     data = abs(fftshift(ifft2(resampled_less * more_fourier)))
     return Convolvable(data, more_samples.unit_x, more_samples.unit_y, False)
+
+def _numerical_ft_convolution_core_unequalspacing(finer_sampled, coarser_sampled):
+    # compute the ordinate axes of the input of each
+    in_x_more = forward_ft_unit(finer_sampled.sample_spacing, finer_sampled.data.shape[0])
+    in_y_more = forward_ft_unit(finer_sampled.sample_spacing, finer_sampled.data.shape[1])
+
+    in_x_less = forward_ft_unit(coarser_sampled.sample_spacing, coarser_sampled.data.shape[0])
+    in_y_less = forward_ft_unit(coarser_sampled.sample_spacing, coarser_sampled.data.shape[1])
+
+    # fourier-space interpolate the larger bandwidth signal onto the grid defined by the lower
+    # bandwidth signal.  This assumes the lower bandwidth signal is Nyquist sampled, which is
+    # not necessarily the case.  The accuracy of this method depends on the quality of the input.
+    more_fourier = fftshift(fft2(fftshift(finer_sampled.data)))
+    interpf = interp2d(in_x_more, in_y_more, more_fourier, kind='linear')
+    resampled_more = interpf(in_x_less, in_y_less)
+
+    # FFT the less well sampled input and perform the Fourier based convolution.
+    less_fourier = fftshift(fft2(fftshift(coarser_sampled.data)))
+    data = abs(fftshift(ifft2(resampled_more * less_fourier)))
+    return Convolvable(data, in_x_less, in_y_less, False)
 
 
 def _compute_output_grid(convolvable1, convolvable2):
