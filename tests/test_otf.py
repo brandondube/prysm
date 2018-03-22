@@ -29,5 +29,3 @@ def test_mtf_plot_tan_sag_functions(mtf):
     fig, ax = mtf.plot_tan_sag()
     assert fig
     assert ax
-
-
