@@ -13,13 +13,13 @@ def plot_fourier_chain(pupil, psf, mtf, fig=None, axs=None, sizex=12, sizey=6):
         The psf of an optical system
     mtf : `MTF`
         The MTF of an optical system
-    fig : `matplotlib.figure.Figure`
+    fig : `matplotlib.figure.Figure`, optional:
         A figure object
     axs : `list` of `matplotlib.axes.Axis`
         axes to place the plots in
-    sizex : number
+    sizex : `float`
         size of the figure in x
-    sizey : number
+    sizey : `float`
         size of the figure in y
 
     Returns

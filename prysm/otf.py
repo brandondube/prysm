@@ -230,9 +230,9 @@ class MTF(object):
         ----------
         max_freq : `float`
             Maximum frequency to plot to.  Axis limits will be ((-max_freq, max_freq), (-max_freq, max_freq)).
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional:
             Figure to draw plot in
-        ax : `matplotlib.axes.Axis`
+        ax : `matplotlib.axes.Axis`, optional:
             Axis to draw plot in
 
         Returns
@@ -270,12 +270,10 @@ class MTF(object):
         ----------
         max_freq : `float`
             Maximum frequency to plot to.  Axis limits will be ((-max_freq, max_freq), (-max_freq, max_freq))
-
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional:
             Figure to draw plot in
-        ax : `matplotlib.axes.Axis`
+        ax : `matplotlib.axes.Axis`, optional:
             Axis to draw plot in
-
         labels : `iterable`
             set of labels for the two lines that will be plotted
 

@@ -60,12 +60,12 @@ class MTFvFvF(object):
         symmetric : `bool`
             make the plot symmetric by mirroring it about the x-axis origin
         contours : `bool`
-            plot contours, yes or no (T/F)
+            plot contours
         interp_method : `string`
             interpolation method used for the plot
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional:
             Figure to plot inside
-        ax : `matplotlib.axes.Axis`
+        ax : `matplotlib.axes.Axis`, optional:
             Axis to plot inside
 
         Returns
@@ -123,14 +123,14 @@ class MTFvFvF(object):
             frequencies to plot, will be rounded to the closest values present in the self.freq iterable
         _range : `float`
             +/- focus range to plot, symmetric
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure to plot inside
         ax : `matplotlib.axes.Axis`
             Axis to plot inside
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             figure containing the plot
         axis : `matplotlib.axes.Axis`
             axis containing the plot
@@ -366,14 +366,14 @@ class MTFFFD(object):
         ----------
         freq : `float`
             frequency to plot at
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             figure containing the plot
         axis : `matplotlib.axes.Axis`
             axis containing the plot
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             figure containing the plot
         axis : `matplotlib.axes.Axis`
             axis containing the plot
@@ -482,14 +482,14 @@ def plot_mtf_vs_field(data_dict, fig=None, ax=None):
     ----------
     data_dict : `dict`
         dictionary with keys tan, sag, fields, frequencies
-    fig : `matplotlib.figure.Figure`
+    fig : `matplotlib.figure.Figure`, optional
         figure containing the plot
     axis : `matplotlib.axes.Axis`
         axis containing the plot
 
     Returns
     -------
-    fig : `matplotlib.figure.Figure`
+    fig : `matplotlib.figure.Figure`, optional
         figure containing the plot
     axis : `matplotlib.axes.Axis`
         axis containing the plot

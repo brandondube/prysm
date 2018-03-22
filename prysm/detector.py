@@ -127,16 +127,16 @@ class Detector(object):
         ----------
         which : `string` or `int`
             if string, "first" or "last", otherwise index into the capture buffer of the camera
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional:
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure:
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`, optional:
+        ax : `matplotlib.axes.Axis`
             Axis containing the plot
 
         """

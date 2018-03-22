@@ -69,7 +69,7 @@ def uniform_cart_to_polar(x, y, data):
         samples for interpolated values
     phi : `numpy.ndarray`
         samples for interpolated values
-    f(rho,phi) : `numpy.ndarray`:
+    f(rho,phi) : `numpy.ndarray`
         data uniformly sampled in (rho,phi)
 
     Notes

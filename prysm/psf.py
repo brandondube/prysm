@@ -133,7 +133,7 @@ class PSF(Convolvable):
             if not None, overlays gridlines with spacing equal to pix_grid.
             Intended to show the collection into camera pixels while still in
             the oversampled domain
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional:
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
@@ -144,7 +144,7 @@ class PSF(Convolvable):
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
@@ -195,14 +195,14 @@ class PSF(Convolvable):
         ----------
         axlim : `float` or `int`
             axis limits, in microns
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure to draw plot in
         ax : `matplotlib.axes.Axis`
             Axis to draw plot in
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
@@ -233,14 +233,14 @@ class PSF(Convolvable):
             azimuth to plot at, in degrees
         axlim : `float`
             limits of axis, will plot [0, axlim]
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
@@ -475,14 +475,14 @@ class RGBPSF(object):
             if not None, overlays gridlines with spacing equal to pix_grid.
             Intended to show the collection into camera pixels while still in
             the oversampled domain
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
@@ -533,12 +533,12 @@ class RGBPSF(object):
             if not None, overlays gridlines with spacing equal to pix_grid.
             Intended to show the collection into camera pixels while still in
             the oversampled domain
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot

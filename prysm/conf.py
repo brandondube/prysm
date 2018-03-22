@@ -125,7 +125,7 @@ class Config(object):
 
         Returns
         -------
-        `object`: `numpy.float32` or `numpy.float64`
+        `object` : `numpy.float32` or `numpy.float64`
             precision used
 
         """
@@ -138,7 +138,7 @@ class Config(object):
 
         Returns
         -------
-        `object`: `numpy.complex64` or `numpy.complex128`
+        `object` : `numpy.complex64` or `numpy.complex128`
             precision used for complex arrays
 
         """

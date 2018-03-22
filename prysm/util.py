@@ -159,7 +159,7 @@ def share_fig_ax(fig=None, ax=None, numax=1, sharex=False, sharey=False):
 
     Parameters
     ----------
-    fig : `matplotlib.figure.Figure`
+    fig : `matplotlib.figure.Figure`, optional
         figure
     ax : `matplotlib.axes.Axis`
         axis or array of axes

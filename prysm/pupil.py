@@ -162,7 +162,7 @@ class Pupil(object):
 
         Parameters
         ----------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional:
             Figure to draw plot in
         ax : `matplotlib.axes.Axis`
             Axis to draw plot in
@@ -171,7 +171,7 @@ class Pupil(object):
         -------
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`, optional:
+        ax : `matplotlib.axes.Axis`
             Axis containing the plot
 
         """
@@ -195,14 +195,14 @@ class Pupil(object):
 
         Parameters
         ----------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure to draw plot in
         ax : `matplotlib.axes.Axis`
             Axis to draw plot in
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
@@ -232,14 +232,14 @@ class Pupil(object):
             Visibility of the interferogram
         passes : `float`
             Number of passes (double-pass, quadra-pass, etc.)
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure to draw plot in
         ax : `matplotlib.axes.Axis`
             Axis to draw plot in
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot

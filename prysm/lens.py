@@ -113,7 +113,7 @@ class Lens(object):
             field_index (`int`): index of the field to maximize MTF at.
 
         Returns:
-            `Lens`: self.
+            `Lens` self.
         '''
         coefs = self.aberrations.copy()
         try:
@@ -171,11 +171,11 @@ class Lens(object):
         Returns:
             `tuple` containing:
 
-                `numpy.ndarray`: (Tan) a 3D ndnarray where the columns
+                `numpy.ndarray` (Tan) a 3D ndnarray where the columns
                     correspond to fields and the rows correspond to spatial
                     frequencies.
 
-                `numpy.ndarray`: (Sag) a 3D ndnarray where the columns
+                `numpy.ndarray` (Sag) a 3D ndnarray where the columns
                     correspond to fields and the rows correspond to spatial
                     frequencies.
 
@@ -206,9 +206,9 @@ class Lens(object):
         Returns:
             `tuple` containing:
 
-                `matplotlib.pyplot.figure`: figure containing the plots.
+                `matplotlib.pyplot.figure` figure containing the plots.
 
-                `list`: the axes the plots are placed in.
+                `list` the axes the plots are placed in.
 
         '''
         psfs = self.psf_vs_field(num_pts)
@@ -244,9 +244,9 @@ class Lens(object):
         Return:
             `tuple` containing:
 
-                `matplotlib.pyplot.figure`: figure containing the plot.
+                `matplotlib.pyplot.figure` figure containing the plot.
 
-                `matplotlib.pyplot.axis`: axis containing the plot.
+                `matplotlib.pyplot.axis` axis containing the plot.
 
         '''
         data_s, data_t = self.mtf_vs_field(num_pts, freqs)
@@ -303,7 +303,7 @@ class Lens(object):
                 iterable.
 
         Returns:
-            `Pupil`: a pupil object.
+            `Pupil` a pupil object.
         '''
         return Seidel(**self.aberrations,
                       epd=self.epd,
@@ -319,7 +319,7 @@ class Lens(object):
                 iterable.
 
         Returns:
-            `PSF`: a psf object.
+            `PSF` a psf object.
         '''
         p = self._make_pupil(field_index=field_index)
         return PSF.from_pupil(p, self.efl)
@@ -332,7 +332,7 @@ class Lens(object):
                 iterable.
 
         Returns:
-            `MTF`: an MTF object.
+            `MTF` an MTF object.
         '''
         pp = self._make_psf(field_index=field_index)
         return MTF.from_psf(pp)
@@ -411,7 +411,7 @@ class Lens(object):
         ''' Makes a deep copy of this Lens instance.
 
         Returns:
-            `Lens`: a new Lens instance.
+            `Lens` a new Lens instance.
         '''
         ret = Lens()
         ret.__dict__ = deepcopy(self.__dict__)
@@ -444,7 +444,7 @@ def _spherical_defocus_from_monochromatic_mtf(lens, frequencies, mtf_s, mtf_t):
             to the frequencies argument.
 
     Returns:
-        `Lens`: A new lens object with its aberrations field modified with new
+        `Lens` A new lens object with its aberrations field modified with new
             spherical coefficients.
 
     '''

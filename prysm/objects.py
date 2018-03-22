@@ -54,9 +54,9 @@ class Image(object):
         Returns:
             `tuple` containing:
 
-                `matplotlib.figure`: figure containing the plot.
+                `matplotlib.figure` figure containing the plot.
 
-                `matplotlib.axis`: axis containing the plot.
+                `matplotlib.axis` axis containing the plot.
 
         '''
         lims = (0, 1)
@@ -84,9 +84,9 @@ class Image(object):
         Returns:
             `tuple` containing:
 
-                `matplotlib.figure`: figure containing the plot.
+                `matplotlib.figure` figure containing the plot.
 
-                `matplotlib.axis`: axis containing the plot.
+                `matplotlib.axis` axis containing the plot.
 
         '''
         dat = abs(fftshift(fft2(pad2d(self.data))))
@@ -120,7 +120,7 @@ class Image(object):
             psf (`PSF`): a PSF
 
         Returns:
-            `Image`: A new, blurred image.
+            `Image` A new, blurred image.
 
         '''
         img_psf = self.as_psf()
@@ -159,7 +159,7 @@ class Image(object):
             scale (`float`): pixel scale, in microns.
 
         Returns:
-            `Image`: a new image object.
+            `Image` a new image object.
 
         Notes:
             TODO: proper handling of images with more than 8bpp.
@@ -219,9 +219,9 @@ class RGBImage(object):
         Returns:
             `tuple` containing:
 
-                `matplotlib.figure`: figure containing the plot.
+                `matplotlib.figure` figure containing the plot.
 
-                `matplotlib.axis`: axis containing the plot.
+                `matplotlib.axis` axis containing the plot.
 
         '''
         lims = (0, 1)
@@ -242,7 +242,7 @@ class RGBImage(object):
             color (`string`): red, green, or blue
 
         Returns:
-            `PSF`: a PSF object for the given color plane.
+            `PSF` a PSF object for the given color plane.
 
         '''
         if color.lower() in ('g', 'green'):
@@ -283,7 +283,7 @@ class RGBImage(object):
             rgbpsf (`RGBPSF`): an RGBPSF
 
         Returns:
-            `RGBImage`: A new, blurred image.
+            `RGBImage` A new, blurred image.
 
         '''
         img_r = self.as_psf('r')
@@ -318,7 +318,7 @@ class RGBImage(object):
             scale (`float`): pixel scale, in microns.
 
         Returns:
-            `RGBImage`: a new image object.
+            `RGBImage` a new image object.
 
         Notes:
             TODO: proper handling of images with more than 8bpp.
@@ -346,7 +346,7 @@ def rgbimage_to_datacube(rgbimage):
         rgbimage (`RGBImage`): an RGBImage object.
 
     Returns:
-        `numpy.ndarray`: an ndarray of shape m x n x 3.
+        `numpy.ndarray` an ndarray of shape m x n x 3.
     '''
     dat = np.empty((rgbimage.samples_x, rgbimage.samples_y, 3), dtype=np.uint8)
     dat[:, :, 0] = rgbimage.R * 255
@@ -409,7 +409,7 @@ class Slit(Image):
             unit_y (numpy.ndarray): sample points in y axis.
 
         Returns:
-            `numpy.ndarray`: 2D numpy array containing the analytic fourier transform.
+            `numpy.ndarray` 2D numpy array containing the analytic fourier transform.
 
         '''
         xq, yq = np.meshgrid(unit_x, unit_y)
@@ -511,7 +511,7 @@ class TiltedSquare(Image):
             samples (`int`): number of samples.
 
         Returns:
-            `TiltedSquare`: new TiltedSquare instance.
+            `TiltedSquare` new TiltedSquare instance.
 
         '''
         radius = 0.3

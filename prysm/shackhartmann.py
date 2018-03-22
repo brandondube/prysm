@@ -186,14 +186,14 @@ class ShackHartmann(object):
 
         Parameters
         ----------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
@@ -216,7 +216,7 @@ class ShackHartmann(object):
         make_image : `bool`
             boolean, whether to simulate the actual detector; must be false or will raise
             NotImplementedError
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
@@ -303,14 +303,14 @@ class ShackHartmann(object):
             which capture to plot, defaults to most recent
         type : `str`, {'quiver', 'dots'}
             what type of plot to make
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
