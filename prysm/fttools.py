@@ -1,7 +1,7 @@
 """Supplimental tools for computing fourier transforms."""
 import numpy as np
 
-from prysm.mathops import floor, ceil, fftshift, fftfreq
+from .mathops import floor, ceil, fftshift, fftfreq
 
 
 def pad2d(array, Q=2, value=0):

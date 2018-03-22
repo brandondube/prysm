@@ -3,11 +3,11 @@ from collections import deque
 
 import numpy as np
 
-from prysm.conf import config
-from prysm.mathops import (floor, ceil, cos, sinc)
-from prysm.psf import PSF
-from prysm.objects import Image
-from prysm.util import is_odd
+from .conf import config
+from .mathops import (floor, ceil, cos, sinc)
+from .psf import PSF
+from .objects import Image
+from .util import is_odd
 
 
 class Detector(object):

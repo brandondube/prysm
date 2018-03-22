@@ -4,9 +4,10 @@ import numpy as np
 import pandas as pd
 
 from scipy.interpolate import griddata
-from prysm.mathops import floor, ceil, sin, cos, radians
-from prysm.util import correct_gamma, share_fig_ax
-from prysm.io import read_trioptics_mtf_vs_field, read_trioptics_MTFvFvF
+
+from .mathops import floor, ceil, sin, cos, radians
+from .util import correct_gamma, share_fig_ax
+from .io import read_trioptics_mtf_vs_field, read_trioptics_MTFvFvF
 
 
 class MTFvFvF(object):

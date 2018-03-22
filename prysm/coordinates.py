@@ -2,7 +2,7 @@
 import numpy as np
 from scipy import interpolate
 
-from prysm.mathops import pi, sqrt, atan2, cos, sin, exp
+from .mathops import pi, sqrt, atan2, cos, sin, exp
 
 
 def cart_to_polar(x, y):

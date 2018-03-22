@@ -4,12 +4,12 @@ from collections import namedtuple
 import numpy as np
 import pandas as pd
 
-from prysm.seidel import Seidel
-from prysm.fringezernike import FringeZernike
-from prysm.otf import MTF
-from prysm.mtf_utils import mtf_ts_extractor, mtf_ts_to_dataframe
-from prysm.thinlens import defocus_to_image_displacement
-from prysm.mathops import sqrt
+from .seidel import Seidel
+from .fringezernike import FringeZernike
+from .otf import MTF
+from .mtf_utils import mtf_ts_extractor, mtf_ts_to_dataframe
+from .thinlens import defocus_to_image_displacement
+from .mathops import sqrt
 
 SimulationConfig = namedtuple('SimulationConfig',
                               ['efl',

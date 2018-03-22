@@ -7,18 +7,18 @@ from functools import lru_cache
 
 import numpy as np
 
-from prysm.conf import config
-from prysm.mathops import (
+from .conf import config
+from .mathops import (
     fft2,
     fftshift,
     sin,
     cos,
     sqrt,
 )
-from prysm.coordinates import cart_to_polar
-from prysm.psf import PSF
-from prysm.fttools import forward_ft_unit, pad2d
-from prysm.util import share_fig_ax, is_odd
+from .coordinates import cart_to_polar
+from .psf import PSF
+from .fttools import forward_ft_unit, pad2d
+from .util import share_fig_ax, is_odd
 
 
 class Image(object):

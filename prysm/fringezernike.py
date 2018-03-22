@@ -2,8 +2,8 @@
 '''
 import numpy as np
 
-from prysm.conf import config
-from prysm.mathops import (
+from .conf import config
+from .mathops import (
     jit,
     vectorize,
     sin,
@@ -11,7 +11,7 @@ from prysm.mathops import (
     atan2,
     sqrt,
 )
-from prysm.pupil import Pupil
+from .pupil import Pupil
 
 
 _names = (

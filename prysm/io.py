@@ -5,7 +5,7 @@ import codecs
 
 import numpy as np
 
-from prysm.conf import config
+from .conf import config
 
 
 def read_trioptics_MTFvFvF(file_path):

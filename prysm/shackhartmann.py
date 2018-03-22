@@ -3,9 +3,9 @@ from collections import deque
 
 import numpy as np
 
-from prysm.detector import bindown
-from prysm.units import waves_to_microns
-from prysm.util import share_fig_ax
+from .detector import bindown
+from .units import waves_to_microns
+from .util import share_fig_ax
 
 
 class ShackHartmann(object):

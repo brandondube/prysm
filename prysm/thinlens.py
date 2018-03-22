@@ -1,7 +1,8 @@
 """A collection of thin lens equations for system modeling."""
-from prysm.util import guarantee_array
-from prysm.fringezernike import _normalizations
-from prysm.mathops import atan2, sin
+
+from .util import guarantee_array
+from .fringezernike import _normalizations
+from .mathops import atan2, sin
 
 
 def object_to_image_dist(efl, object_distance):

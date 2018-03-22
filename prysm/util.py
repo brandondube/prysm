@@ -2,9 +2,10 @@
 from operator import itemgetter
 
 import numpy as np
+
 from matplotlib import pyplot as plt
 
-from prysm.mathops import sqrt
+from .mathops import sqrt
 
 
 def is_odd(int):

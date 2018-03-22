@@ -4,15 +4,14 @@ import numpy as np
 from scipy import interpolate
 from scipy.special import j1
 
-from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1.axes_rgb import make_rgb_axes
 
-from prysm.conf import config
-from prysm.mathops import pi, floor
-from prysm.coordinates import uniform_cart_to_polar
-from prysm.util import correct_gamma, share_fig_ax
-from prysm.convolution import Convolvable
-from prysm.propagation import prop_pupil_plane_to_psf_plane
+from .conf import config
+from .mathops import pi, floor
+from .coordinates import uniform_cart_to_polar
+from .util import correct_gamma, share_fig_ax
+from .convolution import Convolvable
+from .propagation import prop_pupil_plane_to_psf_plane
 
 
 class PSF(Convolvable):

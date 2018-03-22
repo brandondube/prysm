@@ -3,7 +3,7 @@
 import numpy as np
 from scipy.spatial import Delaunay
 
-from prysm.mathops import (
+from .mathops import (
     exp,
     log,
     sin,

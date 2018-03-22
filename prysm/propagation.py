@@ -1,9 +1,9 @@
 """Numerical optical propagation."""
 import numpy as np
 
-from prysm.mathops import fftshift, ifftshift, fft2
-from prysm.fttools import pad2d
-from prysm.util import pupil_sample_to_psf_sample
+from .mathops import fftshift, ifftshift, fft2
+from .fttools import pad2d
+from .util import pupil_sample_to_psf_sample
 
 
 def prop_pupil_plane_to_psf_plane(wavefunction, input_sample_spacing, prop_dist, wavelength, Q):

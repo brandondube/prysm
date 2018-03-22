@@ -4,9 +4,9 @@ from functools import lru_cache
 
 import numpy as np
 
-from prysm.conf import config
-from prysm.pupil import Pupil
-from prysm.mathops import cos
+from .conf import config
+from .pupil import Pupil
+from .mathops import cos
 
 
 class Seidel(Pupil):

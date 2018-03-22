@@ -3,8 +3,8 @@ import numpy as np
 
 from scipy.interpolate import interp2d
 
-from prysm.mathops import fft2, ifft2, fftshift, fftfreq
-from prysm.fttools import forward_ft_unit
+from .mathops import fft2, ifft2, fftshift, fftfreq
+from .fttools import forward_ft_unit
 
 
 class Convolvable(object):

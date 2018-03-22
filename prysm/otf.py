@@ -3,13 +3,11 @@ import numpy as np
 
 from scipy import interpolate
 
-from matplotlib import pyplot as plt
-
-from prysm.mathops import fft2, fftshift, pi, sqrt, arccos
-from prysm.psf import PSF
-from prysm.fttools import forward_ft_unit
-from prysm.util import correct_gamma, share_fig_ax
-from prysm.coordinates import polar_to_cart
+from .mathops import fft2, fftshift, pi, sqrt, arccos
+from .psf import PSF
+from .fttools import forward_ft_unit
+from .util import correct_gamma, share_fig_ax
+from .coordinates import polar_to_cart
 
 
 class MTF(object):

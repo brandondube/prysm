@@ -7,13 +7,13 @@ from copy import deepcopy
 import numpy as np
 from scipy.optimize import minimize
 
-from prysm.conf import config
-from prysm.seidel import Seidel
-from prysm.psf import PSF
-from prysm.otf import MTF
-from prysm.util import share_fig_ax
-from prysm.thinlens import image_displacement_to_defocus
-from prysm.mtf_utils import MTFvFvF
+from .conf import config
+from .seidel import Seidel
+from .psf import PSF
+from .otf import MTF
+from .util import share_fig_ax
+from .thinlens import image_displacement_to_defocus
+from .mtf_utils import MTFvFvF
 
 
 class Lens(object):

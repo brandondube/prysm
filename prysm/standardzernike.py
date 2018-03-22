@@ -3,8 +3,8 @@ optical systems.
 '''
 import numpy as np
 
-from prysm.conf import config
-from prysm.mathops import (
+from .conf import config
+from .mathops import (
     jit,
     vectorize,
     atan2,
@@ -12,7 +12,7 @@ from prysm.mathops import (
     sin,
     sqrt,
 )
-from prysm.pupil import Pupil
+from .pupil import Pupil
 
 _names = (
     'Z0  - Piston / Bias',

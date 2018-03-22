@@ -1,5 +1,5 @@
 """Extra functions, used for demos and education."""
-from prysm.util import share_fig_ax
+from .util import share_fig_ax
 
 
 def plot_fourier_chain(pupil, psf, mtf, fig=None, axs=None, sizex=12, sizey=6):

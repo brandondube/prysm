@@ -8,16 +8,13 @@ from numpy import (
     isfinite,
 )
 
-from matplotlib import pyplot as plt
-
-from prysm.conf import config
-from prysm.util import share_fig_ax, rms
-from prysm.coordinates import cart_to_polar
-from prysm.units import (
-    waves_to_microns, waves_to_nanometers,
+from .conf import config
+from .util import share_fig_ax, rms
+from .coordinates import cart_to_polar
+from .units import (
     microns_to_waves, nanometers_to_waves,
 )
-from prysm.mathops import (
+from .mathops import (
     nan, pi,
     exp,
     sin

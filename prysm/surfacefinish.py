@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from prysm.pupil import Pupil
+from .pupil import Pupil
 
 
 class SurfaceFinish(Pupil):
