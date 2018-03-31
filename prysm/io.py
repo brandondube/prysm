@@ -7,8 +7,10 @@ import numpy as np
 
 from .conf import config
 
+trioptics_enc = 'cp1252'
 
-def read_trioptics_MTFvFvF(file_path):
+
+def read_trioptics_mtfvfvf(file_path):
     """Read MTF vs Field vs Focus data from a Trioptics .txt dump.
 
     Parameters
@@ -68,9 +70,8 @@ def read_trioptics_mtf_vs_field(file_path):
         dictionary with keys of freq, field, tan, sag
 
     """
-    enc = 'cp1252'
-    # read the file into memory and handle ios-8859-1 to utf-8 for non windows platforms
-    with codecs.open(file_path, mode='r', encoding=enc) as fid:
+    # read the file into memory and handle ISO-8859-1 to UTF-8 for non windows platforms
+    with codecs.open(file_path, mode='r', encoding=trioptics_enc) as fid:
         data = codecs.encode(fid.read(), 'utf-8').decode('utf-8')
 
         # compile a pattern that will search for the image heights in the file and extract
@@ -100,3 +101,39 @@ def read_trioptics_mtf_vs_field(file_path):
             'tan': tan,
             'sag': sag,
         }
+
+
+def read_trioptics_mtf(file_path):
+    # read the file into memory and handle ISO-8859-1 to UTF-8 for non windows platforms
+    with codecs.open(file_path, mode='r', encoding=trioptics_enc) as fid:
+        data = codecs.encode(fid.read(), 'utf-8').decode('utf-8')
+
+    # compile regex scanners to grab wavelength, focus, and frequency information
+    # in addition to the T, S MTF data.
+    focus_scanner = re.compile(r'Focus Position  : (\-?\d+\.\d+) mm')
+    wavelength_scanner = re.compile(r'Wavelength      : (\d+) nm')
+    data_scanner = re.compile(r'\r\n(\d+\.?\d?)=09\r\n(\d+\.\d+)=09')
+
+    # get focus and wavelength
+    focus_pos = float(focus_scanner.search(data).group(1))
+    wavelength = float(wavelength_scanner.search(data).group(1)) / 1e3  # nm to um
+
+    # simultaneously grab frequency and MTF
+    result = data_scanner.findall(data)
+    freqs, mtfs = [], []
+    for dat in result:
+        freqs.append(float(dat[0]))
+        mtfs.append(dat[1])
+
+    breakpt = len(mtfs) // 2
+    t = np.asarray(mtfs[:breakpt], dtype=config.precision)
+    s = np.asarray(mtfs[breakpt:], dtype=config.precision)
+    freqs = tuple(freqs[:breakpt])
+
+    return {
+        'focus': focus_pos,
+        'wavelength': wavelength,
+        'freq': freqs,
+        'tan': t,
+        'sag': s,
+    }
