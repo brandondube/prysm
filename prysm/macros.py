@@ -13,15 +13,13 @@ from .mathops import sqrt
 
 SystemConfig = namedtuple('SystemConfig', ['efl', 'fno', 'wvl'])
 SimulationConfig = namedtuple('SimulationConfig', SystemConfig._fields +
-                              ['efl',
-                               'fno',
-                               'wvl',
-                               'samples',
+                              ['samples',
                                'freqs',
                                'focus_range_waves',
                                'focus_zernike',
                                'focus_normed',
-                               'focus_planes'])
+                               'focus_planes',
+                               ])
 
 DEFAULT_SIM_PARAMS = SimulationConfig(
     efl=50,
