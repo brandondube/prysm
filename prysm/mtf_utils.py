@@ -7,7 +7,7 @@ from scipy.interpolate import griddata
 
 from .mathops import floor, ceil, sin, cos, radians
 from .util import correct_gamma, share_fig_ax
-from .io import read_trioptics_mtf_vs_field, read_trioptics_MTFvFvF
+from .io import read_trioptics_mtf_vs_field, read_trioptics_mtfvfvf
 
 
 class MTFvFvF(object):
@@ -271,7 +271,7 @@ class MTFvFvF(object):
             new MTFvFvF object
 
         """
-        return MTFvFvF(**read_trioptics_MTFvFvF(file_path))
+        return MTFvFvF(**read_trioptics_mtfvfvf(file_path))
 
 
 def mtf_ts_extractor(mtf, freqs):
