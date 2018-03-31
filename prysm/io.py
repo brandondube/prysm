@@ -104,6 +104,19 @@ def read_trioptics_mtf_vs_field(file_path):
 
 
 def read_trioptics_mtf(file_path):
+    """Read MTF data from a Trioptics data file.
+
+    Parameters
+    ----------
+    file_path : path_like
+        location of a .mht certificate file
+
+    Returns
+    -------
+    `dict`
+        dictionary with keys focus, wavelength, freq, tan, sag
+
+    """
     # read the file into memory and handle ISO-8859-1 to UTF-8 for non windows platforms
     with codecs.open(file_path, mode='r', encoding=trioptics_enc) as fid:
         data = codecs.encode(fid.read(), 'utf-8').decode('utf-8')
