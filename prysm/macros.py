@@ -11,15 +11,14 @@ from .mtf_utils import mtf_ts_extractor, mtf_ts_to_dataframe
 from .thinlens import defocus_to_image_displacement
 from .mathops import sqrt
 
-SystemConfig = namedtuple('SystemConfig', ['efl', 'fno', 'wvl'])
+SystemConfig = namedtuple('SystemConfig', ('efl', 'fno', 'wvl', 'samples'))
 SimulationConfig = namedtuple('SimulationConfig', SystemConfig._fields +
-                              ['samples',
-                               'freqs',
+                              ('freqs',
                                'focus_range_waves',
                                'focus_zernike',
                                'focus_normed',
                                'focus_planes',
-                               ])
+                               ))
 
 DEFAULT_SIM_PARAMS = SimulationConfig(
     efl=50,
