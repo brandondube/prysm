@@ -11,7 +11,8 @@ from .mtf_utils import mtf_ts_extractor, mtf_ts_to_dataframe
 from .thinlens import defocus_to_image_displacement
 from .mathops import sqrt
 
-SimulationConfig = namedtuple('SimulationConfig',
+SystemConfig = namedtuple('SystemConfig', ['efl', 'fno', 'wvl'])
+SimulationConfig = namedtuple('SimulationConfig', SystemConfig._fields +
                               ['efl',
                                'fno',
                                'wvl',
