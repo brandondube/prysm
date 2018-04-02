@@ -34,10 +34,12 @@ class Convolvable(object):
         self.unit_x = unit_x
         self.unit_y = unit_y
         self.has_analytic_ft = has_analytic_ft
-        self.sample_spacing = unit_x[1] - unit_x[0]
         if data is not None:
             self.samples_x, self.samples_y = data.shape
             self.center_x, self.center_y = self.samples_x // 2, self.samples_y // 2
+            self.sample_spacing = unit_x[1] - unit_x[0]
+        else:
+            self.sample_spacing = 1e99
 
     def conv(self, other):
         """Convolves this convolvable with another.
@@ -108,7 +110,7 @@ class Convolvable(object):
         elif not self.has_analytic_ft and other.has_analytic_ft:
             return single_analytical_ft_convolution(self, other)
         else:
-            raise NotImplementedError('Other convolutional cases not implemented')
+            return pure_numerical_ft_convolution(self, other)
 
 
 def double_analytical_ft_convolution(convolvable1, convolvable2):
@@ -251,12 +253,22 @@ def _compute_output_grid(convolvable1, convolvable2):
     if convolvable1.unit_x[0] < convolvable2.unit_x[0]:
         output_x_left = convolvable1.unit_x[0]
     else:
-        output_x_right = convolvable2.unit_x[0]
+        output_x_left = convolvable2.unit_x[0]
+
+    if convolvable1.unit_x[-1] > convolvable2.unit_x[-1]:
+        output_x_right = convolvable1.unit_x[-1]
+    else:
+        output_x_right = convolvable2.unit_x[-1]
 
     if convolvable1.unit_y[0] < convolvable2.unit_y[0]:
         output_y_left = convolvable1.unit_y[0]
     else:
-        output_y_right = convolvable2.unit_y[0]
+        output_y_left = convolvable2.unit_y[0]
+
+    if convolvable1.unit_y[-1] > convolvable2.unit_y[-1]:
+        output_y_right = convolvable1.unit_y[-1]
+    else:
+        output_y_right = convolvable2.unit_y[-1]
 
     # if region is not an integer multiple of sample spacings, enlarge to make this true
     x_rem = (output_x_right - output_x_left) % output_spacing
