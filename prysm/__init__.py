@@ -7,7 +7,6 @@ from prysm.pupil import Pupil
 from prysm.fringezernike import FringeZernike
 from prysm.standardzernike import StandardZernike
 from prysm.seidel import Seidel
-from prysm.surfacefinish import SurfaceFinish
 from prysm.psf import PSF, MultispectralPSF, RGBPSF
 from prysm.otf import MTF
 from prysm.geometry import (
@@ -46,7 +45,6 @@ __all__ = [
     'FringeZernike',
     'StandardZernike',
     'Seidel',
-    'SurfaceFinish',
     'PSF',
     'MultispectralPSF',
     'RGBPSF',
