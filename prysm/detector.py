@@ -4,8 +4,8 @@ from collections import deque
 import numpy as np
 
 from .conf import config
-from .mathops import (floor, ceil, cos, sinc)
-from .psf import PSF
+from .convolution import Convolvable
+from .mathops import floor, ceil, cos, sinc
 from .objects import Image
 from .util import is_odd
 
@@ -147,7 +147,7 @@ class Detector(object):
         return fig, ax
 
 
-class OLPF(PSF):
+class OLPF(Convolvable):
     """Optical Low Pass Filter.
 
     Applies blur to an image to suppress high frequency MTF and aliasing when combined with a PixelAperture.
@@ -222,7 +222,7 @@ class OLPF(PSF):
                 cos(2 * yq * self.width_y / 1e3)).astype(config.precision)
 
 
-class PixelAperture(PSF):
+class PixelAperture(Convolvable):
     """The aperture of a pixel.
 
     Attributes
@@ -237,20 +237,20 @@ class PixelAperture(PSF):
         y-width of the pixel aperture, um, full width
 
     """
-    def __init__(self, width_x, width_y=None, sample_spacing=0.1, samples_x=384, samples_y=None):
+    def __init__(self, width_x, width_y=None, sample_spacing=0, samples_x=None, samples_y=None):
         """Create a new `PixelAperture` object.
 
         Parameters
         ----------
         width_x : `float`
             width of the aperture in the x dimension, in microns.
-        width_y : `float`
+        width_y : `float`, optional
             siez of the aperture in the y dimension, in microns
-        sample_spacing : `float`
+        sample_spacing : `float`, optional
             spacing of samples, in microns
-        samples_x : `int`
+        samples_x : `int`, optional
             number of samples in the x dimension
-        samples_y : `int`
+        samples_y : `int`, optional
             number of samples in the y dimension
 
         """
@@ -261,18 +261,24 @@ class PixelAperture(PSF):
 
         self.width_x = width_x
         self.width_y = width_y
-        self.center_x = samples_x // 2
-        self.center_y = samples_y // 2
 
-        half_width = width_x / 2
-        half_height = width_y / 2
-        steps_x = int(half_width // sample_spacing)
-        steps_y = int(half_height // sample_spacing)
+        if samples_x is None:  # do no math
+            data, unit_x, unit_y = None, np.zeros(2), np.zeros(2)
+            super().__init__(data=data, unit_x=unit_x, unit_y=unit_y, has_analytic_ft=True)
+        else:  # build PixelAperture model
+            center_x = samples_x // 2
+            center_y = samples_y // 2
+            half_width = width_x / 2
+            half_height = width_y / 2
+            steps_x = int(half_width // sample_spacing)
+            steps_y = int(half_height // sample_spacing)
 
-        pixel_aperture = np.zeros((samples_x, samples_y))
-        pixel_aperture[self.center_y - steps_y:self.center_y + steps_y,
-                       self.center_x - steps_x:self.center_x + steps_x] = 1
-        super().__init__(data=pixel_aperture, sample_spacing=sample_spacing)
+            pixel_aperture = np.zeros((samples_x, samples_y))
+            pixel_aperture[center_y - steps_y:center_y + steps_y,
+                           center_x - steps_x:center_x + steps_x] = 1
+            extx, exty = samples_x // 2 * sample_spacing, samples_y // 2 * sample_spacing
+            ux, uy = np.linspace(-extx, extx, samples_x), np.linspace(-exty, exty, samples_y)
+            super().__init__(data=pixel_aperture, unit_x=ux, unit_y=uy, has_analytic_ft=True)
 
     def analytic_ft(self, unit_x, unit_y):
         """Analytic fourier transform of a pixel aperture.
