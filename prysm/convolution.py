@@ -131,10 +131,9 @@ def double_analytical_ft_convolution(convolvable1, convolvable2):
     """
     spatial_x, spatial_y = _compute_output_grid(convolvable1, convolvable2)
     fourier_x = fftfreq(spatial_x.shape[0], spatial_x[1] - spatial_x[0])
-    fourier_y = fftfreq(spatial_y.shape[0], spatial_y[0] - spatial_y[0])
-    gridx, gridy = np.meshgrid(fourier_x, fourier_y)
-    c1_part = convolvable1.analytic_ft(gridx, gridy)
-    c2_part = convolvable2.analytic_ft(gridx, gridy)
+    fourier_y = fftfreq(spatial_y.shape[0], spatial_y[1] - spatial_y[0])
+    c1_part = convolvable1.analytic_ft(fourier_x, fourier_y)
+    c2_part = convolvable2.analytic_ft(fourier_x, fourier_y)
     out_data = abs(fftshift(ifft2(c1_part * c2_part)))
     return Convolvable(out_data, spatial_x, spatial_y, has_analytic_ft=False)
 
