@@ -1,14 +1,30 @@
-"""Defines behavior of convolvable items and a base class to encapsulate that behavior."""
+"""Defines behavior of convolvable items and a base class to encapsulate that behavior.
+"""
 import numpy as np
 
 from scipy.interpolate import interp2d
 
 from .mathops import fft2, ifft2, fftshift, fftfreq
-from .fttools import forward_ft_unit
+from .fttools import forward_ft_unit, pad2d
+from .util import share_fig_ax
 
 
 class Convolvable(object):
-    """A base class for convolvable objects to inherit from."""
+    """A base class for convolvable objects to inherit from.
+
+    Attributes
+    ----------
+    data : TYPE
+        Description
+    has_analytic_ft : TYPE
+        Description
+    sample_spacing : float
+        Description
+    unit_x : TYPE
+        Description
+    unit_y : TYPE
+        Description
+    """
     def __init__(self, data, unit_x, unit_y, has_analytic_ft=False):
         """Create a new Convolvable object.
 
@@ -18,14 +34,14 @@ class Convolvable(object):
             2D ndarray of data
         unit_x : `numpy.ndarray`
             1D ndarray defining x data grid
-        unit_y  : `numpy.ndarray`
+        unit_y : `numpy.ndarray`
             1D ndarray defining y data grid
         has_analytic_ft : `bool`, optional
             Whether this convolvable overrides self.analytic_ft, and has a known
             analytical fourier tansform
 
-        Returns
-        -------
+        No Longer Returned
+        ------------------
         `Convolvable`
             New convolvable object
 
@@ -111,6 +127,103 @@ class Convolvable(object):
             return single_analytical_ft_convolution(self, other)
         else:
             return pure_numerical_ft_convolution(self, other)
+
+    def show(self, interp_method=None, fig=None, ax=None):
+        '''Displays the image.
+
+        Parameters
+        ----------
+        interp_method : `string`
+            interpolation technique used in display.
+
+        fig : `matplotlib.figure`
+            figure to display in.
+
+        ax : `matplotlib.axis`
+            axis to display in.
+
+        Returns
+        -------
+        `tuple` containing:
+
+            `matplotlib.figure` figure containing the plot.
+
+            `matplotlib.axis` axis containing the plot.
+
+        '''
+        if self.unit_x:
+            extx = [self.unit_x[0], self.unit_x[1]]
+            exty = [self.unit_y[0], self.unit_y[1]]
+            ext = [*extx, *exty]
+        else:
+            ext = None
+
+        fig, ax = share_fig_ax(fig, ax)
+        ax.imshow(self.data,
+                  extent=ext,
+                  origin='lower',
+                  clim=(0, 1),
+                  cmap='Greys_r',
+                  interpolation=interp_method)
+        # ax.set_axis_off()
+        return fig, ax
+
+    def show_fourier(self, freq_x=None, freq_y=None, interp_method='lanczos', fig=None, ax=None):
+        '''Displays the fourier transform of the image.
+
+        Parameters
+        ----------
+        interp_method : `string`
+            method used to interpolate the data for display.
+        freq_x : iterable
+            x frequencies to use for convolvable with analytical FT and no data
+        freq_y : iterable
+            y frequencies to use for convolvable with analytic FT and no data
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        Notes
+        -----
+        freq_x and freq_y are unused when the convolvable has a .data field.
+
+        '''
+        if self.has_analytic_ft:
+            if self.data is None:
+                if freq_x is None or freq_y is None:
+                    raise ValueError('Convolvable has analytic FT and no data, must proide x and y coordinates')
+            else:
+                lx, ly, ss = len(self.unit_x), len(self.unit_y), self.sample_spacing
+                freq_x, freq_y = forward_ft_unit(ss, lx), forward_ft_unit(ss, ly)
+
+            data = self.analytic_ft(freq_x, freq_y)
+        else:
+            data = abs(fftshift(fft2(pad2d(self.data))))
+            data /= data.max()
+            freq_x = forward_ft_unit(self.sample_spacing, self.samples_x)
+            freq_y = forward_ft_unit(self.sample_spacing, self.samples_y)
+
+        xmin, xmax = freq_x[0], freq_x[-1]
+        ymin, ymax = freq_y[0], freq_y[-1]
+
+        fig, ax = share_fig_ax(fig, ax)
+        im = ax.imshow(data,
+                       extent=[xmin, xmax, ymin, ymax],
+                       cmap='Greys_r',
+                       interpolation=interp_method,
+                       origin='lower')
+        fig.colorbar(im, ax=ax)
+        ax.set(xlim=(xmin, xmax), xlabel=r' \nu_x [cy/mm]',
+               ylim=(ymin, ymax), ylabel=r' \nu_y [cy/mm]')
+        return fig, ax
 
 
 def double_analytical_ft_convolution(convolvable1, convolvable2):
