@@ -134,7 +134,7 @@ def read_trioptics_mtf(file_path):
     for blockend in blockend_scanner.finditer(data):
         if blockend.end() > sagpos and cutoff is None:
             cutoff = blockend.end()
-    print(sagpos, cutoff)
+
     # get focus and wavelength
     focus_pos = float(focus_scanner.search(data).group(1))
     wavelength = float(wavelength_scanner.search(data).group(1)) / 1e3  # nm to um
