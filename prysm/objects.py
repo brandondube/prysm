@@ -79,7 +79,7 @@ class Image(Convolvable):
         TODO: proper handling of images with more than 8bpp.
 
         '''
-        imgarr = imread(path, flatten=True, mode='F')
+        imgarr = imread(path, flatten=True, pilmode='F')
 
         return Image(data=np.flip(imgarr, axis=0) / 255, sample_spacing=scale, synthetic=False)
 

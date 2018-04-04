@@ -128,44 +128,50 @@ class Convolvable(object):
         else:
             return pure_numerical_ft_convolution(self, other)
 
-    def show(self, interp_method=None, fig=None, ax=None):
+    def show(self, xlim=(None, None), ylim=(None, None), interp_method=None, show_colorbar=True, fig=None, ax=None):
         '''Displays the image.
 
         Parameters
         ----------
+        xlim : iterable, optional
+            x axis limits
+        ylim : iterable,
+            y axis limits
         interp_method : `string`
-            interpolation technique used in display.
-
-        fig : `matplotlib.figure`
-            figure to display in.
-
-        ax : `matplotlib.axis`
-            axis to display in.
+            interpolation technique used in display
+        show_colorbar : `bool`
+            whether to show the colorbar or not.
+        fig : `matplotlib.figure.Figure`, optional:
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`, optional:
+            Axis containing the plot
 
         Returns
         -------
-        `tuple` containing:
-
-            `matplotlib.figure` figure containing the plot.
-
-            `matplotlib.axis` axis containing the plot.
+        fig : `matplotlib.figure.Figure`, optional:
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`, optional:
+            Axis containing the plot
 
         '''
-        if self.unit_x:
-            extx = [self.unit_x[0], self.unit_x[1]]
-            exty = [self.unit_y[0], self.unit_y[1]]
+        if self.unit_x is not None:
+            extx = [self.unit_x[0], self.unit_x[-1]]
+            exty = [self.unit_y[0], self.unit_y[-1]]
             ext = [*extx, *exty]
         else:
             ext = None
 
         fig, ax = share_fig_ax(fig, ax)
-        ax.imshow(self.data,
-                  extent=ext,
-                  origin='lower',
-                  clim=(0, 1),
-                  cmap='Greys_r',
-                  interpolation=interp_method)
-        # ax.set_axis_off()
+        im = ax.imshow(self.data,
+                       extent=ext,
+                       origin='lower',
+                       clim=(0, 1),
+                       cmap='Greys_r',
+                       interpolation=interp_method)
+        ax.set(xlim=xlim, xlabel=r'$x$ [$\mu m$]',
+               ylim=ylim, ylabel=r'$y$ [$\mu m$]')
+        if show_colorbar:
+            fig.colorbar(im, label=r'Normalized Intensity [a.u.]', ax=ax)
         return fig, ax
 
     def show_fourier(self, freq_x=None, freq_y=None, interp_method='lanczos', fig=None, ax=None):
