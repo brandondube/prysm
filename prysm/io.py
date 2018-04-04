@@ -123,16 +123,24 @@ def read_trioptics_mtf(file_path):
 
     # compile regex scanners to grab wavelength, focus, and frequency information
     # in addition to the T, S MTF data.
+    # lastly, compile a scanner to cut the file after the end of the "MTF Sagittal" scanner
     focus_scanner = re.compile(r'Focus Position  : (\-?\d+\.\d+) mm')
     wavelength_scanner = re.compile(r'Wavelength      : (\d+) nm')
     data_scanner = re.compile(r'\r\n(\d+\.?\d?)=09\r\n(\d+\.\d+)=09')
+    sag_scanner = re.compile(r'Measurement Table: MTF vs. Frequency \( Sagittal \)')
+    blockend_scanner = re.compile(r'  _____ =20')
 
+    sagpos, cutoff = sag_scanner.search(data).end(), None
+    for blockend in blockend_scanner.finditer(data):
+        if blockend.end() > sagpos and cutoff is None:
+            cutoff = blockend.end()
+    print(sagpos, cutoff)
     # get focus and wavelength
     focus_pos = float(focus_scanner.search(data).group(1))
     wavelength = float(wavelength_scanner.search(data).group(1)) / 1e3  # nm to um
 
     # simultaneously grab frequency and MTF
-    result = data_scanner.findall(data)
+    result = data_scanner.findall(data[:cutoff])
     freqs, mtfs = [], []
     for dat in result:
         freqs.append(float(dat[0]))
