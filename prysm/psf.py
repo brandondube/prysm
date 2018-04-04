@@ -2,12 +2,11 @@
 import numpy as np
 
 from scipy import interpolate
-from scipy.special import j1
 
 from mpl_toolkits.axes_grid1.axes_rgb import make_rgb_axes
 
 from .conf import config
-from .mathops import pi, floor
+from .mathops import pi, floor, jinc
 from .coordinates import uniform_cart_to_polar
 from .util import correct_gamma, share_fig_ax
 from .convolution import Convolvable
@@ -623,26 +622,3 @@ def airydisk(unit_r, fno, wavelength):
     """
     u_eff = unit_r * pi / wavelength / fno
     return abs(2 * jinc(u_eff)) ** 2
-
-
-def jinc(r):
-    """Jinc.
-
-    Parameters
-    ----------
-    r : `number`
-        radial distance
-
-    Returns
-    -------
-    `float`
-        the value of j1(x)/x for x != 0, 0.5 at 0
-
-    """
-    if r == 0:
-        return 0.5
-    else:
-        return j1(r) / r
-
-
-jinc = np.vectorize(jinc)

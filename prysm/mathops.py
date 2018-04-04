@@ -29,6 +29,8 @@ from numpy import (
 )
 from numpy.fft import fftshift, ifftshift, fftfreq
 
+from scipy.special import j1
+
 atan2 = arctan2
 atan = arctan
 
@@ -69,6 +71,28 @@ except ImportError:
 
     vectorize = jit
 
+
+def jinc(r):
+    """Jinc.
+
+    Parameters
+    ----------
+    r : `number`
+        radial distance
+
+    Returns
+    -------
+    `float`
+        the value of j1(x)/x for x != 0, 0.5 at 0
+
+    """
+    if r == 0:
+        return 0.5
+    else:
+        return j1(r) / r
+
+
+jinc = np.vectorize(jinc)
 
 # export control
 # thanks, ITAR
