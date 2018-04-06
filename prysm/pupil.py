@@ -17,6 +17,7 @@ from .units import (
     microns_to_waves, nanometers_to_waves,
 )
 from .mathops import (
+    nan,
     pi,
     exp,
     sin
@@ -336,11 +337,16 @@ class Pupil(object):
             self, the pupil instance
 
         """
-        if target.lower() == 'both':
-            self.phase *= mask
+        tl = target.lower()
+        if tl == 'both':
+            idx = mask == 0
+            self.phase[idx] = nan
             self.fcn *= mask
+        elif tl == 'phase':
+            idx = mask == 0
+            self.phase[idx] = nan
         else:
-            self[target] *= mask
+            self.fcn *= mask
 
         return self
 
