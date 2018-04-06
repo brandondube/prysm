@@ -1,5 +1,7 @@
 ''' A repository of fringe zernike aberration descriptions used to model pupils of optical systems.
 '''
+from collections import defaultdict
+
 import numpy as np
 
 from .conf import config
@@ -12,6 +14,7 @@ from .mathops import (
     sqrt,
 )
 from .pupil import Pupil
+from .coordinates import make_rho_phi_grid
 
 
 _names = (
@@ -330,65 +333,56 @@ def Z48(rho, phi):
 
 
 zernfcns = {
-    0.0: Z0,
-    1.0: Z1,
-    2.0: Z2,
-    3.0: Z3,
-    4.0: Z4,
-    5.0: Z5,
-    6.0: Z6,
-    7.0: Z7,
-    8.0: Z8,
-    9.0: Z9,
-    10.0: Z10,
-    11.0: Z11,
-    12.0: Z12,
-    13.0: Z13,
-    14.0: Z14,
-    15.0: Z15,
-    16.0: Z16,
-    17.0: Z17,
-    18.0: Z18,
-    19.0: Z19,
-    20.0: Z20,
-    21.0: Z21,
-    22.0: Z22,
-    23.0: Z23,
-    24.0: Z24,
-    25.0: Z25,
-    26.0: Z26,
-    27.0: Z27,
-    28.0: Z28,
-    29.0: Z29,
-    30.0: Z30,
-    31.0: Z31,
-    32.0: Z32,
-    33.0: Z33,
-    34.0: Z34,
-    35.0: Z35,
-    36.0: Z36,
-    37.0: Z37,
-    38.0: Z38,
-    39.0: Z39,
-    40.0: Z40,
-    41.0: Z41,
-    42.0: Z42,
-    43.0: Z43,
-    44.0: Z44,
-    45.0: Z45,
-    46.0: Z46,
-    47.0: Z47,
-    48.0: Z48,
+    0: Z0,
+    1: Z1,
+    2: Z2,
+    3: Z3,
+    4: Z4,
+    5: Z5,
+    6: Z6,
+    7: Z7,
+    8: Z8,
+    9: Z9,
+    10: Z10,
+    11: Z11,
+    12: Z12,
+    13: Z13,
+    14: Z14,
+    15: Z15,
+    16: Z16,
+    17: Z17,
+    18: Z18,
+    19: Z19,
+    20: Z20,
+    21: Z21,
+    22: Z22,
+    23: Z23,
+    24: Z24,
+    25: Z25,
+    26: Z26,
+    27: Z27,
+    28: Z28,
+    29: Z29,
+    30: Z30,
+    31: Z31,
+    32: Z32,
+    33: Z33,
+    34: Z34,
+    35: Z35,
+    36: Z36,
+    37: Z37,
+    38: Z38,
+    39: Z39,
+    40: Z40,
+    41: Z41,
+    42: Z42,
+    43: Z43,
+    44: Z44,
+    45: Z45,
+    46: Z46,
+    47: Z47,
+    48: Z48,
 }
-
-
-def zernwrapper(term, rms_norm, rho, phi):
-    ''' Wraps the Z0..Z48 functions.
-    '''
-    if rms_norm is True:
-        return _normalizations[term] * zernfcns[term](rho, phi)
-    else:
-        return zernfcns[term](rho, phi)
 
 
 # See JCW - http://wp.optics.arizona.edu/jcwyant/wp-content/uploads/sites/13/2016/08/ZernikePolynomialsForTheWeb.pdf
@@ -443,6 +437,30 @@ _normalizations = (
     2 * sqrt(6),  # Z47
     sqrt(13),     # Z48
 )
+
+
+class FZCache(object):
+    def __init__(self):
+        self.normed = defaultdict(dict)
+        self.regular = defaultdict(dict)
+
+    def get_zernike(self, number, norm, samples):
+        if norm is True:
+            target = self.normed
+        else:
+            target = self.regular
+
+        try:
+            zern = target[samples][number]
+        except KeyError:
+            rho, phi = make_rho_phi_grid(samples, aligned='y')
+            zern = zernfcns[number](rho, phi)
+            if norm is True:
+                zern *= _normalizations[number]
+
+            target[samples][number] = zern.copy()
+
+        return zern
 
 
 class FringeZernike(Pupil):
@@ -550,16 +568,12 @@ class FringeZernike(Pupil):
 
         '''
         # build a coordinate system over which to evaluate this function
-        self._gengrid()
         self.phase = np.zeros((self.samples, self.samples), dtype=config.precision)
         for term, coef in enumerate(self.coefs):
             # short circuit for speed
             if coef == 0:
                 continue
-            self.phase += coef * zernwrapper(term=term,
-                                             rms_norm=self.normalize,
-                                             rho=self.rho,
-                                             phi=self.phi)
+            self.phase += coef * zcache.get_zernike(term, self.normalize, self.samples)
 
         self._correct_phase_units()
         self._phase_to_wavefunction()
@@ -640,9 +654,15 @@ def fit(data, num_terms=16, rms_norm=False, round_at=6):
     # compute each zernike term
     zernikes = []
     for i in range(num_terms):
-        zernikes.append(zernwrapper(i, rms_norm, rho, phi))
+        base_zern = zernfcns[i](rho, phi)
+        if rms_norm:
+            base_zern *= _normalizations(i)
+        zernikes.append(base_zern)
     zerns = np.asarray(zernikes).T
 
     # use least squares to compute the coefficients
     coefs = np.linalg.lstsq(zerns, data[pts].flatten())[0]
     return coefs.round(round_at)
+
+
+zcache = FZCache()
