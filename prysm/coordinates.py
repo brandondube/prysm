@@ -2,6 +2,7 @@
 import numpy as np
 from scipy import interpolate
 
+from .config import config
 from .mathops import pi, sqrt, atan2, cos, sin, exp
 
 
@@ -148,3 +149,49 @@ def resample_2d_complex(array, sample_pts, query_pts):
     interp_phase = phasefunc((yq, xq))
 
     return interp_mag * exp(1j * interp_phase)
+
+
+def make_xy_grid(samples):
+    """Create an x, y grid from -1, 1 with n number of samples.
+
+    Parameters
+    ----------
+    samples : `int`
+        number of samples in the output grid, will have shape (samples, samples)
+
+    Returns
+    -------
+    xx : `numpy.ndarray`
+        x meshgrid
+    yy : `numpy.ndarray`
+        y meshgrid
+
+    """
+    x = np.linspace(-1, 1, samples, dtype=config.precision)
+    y = np.linspace(-1, 1, samples, dtype=config.precision)
+    xx, yy = np.meshgrid(x, y)
+    return xx, yy
+
+
+def make_rho_phi_grid(samples, aligned='x'):
+    """Create an rho, phi grid from -1, 1 with n number of samples.
+
+    Parameters
+    ----------
+    samples : `int`
+        number of samples in the output grid, will have shape (samples, samples)
+
+    Returns
+    -------
+    rho : `numpy.ndarray`
+        radial meshgrid
+    phi : `numpy.ndarray`
+        angular meshgrid
+
+    """
+    xx, yy = make_xy_grid(samples)
+    if aligned == 'x':
+        rho, phi = cart_to_polar(xx, yy)
+    else:
+        rho, phi = cart_to_polar(yy, xx)
+    return rho, phi
