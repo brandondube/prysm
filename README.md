@@ -61,11 +61,7 @@ Prysm uses numpy for array operations.  If your environment has [numba](http://n
 
 * Shack-Hartmann sensor models
 
-* A subset of colorimetry and color space transforms
-
 * Utilities for processing MTF and spectral data
-
-* An OceanOptics spectrometer file reader
 
 * An Object-Oriented Lens model based on physical optics
 
