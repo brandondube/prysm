@@ -1,5 +1,7 @@
 """Functions used to generate various geometrical constructs.
 """
+from collections import defaultdict
+
 import numpy as np
 from scipy.spatial import Delaunay
 
@@ -10,6 +12,36 @@ from .mathops import (
     cos,
     pi,
 )
+from .coordinates import cart_to_polar
+
+
+class MaskCache(object):
+    def __init__(self):
+        self.masks = defaultdict(dict)
+
+    def get_mask(self, samples, shape):
+        """Get a mask with the given number of samples and shape.
+
+        Parameters
+        ----------
+        samples : `int`
+            number of samples, mask is (samples,samples) in shape
+        shape : `str`
+            string of a regular n-sided polygon, e.g. 'square', 'hexagon'.
+
+        Returns
+        -------
+        `numpy.ndarray`
+            ndarray; ones inside the shape, zeros outside
+
+        """
+        try:
+            mask = self.masks[samples][shape]
+        except KeyError:
+            mask = shapes[shape](samples=samples)
+            self.masks[samples][shape] = mask.copy()
+
+        return mask
 
 
 def gaussian(sigma=0.5, samples=128):
@@ -98,6 +130,23 @@ def rotated_ellipse(width_major, width_minor, major_axis_angle=0, samples=128):
     minor_axis_term = ((xv * sin(A) - yv * cos(A)) ** 2) / b ** 2
     arr[major_axis_term + minor_axis_term > 1] = 0
     return arr
+
+
+def triangle(samples=128):
+    """Create a square mask.
+
+    Parameters
+    ----------
+    samples : `int`, optional
+        number of samples in the square output array
+
+    Returns
+    -------
+    `numpy.ndarray`
+        binary ndarray representation of the mask
+
+    """
+    return regular_polygon_mask(3, samples)
 
 
 def square(samples=128):
@@ -270,6 +319,29 @@ def trisdecagon(samples=128):
     return regular_polygon_mask(13, samples)
 
 
+def circle(samples=128):
+    """Create a circular mask.
+
+    Parameters
+    ----------
+    samples : `int`, optional
+        number of samples in the square output array
+
+    Returns
+    -------
+    `numpy.ndarray`
+        binary ndarray representation of the mask
+
+    """
+    x = np.linspace(-1, 1, 128)
+    y = x
+    xx, yy = np.meshgrid(x, y)
+    rho, phi = cart_to_polar(xx, yy)
+    mask = np.ones(rho.shape)
+    mask[rho > 1] = 0
+    return mask
+
+
 def regular_polygon_mask(num_sides, num_samples):
     """Generate a regular polygon mask with the given number of sides and samples in the mask array.
 
@@ -343,3 +415,21 @@ def generate_vertices(num_sides, radius=1):
         pts.append((int(x), int(y)))
 
     return np.asarray(pts)
+
+
+shapes = {
+    'circle': circle,
+    'triangle': triangle,
+    'square': square,
+    'pentagon': pentagon,
+    'hexagon': hexagon,
+    'heptagon': heptagon,
+    'octagon': octagon,
+    'nonagon': nonagon,
+    'decagon': decagon,
+    'hendecagon': hendecagon,
+    'dodecagon': dodecagon,
+    'trisdecagon': trisdecagon,
+}
+
+mcache = MaskCache()
