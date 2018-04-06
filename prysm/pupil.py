@@ -5,13 +5,13 @@ from copy import deepcopy
 import numpy as np
 from numpy import (
     empty, zeros,
-    linspace, meshgrid,
+    linspace,
     isfinite,
 )
 
 from .conf import config
 from .util import share_fig_ax, rms
-from .coordinates import cart_to_polar
+from .coordinates import make_rho_phi_grid
 from .geometry import mcache
 from .units import (
     microns_to_waves, nanometers_to_waves,
@@ -283,8 +283,6 @@ class Pupil(object):
                ylabel=r'Pupil $\eta$ [mm]')
         return fig, ax
 
-    # meat 'n potatoes ---------------------------------------------------------
-
     def build(self):
         """Construct a numerical model of a `Pupil`.
 
@@ -376,9 +374,7 @@ class Pupil(object):
             the azimuthal coordinate of the pupil coordinate grid
 
         """
-        x = y = linspace(-1, 1, self.samples, dtype=config.precision)
-        xv, yv = meshgrid(x, y)
-        self.rho, self.phi = cart_to_polar(yv, xv)
+        self.rho, self.phi = make_rho_phi_grid(self.samples, aligned='x')
         return self.rho, self.phi
 
     def _correct_phase_units(self):
