@@ -2,6 +2,7 @@
 '''
 from copy import deepcopy
 
+import numpy as np
 from numpy import (
     empty, zeros,
     linspace, meshgrid,
@@ -11,11 +12,12 @@ from numpy import (
 from .conf import config
 from .util import share_fig_ax, rms
 from .coordinates import cart_to_polar
+from .geometry import mcache
 from .units import (
     microns_to_waves, nanometers_to_waves,
 )
 from .mathops import (
-    nan, pi,
+    pi,
     exp,
     sin
 )
@@ -62,9 +64,14 @@ class Pupil(object):
         1D array which gives the sample locations across the 2D pupil region
     wavelength : `float`
         wavelength of light, um
+    _mask : `numpy.ndarray`
+        mask used to define pupil extent and amplitude
+    mask_target : `str`
+        target for automatic masking on pupil creation
 
     """
-    def __init__(self, samples=128, epd=1.0, wavelength=0.55, opd_unit=r'$\lambda$'):
+    def __init__(self, samples=128, epd=1.0, wavelength=0.55, opd_unit=r'$\lambda$',
+                 mask='circle', mask_target='both'):
         """Create a new `Pupil` instance.
 
         Parameters
@@ -78,6 +85,16 @@ class Pupil(object):
         opd_unit : str, optional, {'waves', 'um', 'nm'}
             unit used to express the OPD.  Equivalent strings may be used to the
             valid options, e.g. 'microns', or 'nanometers'
+        mask : `str` or `numpy.ndarray`
+            mask used to define the amplitude and boundary of the pupil; any
+            regular polygon from `prysm.geometry` as a string, e.g. 'circle' is
+            valid.  A user-provided ndarray can also be used.
+        mask_target : `str`, {'phase', 'fcn', 'both', None}
+            which array to mask during pupil creation; only masking fcn is
+            faster for numerical propagations but will make plot2d() and the
+            phase array not be truncated properly.  Note that if the mask is not
+            binary and `phase` or `both` is used, phase plots will also not be
+            correct, as they will be attenuated by the mask.
 
         Raises
         ------
@@ -107,8 +124,14 @@ class Pupil(object):
         else:
             raise ValueError('OPD must be expressed in waves, microns, or nm')
 
+        if type(mask) is not np.ndarray:
+            mask = mcache.get_mask(self.samples, mask)
+
+        self._mask = mask
+        self.mask_target = mask_target
+
         self.build()
-        self.clip()
+        self.mask(self._mask, self.mask_target)
 
     # quick-access slices, properties ------------------------------------------
 
@@ -296,35 +319,18 @@ class Pupil(object):
         self.fcn = exp(1j * 2 * pi * self.phase)  # phase implicitly in units of waves, no 2pi/l
         return self
 
-    def clip(self, normalized_radius=1):
-        """Clip outside the circular boundary of the pupil.
-
-        Parameters
-        ----------
-        normalized_radius : `float`
-            normalized_radius to clip at
-
-        Returns
-        -------
-        self.phase : `numpy.ndarray`
-            phase of the pupil
-        self.fcn : `numpy.ndarray`
-            complex representation of the pupil
-
-        """
-        self.phase[self.rho > normalized_radius] = nan
-        self.fcn[self.rho > normalized_radius] = 0
-        return self.phase, self.fcn
-
-    def mask(self, mask):
+    def mask(self, mask, target):
         """Apply a mask to the pupil.
 
         Used to implement vignetting, chief ray angles, etc.
 
         Parameters
         ----------
-        mask : `numpy.ndarray`
-            ndarray of real values of the same shape as the pupil
+        mask : `str` or `numpy.ndarray`
+            if a string, uses geometry.mcache for high speed access to a mask with a given shape,
+            e.g. mask='circle' or mask='hexagon'.  If an ndarray, directly use the mask.
+        target : `str`, {'phase', 'fcn', 'both'}
+            which array to mask;
 
         Returns
         -------
@@ -332,8 +338,12 @@ class Pupil(object):
             self, the pupil instance
 
         """
-        self.phase *= mask
-        self.fcn *= mask
+        if target.lower() == 'both':
+            self.phase *= mask
+            self.fcn *= mask
+        else:
+            self[target] *= mask
+
         return self
 
     def clone(self):
@@ -381,28 +391,6 @@ class Pupil(object):
 
         """
         self.phase = convert_phase(self.phase, self)
-
-    def stopdown(self, new_epd):
-        """Simulate stopping a lens down by applying a circular mask to the pupil.
-
-        This truncates its periphery but does not change the size of the array; so Q used when
-        computing a PSF or MTF is no longer required to be 2.
-
-        Parameters
-        ----------
-        new_epd : `float`
-            new diameter of the pupil
-
-        Returns
-        -------
-        `Pupil`
-            new pupil with modified phase and function arrays
-
-        """
-        p = self.clone()
-        radius = new_epd / self.epd
-        p.clip(radius)
-        return p
 
     def __add__(self, other):
         """Sum the phase of two pupils.
