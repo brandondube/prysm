@@ -2,7 +2,7 @@
 import numpy as np
 from scipy import interpolate
 
-from .config import config
+from .conf import config
 from .mathops import pi, sqrt, atan2, cos, sin, exp
 
 
