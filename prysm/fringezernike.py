@@ -453,7 +453,7 @@ class FZCache(object):
         try:
             zern = target[samples][number]
         except KeyError:
-            rho, phi = make_rho_phi_grid(samples, aligned='x')
+            rho, phi = make_rho_phi_grid(samples, aligned='y')
             zern = zernfcns[number](rho, phi)
             if norm is True:
                 zern *= _normalizations[number]

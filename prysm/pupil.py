@@ -380,7 +380,7 @@ class Pupil(object):
             the azimuthal coordinate of the pupil coordinate grid
 
         """
-        self.rho, self.phi = make_rho_phi_grid(self.samples, aligned='x')
+        self.rho, self.phi = make_rho_phi_grid(self.samples, aligned='y')
         return self.rho, self.phi
 
     def _correct_phase_units(self):
