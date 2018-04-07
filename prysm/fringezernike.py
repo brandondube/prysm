@@ -656,7 +656,7 @@ def fit(data, num_terms=16, rms_norm=False, round_at=6):
     for i in range(num_terms):
         base_zern = zernfcns[i](rho, phi)
         if rms_norm:
-            base_zern *= _normalizations(i)
+            base_zern *= _normalizations[i]
         zernikes.append(base_zern)
     zerns = np.asarray(zernikes).T
 
