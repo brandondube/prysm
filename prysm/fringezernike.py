@@ -453,7 +453,7 @@ class FZCache(object):
         try:
             zern = target[samples][number]
         except KeyError:
-            rho, phi = make_rho_phi_grid(samples, aligned='y')
+            rho, phi = make_rho_phi_grid(samples, aligned='x')
             zern = zernfcns[number](rho, phi)
             if norm is True:
                 zern *= _normalizations[number]
@@ -661,7 +661,7 @@ def fit(data, num_terms=16, rms_norm=False, round_at=6):
     zerns = np.asarray(zernikes).T
 
     # use least squares to compute the coefficients
-    coefs = np.linalg.lstsq(zerns, data[pts].flatten())[0]
+    coefs = np.linalg.lstsq(zerns, data[pts].flatten(), rcond=None)[0]
     return coefs.round(round_at)
 
 
