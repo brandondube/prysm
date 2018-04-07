@@ -13,9 +13,6 @@ from .conf import config
 from .util import share_fig_ax, rms
 from .coordinates import make_rho_phi_grid
 from .geometry import mcache
-from .units import (
-    microns_to_waves, nanometers_to_waves,
-)
 from .mathops import (
     nan,
     pi,
@@ -168,14 +165,14 @@ class Pupil(object):
 
         """
         non_nan = isfinite(self.phase)
-        return convert_phase((self.phase[non_nan].max() - self.phase[non_nan].min()), self)
+        return self.phase[non_nan].max() - self.phase[non_nan].min()
 
     @property
     def rms(self):
         """Return the RMS wavefront error in the given OPD units as a `float`.
 
         """
-        return convert_phase(rms(self.phase), self)
+        return rms(self.phase)
 
     # quick-access slices, properties ------------------------------------------
 
@@ -202,7 +199,7 @@ class Pupil(object):
         epd = self.epd
 
         fig, ax = share_fig_ax(fig, ax)
-        im = ax.imshow(convert_phase(self.phase, self),
+        im = ax.imshow(self.phase,
                        extent=[-epd / 2, epd / 2, -epd / 2, epd / 2],
                        cmap='RdYlBu',
                        interpolation='lanczos',
@@ -315,7 +312,8 @@ class Pupil(object):
             this pupil instance
 
         """
-        self.fcn = exp(1j * 2 * pi * self.phase)  # phase implicitly in units of waves, no 2pi/l
+        phase = convert_phase(self.phase, self)
+        self.fcn = exp(1j * 2 * pi * phase)  # phase implicitly in units of waves, no 2pi/l
         return self
 
     def mask(self, mask, target):
@@ -392,7 +390,7 @@ class Pupil(object):
             this pupil instance
 
         """
-        self.phase = convert_phase(self.phase, self)
+        return convert_phase(self.phase, self)
 
     def __add__(self, other):
         """Sum the phase of two pupils.
@@ -419,7 +417,7 @@ class Pupil(object):
         result = self.clone()
         result.phase = self.phase + other.phase
         result = result._phase_to_wavefunction()
-        result.clip()
+        result.mask(result._mask, result.mask_target)
         return result
 
     def __sub__(self, other):
@@ -447,7 +445,7 @@ class Pupil(object):
         result = self.clone()
         result.phase = self.phase - other.phase
         result = result._phase_to_wavefunction()
-        result.clip()
+        result.mask(result._mask, result.mask_target)
         return result
 
     # meat 'n potatoes ---------------------------------------------------------
@@ -470,8 +468,8 @@ def convert_phase(array, pupil):
 
     """
     if pupil._opd_unit == 'microns':
-        return array * microns_to_waves(pupil.wavelength)
+        return array / pupil.wavelength
     elif pupil._opd_unit == 'nanometers':
-        return array * nanometers_to_waves(pupil.wavelength)
+        return array / pupil.wavelength / 1e3
     else:
         return array
