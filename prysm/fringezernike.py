@@ -1,4 +1,4 @@
-''' A repository of fringe zernike aberration descriptions used to model pupils of optical systems.
+''' A repository of fringe Zernike aberration descriptions used to model pupils of optical systems.
 '''
 from collections import defaultdict
 
@@ -15,59 +15,6 @@ from .mathops import (
 )
 from .pupil import Pupil
 from .coordinates import make_rho_phi_grid
-
-
-_names = (
-    'Z0  - Piston / Bias',
-    'Z1  - Tilt X',
-    'Z2  - Tilt Y',
-    'Z3  - Defocus / Power',
-    'Z4  - Primary Astigmatism 00deg',
-    'Z5  - Primary Astigmatism 45deg',
-    'Z6  - Primary Coma X',
-    'Z7  - Primary Coma Y',
-    'Z8  - Primary Spherical',
-    'Z9  - Primary Trefoil X',
-    'Z10 - Primary Trefoil Y',
-    'Z11 - Secondary Astigmatism 00deg',
-    'Z12 - Secondary Astigmatism 45deg',
-    'Z13 - Secondary Coma X',
-    'Z14 - Secondary Coma Y',
-    'Z15 - Secondary Spherical',
-    'Z16 - Primary Tetrafoil X',
-    'Z17 - Primary Tetrafoil Y',
-    'Z18 - Secondary Trefoil X',
-    'Z19 - Secondary Trefoil Y',
-    'Z20 - Tertiary Astigmatism 00deg',
-    'Z21 - Tertiary Astigmatism 45deg',
-    'Z22 - Tertiary Coma X',
-    'Z23 - Tertiary Coma Y',
-    'Z24 - Tertiary Spherical',
-    'Z25 - Pentafoil X',
-    'Z26 - Pentafoil Y',
-    'Z27 - Secondary Tetrafoil X',
-    'Z28 - Secondary Tetrafoil Y',
-    'Z29 - Tertiary Trefoil X',
-    'Z30 - Tertiary Trefoil Y',
-    'Z31 - Quarternary Astigmatism 00deg',
-    'Z32 - Quarternary Astigmatism 45deg',
-    'Z33 - Quarternary Coma X',
-    'Z34 - Quarternary Coma Y',
-    'Z35 - Quarternary Spherical',
-    'Z36 - Primary Hexafoil X',
-    'Z37 - Primary Hexafoil Y',
-    'Z38 - Secondary Pentafoil X',
-    'Z39 - Secondary Pentafoil Y',
-    'Z40 - Tertiary Tetrafoil X',
-    'Z41 - Tertiary Tetrafoil Y',
-    'Z42 - Quaternary Trefoil X',
-    'Z43 - Quaternary Trefoil Y',
-    'Z44 - Quinternary Astigmatism 00deg',
-    'Z45 - Quinternary Astigmatism 45deg',
-    'Z46 - Quinternary Coma X',
-    'Z47 - Quinternary Coma Y',
-    'Z48 - Quarternary Spherical',
-)
 
 
 @jit
@@ -386,6 +333,58 @@ zernfcns = {
 
 
 # See JCW - http://wp.optics.arizona.edu/jcwyant/wp-content/uploads/sites/13/2016/08/ZernikePolynomialsForTheWeb.pdf
+_names = (
+    'Z0  - Piston / Bias',
+    'Z1  - Tilt Y',
+    'Z2  - Tilt X',
+    'Z3  - Defocus / Power',
+    'Z4  - Primary Astigmatism 00deg',
+    'Z5  - Primary Astigmatism 45deg',
+    'Z6  - Primary Coma Y',
+    'Z7  - Primary Coma X',
+    'Z8  - Primary Spherical',
+    'Z9  - Primary Trefoil Y',
+    'Z10 - Primary Trefoil X',
+    'Z11 - Secondary Astigmatism 00deg',
+    'Z12 - Secondary Astigmatism 45deg',
+    'Z13 - Secondary Coma Y',
+    'Z14 - Secondary Coma X',
+    'Z15 - Secondary Spherical',
+    'Z16 - Primary Tetrafoil Y',
+    'Z17 - Primary Tetrafoil X',
+    'Z18 - Secondary Trefoil Y',
+    'Z19 - Secondary Trefoil X',
+    'Z20 - Tertiary Astigmatism 00deg',
+    'Z21 - Tertiary Astigmatism 45deg',
+    'Z22 - Tertiary Coma Y',
+    'Z23 - Tertiary Coma X',
+    'Z24 - Tertiary Spherical',
+    'Z25 - Pentafoil Y',
+    'Z26 - Pentafoil X',
+    'Z27 - Secondary Tetrafoil Y',
+    'Z28 - Secondary Tetrafoil X',
+    'Z29 - Tertiary Trefoil Y',
+    'Z30 - Tertiary Trefoil X',
+    'Z31 - Quarternary Astigmatism 00deg',
+    'Z32 - Quarternary Astigmatism 45deg',
+    'Z33 - Quarternary Coma Y',
+    'Z34 - Quarternary Coma X',
+    'Z35 - Quarternary Spherical',
+    'Z36 - Primary Hexafoil Y',
+    'Z37 - Primary Hexafoil X',
+    'Z38 - Secondary Pentafoil Y',
+    'Z39 - Secondary Pentafoil X',
+    'Z40 - Tertiary Tetrafoil Y',
+    'Z41 - Tertiary Tetrafoil X',
+    'Z42 - Quaternary Trefoil Y',
+    'Z43 - Quaternary Trefoil X',
+    'Z44 - Quinternary Astigmatism 00deg',
+    'Z45 - Quinternary Astigmatism 45deg',
+    'Z46 - Quinternary Coma Y',
+    'Z47 - Quinternary Coma X',
+    'Z48 - Quarternary Spherical',
+)
+
 _normalizations = (
     1,            # Z 0
     2,            # Z 1
@@ -497,7 +496,7 @@ class FringeZernike(Pupil):
             base (`int`): 0 or 1, adjusts the base index of the polynomial
                 expansion.
 
-            Zx (`float`): xth fringe zernike coefficient, in range [0,48] or [1,49] if base 1
+            Zx (`float`): Zth fringe Zernike coefficient, in range [0,48] or [1,49] if base 1
 
         Returns:
             FringeZernike.  A new :class:`FringeZernike` pupil instance.
@@ -508,7 +507,7 @@ class FringeZernike(Pupil):
                         the highest given Z-index.
                         e.g. passing [1,2,3] will be interpreted as Z0=1, Z1=2, Z3=3.
 
-                - kwargs: pass a named set of zernike terms.
+                - kwargs: pass a named set of Zernike terms.
                           e.g. FringeZernike(Z0=1, Z1=2, Z2=3)
 
             Supports normalization and unit conversion, can pass kwargs:
@@ -621,7 +620,7 @@ class FringeZernike(Pupil):
 
 
 def fit(data, num_terms=16, rms_norm=False, round_at=6):
-    ''' Fits a number of zernike coefficients to provided data by minimizing
+    ''' Fits a number of Zernike coefficients to provided data by minimizing
         the root sum square between each coefficient and the given data.  The
         data should be uniformly sampled in an x,y grid.
 
@@ -645,13 +644,13 @@ def fit(data, num_terms=16, rms_norm=False, round_at=6):
     # precompute the valid indexes in the original data
     pts = np.isfinite(data)
 
-    # set up an x/y rho/phi grid to evaluate zernikes on
+    # set up an x/y rho/phi grid to evaluate Zernikes on
     x, y = np.linspace(-1, 1, data.shape[1]), np.linspace(-1, 1, data.shape[0])
-    xv, yv = np.meshgrid(x, y)
-    rho = sqrt(xv**2 + yv**2)[pts].flatten()
-    phi = atan2(xv, yv)[pts].flatten()
+    xx, yy = np.meshgrid(x, y)
+    rho = sqrt(xx**2 + yy**2)[pts].flatten()
+    phi = atan2(xx, yy)[pts].flatten()
 
-    # compute each zernike term
+    # compute each Zernike term
     zernikes = []
     for i in range(num_terms):
         base_zern = zernfcns[i](rho, phi)
