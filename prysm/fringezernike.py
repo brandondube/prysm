@@ -574,7 +574,6 @@ class FringeZernike(Pupil):
                 continue
             self.phase += coef * zcache.get_zernike(term, self.normalize, self.samples)
 
-        self._correct_phase_units()
         self._phase_to_wavefunction()
         return self.phase, self.fcn
 

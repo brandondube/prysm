@@ -75,7 +75,6 @@ class Seidel(Pupil):
 
         # compute the pupil phase and wave function
         self.phase = eval('+'.join(mathexprs)).astype(config.precision)
-        self._correct_phase_units()
         self._phase_to_wavefunction()
         return self.phase, self.fcn
 
