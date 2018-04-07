@@ -333,7 +333,7 @@ def circle(samples=128):
         binary ndarray representation of the mask
 
     """
-    x = np.linspace(-1, 1, 128)
+    x = np.linspace(-1, 1, samples)
     y = x
     xx, yy = np.meshgrid(x, y)
     rho, phi = cart_to_polar(xx, yy)
