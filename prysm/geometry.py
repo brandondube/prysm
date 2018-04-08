@@ -5,6 +5,7 @@ from collections import defaultdict
 import numpy as np
 from scipy.spatial import Delaunay
 
+from .conf import config
 from .mathops import (
     exp,
     log,
@@ -63,12 +64,12 @@ def gaussian(sigma=0.5, samples=128):
     """
     s = sigma
 
-    x = np.arange(0, samples, 1, float)
+    x = np.arange(0, samples, 1, dtype=config.precision)
     y = x[:, np.newaxis]
 
     # // is floor division in python
     x0 = y0 = samples // 2
-    return exp(-4 * log(2) * ((x - x0 ** 2) + (y - y0) ** 2) / (s * samples) ** 2)
+    return exp(-4 * log(2) * ((x - x0) ** 2 + (y - y0) ** 2) / (s * samples) ** 2)
 
 
 def rotated_ellipse(width_major, width_minor, major_axis_angle=0, samples=128):
