@@ -7,7 +7,7 @@ from mpl_toolkits.axes_grid1.axes_rgb import make_rgb_axes
 
 from .conf import config
 from .mathops import pi, floor, jinc
-from .coordinates import uniform_cart_to_polar
+from .coordinates import uniform_cart_to_polar, cart_to_polar
 from .util import correct_gamma, share_fig_ax
 from .convolution import Convolvable
 from .propagation import prop_pupil_plane_to_psf_plane
@@ -602,7 +602,34 @@ class RGBPSF(object):
         return fig, ax
 
 
-def airydisk(unit_r, fno, wavelength):
+class AiryDisk(PSF):
+    """An airy disk, the PSF of a circular aperture."""
+    def __init__(self, fno, wavelength, extent, samples):
+        """Create a new AiryDisk.
+
+        Parameters
+        ----------
+        fno : `float`
+            F/# associated with the PSF
+        wavelength : `float`
+            wavelength of light, in microns
+        extent : `float`
+            cartesian window half-width, e.g. 10 will make an RoI 20x20 microns wide
+        samples : `int`
+            number of samples across full width
+
+        """
+        x = np.linspace(-extent, extent, samples)
+        y = np.linspace(-extent, extent, samples)
+        xx, yy = np.meshgrid(x, y)
+        rho, phi = cart_to_polar(xx, yy)
+        data = _airydisk(rho, fno, wavelength)
+        self.fno = fno
+        self.wavelength = wavelength
+        super().__init__(data, x, y)
+
+
+def _airydisk(unit_r, fno, wavelength):
     """Compute the airy disk function over a given spatial distance.
 
     Parameters
