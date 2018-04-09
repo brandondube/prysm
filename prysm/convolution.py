@@ -14,16 +14,17 @@ class Convolvable(object):
 
     Attributes
     ----------
-    data : TYPE
-        Description
-    has_analytic_ft : TYPE
-        Description
-    sample_spacing : float
-        Description
-    unit_x : TYPE
-        Description
-    unit_y : TYPE
-        Description
+    data : `numpy.ndarray`
+        numerical representation of object
+    has_analytic_ft : `bool`
+        whether this convolvable has an analytical Fourier transform
+    sample_spacing : `float`
+        center to center spacing of samples
+    unit_x : `numpy.ndarray`
+        x-axis unit
+    unit_y : `numpy.ndarray`
+        y-axis unit
+
     """
     def __init__(self, data, unit_x, unit_y, has_analytic_ft=False):
         """Create a new Convolvable object.
@@ -39,11 +40,6 @@ class Convolvable(object):
         has_analytic_ft : `bool`, optional
             Whether this convolvable overrides self.analytic_ft, and has a known
             analytical fourier tansform
-
-        No Longer Returned
-        ------------------
-        `Convolvable`
-            New convolvable object
 
         """
         self.data = data
@@ -275,7 +271,7 @@ def single_analytical_ft_convolution(without_analytic, with_analytic):
     """
     fourier_data = fftshift(fft2(fftshift(without_analytic.data)))
     fourier_unit_x = forward_ft_unit(without_analytic.sample_spacing, without_analytic.samples_x)
-    fourier_unit_y = forward_ft_unit(without_analytic.sample_spacing, without_analytic.samples_x)
+    fourier_unit_y = forward_ft_unit(without_analytic.sample_spacing, without_analytic.samples_y)
     a_ft = with_analytic.analytic_ft(fourier_unit_x, fourier_unit_y)
     result = abs(fftshift(ifft2(fourier_data * a_ft)))
     return Convolvable(result, without_analytic.unit_x, without_analytic.unit_y, False)
