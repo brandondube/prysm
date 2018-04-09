@@ -186,20 +186,25 @@ class OLPF(Convolvable):
         self.width_x = width_x
         self.width_y = width_y
 
-        space_x = width_x / 2
-        space_y = width_y / 2
-        shift_x = int(space_x // sample_spacing)
-        shift_y = int(space_y // sample_spacing)
-        center_x = samples_x // 2
-        center_y = samples_y // 2
+        if samples_x is None:  # do no math
+            data, ux, uy = None, np.zeros(2), np.zeros(2)
+        else:
+            space_x = width_x / 2
+            space_y = width_y / 2
+            shift_x = int(space_x // sample_spacing)
+            shift_y = int(space_y // sample_spacing)
+            center_x = samples_x // 2
+            center_y = samples_y // 2
 
-        data = np.zeros((samples_x, samples_y))
+            data = np.zeros((samples_x, samples_y))
 
-        data[center_y - shift_y, center_x - shift_x] = 1
-        data[center_y - shift_y, center_x + shift_x] = 1
-        data[center_y + shift_y, center_x - shift_x] = 1
-        data[center_y + shift_y, center_x + shift_x] = 1
-        super().__init__(data=data, sample_spacing=sample_spacing)
+            data[center_y - shift_y, center_x - shift_x] = 1
+            data[center_y - shift_y, center_x + shift_x] = 1
+            data[center_y + shift_y, center_x - shift_x] = 1
+            data[center_y + shift_y, center_x + shift_x] = 1
+            ux = np.linspace(-space_x, space_x, samples_x)
+            uy = np.linspace(-space_y, space_y, samples_y)
+        super().__init__(data=data, unit_x=ux, unit_y=uy, has_analytic_ft=True)
 
     def analytic_ft(self, unit_x, unit_y):
         """Analytic fourier transform of a pixel aperture.
@@ -218,8 +223,8 @@ class OLPF(Convolvable):
 
         """
         xq, yq = np.meshgrid(unit_x, unit_y)
-        return (cos(2 * xq * self.width_x / 1e3) *
-                cos(2 * yq * self.width_y / 1e3)).astype(config.precision)
+        return (cos(2 * xq * self.width_x) *
+                cos(2 * yq * self.width_y)).astype(config.precision)
 
 
 class PixelAperture(Convolvable):
@@ -263,8 +268,7 @@ class PixelAperture(Convolvable):
         self.width_y = width_y
 
         if samples_x is None:  # do no math
-            data, unit_x, unit_y = None, np.zeros(2), np.zeros(2)
-            super().__init__(data=data, unit_x=unit_x, unit_y=unit_y, has_analytic_ft=True)
+            data, ux, uy = None, np.zeros(2), np.zeros(2)
         else:  # build PixelAperture model
             center_x = samples_x // 2
             center_y = samples_y // 2
@@ -273,12 +277,12 @@ class PixelAperture(Convolvable):
             steps_x = int(half_width // sample_spacing)
             steps_y = int(half_height // sample_spacing)
 
-            pixel_aperture = np.zeros((samples_x, samples_y))
-            pixel_aperture[center_y - steps_y:center_y + steps_y,
-                           center_x - steps_x:center_x + steps_x] = 1
+            data = np.zeros((samples_x, samples_y))
+            data[center_y - steps_y:center_y + steps_y,
+                 center_x - steps_x:center_x + steps_x] = 1
             extx, exty = samples_x // 2 * sample_spacing, samples_y // 2 * sample_spacing
             ux, uy = np.linspace(-extx, extx, samples_x), np.linspace(-exty, exty, samples_y)
-            super().__init__(data=pixel_aperture, unit_x=ux, unit_y=uy, has_analytic_ft=True)
+        super().__init__(data=data, unit_x=ux, unit_y=uy, has_analytic_ft=True)
 
     def analytic_ft(self, unit_x, unit_y):
         """Analytic fourier transform of a pixel aperture.
@@ -297,8 +301,8 @@ class PixelAperture(Convolvable):
 
         """
         xq, yq = np.meshgrid(unit_x, unit_y)
-        return (sinc(xq * self.width_x / 1e3) *
-                sinc(yq * self.width_y / 1e3)).astype(config.precision)
+        return (sinc(xq * self.width_x) *
+                sinc(yq * self.width_y)).astype(config.precision)
 
 
 def generate_mtf(pixel_aperture=1, azimuth=0, num_samples=128):
