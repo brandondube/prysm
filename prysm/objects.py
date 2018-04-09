@@ -17,7 +17,7 @@ from .coordinates import cart_to_polar
 
 
 class Image(Convolvable):
-    '''Images of an object
+    '''Image of an object.
     '''
     def __init__(self, data, sample_spacing, has_analytic_ft):
         '''Creates a new Image object.
@@ -26,11 +26,10 @@ class Image(Convolvable):
         ----------
         data : `numpy.ndarray`
             data that represents the image, 2D.
-
         sample_spacing : `float`
             pixel pitch of the data.
-        has_analytic_ft : TYPE
-            Description
+        has_analytic_ft : `bool`
+            whether the image has an analytical Fourier transform
 
         '''
         samples_y, samples_x = data.shape
@@ -84,7 +83,7 @@ class Image(Convolvable):
         return Image(data=np.flip(imgarr, axis=0) / 255, sample_spacing=scale, synthetic=False)
 
 
-class Slit(Image):
+class Slit(Convolvable):
     '''Representation of a slit or pair of slits.
 
     Attributes
@@ -123,6 +122,8 @@ class Slit(Image):
             ext = samples / 2 * sample_spacing
             x, y = np.linspace(-ext, ext, samples), np.linspace(-ext, ext, samples)
             arr = np.zeros((samples, samples))
+        else:
+            arr, x, y = None, np.zeros(2), np.zeros(2)
 
         # paint in the slit
         if orientation.lower() in ('v', 'vert', 'vertical'):
@@ -144,10 +145,7 @@ class Slit(Image):
             self.orientation = 'Crossed'
             self.width_x, self.width_y = width, width
 
-        if samples > 0:
-            super().__init__(data=arr, sample_spacing=sample_spacing, has_analytic_ft=True)
-        else:
-            super().__init__(data=None, sample_spacing=1e99, has_analytic_ft=True)
+        super().__init__(arr, x, y, has_analytic_ft=True)
 
     def analytic_ft(self, unit_x, unit_y):
         '''Analytic fourier transform of a slit.
@@ -167,15 +165,15 @@ class Slit(Image):
         '''
         xq, yq = np.meshgrid(unit_x, unit_y)
         if self.width_x > 0 and self.width_y > 0:
-            return (sinc(xq * self.width_x / 1e3) +
-                    sinc(yq * self.width_y / 1e3)).astype(config.precision)
+            return (sinc(xq * self.width_x) +
+                    sinc(yq * self.width_y)).astype(config.precision)
         elif self.width_x > 0 and self.width_y is 0:
-            return sinc(xq * self.width_x / 1e3).astype(config.precision)
+            return sinc(xq * self.width_x).astype(config.precision)
         else:
-            return sinc(yq * self.width_y / 1e3).astype(config.precision)
+            return sinc(yq * self.width_y).astype(config.precision)
 
 
-class Pinhole(Image):
+class Pinhole(Convolvable):
     '''Representation of a pinhole.
 
     Attributes
@@ -210,13 +208,13 @@ class Pinhole(Image):
             x, y = np.linspace(-ext, ext, samples), np.linspace(-ext, ext, samples)
             xv, yv = np.meshgrid(x, y)
             w = width / 2
-
             # paint a circle on a black background
             arr = np.zeros((samples, samples))
             arr[sqrt(xv**2 + yv**2) < w] = 1
-            super().__init__(data=arr, sample_spacing=sample_spacing, has_analytic_ft=True)
         else:
-            super().__init__(data=None, sample_spacing=1e99, has_analytic_ft=True)
+            arr, x, y = None, np.zeros(2), np.zeros(2)
+
+        super().__init__(data=arr, unit_x=x, unit_y=y, has_analytic_ft=True)
 
     def analytic_ft(self, unit_x, unit_y):
         '''Analytic fourier transform of a slit.
@@ -239,7 +237,7 @@ class Pinhole(Image):
         return jinc(rho).astype(config.precision)
 
 
-class SiemensStar(Image):
+class SiemensStar(Convolvable):
     '''Representation of a Siemen's star object.
 
     Attributes
@@ -295,10 +293,10 @@ class SiemensStar(Image):
         else:
             raise ValueError('invalid background color')
 
-        super().__init__(data=arr, sample_spacing=sample_spacing, has_analytic_ft=False)
+        super().__init__(data=arr, unit_x=x, unit_y=y, has_analytic_ft=False)
 
 
-class TiltedSquare(Image):
+class TiltedSquare(Convolvable):
     '''Describes a tilted square for e.g. slanted-edge '''
 
     def __init__(self, angle=8, background='white', sample_spacing=2, samples=384):
@@ -336,4 +334,4 @@ class TiltedSquare(Image):
         yp = xx * sin(angle) + yy * cos(angle)
         mask = (abs(xp) < radius) * (abs(yp) < radius)
         arr[mask] = fill_with
-        super().__init__(data=arr, sample_spacing=sample_spacing, has_analytic_ft=False)
+        super().__init__(data=arr, unit_x=x, unit_y=y, has_analytic_ft=False)
