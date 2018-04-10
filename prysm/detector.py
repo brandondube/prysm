@@ -46,54 +46,35 @@ class Detector(object):
         self.bit_depth = nbits
         self.captures = deque(maxlen=framebuffer)
 
-    def sample_psf(self, psf):
-        """Sample a PSF, mimics capturing a photo of an oversampled representation of an image.
+    def capture(self, convolvable):
+        """Sample a convolvable, mimics capturing a photo of an oversampled representation of an image.
 
         Parameters
         ----------
-        psf : `PSF`
-            a PSF object
+        convolvable : `prysm.Convolvable`
+            a convolvable object
 
         Returns
         -------
-        `PSF`
-            a new PSF object, as it would be sampled by the detector
+        `prysm.convolvable`
+            a new convolvable object, as it would be sampled by the detector
 
         Raises
         ------
         ValueError
-            if the PSF would have to become supersampled by the detector;
+            if the convolvable would have to become supersampled by the detector;
             this would lead to an inaccurate result and is not supported
 
         """
-        # we assume the pixels are bigger than the samples in the PSF
-        samples_per_pixel = self.pixel_size / psf.sample_spacing
+        # we assume the pixels are bigger than the samples in the convolvable
+        samples_per_pixel = self.pixel_size / convolvable.sample_spacing
         if samples_per_pixel < 1:
             raise ValueError('Pixels smaller than samples, bindown not possible.')
         else:
             samples_per_pixel = int(ceil(samples_per_pixel))
 
-        data = bindown(psf.data, samples_per_pixel)
-        self.captures.append(Image(data=data, sample_spacing=self.pixel_size))
-        return self.captures[-1]
-
-    def sample_image(self, image):
-        """Sample an image.
-
-        Parameters
-        ----------
-        image : `Image`
-            an Image object
-
-        Returns
-        -------
-        `Image`
-            a new, sampled image
-
-        """
-        intermediate_psf = self.sample_psf(image.as_psf())
-        self.captures.append(Image(data=intermediate_psf.data,
-                                   sample_spacing=intermediate_psf.sample_spacing))
+        data = bindown(convolvable.data, samples_per_pixel)
+        self.captures.append(Image(data=data, sample_spacing=self.pixel_size, has_analytic_ft=False))
         return self.captures[-1]
 
     def save_image(self, path, which='last'):
