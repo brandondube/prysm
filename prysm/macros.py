@@ -11,7 +11,7 @@ from .mtf_utils import mtf_ts_extractor, mtf_ts_to_dataframe
 from .thinlens import defocus_to_image_displacement
 from .mathops import sqrt
 
-SystemConfig = namedtuple('SystemConfig', ('efl', 'fno', 'wvl', 'samples', 'mask'))
+SystemConfig = namedtuple('SystemConfig', ('efl', 'fno', 'wvl', 'samples', 'mask', 'mask_target'))
 SimulationConfig = namedtuple('SimulationConfig',
                               ('freqs',
                                'focus_range_waves',
@@ -19,8 +19,8 @@ SimulationConfig = namedtuple('SimulationConfig',
                                'focus_normed',
                                'focus_planes',
                                ) + SystemConfig._fields)
-SystemConfig.__new__.__defaults__ = ('circle',)
-SimulationConfig.__new__.__defaults__ = ('circle',)
+SystemConfig.__new__.__defaults__ = ('circle', 'fcn')
+SimulationConfig.__new__.__defaults__ = ('circle', 'fcn')
 
 DEFAULT_SIM_PARAMS = SimulationConfig(
     efl=50,
@@ -63,12 +63,16 @@ def thrufocus_mtf_from_wavefront(focused_wavefront, sim_params):
         if s.focus_zernike:
             defocus = FringeZernike(base=1, Z4=focus, rms_norm=s.focus_normed, samples=s.samples,
                                     epd=s.efl / s.fno,
-                                    wavelength=s.wvl)
+                                    wavelength=s.wvl,
+                                    mask=s.mask,
+                                    mask_target=s.mask_target)
         else:
             defocus = Seidel(W020=focus,
                              epd=s.efl / s.fno,
                              samples=s.samples,
-                             wavelength=s.wvl)
+                             wavelength=s.wvl,
+                             mask=s.mask,
+                             mask_target=s.mask_target)
         mtf = MTF.from_pupil(focused_wavefront + defocus, efl=s.efl)
         tan, sag = mtf_ts_extractor(mtf, s.freqs)
         dfs.append(mtf_ts_to_dataframe(tan, sag, s.freqs, focus=displacement))
