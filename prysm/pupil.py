@@ -298,7 +298,6 @@ class Pupil(object):
 
         # fill in the phase of the pupil
         self.phase = zeros((self.samples, self.samples), dtype=config.precision)
-        self._correct_phase_units()
         self._phase_to_wavefunction()
 
         return self
@@ -313,6 +312,12 @@ class Pupil(object):
 
         """
         phase = convert_phase(self.phase, self)
+
+        # guard against NaNs in phase
+        nans = ~np.isfinite(phase)
+        if np.any(nans):
+            phase[nans] = 0
+
         self.fcn = exp(1j * 2 * pi * phase)  # phase implicitly in units of waves, no 2pi/l
         return self
 
@@ -416,6 +421,7 @@ class Pupil(object):
 
         result = self.clone()
         result.phase = self.phase + other.phase
+        result._mask = self._mask * other._mask
         result = result._phase_to_wavefunction()
         result.mask(result._mask, result.mask_target)
         return result
@@ -444,11 +450,10 @@ class Pupil(object):
 
         result = self.clone()
         result.phase = self.phase - other.phase
+        result._mask = self._mask * other._mask
         result = result._phase_to_wavefunction()
         result.mask(result._mask, result.mask_target)
         return result
-
-    # meat 'n potatoes ---------------------------------------------------------
 
 
 def convert_phase(array, pupil):
