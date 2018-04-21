@@ -27,8 +27,8 @@ def pad2d(array, Q=2, value=0):
 
     """
     x, y = array.shape
-    out_x = x * Q
-    out_y = y * Q
+    out_x = int(x * Q)
+    out_y = int(y * Q)
     factor_x = (out_x - x) / 2
     factor_y = (out_y - x) / 2
     pad_shape = ((floor(factor_x), ceil(factor_x)), (floor(factor_y), ceil(factor_y)))
