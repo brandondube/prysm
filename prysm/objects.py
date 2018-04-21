@@ -19,7 +19,7 @@ from .coordinates import cart_to_polar
 class Image(Convolvable):
     '''Image of an object.
     '''
-    def __init__(self, data, sample_spacing, has_analytic_ft):
+    def __init__(self, data, sample_spacing, has_analytic_ft=False):
         '''Creates a new Image object.
 
         Parameters
