@@ -1,8 +1,9 @@
 """Defines behavior of convolvable items and a base class to encapsulate that behavior.
 """
 import numpy as np
-
 from scipy.interpolate import interp2d
+
+import matplotlib as mpl
 
 from .mathops import fft2, ifft2, fftshift, fftfreq
 from .fttools import forward_ft_unit, pad2d
@@ -124,7 +125,7 @@ class Convolvable(object):
         else:
             return pure_numerical_ft_convolution(self, other)
 
-    def show(self, xlim=(None, None), ylim=(None, None), interp_method=None, show_colorbar=True, fig=None, ax=None):
+    def show(self, xlim=(None, None), ylim=(None, None), interp_method=None, power=1, show_colorbar=True, fig=None, ax=None):
         '''Displays the image.
 
         Parameters
@@ -135,6 +136,8 @@ class Convolvable(object):
             y axis limits
         interp_method : `string`
             interpolation technique used in display
+        power : `float`
+            inverse of power to stretch image by.  E.g. power=2 will plot img ** (1/2)
         show_colorbar : `bool`
             whether to show the colorbar or not.
         fig : `matplotlib.figure.Figure`, optional:
@@ -161,6 +164,7 @@ class Convolvable(object):
         im = ax.imshow(self.data,
                        extent=ext,
                        origin='lower',
+                       norm=mpl.colors.PowerNorm(1/power),
                        clim=(0, 1),
                        cmap='Greys_r',
                        interpolation=interp_method)
