@@ -16,7 +16,7 @@ def tpsf():
     x, y = np.linspace(-LIM, LIM, SAMPLES), np.linspace(-LIM, LIM, SAMPLES)
     xx, yy = np.meshgrid(x, y)
     rho, phi = cart_to_polar(xx, yy)
-    dat = psf.airydisk(rho, 10, 0.55)
+    dat = psf._airydisk(rho, 10, 0.55)
     return psf.PSF(dat, x, y)
 
 
