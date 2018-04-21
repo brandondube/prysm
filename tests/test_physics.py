@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from prysm import Pupil, PSF, MTF, Seidel
-from prysm.psf import airydisk
+from prysm.psf import _airydisk
 from prysm.otf import diffraction_limited_mtf
 
 PRECISION = 1e-3  # ~0.1%
@@ -26,7 +26,7 @@ def test_diffprop_matches_airydisk(efl, epd, wvl):
     psf = PSF.from_pupil(p, efl)
     u, sx = psf.slice_x
     u, sy = psf.slice_y
-    analytic = airydisk(u, fno, wvl)
+    analytic = _airydisk(u, fno, wvl)
     assert np.allclose(sx, analytic, rtol=PRECISION, atol=PRECISION)
     assert np.allclose(sy, analytic, rtol=PRECISION, atol=PRECISION)
 
@@ -73,4 +73,4 @@ WVLS = [.5, .55, 1, 10]
 
 @pytest.mark.parametrize('fno, wvl', product(FNOS, WVLS))
 def test_airydisk_has_unit_peak(fno, wvl):
-    assert airydisk(0, fno=fno, wavelength=wvl) == 1
+    assert _airydisk(0, fno=fno, wavelength=wvl) == 1
