@@ -51,10 +51,6 @@ class Image(Convolvable):
 
         '''
         dat = (self.data * 255).astype(np.uint8)
-
-        if self.synthetic is False:
-            # was a real image, need to flip vertically.
-            dat = np.flip(dat, axis=0)
         imsave(path, dat)
 
     @staticmethod
