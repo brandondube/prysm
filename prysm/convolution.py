@@ -205,7 +205,7 @@ class Convolvable(object):
         if self.has_analytic_ft:
             if self.data is None:
                 if freq_x is None or freq_y is None:
-                    raise ValueError('Convolvable has analytic FT and no data, must proide x and y coordinates')
+                    raise ValueError('Convolvable has analytic FT and no data, must provide x and y coordinates')
             else:
                 lx, ly, ss = len(self.unit_x), len(self.unit_y), self.sample_spacing
                 freq_x, freq_y = forward_ft_unit(ss, lx), forward_ft_unit(ss, ly)
