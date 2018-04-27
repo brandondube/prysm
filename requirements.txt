@@ -3,3 +3,5 @@ scipy>=0.19.1
 matplotlib>=2.0.2
 pandas>=0.20.0
 imageio>=2.3.0
+
+numba>=0.37.0 [cpu+]
