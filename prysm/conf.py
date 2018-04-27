@@ -22,10 +22,6 @@ class Config(object):
             base for zernikes; start at 0 or 1
 
         """
-        # self._precision = None
-        # self._precision_complex = None
-        # self._backend = None
-        # self._zernike_base = None
         self.precision = precision
         self.backend = backend
         self.zernike_base = zernike_base
