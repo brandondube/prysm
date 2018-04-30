@@ -319,7 +319,7 @@ def mtf_ts_to_dataframe(tan, sag, freqs, field=0, focus=0):
 
     """
     rows = []
-    for f, s, t in zip(freqs, tan, sag):
+    for f, t, s in zip(freqs, tan, sag):
         base_dict = {
             'Field': field,
             'Focus': focus,
