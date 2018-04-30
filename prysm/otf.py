@@ -3,6 +3,8 @@ import numpy as np
 
 from scipy import interpolate
 
+import matplotlib as mpl
+
 from .mathops import fft2, fftshift, pi, sqrt, arccos
 from .psf import PSF
 from .fttools import forward_ft_unit
@@ -223,13 +225,15 @@ class MTF(object):
 
     # plotting -----------------------------------------------------------------
 
-    def plot2d(self, max_freq=200, fig=None, ax=None):
+    def plot2d(self, max_freq=200, power=1, fig=None, ax=None):
         """Create a 2D plot of the MTF.
 
         Parameters
         ----------
         max_freq : `float`
             Maximum frequency to plot to.  Axis limits will be ((-max_freq, max_freq), (-max_freq, max_freq)).
+        power : `float`
+            inverse of power to stretch the MTF to/by, e.g. power=2 will plot MTF^(1/2)
         fig : `matplotlib.figure.Figure`, optional:
             Figure to draw plot in
         ax : `matplotlib.axes.Axis`, optional:
@@ -248,12 +252,13 @@ class MTF(object):
 
         fig, ax = share_fig_ax(fig, ax)
 
-        im = ax.imshow(correct_gamma(self.data),
+        im = ax.imshow(self.data,
                        extent=[left, right, bottom, top],
                        origin='lower',
                        cmap='Greys_r',
-                       interpolation='lanczos',
-                       clim=(0, 1))
+                       clim=(0, 1),
+                       norm=mpl.colors.PowerNorm(1/power),
+                       interpolation='lanczos')
         cb = fig.colorbar(im, label='MTF [Rel 1.0]', ax=ax, fraction=0.046)
         cb.outline.set_edgecolor('k')
         cb.outline.set_linewidth(0.5)
