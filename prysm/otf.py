@@ -146,7 +146,7 @@ class MTF(object):
         for freq, az in zip(freqs, azimuths):
             x, y = polar_to_cart(freq, az)
             outs.append(float(self.interpf_2d((x, y), method='linear')))
-        return outs
+        return np.asarray(outs)
 
     def exact_xy(self, x, y=None):
         """Retrieve the MTF at the specified X-Y frequency pairs.
