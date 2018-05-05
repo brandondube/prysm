@@ -1,6 +1,13 @@
 """Configuration for this instance of prysm."""
 import numpy as np
 
+def _check_cuda_compatibility():
+    try:
+        import cupy
+        return True
+    except ImportError:
+        return False
+
 class Config(object):
     """Global configuration of prysm."""
     def __init__(self, precision=64, backend='np', zernike_base=1):
@@ -25,6 +32,7 @@ class Config(object):
         self.precision = precision
         self.backend = backend
         self.zernike_base = zernike_base
+        self.cuda_compatible = _check_cuda_compatibility()
 
     @property
     def precision(self):
@@ -103,10 +111,15 @@ class Config(object):
             invalid backend
 
         """
-        if backend.lower() not in ('np', 'numpy'):
-            raise ValueError('Backend must be numpy')
-        else:
+        from .mathops import change_backend
+        if backend.lower() in ('np', 'numpy'):
             self._backend = 'np'
+            change_backend(to='np')
+        elif backend.lower() in ('cu', 'cuda'):
+            self._backend = 'cu'
+            change_backend(to='cu')
+        else:
+            raise ValueError('backend must be numpy or cuda.')
 
     @property
     def zernike_base(self):

@@ -14,6 +14,7 @@ setup(
     install_requires=['numpy', 'scipy', 'pandas', 'matplotlib', 'imageio'],
     extras_require={
         'cpu+': ['numba>=0.37.0'],
+        'cuda': ['cupy>=4.0.0'],
     },
     classifiers=[
         'Development Status :: 4 - Beta',

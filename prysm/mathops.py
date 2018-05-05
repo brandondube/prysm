@@ -31,10 +31,12 @@ from numpy.fft import fftshift, ifftshift, fftfreq
 
 from scipy.special import j1
 
+from prysm import conf
+
 atan2 = arctan2
 atan = arctan
 
-# numba funcs, cuda
+# numba funcs
 try:
     from numba import jit, vectorize
 except ImportError:
@@ -71,6 +73,35 @@ except ImportError:
 
     vectorize = jit
 
+# cuda
+try:
+    import cupy as cu
+except ImportError:
+    conf.config.cuda_compatible = False
+
+allfuncs = frozenset((
+    'sqrt',
+    'sin',
+    'cos',
+    'tan',
+    'arctan',
+    'arctan2',
+    'arccos',
+    'arcsin',
+    'sinc',
+    'radians',
+    'exp',
+    'log',
+    'log10',
+))
+
+fftfuncs = frozenset((
+    'fft2',
+    'ifft2',
+    'fftshift',
+    'ifftshift',
+    'fftfreq',
+))
 
 def jinc(r):
     """Jinc.
@@ -104,3 +135,26 @@ fft2, ifft2 = np.fft.fft2, np.fft.ifft2
 assert [nan, pi, sqrt, sin, cos, tan, arccos, arcsin, sinc, radians, exp, log, log10]
 assert [fftshift, ifftshift, fft2, ifft2, fftfreq]
 assert [floor, ceil]
+
+
+def change_backend(to):
+    if to.lower() == 'cu':
+        if not conf.config.cuda_compatible:
+            raise ValueError('installation lacks cuda support.')
+        else:
+            for func in allfuncs:
+                exec(f'from cupy import {func}')
+                globals()[func] = eval(func)
+
+            for func in fftfuncs:
+                exec(f'from cupy.fft import {func}')
+                globals()[func] = eval(func)
+
+    elif to.lower() == 'np':
+        for func in allfuncs:
+            exec(f'from numpy import {func}')
+            globals()[func] = eval(func)
+
+        for func in fftfuncs:
+            exec(f'from numpy.fft import {func}')
+            globals()[func] = eval(func)
