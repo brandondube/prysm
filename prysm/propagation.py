@@ -1,9 +1,10 @@
 """Numerical optical propagation."""
 import numpy as np
 
-from .mathops import fftshift, ifftshift, fft2
 from .fttools import pad2d
 from .util import pupil_sample_to_psf_sample
+
+from prysm import mathops as m
 
 
 def prop_pupil_plane_to_psf_plane(wavefunction, input_sample_spacing, prop_dist, wavelength, Q):
@@ -33,7 +34,7 @@ def prop_pupil_plane_to_psf_plane(wavefunction, input_sample_spacing, prop_dist,
 
     """
     padded_wavefront = pad2d(wavefunction, Q)
-    impulse_response = ifftshift(fft2(fftshift(padded_wavefront)))
+    impulse_response = m.ifftshift(m.fft2(m.fftshift(padded_wavefront)))
     psf = abs(impulse_response) ** 2
 
     s = wavefunction.shape

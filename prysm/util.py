@@ -5,7 +5,7 @@ import numpy as np
 
 from matplotlib import pyplot as plt
 
-from .mathops import sqrt
+from prysm import mathops as m
 
 
 def is_odd(int):
@@ -201,7 +201,7 @@ def rms(array):
 
     """
     non_nan = np.isfinite(array)
-    return sqrt((array[non_nan] ** 2).mean())
+    return m.sqrt((array[non_nan] ** 2).mean())
 
 
 def guarantee_array(variable):

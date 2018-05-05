@@ -6,7 +6,8 @@ import numpy as np
 
 from .conf import config
 from .pupil import Pupil
-from .mathops import cos
+
+from prysm import mathops as m
 
 
 class Seidel(Pupil):
@@ -109,4 +110,4 @@ def wexpr_to_opd_expr(Wxxx):
     _ = list(Wxxx[1:])
     H, rho, phi = _[0], _[1], _[2]
     # .format converts to bytecode, f-strings do not.  Micro-optimization here
-    return 'H**{0} * rho**{1} * cos(phi)**{2}'.format(H, rho, phi)
+    return 'H**{0} * rho**{1} * m.cos(phi)**{2}'.format(H, rho, phi)

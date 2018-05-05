@@ -13,12 +13,8 @@ from .conf import config
 from .util import share_fig_ax, rms
 from .coordinates import make_rho_phi_grid
 from .geometry import mcache
-from .mathops import (
-    nan,
-    pi,
-    exp,
-    sin
-)
+
+from prysm import mathops as m
 
 
 class Pupil(object):
@@ -38,7 +34,7 @@ class Pupil(object):
     Notes
     -----
     subclasses should implement a build() method and their own way of
-        expressing OPD.
+    expressing OPD.
 
     Attributes
     ----------
@@ -49,7 +45,7 @@ class Pupil(object):
     fcn : `numpy.ndarray`
         wavefunction, complex 2D array
     opd_unit : `str`
-        unit used to express phase errors
+        unit used to m.express phase errors
     phase : `numpy.ndarray`
         phase, real 2D array
     rho : `numpy.ndarray`
@@ -81,7 +77,7 @@ class Pupil(object):
         wavelength : float, optional
             wavelength of light, um
         opd_unit : str, optional, {'waves', 'um', 'nm'}
-            unit used to express the OPD.  Equivalent strings may be used to the
+            unit used to m.express the OPD.  Equivalent strings may be used to the
             valid options, e.g. 'microns', or 'nanometers'
         mask : `str` or `numpy.ndarray`
             mask used to define the amplitude and boundary of the pupil; any
@@ -120,7 +116,7 @@ class Pupil(object):
             self._opd_unit = 'nanometers'
             self._opd_str = 'nm'
         else:
-            raise ValueError('OPD must be expressed in waves, microns, or nm')
+            raise ValueError('OPD must be m.expressed in waves, microns, or nm')
 
         if type(mask) is not np.ndarray:
             mask = mcache.get_mask(self.samples, mask)
@@ -269,7 +265,7 @@ class Pupil(object):
         epd = self.epd
 
         fig, ax = share_fig_ax(fig, ax)
-        plotdata = (visibility * sin(2 * pi * passes * self.phase))
+        plotdata = (visibility * m.sin(2 * m.pi * passes * self.phase))
         im = ax.imshow(plotdata,
                        extent=[-epd / 2, epd / 2, -epd / 2, epd / 2],
                        cmap='Greys_r',
@@ -313,12 +309,12 @@ class Pupil(object):
         """
         phase = convert_phase(self.phase, self)
 
-        # guard against NaNs in phase
+        # guard against nans in phase
         nans = ~np.isfinite(phase)
         if np.any(nans):
             phase[nans] = 0
 
-        self.fcn = exp(1j * 2 * pi * phase)  # phase implicitly in units of waves, no 2pi/l
+        self.fcn = m.exp(1j * 2 * m.pi * phase)  # phase implicitly in units of waves, no 2pi/l
         return self
 
     def mask(self, mask, target):
@@ -343,11 +339,11 @@ class Pupil(object):
         tl = target.lower()
         if tl == 'both':
             idx = mask == 0
-            self.phase[idx] = nan
+            self.phase[idx] = m.nan
             self.fcn *= mask
         elif tl == 'phase':
             idx = mask == 0
-            self.phase[idx] = nan
+            self.phase[idx] = m.nan
         else:
             self.fcn *= mask
 

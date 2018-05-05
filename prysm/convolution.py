@@ -5,7 +5,7 @@ from scipy.interpolate import interp2d
 
 import matplotlib as mpl
 
-from .mathops import fft2, ifft2, fftshift, fftfreq
+from prysm import mathops as m
 from .fttools import forward_ft_unit, pad2d
 from .util import share_fig_ax
 
@@ -212,7 +212,7 @@ class Convolvable(object):
 
             data = self.analytic_ft(freq_x, freq_y)
         else:
-            data = abs(fftshift(fft2(pad2d(self.data))))
+            data = abs(m.fftshift(m.fft2(pad2d(self.data))))
             data /= data.max()
             freq_x = forward_ft_unit(self.sample_spacing, self.samples_x)
             freq_y = forward_ft_unit(self.sample_spacing, self.samples_y)
@@ -249,11 +249,11 @@ def double_analytical_ft_convolution(convolvable1, convolvable2):
 
     """
     spatial_x, spatial_y = _compute_output_grid(convolvable1, convolvable2)
-    fourier_x = fftfreq(spatial_x.shape[0], spatial_x[1] - spatial_x[0])
-    fourier_y = fftfreq(spatial_y.shape[0], spatial_y[1] - spatial_y[0])
+    fourier_x = m.fftfreq(spatial_x.shape[0], spatial_x[1] - spatial_x[0])
+    fourier_y = m.fftfreq(spatial_y.shape[0], spatial_y[1] - spatial_y[0])
     c1_part = convolvable1.analytic_ft(fourier_x, fourier_y)
     c2_part = convolvable2.analytic_ft(fourier_x, fourier_y)
-    out_data = abs(fftshift(ifft2(c1_part * c2_part)))
+    out_data = abs(m.fftshift(m.ifft2(c1_part * c2_part)))
     return Convolvable(out_data, spatial_x, spatial_y, has_analytic_ft=False)
 
 
@@ -273,11 +273,11 @@ def single_analytical_ft_convolution(without_analytic, with_analytic):
         A convolution result
 
     """
-    fourier_data = fftshift(fft2(fftshift(without_analytic.data)))
+    fourier_data = m.fftshift(m.fft2(m.fftshift(without_analytic.data)))
     fourier_unit_x = forward_ft_unit(without_analytic.sample_spacing, without_analytic.samples_x)
     fourier_unit_y = forward_ft_unit(without_analytic.sample_spacing, without_analytic.samples_y)
     a_ft = with_analytic.analytic_ft(fourier_unit_x, fourier_unit_y)
-    result = abs(fftshift(ifft2(fourier_data * a_ft)))
+    result = abs(m.fftshift(m.ifft2(fourier_data * a_ft)))
     return Convolvable(result, without_analytic.unit_x, without_analytic.unit_y, False)
 
 
@@ -315,9 +315,9 @@ def pure_numerical_ft_convolution(convolvable1, convolvable2):
 
 def _numerical_ft_convolution_core_equalspacing(convolvable1, convolvable2):
     # two are identically sampled; just FFT convolve them without modification
-    ft1 = fftshift(fft2(fftshift(convolvable1.data)))
-    ft2 = fftshift(fft2(fftshift(convolvable2.data)))
-    data = abs(fftshift(ifft2(ft1 * ft2)))
+    ft1 = m.fftshift(m.fft2(m.fftshift(convolvable1.data)))
+    ft2 = m.fftshift(m.fft2(m.fftshift(convolvable2.data)))
+    data = abs(m.fftshift(m.ifft2(ft1 * ft2)))
     return Convolvable(data, convolvable1.unit_x, convolvable2.unit_y, False)
 
 
@@ -329,13 +329,13 @@ def _numerical_ft_convolution_core_equalspacing_unequalsamplecount(more_samples,
     output_y = forward_ft_unit(more_samples.sample_spacing, more_samples.data.shape[1])
 
     # FFT the less sampled one and map it onto the denser grid
-    less_fourier = fftshift(fft2(fftshift(less_samples.data)))
+    less_fourier = m.fftshift(m.fft2(m.fftshift(less_samples.data)))
     interpf = interp2d(in_x, in_y, less_fourier, kind='linear')
     resampled_less = interpf(output_x, output_y)
 
     # FFT convolve the two convolvables
-    more_fourier = fftshift(fft2(fftshift(more_samples.data)))
-    data = abs(fftshift(ifft2(resampled_less * more_fourier)))
+    more_fourier = m.fftshift(m.fft2(m.fftshift(more_samples.data)))
+    data = abs(m.fftshift(m.ifft2(resampled_less * more_fourier)))
     return Convolvable(data, more_samples.unit_x, more_samples.unit_y, False)
 
 
@@ -350,13 +350,13 @@ def _numerical_ft_convolution_core_unequalspacing(finer_sampled, coarser_sampled
     # fourier-space interpolate the larger bandwidth signal onto the grid defined by the lower
     # bandwidth signal.  This assumes the lower bandwidth signal is Nyquist sampled, which is
     # not necessarily the case.  The accuracy of this method depends on the quality of the input.
-    more_fourier = fftshift(fft2(fftshift(finer_sampled.data)))
+    more_fourier = m.fftshift(m.fft2(m.fftshift(finer_sampled.data)))
     interpf = interp2d(in_x_more, in_y_more, more_fourier, kind='linear')
     resampled_more = interpf(in_x_less, in_y_less)
 
     # FFT the less well sampled input and perform the Fourier based convolution.
-    less_fourier = fftshift(fft2(fftshift(coarser_sampled.data)))
-    data = abs(fftshift(ifft2(resampled_more * less_fourier)))
+    less_fourier = m.fftshift(m.fft2(m.fftshift(coarser_sampled.data)))
+    data = abs(m.fftshift(m.ifft2(resampled_more * less_fourier)))
     return Convolvable(data, in_x_less, in_y_less, False)
 
 

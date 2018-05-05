@@ -5,10 +5,10 @@ import pandas as pd
 
 from scipy.interpolate import griddata
 
-from .mathops import floor, ceil, sin, cos, radians
 from .util import correct_gamma, share_fig_ax
 from .io import read_trioptics_mtf_vs_field, read_trioptics_mtfvfvf
 
+from prysm import mathops as m
 
 class MTFvFvF(object):
     """Abstract object representing a cube of MTF vs Field vs Focus data.
@@ -212,7 +212,7 @@ class MTFvFvF(object):
             # account for fractional indexes
             focus_out = avg_idxs.copy()
             for i, idx in enumerate(avg_idxs):
-                li, ri = floor(idx), ceil(idx)
+                li, ri = m.floor(idx), m.ceil(idx)
                 lf, rf = self.focus[li], self.focus[ri]
                 diff = rf - lf
                 part = idx % 1
@@ -439,12 +439,12 @@ class MTFFFD(object):
         """
         # ret = (r.lower() for r in ret)
         # extract data from files
-        azimuths = radians(np.asarray(azimuths, dtype=np.float64))
+        azimuths = m.radians(np.asarray(azimuths, dtype=np.float64))
         freqs, xs, ys, ts, ss = [], [], [], [], []
         for path, angle in zip(paths, azimuths):
             d = read_trioptics_mtf_vs_field(path)
             imght, freq, t, s = d['field'], d['freq'], d['tan'], d['sag']
-            x, y = imght * cos(angle), imght * sin(angle)
+            x, y = imght * m.cos(angle), imght * m.sin(angle)
             freqs.append(freq)
             xs.append(x)
             ys.append(y)

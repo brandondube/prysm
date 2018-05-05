@@ -5,9 +5,9 @@ import numpy as np
 
 from .conf import config
 from .convolution import Convolvable
-from .mathops import floor, ceil, cos, sinc
 from .objects import Image
 from .util import is_odd
+from prysm import mathops as m
 
 
 class Detector(object):
@@ -71,7 +71,7 @@ class Detector(object):
         if samples_per_pixel < 1:
             raise ValueError('Pixels smaller than samples, bindown not possible.')
         else:
-            samples_per_pixel = int(ceil(samples_per_pixel))
+            samples_per_pixel = int(m.ceil(samples_per_pixel))
 
         data = bindown(convolvable.data, samples_per_pixel)
         self.captures.append(Image(data=data, sample_spacing=self.pixel_size, has_analytic_ft=False))
@@ -204,8 +204,8 @@ class OLPF(Convolvable):
 
         """
         xq, yq = np.meshgrid(unit_x, unit_y)
-        return (cos(2 * xq * self.width_x) *
-                cos(2 * yq * self.width_y)).astype(config.precision)
+        return (m.cos(2 * xq * self.width_x) *
+                m.cos(2 * yq * self.width_y)).astype(config.precision)
 
 
 class PixelAperture(Convolvable):
@@ -282,8 +282,8 @@ class PixelAperture(Convolvable):
 
         """
         xq, yq = np.meshgrid(unit_x, unit_y)
-        return (sinc(xq * self.width_x) *
-                sinc(yq * self.width_y)).astype(config.precision)
+        return (m.sinc(xq * self.width_x) *
+                m.sinc(yq * self.width_y)).astype(config.precision)
 
 
 def generate_mtf(pixel_aperture=1, azimuth=0, num_samples=128):
@@ -312,7 +312,7 @@ def generate_mtf(pixel_aperture=1, azimuth=0, num_samples=128):
     """
     pitch_unit = pixel_aperture / 1e3
     normalized_frequencies = np.linspace(0, 2, num_samples)
-    otf = np.sinc(normalized_frequencies)
+    otf = np.m.sinc(normalized_frequencies)
     mtf = np.abs(otf)
     return normalized_frequencies / pitch_unit, mtf
 
@@ -377,10 +377,10 @@ def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
     else:
         samples_tmp_x = (samples_x - final_idx_x) // 2
         samples_tmp_y = (samples_y - final_idx_y) // 2
-        samples_top = int(floor(samples_tmp_y))
-        samples_bottom = int(ceil(samples_tmp_y))
-        samples_left = int(ceil(samples_tmp_x))
-        samples_right = int(floor(samples_tmp_x))
+        samples_top = int(m.floor(samples_tmp_y))
+        samples_bottom = int(m.ceil(samples_tmp_y))
+        samples_left = int(m.ceil(samples_tmp_x))
+        samples_right = int(m.floor(samples_tmp_x))
         trimmed_data = array[samples_left:final_idx_x + samples_right,
                              samples_bottom:final_idx_y + samples_top]
 

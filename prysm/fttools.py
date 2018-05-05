@@ -1,7 +1,7 @@
 """Supplimental tools for computing fourier transforms."""
 import numpy as np
 
-from .mathops import floor, ceil, fftshift, fftfreq
+from prysm import mathops as m
 
 
 def pad2d(array, Q=2, value=0):
@@ -31,7 +31,7 @@ def pad2d(array, Q=2, value=0):
     out_y = int(y * Q)
     factor_x = (out_x - x) / 2
     factor_y = (out_y - x) / 2
-    pad_shape = ((floor(factor_x), ceil(factor_x)), (floor(factor_y), ceil(factor_y)))
+    pad_shape = ((m.floor(factor_x), m.ceil(factor_x)), (m.floor(factor_y), m.ceil(factor_y)))
     if value is 0:
         out = np.zeros((out_x, out_y), dtype=array.dtype)
     else:
@@ -58,4 +58,4 @@ def forward_ft_unit(sample_spacing, samples):
         array of sample frequencies in the output of an fft
 
     """
-    return fftshift(fftfreq(samples, sample_spacing))
+    return m.fftshift(m.fftfreq(samples, sample_spacing))

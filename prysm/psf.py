@@ -6,12 +6,12 @@ from scipy import interpolate
 from mpl_toolkits.axes_grid1.axes_rgb import make_rgb_axes
 
 from .conf import config
-from .mathops import pi, floor, jinc
 from .coordinates import uniform_cart_to_polar, cart_to_polar
 from .util import correct_gamma, share_fig_ax
 from .convolution import Convolvable
 from .propagation import prop_pupil_plane_to_psf_plane
 
+from prysm import mathops as m
 
 class PSF(Convolvable):
     """A Point Spread Function.
@@ -177,7 +177,7 @@ class PSF(Convolvable):
 
         if pix_grid is not None:
             # if pixel grid is desired, add it
-            mult = floor(axlim / pix_grid)
+            mult = m.floor(axlim / pix_grid)
             gmin, gmax = -mult * pix_grid, mult * pix_grid
             pts = np.arange(gmin, gmax, pix_grid)
             ax.set_yticks(pts, minor=True)
@@ -508,7 +508,7 @@ class RGBPSF(object):
 
         if pix_grid is not None:
             # if pixel grid is desired, add it
-            mult = floor(axlim / pix_grid)
+            mult = m.floor(axlim / pix_grid)
             gmin, gmax = -mult * pix_grid, mult * pix_grid
             pts = np.arange(gmin, gmax, pix_grid)
             ax.set_yticks(pts, minor=True)
@@ -588,7 +588,7 @@ class RGBPSF(object):
             ax.set(xlim=(-axlim, axlim), ylim=(-axlim, axlim))
             if pix_grid is not None:
                 # if pixel grid is desired, add it
-                mult = np.floor(axlim / pix_grid)
+                mult = np.m.floor(axlim / pix_grid)
                 gmin, gmax = -mult * pix_grid, mult * pix_grid
                 pts = np.arange(gmin, gmax, pix_grid)
                 ax.set_yticks(pts, minor=True)
@@ -647,5 +647,5 @@ def _airydisk(unit_r, fno, wavelength):
         ndarray containing the airy pattern
 
     """
-    u_eff = unit_r * pi / wavelength / fno
-    return abs(2 * jinc(u_eff)) ** 2
+    u_eff = unit_r * m.pi / wavelength / fno
+    return abs(2 * m.jinc(u_eff)) ** 2

@@ -9,7 +9,8 @@ from .fringezernike import FringeZernike
 from .otf import MTF
 from .mtf_utils import mtf_ts_extractor, mtf_ts_to_dataframe
 from .thinlens import defocus_to_image_displacement
-from .mathops import sqrt
+
+from prysm import mathops as m
 
 SystemConfig = namedtuple('SystemConfig', ('efl', 'fno', 'wvl', 'samples', 'mask', 'mask_target'))
 SimulationConfig = namedtuple('SimulationConfig',
@@ -28,7 +29,7 @@ DEFAULT_SIM_PARAMS = SimulationConfig(
     wvl=0.55,
     samples=128,
     freqs=tuple(range(10, 850, 10)),
-    focus_range_waves=0.5 / sqrt(3),
+    focus_range_waves=0.5 / m.sqrt(3),
     focus_zernike=True,
     focus_normed=True,
     focus_planes=21)

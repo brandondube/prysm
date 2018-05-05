@@ -5,11 +5,12 @@ from scipy import interpolate
 
 import matplotlib as mpl
 
-from .mathops import fft2, fftshift, pi, sqrt, arccos
 from .psf import PSF
 from .fttools import forward_ft_unit
 from .util import correct_gamma, share_fig_ax
 from .coordinates import polar_to_cart
+
+from prysm import mathops as m
 
 
 class MTF(object):
@@ -355,7 +356,7 @@ class MTF(object):
             A new MTF instance
 
         """
-        dat = abs(fftshift(fft2(psf.data)))
+        dat = abs(m.fftshift(m.fft2(psf.data)))
         unit_x = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_x)  # 1e3 for microns => mm
         unit_y = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_y)
         return MTF(dat / dat[psf.center_x, psf.center_y], unit_x, unit_y)
@@ -445,9 +446,9 @@ def _difflim_mtf_core(normalized_frequency):
     if normalized_frequency >= 1.0:
         return 0
     else:
-        return (2 / pi) * \
-               (arccos(normalized_frequency) - normalized_frequency *
-                sqrt(1 - normalized_frequency ** 2))
+        return (2 / m.pi) * \
+               (m.arccos(normalized_frequency) - normalized_frequency *
+                m.sqrt(1 - normalized_frequency ** 2))
 
 
 _difflim_mtf_core = np.vectorize(_difflim_mtf_core)  # allow "if" in fcn to work with ndarrays

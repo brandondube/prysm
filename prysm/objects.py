@@ -1,19 +1,14 @@
-'''Object to convolve lens PSFs with
+'''Object to convolve lens PSFs with.
 '''
 import numpy as np
 
 from imageio import imread, imsave
 
 from .conf import config
-from .mathops import (
-    sin,
-    cos,
-    sqrt,
-    sinc,
-    jinc,
-)
 from .convolution import Convolvable
 from .coordinates import cart_to_polar
+
+from prysm import mathops as m
 
 
 class Image(Convolvable):
@@ -161,12 +156,12 @@ class Slit(Convolvable):
         '''
         xq, yq = np.meshgrid(unit_x, unit_y)
         if self.width_x > 0 and self.width_y > 0:
-            return (sinc(xq * self.width_x) +
-                    sinc(yq * self.width_y)).astype(config.precision)
+            return (m.sinc(xq * self.width_x) +
+                    m.sinc(yq * self.width_y)).astype(config.precision)
         elif self.width_x > 0 and self.width_y is 0:
-            return sinc(xq * self.width_x).astype(config.precision)
+            return m.sinc(xq * self.width_x).astype(config.precision)
         else:
-            return sinc(yq * self.width_y).astype(config.precision)
+            return m.sinc(yq * self.width_y).astype(config.precision)
 
 
 class Pinhole(Convolvable):
@@ -206,7 +201,7 @@ class Pinhole(Convolvable):
             w = width / 2
             # paint a circle on a black background
             arr = np.zeros((samples, samples))
-            arr[sqrt(xv**2 + yv**2) < w] = 1
+            arr[m.sqrt(xv**2 + yv**2) < w] = 1
         else:
             arr, x, y = None, np.zeros(2), np.zeros(2)
 
@@ -229,8 +224,8 @@ class Pinhole(Convolvable):
 
         '''
         xq, yq = np.meshgrid(unit_x, unit_y)
-        rho = sqrt(xq**2 + yq**2) / self.width / 1e3
-        return jinc(rho).astype(config.precision)
+        rho = m.sqrt(xq**2 + yq**2) / self.width / 1e3
+        return m.jinc(rho).astype(config.precision)
 
 
 class SiemensStar(Convolvable):
@@ -274,7 +269,7 @@ class SiemensStar(Convolvable):
         rv, pv = cart_to_polar(xx, yy)
 
         # generate the siemen's star as a (rho,phi) polynomial
-        arr = cos(num_spokes / 2 * pv)
+        arr = m.cos(num_spokes / 2 * pv)
 
         if not sinusoidal:  # make binary
             arr[arr < 0] = -1
@@ -326,8 +321,8 @@ class TiltedSquare(Convolvable):
 
         # TODO: convert inline operation to use of rotation matrix
         angle = np.radians(angle)
-        xp = xx * cos(angle) - yy * sin(angle)
-        yp = xx * sin(angle) + yy * cos(angle)
+        xp = xx * m.cos(angle) - yy * m.sin(angle)
+        yp = xx * m.sin(angle) + yy * m.cos(angle)
         mask = (abs(xp) < radius) * (abs(yp) < radius)
         arr[mask] = fill_with
         super().__init__(data=arr, unit_x=x, unit_y=y, has_analytic_ft=False)

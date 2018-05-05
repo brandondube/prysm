@@ -6,14 +6,9 @@ import numpy as np
 from scipy.spatial import Delaunay
 
 from .conf import config
-from .mathops import (
-    exp,
-    log,
-    sin,
-    cos,
-    pi,
-)
 from .coordinates import cart_to_polar
+
+from prysm import mathops as m
 
 
 class MaskCache(object):
@@ -69,7 +64,7 @@ def gaussian(sigma=0.5, samples=128):
 
     # // is floor division in python
     x0 = y0 = samples // 2
-    return exp(-4 * log(2) * ((x - x0) ** 2 + (y - y0) ** 2) / (s * samples) ** 2)
+    return m.exp(-4 * m.log(2) * ((x - x0) ** 2 + (y - y0) ** 2) / (s * samples) ** 2)
 
 
 def rotated_ellipse(width_major, width_minor, major_axis_angle=0, samples=128):
@@ -127,8 +122,8 @@ def rotated_ellipse(width_major, width_minor, major_axis_angle=0, samples=128):
     xv, yv = np.meshgrid(x, y)
     A = np.radians(-major_axis_angle)
     a, b = width_major, width_minor
-    major_axis_term = ((xv * cos(A) + yv * sin(A)) ** 2) / a ** 2
-    minor_axis_term = ((xv * sin(A) - yv * cos(A)) ** 2) / b ** 2
+    major_axis_term = ((xv * m.cos(A) + yv * m.sin(A)) ** 2) / a ** 2
+    minor_axis_term = ((xv * m.sin(A) - yv * m.cos(A)) ** 2) / b ** 2
     arr[major_axis_term + minor_axis_term > 1] = 0
     return arr
 
@@ -408,11 +403,11 @@ def generate_vertices(num_sides, radius=1):
         array with first column X points, second column Y points
 
     """
-    angle = 2 * pi / num_sides
+    angle = 2 * m.pi / num_sides
     pts = []
     for point in range(num_sides):
-        x = radius * sin(point * angle)
-        y = radius * cos(point * angle)
+        x = radius * m.sin(point * angle)
+        y = radius * m.cos(point * angle)
         pts.append((int(x), int(y)))
 
     return np.asarray(pts)

@@ -3,7 +3,7 @@ import numpy as np
 from scipy import interpolate
 
 from .conf import config
-from .mathops import pi, sqrt, atan2, cos, sin, exp
+from prysm import mathops as m
 
 
 def cart_to_polar(x, y):
@@ -24,8 +24,8 @@ def cart_to_polar(x, y):
         azimuthal coordinate
 
     '''
-    rho = sqrt(x ** 2 + y ** 2)
-    phi = atan2(y, x)
+    rho = m.sqrt(x ** 2 + y ** 2)
+    phi = m.atan2(y, x)
     return rho, phi
 
 
@@ -47,8 +47,8 @@ def polar_to_cart(rho, phi):
         y coordinate
 
     '''
-    x = rho * cos(phi)
-    y = rho * sin(phi)
+    x = rho * m.cos(phi)
+    y = rho * m.sin(phi)
     return x, y
 
 
@@ -82,7 +82,7 @@ def uniform_cart_to_polar(x, y, data):
     xmax = x[-1]
     num_pts = len(x)
     rho = np.linspace(0, xmax, num_pts / 2)
-    phi = np.linspace(0, 2 * pi, num_pts)
+    phi = np.linspace(0, 2 * m.pi, num_pts)
     rv, pv = np.meshgrid(rho, phi)
 
     # map points to x, y and make a grid for the original samples
@@ -148,7 +148,7 @@ def resample_2d_complex(array, sample_pts, query_pts):
     interp_mag = magfunc((yq, xq))
     interp_phase = phasefunc((yq, xq))
 
-    return interp_mag * exp(1j * interp_phase)
+    return interp_mag * m.exp(1j * interp_phase)
 
 
 def make_xy_grid(samples):

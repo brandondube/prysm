@@ -4,15 +4,9 @@ optical systems.
 import numpy as np
 
 from .conf import config
-from .mathops import (
-    jit,
-    vectorize,
-    atan2,
-    cos,
-    sin,
-    sqrt,
-)
 from .pupil import Pupil
+
+from prysm import mathops as m
 
 _names = (
     'Z0  - Piston / Bias',
@@ -66,244 +60,244 @@ _names = (
 )
 
 
-@jit
+@m.jit
 def Z0(rho, phi):
     return np.ones(rho.shape)
 
 
-@vectorize
+@m.vectorize
 def Z1(rho, phi):
-    return rho * cos(phi)
+    return rho * m.cos(phi)
 
 
-@vectorize
+@m.vectorize
 def Z2(rho, phi):
-    return rho * sin(phi)
+    return rho * m.sin(phi)
 
 
-@vectorize
+@m.vectorize
 def Z3(rho, phi):
-    return rho**2 * cos(2 * phi)
+    return rho**2 * m.cos(2 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z4(rho, phi):
     return 2 * rho ** 2 - 1
 
 
-@vectorize
+@m.vectorize
 def Z5(rho, phi):
-    return rho**2 * sin(2 * phi)
+    return rho**2 * m.sin(2 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z6(rho, phi):
-    return rho**3 * cos(3 * phi)
+    return rho**3 * m.cos(3 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z7(rho, phi):
-    return (3 * rho**3 - 2 * rho) * cos(phi)
+    return (3 * rho**3 - 2 * rho) * m.cos(phi)
 
 
-@vectorize
+@m.vectorize
 def Z8(rho, phi):
-    return (3 * rho**3 - 2 * rho) * sin(phi)
+    return (3 * rho**3 - 2 * rho) * m.sin(phi)
 
 
-@vectorize
+@m.vectorize
 def Z9(rho, phi):
-    return rho**3 * sin(3 * phi)
+    return rho**3 * m.sin(3 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z10(rho, phi):
-    return rho**4 * cos(4 * phi)
+    return rho**4 * m.cos(4 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z11(rho, phi):
-    return (4 * rho**4 - 3 * rho**2) * cos(2 * phi)
+    return (4 * rho**4 - 3 * rho**2) * m.cos(2 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z12(rho, phi):
     return -6 * rho**2 + 6 * rho**4 + 1
 
 
-@vectorize
+@m.vectorize
 def Z13(rho, phi):
-    return (4 * rho**4 - 3 * rho**2) * sin(2 * phi)
+    return (4 * rho**4 - 3 * rho**2) * m.sin(2 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z14(rho, phi):
-    return rho**4 * sin(4 * phi)
+    return rho**4 * m.sin(4 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z15(rho, phi):
-    return rho**5 * cos(5 * phi)
+    return rho**5 * m.cos(5 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z16(rho, phi):
-    return (5 * rho**5 - 4 * rho**3) * cos(3 * phi)
+    return (5 * rho**5 - 4 * rho**3) * m.cos(3 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z17(rho, phi):
-    return (10 * rho**5 - 12 * rho**3 + 3 * rho) * cos(phi)
+    return (10 * rho**5 - 12 * rho**3 + 3 * rho) * m.cos(phi)
 
 
-@vectorize
+@m.vectorize
 def Z18(rho, phi):
-    return (10 * rho**5 - 12 * rho**3 + 3 * rho) * sin(phi)
+    return (10 * rho**5 - 12 * rho**3 + 3 * rho) * m.sin(phi)
 
 
-@vectorize
+@m.vectorize
 def Z19(rho, phi):
-    return (5 * rho**5 - 4 * rho**3) * sin(3 * phi)
+    return (5 * rho**5 - 4 * rho**3) * m.sin(3 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z20(rho, phi):
-    return rho**5 * cos(5 * phi)
+    return rho**5 * m.cos(5 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z21(rho, phi):
-    return rho**6 * cos(6 * phi)
+    return rho**6 * m.cos(6 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z22(rho, phi):
-    return (6 * rho**6 - 5 * rho**4) * cos(4 * phi)
+    return (6 * rho**6 - 5 * rho**4) * m.cos(4 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z23(rho, phi):
-    return (15 * rho**6 - 20 * rho**4 + 6 * rho**2) * cos(2 * phi)
+    return (15 * rho**6 - 20 * rho**4 + 6 * rho**2) * m.cos(2 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z24(rho, phi):
     return 20 * rho**6 - 30 * rho**4 + 12 * rho**2 - 1
 
 
-@vectorize
+@m.vectorize
 def Z25(rho, phi):
-    return (15 * rho**6 - 20 * rho**4 + 6 * rho**2) * sin(2 * phi)
+    return (15 * rho**6 - 20 * rho**4 + 6 * rho**2) * m.sin(2 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z26(rho, phi):
-    return (6 * rho**6 - 5 * rho**4) * sin(4 * phi)
+    return (6 * rho**6 - 5 * rho**4) * m.sin(4 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z27(rho, phi):
-    return rho**6 * sin(6 * phi)
+    return rho**6 * m.sin(6 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z28(rho, phi):
-    return rho**6 * cos(7 * phi)
+    return rho**6 * m.cos(7 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z29(rho, phi):
-    return (7 * rho**7 - 6 * rho**5) * cos(5 * phi)
+    return (7 * rho**7 - 6 * rho**5) * m.cos(5 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z30(rho, phi):
-    return (21 * rho**7 - 30 * rho**5 + 10 * rho**3) * cos(3 * phi)
+    return (21 * rho**7 - 30 * rho**5 + 10 * rho**3) * m.cos(3 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z31(rho, phi):
-    return (35 * rho**7 - 60 * rho**5 + 30 * rho**3 - 4 * rho) * cos(phi)
+    return (35 * rho**7 - 60 * rho**5 + 30 * rho**3 - 4 * rho) * m.cos(phi)
 
 
-@vectorize
+@m.vectorize
 def Z32(rho, phi):
-    return (35 * rho**7 - 60 * rho**5 + 30 * rho**3 - 4 * rho) * sin(phi)
+    return (35 * rho**7 - 60 * rho**5 + 30 * rho**3 - 4 * rho) * m.sin(phi)
 
 
-@vectorize
+@m.vectorize
 def Z33(rho, phi):
-    return (21 * rho**7 - 30 * rho**5 + 10 * rho**3) * sin(3 * phi)
+    return (21 * rho**7 - 30 * rho**5 + 10 * rho**3) * m.sin(3 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z34(rho, phi):
-    return (7 * rho**7 - 6 * rho**5) * sin(5 * phi)
+    return (7 * rho**7 - 6 * rho**5) * m.sin(5 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z35(rho, phi):
-    return rho**7 * sin(7 * phi)
+    return rho**7 * m.sin(7 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z36(rho, phi):
-    return rho**8 * cos(8 * phi)
+    return rho**8 * m.cos(8 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z37(rho, phi):
-    return (8 * rho**8 - 7 * rho**6) * cos(6 * phi)
+    return (8 * rho**8 - 7 * rho**6) * m.cos(6 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z38(rho, phi):
-    return (28 * rho**8 - 42 * rho**6 + 15 * rho**4) * cos(4 * phi)
+    return (28 * rho**8 - 42 * rho**6 + 15 * rho**4) * m.cos(4 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z39(rho, phi):
-    return (56 * rho**8 - 105 * rho**6 + 60 * rho**4 - 10 * rho**2) * cos(2 * phi)
+    return (56 * rho**8 - 105 * rho**6 + 60 * rho**4 - 10 * rho**2) * m.cos(2 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z40(rho, phi):
     return 70 * rho**8 - 140 * rho**7 + 90 * rho**4 - 20 * rho**2 + 1
 
 
-@vectorize
+@m.vectorize
 def Z41(rho, phi):
-    return (56 * rho**8 - 105 * rho**6 + 60 * rho**4 - 10 * rho**2) * cos(2 * phi)
+    return (56 * rho**8 - 105 * rho**6 + 60 * rho**4 - 10 * rho**2) * m.cos(2 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z42(rho, phi):
-    return (28 * rho**8 - 42 * rho**6 + 15 * rho**4) * sin(4 * phi)
+    return (28 * rho**8 - 42 * rho**6 + 15 * rho**4) * m.sin(4 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z43(rho, phi):
-    return (8 * rho**8 - 7 * rho**6) * sin(6 * phi)
+    return (8 * rho**8 - 7 * rho**6) * m.sin(6 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z44(rho, phi):
-    return rho**8 * sin(8 * phi)
+    return rho**8 * m.sin(8 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z45(rho, phi):
-    return rho**9 * cos(9 * phi)
+    return rho**9 * m.cos(9 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z46(rho, phi):
-    return (9 * rho**9 - 8 * rho**7) * cos(7 * phi)
+    return (9 * rho**9 - 8 * rho**7) * m.cos(7 * phi)
 
 
-@vectorize
+@m.vectorize
 def Z47(rho, phi):
-    return (36 * rho**9 - 56 * rho**7 + 21 * rho**5) * cos(5 * phi)
+    return (36 * rho**9 - 56 * rho**7 + 21 * rho**5) * m.cos(5 * phi)
 
 
 zernfcns = {
@@ -533,8 +527,8 @@ def fit(data, num_terms=16, rms_norm=False, round_at=6):
     # set up an x/y rho/phi grid to evaluate zernikes on
     x, y = np.linspace(-1, 1, data.shape[1]), np.linspace(-1, 1, data.shape[0])
     xv, yv = np.meshgrid(x, y)
-    rho = sqrt(xv**2 + yv**2)[pts].flatten()
-    phi = atan2(xv, yv)[pts].flatten()
+    rho = m.sqrt(xv**2 + yv**2)[pts].flatten()
+    phi = m.atan2(xv, yv)[pts].flatten()
 
     # compute each zernike term
     zernikes = []
