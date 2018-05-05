@@ -5,6 +5,7 @@ import pytest
 import numpy as np
 
 from prysm import otf
+from prysm.fttools import forward_ft_unit
 
 
 SAMPLES = 32
@@ -13,7 +14,7 @@ LIM = 1e3
 
 @pytest.fixture
 def mtf():
-    x, y = np.linspace(-LIM, LIM, SAMPLES), np.linspace(-LIM, LIM, SAMPLES)
+    x, y = forward_ft_unit(1/1e3, 128), forward_ft_unit(1/1e3, 128)
     xx, yy = np.meshgrid(x, y)
     dat = np.sin(xx)
     return otf.MTF(data=dat, unit_x=x)  # do not pass unit_y, simultaneous test for unit_y=None
@@ -43,3 +44,11 @@ def test_mtf_exact_xy_functions(mtf, y):
     x = [0, 1, 2, 3]
     mtf_ = mtf.exact_xy(x, y)
     assert type(mtf_) is np.ndarray
+
+
+def test_mtf_exact_tan_functions(mtf):
+    assert type(mtf.exact_tan(0)) is np.ndarray
+
+
+def test_mtf_exact_sag_functions(mtf):
+    assert type(mtf.exact_sag(0)) is np.ndarray
