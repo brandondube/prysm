@@ -31,8 +31,6 @@ from numpy.fft import fftshift, ifftshift, fftfreq
 
 from scipy.special import j1
 
-from prysm import conf
-
 atan2 = arctan2
 atan = arctan
 
@@ -76,8 +74,9 @@ except ImportError:
 # cuda
 try:
     import cupy as cu
+    cuda_compatible = True
 except ImportError:
-    conf.config.cuda_compatible = False
+    cuda_compatible = False
 
 allfuncs = frozenset((
     'sqrt',
@@ -139,7 +138,7 @@ assert [floor, ceil]
 
 def change_backend(to):
     if to.lower() == 'cu':
-        if not conf.config.cuda_compatible:
+        if not cuda_compatible:
             raise ValueError('installation lacks cuda support.')
         else:
             for func in allfuncs:
