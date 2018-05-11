@@ -1,8 +1,6 @@
 """Shack Hartmann sensor modeling tools."""
 from collections import deque
 
-import numpy as np
-
 from .detector import bindown
 from .units import waves_to_microns
 from .util import share_fig_ax
@@ -130,9 +128,9 @@ class ShackHartmann(object):
         lenslet_end_x = round(end_factor_x * sensor_size[0] * 1e3 - lenslet_shift, 4)
         lenslet_end_y = round(end_factor_y * sensor_size[1] * 1e3 - lenslet_shift, 4)
 
-        lenslet_pos_x = np.linspace(lenslet_start_x, lenslet_end_x, self.num_lenslets[0])
-        lenslet_pos_y = np.linspace(lenslet_start_y, lenslet_end_y, self.num_lenslets[0])
-        self.refx, self.refy = np.meshgrid(lenslet_pos_x, lenslet_pos_y)
+        lenslet_pos_x = m.linspace(lenslet_start_x, lenslet_end_x, self.num_lenslets[0])
+        lenslet_pos_y = m.linspace(lenslet_start_y, lenslet_end_y, self.num_lenslets[0])
+        self.refx, self.refy = m.meshgrid(lenslet_pos_x, lenslet_pos_y)
 
         # initiate the frame buffer and store the wavelength
         self.buffer_depth = framebuffer
@@ -160,9 +158,9 @@ class ShackHartmann(object):
             pp = self.pixel_pitch
             pxx, pxy = self.resolution
             pixextx, pixexty = pp * pxx, pp * pxy
-            x = np.arange(0, pixextx, pp)
-            y = np.arange(0, pixexty, pp)
-            self.pixel_locations_x, self.pixel_locations_y = np.meshgrid(x, y)
+            x = m.arange(0, pixextx, pp)
+            y = m.arange(0, pixexty, pp)
+            self.pixel_locations_x, self.pixel_locations_y = m.meshgrid(x, y)
 
         return self.pixel_locations_x, self.pixel_locations_y
 
@@ -256,7 +254,7 @@ class ShackHartmann(object):
 
         # compute the gradient - TODO: see why gradient is dy,dx not dx,dy
         normalized_sample_spacing = 2 / pupil.samples
-        dy, dx = np.gradient(data, normalized_sample_spacing, normalized_sample_spacing)
+        dy, dx = m.gradient(data, normalized_sample_spacing, normalized_sample_spacing)
 
         # convert the gradient from waves to radians -- angle alpha is made as:
         '''
@@ -341,9 +339,9 @@ def psf_shift(lenslet_efl, dx, dy, mag=1):
     ----------
     lenslet_efl : `float`
         EFL of lenslets, microns
-    dx : `np.ndarray`
+    dx : `m.ndarray`
         dx gradient of wavefront
-    dy : `np.ndarray`
+    dy : `m.ndarray`
         dy gradient of wavefront
     mag : `float`
         magnification of the collimation system

@@ -1,7 +1,6 @@
 ''' A repository of standard zernike aberration descriptions used to model pupils of
 optical systems.
 '''
-import numpy as np
 
 from .conf import config
 from .pupil import Pupil
@@ -62,7 +61,7 @@ _names = (
 
 @m.jit
 def Z0(rho, phi):
-    return np.ones(rho.shape)
+    return m.ones(rho.shape)
 
 
 @m.vectorize
@@ -448,7 +447,7 @@ class StandardZernike(Pupil):
         # construct an equation for the phase of the pupil
         # build a coordinate system over which to evaluate this function
         self._gengrid()
-        self.phase = np.zeros((self.samples, self.samples), dtype=config.precision)
+        self.phase = m.zeros((self.samples, self.samples), dtype=config.precision)
         for term, coef in enumerate(self.coefs):
             # short circuit for speed
             if coef == 0:
@@ -473,7 +472,7 @@ class StandardZernike(Pupil):
                 continue
 
             # positive coefficient, prepend with +
-            if np.sign(coef) == 1:
+            if m.sign(coef) == 1:
                 _ = '+' + f'{coef:.3f}'
             # negative, sign comes from the value
             else:
@@ -522,11 +521,11 @@ def fit(data, num_terms=16, rms_norm=False, round_at=6):
         raise ValueError(f'number of terms must be less than {len(zernfcns)}')
 
     # precompute the valid indexes in the original data
-    pts = np.isfinite(data)
+    pts = m.isfinite(data)
 
     # set up an x/y rho/phi grid to evaluate zernikes on
-    x, y = np.linspace(-1, 1, data.shape[1]), np.linspace(-1, 1, data.shape[0])
-    xv, yv = np.meshgrid(x, y)
+    x, y = m.linspace(-1, 1, data.shape[1]), m.linspace(-1, 1, data.shape[0])
+    xv, yv = m.meshgrid(x, y)
     rho = m.sqrt(xv**2 + yv**2)[pts].flatten()
     phi = m.atan2(xv, yv)[pts].flatten()
 
@@ -534,8 +533,8 @@ def fit(data, num_terms=16, rms_norm=False, round_at=6):
     zernikes = []
     for i in range(num_terms):
         zernikes.append(zernwrapper(i, rms_norm, rho, phi))
-    zerns = np.asarray(zernikes).T
+    zerns = m.asarray(zernikes).T
 
     # use least squares to compute the coefficients
-    coefs = np.linalg.lstsq(zerns, data[pts].flatten())[0]
+    coefs = m.linalg.lstsq(zerns, data[pts].flatten())[0]
     return coefs.round(round_at)

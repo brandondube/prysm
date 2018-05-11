@@ -1,5 +1,4 @@
 """Coordinate conversions."""
-import numpy as np
 from scipy import interpolate
 
 from .conf import config
@@ -81,9 +80,9 @@ def uniform_cart_to_polar(x, y, data):
     # create a set of polar coordinates to interpolate onto
     xmax = x[-1]
     num_pts = len(x)
-    rho = np.linspace(0, xmax, num_pts / 2)
-    phi = np.linspace(0, 2 * m.pi, num_pts)
-    rv, pv = np.meshgrid(rho, phi)
+    rho = m.linspace(0, xmax, num_pts / 2)
+    phi = m.linspace(0, 2 * m.pi, num_pts)
+    rv, pv = m.meshgrid(rho, phi)
 
     # map points to x, y and make a grid for the original samples
     xv, yv = polar_to_cart(rv, pv)
@@ -112,7 +111,7 @@ def resample_2d(array, sample_pts, query_pts):
         array resampled onto query_pts via bivariate spline
 
     """
-    xq, yq = np.meshgrid(*query_pts)
+    xq, yq = m.meshgrid(*query_pts)
     interpf = interpolate.RectBivariateSpline(*sample_pts, array)
     return interpf.ev(yq, xq)
 
@@ -138,9 +137,9 @@ def resample_2d_complex(array, sample_pts, query_pts):
         array resampled onto query_pts via bivariate spline
 
     '''
-    xq, yq = np.meshgrid(*query_pts)
+    xq, yq = m.meshgrid(*query_pts)
     mag = abs(array)
-    phase = np.angle(array)
+    phase = m.angle(array)
 
     magfunc = interpolate.RegularGridInterpolator(sample_pts, mag)
     phasefunc = interpolate.RegularGridInterpolator(sample_pts, phase)
@@ -167,9 +166,9 @@ def make_xy_grid(samples):
         y meshgrid
 
     """
-    x = np.linspace(-1, 1, samples, dtype=config.precision)
-    y = np.linspace(-1, 1, samples, dtype=config.precision)
-    xx, yy = np.meshgrid(x, y)
+    x = m.linspace(-1, 1, samples, dtype=config.precision)
+    y = m.linspace(-1, 1, samples, dtype=config.precision)
+    xx, yy = m.meshgrid(x, y)
     return xx, yy
 
 

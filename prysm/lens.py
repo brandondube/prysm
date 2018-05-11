@@ -4,7 +4,6 @@ import warnings
 from functools import partial
 from copy import deepcopy
 
-import numpy as np
 from scipy.optimize import minimize
 
 from .conf import config
@@ -14,6 +13,8 @@ from .otf import MTF
 from .util import share_fig_ax
 from .thinlens import image_displacement_to_defocus
 from .mtf_utils import MTFvFvF
+
+from prysm import mathops as m
 
 
 class Lens(object):
@@ -181,8 +182,8 @@ class Lens(object):
 
         '''
         self._uniformly_spaced_fields(num_pts)
-        mtfs_t = np.empty((num_pts, len(freqs)))
-        mtfs_s = np.empty((num_pts, len(freqs)))
+        mtfs_t = m.empty((num_pts, len(freqs)))
+        mtfs_s = m.empty((num_pts, len(freqs)))
         for idx in range(num_pts):
             mtf = self._make_mtf(idx)
             vals_t = mtf.exact_polar(freqs, 0)
@@ -250,7 +251,7 @@ class Lens(object):
 
         '''
         data_s, data_t = self.mtf_vs_field(num_pts, freqs)
-        flds_abs = np.linspace(0, self.fov_y, num_pts)
+        flds_abs = m.linspace(0, self.fov_y, num_pts)
         fig, ax = share_fig_ax(fig, ax)
         for i in range(len(freqs)):
             ln, = ax.plot(flds_abs, data_s[:, i], lw=3, ls='--')
@@ -279,7 +280,7 @@ class Lens(object):
             t.append(mtf.exact_polar(freqs, 0))
             s.append(mtf.exact_polar(freqs, 90))
 
-        t, s = np.asarray(t), np.asarray(s)
+        t, s = m.asarray(t), m.asarray(s)
         fig, ax = share_fig_ax(fig, ax)
         for idx, freq in enumerate(freqs):
             l, = ax.plot(focus, t[:, idx], lw=2, label=freq)
@@ -356,7 +357,7 @@ class Lens(object):
 
         '''
         # todo: parallelize
-        focus_shifts = np.linspace(-focus_range, focus_range, num_pts)
+        focus_shifts = m.linspace(-focus_range, focus_range, num_pts)
         defocus_wvs = image_displacement_to_defocus(focus_shifts, self.fno, self.wavelength)
 
         mtfs = []
@@ -376,9 +377,9 @@ class Lens(object):
         for idx in range(num_fields):
             focus, net_mtfs[idx] = self._make_mtf_thrufocus(idx, focus_range, num_focus)
 
-        fields = (self.fields[-1] * self.fov_y) * np.linspace(0, 1, num_fields)
-        t_cube = np.empty((num_focus, num_fields, len(freqs)))
-        s_cube = np.empty((num_focus, num_fields, len(freqs)))
+        fields = (self.fields[-1] * self.fov_y) * m.linspace(0, 1, num_fields)
+        t_cube = m.empty((num_focus, num_fields, len(freqs)))
+        s_cube = m.empty((num_focus, num_fields, len(freqs)))
         for idx, mtfs in enumerate(net_mtfs):
             for idx2, submtf in enumerate(mtfs):
                 t = submtf.exact_polar(freqs, 0)
@@ -400,7 +401,7 @@ class Lens(object):
             self.
 
         '''
-        _ = np.arange(0, num_pts, dtype=config.precision)
+        _ = m.arange(0, num_pts, dtype=config.precision)
         flds = _ / _.max()
         self.fields = flds
         return self
@@ -477,7 +478,7 @@ def _spherical_cost_fcn_raw(frequencies, truth_s, truth_t, lens, abervalues):
     synth_t = mtf.exact_polar(frequencies, 0)
     synth_s = mtf.exact_polar(frequencies, 90)
 
-    truth = np.stack((truth_s, truth_t))
-    synth = np.stack((synth_s, synth_t))
+    truth = m.stack((truth_s, truth_t))
+    synth = m.stack((synth_s, synth_t))
 
     return ((truth - synth) ** 2).sum()

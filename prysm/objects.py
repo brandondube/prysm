@@ -1,6 +1,4 @@
-'''Object to convolve lens PSFs with.
-'''
-import numpy as np
+'''Object to convolve lens PSFs with.'''
 
 from imageio import imread, imsave
 
@@ -31,7 +29,7 @@ class Image(Convolvable):
         center_x, center_y = samples_x // 2, samples_y // 2
         ext_x = sample_spacing * center_x
         ext_y = sample_spacing * center_y
-        unit_x, unit_y = np.linspace(-ext_x, ext_x, samples_x), np.linspace(-ext_y, ext_y, samples_y)
+        unit_x, unit_y = m.linspace(-ext_x, ext_x, samples_x), m.linspace(-ext_y, ext_y, samples_y)
         super().__init__(data, unit_x, unit_y, has_analytic_ft)
 
     def save(self, path, nbits=8):
@@ -45,7 +43,7 @@ class Image(Convolvable):
             number of bits in the output image
 
         '''
-        dat = (self.data * 255).astype(np.uint8)
+        dat = (self.data * 255).astype(m.uint8)
         imsave(path, dat)
 
     @staticmethod
@@ -71,7 +69,7 @@ class Image(Convolvable):
         '''
         imgarr = imread(path, flatten=True, pilmode='F')
 
-        return Image(data=np.flip(imgarr, axis=0) / 255, sample_spacing=scale, synthetic=False)
+        return Image(data=m.flip(imgarr, axis=0) / 255, sample_spacing=scale, synthetic=False)
 
 
 class Slit(Convolvable):
@@ -111,10 +109,10 @@ class Slit(Convolvable):
 
         if samples > 0:
             ext = samples / 2 * sample_spacing
-            x, y = np.linspace(-ext, ext, samples), np.linspace(-ext, ext, samples)
-            arr = np.zeros((samples, samples))
+            x, y = m.linspace(-ext, ext, samples), m.linspace(-ext, ext, samples)
+            arr = m.zeros((samples, samples))
         else:
-            arr, x, y = None, np.zeros(2), np.zeros(2)
+            arr, x, y = None, m.zeros(2), m.zeros(2)
 
         # paint in the slit
         if orientation.lower() in ('v', 'vert', 'vertical'):
@@ -154,7 +152,7 @@ class Slit(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         '''
-        xq, yq = np.meshgrid(unit_x, unit_y)
+        xq, yq = m.meshgrid(unit_x, unit_y)
         if self.width_x > 0 and self.width_y > 0:
             return (m.sinc(xq * self.width_x) +
                     m.sinc(yq * self.width_y)).astype(config.precision)
@@ -196,14 +194,14 @@ class Pinhole(Convolvable):
         # produce coordinate arrays
         if samples > 0:
             ext = samples / 2 * sample_spacing
-            x, y = np.linspace(-ext, ext, samples), np.linspace(-ext, ext, samples)
-            xv, yv = np.meshgrid(x, y)
+            x, y = m.linspace(-ext, ext, samples), m.linspace(-ext, ext, samples)
+            xv, yv = m.meshgrid(x, y)
             w = width / 2
             # paint a circle on a black background
-            arr = np.zeros((samples, samples))
+            arr = m.zeros((samples, samples))
             arr[m.sqrt(xv**2 + yv**2) < w] = 1
         else:
-            arr, x, y = None, np.zeros(2), np.zeros(2)
+            arr, x, y = None, m.zeros(2), m.zeros(2)
 
         super().__init__(data=arr, unit_x=x, unit_y=y, has_analytic_ft=True)
 
@@ -223,7 +221,7 @@ class Pinhole(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         '''
-        xq, yq = np.meshgrid(unit_x, unit_y)
+        xq, yq = m.meshgrid(unit_x, unit_y)
         rho = m.sqrt(xq**2 + yq**2) / self.width / 1e3
         return m.jinc(rho).astype(config.precision)
 
@@ -263,9 +261,9 @@ class SiemensStar(Convolvable):
         self.num_spokes = num_spokes
 
         # generate a coordinate grid
-        x = np.linspace(-1, 1, samples)
-        y = np.linspace(-1, 1, samples)
-        xx, yy = np.meshgrid(x, y)
+        x = m.linspace(-1, 1, samples)
+        y = m.linspace(-1, 1, samples)
+        xx, yy = m.meshgrid(x, y)
         rv, pv = cart_to_polar(xx, yy)
 
         # generate the siemen's star as a (rho,phi) polynomial
@@ -307,20 +305,20 @@ class TiltedSquare(Convolvable):
         '''
         radius = 0.3
         if background.lower() == 'white':
-            arr = np.ones((samples, samples))
+            arr = m.ones((samples, samples))
             fill_with = 0
         else:
-            arr = np.zeros((samples, samples))
+            arr = m.zeros((samples, samples))
             fill_with = 1
 
         # TODO: optimize by working with index numbers directly and avoid
         # creation of X,Y arrays for performance.
-        x = np.linspace(-0.5, 0.5, samples)
-        y = np.linspace(-0.5, 0.5, samples)
-        xx, yy = np.meshgrid(x, y)
+        x = m.linspace(-0.5, 0.5, samples)
+        y = m.linspace(-0.5, 0.5, samples)
+        xx, yy = m.meshgrid(x, y)
 
         # TODO: convert inline operation to use of rotation matrix
-        angle = np.radians(angle)
+        angle = m.radians(angle)
         xp = xx * m.cos(angle) - yy * m.sin(angle)
         yp = xx * m.sin(angle) + yy * m.cos(angle)
         mask = (abs(xp) < radius) * (abs(yp) < radius)

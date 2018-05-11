@@ -3,8 +3,6 @@ import os
 import re
 import codecs
 
-import numpy as np
-
 from .conf import config
 
 trioptics_enc = 'cp1252'
@@ -31,7 +29,7 @@ def read_trioptics_mtfvfvf(file_path):
             metavalues = meta.split()
             imght, objang, focuspos, freqpitch = metavalues[1::2]
             mtf_raw = data.split()[1:]  # first element is "MTF"
-            mtf = np.asarray(mtf_raw, dtype=config.precision)
+            mtf = m.asarray(mtf_raw, dtype=config.precision)
             imghts.append(imght)
             objangs.append(objang)
             focusposes.append(focuspos)
@@ -42,11 +40,11 @@ def read_trioptics_mtfvfvf(file_path):
     else:
         azimuth = 'Sag'
 
-    focuses = np.unique(np.asarray(focusposes, dtype=config.precision))
-    focuses = (focuses - np.mean(focuses)) * 1e3
-    imghts = np.unique(np.asarray(imghts, dtype=config.precision))
-    freqs = np.arange(len(mtfs[0]), dtype=config.precision) * float(freqpitch)
-    data = np.swapaxes(np.asarray(mtfs).reshape(len(focuses), len(imghts), len(freqs)), 0, 1)
+    focuses = m.unique(m.asarray(focusposes, dtype=config.precision))
+    focuses = (focuses - m.mean(focuses)) * 1e3
+    imghts = m.unique(m.asarray(imghts, dtype=config.precision))
+    freqs = m.arange(len(mtfs[0]), dtype=config.precision) * float(freqpitch)
+    data = m.swapaxes(m.asarray(mtfs).reshape(len(focuses), len(imghts), len(freqs)), 0, 1)
     return {
         'data': data,
         'focus': focuses,
@@ -87,14 +85,14 @@ def read_trioptics_mtf_vs_field(file_path):
         tan, sag = tan[:endpt], sag[:endpt]
 
         # now extract the freqs from the tan data
-        freqs = np.asarray([float(s.split('(')[0][1:]) for s in tan])
+        freqs = m.asarray([float(s.split('(')[0][1:]) for s in tan])
 
         # lastly, extract the floating point tan and sag data
         # also take fields, to the 4th decimal place (nearest .1um)
         # reformat T/S to 2D arrays with indices of (freq, field)
-        tan = np.asarray([s.split('=09')[1:-1] for s in tan], dtype=config.precision)
-        sag = np.asarray([s.split('=09')[1:-1] for s in sag], dtype=config.precision)
-        fields = np.asarray(fields.split('=09')[0:-1], dtype=config.precision).round(4)
+        tan = m.asarray([s.split('=09')[1:-1] for s in tan], dtype=config.precision)
+        sag = m.asarray([s.split('=09')[1:-1] for s in sag], dtype=config.precision)
+        fields = m.asarray(fields.split('=09')[0:-1], dtype=config.precision).round(4)
         return {
             'freq': freqs,
             'field': fields,
@@ -147,8 +145,8 @@ def read_trioptics_mtf(file_path):
         mtfs.append(dat[1])
 
     breakpt = len(mtfs) // 2
-    t = np.asarray(mtfs[:breakpt], dtype=config.precision)
-    s = np.asarray(mtfs[breakpt:], dtype=config.precision)
+    t = m.asarray(mtfs[:breakpt], dtype=config.precision)
+    s = m.asarray(mtfs[breakpt:], dtype=config.precision)
     freqs = tuple(freqs[:breakpt])
 
     return {

@@ -1,7 +1,6 @@
 """Useful macros for performing more complicated tasks."""
 from collections import namedtuple
 
-import numpy as np
 import pandas as pd
 
 from .seidel import Seidel
@@ -57,7 +56,7 @@ def thrufocus_mtf_from_wavefront(focused_wavefront, sim_params):
 
     """
     s = sim_params
-    focusdiv_wvs = np.linspace(-1*s.focus_range_waves, s.focus_range_waves, s.focus_planes)
+    focusdiv_wvs = m.linspace(-1*s.focus_range_waves, s.focus_range_waves, s.focus_planes)
     focusdiv_um = defocus_to_image_displacement(focusdiv_wvs, s.fno, s.wvl, s.focus_zernike, s.focus_normed)
     dfs = []
     for focus, displacement in zip(focusdiv_wvs, focusdiv_um):
@@ -104,8 +103,8 @@ def thrufocus_mtf_from_wavefront_array(focused_wavefront, sim_params):
 
     """
     s = sim_params
-    focusdiv_wvs = np.linspace(-s.focus_range_waves, s.focus_range_waves, s.focus_planes)
-    tt, ss = np.empty((s.focus_planes, len(s.freqs))), np.empty((s.focus_planes, len(s.freqs)))
+    focusdiv_wvs = m.linspace(-s.focus_range_waves, s.focus_range_waves, s.focus_planes)
+    tt, ss = m.empty((s.focus_planes, len(s.freqs))), m.empty((s.focus_planes, len(s.freqs)))
     for idx, focus in enumerate(focusdiv_wvs):
         if s.focus_zernike:
             defocus = FringeZernike(base=1, Z4=focus, rms_norm=s.focus_normed, samples=s.samples,

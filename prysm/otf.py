@@ -1,6 +1,4 @@
 """A base optical transfer function interface."""
-import numpy as np
-
 from scipy import interpolate
 
 import matplotlib as mpl
@@ -137,7 +135,7 @@ class MTF(object):
         elif type(azimuths) in (int, float):
             azimuths = [azimuths] * len(freqs)
 
-        azimuths = np.radians(azimuths)
+        azimuths = m.radians(azimuths)
         # handle single value case
         if type(freqs) in (int, float):
             x, y = polar_to_cart(freqs, azimuths)
@@ -147,7 +145,7 @@ class MTF(object):
         for freq, az in zip(freqs, azimuths):
             x, y = polar_to_cart(freq, az)
             outs.append(float(self.interpf_2d((x, y), method='linear')))
-        return np.asarray(outs)
+        return m.asarray(outs)
 
     def exact_xy(self, x, y=None):
         """Retrieve the MTF at the specified X-Y frequency pairs.
@@ -182,11 +180,11 @@ class MTF(object):
         if type(x) in (int, float):
             x = [x] * len(y)
 
-        x, y = np.asarray(x), np.asarray(y)
+        x, y = m.asarray(x), m.asarray(y)
         outs = []
         for x, y in zip(x, y):
             outs.append(float(self.interpf_2d((x, y), method='linear')))
-        return np.asarray(outs)
+        return m.asarray(outs)
 
     def exact_tan(self, freq):
         """Return data at an exact x coordinate along the y=0 axis.
@@ -417,9 +415,9 @@ def diffraction_limited_mtf(fno, wavelength, frequencies=None, num_pts=128):
     """
     extinction = 1 / (wavelength / 1000 * fno)
     if frequencies is None:
-        normalized_frequency = np.linspace(0, 1, num_pts)
+        normalized_frequency = m.linspace(0, 1, num_pts)
     else:
-        normalized_frequency = np.asarray(frequencies) / extinction
+        normalized_frequency = m.asarray(frequencies) / extinction
 
     mtf = _difflim_mtf_core(normalized_frequency)
 
@@ -451,4 +449,4 @@ def _difflim_mtf_core(normalized_frequency):
                 m.sqrt(1 - normalized_frequency ** 2))
 
 
-_difflim_mtf_core = np.vectorize(_difflim_mtf_core)  # allow "if" in fcn to work with ndarrays
+_difflim_mtf_core = m.vectorize(_difflim_mtf_core)  # allow "if" in fcn to work with ndarrays

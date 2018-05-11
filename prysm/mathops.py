@@ -26,6 +26,7 @@ from numpy import (
     exp,
     log,
     log10,
+    newaxis,
 )
 from numpy.fft import fftshift, ifftshift, fftfreq
 
@@ -92,6 +93,25 @@ allfuncs = frozenset((
     'exp',
     'log',
     'log10',
+    'linspace',
+    'meshgrid',
+    'angle',
+    'zeros',
+    'ones',
+    'empty',
+    'sign',
+    'isfinite',
+    'asarray',
+    'arange',
+    'stack',
+    'mean',
+    'unique',
+    'swapaxes',
+    'rollaxis',
+    'searchsorted',
+    'concatenate',
+    'cumsum',
+    'gradient',
 ))
 
 fftfuncs = frozenset((
@@ -100,6 +120,10 @@ fftfuncs = frozenset((
     'fftshift',
     'ifftshift',
     'fftfreq',
+))
+
+linalgfuncs = frozenset((
+    'lstsq',
 ))
 
 def jinc(r):

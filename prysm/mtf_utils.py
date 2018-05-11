@@ -1,6 +1,4 @@
 """Utilities for working with MTF data."""
-
-import numpy as np
 import pandas as pd
 
 from scipy.interpolate import griddata
@@ -78,12 +76,12 @@ class MTFvFvF(object):
         """
         ext_x = [self.field[0], self.field[-1]]
         ext_y = [self.focus[0], self.focus[-1]]
-        freq_idx = np.searchsorted(self.freq, freq)
+        freq_idx = m.searchsorted(self.freq, freq)
 
         # if the plot is symmetric, mirror the data
         if symmetric is True:
             dat = correct_gamma(
-                np.concatenate((
+                m.concatenate((
                     self.data[:, ::-1, freq_idx],
                     self.data[:, :, freq_idx]),
                     axis=1))
@@ -136,9 +134,9 @@ class MTFvFvF(object):
             axis containing the plot
 
         """
-        field_idx = np.searchsorted(self.field, field)
-        freq_idxs = [np.searchsorted(self.freq, f) for f in freqs]
-        range_idxs = [np.searchsorted(self.focus, r) for r in (-_range, _range)]
+        field_idx = m.searchsorted(self.field, field)
+        freq_idxs = [m.searchsorted(self.freq, f) for f in freqs]
+        range_idxs = [m.searchsorted(self.focus, r) for r in (-_range, _range)]
         xaxis_pts = self.focus[range_idxs[0]:range_idxs[1]]
 
         mtf_arrays = []
@@ -198,9 +196,9 @@ class MTFvFvF(object):
         """
         if algorithm == '0.5':
             # locate the frequency index on axis
-            idx_axis = np.searchsorted(self.field, 0)
+            idx_axis = m.searchsorted(self.field, 0)
             idx_freq = abs(self.data[:, idx_axis, :].max(axis=0) - 0.5).argmin(axis=1)
-            focus_idx = self.data[:, np.arange(self.data.shape[1]), idx_freq].argmax(axis=0)
+            focus_idx = self.data[:, m.arange(self.data.shape[1]), idx_freq].argmax(axis=0)
             return self.focus[focus_idx], self.field
         elif algorithm.lower() in ('avg', 'average'):
             if self.freq[0] == 0:
@@ -246,9 +244,9 @@ class MTFvFvF(object):
         sorted_df = df.sort_values(by=['Focus', 'Field', 'Freq'])
         T = sorted_df[sorted_df.Azimuth == 'Tan']
         S = sorted_df[sorted_df.Azimuth == 'Sag']
-        focus = np.unique(df.Focus.as_matrix())
-        fields = np.unique(df.Fields.as_matrix())
-        freqs = np.unique(df.Freq.as_matrix())
+        focus = m.unique(df.Focus.as_matrix())
+        fields = m.unique(df.Fields.as_matrix())
+        freqs = m.unique(df.Freq.as_matrix())
         d1, d2, d3 = len(focus), len(fields), len(freqs)
         t_mat = T.as_matrix.reshape((d1, d2, d3))
         s_mat = S.as_matrix.reshape((d1, d2, d3))
@@ -379,7 +377,7 @@ class MTFFFD(object):
             axis containing the plot
 
         """
-        idx = np.searchsorted(self.freq, freq)
+        idx = m.searchsorted(self.freq, freq)
         extx = (self.field_x[0], self.field_x[-1])
         exty = (self.field_y[0], self.field_y[-1])
         fig, ax = share_fig_ax(fig, ax)
@@ -439,7 +437,7 @@ class MTFFFD(object):
         """
         # ret = (r.lower() for r in ret)
         # extract data from files
-        azimuths = m.radians(np.asarray(azimuths, dtype=np.float64))
+        azimuths = m.radians(m.asarray(azimuths, dtype=m.float64))
         freqs, xs, ys, ts, ss = [], [], [], [], []
         for path, angle in zip(paths, azimuths):
             d = read_trioptics_mtf_vs_field(path)
@@ -452,15 +450,15 @@ class MTFFFD(object):
             ss.append(s)
 
         # convert to arrays and interpolate onto a regular 2D grid via a cubic interpolator
-        xarr, yarr, farr = np.asarray(xs), np.asarray(ys), np.asarray(freqs)
-        val_tan, val_sag = np.asarray(ts), np.asarray(ss)
+        xarr, yarr, farr = m.asarray(xs), m.asarray(ys), m.asarray(freqs)
+        val_tan, val_sag = m.asarray(ts), m.asarray(ss)
         npts = len(xs[0]) * upsample
         xmin, xmax, ymin, ymax = xarr.min(), xarr.max(), yarr.min(), yarr.max()
 
         # loop through the frequencies and interpolate them all onto the regular output grid
-        out_x, out_y = np.linspace(xmin, xmax, npts), np.linspace(ymin, ymax, npts)
-        xx, yy = np.meshgrid(out_x, out_y)
-        sample_pts = np.stack([xarr.ravel(), yarr.ravel()], axis=1)
+        out_x, out_y = m.linspace(xmin, xmax, npts), m.linspace(ymin, ymax, npts)
+        xx, yy = m.meshgrid(out_x, out_y)
+        sample_pts = m.stack([xarr.ravel(), yarr.ravel()], axis=1)
         interpt, interps = [], []
         for idx in range(val_tan.shape[1]):
             datt = griddata(sample_pts, val_tan[:, idx, :].ravel(), (xx, yy), method='linear')
@@ -468,7 +466,7 @@ class MTFFFD(object):
             interpt.append(datt)
             interps.append(dats)
 
-        tan, sag = np.rollaxis(np.asarray(interpt), 0, 3), np.rollaxis(np.asarray(interps), 0, 3)
+        tan, sag = m.rollaxis(m.asarray(interpt), 0, 3), m.rollaxis(m.asarray(interps), 0, 3)
         if ret == ('tan', 'sag'):
             return MTFFFD(tan, out_x, out_y, farr[0, :]), MTFFFD(sag, out_x, out_y, farr[0, :])
         else:

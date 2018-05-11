@@ -1,8 +1,6 @@
 """Utility functions."""
 from operator import itemgetter
 
-import numpy as np
-
 from matplotlib import pyplot as plt
 
 from prysm import mathops as m
@@ -139,17 +137,17 @@ def fold_array(array, axis=1):
         xh = xs // 2
         left_chunk = array[:, :xh]
         right_chunk = array[:, xh:]
-        folded_array = np.concatenate((right_chunk[:, :, np.newaxis],
-                                       np.flip(np.flip(left_chunk, axis=1),
-                                               axis=0)[:, :, np.newaxis]),
+        folded_array = m.concatenate((right_chunk[:, :, m.newaxis],
+                                       m.flip(m.flip(left_chunk, axis=1),
+                                               axis=0)[:, :, m.newaxis]),
                                       axis=2)
     else:
         yh = ys // 2
         top_chunk = array[:yh, :]
         bottom_chunk = array[yh:, :]
-        folded_array = np.concatenate((bottom_chunk[:, :, np.newaxis],
-                                       np.flip(np.flip(top_chunk, axis=1),
-                                               axis=0)[:, :, np.newaxis]),
+        folded_array = m.concatenate((bottom_chunk[:, :, m.newaxis],
+                                       m.flip(m.flip(top_chunk, axis=1),
+                                               axis=0)[:, :, m.newaxis]),
                                       axis=2)
     return folded_array.mean(axis=2)
 
@@ -200,7 +198,7 @@ def rms(array):
         RMS of the array
 
     """
-    non_nan = np.isfinite(array)
+    non_nan = m.isfinite(array)
     return m.sqrt((array[non_nan] ** 2).mean())
 
 
@@ -223,12 +221,12 @@ def guarantee_array(variable):
         non-numeric type
 
     """
-    if type(variable) in [float, np.ndarray, np.int32, np.int64, np.float32, np.float64, np.complex64, np.complex128]:
+    if type(variable) in [float, m.ndarray, m.int32, m.int64, m.float32, m.float64, m.complex64, m.complex128]:
         return variable
     elif type(variable) is int:
         return float(variable)
     elif type(variable) is list:
-        return np.asarray(variable)
+        return m.asarray(variable)
     else:
         raise ValueError(f'variable is of invalid type {type(variable)}')
 
@@ -249,8 +247,8 @@ def ecdf(x):
         cumulative distribution function of the data
 
     """
-    xs = np.sort(x)
-    ys = np.arange(1, len(xs) + 1) / float(len(xs))
+    xs = m.sort(x)
+    ys = m.arange(1, len(xs) + 1) / float(len(xs))
     return xs, ys
 
 
@@ -314,7 +312,7 @@ def smooth(x, window_len=3, window='flat'):
         invalid window provided
 
     """
-    x = np.asarray(x)
+    x = m.asarray(x)
     if window_len == 1:  # short circuit and return original array if window length is unity
         return x
 
@@ -327,11 +325,11 @@ def smooth(x, window_len=3, window='flat'):
     if window not in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
         raise ValueError('Window must be one of flat, hanning, hamming, bartlett, blackman')
 
-    s = np.r_[x[window_len - 1:0: - 1], x, x[-2:-window_len - 1:-1]]
+    s = m.r_[x[window_len - 1:0: - 1], x, x[-2:-window_len - 1:-1]]
     if window.lower() == 'flat':  # moving average
-        w = np.ones(window_len, 'd')
+        w = m.ones(window_len, 'd')
     else:
-        w = eval('np.' + window + '(window_len)')
+        w = eval('m.' + window + '(window_len)')
 
-    y = np.convolve(w / w.sum(), s, mode='valid')
-    return y[(int(np.floor(window_len / 2)) - 1):-(int(np.ceil(window_len / 2)))]
+    y = m.convolve(w / w.sum(), s, mode='valid')
+    return y[(int(m.floor(window_len / 2)) - 1):-(int(m.ceil(window_len / 2)))]

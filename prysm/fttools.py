@@ -1,6 +1,4 @@
 """Supplimental tools for computing fourier transforms."""
-import numpy as np
-
 from prysm import mathops as m
 
 
@@ -33,9 +31,9 @@ def pad2d(array, Q=2, value=0):
     factor_y = (out_y - x) / 2
     pad_shape = ((m.floor(factor_x), m.ceil(factor_x)), (m.floor(factor_y), m.ceil(factor_y)))
     if value is 0:
-        out = np.zeros((out_x, out_y), dtype=array.dtype)
+        out = m.zeros((out_x, out_y), dtype=array.dtype)
     else:
-        out = np.ones((out_x, out_y), dtype=array.dtype) * value
+        out = m.ones((out_x, out_y), dtype=array.dtype) * value
     x_idx1, x_idx2 = pad_shape[0][0], pad_shape[0][1]
     y_idx1, y_idx2 = pad_shape[1][0], pad_shape[1][1]
     out[x_idx1:x_idx2 + x, y_idx1:y_idx2 + y] = array

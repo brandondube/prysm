@@ -1,6 +1,5 @@
 """Defines behavior of convolvable items and a base class to encapsulate that behavior.
 """
-import numpy as np
 from scipy.interpolate import interp2d
 
 import matplotlib as mpl
@@ -126,7 +125,7 @@ class Convolvable(object):
             return pure_numerical_ft_convolution(self, other)
 
     def show(self, xlim=(None, None), ylim=(None, None), interp_method=None, power=1, show_colorbar=True, fig=None, ax=None):
-        '''Displays the image.
+        '''Display the image.
 
         Parameters
         ----------
@@ -175,7 +174,7 @@ class Convolvable(object):
         return fig, ax
 
     def show_fourier(self, freq_x=None, freq_y=None, interp_method='lanczos', fig=None, ax=None):
-        '''Displays the fourier transform of the image.
+        '''Display the fourier transform of the image.
 
         Parameters
         ----------
@@ -403,6 +402,6 @@ def _compute_output_grid(convolvable1, convolvable2):
     # finally, compute the output window
     samples_x = (output_x_right - output_x_left) // output_spacing
     samples_y = (output_y_right - output_y_left) // output_spacing
-    unit_out_x = np.linspace(output_x_left, output_x_right, samples_x)
-    unit_out_y = np.linspace(output_y_left, output_y_right, samples_y)
+    unit_out_x = m.linspace(output_x_left, output_x_right, samples_x)
+    unit_out_y = m.linspace(output_y_left, output_y_right, samples_y)
     return unit_out_x, unit_out_y

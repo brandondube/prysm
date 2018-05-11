@@ -2,7 +2,6 @@
 """
 from collections import defaultdict
 
-import numpy as np
 from scipy.spatial import Delaunay
 
 from .conf import config
@@ -59,8 +58,8 @@ def gaussian(sigma=0.5, samples=128):
     """
     s = sigma
 
-    x = np.arange(0, samples, 1, dtype=config.precision)
-    y = x[:, np.newaxis]
+    x = m.arange(0, samples, 1, dtype=config.precision)
+    y = x[:, m.newaxis]
 
     # // is floor division in python
     x0 = y0 = samples // 2
@@ -116,11 +115,11 @@ def rotated_ellipse(width_major, width_minor, major_axis_angle=0, samples=128):
     if width_minor > width_major:
         raise ValueError('By definition, major axis must be larger than minor.')
 
-    arr = np.ones((samples, samples))
+    arr = m.ones((samples, samples))
     lim = width_major
-    x, y = np.linspace(-lim, lim, samples), np.linspace(-lim, lim, samples)
-    xv, yv = np.meshgrid(x, y)
-    A = np.radians(-major_axis_angle)
+    x, y = m.linspace(-lim, lim, samples), m.linspace(-lim, lim, samples)
+    xv, yv = m.meshgrid(x, y)
+    A = m.radians(-major_axis_angle)
     a, b = width_major, width_minor
     major_axis_term = ((xv * m.cos(A) + yv * m.sin(A)) ** 2) / a ** 2
     minor_axis_term = ((xv * m.sin(A) - yv * m.cos(A)) ** 2) / b ** 2
@@ -159,7 +158,7 @@ def square(samples=128):
         binary ndarray representation of the mask
 
     """
-    return np.ones((samples, samples), dtype=bool)
+    return m.ones((samples, samples), dtype=bool)
 
 
 def pentagon(samples=128):
@@ -329,11 +328,11 @@ def circle(samples=128):
         binary ndarray representation of the mask
 
     """
-    x = np.linspace(-1, 1, samples)
+    x = m.linspace(-1, 1, samples)
     y = x
-    xx, yy = np.meshgrid(x, y)
+    xx, yy = m.meshgrid(x, y)
     rho, phi = cart_to_polar(xx, yy)
-    mask = np.ones(rho.shape)
+    mask = m.ones(rho.shape)
     mask[rho > 1] = 0
     return mask
 
@@ -377,9 +376,9 @@ def generate_mask(vertices, num_samples=128):
         polygon mask
 
     """
-    vertices = np.asarray(vertices)
-    unit = np.arange(num_samples)
-    xxyy = np.stack(np.meshgrid(unit, unit), axis=2)
+    vertices = m.asarray(vertices)
+    unit = m.arange(num_samples)
+    xxyy = m.stack(m.meshgrid(unit, unit), axis=2)
 
     # use delaunay to fill from the vertices and produce a mask
     triangles = Delaunay(vertices, qhull_options='Qj Qf')
@@ -410,7 +409,7 @@ def generate_vertices(num_sides, radius=1):
         y = radius * m.cos(point * angle)
         pts.append((int(x), int(y)))
 
-    return np.asarray(pts)
+    return m.asarray(pts)
 
 
 shapes = {

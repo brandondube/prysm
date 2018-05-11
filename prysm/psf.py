@@ -1,6 +1,4 @@
 """A base point spread function interface."""
-import numpy as np
-
 from scipy import interpolate
 
 from mpl_toolkits.axes_grid1.axes_rgb import make_rgb_axes
@@ -105,10 +103,10 @@ class PSF(Convolvable):
             # take average of all azimuths as input data
             dat = interp_dat.mean(axis=0)
         else:
-            index = np.searchsorted(phi, np.radians(azimuth))
+            index = m.searchsorted(phi, m.radians(azimuth))
             dat = interp_dat[index, :]
 
-        enc_eng = np.cumsum(dat, dtype=config.precision)
+        enc_eng = m.cumsum(dat, dtype=config.precision)
         return self.unit_x[self.center_x:], enc_eng / enc_eng[-1]
 
     # quick-access slices ------------------------------------------------------
@@ -179,7 +177,7 @@ class PSF(Convolvable):
             # if pixel grid is desired, add it
             mult = m.floor(axlim / pix_grid)
             gmin, gmax = -mult * pix_grid, mult * pix_grid
-            pts = np.arange(gmin, gmax, pix_grid)
+            pts = m.arange(gmin, gmax, pix_grid)
             ax.set_yticks(pts, minor=True)
             ax.set_xticks(pts, minor=True)
             ax.yaxis.grid(True, which='minor', color='white', alpha=0.25)
@@ -337,13 +335,13 @@ class MultispectralPSF(PSF):
                 ref_samples_x = psf.samples_x
                 ref_samples_y = psf.samples_y
 
-        merge_data = np.zeros((ref_samples_x, ref_samples_y, len(psfs)))
+        merge_data = m.zeros((ref_samples_x, ref_samples_y, len(psfs)))
         for idx, psf in enumerate(psfs):
             # don't do anything to our reference PSF
             if idx is ref_idx:
                 merge_data[:, :, idx] = psf.data * weights[idx]
             else:
-                xv, yv = np.meshgrid(ref_unit_x, ref_unit_y)
+                xv, yv = m.meshgrid(ref_unit_x, ref_unit_y)
                 interpf = interpolate.RegularGridInterpolator((psf.unit_x, psf.unit_y), psf.data)
                 merge_data[:, :, idx] = interpf((xv, yv), method='linear') * weights[idx]
 
@@ -367,10 +365,10 @@ class RGBPSF(object):
             PSF for the blue channel
 
         '''
-        if np.array_equal(r_psf.unit_x, g_psf.unit_x) and \
-           np.array_equal(g_psf.unit_x, b_psf.unit_x) and \
-           np.array_equal(r_psf.unit_y, g_psf.unit_y) and \
-           np.array_equal(g_psf.unit_y, b_psf.unit_y):
+        if m.array_equal(r_psf.unit_x, g_psf.unit_x) and \
+           m.array_equal(g_psf.unit_x, b_psf.unit_x) and \
+           m.array_equal(r_psf.unit_y, g_psf.unit_y) and \
+           m.array_equal(g_psf.unit_y, b_psf.unit_y):
             # do not need to interpolate the arrays
             self.R = r_psf.data
             self.G = g_psf.data
@@ -380,7 +378,7 @@ class RGBPSF(object):
             # sampled, use it to define our grid
             self.B = b_psf.data
 
-            xv, yv = np.meshgrid(b_psf.unit_x, b_psf.unit_y)
+            xv, yv = m.meshgrid(b_psf.unit_x, b_psf.unit_y)
             interpf_r = interpolate.RegularGridInterpolator((r_psf.unit_y, r_psf.unit_x), r_psf.data)
             interpf_g = interpolate.RegularGridInterpolator((g_psf.unit_y, g_psf.unit_x), g_psf.data)
             self.R = interpf_r((yv, xv), method='linear')
@@ -487,7 +485,7 @@ class RGBPSF(object):
             Axis containing the plot
 
         '''
-        dat = np.empty((self.samples_x, self.samples_y, 3))
+        dat = m.empty((self.samples_x, self.samples_y, 3))
         dat[:, :, 0] = self.R
         dat[:, :, 1] = self.G
         dat[:, :, 2] = self.B
@@ -510,7 +508,7 @@ class RGBPSF(object):
             # if pixel grid is desired, add it
             mult = m.floor(axlim / pix_grid)
             gmin, gmax = -mult * pix_grid, mult * pix_grid
-            pts = np.arange(gmin, gmax, pix_grid)
+            pts = m.arange(gmin, gmax, pix_grid)
             ax.set_yticks(pts, minor=True)
             ax.set_xticks(pts, minor=True)
             ax.yaxis.grid(True, which='minor')
@@ -548,10 +546,10 @@ class RGBPSF(object):
 
         """
         # make the arrays for the RGB images
-        dat = np.empty((self.samples_y, self.samples_x, 3))
-        datr = np.zeros((self.samples_y, self.samples_x, 3))
-        datg = np.zeros((self.samples_y, self.samples_x, 3))
-        datb = np.zeros((self.samples_y, self.samples_x, 3))
+        dat = m.empty((self.samples_y, self.samples_x, 3))
+        datr = m.zeros((self.samples_y, self.samples_x, 3))
+        datg = m.zeros((self.samples_y, self.samples_x, 3))
+        datb = m.zeros((self.samples_y, self.samples_x, 3))
         dat[:, :, 0] = self.R
         dat[:, :, 1] = self.G
         dat[:, :, 2] = self.B
@@ -588,9 +586,9 @@ class RGBPSF(object):
             ax.set(xlim=(-axlim, axlim), ylim=(-axlim, axlim))
             if pix_grid is not None:
                 # if pixel grid is desired, add it
-                mult = np.m.floor(axlim / pix_grid)
+                mult = m.m.floor(axlim / pix_grid)
                 gmin, gmax = -mult * pix_grid, mult * pix_grid
-                pts = np.arange(gmin, gmax, pix_grid)
+                pts = m.arange(gmin, gmax, pix_grid)
                 ax.set_yticks(pts, minor=True)
                 ax.set_xticks(pts, minor=True)
                 ax.yaxis.grid(True, which='minor')
@@ -619,9 +617,9 @@ class AiryDisk(PSF):
             number of samples across full width
 
         """
-        x = np.linspace(-extent, extent, samples)
-        y = np.linspace(-extent, extent, samples)
-        xx, yy = np.meshgrid(x, y)
+        x = m.linspace(-extent, extent, samples)
+        y = m.linspace(-extent, extent, samples)
+        xx, yy = m.meshgrid(x, y)
         rho, phi = cart_to_polar(xx, yy)
         data = _airydisk(rho, fno, wavelength)
         self.fno = fno

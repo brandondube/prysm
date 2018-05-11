@@ -1,8 +1,6 @@
 """Detector-related simulations."""
 from collections import deque
 
-import numpy as np
-
 from .conf import config
 from .convolution import Convolvable
 from .objects import Image
@@ -168,7 +166,7 @@ class OLPF(Convolvable):
         self.width_y = width_y
 
         if samples_x is None:  # do no math
-            data, ux, uy = None, np.zeros(2), np.zeros(2)
+            data, ux, uy = None, m.zeros(2), m.zeros(2)
         else:
             space_x = width_x / 2
             space_y = width_y / 2
@@ -177,14 +175,14 @@ class OLPF(Convolvable):
             center_x = samples_x // 2
             center_y = samples_y // 2
 
-            data = np.zeros((samples_x, samples_y))
+            data = m.zeros((samples_x, samples_y))
 
             data[center_y - shift_y, center_x - shift_x] = 1
             data[center_y - shift_y, center_x + shift_x] = 1
             data[center_y + shift_y, center_x - shift_x] = 1
             data[center_y + shift_y, center_x + shift_x] = 1
-            ux = np.linspace(-space_x, space_x, samples_x)
-            uy = np.linspace(-space_y, space_y, samples_y)
+            ux = m.linspace(-space_x, space_x, samples_x)
+            uy = m.linspace(-space_y, space_y, samples_y)
         super().__init__(data=data, unit_x=ux, unit_y=uy, has_analytic_ft=True)
 
     def analytic_ft(self, unit_x, unit_y):
@@ -203,7 +201,7 @@ class OLPF(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        xq, yq = np.meshgrid(unit_x, unit_y)
+        xq, yq = m.meshgrid(unit_x, unit_y)
         return (m.cos(2 * xq * self.width_x) *
                 m.cos(2 * yq * self.width_y)).astype(config.precision)
 
@@ -249,7 +247,7 @@ class PixelAperture(Convolvable):
         self.width_y = width_y
 
         if samples_x is None:  # do no math
-            data, ux, uy = None, np.zeros(2), np.zeros(2)
+            data, ux, uy = None, m.zeros(2), m.zeros(2)
         else:  # build PixelAperture model
             center_x = samples_x // 2
             center_y = samples_y // 2
@@ -258,11 +256,11 @@ class PixelAperture(Convolvable):
             steps_x = int(half_width // sample_spacing)
             steps_y = int(half_height // sample_spacing)
 
-            data = np.zeros((samples_x, samples_y))
+            data = m.zeros((samples_x, samples_y))
             data[center_y - steps_y:center_y + steps_y,
                  center_x - steps_x:center_x + steps_x] = 1
             extx, exty = samples_x // 2 * sample_spacing, samples_y // 2 * sample_spacing
-            ux, uy = np.linspace(-extx, extx, samples_x), np.linspace(-exty, exty, samples_y)
+            ux, uy = m.linspace(-extx, extx, samples_x), m.linspace(-exty, exty, samples_y)
         super().__init__(data=data, unit_x=ux, unit_y=uy, has_analytic_ft=True)
 
     def analytic_ft(self, unit_x, unit_y):
@@ -281,7 +279,7 @@ class PixelAperture(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        xq, yq = np.meshgrid(unit_x, unit_y)
+        xq, yq = m.meshgrid(unit_x, unit_y)
         return (m.sinc(xq * self.width_x) *
                 m.sinc(yq * self.width_y)).astype(config.precision)
 
@@ -311,9 +309,9 @@ def generate_mtf(pixel_aperture=1, azimuth=0, num_samples=128):
 
     """
     pitch_unit = pixel_aperture / 1e3
-    normalized_frequencies = np.linspace(0, 2, num_samples)
-    otf = np.m.sinc(normalized_frequencies)
-    mtf = np.abs(otf)
+    normalized_frequencies = m.linspace(0, 2, num_samples)
+    otf = m.sinc(normalized_frequencies)
+    mtf = abs(otf)
     return normalized_frequencies / pitch_unit, mtf
 
 

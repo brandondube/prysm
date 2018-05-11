@@ -2,8 +2,6 @@
 """
 from functools import lru_cache
 
-import numpy as np
-
 from .conf import config
 from .pupil import Pupil
 
@@ -65,7 +63,7 @@ class Seidel(Pupil):
             wavefunction over (x,y) coordinates
 
         """
-        mathexprs = ['np.zeros((self.samples, self.samples))']
+        mathexprs = ['m.zeros((self.samples, self.samples))']
         for term, coef in zip(self.eqns, self.coefs):
             mathexprs.append(str(coef) + '*(' + term + ')')
 

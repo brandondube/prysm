@@ -2,13 +2,6 @@
 '''
 from copy import deepcopy
 
-import numpy as np
-from numpy import (
-    empty, zeros,
-    linspace,
-    isfinite,
-)
-
 from .conf import config
 from .util import share_fig_ax, rms
 from .coordinates import make_rho_phi_grid
@@ -100,10 +93,10 @@ class Pupil(object):
         self.epd = epd
         self.wavelength = wavelength
         self.opd_unit = opd_unit
-        self.phase = self.fcn = empty((samples, samples), dtype=config.precision)
-        self.unit = linspace(-epd / 2, epd / 2, samples, dtype=config.precision)
+        self.phase = self.fcn = m.empty((samples, samples), dtype=config.precision)
+        self.unit = m.linspace(-epd / 2, epd / 2, samples, dtype=config.precision)
         self.sample_spacing = self.unit[-1] - self.unit[-2]
-        self.rho = self.phi = empty((samples, samples), dtype=config.precision)
+        self.rho = self.phi = m.empty((samples, samples), dtype=config.precision)
         self.center = samples // 2
 
         if opd_unit.lower() in ('$\lambda$', 'waves'):
@@ -160,7 +153,7 @@ class Pupil(object):
         """Return the peak-to-valley wavefront error as a `float`.
 
         """
-        non_nan = isfinite(self.phase)
+        non_nan = m.isfinite(self.phase)
         return self.phase[non_nan].max() - self.phase[non_nan].min()
 
     @property
