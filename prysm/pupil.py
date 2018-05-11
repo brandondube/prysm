@@ -286,7 +286,7 @@ class Pupil(object):
         self._gengrid()
 
         # fill in the phase of the pupil
-        self.phase = zeros((self.samples, self.samples), dtype=config.precision)
+        self.phase = m.zeros((self.samples, self.samples), dtype=config.precision)
         self._phase_to_wavefunction()
 
         return self

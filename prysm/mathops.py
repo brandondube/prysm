@@ -156,6 +156,8 @@ jinc = np.vectorize(jinc)
 
 fft2, ifft2 = np.fft.fft2, np.fft.ifft2
 
+ndarray = np.ndarray
+
 # silence pyflakes
 assert [nan, pi, sqrt, sin, cos, tan, arccos, arcsin, sinc, radians, exp, log, log10]
 assert [fftshift, ifftshift, fft2, ifft2, fftfreq]
