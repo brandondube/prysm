@@ -111,7 +111,7 @@ class Pupil(object):
         else:
             raise ValueError('OPD must be m.expressed in waves, microns, or nm')
 
-        if type(mask) is not np.ndarray:
+        if type(mask) is not m.ndarray:
             mask = mcache.get_mask(self.samples, mask)
 
         self._mask = mask
@@ -303,8 +303,8 @@ class Pupil(object):
         phase = convert_phase(self.phase, self)
 
         # guard against nans in phase
-        nans = ~np.isfinite(phase)
-        if np.any(nans):
+        nans = ~m.isfinite(phase)
+        if m.any(nans):
             phase[nans] = 0
 
         self.fcn = m.exp(1j * 2 * m.pi * phase)  # phase implicitly in units of waves, no 2pi/l

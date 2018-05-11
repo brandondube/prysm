@@ -112,6 +112,8 @@ allfuncs = frozenset((
     'concatenate',
     'cumsum',
     'gradient',
+    'any',
+    'isfinite',
 ))
 
 fftfuncs = frozenset((
