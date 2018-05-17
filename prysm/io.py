@@ -4,6 +4,7 @@ import re
 import codecs
 
 from .conf import config
+from prysm import mathops as m
 
 trioptics_enc = 'cp1252'
 
