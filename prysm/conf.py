@@ -1,7 +1,6 @@
 """Configuration for this instance of prysm."""
 import numpy as np
 
-from prysm import mathops as m
 
 class Config(object):
     """Global configuration of prysm."""
@@ -24,9 +23,12 @@ class Config(object):
             base for zernikes; start at 0 or 1
 
         """
+        self.initialized = False
         self.precision = precision
         self.backend = backend
         self.zernike_base = zernike_base
+        self.chbackend_observers = []
+        self.initialized = True
 
     @property
     def precision(self):
@@ -107,12 +109,14 @@ class Config(object):
         """
         if backend.lower() in ('np', 'numpy'):
             self._backend = 'np'
-            m.change_backend(to='np')
         elif backend.lower() in ('cu', 'cuda'):
             self._backend = 'cu'
-            m.change_backend(to='cu')
         else:
             raise ValueError('backend must be numpy or cuda.')
+
+        if self.initialized:
+            for obs in self.chbackend_observers:
+                obs(self._backend)
 
     @property
     def zernike_base(self):
@@ -145,5 +149,6 @@ class Config(object):
             raise ValueError('By convention zernike base must be 0 or 1.')
 
         self._zernike_base = base
+
 
 config = Config()
