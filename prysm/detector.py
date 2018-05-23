@@ -3,7 +3,6 @@ from collections import deque
 
 from .conf import config
 from .convolution import Convolvable
-from .objects import Image
 from .util import is_odd
 from prysm import mathops as m
 
@@ -72,7 +71,9 @@ class Detector(object):
             samples_per_pixel = int(m.ceil(samples_per_pixel))
 
         data = bindown(convolvable.data, samples_per_pixel)
-        self.captures.append(Image(data=data, sample_spacing=self.pixel_size, has_analytic_ft=False))
+        s = data.shape
+        ux, uy = m.linspace(-1, 1, s[0]), m.linspace(-1, 1, s[1])
+        self.captures.append(Convolvable(data=data, unit_x=ux, unit_y=uy, has_analytic_ft=False))
         return self.captures[-1]
 
     def save_image(self, path, which='last'):

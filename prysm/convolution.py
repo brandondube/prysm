@@ -2,6 +2,8 @@
 """
 from scipy.interpolate import interp2d
 
+from imageio import imread, imsave
+
 import matplotlib as mpl
 
 from prysm import mathops as m
@@ -115,14 +117,71 @@ class Convolvable(object):
                 correct.
 
         """
-        if self.has_analytic_ft and other.has_analytic_ft:
-            return double_analytical_ft_convolution(self, other)
-        elif self.has_analytic_ft and not other.has_analytic_ft:
-            return single_analytical_ft_convolution(other, self)
-        elif not self.has_analytic_ft and other.has_analytic_ft:
-            return single_analytical_ft_convolution(self, other)
-        else:
-            return pure_numerical_ft_convolution(self, other)
+        return _conv(self, other, op='mul')
+
+    def deconv(self, other):
+        """Convolves this convolvable with another.
+
+        Parameters
+        ----------
+        other : `Convolvable`
+            A convolvable object
+
+        Returns
+        -------
+        `Convolvable`
+            a convolvable that lacks an analytical fourier transform
+
+        Notes
+        -----
+        The algoithm works according to the following cases:
+            1.  Both self and other have analytical fourier transforms:
+                - The analytic forms will be used to compute the output directly.
+                - The output sample spacing will be the finer of the two inputs.
+                - The output window will cover the same extent as the "wider"
+                  input.  If this window is not an integer number of samples
+                  wide, it will be enlarged symmetrically such that it is.  This
+                  may mean the output array is not of the same size as either
+                  input.
+                - An input which contains a sample at (0,0) may not produce an
+                  output with a sample at (0,0) if the input samplings are not
+                  favorable.  To ensure this does not happen confirm that the
+                  inputs are computed over identical grids containing 0 to
+                  begin with.
+            2.  One of self and other have analytical fourier transforms:
+                - The input which does NOT have an analytical fourier transform
+                  will define the output grid.
+                - The available analytic FT will be used to do the convolution
+                  in Fourier space.
+            3.  Neither input has an analytic fourier transform:
+                3.1, the two convolvables have the same sample spacing to within
+                     a numerical precision of 0.1 nm:
+                    - the fourier transform of both will be taken.  If one has
+                      fewer samples, it will be upsampled in Fourier space
+                3.2, the two convolvables have different sample spacing:
+                    - The fourier transform of both inputs will be taken.  It is
+                      assumed that the more coarsely sampled signal is Nyquist
+                      sampled or better, and thus acts as a low-pass filter; the
+                      more finaly sampled input will be interpolated onto the
+                      same grid as the more coarsely sampled input.  The higher
+                      frequency energy would be eliminated by multiplication with
+                      the Fourier spectrum of the more coarsely sampled input
+                      anyway.
+
+        The subroutines have the following properties with regard to accuracy:
+            1.  Computes a perfect numerical representation of the continuous
+                output, provided the output grid is capable of Nyquist sampling
+                the result.
+            2.  If the input that does not have an analytic FT is unaliased,
+                computes a perfect numerical representation of the continuous
+                output.  If it does not, the input aliasing limits the output.
+            3.  Accuracy of computation is dependent on how much energy is
+                present at nyquist in the worse-sampled input; if this input
+                is worse than Nyquist sampled, then the result will not be
+                correct.
+
+        """
+        return _conv(self, other, op='div')
 
     def show(self, xlim=(None, None), ylim=(None, None), interp_method=None, power=1, show_colorbar=True, fig=None, ax=None):
         '''Display the image.
@@ -230,8 +289,69 @@ class Convolvable(object):
                ylim=(ymin, ymax), ylabel=r' \nu_y [cy/mm]')
         return fig, ax
 
+    def save(self, path, nbits=8):
+        '''Write the image to a png, jpg, tiff, etc.
 
-def double_analytical_ft_convolution(convolvable1, convolvable2):
+        Parameters
+        ----------
+        path : `string`
+            path to write the image to
+        nbits : `int`
+            number of bits in the output image
+
+        '''
+        dat = (self.data * 255).astype(m.uint8)
+        imsave(path, dat)
+
+    @staticmethod
+    def from_file(path, scale):
+        '''Read a monochrome 8 bit per pixel file into a new Image instance.
+
+        Parameters
+        ----------
+        path : `string`
+            path to a file
+        scale : `float`
+            pixel scale, in microns
+
+        Returns
+        -------
+        `Image`
+            a new image object
+
+        Notes
+        -----
+        TODO: proper handling of images with more than 8bpp.
+
+        '''
+        imgarr = imread(path, flatten=True, pilmode='F')
+        s = imgarr.shape
+
+        ux, uy = m.linspace(-1, 1, s[0]), m.linspace(-1, 1, s[1])
+        return Convolvable(data=m.flip(imgarr, axis=0) / 255, unit_x=ux, unit_y=uy, has_analytic_ft=False)
+
+
+def _conv(convolvable1, convolvable2, op='mul'):
+    if convolvable1.has_analytic_ft and convolvable2.has_analytic_ft:
+        return double_analytical_ft_convolution(convolvable1, convolvable2, op=op)
+    elif convolvable1.has_analytic_ft and not convolvable2.has_analytic_ft:
+        return single_analytical_ft_convolution(convolvable2, convolvable1, op=op)
+    elif not convolvable1.has_analytic_ft and convolvable2.has_analytic_ft:
+        return single_analytical_ft_convolution(convolvable1, convolvable2, op=op)
+    else:
+        return pure_numerical_ft_convolution(convolvable1, convolvable2, op=op)
+
+
+def _conv_result_core(data1, data2, op='mul'):
+    if op is 'mul':
+        dat = abs(m.fftshift(m.ifft2(data1 * data2)))
+    else:
+        dat = abs(m.fftshift(m.ifft2(data1 / data2)))
+
+    return dat / dat.max()
+
+
+def double_analytical_ft_convolution(convolvable1, convolvable2, op='mul'):
     """Convolves two convolvable objects utilizing their analytic fourier transforms.
 
     Parameters
@@ -252,11 +372,11 @@ def double_analytical_ft_convolution(convolvable1, convolvable2):
     fourier_y = m.fftfreq(spatial_y.shape[0], spatial_y[1] - spatial_y[0])
     c1_part = convolvable1.analytic_ft(fourier_x, fourier_y)
     c2_part = convolvable2.analytic_ft(fourier_x, fourier_y)
-    out_data = abs(m.fftshift(m.ifft2(c1_part * c2_part)))
+    out_data = _conv_result_core(c1_part, c2_part, op)
     return Convolvable(out_data, spatial_x, spatial_y, has_analytic_ft=False)
 
 
-def single_analytical_ft_convolution(without_analytic, with_analytic):
+def single_analytical_ft_convolution(without_analytic, with_analytic, op='mul'):
     """Convolves two convolvable objects utilizing their analytic fourier transforms.
 
     Parameters
@@ -276,11 +396,11 @@ def single_analytical_ft_convolution(without_analytic, with_analytic):
     fourier_unit_x = forward_ft_unit(without_analytic.sample_spacing, without_analytic.samples_x)
     fourier_unit_y = forward_ft_unit(without_analytic.sample_spacing, without_analytic.samples_y)
     a_ft = with_analytic.analytic_ft(fourier_unit_x, fourier_unit_y)
-    result = abs(m.fftshift(m.ifft2(fourier_data * a_ft)))
+    result = _conv_result_core(fourier_data, a_ft, op)
     return Convolvable(result, without_analytic.unit_x, without_analytic.unit_y, False)
 
 
-def pure_numerical_ft_convolution(convolvable1, convolvable2):
+def pure_numerical_ft_convolution(convolvable1, convolvable2, op='mul'):
     """Convolves two convolvable objects utilizing their analytic fourier transforms.
 
     Parameters
@@ -300,27 +420,27 @@ def pure_numerical_ft_convolution(convolvable1, convolvable2):
     if (convolvable1.sample_spacing - convolvable2.sample_spacing) < 1e-4:
         s1, s2 = convolvable1.data.shape, convolvable2.data.shape
         if s1[0] > s2[0]:
-            return _numerical_ft_convolution_core_equalspacing_unequalsamplecount(convolvable1, convolvable2)
+            return _numerical_ft_convolution_core_equalspacing_unequalsamplecount(convolvable1, convolvable2, op=op)
         elif s1[0] < s2[0]:
-            return _numerical_ft_convolution_core_equalspacing_unequalsamplecount(convolvable2, convolvable1)
+            return _numerical_ft_convolution_core_equalspacing_unequalsamplecount(convolvable2, convolvable1, op=op)
         else:
-            return _numerical_ft_convolution_core_equalspacing(convolvable1, convolvable2)
+            return _numerical_ft_convolution_core_equalspacing(convolvable1, convolvable2, op=op)
     else:
         if convolvable1.sample_spacing < convolvable2.sample_spacing:
-            return _numerical_ft_convolution_core_unequalspacing(convolvable1, convolvable2)
+            return _numerical_ft_convolution_core_unequalspacing(convolvable1, convolvable2, op=op)
         else:
-            return _numerical_ft_convolution_core_unequalspacing(convolvable2, convolvable1)
+            return _numerical_ft_convolution_core_unequalspacing(convolvable2, convolvable1, op=op)
 
 
-def _numerical_ft_convolution_core_equalspacing(convolvable1, convolvable2):
+def _numerical_ft_convolution_core_equalspacing(convolvable1, convolvable2, op='mul'):
     # two are identically sampled; just FFT convolve them without modification
     ft1 = m.fftshift(m.fft2(m.fftshift(convolvable1.data)))
     ft2 = m.fftshift(m.fft2(m.fftshift(convolvable2.data)))
-    data = abs(m.fftshift(m.ifft2(ft1 * ft2)))
-    return Convolvable(data, convolvable1.unit_x, convolvable2.unit_y, False)
+    data = _conv_result_core(ft1, ft2, op)
+    return Convolvable(data, convolvable1.unit_x, convolvable1.unit_y, False)
 
 
-def _numerical_ft_convolution_core_equalspacing_unequalsamplecount(more_samples, less_samples):
+def _numerical_ft_convolution_core_equalspacing_unequalsamplecount(more_samples, less_samples, op='mul'):
     # compute the ordinate axes of the input and output
     in_x = forward_ft_unit(less_samples.sample_spacing, less_samples.data.shape[0])
     in_y = forward_ft_unit(less_samples.sample_spacing, less_samples.data.shape[1])
@@ -334,11 +454,11 @@ def _numerical_ft_convolution_core_equalspacing_unequalsamplecount(more_samples,
 
     # FFT convolve the two convolvables
     more_fourier = m.fftshift(m.fft2(m.fftshift(more_samples.data)))
-    data = abs(m.fftshift(m.ifft2(resampled_less * more_fourier)))
+    data = _conv_result_core(resampled_less, more_fourier, op)
     return Convolvable(data, more_samples.unit_x, more_samples.unit_y, False)
 
 
-def _numerical_ft_convolution_core_unequalspacing(finer_sampled, coarser_sampled):
+def _numerical_ft_convolution_core_unequalspacing(finer_sampled, coarser_sampled, op='mul'):
     # compute the ordinate axes of the input of each
     in_x_more = forward_ft_unit(finer_sampled.sample_spacing, finer_sampled.data.shape[0])
     in_y_more = forward_ft_unit(finer_sampled.sample_spacing, finer_sampled.data.shape[1])
@@ -355,7 +475,7 @@ def _numerical_ft_convolution_core_unequalspacing(finer_sampled, coarser_sampled
 
     # FFT the less well sampled input and perform the Fourier based convolution.
     less_fourier = m.fftshift(m.fft2(m.fftshift(coarser_sampled.data)))
-    data = abs(m.fftshift(m.ifft2(resampled_more * less_fourier)))
+    data = _conv_result_core(resampled_more, less_fourier, op)
     return Convolvable(data, in_x_less, in_y_less, False)
 
 

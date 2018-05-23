@@ -1,75 +1,10 @@
 '''Object to convolve lens PSFs with.'''
 
-from imageio import imread, imsave
-
 from .conf import config
 from .convolution import Convolvable
 from .coordinates import cart_to_polar
 
 from prysm import mathops as m
-
-
-class Image(Convolvable):
-    '''Image of an object.
-    '''
-    def __init__(self, data, sample_spacing, has_analytic_ft=False):
-        '''Creates a new Image object.
-
-        Parameters
-        ----------
-        data : `numpy.ndarray`
-            data that represents the image, 2D.
-        sample_spacing : `float`
-            pixel pitch of the data.
-        has_analytic_ft : `bool`
-            whether the image has an analytical Fourier transform
-
-        '''
-        samples_y, samples_x = data.shape
-        center_x, center_y = samples_x // 2, samples_y // 2
-        ext_x = sample_spacing * center_x
-        ext_y = sample_spacing * center_y
-        unit_x, unit_y = m.linspace(-ext_x, ext_x, samples_x), m.linspace(-ext_y, ext_y, samples_y)
-        super().__init__(data, unit_x, unit_y, has_analytic_ft)
-
-    def save(self, path, nbits=8):
-        '''Write the image to a png, jpg, tiff, etc.
-
-        Parameters
-        ----------
-        path : `string`
-            path to write the image to
-        nbits : `int`
-            number of bits in the output image
-
-        '''
-        dat = (self.data * 255).astype(m.uint8)
-        imsave(path, dat)
-
-    @staticmethod
-    def from_file(path, scale):
-        '''Read a monochrome 8 bit per pixel file into a new Image instance.
-
-        Parameters
-        ----------
-        path : `string`
-            path to a file
-        scale : `float`
-            pixel scale, in microns
-
-        Returns
-        -------
-        `Image`
-            a new image object
-
-        Notes
-        -----
-        TODO: proper handling of images with more than 8bpp.
-
-        '''
-        imgarr = imread(path, flatten=True, pilmode='F')
-
-        return Image(data=m.flip(imgarr, axis=0) / 255, sample_spacing=scale, synthetic=False)
 
 
 class Slit(Convolvable):

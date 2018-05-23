@@ -25,7 +25,6 @@ from prysm.geometry import (
 )
 
 from prysm.objects import (
-    Image,
     Slit,
     Pinhole,
     SiemensStar,
@@ -62,7 +61,6 @@ __all__ = [
     'hendecagon',
     'dodecagon',
     'trisdecagon',
-    'Image',
     'Slit',
     'Pinhole',
     'SiemensStar',
