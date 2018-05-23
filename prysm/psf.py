@@ -11,6 +11,7 @@ from .propagation import prop_pupil_plane_to_psf_plane
 
 from prysm import mathops as m
 
+
 class PSF(Convolvable):
     """A Point Spread Function.
 
