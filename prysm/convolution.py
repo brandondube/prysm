@@ -326,8 +326,8 @@ class Convolvable(object):
         '''
         imgarr = imread(path, flatten=True, pilmode='F')
         s = imgarr.shape
-
-        ux, uy = m.linspace(-1, 1, s[0]), m.linspace(-1, 1, s[1])
+        extx, exty = s[0] * scale // 2, s[1] * scale // 2
+        ux, uy = m.arange(-extx, exty, scale), m.arange(-exty, exty, scale)
         return Convolvable(data=m.flip(imgarr, axis=0) / 255, unit_x=ux, unit_y=uy, has_analytic_ft=False)
 
 
