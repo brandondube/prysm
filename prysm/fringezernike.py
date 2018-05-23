@@ -639,7 +639,7 @@ def fit(data, num_terms=16, rms_norm=False, round_at=6):
     x, y = m.linspace(-1, 1, data.shape[1]), m.linspace(-1, 1, data.shape[0])
     xx, yy = m.meshgrid(x, y)
     rho = m.sqrt(xx**2 + yy**2)[pts].flatten()
-    phi = m.atan2(xx, yy)[pts].flatten()
+    phi = m.arctan2(xx, yy)[pts].flatten()
 
     # compute each Zernike term
     zernikes = []

@@ -24,7 +24,7 @@ def cart_to_polar(x, y):
 
     '''
     rho = m.sqrt(x ** 2 + y ** 2)
-    phi = m.atan2(y, x)
+    phi = m.arctan2(y, x)
     return rho, phi
 
 

@@ -5,7 +5,7 @@ import pytest
 import numpy as np
 
 from prysm import coordinates
-from prysm.mathops import sqrt, atan2, pi, sin, cos
+from prysm.mathops import sqrt, arctan2, pi, sin, cos
 
 TEST_SAMPLES = 32
 
@@ -37,7 +37,7 @@ def data_2d_complex():
 def test_cart_to_polar(x, y):
     rho, phi = coordinates.cart_to_polar(x, y)
     assert np.allclose(rho, sqrt(x**2 + y**2))
-    assert np.allclose(phi, atan2(y, x))
+    assert np.allclose(phi, arctan2(y, x))
 
 
 @pytest.mark.parametrize('rho, phi', [

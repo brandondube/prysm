@@ -53,7 +53,7 @@ def image_dist_epd_to_na(image_distance, epd):
     image_distance = guarantee_array(image_distance)
 
     rho = epd / 2
-    marginal_ray_angle = abs(m.atan2(rho, image_distance))
+    marginal_ray_angle = abs(m.arctan2(rho, image_distance))
     return marginal_ray_angle
 
 
