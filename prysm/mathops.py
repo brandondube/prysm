@@ -128,6 +128,14 @@ linalgfuncs = frozenset((
     'lstsq',
 ))
 
+constants = frozenset((
+    'ndarray',
+    'float32',
+    'float64',
+    'complex64',
+    'complex128',
+))
+
 def jinc(r):
     """Jinc.
 
