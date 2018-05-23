@@ -72,7 +72,8 @@ class Detector(object):
 
         data = bindown(convolvable.data, samples_per_pixel)
         s = data.shape
-        ux, uy = m.linspace(-1, 1, s[0]), m.linspace(-1, 1, s[1])
+        extx, exty = s[0] * self.pixel_size // 2, s[1] * self.pixel_size // 2
+        ux, uy = m.arange(-extx, exty, self.pixel_size), m.arange(-exty, exty, self.pixel_size)
         self.captures.append(Convolvable(data=data, unit_x=ux, unit_y=uy, has_analytic_ft=False))
         return self.captures[-1]
 
