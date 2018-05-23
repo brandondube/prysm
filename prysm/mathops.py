@@ -5,35 +5,11 @@ utilize more high performance engines if they have them installed, or fall
 back to more widely available options in the case that they do not.
 """
 
-from math import (
-    nan,
-    pi,
-    floor,
-    ceil,
-)
 import numpy as np
-from numpy import (
-    sqrt,
-    sin,
-    cos,
-    tan,
-    arctan,
-    arctan2,
-    arccos,
-    arcsin,
-    sinc,
-    radians,
-    exp,
-    log,
-    log10,
-    newaxis,
-)
-from numpy.fft import fftshift, ifftshift, fftfreq
 
 from scipy.special import j1
 
-atan2 = arctan2
-atan = arctan
+from prysm.conf import config
 
 # numba funcs
 try:
@@ -74,7 +50,8 @@ except ImportError:
 
 # cuda
 try:
-    import cupy as cu
+    import cupy as cp
+    assert cp
     cuda_compatible = True
 except ImportError:
     cuda_compatible = False
@@ -130,11 +107,16 @@ linalgfuncs = frozenset((
 
 constants = frozenset((
     'ndarray',
+    'uint8',
+    'uint16',
+    'uint32',
     'float32',
     'float64',
     'complex64',
     'complex128',
+    'pi',
 ))
+
 
 def jinc(r):
     """Jinc.
@@ -158,38 +140,39 @@ def jinc(r):
 
 jinc = np.vectorize(jinc)
 
-# export control
-# thanks, ITAR
-
-
-fft2, ifft2 = np.fft.fft2, np.fft.ifft2
-
-ndarray = np.ndarray
-
-# silence pyflakes
-assert [nan, pi, sqrt, sin, cos, tan, arccos, arcsin, sinc, radians, exp, log, log10]
-assert [fftshift, ifftshift, fft2, ifft2, fftfreq]
-assert [floor, ceil]
-
 
 def change_backend(to):
     if to.lower() == 'cu':
         if not cuda_compatible:
             raise ValueError('installation lacks cuda support.')
         else:
-            for func in allfuncs:
-                exec(f'from cupy import {func}')
-                globals()[func] = eval(func)
-
-            for func in fftfuncs:
-                exec(f'from cupy.fft import {func}')
-                globals()[func] = eval(func)
+            target_base = 'cupy'
+            target_fft = 'cupy.fft'
+            target_linalg = 'cupy.linalg'
+            # target_scipy = 'cupyx.scipy'
 
     elif to.lower() == 'np':
-        for func in allfuncs:
-            exec(f'from numpy import {func}')
-            globals()[func] = eval(func)
+        target_base = 'numpy'
+        target_fft = 'numpy.fft'
+        target_linalg = 'numpy.linalg'
+        # target_scipy = 'scipy'
 
-        for func in fftfuncs:
-            exec(f'from numpy.fft import {func}')
-            globals()[func] = eval(func)
+    for func in allfuncs:
+        exec(f'from {target_base} import {func}')
+        globals()[func] = eval(func)
+
+    for const in constants:
+        exec(f'from {target_base} import {const}')
+        globals()[const] = eval(const)
+
+    for func in fftfuncs:
+        exec(f'from {target_fft} import {func}')
+        globals()[func] = eval(func)
+
+    for func in linalgfuncs:
+        exec(f'from {target_linalg} import {func}')
+        globals()[func] = eval(func)
+
+
+config.chbackend_observers.append(change_backend)
+config.backend = config.backend  # trigger import of math functions
