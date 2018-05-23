@@ -7,7 +7,7 @@ from prysm.pupil import Pupil
 from prysm.fringezernike import FringeZernike
 from prysm.standardzernike import StandardZernike
 from prysm.seidel import Seidel
-from prysm.psf import PSF, MultispectralPSF, RGBPSF
+from prysm.psf import PSF, MultispectralPSF, RGBPSF, AiryDisk
 from prysm.otf import MTF
 from prysm.geometry import (
     gaussian,
@@ -47,6 +47,7 @@ __all__ = [
     'PSF',
     'MultispectralPSF',
     'RGBPSF',
+    'AiryDisk',
     'MTF',
     'Lens',
     'gaussian',
