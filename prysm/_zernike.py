@@ -4,6 +4,9 @@ from prysm import mathops as m
 from prysm.conf import config
 
 
+# See JCW - http://wp.optics.arizona.edu/jcwyant/wp-content/uploads/sites/13/2016/08/ZernikePolynomialsForTheWeb.pdf
+
+
 def piston(rho, phi):
     return m.ones(rho.shape)
 
@@ -370,8 +373,9 @@ _zernikes = [
     quinternary_spherical
 ]
 
-zernikes_gpu = [m.fuse(func) for func in _zernikes]  # cupy compiled zernikes
+zernikes_gpu = [m.fuse(func) for func in _zernikes[1:]]  # cupy compiled zernikes
 zernikes_cpu = [m.vectorize(func) for func in _zernikes[1:]]  # numba compiled zernikes
+zernikes_gpu.insert(0, _zernikes[0])
 zernikes_cpu.insert(0, m.jit(_zernikes[0]))
 
 
