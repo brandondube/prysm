@@ -1,6 +1,7 @@
 """Basic Zernike functions."""
 
 from prysm import mathops as m
+from prysm.conf import config
 
 
 def piston(rho, phi):
@@ -318,7 +319,7 @@ quinternary_coma_y.name = 'Quinternary Coma Y'
 quinternary_coma_x.name = 'Quinternary Coma X'
 quinternary_spherical.name = 'Quinternary Spherical'
 
-__all__ = [
+_zernikes = [
     piston,
     tip,
     tilt,
@@ -368,3 +369,18 @@ __all__ = [
     quinternary_coma_x,
     quinternary_spherical
 ]
+
+zernikes_gpu = [m.fuse(func=func) for func in _zernikes]  # cupy compiled zernikes
+zernikes_cpu = [m.vectorize(func) for func in _zernikes[1:]]  # numba compiled zernikes
+zernikes_cpu.insert(0, m.jit(_zernikes[0]))
+
+
+def change_backend(to):
+    if to == 'cu':
+        globals()['zernikes'] = zernikes_gpu
+    elif to == 'np':
+        globals()['zernikes'] = zernikes_cpu
+
+
+config.chbackend_observers.append(change_backend)
+config.backend = config.backend  # trigger import of math functions
