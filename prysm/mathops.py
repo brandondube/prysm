@@ -129,6 +129,7 @@ constants = frozenset((
     'float64',
     'complex64',
     'complex128',
+    'newaxis',
     'pi',
     'nan',
     'inf',
@@ -174,6 +175,15 @@ def change_backend(to):
         target_linalg = 'numpy.linalg'
         # target_scipy = 'scipy'
 
+        # two sets of functionality unavailable via cupy
+        for func in allfuncs_cupy_missing:
+            exec(f'from {target_base} import {func}')
+            globals()[func] = eval(func)
+
+        for func in linalgfuncs:
+            exec(f'from {target_linalg} import {func}')
+            globals()[func] = eval(func)
+
     for func in allfuncs:
         exec(f'from {target_base} import {func}')
         globals()[func] = eval(func)
@@ -185,10 +195,6 @@ def change_backend(to):
     for func in fftfuncs:
         exec(f'from {target_fft} import {func}')
         globals()[func] = eval(func)
-
-    # for func in linalgfuncs:
-    #     exec(f'from {target_linalg} import {func}')
-    #     globals()[func] = eval(func)
 
 
 config.chbackend_observers.append(change_backend)
