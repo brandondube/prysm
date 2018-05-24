@@ -40,37 +40,6 @@ def test_ecdf_binary_distribution():
     assert np.allclose(np.unique(x), np.asarray([0, 1]))  # TODO: more rigorous tests.
 
 
-@pytest.fixture(params=['flat', 'hanning', 'hamming', 'bartlett', 'blackman'])
-def window(request):
-    return request.param
-
-
-@pytest.mark.parametrize('val', [-1, 1, 1.05])
-def test_smooth_doesnt_change_constant_arrays(val, window):
-    arr = np.ones((ARR_SIZE)) * val
-    assert np.allclose(util.smooth(arr, window=window), arr)
-
-
-def test_smooth_rejects_2d():
-    arr = np.empty((2, 2))
-    with pytest.raises(ValueError):
-        util.smooth(arr)
-
-
-def test_smooth_rejects_wrong_window():
-    with pytest.raises(ValueError):
-        arr = np.empty(4)
-        util.smooth(arr, window='foo')
-
-
-def test_smooth_rejects_window_bigger_than_array():
-    window_length = 5
-    arr_len = 2
-    arr = np.empty((arr_len))
-    with pytest.raises(ValueError):
-        util.smooth(arr, window_len=window_length)
-
-
 def test_correct_gamma_unity_case():
     arr = np.ones((ARR_SIZE, ARR_SIZE)) * 0.75
     out = util.correct_gamma(arr, encoding=1)
