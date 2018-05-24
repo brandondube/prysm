@@ -370,7 +370,7 @@ _zernikes = [
     quinternary_spherical
 ]
 
-zernikes_gpu = [m.fuse(func=func) for func in _zernikes]  # cupy compiled zernikes
+zernikes_gpu = [m.fuse(func) for func in _zernikes]  # cupy compiled zernikes
 zernikes_cpu = [m.vectorize(func) for func in _zernikes[1:]]  # numba compiled zernikes
 zernikes_cpu.insert(0, m.jit(_zernikes[0]))
 
