@@ -51,10 +51,20 @@ except ImportError:
 # cuda
 try:
     import cupy as cp
+    from cupy import fuse
     assert cp
     cuda_compatible = True
 except ImportError:
     cuda_compatible = False
+
+    def fuse(*args, **kwargs):
+        if 'func' in kwargs:
+            return kwargs['func']
+        else:
+            def wrapper(function):
+                return function
+
+            return wrapper
 
 allfuncs = frozenset((
     'sqrt',
@@ -146,7 +156,7 @@ jinc = np.vectorize(jinc)
 
 
 def change_backend(to):
-    if to.lower() == 'cu':
+    if to == 'cu':
         if not cuda_compatible:
             raise ValueError('installation lacks cuda support.')
         else:
@@ -155,7 +165,7 @@ def change_backend(to):
             target_linalg = 'cupy.linalg'
             # target_scipy = 'cupyx.scipy'
 
-    elif to.lower() == 'np':
+    elif to == 'np':
         target_base = 'numpy'
         target_fft = 'numpy.fft'
         target_linalg = 'numpy.linalg'
