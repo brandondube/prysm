@@ -1,7 +1,7 @@
 """A collection of thin lens equations for system modeling."""
 
 from .util import guarantee_array
-from .fringezernike import _normalizations
+from ._zernike import defocus as _defocus
 
 from prysm import mathops as m
 
@@ -197,7 +197,7 @@ def defocus_to_image_displacement(defocus, fno, wavelength, zernike=False, rms_n
     # if the defocus is a zernike, make it match Seidel notation for equation validity
     if zernike is True:
         if rms_norm is True:
-            defocus = defocus * _normalizations[4]  # not using *= on these to avoid side effects with in-place ops
+            defocus = defocus * _defocus.norm  # not using *= on these to avoid side effects with in-place ops
         defocus = defocus * 2
     return 8 * fno**2 * wavelength * defocus
 
@@ -228,7 +228,7 @@ def image_displacement_to_defocus(image_displacement, fno, wavelength, zernike=F
     defocus = image_displacement / (8 * fno ** 2 * wavelength)
     if zernike is True:
         if rms_norm is True:
-            return defocus / 2 / _normalizations[4]
+            return defocus / 2 / _defocus.norm
         else:
             return defocus / 2
     else:
