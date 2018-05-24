@@ -29,7 +29,9 @@ def pad2d(array, Q=2, value=0):
     out_y = int(y * Q)
     factor_x = (out_x - x) / 2
     factor_y = (out_y - x) / 2
-    pad_shape = ((m.floor(factor_x), m.ceil(factor_x)), (m.floor(factor_y), m.ceil(factor_y)))
+    pad_shape = (
+        (int(m.floor(factor_x)), int(m.ceil(factor_x))),
+        (int(m.floor(factor_y)), int(m.ceil(factor_y))))
     if value is 0:
         out = m.zeros((out_x, out_y), dtype=array.dtype)
     else:
