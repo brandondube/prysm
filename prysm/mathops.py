@@ -118,6 +118,7 @@ constants = frozenset((
     'complex128',
     'pi',
     'nan',
+    'inf',
 ))
 
 
