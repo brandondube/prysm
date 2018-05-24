@@ -200,6 +200,8 @@ class SiemensStar(Convolvable):
         y = m.linspace(-1, 1, samples)
         xx, yy = m.meshgrid(x, y)
         rv, pv = cart_to_polar(xx, yy)
+        ext = sample_spacing * samples / 2
+        ux, uy = m.arange(-ext, ext, sample_spacing), m.arange(-ext, ext, sample_spacing)
 
         # generate the siemen's star as a (rho,phi) polynomial
         arr = m.cos(num_spokes / 2 * pv)
@@ -217,7 +219,7 @@ class SiemensStar(Convolvable):
         else:
             raise ValueError('invalid background color')
 
-        super().__init__(data=arr, unit_x=x, unit_y=y, has_analytic_ft=False)
+        super().__init__(data=arr, unit_x=ux, unit_y=uy, has_analytic_ft=False)
 
 
 class TiltedSquare(Convolvable):
