@@ -10,8 +10,6 @@ from prysm.coordinates import cart_to_polar
 from prysm import fringezernike
 
 
-Z = fringezernike.zernfcns
-norms = fringezernike._normalizations
 SAMPLES = 32
 
 X, Y = np.linspace(-1, 1, SAMPLES), np.linspace(-1, 1, SAMPLES)
@@ -36,13 +34,13 @@ def fit_data():
 
 
 def test_all_zernfcns_run_without_error_or_nans(rho, phi):
-    for _, zernike in Z.items():
-        assert zernike(rho, phi).all()
+    for i in range(48):
+        assert fringezernike.FZCache.get_zernike(i, norm=False, samples=SAMPLES).all()
 
 
 def test_all_zernfcns_run_without_errors_or_nans_with_norms(rho, phi):
-    for (_, zernike), norm in zip(Z.items(), norms):
-        assert (zernike(rho, phi) * norm).all()
+    for i in range(48):
+        assert fringezernike.FZCache.get_zernike(i, norm=True, samples=SAMPLES).all()
 
 
 def test_can_build_fringezernike_pupil_with_vector_args():
