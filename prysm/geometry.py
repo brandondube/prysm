@@ -38,6 +38,9 @@ class MaskCache(object):
 
         return mask
 
+    def clear(self, *args):
+        self.masks = defaultdict(dict)
+
 
 def gaussian(sigma=0.5, samples=128):
     """Generate a gaussian mask with a given sigma.
@@ -428,3 +431,4 @@ shapes = {
 }
 
 mcache = MaskCache()
+config.chbackend_observers.append(mcache.clear)
