@@ -91,6 +91,8 @@ allfuncs = frozenset((
     'gradient',
     'any',
     'isfinite',
+    'ceil',
+    'floor',
 ))
 
 fftfuncs = frozenset((
@@ -115,6 +117,7 @@ constants = frozenset((
     'complex64',
     'complex128',
     'pi',
+    'nan',
 ))
 
 
