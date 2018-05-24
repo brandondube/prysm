@@ -66,7 +66,7 @@ except ImportError:
 
             return wrapper
 
-allfuncs = frozenset((
+allfuncs = set((
     'sqrt',
     'sin',
     'cos',
@@ -75,7 +75,6 @@ allfuncs = frozenset((
     'arctan2',
     'arccos',
     'arcsin',
-    'sinc',
     'radians',
     'exp',
     'log',
@@ -95,15 +94,19 @@ allfuncs = frozenset((
     'unique',
     'swapaxes',
     'rollaxis',
-    'searchsorted',
     'concatenate',
     'cumsum',
-    'gradient',
     'any',
     'isfinite',
     'ceil',
     'floor',
 ))
+
+allfuncs_cupy_missing = set((
+    'searchsorted',
+    'gradient',
+    'sinc',
+    ))
 
 fftfuncs = frozenset((
     'fft2',
@@ -183,9 +186,9 @@ def change_backend(to):
         exec(f'from {target_fft} import {func}')
         globals()[func] = eval(func)
 
-    for func in linalgfuncs:
-        exec(f'from {target_linalg} import {func}')
-        globals()[func] = eval(func)
+    # for func in linalgfuncs:
+    #     exec(f'from {target_linalg} import {func}')
+    #     globals()[func] = eval(func)
 
 
 config.chbackend_observers.append(change_backend)
