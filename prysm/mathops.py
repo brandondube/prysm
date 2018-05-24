@@ -67,6 +67,7 @@ except ImportError:
             return wrapper
 
 allfuncs = set((
+    'sort',
     'sqrt',
     'sin',
     'cos',
@@ -126,6 +127,8 @@ constants = frozenset((
     'uint8',
     'uint16',
     'uint32',
+    'int32',
+    'int64',
     'float32',
     'float64',
     'complex64',
