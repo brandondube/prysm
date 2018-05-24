@@ -183,7 +183,7 @@ class Convolvable(object):
         """
         return _conv(self, other, op='div')
 
-    def show(self, xlim=(None, None), ylim=(None, None), interp_method=None, power=1, show_colorbar=True, fig=None, ax=None):
+    def show(self, xlim=None, ylim=None, interp_method=None, power=1, show_colorbar=True, fig=None, ax=None):
         '''Display the image.
 
         Parameters
@@ -217,6 +217,9 @@ class Convolvable(object):
             ext = [*extx, *exty]
         else:
             ext = None
+
+        if xlim is not None and ylim is None:
+            ylim = xlim
 
         fig, ax = share_fig_ax(fig, ax)
         im = ax.imshow(self.data,
@@ -284,9 +287,9 @@ class Convolvable(object):
                        cmap='Greys_r',
                        interpolation=interp_method,
                        origin='lower')
-        fig.colorbar(im, ax=ax)
-        ax.set(xlim=(xmin, xmax), xlabel=r' \nu_x [cy/mm]',
-               ylim=(ymin, ymax), ylabel=r' \nu_y [cy/mm]')
+        fig.colorbar(im, ax=ax, label='Normalized Spectral Intensity [a.u.]')
+        ax.set(xlim=(xmin, xmax), xlabel=r' $\nu_x$ [cy/mm]',
+               ylim=(ymin, ymax), ylabel=r' $\nu_y$ [cy/mm]')
         return fig, ax
 
     def save(self, path, nbits=8):
@@ -346,7 +349,13 @@ def _conv_result_core(data1, data2, op='mul'):
     if op is 'mul':
         dat = abs(m.fftshift(m.ifft2(data1 * data2)))
     else:
-        dat = abs(m.fftshift(m.ifft2(data1 / data2)))
+        intermediate = abs(m.ifft2(data1 / data2))
+        d1_zero = data1 < 6e-5  # 16-bit cutoff ~= 6e-5
+        d2_zero = data2 < 6e-5
+        allzeros = m.stack((d1_zero, d2_zero), axis=-1)
+        mask = m.any(allzeros, axis=-1)
+        intermediate[mask] = 0
+        dat = m.fftshift(intermediate)
 
     return dat / dat.max()
 
