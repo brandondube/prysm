@@ -92,6 +92,7 @@ allfuncs = set((
     'stack',
     'mean',
     'unique',
+    'flip',
     'swapaxes',
     'rollaxis',
     'concatenate',
