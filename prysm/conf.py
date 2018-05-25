@@ -109,7 +109,7 @@ class Config(object):
         """
         if backend.lower() in ('np', 'numpy'):
             self._backend = 'np'
-        elif backend.lower() in ('cu', 'cuda'):
+        elif backend.lower() in ('cp', 'cu', 'cuda'):
             self._backend = 'cu'
         else:
             raise ValueError('backend must be numpy or cuda.')
