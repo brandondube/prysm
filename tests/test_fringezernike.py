@@ -35,12 +35,12 @@ def fit_data():
 
 def test_all_zernfcns_run_without_error_or_nans(rho, phi):
     for i in range(48):
-        assert fringezernike.FZCache.get_zernike(i, norm=False, samples=SAMPLES).all()
+        assert fringezernike.zcache.get_zernike(i, norm=False, samples=SAMPLES).all()
 
 
 def test_all_zernfcns_run_without_errors_or_nans_with_norms(rho, phi):
     for i in range(48):
-        assert fringezernike.FZCache.get_zernike(i, norm=True, samples=SAMPLES).all()
+        assert fringezernike.zcache.get_zernike(i, norm=True, samples=SAMPLES).all()
 
 
 def test_can_build_fringezernike_pupil_with_vector_args():
