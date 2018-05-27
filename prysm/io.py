@@ -15,9 +15,11 @@ def read_file_stream_or_path(path_or_file):
     try:
         with codecs.open(path_or_file, mode='r', encoding=trioptics_enc) as fid:
             data = codecs.encode(fid.read(), 'utf-8').decode('utf-8')
-
     except FileNotFoundError:
+        path_or_file.seek(0)
         data = path_or_file.read()
+    except AttributeError:
+        data = path_or_file
 
     return data
 
@@ -27,7 +29,7 @@ def read_trioptics_mtfvfvf(file_path):
 
     Parameters
     ----------
-    file_path : `str` or path_like
+    file_path : path_like or `str`
         path to read data from
 
     Returns
@@ -68,13 +70,15 @@ def read_trioptics_mtfvfvf(file_path):
     }
 
 
-def read_trioptics_mtf_vs_field(file_path):
+def read_trioptics_mtf_vs_field(file, metadata=False):
     """Read tangential and sagittal MTF data from a Trioptics .mht file.
 
     Parameters
     ----------
-    file_path : `str` or path_like
-        path to a file
+    file : `str` or path_like or file_like
+        contents of a file, path_like to the file, or file object
+    metadata : `bool`
+        whether to also extract and return metadata
 
     Returns
     -------
@@ -82,7 +86,8 @@ def read_trioptics_mtf_vs_field(file_path):
         dictionary with keys of freq, field, tan, sag
 
     """
-    data = read_file_stream_or_path(file_path)
+    data = read_file_stream_or_path(file)
+    data = data[:len(data)//10]  # only search in a subset of the file for speed
 
     # compile a pattern that will search for the image heights in the file and extract
     fields_pattern = re.compile(f'MTF=09{os.linesep}(.*?){os.linesep}Legend=09', flags=re.DOTALL)
@@ -105,29 +110,38 @@ def read_trioptics_mtf_vs_field(file_path):
     tan = m.asarray([s.split('=09')[1:-1] for s in tan], dtype=config.precision)
     sag = m.asarray([s.split('=09')[1:-1] for s in sag], dtype=config.precision)
     fields = m.asarray(fields.split('=09')[0:-1], dtype=config.precision).round(4)
-    return {
+    res = {
         'freq': freqs,
         'field': fields,
         'tan': tan,
         'sag': sag,
     }
+    if metadata is True:
+        return {**res, **parse_trioptics_metadata(data)}
+    else:
+        return res
 
 
-def read_trioptics_mtf(file_path):
+def read_trioptics_mtf(file, metadata=False):
     """Read MTF data from a Trioptics data file.
 
     Parameters
     ----------
-    file_path : path_like
-        location of a .mht certificate file
+    file : `str` or path_like or file_like
+        contents of a file, path_like to the file, or file object
+    metadata : `bool`
+        whether to also extract and return metadata
 
     Returns
     -------
     `dict`
         dictionary with keys focus, wavelength, freq, tan, sag
+        if metadata=True, also has keys in the return of
+        `io.parse_trioptics_metadata`.
 
     """
-    data = read_file_stream_or_path(file_path)
+    data = read_file_stream_or_path(file)
+    data = data[:len(data)//10]
 
     # compile regex scanners to grab wavelength, focus, and frequency information
     # in addition to the T, S MTF data.
@@ -157,12 +171,16 @@ def read_trioptics_mtf(file_path):
     s = m.asarray(mtfs[breakpt:], dtype=config.precision)
     freqs = tuple(freqs[:breakpt])
 
-    return {
+    res = {
         'focus': focus_pos,
         'freq': freqs,
         'tan': t,
         'sag': s,
     }
+    if metadata is True:
+        return {**res, **parse_trioptics_metadata(data)}
+    else:
+        return res
 
 
 def parse_trioptics_metadata(file_contents):
