@@ -8,12 +8,10 @@ import calendar
 from .conf import config
 from prysm import mathops as m
 
-trioptics_enc = 'cp1252'
-
 
 def read_file_stream_or_path(path_or_file):
     try:
-        with codecs.open(path_or_file, mode='r', encoding=trioptics_enc) as fid:
+        with codecs.open(path_or_file, mode='r', encoding='cp1252') as fid:
             data = codecs.encode(fid.read(), 'utf-8').decode('utf-8')
     except FileNotFoundError:
         path_or_file.seek(0)
@@ -225,3 +223,24 @@ def parse_trioptics_metadata(file_contents):
         'focus_pos': focus_pos,
         'azimuth': azimuth,
     }
+
+
+def identify_trioptics_measurement_type(file):
+    data = read_file_stream_or_path(file)
+    data_parse = data[750:1500]
+    measurement_type_scanner = re.compile(r'Measure Program  : (.*)')
+    program = measurement_type_scanner.search(data_parse).group(1)
+    return program, data
+
+
+TRIOPTICS_SWITCHBOARD = {
+    'MTF vs. Field': read_trioptics_mtf_vs_field,
+    'Distortion': NotImplemented,
+    'Axial Color': NotImplemented,
+    'Lateral Color': NotImplemented,
+}
+
+
+def read_any_trioptics_mht(file):
+    type_, data = identify_trioptics_measurement_type(file)
+    return TRIOPTICS_SWITCHBOARD[type_](data)
