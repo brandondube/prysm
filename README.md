@@ -8,20 +8,20 @@ A python3.6+ optics module.
 
 ## Installation
 
-For the most up-to-date version of prysm, you should install from github:
-```
-pip install git+git://github.com/brandondube/prysm.git
-```
-prysm is also on pypi, but is not kept very up-to-date there:
+prysm is on pypi:
 ```
 pip install prysm
 ```
+For the most up-to-date version, you can install from github:
+```
+pip install git+git://github.com/brandondube/prysm.git
+```
 
-If you would like to see more frequent updates to the version on pypi, please let the author know.  prysm requires [numpy](http://www.numpy.org/), [scipy](https://www.scipy.org/), [pandas](https://pandas.pydata.org/), and [matplotlib](https://matplotlib.org/).  Pip should take care of these for you, but if for some reason it doesn't, make sure they are installed first.
+prysm requires [numpy](http://www.numpy.org/), [scipy](https://www.scipy.org/), [pandas](https://pandas.pydata.org/), and [matplotlib](https://matplotlib.org/).  Pip should take care of these for you, but if for some reason it doesn't, make sure they are installed first.
 
 ### Optional Dependencies
 
-Prysm uses numpy for array operations.  If your environment has [numba](http://numba.pydata.org/) installed, it will automatically accelerate many of prysm's compuations.  The tests will require [pytest](http://pytest.org/) to run.
+Prysm uses numpy for array operations.  If your environment has [numba](http://numba.pydata.org/) installed, it will automatically accelerate many of prysm's compuations.  To use an nVidia GPU, you must have [cupy](https://cupy.chainer.org/) installed.  The tests will require [pytest](http://pytest.org/) to run.
 
 ## Features
 
