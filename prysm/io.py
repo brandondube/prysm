@@ -189,6 +189,30 @@ def read_trioptics_mtf(file, metadata=False):
 
 
 def parse_trioptics_metadata(file_contents):
+    """Read metadata from the contents of a Trioptics .mht file.
+
+    Parameters:
+    -----------
+    file_contents : `str`
+        contents of a .mht file.
+
+    Returns:
+    --------
+    `dict`
+        dictionary with keys:
+            - operator
+            - time
+            - sample_id
+            - instrument
+            - instrument_sn
+            - collimator
+            - wavelength
+            - efl
+            - obj_angle
+            - focus_pos
+            - azimuth
+
+    """
     data = file_contents[750:1500]  # skip large section to make regex faster
 
     operator_scanner = re.compile(r'Operator         : (\S*)')
@@ -222,6 +246,7 @@ def parse_trioptics_metadata(file_contents):
         'operator': operator,
         'time': timestamp,
         'sample_id': sampleid,
+        'instrument': 'Trioptics ImageMaster HR',
         'instrument_sn': instrument_sn,
         'collimator': collimator_efl,
         'wavelength': wavelength,
@@ -233,6 +258,21 @@ def parse_trioptics_metadata(file_contents):
 
 
 def identify_trioptics_measurement_type(file):
+    """Identify type of measurement in a Trioptics .mht file.
+
+    Parameters
+    ----------
+    file : `str` or path_like or file_like
+        contents of a file, path_like to the file, or file object
+
+    Returns
+    -------
+    program : `str`
+        measurement type
+    data : `str`
+        contents of the file
+
+    """
     data = read_file_stream_or_path(file)
     data_parse = data[750:1500]
     measurement_type_scanner = re.compile(r'Measure Program  : (.*)')
@@ -248,6 +288,22 @@ TRIOPTICS_SWITCHBOARD = {
 }
 
 
-def read_any_trioptics_mht(file):
+def read_any_trioptics_mht(file, metadata=False):
+    """Read any Trioptics .mht certificate (MTF vs Field, Distortion, etc).
+
+    Parameters
+    ----------
+    file : `str` or path_like or file_like
+        contents of a file, path_like to the file, or file object
+    metadata : `bool`
+        whether to also extract and return metadata
+
+    Returns
+    -------
+    `dict`
+        dictionary with appropriate keys.  If metadata=True, also has keys in
+        the return of `io.parse_trioptics_metadata`.
+
+    """
     type_, data = identify_trioptics_measurement_type(file)
     return TRIOPTICS_SWITCHBOARD[type_](data)
