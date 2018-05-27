@@ -22,13 +22,15 @@ def read_file_stream_or_path(path_or_file):
     return data
 
 
-def read_trioptics_mtfvfvf(file_path):
+def read_trioptics_mtfvfvf(file, filename=None):
     """Read MTF vs Field vs Focus data from a Trioptics .txt dump.
 
     Parameters
     ----------
-    file_path : path_like or `str`
-        path to read data from
+    file : `str` or path_like or file_like
+        file to read from, if string of file body, must provide filename
+    filename : `str`, optional
+        name of file; used to select tan/sag if file is given as contents
 
     Returns
     -------
@@ -36,23 +38,28 @@ def read_trioptics_mtfvfvf(file_path):
         MTF vs Field vs Focus object
 
     """
-    with open(file_path, 'r') as fid:
-        lines = fid.readlines()
-        imghts, objangs, focusposes, mtfs = [], [], [], []
-        for meta, data in zip(lines[0::2], lines[1::2]):  # iterate 2 lines at a time
-            metavalues = meta.split()
-            imght, objang, focuspos, freqpitch = metavalues[1::2]
-            mtf_raw = data.split()[1:]  # first element is "MTF"
-            mtf = m.asarray(mtf_raw, dtype=config.precision)
-            imghts.append(imght)
-            objangs.append(objang)
-            focusposes.append(focuspos)
-            mtfs.append(mtf)
+    if filename is None:
+        with open(file, 'r') as fid:
+            lines = fid.readlines()
+    else:
+        lines = file.splitlines()
+        file = filename
 
-    if str(file_path)[-7:-4] == 'Tan':
+    if str(file)[-7:-4] == 'Tan':
         azimuth = 'Tan'
     else:
         azimuth = 'Sag'
+
+    imghts, objangs, focusposes, mtfs = [], [], [], []
+    for meta, data in zip(lines[0::2], lines[1::2]):  # iterate 2 lines at a time
+        metavalues = meta.split()
+        imght, objang, focuspos, freqpitch = metavalues[1::2]
+        mtf_raw = data.split()[1:]  # first element is "MTF"
+        mtf = m.asarray(mtf_raw, dtype=config.precision)
+        imghts.append(imght)
+        objangs.append(objang)
+        focusposes.append(focuspos)
+        mtfs.append(mtf)
 
     focuses = m.unique(m.asarray(focusposes, dtype=config.precision))
     focuses = (focuses - m.mean(focuses)) * 1e3
