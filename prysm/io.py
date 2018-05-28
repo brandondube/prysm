@@ -22,6 +22,28 @@ def read_file_stream_or_path(path_or_file):
     return data
 
 
+def is_mtfvfvf_file(file):
+    """Read MTF vs Field vs Focus data from a Trioptics .txt dump.
+
+    Parameters
+    ----------
+    file : `str` or path_like or file_like
+        file to read from, if string of file body, must provide filename
+
+    Returns:
+    boolean : `bool`
+        if the file is an MTFvFvF file
+    data : `str`
+        contents of the file
+    `
+    """
+    data = read_file_stream_or_path(file)
+    if data.startswith('ImgHeight'):
+        return True, data
+    else:
+        return False, data
+
+
 def read_trioptics_mtfvfvf(file, filename=None):
     """Read MTF vs Field vs Focus data from a Trioptics .txt dump.
 
