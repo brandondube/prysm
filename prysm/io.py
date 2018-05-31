@@ -334,4 +334,4 @@ def read_any_trioptics_mht(file, metadata=False):
 
     """
     type_, data = identify_trioptics_measurement_type(file)
-    return type_, TRIOPTICS_SWITCHBOARD[type_](data)
+    return type_, TRIOPTICS_SWITCHBOARD[type_](data, metadata=metadata)
