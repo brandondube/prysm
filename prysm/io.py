@@ -263,7 +263,7 @@ def parse_trioptics_metadata(file_contents):
     h, m, s = hms.split(':')
     h, m, s = (int(str_) for str_ in [h, m, s])
     timestamp = datetime.datetime(year=year, month=month_num, day=day, hour=h, minute=m, second=s)
-    sampleid = sampleid_scanner.search(data).group(1)
+    sampleid = sampleid_scanner.search(data).group(1).strip()
     instrument_sn = instrument_sn_scanner.search(data).group(1)
 
     collimator_efl = float(collimatorefl_scanner.search(data).group(1))
