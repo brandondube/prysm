@@ -13,10 +13,14 @@ def read_file_stream_or_path(path_or_file):
     try:
         with codecs.open(path_or_file, mode='r', encoding='cp1252') as fid:
             data = codecs.encode(fid.read(), 'utf-8').decode('utf-8')
-    except FileNotFoundError:
+    except (FileNotFoundError, TypeError):  # FNF -- file object, TypeError -- file_like
         path_or_file.seek(0)
-        data = path_or_file.read()
-    except AttributeError:
+        try:
+            raw = path_or_file.read()
+            data = codecs.encode(raw, 'utf-8').decode('utf-8')
+        except TypeError:  # opened in bytes mode
+            data = raw.decode('cp1252')
+    except (AttributeError, UnicodeDecodeError):
         data = path_or_file
 
     return data
@@ -328,4 +332,4 @@ def read_any_trioptics_mht(file, metadata=False):
 
     """
     type_, data = identify_trioptics_measurement_type(file)
-    return TRIOPTICS_SWITCHBOARD[type_](data)
+    return type_, TRIOPTICS_SWITCHBOARD[type_](data)
