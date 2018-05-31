@@ -14,12 +14,14 @@ def read_file_stream_or_path(path_or_file):
         with codecs.open(path_or_file, mode='r', encoding='cp1252') as fid:
             data = codecs.encode(fid.read(), 'utf-8').decode('utf-8')
     except (FileNotFoundError, TypeError):  # FNF -- file object, TypeError -- file_like
-        path_or_file.seek(0)
         try:
+            path_or_file.seek(0)
             raw = path_or_file.read()
             data = codecs.encode(raw, 'utf-8').decode('utf-8')
         except TypeError:  # opened in bytes mode
             data = raw.decode('cp1252')
+        except AttributeError:
+            data = path_or_file  # TODO: avoid duplicate
     except (AttributeError, UnicodeDecodeError):
         data = path_or_file
 
@@ -302,7 +304,7 @@ def identify_trioptics_measurement_type(file):
     data = read_file_stream_or_path(file)
     data_parse = data[750:1500]
     measurement_type_scanner = re.compile(r'Measure Program  : (.*)')
-    program = measurement_type_scanner.search(data_parse).group(1)
+    program = measurement_type_scanner.search(data_parse).group(1).strip()
     return program, data
 
 
