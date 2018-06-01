@@ -281,6 +281,7 @@ def parse_trioptics_metadata(file_contents):
         'collimator': collimator_efl,
         'wavelength': wavelength,
         'efl': sample_efl,
+        'fno': 1,
         'obj_angle': obj_angle,
         'focus_pos': focus_pos,
         'azimuth': azimuth,
