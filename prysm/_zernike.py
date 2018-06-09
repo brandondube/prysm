@@ -327,6 +327,7 @@ _zernikes = [
     tip,
     tilt,
     defocus,
+    primary_astigmatism_00,
     primary_astigmatism_45,
     primary_coma_y,
     primary_coma_x,

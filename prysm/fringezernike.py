@@ -203,7 +203,7 @@ class FringeZernike(Pupil):
             # short circuit for speed
             if coef == 0:
                 continue
-            self.phase += coef * zcache.get_zernike(term - self.base, self.normalize, self.samples)
+            self.phase += coef * zcache.get_zernike(term, self.normalize, self.samples)
 
         self._phase_to_wavefunction()
         return self.phase, self.fcn
