@@ -2,6 +2,7 @@
 from scipy import interpolate
 
 from mpl_toolkits.axes_grid1.axes_rgb import make_rgb_axes
+from matplotlib import colors
 
 from .conf import config
 from .coordinates import uniform_cart_to_polar, cart_to_polar
@@ -148,7 +149,6 @@ class PSF(Convolvable):
             Axis containing the plot
 
         """
-        fcn = correct_gamma(self.data ** power)
         label_str = 'Normalized Intensity [a.u.]'
         lims = (0, 1)
 
@@ -157,10 +157,11 @@ class PSF(Convolvable):
 
         fig, ax = share_fig_ax(fig, ax)
 
-        im = ax.imshow(fcn,
+        im = ax.imshow(self.data,
                        extent=[left, right, bottom, top],
                        origin='lower',
                        cmap='Greys_r',
+                       norm=colors.PowerNorm(1/power),
                        interpolation=interp_method,
                        clim=lims)
         if show_colorbar:
