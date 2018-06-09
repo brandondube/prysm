@@ -82,7 +82,7 @@ class FZCache(object):
             func = z.zernikes[zernmap[number]]
             zern = func(rho, phi)
             if norm is True:
-                zern *= func.norm
+                zern *= func.__wrapped__.norm
 
             target[samples][number] = zern.copy()
 
@@ -277,7 +277,7 @@ def fit(data, num_terms=16, rms_norm=False, round_at=6):
         func = z.zernikes[zernmap[i]]
         base_zern = func(rho, phi)
         if rms_norm:
-            base_zern *= func.norm
+            base_zern *= func.__wrapped__.norm
         zernikes.append(base_zern)
     zerns = m.asarray(zernikes).T
 
