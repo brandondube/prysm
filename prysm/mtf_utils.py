@@ -8,6 +8,7 @@ from .io import read_trioptics_mtf_vs_field, read_trioptics_mtfvfvf
 
 from prysm import mathops as m
 
+
 class MTFvFvF(object):
     """Abstract object representing a cube of MTF vs Field vs Focus data.
 
@@ -435,42 +436,82 @@ class MTFFFD(object):
             return option is not available
 
         """
-        # ret = (r.lower() for r in ret)
-        # extract data from files
         azimuths = m.radians(m.asarray(azimuths, dtype=m.float64))
-        freqs, xs, ys, ts, ss = [], [], [], [], []
+        freqs, ts, ss = [], [], []
         for path, angle in zip(paths, azimuths):
             d = read_trioptics_mtf_vs_field(path)
             imght, freq, t, s = d['field'], d['freq'], d['tan'], d['sag']
-            x, y = imght * m.cos(angle), imght * m.sin(angle)
             freqs.append(freq)
-            xs.append(x)
-            ys.append(y)
             ts.append(t)
             ss.append(s)
 
-        # convert to arrays and interpolate onto a regular 2D grid via a cubic interpolator
-        xarr, yarr, farr = m.asarray(xs), m.asarray(ys), m.asarray(freqs)
-        val_tan, val_sag = m.asarray(ts), m.asarray(ss)
-        npts = len(xs[0]) * upsample
-        xmin, xmax, ymin, ymax = xarr.min(), xarr.max(), yarr.min(), yarr.max()
-
-        # loop through the frequencies and interpolate them all onto the regular output grid
-        out_x, out_y = m.linspace(xmin, xmax, npts), m.linspace(ymin, ymax, npts)
-        xx, yy = m.meshgrid(out_x, out_y)
-        sample_pts = m.stack([xarr.ravel(), yarr.ravel()], axis=1)
-        interpt, interps = [], []
-        for idx in range(val_tan.shape[1]):
-            datt = griddata(sample_pts, val_tan[:, idx, :].ravel(), (xx, yy), method='linear')
-            dats = griddata(sample_pts, val_sag[:, idx, :].ravel(), (xx, yy), method='linear')
-            interpt.append(datt)
-            interps.append(dats)
-
-        tan, sag = m.rollaxis(m.asarray(interpt), 0, 3), m.rollaxis(m.asarray(interps), 0, 3)
+        xx, yy, tan, sag = radial_mtf_to_mtfffd_data(ts, ss, imght, azimuths, upsample=10)
         if ret == ('tan', 'sag'):
-            return MTFFFD(tan, out_x, out_y, farr[0, :]), MTFFFD(sag, out_x, out_y, farr[0, :])
+            return MTFFFD(tan, xx, yy, freq), MTFFFD(sag, xx, yy, freq)
         else:
             raise NotImplemented('other returns not implemented')
+
+    @staticmethod
+    def from_polar_data(tan, sag, fields, azimuths, freqs, upsample=10):
+        x, y, t, s = radial_mtf_to_mtfffd_data(tan, sag, fields, azimuths, upsample)
+        return MTFFFD(t, x, y, freqs), MTFFFD(s, x, y, freqs)
+
+
+def radial_mtf_to_mtfffd_data(tan, sag, imagehts, azimuths, upsample):
+    """Take radial MTF data and map it to inputs to the MTFFFD constructor.
+
+    Performs upsampling/interpolation in cartesian coordinates
+
+    Parameters
+    ----------
+    tan : `np.ndarray`
+        tangential data
+    sag : `np.ndarray`
+        sagittal data
+    imagehts : `np.ndarray`
+        array of image heights
+    azimuths : iterable
+        azimuths corresponding to the first dimension of the tan/sag arrays
+    upsample : `float`
+        upsampling factor
+
+    Returns
+    -------
+    out_x : `np.ndarray`
+        x coordinates of the output data
+    out_y : `np.ndarray`
+        y coordinates of the output data
+    tan : `np.ndarray`
+        tangential data
+    sag : `np.ndarray`
+        sagittal data
+
+    """
+    # take polar data and convert to cartesian
+    xs, ys = [], []
+    for az in azimuths:
+        xs.append(imagehts * m.cos(az))
+        ys.append(imagehts * m.sin(az))
+
+    # convert to arrays and interpolate onto a regular 2D grid via a cubic interpolator
+    xarr, yarr = m.asarray(xs), m.asarray(ys)
+    val_tan, val_sag = m.asarray(tan), m.asarray(sag)
+    npts = len(xs[0]) * upsample
+    xmin, xmax, ymin, ymax = xarr.min(), xarr.max(), yarr.min(), yarr.max()
+
+    # loop through the frequencies and interpolate them all onto the regular output grid
+    out_x, out_y = m.linspace(xmin, xmax, npts), m.linspace(ymin, ymax, npts)
+    xx, yy = m.meshgrid(out_x, out_y)
+    sample_pts = m.stack([xarr.ravel(), yarr.ravel()], axis=1)
+    interpt, interps = [], []
+    for idx in range(val_tan.shape[1]):
+        datt = griddata(sample_pts, val_tan[:, idx, :].ravel(), (xx, yy), method='linear')
+        dats = griddata(sample_pts, val_sag[:, idx, :].ravel(), (xx, yy), method='linear')
+        interpt.append(datt)
+        interps.append(dats)
+
+    tan, sag = m.rollaxis(m.asarray(interpt), 0, 3), m.rollaxis(m.asarray(interps), 0, 3)
+    return out_x, out_y, tan, sag
 
 
 def plot_mtf_vs_field(data_dict, fig=None, ax=None):
