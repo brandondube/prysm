@@ -101,6 +101,8 @@ allfuncs = set((
     'isfinite',
     'ceil',
     'floor',
+    'outer',
+    'inner',
 ))
 
 allfuncs_cupy_missing = set((
