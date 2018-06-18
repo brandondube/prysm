@@ -4,7 +4,6 @@ The intend is to make the backend for prysm interoperable, allowing users to
 utilize more high performance engines if they have them installed, or fall
 back to more widely available options in the case that they do not.
 """
-
 import numpy as np
 
 from scipy.special import j1
