@@ -358,15 +358,23 @@ class MTFFFD(object):
         self.field_y = field_y
         self.freq = freq
 
-    def plot2d(self, freq, contours=True, fig=None, ax=None):
+    def plot2d(self, freq, show_contours=True,
+               cmap='inferno', clim=(0, 1), show_cb=True,
+               fig=None, ax=None):
         """Plot the MTF FFD.
 
         Parameters
         ----------
         freq : `float`
             frequency to plot at
-        contours : `bool`
+        show_contours : `bool`
             whether to plot contours
+        cmap : `str`
+            colormap to pass to `imshow`
+        clim : `iterable`
+            length 2 iterable with lower, upper bounds of colors
+        show_cb : `bool`
+            whether to show the colorbar or not
         fig : `matplotlib.figure.Figure`, optional
             figure containing the plot
         ax : `matplotlib.axes.Axis`
@@ -389,16 +397,20 @@ class MTFFFD(object):
                        extent=ext,
                        origin='lower',
                        interpolation='gaussian',
-                       cmap='inferno',
-                       clim=(0, 1))
+                       cmap=cmap,
+                       clim=clim)
 
-        if contours is True:
-            contours = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        if show_contours is True:
+            if clim[0] < 0:
+                contours = list(m.arange(clim[0], clim[1] + 0.1, 0.1))
+            else:
+                contours = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
             cs = ax.contour(self.data[:, :, idx], contours, colors='0.15', linewidths=0.75, extent=ext)
             ax.clabel(cs, fmt='%1.1f', rightside_up=True)
 
         ax.set(xlabel='Image Plane X [mm]', ylabel='Image Plane Y [mm]')
-        fig.colorbar(im, label=f'MTF @ {freq} cy/mm', ax=ax, fraction=0.046)
+        if show_cb:
+            fig.colorbar(im, label=f'MTF @ {freq} cy/mm', ax=ax, fraction=0.046)
         return fig, ax
 
     def __add__(self, other):
@@ -437,7 +449,7 @@ class MTFFFD(object):
 
         return MTFFFD(self.data * other, self.field_x, self.field_y, self.freq)
 
-    def __div__(self, other):
+    def __truediv__(self, other):
         if type(other) not in {int, float}:
             raise ValueError('can only div by ints and floats')
 
@@ -448,12 +460,14 @@ class MTFFFD(object):
             raise ValueError('can only mul by ints and floats')
 
         self.data *= other
+        return self
 
-    def __idiv__(self, other):
+    def __itruediv__(self, other):
         if type(other) not in {int, float}:
             raise ValueError('can only div by ints and floats')
 
         self.data /= other
+        return self
 
     @staticmethod
     def from_dataframe(df, azimuth):
