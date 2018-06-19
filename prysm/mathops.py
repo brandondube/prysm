@@ -105,6 +105,7 @@ allfuncs = set((
     'inner',
     'argmin',
     'argmax',
+    'allclose',
 ))
 
 allfuncs_cupy_missing = set((
