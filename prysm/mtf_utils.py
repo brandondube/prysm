@@ -1,7 +1,7 @@
 """Utilities for working with MTF data."""
 import pandas as pd
 
-from scipy.interpolate import griddata
+from scipy.interpolate import griddata, RegularGridInterpolator as RGI
 
 from .util import correct_gamma, share_fig_ax
 from .io import read_trioptics_mtf_vs_field, read_trioptics_mtfvfvf
@@ -388,7 +388,7 @@ class MTFFFD(object):
                        interpolation='gaussian',
                        cmap='inferno',
                        clim=(0, 1))
-        ax.set(xlim=(-11, 11), xlabel='Image Plane X [mm]', ylim=(-8, 8), ylabel='Image Plane Y [mm]')
+        ax.set(xlabel='Image Plane X [mm]', ylabel='Image Plane Y [mm]')
         fig.colorbar(im, label=f'MTF @ {freq} cy/mm', ax=ax, fraction=0.046)
         return fig, ax
 
@@ -487,31 +487,48 @@ def radial_mtf_to_mtfffd_data(tan, sag, imagehts, azimuths, upsample):
         sagittal data
 
     """
-    # take polar data and convert to cartesian
-    xs, ys = [], []
-    for az in azimuths:
-        xs.append(imagehts * m.cos(az))
-        ys.append(imagehts * m.sin(az))
+    azimuths = m.asarray(azimuths)
+    imagehts = m.asarray(imagehts)
+    amin, amax = min(azimuths), max(azimuths)
+    imin, imax = min(imagehts), max(imagehts)
+    aq = m.linspace(amin, amax, int(len(azimuths) * upsample))
+    iq = m.linspace(imin, imax, int(len(imagehts) * 4))  # hard-code 4x linear upsample, change later
+    aa, ii = m.meshgrid(aq, iq, indexing='ij')
 
-    # convert to arrays and interpolate onto a regular 2D grid via a cubic interpolator
-    xarr, yarr = m.asarray(xs), m.asarray(ys)
-    val_tan, val_sag = m.asarray(tan), m.asarray(sag)
-    npts = len(xs[0]) * upsample
-    xmin, xmax, ymin, ymax = xarr.min(), xarr.max(), yarr.min(), yarr.max()
+    # for each frequency, build an interpolating function and upsample
+    up_t = m.empty((len(aq), tan.shape[1], len(iq)))
+    up_s = m.empty((len(aq), sag.shape[1], len(iq)))
+    for idx in range(tan.shape[1]):
+        t, s = tan[:, idx, :], sag[:, idx, :]
+        interpft = RGI((azimuths, imagehts), t, method='linear')
+        interpfs = RGI((azimuths, imagehts), s, method='linear')
+        up_t[:, idx, :] = interpft((aa, ii))
+        up_s[:, idx, :] = interpfs((aa, ii))
 
-    # loop through the frequencies and interpolate them all onto the regular output grid
-    out_x, out_y = m.linspace(xmin, xmax, npts), m.linspace(ymin, ymax, npts)
-    xx, yy = m.meshgrid(out_x, out_y)
-    sample_pts = m.stack([xarr.ravel(), yarr.ravel()], axis=1)
-    interpt, interps = [], []
-    for idx in range(val_tan.shape[1]):
-        datt = griddata(sample_pts, val_tan[:, idx, :].ravel(), (xx, yy), method='linear')
-        dats = griddata(sample_pts, val_sag[:, idx, :].ravel(), (xx, yy), method='linear')
-        interpt.append(datt)
-        interps.append(dats)
+    # compute the locations of the samples on a cartesian grid
+    xd, yd = m.outer(m.cos(m.radians(aq)), iq), m.outer(m.sin(m.radians(aq)), iq)
+    samples = m.stack([xd.ravel(), yd.ravel()], axis=1)
 
-    tan, sag = m.rollaxis(m.asarray(interpt), 0, 3), m.rollaxis(m.asarray(interps), 0, 3)
-    return out_x, out_y, tan, sag
+    # for the output cartesian grid, figure out the x-y coverage and build a regular grid
+    absamin = min(abs(azimuths))
+    closest_to_90 = azimuths[m.argmin(azimuths-90)]
+    xfctr = m.cos(m.radians(absamin))
+    yfctr = m.cos(m.radians(closest_to_90))
+    xmin, xmax = imin * xfctr, imax * xfctr
+    ymin, ymax = imin * yfctr, imax * yfctr
+    xq, yq = m.linspace(xmin, xmax, len(iq)), m.linspace(ymin, ymax, len(iq))
+    xx, yy = m.meshgrid(xq, yq)
+
+    outt, outs = [], []
+    # for each frequency, interpolate onto the cartesian grid
+    for idx in range(up_t.shape[1]):
+        datt = griddata(samples, up_t[:, idx, :].ravel(), (xx, yy), method='linear')
+        dats = griddata(samples, up_s[:, idx, :].ravel(), (xx, yy), method='linear')
+        outt.append(datt.reshape(xx.shape))
+        outs.append(dats.reshape(xx.shape))
+
+    outt, outs = m.rollaxis(m.asarray(outt), 0, 3), m.rollaxis(m.asarray(outs), 0, 3)
+    return xq, yq, outt, outs
 
 
 def plot_mtf_vs_field(data_dict, fig=None, ax=None):
