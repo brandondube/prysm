@@ -358,16 +358,18 @@ class MTFFFD(object):
         self.field_y = field_y
         self.freq = freq
 
-    def plot2d(self, freq, fig=None, ax=None):
+    def plot2d(self, freq, contours=True, fig=None, ax=None):
         """Plot the MTF FFD.
 
         Parameters
         ----------
         freq : `float`
             frequency to plot at
+        contours : `bool`
+            whether to plot contours
         fig : `matplotlib.figure.Figure`, optional
             figure containing the plot
-        axis : `matplotlib.axes.Axis`
+        ax : `matplotlib.axes.Axis`
             axis containing the plot
 
         Returns
@@ -381,13 +383,20 @@ class MTFFFD(object):
         idx = m.searchsorted(self.freq, freq)
         extx = (self.field_x[0], self.field_x[-1])
         exty = (self.field_y[0], self.field_y[-1])
+        ext = [*extx, *exty]
         fig, ax = share_fig_ax(fig, ax)
         im = ax.imshow(self.data[:, :, idx],
-                       extent=[*extx, *exty],
+                       extent=ext,
                        origin='lower',
                        interpolation='gaussian',
                        cmap='inferno',
                        clim=(0, 1))
+
+        if contours is True:
+            contours = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+            cs = ax.contour(self.data[:, :, idx], contours, colors='0.15', linewidths=0.75, extent=ext)
+            ax.clabel(cs, fmt='%1.1f', rightside_up=True)
+
         ax.set(xlabel='Image Plane X [mm]', ylabel='Image Plane Y [mm]')
         fig.colorbar(im, label=f'MTF @ {freq} cy/mm', ax=ax, fraction=0.046)
         return fig, ax
