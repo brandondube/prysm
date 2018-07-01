@@ -221,6 +221,62 @@ class MTFvFvF(object):
         else:
             raise ValueError('0.5 is only algorithm supported')
 
+    def __add__(self, other):
+        if type(other) == type(self):
+            # both MTF FFDs, check alignment of data
+            same_x = m.allclose(self.field_x, other.field_x)
+            same_y = m.allclose(self.field_y, other.field_y)
+            same_freq = m.allclose(self.freq, other.freq)
+            if not same_x and same_y and same_freq:
+                raise ValueError('x or y coordinates or frequencies mismatch between MTF FFDs')
+            else:
+                return MTFFFD(self.data + other.data, self.field_x, self.field_y, self.freq)
+        elif type(other) in {int, float}:
+            return MTFFFD(self.data + other, self.field_x, self.field_y, self.freq)
+        else:
+            raise ValueError('MTF FFDs can only be added to each other')
+
+    def __sub__(self, other):
+        if type(other) == type(self):
+            # both MTF FFDs, check alignment of data
+            same_x = m.allclose(self.field_x, other.field_x)
+            same_y = m.allclose(self.field_y, other.field_y)
+            same_freq = m.allclose(self.freq, other.freq)
+            if not same_x and same_y and same_freq:
+                raise ValueError('x or y coordinates or frequencies mismatch between MTF FFDs')
+            else:
+                return MTFFFD(self.data - other.data, self.field_x, self.field_y, self.freq)
+        elif type(other) in {int, float}:
+            return MTFFFD(self.data - other, self.field_x, self.field_y, self.freq)
+        else:
+            raise ValueError('MTF FFDs can only be added to each other')
+
+    def __mul__(self, other):
+        if type(other) not in {int, float}:
+            raise ValueError('can only mul by ints and floats')
+
+        return MTFFFD(self.data * other, self.field_x, self.field_y, self.freq)
+
+    def __truediv__(self, other):
+        if type(other) not in {int, float}:
+            raise ValueError('can only div by ints and floats')
+
+        return MTFFFD(self.data / other, self.field_x, self.field_y, self.freq)
+
+    def __imul__(self, other):
+        if type(other) not in {int, float}:
+            raise ValueError('can only mul by ints and floats')
+
+        self.data *= other
+        return self
+
+    def __itruediv__(self, other):
+        if type(other) not in {int, float}:
+            raise ValueError('can only div by ints and floats')
+
+        self.data /= other
+        return self
+
     @staticmethod
     def from_dataframe(df):
         """Return a pair of MTFvFvF objects for the tangential and one for the sagittal MTF.
