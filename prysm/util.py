@@ -202,6 +202,25 @@ def rms(array):
     return m.sqrt((array[non_nan] ** 2).mean())
 
 
+def Ra(array):
+    """Return the Ra value for the valid elements of an array.
+
+    Parameters
+    ----------
+    array: `numpy.ndarray`
+        array of values
+
+    Returns
+    -------
+    `float`
+        Ra of the array
+    """
+    non_nan = m.isfinite(array)
+    ary = array[non_nan]
+    mean = ary.mean()
+    return abs(ary - mean).sum() / ary.size
+
+
 def guarantee_array(variable):
     """Guarantee that a varaible is a numpy ndarray and supports -, *, +, and other operators.
 
