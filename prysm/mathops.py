@@ -106,6 +106,7 @@ allfuncs = set((
     'argmin',
     'argmax',
     'allclose',
+    'frombuffer',
 ))
 
 allfuncs_cupy_missing = set((
