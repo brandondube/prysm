@@ -364,6 +364,7 @@ def read_zygo_dat(file):
         contents = fid.read()
 
     meta = read_zygo_metadata(contents)
+    print(meta)
     w, h = meta['camera']['width'], meta['camera']['height']
     img_len = w * h
     header_len = meta['header']['size']
@@ -406,216 +407,220 @@ def read_zygo_metadata(file_contents):
     FL64 = '<d'
     C = 'c'
     uint8 = 'B'
+    WASTE_BYTE = '\x00'
 
-    magic_number = struct.unpack(IB32, c[:4])
+    magic_number = struct.unpack(IB32, c[:4])[0]
     header = {
-        'format': struct.unpack(IB16, c[4:6]),
-        'size': struct.unpack(IB32, c[6:10]),
+        'format': struct.unpack(IB16, c[4:6])[0],
+        'size': struct.unpack(IB32, c[6:10])[0],
     }
-    swmaj = struct.unpack(IB16, c[10:12])
-    swmin = struct.unpack(IB16, c[12:14])
-    swpatch = struct.unpack(IB16, c[14:16])
+    swtype = struct.unpack(IB16, c[10:12])[0]
+    swdate = c[12:42].decode(ZYGO_ENC).rstrip(WASTE_BYTE)
+    swmaj = struct.unpack(IB16, c[42:44])[0]
+    swmin = struct.unpack(IB16, c[44:46])[0]
+    swpatch = struct.unpack(IB16, c[46:48])[0]
     metropro_version = f'{swmaj}.{swmin}.{swpatch}'
     ac = {
-        'x': struct.unpack(IB16, c[48:50]),
-        'y': struct.unpack(IB16, c[50:52]),
-        'width': struct.unpack(IB16, c[52:54]),
-        'height': struct.unpack(IB16, c[54:56]),
-        'n_buckets': struct.unpack(IB16, c[56:58]),
-        'range': struct.unpack(IB16, c[58:60]),
-        'n_bytes': struct.unpack(IB32, c[60:64]),
+        'x': struct.unpack(IB16, c[48:50])[0],
+        'y': struct.unpack(IB16, c[50:52])[0],
+        'width': struct.unpack(IB16, c[52:54])[0],
+        'height': struct.unpack(IB16, c[54:56])[0],
+        'n_buckets': struct.unpack(IB16, c[56:58])[0],
+        'range': struct.unpack(IB16, c[58:60])[0],
+        'n_bytes': struct.unpack(IB32, c[60:64])[0],
     }
     cn = {
-        'x': struct.unpack(IB16, c[64:66]),
-        'y': struct.unpack(IB16, c[66:68]),
-        'width': struct.unpack(IB16, c[68:70]),
-        'height': struct.unpack(IB16, c[70:72]),
-        'n_bytes': struct.unpack(IB32, c[72:76]),
+        'x': struct.unpack(IB16, c[64:66])[0],
+        'y': struct.unpack(IB16, c[66:68])[0],
+        'width': struct.unpack(IB16, c[68:70])[0],
+        'height': struct.unpack(IB16, c[70:72])[0],
+        'n_bytes': struct.unpack(IB32, c[72:76])[0],
     }
-    timestamp = struct.unpack(IB32, c[76:80])
-    comment = c[80:162].decode(ZYGO_ENC)
-    source = struct.unpack(IB16, c[162:164])
-    scale_factor = struct.unpack(FB32, c[164:168])
-    wavelength = struct.unpack(FB32, c[168:172])
-    numerical_aperture = struct.unpack(FB32, c[172:176])
-    obliquity_factor = struct.unpack(FB32, c[176:180])
-    magnification = struct.unpack(FB32, c[180:184])
-    lateral_resolution = struct.unpack(FB32, c[184:188])
-    acq_type = struct.unpack(IB16, c[188:190])
-    intensity_average_count = struct.unpack(IB16, c[190:192])
-    sfac_limit = struct.unpack(IB16, c[194:196])
+    timestamp = struct.unpack(IB32, c[76:80])[0]
+    comment = c[80:162].decode(ZYGO_ENC).rstrip(WASTE_BYTE)
+    source = struct.unpack(IB16, c[162:164])[0]
+    scale_factor = struct.unpack(FB32, c[164:168])[0]
+    wavelength = struct.unpack(FB32, c[168:172])[0]
+    numerical_aperture = struct.unpack(FB32, c[172:176])[0]
+    obliquity_factor = struct.unpack(FB32, c[176:180])[0]
+    magnification = struct.unpack(FB32, c[180:184])[0]
+    lateral_resolution = struct.unpack(FB32, c[184:188])[0]
+    acq_type = struct.unpack(IB16, c[188:190])[0]
+    intensity_average_count = struct.unpack(IB16, c[190:192])[0]
+    sfac_limit = struct.unpack(IB16, c[194:196])[0]
     ramp = {
-        'cal': struct.unpack(IB16, c[192:194]),
-        'gain': struct.unpack(IB16, c[196:198]),
+        'cal': struct.unpack(IB16, c[192:194])[0],
+        'gain': struct.unpack(IB16, c[196:198])[0],
     }
-    part_thickness = struct.unpack(FB32, c[198:202])
-    sw_llc = struct.unpack(IB16, c[202:204])
-    target_range = struct.unpack(FB32, c[204:208])
-    rad_crv_measure_seq = struct.unpack(IL32, c[208:210])
-    min_mod = struct.unpack(IB32, c[210:214])
-    min_mod_count = struct.unpack(IB32, c[214:218])
-    phase_res = struct.unpack(IB16, c[218:220])
-    min_area = struct.unpack(IB32, c[220:224])
+    part_thickness = struct.unpack(FB32, c[198:202])[0]
+    sw_llc = struct.unpack(IB16, c[202:204])[0]
+    target_range = struct.unpack(FB32, c[204:208])[0]
+    rad_crv_measure_seq = struct.unpack(IL16, c[208:210])[0]
+    min_mod = struct.unpack(IB32, c[210:214])[0]
+    min_mod_count = struct.unpack(IB32, c[214:218])[0]
+    phase_res = struct.unpack(IB16, c[218:220])[0]
+    min_area = struct.unpack(IB32, c[220:224])[0]
     discontinuity = {
-        'action': struct.unpack(IB16, c[224:226]),
-        'filter': struct.unpack(FB32, c[226:230]),
+        'action': struct.unpack(IB16, c[224:226])[0],
+        'filter': struct.unpack(FB32, c[226:230])[0],
     }
-    connect_order = struct.unpack(IB16, c[230:232])
-    sign = struct.unpack(IB16, c[232:234])
+    connect_order = struct.unpack(IB16, c[230:232])[0]
+    sign = struct.unpack(IB16, c[232:234])[0]
     camera = {
-        'width': struct.unpack(IB16, c[234:236]),
-        'height': struct.unpack(IB16, c[236:238]),
+        'width': struct.unpack(IB16, c[234:236])[0],
+        'height': struct.unpack(IB16, c[236:238])[0],
     }
     _sys = {
-        'type': struct.unpack(IB16, c[238:240]),
-        'board': struct.unpack(IB16, c[240:242]),
-        'serial': struct.unpack(IB16, c[242:244]),
-        'inst_id': struct.unpack(IB16, c[244:246])
+        'type': struct.unpack(IB16, c[238:240])[0],
+        'board': struct.unpack(IB16, c[240:242])[0],
+        'serial': struct.unpack(IB16, c[242:244])[0],
+        'inst_id': struct.unpack(IB16, c[244:246])[0]
     }
-    obj_name = c[246:258].decode(ZYGO_ENC)
-    part_name = c[258:298].decode(ZYGO_ENC)
-    codev_type = struct.unpack(IB16, c[298:300])
-    phase_avg_count = struct.unpack(IB16, c[300:302])
-    sub_sys_err = struct.unpack(IB16, c[302:304])
+    obj_name = c[246:258].decode(ZYGO_ENC).rstrip(WASTE_BYTE)
+    part_name = c[258:298].decode(ZYGO_ENC).rstrip(WASTE_BYTE)
+    codev_type = struct.unpack(IB16, c[298:300])[0]
+    phase_avg_count = struct.unpack(IB16, c[300:302])[0]
+    sub_sys_err = struct.unpack(IB16, c[302:304])[0]
     # 305-320 unused
-    part_sn = c[320:360].decode(ZYGO_ENC)
-    refractive_index = struct.unpack(FB32, c[360:364])
+    part_sn = c[320:360].decode(ZYGO_ENC).rstrip(WASTE_BYTE)
+    refractive_index = struct.unpack(FB32, c[360:364])[0]
     remove = {
-        'tilt': struct.unpack(IB16, c[364:366]),
-        'fringes': struct.unpack(IB16, c[366:368]),
+        'tilt': struct.unpack(IB16, c[364:366])[0],
+        'fringes': struct.unpack(IB16, c[366:368])[0],
     }
-    max_area = struct.unpack(IB32, c[368:372])
-    setup_type = struct.unpack(IB16, c[372:374])
-    wrapped = struct.unpack(IB16, c[374:376])
-    pre_connect_filter = struct.unpack(FB32, c[376:380])
+    max_area = struct.unpack(IB32, c[368:372])[0]
+    setup_type = struct.unpack(IB16, c[372:374])[0]
+    wrapped = struct.unpack(IB16, c[374:376])[0]
+    pre_connect_filter = struct.unpack(FB32, c[376:380])[0]
     wavelength_in = {
-        1: struct.unpack(FB32, c[386:390]),
-        2: struct.unpack(FB32, c[380:384]),
-        3: struct.unpack(FB32, c[390:394]),
-        4: struct.unpack(FB32, c[394:398]),
-        'fold': struct.unpack(IB16, c[386:390]),
+        1: struct.unpack(FB32, c[386:390])[0],
+        2: struct.unpack(FB32, c[380:384])[0],
+        3: struct.unpack(FB32, c[390:394])[0],
+        4: struct.unpack(FB32, c[394:398])[0],
+        'fold': struct.unpack(IB16, c[384:386])[0],
     }
-    wavelength_select = c[398:406].decode(ZYGO_ENC)
-    fda_res = struct.unpack(IB16, c[406:408])
-    scan_description = c[408:428].decode(ZYGO_ENC)
+    wavelength_select = c[398:406].decode(ZYGO_ENC).rstrip(WASTE_BYTE)
+    fda_res = struct.unpack(IB16, c[406:408])[0]
+    scan_description = c[408:428].decode(ZYGO_ENC).rstrip(WASTE_BYTE)
     # n_fiducials = struct.unpack(IB16, c[428:430])  # skip - redundant
     fiducials = [
-        struct.unpack(FB32, c[430:434]),
-        struct.unpack(FB32, c[434:438]),
-        struct.unpack(FB32, c[438:442]),
-        struct.unpack(FB32, c[442:446]),
-        struct.unpack(FB32, c[446:450]),
-        struct.unpack(FB32, c[450:454]),
-        struct.unpack(FB32, c[454:458]),
-        struct.unpack(FB32, c[458:462]),
-        struct.unpack(FB32, c[462:466]),
-        struct.unpack(FB32, c[466:470]),
-        struct.unpack(FB32, c[470:474]),
-        struct.unpack(FB32, c[474:478]),
-        struct.unpack(FB32, c[478:482]),
-        struct.unpack(FB32, c[482:486]),
+        struct.unpack(FB32, c[430:434])[0],
+        struct.unpack(FB32, c[434:438])[0],
+        struct.unpack(FB32, c[438:442])[0],
+        struct.unpack(FB32, c[442:446])[0],
+        struct.unpack(FB32, c[446:450])[0],
+        struct.unpack(FB32, c[450:454])[0],
+        struct.unpack(FB32, c[454:458])[0],
+        struct.unpack(FB32, c[458:462])[0],
+        struct.unpack(FB32, c[462:466])[0],
+        struct.unpack(FB32, c[466:470])[0],
+        struct.unpack(FB32, c[470:474])[0],
+        struct.unpack(FB32, c[474:478])[0],
+        struct.unpack(FB32, c[478:482])[0],
+        struct.unpack(FB32, c[482:486])[0],
     ]
     pixel_dims = {
-        'width': struct.unpack(FB32, c[486:490]),
-        'height': struct.unpack(FB32, c[490:494])
+        'width': struct.unpack(FB32, c[486:490])[0],
+        'height': struct.unpack(FB32, c[490:494])[0]
     }
-    exit_pupil_diameter = struct.unpack(FB32, c[494:498])
-    light_level_percent = struct.unpack(FB32, c[498:502])
+    exit_pupil_diameter = struct.unpack(FB32, c[494:498])[0]
+    light_level_percent = struct.unpack(FB32, c[498:502])[0]
     coords = {
-        'state': struct.unpack(IL32, c[502:506]),
-        'x': struct.unpack(FL32, c[506:510]),
-        'y': struct.unpack(FL32, c[510:514]),
-        'z': struct.unpack(FL32, c[514:518]),
-        'a': struct.unpack(FL32, c[518:522]),  # x rotation
-        'b': struct.unpack(FL32, c[522:526]),  # y rotation
-        'c': struct.unpack(FL32, c[526:530]),  # z rotation
+        'state': struct.unpack(IL32, c[502:506])[0],
+        'x': struct.unpack(FL32, c[506:510])[0],
+        'y': struct.unpack(FL32, c[510:514])[0],
+        'z': struct.unpack(FL32, c[514:518])[0],
+        'a': struct.unpack(FL32, c[518:522])[0],  # x rotation
+        'b': struct.unpack(FL32, c[522:526])[0],  # y rotation
+        'c': struct.unpack(FL32, c[526:530])[0],  # z rotation
     }
-    coherence_mode = struct.unpack(IL16, c[530:532])
-    surface_filter = struct.unpack(IL16, c[532:534])
-    sys_err_filename = c[534:562].decode(ZYGO_ENC)
-    zoom_descr = c[562:570].decode(ZYGO_ENC)
+    coherence_mode = struct.unpack(IL16, c[530:532])[0]
+    surface_filter = struct.unpack(IL16, c[532:534])[0]
+    sys_err_filename = c[534:562].decode(ZYGO_ENC).rstrip(WASTE_BYTE)
+    zoom_descr = c[562:570].decode(ZYGO_ENC).rstrip(WASTE_BYTE)
     # maybe can make a part dict, merge with above part_thickness, etc?
-    alpha_part = struct.unpack(FL32, c[570:574])
-    beta_part = struct.unpack(FL32, c[574:578])
-    dist_part = struct.unpack(FL32, c[578:582])
+    alpha_part = struct.unpack(FL32, c[570:574])[0]
+    beta_part = struct.unpack(FL32, c[574:578])[0]
+    dist_part = struct.unpack(FL32, c[578:582])[0]
     cam_split = {
-        'loc_x': struct.unpack(IL16, c[582:584]),
-        'loc_y': struct.unpack(IL16, c[584:586]),
-        'trans_x': struct.unpack(IL16, c[586:588]),
-        'trans_y': struct.unpack(IL16, c[588:590]),
+        'loc_x': struct.unpack(IL16, c[582:584])[0],
+        'loc_y': struct.unpack(IL16, c[584:586])[0],
+        'trans_x': struct.unpack(IL16, c[586:588])[0],
+        'trans_y': struct.unpack(IL16, c[588:590])[0],
     }
     material = {
-        'a': c[590:614].decode(ZYGO_ENC),
-        'b': c[614:638].decode(ZYGO_ENC)
+        'a': c[590:614].decode(ZYGO_ENC).rstrip(WASTE_BYTE),
+        'b': c[614:638].decode(ZYGO_ENC).rstrip(WASTE_BYTE),
     }
     # 639-642 unused
     dmi_center = {
-        'x': struct.unpack(FL32, c[642:646]),
-        'y': struct.unpack(FL32, c[646:650]),
+        'x': struct.unpack(FL32, c[642:646])[0],
+        'y': struct.unpack(FL32, c[646:650])[0],
     }
-    sph_distortion_correction = struct.unpack(IL16, c[650:652])
+    sph_distortion_correction = struct.unpack(IL16, c[650:652])[0]
     # 653-654 unused
     sph_dist = {
-        'part_na': struct.unpack(FL32, c[654:658]),
-        'part_radius': struct.unpack(FL32, c[658:662]),
-        'cal_na': struct.unpack(FL32, c[662:666]),
-        'cal_radius': struct.unpack(FL32, c[666:670]),
+        'part_na': struct.unpack(FL32, c[654:658])[0],
+        'part_radius': struct.unpack(FL32, c[658:662])[0],
+        'cal_na': struct.unpack(FL32, c[662:666])[0],
+        'cal_radius': struct.unpack(FL32, c[666:670])[0],
     }
-    surface_type = struct.unpack(IL16, c[670:672])
-    ac_surface_type = struct.unpack(IL16, c[672:674])
-    z_pos = struct.unpack(FL32, c[674:678])
-    power_mul = struct.unpack(FL32, c[678:682])
-    focus_mul = struct.unpack(FL32, c[682:686])
-    roc_focus_cal_factor = struct.unpack(FL32, c[686:690])
-    roc_power_cal_factor = struct.unpack(FL32, c[690:694])
+    surface_type = struct.unpack(IL16, c[670:672])[0]
+    ac_surface_type = struct.unpack(IL16, c[672:674])[0]
+    z_pos = struct.unpack(FL32, c[674:678])[0]
+    power_mul = struct.unpack(FL32, c[678:682])[0]
+    focus_mul = struct.unpack(FL32, c[682:686])[0]
+    roc_focus_cal_factor = struct.unpack(FL32, c[686:690])[0]
+    roc_power_cal_factor = struct.unpack(FL32, c[690:694])[0]
     ftp_pos = {
-        'left': struct.unpack(FL32, c[694:698]),
-        'right': struct.unpack(FL32, c[698:702]),
-        'pitch': struct.unpack(FL32, c[702:706]),
-        'roll': struct.unpack(FL32, c[706:710]),
+        'left': struct.unpack(FL32, c[694:698])[0],
+        'right': struct.unpack(FL32, c[698:702])[0],
+        'pitch': struct.unpack(FL32, c[702:706])[0],
+        'roll': struct.unpack(FL32, c[706:710])[0],
     }
-    min_mod_percent = struct.unpack(FL32, c[710:714])
-    max_intens = struct.unpack(IL32, c[714:718])
-    ring_of_fire = struct.unpack(IL16, c[718:720])  # lol wyd zygo
+    min_mod_percent = struct.unpack(FL32, c[710:714])[0]
+    max_intens = struct.unpack(IL32, c[714:718])[0]
+    ring_of_fire = struct.unpack(IL16, c[718:720])[0]  # lol wyd zygo
     # 721 unused
     rc = {
-        'orientation': struct.unpack(C, c[721:722]),
-        'distance': struct.unpack(FL32, c[722:726]),
-        'angle': struct.unpack(FL32, c[726:730]),
-        'diameter': struct.unpack(FL32, c[730:734]),
+        'orientation': struct.unpack(C, c[721:722])[0],
+        'distance': struct.unpack(FL32, c[722:726])[0],
+        'angle': struct.unpack(FL32, c[726:730])[0],
+        'diameter': struct.unpack(FL32, c[730:734])[0],
     }
-    rem_fringes_mode = struct.unpack(IB16, c[734:736])
+    rem_fringes_mode = struct.unpack(IB16, c[734:736])[0]
     # 737 unused
-    ftpsi_phase_res = struct.unpack(IL16, c[737:738])
-    frames_acquired = struct.unpack(IL16, c[738:740])
-    cavity_type = struct.unpack(IL16, c[740:742])
-    cam_frame_rate = struct.unpack(FL32, c[742:746])
-    tune_range = struct.unpack(FL32, c[746:750])
+    ftpsi_phase_res = struct.unpack(uint8, c[737:738])[0]
+    frames_acquired = struct.unpack(IL16, c[738:740])[0]
+    cavity_type = struct.unpack(IL16, c[740:742])[0]
+    cam_frame_rate = struct.unpack(FL32, c[742:746])[0]
+    tune_range = struct.unpack(FL32, c[746:750])[0]
     cal_pix = {
-        'x': struct.unpack(IL16, c[750:752]),
-        'y': struct.unpack(IL16, c[752:754]),
+        'x': struct.unpack(IL16, c[750:752])[0],
+        'y': struct.unpack(IL16, c[752:754])[0],
     }
     # n_test_cal_pts = struct.unpack(IL16, c[754:756])  # not bothering to read
     # n_ref_cal_pts = struct.unpack(IL16, c[756:758])   # these, redundant
     test_cal_pts = [
-        struct.unpack(FL32, c[758:762]),
-        struct.unpack(FL32, c[762:766]),
-        struct.unpack(FL32, c[766:770]),
-        struct.unpack(FL32, c[770:774]),
+        struct.unpack(FL32, c[758:762])[0],
+        struct.unpack(FL32, c[762:766])[0],
+        struct.unpack(FL32, c[766:770])[0],
+        struct.unpack(FL32, c[770:774])[0],
     ]
     ref_cal_pts = [
-        struct.unpack(FL32, c[774:778]),
-        struct.unpack(FL32, c[778:782]),
-        struct.unpack(FL32, c[782:786]),
-        struct.unpack(FL32, c[786:790]),
+        struct.unpack(FL32, c[774:778])[0],
+        struct.unpack(FL32, c[778:782])[0],
+        struct.unpack(FL32, c[782:786])[0],
+        struct.unpack(FL32, c[786:790])[0],
     ]
-    test_cal_pix_opd = struct.unpack(FL32, c[790:794])
-    test_ref_pix_opd = struct.unpack(FL32, c[794:798])
-    flash_phase_cd_mask = struct.unpack(FL32, c[798:802])
-    flash_phase_alias_mask = struct.unpack(FL32, c[802:806])
-    scan_direction = struct.unpack(uint8, c[806:806])
+    test_cal_pix_opd = struct.unpack(FL32, c[790:794])[0]
+    test_ref_pix_opd = struct.unpack(FL32, c[794:798])[0]
+    flash_phase_cd_mask = struct.unpack(FL32, c[798:802])[0]
+    flash_phase_alias_mask = struct.unpack(FL32, c[802:806])[0]
+    flask_phase_filter = struct.unpack(FL32, c[806:810])[0]
+    scan_direction = struct.unpack(uint8, c[810:811])[0]
     # 812 - 814 unused
-    ftpsi_res_factor = struct.unpack(IL16, c[814:816])
+    ftpsi_res_factor = struct.unpack(IL16, c[814:816])[0]
     # 835 - 900 films, for later
     # 901 - 4096 unused
 
@@ -624,20 +629,195 @@ def read_zygo_metadata(file_contents):
         'direction': scan_direction,
         'scan_description': scan_description,
     }
-    all_vars = [magic_number, header, metropro_version, ac, cn, timestamp, comment,
-        source, scale_factor, wavelength, numerical_aperture, obliquity_factor, magnification,
-        lateral_resolution, acq_type, intensity_average_count, ramp, sfac_limit, part_thickness,
-        sw_llc, target_range, rad_crv_measure_seq, min_mod, min_mod_count, phase_res, min_area,
-        discontinuity, connect_order, sign, camera, _sys, obj_name, part_name, codev_type,
-        phase_avg_count, sub_sys_err, part_sn, refractive_index, remove, max_area, setup_type,
-        wrapped, pre_connect_filter, wavelength_in, wavelength_select, fda_res, scan, fiducials,
-        pixel_dims, exit_pupil_diameter, light_level_percent, coords, coherence_mode, surface_filter,
-        sys_err_filename, zoom_descr, alpha_part, beta_part, dist_part, cam_split, material,
-        dmi_center, sph_distortion_correction, sph_dist, surface_type, ac_surface_type, z_pos,
-        power_mul, focus_mul, roc_focus_cal_factor, roc_power_cal_factor, ftp_pos,
-        min_mod_percent, max_intens, ring_of_fire, rc, rem_fringes_mode, ftpsi_phase_res,
-        frames_acquired, cavity_type, cam_frame_rate, tune_range, cal_pix,
-        ref_cal_pts, test_cal_pts, test_cal_pix_opd, test_ref_pix_opd, flash_phase_cd_mask,
-        ftpsi_res_factor]
+    all_vars = [
+        magic_number,
+        header,
+        swtype,
+        swdate,
+        metropro_version,
+        ac,
+        cn,
+        timestamp,
+        comment,
+        source,
+        scale_factor,
+        wavelength,
+        numerical_aperture,
+        obliquity_factor,
+        magnification,
+        lateral_resolution,
+        acq_type,
+        intensity_average_count,
+        ramp,
+        sfac_limit,
+        part_thickness,
+        sw_llc,
+        target_range,
+        rad_crv_measure_seq,
+        min_mod,
+        min_mod_count,
+        phase_res,
+        min_area,
+        discontinuity,
+        connect_order,
+        sign,
+        camera,
+        _sys,
+        obj_name,
+        part_name,
+        codev_type,
+        phase_avg_count,
+        sub_sys_err,
+        part_sn,
+        refractive_index,
+        remove,
+        max_area,
+        setup_type,
+        wrapped,
+        pre_connect_filter,
+        wavelength_in,
+        wavelength_select,
+        fda_res,
+        scan,
+        fiducials,
+        pixel_dims,
+        exit_pupil_diameter,
+        light_level_percent,
+        coords,
+        coherence_mode,
+        surface_filter,
+        sys_err_filename,
+        zoom_descr,
+        alpha_part,
+        beta_part,
+        dist_part,
+        cam_split,
+        material,
+        dmi_center,
+        sph_distortion_correction,
+        sph_dist,
+        surface_type,
+        ac_surface_type,
+        z_pos,
+        power_mul,
+        focus_mul,
+        roc_focus_cal_factor,
+        roc_power_cal_factor,
+        ftp_pos,
+        min_mod_percent,
+        max_intens,
+        ring_of_fire,
+        rc,
+        rem_fringes_mode,
+        ftpsi_phase_res,
+        frames_acquired,
+        cavity_type,
+        cam_frame_rate,
+        tune_range,
+        cal_pix,
+        ref_cal_pts,
+        test_cal_pts,
+        test_cal_pix_opd,
+        test_ref_pix_opd,
+        flash_phase_cd_mask,
+        flash_phase_alias_mask,
+        flask_phase_filter,
+        ftpsi_res_factor,
+    ]
+    all_keys = [
+        'magic_number',
+        'header',
+        'swtype',
+        'swdate',
+        'metropro_version',
+        'ac',
+        'cn',
+        'timestamp',
+        'comment',
+        'source',
+        'scale_factor',
+        'wavelength',
+        'numerical_aperture',
+        'obliquity_factor',
+        'magnification',
+        'lateral_resolution',
+        'acq_type',
+        'intensity_average_count',
+        'ramp',
+        'sfac_limit',
+        'part_thickness',
+        'sw_llc',
+        'target_range',
+        'rad_crv_measure_seq',
+        'min_mod',
+        'min_mod_count',
+        'phase_res',
+        'min_area',
+        'discontinuity',
+        'connect_order',
+        'sign',
+        'camera',
+        '_sys',
+        'obj_name',
+        'part_name',
+        'codev_type',
+        'phase_avg_count',
+        'sub_sys_err',
+        'part_sn',
+        'refractive_index',
+        'remove',
+        'max_area',
+        'setup_type',
+        'wrapped',
+        'pre_connect_filter',
+        'wavelength_in',
+        'wavelength_select',
+        'fda_res',
+        'scan',
+        'fiducials',
+        'pixel_dims',
+        'exit_pupil_diameter',
+        'light_level_percent',
+        'coords',
+        'coherence_mode',
+        'surface_filter',
+        'sys_err_filename',
+        'zoom_descr',
+        'alpha_part',
+        'beta_part',
+        'dist_part',
+        'cam_split',
+        'material',
+        'dmi_center',
+        'sph_distortion_correction',
+        'sph_dist',
+        'surface_type',
+        'ac_surface_type',
+        'z_pos',
+        'power_mul',
+        'focus_mul',
+        'roc_focus_cal_factor',
+        'roc_power_cal_factor',
+        'ftp_pos',
+        'min_mod_percent',
+        'max_intens',
+        'ring_of_fire',
+        'rc',
+        'rem_fringes_mode',
+        'ftpsi_phase_res',
+        'frames_acquired',
+        'cavity_type',
+        'cam_frame_rate',
+        'tune_range',
+        'cal_pix',
+        'ref_cal_pts',
+        'test_cal_pts',
+        'test_cal_pix_opd',
+        'test_ref_pix_opd',
+        'flash_phase_cd_mask',
+        'flash_phase_alias_mask',
+        'flask_phase_filter',
+        'ftpsi_res_factor',
+    ]
 
-    return {var:var for var in all_vars}
+    return {k:v for k, v in zip(all_keys, all_vars)}
