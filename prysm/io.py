@@ -364,16 +364,20 @@ def read_zygo_dat(file):
         contents = fid.read()
 
     meta = read_zygo_metadata(contents)
-    print(meta)
-    w, h = meta['camera']['width'], meta['camera']['height']
-    img_len = w * h
+    #print(meta)
+    iw, ih = meta['ac']['width'], meta['ac']['height']
+    ilen = iw * ih  # intensity
+    pw, ph = meta['cn']['width'], meta['cn']['height']
+    plen = pw * ph  # phase
     header_len = meta['header']['size']
-    intensity = m.frombuffer(contents, offset=header_len, count=img_len*2, dtype=m.uint16)
-    intensity[intensity >= 2 ** 16 - 1] = m.nan
-    phase = m.frombuffer(contents, offset=header_len+img_len, count=img_len*4, dtype=m.int32).astype(config.precision)
-    phase[phase >= 2 ** 31 - 1] = m.nan
+
+    intensity = m.frombuffer(contents, offset=header_len, count=ilen, dtype=m.uint16).reshape((ih, iw))
+    # little-endian camera data, not sure if always need to byteswap, may break for some users...
+    phase_raw = m.frombuffer(contents, offset=header_len + ilen * 2, count=plen, dtype=m.int32)
+    phase = phase_raw.copy().byteswap(inplace=True).astype(config.precision).reshape((ph, pw))
+    phase[phase >= 2147483640] = m.nan
     phase *= (meta['scale_factor'] * meta['obliquity_factor'] * meta['wavelength'] /
-              ZYGO_PHASE_RES_FACTORS[meta['phase_res']])
+              ZYGO_PHASE_RES_FACTORS[meta['phase_res']])# * 1e9  # unit m to  nm
     return {
         'phase': phase,
         'intensity': intensity,
@@ -583,7 +587,7 @@ def read_zygo_metadata(file_contents):
     ring_of_fire = struct.unpack(IL16, c[718:720])[0]  # lol wyd zygo
     # 721 unused
     rc = {
-        'orientation': struct.unpack(C, c[721:722])[0],
+        'orientation': struct.unpack(C, c[721:722])[0].decode(ZYGO_ENC).rstrip(WASTE_BYTE),
         'distance': struct.unpack(FL32, c[722:726])[0],
         'angle': struct.unpack(FL32, c[726:730])[0],
         'diameter': struct.unpack(FL32, c[730:734])[0],
