@@ -1,6 +1,5 @@
 """Numerical optical propagation."""
 from .fttools import pad2d
-from .util import pupil_sample_to_psf_sample
 
 from prysm import mathops as m
 
@@ -44,3 +43,49 @@ def prop_pupil_plane_to_psf_plane(wavefunction, input_sample_spacing, prop_dist,
     unit_x = m.arange(-1 * (samples_x // 2), samples_x // 2) * sample_spacing
     unit_y = m.arange(-1 * (samples_y // 2), samples_y // 2) * sample_spacing
     return psf, unit_x, unit_y
+
+
+def pupil_sample_to_psf_sample(pupil_sample, num_samples, wavelength, efl):
+    """Convert pupil sample spacing to PSF sample spacing.
+
+    Parameters
+    ----------
+    pupil_sample : `float`
+        sample spacing in the pupil plane
+    num_samples : `int`
+        number of samples present in both planes (must be equal)
+    wavelength : `float`
+        wavelength of light, in microns
+    efl : `float`
+        effective focal length of the optical system in mm
+
+    Returns
+    -------
+    `float`
+        the sample spacing in the PSF plane
+
+    """
+    return (wavelength * efl * 1e3) / (pupil_sample * num_samples)
+
+
+def psf_sample_to_pupil_sample(psf_sample, num_samples, wavelength, efl):
+    """Convert PSF sample spacing to pupil sample spacing.
+
+    Parameters
+    ----------
+    psf_sample : `float`
+        sample spacing in the PSF plane
+    num_samples : `int`
+        number of samples present in both planes (must be equal)
+    wavelength : `float`
+        wavelength of light, in microns
+    efl : `float`
+        effective focal length of the optical system in mm
+
+    Returns
+    -------
+    `float`
+        the sample spacing in the pupil plane
+
+    """
+    return (wavelength * efl * 1e3) / (psf_sample * num_samples)

@@ -58,13 +58,6 @@ def test_fold_array_function():
     assert util.fold_array(arr, axis=0).all()
 
 
-@pytest.mark.parametrize('dzeta', [1 / 128.0, 1 / 256.0, 11.123 / 128.0, 1e10 / 2048.0])
-def test_psf_to_pupil_sample_inverts_pupil_to_psf_sample(dzeta):
-    samples, wvl, efl = 128, 0.55, 10
-    psf_sample = util.pupil_sample_to_psf_sample(dzeta, samples, wvl, efl)
-    assert util.psf_sample_to_pupil_sample(psf_sample, samples, wvl, efl) == dzeta
-
-
 def test_guarantee_array_functionality():
     a_float = 5.0
     an_int = 10

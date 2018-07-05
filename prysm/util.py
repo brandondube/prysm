@@ -48,52 +48,6 @@ def is_power_of_2(value):
         return bool(value and not value & (value - 1))
 
 
-def pupil_sample_to_psf_sample(pupil_sample, num_samples, wavelength, efl):
-    """Convert pupil sample spacing to PSF sample spacing.
-
-    Parameters
-    ----------
-    pupil_sample : `float`
-        sample spacing in the pupil plane
-    num_samples : `int`
-        number of samples present in both planes (must be equal)
-    wavelength : `float`
-        wavelength of light, in microns
-    efl : `float`
-        effective focal length of the optical system in mm
-
-    Returns
-    -------
-    `float`
-        the sample spacing in the PSF plane
-
-    """
-    return (wavelength * efl * 1e3) / (pupil_sample * num_samples)
-
-
-def psf_sample_to_pupil_sample(psf_sample, num_samples, wavelength, efl):
-    """Convert PSF sample spacing to pupil sample spacing.
-
-    Parameters
-    ----------
-    psf_sample : `float`
-        sample spacing in the PSF plane
-    num_samples : `int`
-        number of samples present in both planes (must be equal)
-    wavelength : `float`
-        wavelength of light, in microns
-    efl : `float`
-        effective focal length of the optical system in mm
-
-    Returns
-    -------
-    `float`
-        the sample spacing in the pupil plane
-
-    """
-    return (wavelength * efl * 1e3) / (psf_sample * num_samples)
-
-
 def correct_gamma(img, encoding=2.2):
     """Apply an inverse gamma curve to image data that linearizes the given encoding.
 
