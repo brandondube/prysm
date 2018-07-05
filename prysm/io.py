@@ -342,9 +342,9 @@ def read_any_trioptics_mht(file, metadata=False):
 
 ZYGO_ENC = 'utf-8'  # may be ASCII, cp1252...
 ZYGO_PHASE_RES_FACTORS = {
-    0: 4096
+    0: 4096,
     1: 32768,
-
+}
 
 def read_zygo_dat(file):
     """Read the contents of a zygo binary (.dat) file.
@@ -367,8 +367,9 @@ def read_zygo_dat(file):
     w, h = meta['camera']['width'], meta['camera']['height']
     img_len = w * h
     header_len = meta['header']['size']
-    intensity = m.frombuffer(contents, offset=header_len, count=img_len*2, dtype=m.uint16)    phase = m.frombuffer(contents, offset=header_len+img_len, count=img_len*4, dtype=m.int32).astype(config.precision)
+    intensity = m.frombuffer(contents, offset=header_len, count=img_len*2, dtype=m.uint16)
     intensity[intensity >= 2 ** 16 - 1] = m.nan
+    phase = m.frombuffer(contents, offset=header_len+img_len, count=img_len*4, dtype=m.int32).astype(config.precision)
     phase[phase >= 2 ** 31 - 1] = m.nan
     phase *= (meta['scale_factor'] * meta['obliquity_factor'] * meta['wavelength'] /
               ZYGO_PHASE_RES_FACTORS[meta['phase_res']])
@@ -426,7 +427,7 @@ def read_zygo_metadata(file_contents):
     }
     cn = {
         'x': struct.unpack(IB16, c[64:66]),
-        'y': struct.unpack(IB16, c[66:68])
+        'y': struct.unpack(IB16, c[66:68]),
         'width': struct.unpack(IB16, c[68:70]),
         'height': struct.unpack(IB16, c[70:72]),
         'n_bytes': struct.unpack(IB32, c[72:76]),
@@ -538,7 +539,7 @@ def read_zygo_metadata(file_contents):
     beta_part = struct.unpack(FL32, c[574:578])
     dist_part = struct.unpack(FL32, c[578:582])
     cam_split = {
-        'loc_x': struct.unpack(IL16, c[582:584])
+        'loc_x': struct.unpack(IL16, c[582:584]),
         'loc_y': struct.unpack(IL16, c[584:586]),
         'trans_x': struct.unpack(IL16, c[586:588]),
         'trans_y': struct.unpack(IL16, c[588:590]),
@@ -578,10 +579,10 @@ def read_zygo_metadata(file_contents):
     ring_of_fire = struct.unpack(IL16, c[718:720])  # lol wyd zygo
     # 721 unused
     rc = {
-        'orientation': struct.unpack(C, c[721:722])
-        'distance': struct.unpack(FL32, c[722:726])
-        'angle': struct.unpack(FL32, c[726:730])
-        'diameter': struct.unpack(FL32, c[730:734])
+        'orientation': struct.unpack(C, c[721:722]),
+        'distance': struct.unpack(FL32, c[722:726]),
+        'angle': struct.unpack(FL32, c[726:730]),
+        'diameter': struct.unpack(FL32, c[730:734]),
     }
     rem_fringes_mode = struct.unpack(IB16, c[734:736])
     # 737 unused
