@@ -3,14 +3,24 @@ from prysm.io import read_zygo_dat
 from prysm.util import share_fig_ax, pv, rms, Ra
 from prysm import mathops as m
 
+
 class Interferogram(object):
+    labels = {
+        True: (r'x [$\mu m$]', r'y [$\mu m$]'),
+        False: ('x [px]', 'y [px]')
+    }
     """Class containing logic and data for working with interferometric data."""
-    def __init__(self, phase, intensity=None, meta=None):
+    def __init__(self, phase, intensity=None, x=None, y=None, meta=None):
         self.phase = phase
         self.intensity = intensity
         self.meta = meta
-        self.x = m.arange(self.phase.shape[1])
-        self.y = m.arange(self.phase.shape[0])
+        if x is None:  # assume x, y given together
+            self.x = m.arange(phase.shape[1])
+            self.y = m.arange(phase.shape[0])
+            self._realxy = False
+        else:
+            self.x, self.y = x, y
+            self._realxy = True
 
     @property
     def pv(self):
@@ -70,12 +80,17 @@ class Interferogram(object):
                        cmap=cmap,
                        interpolation=interp_method)
         cb = fig.colorbar(im, label='Height [nm]', ax=ax, fraction=0.046)
-        ax.set(xlabel=r'x, [$\mu m$]', ylabel=r'y, [$\mu m$]')
+        xlab, ylab = self.__class__.labels[self._realxy]
+        ax.set(xlabel=xlab, ylabel=ylab)
         return fig, ax
 
     @staticmethod
     def from_zygo_dat(path):
-        return Interferogram(**read_zygo_dat(path))
+        zydat = read_zygo_dat(path)
+        res = zydat['meta']['lateral_resolution'] * 1e6  # m to um
+        phase = zydat['phase']
+        return Interferogram(phase=phase, intensity=zydat['intensity'], meta=zydat['meta'],
+                             x=m.arange(phase.shape[1]) * res, y=m.arange(phase.shape[0]) * res)
 
 
 
