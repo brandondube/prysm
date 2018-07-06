@@ -98,6 +98,7 @@ allfuncs = set((
     'concatenate',
     'cumsum',
     'any',
+    'all',
     'isfinite',
     'ceil',
     'floor',
@@ -112,7 +113,6 @@ allfuncs = set((
 allfuncs_cupy_missing = set((
     'searchsorted',
     'gradient',
-    'sinc',
     ))
 
 fftfuncs = frozenset((
