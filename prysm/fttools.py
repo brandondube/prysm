@@ -42,6 +42,29 @@ def pad2d(array, Q=2, value=0):
     return out
 
 
+def unpad2d(array, Q=2):
+    """Unpad an array after applying pad2d, above.  Will not work for original arrays of odd length.
+
+    Parameters
+    ----------
+    array : `numpy.ndarray`
+        array of data
+    Q : `float`
+        oversampling factor, same as pad2d
+
+    Returns
+    -------
+    `numpy.ndarray`
+        unpadded data with shape = array.shape // 2
+
+    """
+    iw, ih = array.shape
+    ow, oh = iw / Q, ih / Q
+    dw, dh = iw - ow, ih - oh
+    cut_w, cut_h = int(dw // 2), int(dh // 2)
+    return array[cut_w:-cut_w,cut_h:-cut_h].copy()
+
+
 def forward_ft_unit(sample_spacing, samples):
     """Compute the units resulting from a fourier transform.
 
