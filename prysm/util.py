@@ -138,6 +138,23 @@ def share_fig_ax(fig=None, ax=None, numax=1, sharex=False, sharey=False):
     return fig, ax
 
 
+def pv(array):
+    """Return the PV value of the valid elements of an array.
+
+    Parameters
+    ----------
+    array : `numpy.ndarray`
+        array of values
+
+    Returns
+    -------
+    `float`
+        PV of the array
+    """
+    non_nan = m.isfinite(array)
+    return array[non_nan].max() - array[non_nan].min()
+
+
 def rms(array):
     """Return the RMS value of the valid elements of an array.
 

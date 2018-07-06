@@ -3,7 +3,7 @@
 from copy import deepcopy
 
 from .conf import config
-from .util import share_fig_ax, rms
+from .util import share_fig_ax, pv, rms
 from .coordinates import make_rho_phi_grid
 from .geometry import mcache
 
@@ -153,8 +153,7 @@ class Pupil(object):
         """Return the peak-to-valley wavefront error as a `float`.
 
         """
-        non_nan = m.isfinite(self.phase)
-        return self.phase[non_nan].max() - self.phase[non_nan].min()
+        return pv(self.phase)
 
     @property
     def rms(self):
