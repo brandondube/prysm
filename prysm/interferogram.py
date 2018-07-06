@@ -25,20 +25,44 @@ class Interferogram(object):
         return Ra(self.phase)
 
     def remove_tiptilt(self):
+        """Remove tip/tilt from the data by least squares fitting and subtracting a plane."""
         plane = fit_plane(self.x, self.y, self.phase)
         self.phase -= plane
         return self
 
     def remove_piston(self):
+        """Remove piston from the data by subtracting the mean value."""
         self.phase -= self.phase[m.isfinite(self.phase)].mean()
         return self
 
     def remove_piston_tiptilt(self):
+        """Remove piston/tip/tilt from the data, see remove_tiptilt and remove_piston."""
         self.remove_tiptilt()
         self.remove_piston()
         return self
 
     def plot2d(self, cmap='inferno', interp_method='lanczos', fig=None, ax=None):
+        """Plot the data in 2D.
+
+        Parameters
+        ----------
+        cmap : `str`
+            colormap to use, passed directly to matplotlib
+        interp_method : `str`
+            interpolation method to use, passed directly to matplotlib
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        """
         fig, ax = share_fig_ax(fig, ax)
 
         im = ax.imshow(self.phase,
