@@ -377,7 +377,7 @@ def read_zygo_dat(file):
     phase = phase_raw.copy().byteswap(inplace=True).astype(config.precision).reshape((ph, pw))
     phase[phase >= 2147483640] = m.nan
     phase *= (meta['scale_factor'] * meta['obliquity_factor'] * meta['wavelength'] /
-              ZYGO_PHASE_RES_FACTORS[meta['phase_res']])# * 1e9  # unit m to  nm
+              ZYGO_PHASE_RES_FACTORS[meta['phase_res']]) * 1e9  # unit m to nm
     return {
         'phase': phase,
         'intensity': intensity,
