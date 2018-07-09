@@ -369,6 +369,8 @@ def read_zygo_dat(file, multi_intensity_action='first'):
 
     meta = read_zygo_metadata(contents)
     iw, ih, ib = meta['ac']['width'], meta['ac']['height'], meta['ac']['n_buckets']
+    if ib == 0:
+        ib = 1
     ilen = iw * ih * ib  # intensity
     pw, ph = meta['cn']['width'], meta['cn']['height']
     plen = pw * ph  # phase
