@@ -41,6 +41,16 @@ class Interferogram(object):
     def dropout_percentage(self):
         return m.count_nonzero(~m.isfinite(self.phase)) / self.phase.size * 100
 
+    def crop(self):
+        nans = m.isfinite(self.phase)
+        nancols = m.any(nans, axis=0)
+        nanrows = m.any(nans, axis=1)
+
+        left, right = nanrows.argmax(), nanrows[::-1].argmax()
+        top, bottom = nancols.argmax(), nancols[::-1].argmax()
+        self.phase = self.phase[left:-right, top:-bottom]
+        return self
+
     def remove_tiptilt(self):
         """Remove tip/tilt from the data by least squares fitting and subtracting a plane."""
         plane = fit_plane(self.x, self.y, self.phase)
