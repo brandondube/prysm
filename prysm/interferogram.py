@@ -7,13 +7,24 @@ from prysm import mathops as m
 
 class Interferogram(object):
     labels = {
-        True: (r'x [$\mu m$]', r'y [$\mu m$]'),
-        False: ('x [px]', 'y [px]')
+        True: {
+            'um': (r'x [$\mu m$]', r'y [$\mu m$]'),
+            'mm': ('x [mm]', 'y [mm]'),
+        },
+        False: {
+            'um': ('x [px]', 'y [px]'),
+            'mm': ('x [px]', 'y [px]'),
+        }
+    }
+    scale_map = {
+        'um': 1e6,
+        'mm': 1e3,
     }
     """Class containing logic and data for working with interferometric data."""
-    def __init__(self, phase, intensity=None, x=None, y=None, meta=None):
+    def __init__(self, phase, intensity=None, x=None, y=None, scale='um', meta=None):
         self.phase = phase
         self.intensity = intensity
+        self.scale = scale
         self.meta = meta
         if x is None:  # assume x, y given together
             self.x = m.arange(phase.shape[1])
@@ -104,17 +115,35 @@ class Interferogram(object):
                        clim=clim,
                        interpolation=interp_method)
         fig.colorbar(im, label='Height [nm]', ax=ax, fraction=0.046)
-        xlab, ylab = self.__class__.labels[self._realxy]
+        xlab, ylab = self.__class__.labels[self._realxy][self.scale]
         ax.set(xlabel=xlab, ylabel=ylab)
         return fig, ax
 
     @staticmethod
-    def from_zygo_dat(path):
-        zydat = read_zygo_dat(path)
-        res = zydat['meta']['lateral_resolution'] * 1e6  # m to um
+    def from_zygo_dat(path, multi_intensity_action='first', scale='um'):
+        """Create a new interferogram from a zygo dat file.
+
+        Parameters
+        ----------
+        path : path_like
+            path to a zygo dat file
+        multi_intensity_action : str, optional
+            see `io.read_zygo_dat`
+        scale : `str`, optional, {'um', 'mm'}
+            what xy scale to label the data with, microns or mm
+
+        Returns
+        -------
+        `Interferogram`
+            new Interferogram instance
+
+        """
+        zydat = read_zygo_dat(path, multi_intensity_action=multi_intensity_action)
+        res = zydat['meta']['lateral_resolution'] * Interferogram.scale_map[scale.lower()]
         phase = zydat['phase']
-        return Interferogram(phase=phase, intensity=zydat['intensity'], meta=zydat['meta'],
-                             x=m.arange(phase.shape[1]) * res, y=m.arange(phase.shape[0]) * res)
+        return Interferogram(phase=phase, intensity=zydat['intensity'],
+                             x=m.arange(phase.shape[1]) * res, y=m.arange(phase.shape[0]) * res,
+                             scale=scale.lower(), meta=zydat['meta'])
 
 
 def fit_plane(x, y, z):
