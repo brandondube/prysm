@@ -90,7 +90,33 @@ class Interferogram(object):
         self.remove_piston()
         return self
 
+    def mask(self, mask):
+        """Apply a mask to the data, expects an array of zeros (remove) and ones (keep)
+
+        Parameters
+        ----------
+        mask : TYPE
+            Description
+        """
+        hitpts = mask == 0
+        self.phase[hitpts] = m.nan
+        self.intensity[hitpts] = m.nan
+
     def bandreject(self, wllow, wlhigh):
+        """Apply a band-rejection filter to the phase (height) data.
+
+        Parameters
+        ----------
+        wllow : `float`
+            low wavelength (spatial period), units of self.scale
+        wlhigh : `float`
+            high wavelength (spatial period), units of self.scale
+
+        Returns
+        -------
+        `Interferogram`
+            in-place modified instance of self
+        """
         new_phase = bandreject_filter(self.phase, self.sample_spacing, wllow, wlhigh)
         new_phase[~m.isfinite(self.phase)] = m.nan
         self.phase = new_phase
