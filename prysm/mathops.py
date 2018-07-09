@@ -109,6 +109,7 @@ allfuncs = set((
     'argmax',
     'allclose',
     'frombuffer',
+    'count_nonzero',
 ))
 
 allfuncs_cupy_missing = set((
