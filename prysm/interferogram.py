@@ -64,7 +64,7 @@ class Interferogram(object):
         self.phase = new_phase
         return self
 
-    def plot2d(self, cmap='inferno', interp_method='lanczos', fig=None, ax=None):
+    def plot2d(self, cmap='inferno', clim=(None, None), interp_method='lanczos', fig=None, ax=None):
         """Plot the data in 2D.
 
         Parameters
@@ -91,6 +91,7 @@ class Interferogram(object):
         im = ax.imshow(self.phase,
                        extent=[self.x[0], self.x[-1], self.y[0], self.y[-1]],
                        cmap=cmap,
+                       clim=clim,
                        interpolation=interp_method)
         fig.colorbar(im, label='Height [nm]', ax=ax, fraction=0.046)
         xlab, ylab = self.__class__.labels[self._realxy]

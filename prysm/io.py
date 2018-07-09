@@ -340,19 +340,23 @@ def read_any_trioptics_mht(file, metadata=False):
     type_, data = identify_trioptics_measurement_type(file)
     return type_, TRIOPTICS_SWITCHBOARD[type_](data, metadata=metadata)
 
+
 ZYGO_ENC = 'utf-8'  # may be ASCII, cp1252...
 ZYGO_PHASE_RES_FACTORS = {
     0: 4096,
     1: 32768,
 }
 
-def read_zygo_dat(file):
+
+def read_zygo_dat(file, multi_intensity_action='first'):
     """Read the contents of a zygo binary (.dat) file.
 
     Parameters
     ----------
     file : path_like
         path to a file
+    multi_itensity_action : `str`, {'avg', 'first', 'last'}
+        action to take when handling multiple intensitiy frames, only avg is valid at this time
 
     Returns
     -------
@@ -364,14 +368,22 @@ def read_zygo_dat(file):
         contents = fid.read()
 
     meta = read_zygo_metadata(contents)
-    #print(meta)
-    iw, ih = meta['ac']['width'], meta['ac']['height']
-    ilen = iw * ih  # intensity
+    iw, ih, ib = meta['ac']['width'], meta['ac']['height'], meta['ac']['n_buckets']
+    ilen = iw * ih * ib  # intensity
     pw, ph = meta['cn']['width'], meta['cn']['height']
     plen = pw * ph  # phase
     header_len = meta['header']['size']
 
-    intensity = m.frombuffer(contents, offset=header_len, count=ilen, dtype=m.uint16).reshape((ih, iw))
+    intensity = m.frombuffer(contents, offset=header_len, count=ilen, dtype=m.uint16).reshape((ib, ih, iw))
+    if multi_intensity_action.lower() == 'avg':
+        intensity = intensity.mean(axis=0)
+    elif multi_intensity_action.lower() == 'first':
+        intensity = intensity[0]
+    elif multi_intensity_action.lower() == 'last':
+        intensity = intensity[-1]
+    else:
+        raise ValueError(f'multi_intensity_action {multi_intensity_action} not among valid options of avg, first, last.')
+
     # little-endian camera data, not sure if always need to byteswap, may break for some users...
     phase_raw = m.frombuffer(contents, offset=header_len + ilen * 2, count=plen, dtype=m.int32)
     phase = phase_raw.copy().byteswap(inplace=True).astype(config.precision).reshape((ph, pw))
