@@ -75,6 +75,7 @@ allfuncs = set((
     'arctan2',
     'arccos',
     'arcsin',
+    'sinc',
     'radians',
     'exp',
     'log',
