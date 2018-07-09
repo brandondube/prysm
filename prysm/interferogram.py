@@ -37,6 +37,10 @@ class Interferogram(object):
     def Ra(self):
         return Ra(self.phase)
 
+    @property
+    def dropout_percentage(self):
+        return m.count_nonzero(~m.isfinite(self.phase)) / self.phase.size * 100
+
     def remove_tiptilt(self):
         """Remove tip/tilt from the data by least squares fitting and subtracting a plane."""
         plane = fit_plane(self.x, self.y, self.phase)
@@ -102,7 +106,6 @@ class Interferogram(object):
                              x=m.arange(phase.shape[1]) * res, y=m.arange(phase.shape[0]) * res)
 
 
-
 def fit_plane(x, y, z):
     xx, yy = m.meshgrid(x, y)
     pts = m.isfinite(z)
@@ -134,5 +137,3 @@ def bandreject_filter(array, sample_spacing, wllow, wlhigh):
     fourier[mask] = 0
     out = m.fftshift(m.ifft2(m.ifftshift(fourier)))
     return out.real
-
-
