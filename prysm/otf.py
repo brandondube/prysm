@@ -5,7 +5,7 @@ import matplotlib as mpl
 
 from .psf import PSF
 from .fttools import forward_ft_unit
-from .util import correct_gamma, share_fig_ax
+from .util import share_fig_ax
 from .coordinates import polar_to_cart
 
 from prysm import mathops as m
