@@ -1,7 +1,11 @@
 """tools to analyze interferometric data."""
-from prysm.io import read_zygo_dat
-from prysm.util import share_fig_ax, pv, rms, Ra
-from prysm.fttools import forward_ft_unit
+from .io import read_zygo_dat
+from .fttools import forward_ft_unit
+from .util import share_fig_ax, pv, rms, Ra
+from ._zernike import defocus
+from .coordinates import cart_to_polar
+
+
 from prysm import mathops as m
 
 
@@ -60,6 +64,12 @@ class Interferogram(object):
         left, right = nanrows.argmax(), nanrows[::-1].argmax()
         top, bottom = nancols.argmax(), nancols[::-1].argmax()
         self.phase = self.phase[left:-right, top:-bottom]
+        self.y, self.x = self.y[left:-right], self.x[top:-bottom]
+        return self
+
+    def remove_piston(self):
+        """Remove piston from the data by subtracting the mean value."""
+        self.phase -= self.phase[m.isfinite(self.phase)].mean()
         return self
 
     def remove_tiptilt(self):
@@ -68,9 +78,10 @@ class Interferogram(object):
         self.phase -= plane
         return self
 
-    def remove_piston(self):
-        """Remove piston from the data by subtracting the mean value."""
-        self.phase -= self.phase[m.isfinite(self.phase)].mean()
+    def remove_power(self):
+        """Remove power from the data by least squares fitting."""
+        sphere = fit_sphere(self.phase)
+        self.phase -= sphere
         return self
 
     def remove_piston_tiptilt(self):
@@ -155,6 +166,20 @@ def fit_plane(x, y, z):
     coefs = m.lstsq(m.stack([xx_, yy_, flat]).T, z[pts].flatten(), rcond=None)[0]
     plane_fit = coefs[0] * xx + coefs[1] * yy + coefs[2]
     return plane_fit
+
+
+def fit_sphere(z):
+    x, y = m.linspace(-1, 1, z.shape[1]), m.linspace(-1, 1, z.shape[0])
+    xx, yy = m.meshgrid(x, y)
+    pts = m.isfinite(z)
+    xx_, yy_ = xx[pts].flatten(), yy[pts].flatten()
+    rho, phi = cart_to_polar(xx_, yy_)
+    focus = defocus(rho, phi)
+
+    coefs = m.lstsq(m.stack([focus, m.ones(focus.shape)]).T, z[pts].flatten(), rcond=None)[0]
+    rho, phi = cart_to_polar(xx, yy)
+    sphere = defocus(rho, phi) * coefs[0]
+    return sphere
 
 
 def bandreject_filter(array, sample_spacing, wllow, wlhigh):
