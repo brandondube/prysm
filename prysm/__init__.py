@@ -9,6 +9,7 @@ from prysm.standardzernike import StandardZernike
 from prysm.seidel import Seidel
 from prysm.psf import PSF, MultispectralPSF, RGBPSF, AiryDisk
 from prysm.otf import MTF
+from prysm.interferogram import Interferogram
 from prysm.geometry import (
     gaussian,
     rotated_ellipse,
@@ -23,7 +24,6 @@ from prysm.geometry import (
     dodecagon,
     trisdecagon
 )
-
 from prysm.objects import (
     Slit,
     Pinhole,
@@ -42,6 +42,7 @@ __all__ = [
     'Pupil',
     'FringeZernike',
     'StandardZernike',
+    'Interferogram',
     'Seidel',
     'PSF',
     'MultispectralPSF',
