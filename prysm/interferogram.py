@@ -1,56 +1,33 @@
 """tools to analyze interferometric data."""
+from ._phase import OpticalPhase
+from ._zernike import defocus
 from .io import read_zygo_dat
 from .fttools import forward_ft_unit
-from .util import share_fig_ax, pv, rms, Ra
-from ._zernike import defocus
 from .coordinates import cart_to_polar
 
 
 from prysm import mathops as m
 
 
-class Interferogram(object):
-    labels = {
-        True: {
-            'um': (r'x [$\mu m$]', r'y [$\mu m$]'),
-            'mm': ('x [mm]', 'y [mm]'),
-        },
-        False: {
-            'um': ('x [px]', 'y [px]'),
-            'mm': ('x [px]', 'y [px]'),
-        }
-    }
-    scale_map = {
-        'um': 1e6,
-        'mm': 1e3,
-    }
+class Interferogram(OpticalPhase):
     """Class containing logic and data for working with interferometric data."""
-    def __init__(self, phase, intensity=None, x=None, y=None, scale='um', meta=None):
-        self.phase = phase
-        self.intensity = intensity
-        self.scale = scale
-        self.meta = meta
+    def __init__(self, phase, intensity=None, x=None, y=None, scale='px', meta=None):
         if x is None:  # assume x, y given together
-            self.x = m.arange(phase.shape[1])
-            self.y = m.arange(phase.shape[0])
-            self._realxy = False
+            x = m.arange(phase.shape[1])
+            y = m.arange(phase.shape[0])
+            scale = 'px'
             self.lateral_res = None
-        else:
-            self.x, self.y = x, y
-            self._realxy = True
-            self.sample_spacing = x[1] - x[0]
 
-    @property
-    def pv(self):
-        return pv(self.phase)
+        super().__init__(unit_x=x, unit_y=y, phase=phase,
+                         wavelength=meta.get('wavelength'), phase_unit='nm', spatial_unit='m')
 
-    @property
-    def rms(self):
-        return rms(self.phase)
-
-    @property
-    def Ra(self):
-        return Ra(self.phase)
+        self.xaxis_label = 'X'
+        self.yaxis_label = 'Y'
+        self.zaxis_label = 'Height'
+        self.intensity = intensity
+        self.meta = meta
+        if scale is not 'px':
+            self.change_spatial_unit(to=scale, inplace=True)
 
     @property
     def dropout_percentage(self):
@@ -64,7 +41,7 @@ class Interferogram(object):
         left, right = nanrows.argmax(), nanrows[::-1].argmax()
         top, bottom = nancols.argmax(), nancols[::-1].argmax()
         self.phase = self.phase[left:-right, top:-bottom]
-        self.y, self.x = self.y[left:-right], self.x[top:-bottom]
+        self.unit_y, self.unit_x = self.unit_y[left:-right], self.unit_x[top:-bottom]
         return self
 
     def remove_piston(self):
@@ -74,7 +51,7 @@ class Interferogram(object):
 
     def remove_tiptilt(self):
         """Remove tip/tilt from the data by least squares fitting and subtracting a plane."""
-        plane = fit_plane(self.x, self.y, self.phase)
+        plane = fit_plane(self.unit_x, self.unit_y, self.phase)
         self.phase -= plane
         return self
 
@@ -122,40 +99,6 @@ class Interferogram(object):
         self.phase = new_phase
         return self
 
-    def plot2d(self, cmap='inferno', clim=(None, None), interp_method='lanczos', fig=None, ax=None):
-        """Plot the data in 2D.
-
-        Parameters
-        ----------
-        cmap : `str`
-            colormap to use, passed directly to matplotlib
-        interp_method : `str`
-            interpolation method to use, passed directly to matplotlib
-        fig : `matplotlib.figure.Figure`
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`
-            Axis containing the plot
-
-        Returns
-        -------
-        fig : `matplotlib.figure.Figure`
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`
-            Axis containing the plot
-
-        """
-        fig, ax = share_fig_ax(fig, ax)
-
-        im = ax.imshow(self.phase,
-                       extent=[self.x[0], self.x[-1], self.y[0], self.y[-1]],
-                       cmap=cmap,
-                       clim=clim,
-                       interpolation=interp_method)
-        fig.colorbar(im, label='Height [nm]', ax=ax, fraction=0.046)
-        xlab, ylab = self.__class__.labels[self._realxy][self.scale]
-        ax.set(xlabel=xlab, ylabel=ylab)
-        return fig, ax
-
     @staticmethod
     def from_zygo_dat(path, multi_intensity_action='first', scale='um'):
         """Create a new interferogram from a zygo dat file.
@@ -176,7 +119,7 @@ class Interferogram(object):
 
         """
         zydat = read_zygo_dat(path, multi_intensity_action=multi_intensity_action)
-        res = zydat['meta']['lateral_resolution'] * Interferogram.scale_map[scale.lower()]
+        res = zydat['meta']['lateral_resolution']  # meters
         phase = zydat['phase']
         return Interferogram(phase=phase, intensity=zydat['intensity'],
                              x=m.arange(phase.shape[1]) * res, y=m.arange(phase.shape[0]) * res,
