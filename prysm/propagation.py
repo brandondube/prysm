@@ -31,7 +31,7 @@ def prop_pupil_plane_to_psf_plane(wavefunction, input_sample_spacing, prop_dist,
     return abs(impulse_response) ** 2
 
 
-def prop_pupil_plane_to_psf_plane_units(wavefunction input_sample_spacing, prop_dist, wavelength, Q):
+def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, prop_dist, wavelength, Q):
     """Compute the ordinate axes for a pupil plane to PSF plane propagation.
 
     Parameters
