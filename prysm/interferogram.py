@@ -28,7 +28,6 @@ class Interferogram(OpticalPhase):
         self.intensity = intensity
         self.meta = meta
         if scale != 'px':
-            print('is not')
             self.change_spatial_unit(to=scale, inplace=True)
 
     @property
