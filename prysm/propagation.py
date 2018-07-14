@@ -63,7 +63,7 @@ def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, prop
                                                 efl=prop_dist) / 1e3                # translation
     unit_x = m.arange(-1 * (samples_x // 2), samples_x // 2) * sample_spacing
     unit_y = m.arange(-1 * (samples_y // 2), samples_y // 2) * sample_spacing
-    return psf, unit_x, unit_y
+    return unit_x, unit_y
 
 
 def pupil_sample_to_psf_sample(pupil_sample, num_samples, wavelength, efl):
