@@ -8,7 +8,7 @@ from .conf import config
 from .coordinates import uniform_cart_to_polar, cart_to_polar
 from .util import correct_gamma, share_fig_ax
 from .convolution import Convolvable
-from .propagation import prop_pupil_plane_to_psf_plane
+from .propagation import prop_pupil_plane_to_psf_plane, prop_pupil_plane_to_psf_plane_units
 
 from prysm import mathops as m
 
@@ -300,7 +300,8 @@ class PSF(Convolvable):
             A new PSF instance
 
         """
-        data, ux, uy = prop_pupil_plane_to_psf_plane(pupil.fcn, pupil.sample_spacing, efl, pupil.wavelength, Q)
+        data = prop_pupil_plane_to_psf_plane(pupil.fcn, pupil.sample_spacing, efl, pupil.wavelength, Q)
+        ux, uy = prop_pupil_plane_to_psf_plane_units(pupil.fcn, pupil.sample_spacing, efl, pupil.wavelength, Q)
         return PSF(data, ux, uy)
 
 

@@ -23,17 +23,38 @@ def prop_pupil_plane_to_psf_plane(wavefunction, input_sample_spacing, prop_dist,
     Returns
     -------
     psf : `numpy.ndarray`
-        Description
+        incoherent point spread function
+
+    """
+    padded_wavefront = pad2d(wavefunction, Q)
+    impulse_response = m.ifftshift(m.fft2(m.fftshift(padded_wavefront)))
+    return abs(impulse_response) ** 2
+
+
+def prop_pupil_plane_to_psf_plane_units(wavefunction input_sample_spacing, prop_dist, wavelength, Q):
+    """Compute the ordinate axes for a pupil plane to PSF plane propagation.
+
+    Parameters
+    ----------
+    wavefunction : `numpy.ndarray`
+        the pupil wavefunction
+    input_sample_spacing : `float`
+        spacing between samples in the pupil plane
+    prop_dist : `float`
+        propagation distance along the z distance
+    wavelength : `float`
+        wavelength of light
+    Q : `float`
+        oversampling / padding factor
+
+    Returns
+    -------
     unit_x : `numpy.ndarray`
         x axis unit, 1D ndarray
     unit_y : `numpy.ndarray`
         y axis unit, 1D ndarray
 
     """
-    padded_wavefront = pad2d(wavefunction, Q)
-    impulse_response = m.ifftshift(m.fft2(m.fftshift(padded_wavefront)))
-    psf = abs(impulse_response) ** 2
-
     s = wavefunction.shape
     samples_x, samples_y = s[0] * Q, s[1] * Q
     sample_spacing = pupil_sample_to_psf_sample(pupil_sample=input_sample_spacing,  # factor of
