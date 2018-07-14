@@ -24,12 +24,12 @@ def test_diffprop_matches_airydisk(efl, epd, wvl):
     fno = efl / epd
 
     p = Pupil(wavelength=wvl, epd=epd)
-    psf = PSF.from_pupil(p, efl)
+    psf = PSF.from_pupil(p, efl, Q=3)  # use Q=3 not Q=4 for improved accuracy
     u, sx = psf.slice_x
     u, sy = psf.slice_y
     analytic = _airydisk(u, fno, wvl)
-    assert np.allclose(sx, analytic, rtol=PRECISION, atol=PRECISION)
-    assert np.allclose(sy, analytic, rtol=PRECISION, atol=PRECISION)
+    assert np.allclose(sx, analytic, atol=PRECISION)
+    assert np.allclose(sy, analytic, atol=PRECISION)
 
 
 @pytest.mark.skipif('TRAVIS' in os.environ and os.environ['TRAVIS'] == 'true', reason='lapack error on travis')
@@ -44,12 +44,12 @@ def test_diffprop_matches_analyticmtf(efl, epd, wvl):
 
     analytic_1 = diffraction_limited_mtf(fno, wvl, frequencies=u)
     analytic_2 = diffraction_limited_mtf(fno, wvl, frequencies=uu)
-    assert np.allclose(analytic_1, t, rtol=PRECISION, atol=PRECISION)
-    assert np.allclose(analytic_2, s, rtol=PRECISION, atol=PRECISION)
+    assert np.allclose(analytic_1, t, atol=PRECISION)
+    assert np.allclose(analytic_2, s, atol=PRECISION)
 
 
 def test_array_orientation_consistency_tilt():
-    ''' The pupil array should be shaped as arr[x,y], as should the psf and MTF.
+    ''' The pupil array should be shaped as arr[y,x], as should the psf and MTF.
         A linear phase error in the pupil along y should cause a motion of the
         PSF in y.  Specifically, for a positive-signed phase, that should cause
         a shift in the +y direction.
