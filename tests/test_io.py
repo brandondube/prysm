@@ -27,3 +27,11 @@ def test_read_mtf_vs_field():
     real_freqs = np.asarray([100, 200, 300, 400, 500], dtype=np.float64)
     assert np.allclose(real_fields, result['field'])
     assert np.allclose(real_freqs, result['freq'])
+
+
+def test_read_zygodat():
+    p = data_root / 'valid_zygo_dat_file.dat'
+    result = io.read_zygo_dat(p)
+    assert 'phase' in result
+    assert 'intensity' in result
+    assert 'lateral_resolution' in result['meta']
