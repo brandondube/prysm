@@ -89,8 +89,8 @@ class Pupil(OpticalPhase):
 
         """
         self.epd = epd
-        ux = m.linspace(-epd//2, epd//2, samples)
-        uy = m.linspace(-epd//2, epd//2, samples)
+        ux = m.linspace(-epd / 2, epd / 2, samples)
+        uy = m.linspace(-epd / 2, epd / 2, samples)
         self.samples = samples
         self.sample_spacing = ux[1] - ux[0]
         super().__init__(unit_x=ux, unit_y=uy, phase=None,
