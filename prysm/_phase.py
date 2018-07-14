@@ -100,6 +100,11 @@ class OpticalPhase(object):
         self.unit_y = unit_y
         self.phase = phase
         self.wavelength = wavelength
+        pul, sul = phase_unit.lower(), spatial_unit.lower()
+        if pul not in self.__class__.units:
+            raise ValueError(f'{pul} not a valid unit, must be in {set(self.__class__.units.keys())}')
+        if sul not in self.__class__.units:
+            raise ValueError(f'{sul} not a valid unit, must be in {set(self.__class__.units.keys())}')
         self.phase_unit = self.__class__.units[phase_unit.lower()]
         self.spatial_unit = self.__class__.units[spatial_unit.lower()]
         self.center_x = len(self.unit_x) // 2
@@ -116,7 +121,7 @@ class OpticalPhase(object):
         slice of self.phase : `numpy.ndarray`
 
         """
-        return self.unit, self.phase[self.center]
+        return self.unit_x, self.phase[self.center_x, :]
 
     @property
     def slice_y(self):
@@ -129,7 +134,7 @@ class OpticalPhase(object):
         slice of self.phase : `numpy.ndarray`
 
         """
-        return self.unit, self.phase[:, self.center]
+        return self.unit_y, self.phase[:, self.center_y]
 
     @property
     def pv(self):
@@ -263,8 +268,8 @@ class OpticalPhase(object):
 
         ax.plot(u, x, lw=3, label='Slice X')
         ax.plot(u, y, lw=3, label='Slice Y')
-        ax.set(xlabel=r'x dimension [mm]',
-               ylabel=f'OPD [{self._opd_str}]')
+        ax.set(xlabel=f'{self.xaxis_label} [{self.spatial_unit}]',
+               ylabel=f'{self.zaxis_label} [{self.phase_unit}]')
         ax.legend()
         return fig, ax
 
