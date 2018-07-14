@@ -23,15 +23,16 @@ def test_create_pupil():
     assert hasattr(p, 'epd')
     assert hasattr(p, 'sample_spacing')
     assert hasattr(p, 'samples')
-    assert hasattr(p, 'opd_unit')
-    assert hasattr(p, '_opd_unit')
-    assert hasattr(p, '_opd_str')
+    assert hasattr(p, 'phase_unit')
+    assert hasattr(p, 'spatial_unit')
     assert hasattr(p, 'phase')
     assert hasattr(p, 'fcn')
-    assert hasattr(p, 'unit')
+    assert hasattr(p, 'unit_x')
+    assert hasattr(p, 'unit_y')
     assert hasattr(p, 'rho')
     assert hasattr(p, 'phi')
-    assert hasattr(p, 'center')
+    assert hasattr(p, 'center_x')
+    assert hasattr(p, 'center_y')
 
 
 def test_pupil_passes_valid_params():
@@ -44,8 +45,7 @@ def test_pupil_passes_valid_params():
     assert p.samples == parameters['samples']
     assert p.epd == parameters['epd']
     assert p.wavelength == parameters['wavelength']
-    assert p._opd_str == parameters['opd_unit']
-    assert p._opd_unit == 'nanometers'  # make sure this is updated if the test is changed to a different unit
+    assert p.phase_unit == 'nm'
 
 
 def test_pupil_rejects_bad_opd_unit():
