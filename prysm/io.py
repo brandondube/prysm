@@ -388,7 +388,7 @@ def read_zygo_dat(file, multi_intensity_action='first'):
 
     # little-endian camera data, not sure if always need to byteswap, may break for some users...
     phase_raw = m.frombuffer(contents, offset=header_len + ilen * 2, count=plen, dtype=m.int32)
-    phase = phase_raw.copy().byteswap(inplace=True).astype(config.precision).reshape((ph, pw))
+    phase = phase_raw.copy().byteswap(True).astype(config.precision).reshape((ph, pw))
     phase[phase >= 2147483640] = m.nan
     phase *= (meta['scale_factor'] * meta['obliquity_factor'] * meta['wavelength'] /
               ZYGO_PHASE_RES_FACTORS[meta['phase_res']]) * 1e9  # unit m to nm
