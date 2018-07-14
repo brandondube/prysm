@@ -64,7 +64,7 @@ class PSF(Convolvable):
             coordinate data
 
         """
-        return self.unit_x, self.data[self.center_x]
+        return self.unit_x, self.data[self.center_y, :]
 
     @property
     def slice_y(self):
@@ -78,7 +78,7 @@ class PSF(Convolvable):
             coordinate data
 
         """
-        return self.unit_y, self.data[:, self.center_y]
+        return self.unit_y, self.data[:, self.center_x]
 
     def encircled_energy(self, azimuth=None):
         """Compute the encircled energy at the requested azumith.
@@ -145,7 +145,7 @@ class PSF(Convolvable):
         -------
         fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`, optional:
+        ax : `matplotlib.axes.Axis`, optional
             Axis containing the plot
 
         """
@@ -188,7 +188,7 @@ class PSF(Convolvable):
         return fig, ax
 
     def plot_slice_xy(self, axlim=20, fig=None, ax=None):
-        """Create a plot of slices through the X and Y axes of the `Pupil`.
+        """Create a plot of slices through the X and Y axes of the `PSF`.
 
         Parameters
         ----------
@@ -203,7 +203,7 @@ class PSF(Convolvable):
         -------
         fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`, optional:
+        ax : `matplotlib.axes.Axis`, optional
             Axis containing the plot
 
         """
