@@ -16,17 +16,19 @@ class Interferogram(OpticalPhase):
             x = m.arange(phase.shape[1])
             y = m.arange(phase.shape[0])
             scale = 'px'
-            self.lateral_res = None
+            self.lateral_res = 1
 
         super().__init__(unit_x=x, unit_y=y, phase=phase,
-                         wavelength=meta.get('wavelength'), phase_unit='nm', spatial_unit='m')
+                         wavelength=meta.get('wavelength'), phase_unit='nm',
+                         spatial_unit='m' if scale != 'px' else scale)
 
         self.xaxis_label = 'X'
         self.yaxis_label = 'Y'
         self.zaxis_label = 'Height'
         self.intensity = intensity
         self.meta = meta
-        if scale is not 'px':
+        if scale != 'px':
+            print('is not')
             self.change_spatial_unit(to=scale, inplace=True)
 
     @property
@@ -121,6 +123,10 @@ class Interferogram(OpticalPhase):
         zydat = read_zygo_dat(path, multi_intensity_action=multi_intensity_action)
         res = zydat['meta']['lateral_resolution']  # meters
         phase = zydat['phase']
+
+        if res == 0.0:
+            res = 1
+            scale = 'px'
         return Interferogram(phase=phase, intensity=zydat['intensity'],
                              x=m.arange(phase.shape[1]) * res, y=m.arange(phase.shape[0]) * res,
                              scale=scale.lower(), meta=zydat['meta'])
