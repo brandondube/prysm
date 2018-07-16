@@ -3,7 +3,7 @@ import pandas as pd
 
 from scipy.interpolate import griddata, RegularGridInterpolator as RGI
 
-from .util import correct_gamma, share_fig_ax
+from .util import share_fig_ax
 from .io import read_trioptics_mtf_vs_field, read_trioptics_mtfvfvf
 
 from prysm import mathops as m
@@ -81,14 +81,10 @@ class MTFvFvF(object):
 
         # if the plot is symmetric, mirror the data
         if symmetric is True:
-            dat = correct_gamma(
-                m.concatenate((
-                    self.data[:, ::-1, freq_idx],
-                    self.data[:, :, freq_idx]),
-                    axis=1))
+            dat = m.concatenate((self.data[:, ::-1, freq_idx], self.data[:, :, freq_idx]), axis=1)
             ext_x[0] = ext_x[1] * -1
         else:
-            dat = correct_gamma(self.data[:, :, freq_idx])
+            dat = self.data[:, :, freq_idx]
 
         ext = [ext_x[0], ext_x[1], ext_y[0], ext_y[1]]
 
