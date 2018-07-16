@@ -48,28 +48,6 @@ def is_power_of_2(value):
         return bool(value and not value & (value - 1))
 
 
-def correct_gamma(img, encoding=2.2):
-    """Apply an inverse gamma curve to image data that linearizes the given encoding.
-
-    Parameters
-    ----------
-    img : `numpy.ndarray`
-        array of image data, floats avoid quantization error
-    encoding : `float`
-        gamma to encode that data to (1.0 is linear)
-
-    Returns
-    -------
-    `numpy.ndarray`
-        Array of corrected data
-
-    """
-    if encoding is 1:
-        return img
-    else:
-        return img ** (1 / float(encoding))
-
-
 def fold_array(array, axis=1):
     """Fold an array in half over the given axis and averages.
 
@@ -92,17 +70,17 @@ def fold_array(array, axis=1):
         left_chunk = array[:, :xh]
         right_chunk = array[:, xh:]
         folded_array = m.concatenate((right_chunk[:, :, m.newaxis],
-                                       m.flip(m.flip(left_chunk, axis=1),
-                                               axis=0)[:, :, m.newaxis]),
-                                      axis=2)
+                                     m.flip(m.flip(left_chunk, axis=1),
+                                            axis=0)[:, :, m.newaxis]),
+                                     axis=2)
     else:
         yh = ys // 2
         top_chunk = array[:yh, :]
         bottom_chunk = array[yh:, :]
         folded_array = m.concatenate((bottom_chunk[:, :, m.newaxis],
-                                       m.flip(m.flip(top_chunk, axis=1),
-                                               axis=0)[:, :, m.newaxis]),
-                                      axis=2)
+                                     m.flip(m.flip(top_chunk, axis=1),
+                                            axis=0)[:, :, m.newaxis]),
+                                     axis=2)
     return folded_array.mean(axis=2)
 
 

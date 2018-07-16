@@ -6,7 +6,7 @@ from matplotlib import colors
 
 from .conf import config
 from .coordinates import uniform_cart_to_polar, cart_to_polar
-from .util import correct_gamma, share_fig_ax
+from .util import share_fig_ax
 from .convolution import Convolvable
 from .propagation import prop_pupil_plane_to_psf_plane, prop_pupil_plane_to_psf_plane_units
 
@@ -64,7 +64,7 @@ class PSF(Convolvable):
             coordinate data
 
         """
-        return self.unit_x, self.data[self.center_y, :]
+        return self.unit_y, self.phase[:, self.center_x]
 
     @property
     def slice_y(self):
@@ -78,7 +78,7 @@ class PSF(Convolvable):
             coordinate data
 
         """
-        return self.unit_y, self.data[:, self.center_x]
+        return self.unit_x, self.phase[self.center_y, :]
 
     def encircled_energy(self, azimuth=None):
         """Compute the encircled energy at the requested azumith.
@@ -493,12 +493,12 @@ class RGBPSF(object):
         dat[:, :, 1] = self.G
         dat[:, :, 2] = self.B
 
-        left, right = self.unit_x[0], self.unit_x[-1]
-        bottom, top = self.unit_y[0], self.unit_y[-1]
+        left, right = self.unit_y[0], self.unit_y[-1]
+        bottom, top = self.unit_x[0], self.unit_x[-1]
 
         fig, ax = share_fig_ax(fig, ax)
 
-        ax.imshow(correct_gamma(dat),
+        ax.imshow(dat,
                   extent=[left, right, bottom, top],
                   interpolation=interp_method,
                   origin='lower')
@@ -567,20 +567,20 @@ class RGBPSF(object):
         fig, ax = share_fig_ax(fig, ax)
         axr, axg, axb = make_rgb_axes(ax)
 
-        ax.imshow(correct_gamma(dat),
+        ax.imshow(dat,
                   extent=[left, right, left, right],
                   interpolation=interp_method,
                   origin='lower')
 
-        axr.imshow(correct_gamma(datr),
+        axr.imshow(datr,
                    extent=[left, right, left, right],
                    interpolation=interp_method,
                    origin='lower')
-        axg.imshow(correct_gamma(datg),
+        axg.imshow(datg,
                    extent=[left, right, left, right],
                    interpolation=interp_method,
                    origin='lower')
-        axb.imshow(correct_gamma(datb),
+        axb.imshow(datb,
                    extent=[left, right, left, right],
                    interpolation=interp_method,
                    origin='lower')

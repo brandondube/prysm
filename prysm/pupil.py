@@ -56,8 +56,8 @@ class Pupil(OpticalPhase):
         target for automatic masking on pupil creation
 
     """
-    def __init__(self, samples=128, epd=1.0, wavelength=0.55, opd_unit=r'waves',
-                 mask='circle', mask_target='both'):
+    def __init__(self, samples=128, epd=1.0, wavelength=0.55, opd_unit='waves',
+                 mask='circle', mask_target='both', ux=None, uy=None, phase=None):
         """Create a new `Pupil` instance.
 
         Parameters
@@ -81,6 +81,17 @@ class Pupil(OpticalPhase):
             phase array not be truncated properly.  Note that if the mask is not
             binary and `phase` or `both` is used, phase plots will also not be
             correct, as they will be attenuated by the mask.
+        ux : `np.ndarray`
+            x axis units
+        uy : `np.ndarray`
+            y axis units
+        phase : `np.ndarray`
+            phase data
+
+        Notes
+        -----
+        If ux give, assume uy and phase also given; skip much of the pupil building process
+        and simply copy values.
 
         Raises
         ------
@@ -88,26 +99,30 @@ class Pupil(OpticalPhase):
             if the OPD unit given is invalid
 
         """
-        self.epd = epd
-        ux = m.linspace(-epd / 2, epd / 2, samples)
-        uy = m.linspace(-epd / 2, epd / 2, samples)
-        self.samples = samples
-        self.sample_spacing = ux[1] - ux[0]
-        super().__init__(unit_x=ux, unit_y=uy, phase=None,
+        if ux is None:
+            # must build a pupil
+            self.epd = epd
+            ux = m.linspace(-epd / 2, epd / 2, samples)
+            uy = m.linspace(-epd / 2, epd / 2, samples)
+            self.samples_x = self.samples_y = samples
+        else:
+            # data already known
+            need_to_build = False
+        super().__init__(unit_x=ux, unit_y=uy, phase=phase,
                          wavelength=wavelength, phase_unit=opd_unit, spatial_unit='mm')
         self.xaxis_label = 'Pupil ξ'
         self.yaxis_label = 'Pupil η'
         self.zaxis_label = 'OPD'
         self.rho = self.phi = None
 
-        if type(mask) is not m.ndarray:
-            mask = mcache.get_mask(self.samples, mask)
+        if need_to_build:
+            if type(mask) is not m.ndarray:
+                mask = mcache.get_mask(self.samples, mask)
 
-        self._mask = mask
-        self.mask_target = mask_target
-
-        self.build()
-        self.mask(self._mask, self.mask_target)
+            self._mask = mask
+            self.mask_target = mask_target
+            self.build()
+            self.mask(self._mask, self.mask_target)
 
     def build(self):
         """Construct a numerical model of a `Pupil`.
@@ -271,3 +286,17 @@ class Pupil(OpticalPhase):
         result = result._phase_to_wavefunction()
         result.mask(result._mask, result.mask_target)
         return result
+
+    @staticmethod
+    def from_interferogram(interferogram, wvl=None):
+        if wvl is None:  # not user specified
+            wvl = interferogram.meta.get('Wavelength', None)
+            if wvl is None:  # not from a datx file
+                wvl = interferogram.meta.get('wavelength', None)
+            if wvl is None:
+                raise ValueError('wavelength must be give or carried in interferogram.meta')
+            wvl *= 1e6  # convert zygo meters to prysm microns
+
+        p = Pupil(wavelength=wvl, phase=interferogram.phase, opd_unit=interferogram.phase_unit,
+                  ux=interferogram.unit_x, uy=interferogram.unit_y)
+        return p._phase_to_wavefunction()

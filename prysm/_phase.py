@@ -109,6 +109,7 @@ class OpticalPhase(object):
         self.spatial_unit = self.__class__.units[spatial_unit.lower()]
         self.center_x = len(self.unit_x) // 2
         self.center_y = len(self.unit_y) // 2
+        self.sample_spacing = unit_x[1] - unit_x[0]
 
     @property
     def slice_x(self):
@@ -121,7 +122,7 @@ class OpticalPhase(object):
         slice of self.phase : `numpy.ndarray`
 
         """
-        return self.unit_x, self.phase[self.center_x, :]
+        return self.unit_y, self.phase[:, self.center_x]
 
     @property
     def slice_y(self):
@@ -134,7 +135,7 @@ class OpticalPhase(object):
         slice of self.phase : `numpy.ndarray`
 
         """
-        return self.unit_y, self.phase[:, self.center_y]
+        return self.unit_x, self.phase[self.center_y, :]
 
     @property
     def pv(self):
@@ -261,13 +262,13 @@ class OpticalPhase(object):
             Axis containing the plot
 
         """
-        u, x = self.slice_x
-        _, y = self.slice_y
+        ux, x = self.slice_x
+        uy, y = self.slice_y
 
         fig, ax = share_fig_ax(fig, ax)
 
-        ax.plot(u, x, lw=3, label='Slice X')
-        ax.plot(u, y, lw=3, label='Slice Y')
+        ax.plot(ux, x, lw=3, label='Slice X')
+        ax.plot(uy, y, lw=3, label='Slice Y')
         ax.set(xlabel=f'{self.xaxis_label} [{self.spatial_unit}]',
                ylabel=f'{self.zaxis_label} [{self.phase_unit}]')
         ax.legend()
