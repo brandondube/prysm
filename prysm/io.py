@@ -391,7 +391,7 @@ def read_zygo_datx(file):
                 key = key.split('Data Context.Data Attributes.')[-1]
             if key.endswith('Value'):
                 key = key[:-5]  # strip value from key
-            if key == 'Resolution':
+            if key == 'Resolution:':
                 key = 'Lateral Resolution'
             elif key.endswith('Data Context.Lateral Resolution:'):
                 continue  # duplicate
