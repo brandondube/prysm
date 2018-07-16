@@ -1,7 +1,7 @@
 """tools to analyze interferometric data."""
 from ._phase import OpticalPhase
 from ._zernike import defocus
-from .io import read_zygo_dat
+from .io import read_zygo_dat, read_zygo_datx
 from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar
 
@@ -119,10 +119,16 @@ class Interferogram(OpticalPhase):
             new Interferogram instance
 
         """
-        zydat = read_zygo_dat(path, multi_intensity_action=multi_intensity_action)
-        res = zydat['meta']['lateral_resolution']  # meters
-        phase = zydat['phase']
+        if str(path).endswith('datx'):
+            # datx file, use datx reader
+            zydat = read_zygo_datx(path)
+            res = zydat['meta']['Lateral Resolution']
+        else:
+            # dat file, use dat file reader
+            zydat = read_zygo_dat(path, multi_intensity_action=multi_intensity_action)
+            res = zydat['meta']['lateral_resolution']  # meters
 
+        phase = zydat['phase']
         if res == 0.0:
             res = 1
             scale = 'px'
