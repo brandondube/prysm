@@ -64,7 +64,7 @@ class PSF(Convolvable):
             coordinate data
 
         """
-        return self.unit_y, self.phase[:, self.center_x]
+        return self.unit_y, self.data[:, self.center_x]
 
     @property
     def slice_y(self):
@@ -78,7 +78,7 @@ class PSF(Convolvable):
             coordinate data
 
         """
-        return self.unit_x, self.phase[self.center_y, :]
+        return self.unit_x, self.data[self.center_y, :]
 
     def encircled_energy(self, azimuth=None):
         """Compute the encircled energy at the requested azumith.
