@@ -9,6 +9,12 @@ import calendar
 from .conf import config
 from prysm import mathops as m
 
+try:
+    import h5py
+    can_read_h5 = True
+except ImportError:
+    can_read_h5 = False
+
 
 def read_file_stream_or_path(path_or_file):
     try:
@@ -341,6 +347,80 @@ def read_any_trioptics_mht(file, metadata=False):
     return type_, TRIOPTICS_SWITCHBOARD[type_](data, metadata=metadata)
 
 
+def read_zygo_datx(file):
+    """Read a zygo datx file.
+
+    Parameters
+    ----------
+    file : path_like
+        location of a file
+
+    Returns
+    -------
+    `dict`
+        dictionary with keys phase, intensity, meta
+
+    Raises
+    ------
+    ImportError
+        h5py unavailable, required dependency for this
+
+    """
+    if not can_read_h5:
+        raise ImportError('h5py is required to read dat files.')
+
+    # create a handle to the h5 file
+    with h5py.File(file, 'r') as f:
+        # cast intensity down to int16, saves memory and Zygo doesn't use cameras >> 16-bit
+        intensity = f['Measurement']['Intensity'].value.astype(m.uint16)
+        phase = f['Measurement']['Surface'].value
+        phase[phase >= ZYGO_INVALID_PHASE] = m.nan
+        phase = phase.astype(config.precision)  # cast to big endian
+
+        obliq = f['Measurement']['Surface'].attrs['Obliquity Factor']
+
+        # now get attrs
+        attrs = f['Attributes']
+        key = list(attrs)[-1]
+        attrs = attrs[key].attrs
+        meta = {'Obliquity Factor': float(obliq[0])}
+        for key, value in attrs.items():
+            if key.endswith('Unit'):
+                continue  # do not need unit keys, units implicitly understood.
+            if key.startswith('Data Context.Data Attributes.'):
+                key = key.split('Data Context.Data Attributes.')[-1]
+            if key.endswith('Value'):
+                key = key[:-5]  # strip value from key
+            if key == 'Resolution':
+                key = 'Lateral Resolution'
+            elif key.endswith('Data Context.Lateral Resolution:'):
+                continue  # duplicate
+            elif key in ['Property Bag List', 'Group Number', 'TextCount']:
+                continue  # h5py particulars
+
+            if key.endswith(':'):
+                key = key[:-1]
+            if value.dtype == 'object':
+                value = str(value[0])  # object dtype is a string
+            elif value.dtype in ['uint8', 'int32']:
+                value = int(value[0])
+            elif value.dtype in ['float64']:
+                value = float(value[0])
+            else:
+                continue  # compound items, h5py objects that do not map nicely to primitives
+
+            meta[key] = value
+
+    # 1e9 meters to nanometers
+    phase *= (meta['Interf Scale Factor'] * meta['Obliquity Factor'] * meta['Wavelength']) * 1e9
+    return {
+        'phase': phase,
+        'intensity': intensity,
+        'meta': meta,
+    }
+
+
+ZYGO_INVALID_PHASE = 2147483640
 ZYGO_ENC = 'utf-8'  # may be ASCII, cp1252...
 ZYGO_PHASE_RES_FACTORS = {
     0: 4096,
@@ -389,7 +469,7 @@ def read_zygo_dat(file, multi_intensity_action='first'):
     # little-endian camera data, not sure if always need to byteswap, may break for some users...
     phase_raw = m.frombuffer(contents, offset=header_len + ilen * 2, count=plen, dtype=m.int32)
     phase = phase_raw.copy().byteswap(True).astype(config.precision).reshape((ph, pw))
-    phase[phase >= 2147483640] = m.nan
+    phase[phase >= ZYGO_INVALID_PHASE] = m.nan
     phase *= (meta['scale_factor'] * meta['obliquity_factor'] * meta['wavelength'] /
               ZYGO_PHASE_RES_FACTORS[meta['phase_res']]) * 1e9  # unit m to nm
     return {
@@ -420,9 +500,7 @@ def read_zygo_metadata(file_contents):
     IB32 = '>I'
     IL32 = '<I'
     FB32 = '>f'
-    FB64 = '>d'
     FL32 = '<f'
-    FL64 = '<d'
     C = 'c'
     uint8 = 'B'
     WASTE_BYTE = '\x00'
@@ -838,4 +916,4 @@ def read_zygo_metadata(file_contents):
         'ftpsi_res_factor',
     ]
 
-    return {k:v for k, v in zip(all_keys, all_vars)}
+    return {k: v for k, v in zip(all_keys, all_vars)}
