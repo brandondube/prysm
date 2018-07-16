@@ -15,6 +15,7 @@ setup(
     extras_require={
         'cpu+': ['numba>=0.37.0'],
         'cuda': ['cupy>=4.0.0'],
+        'Mx': ['h5py>=2.8.0'],
     },
     classifiers=[
         'Development Status :: 4 - Beta',
