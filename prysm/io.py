@@ -372,28 +372,30 @@ def read_zygo_datx(file):
     # create a handle to the h5 file
     with h5py.File(file, 'r') as f:
         # cast intensity down to int16, saves memory and Zygo doesn't use cameras >> 16-bit
-        intensity = f['Measurement']['Intensity'].value.astype(m.uint16)
-        phase = f['Measurement']['Surface'].value
+        intens_block = list(f['Data']['Intensity'].keys())[0]
+        phase_block = list(f['Data']['Surface'].keys())[0]
+        intensity = f['Data']['Intensity'][intens_block].value.astype(m.uint16)
+        phase = f['Data']['Surface'][phase_block].value
         phase[phase >= ZYGO_INVALID_PHASE] = m.nan
         phase = phase.astype(config.precision)  # cast to big endian
-
-        obliq = f['Measurement']['Surface'].attrs['Obliquity Factor']
 
         # now get attrs
         attrs = f['Attributes']
         key = list(attrs)[-1]
         attrs = attrs[key].attrs
-        meta = {'Obliquity Factor': float(obliq[0])}
+        meta = {}
         for key, value in attrs.items():
             if key.endswith('Unit'):
                 continue  # do not need unit keys, units implicitly understood.
-            if key.startswith('Data Context.Data Attributes.'):
-                key = key.split('Data Context.Data Attributes.')[-1]
+            if '.Data Attributes.' in key:
+                key = key.split('.Data Attributes.')[-1]
             if key.endswith('Value'):
                 key = key[:-5]  # strip value from key
-            if key == 'Resolution:':
+            if key.endswith(':'):
+                key = key[:-1]
+            if key == 'Resolution':
                 key = 'Lateral Resolution'
-            elif key.endswith('Data Context.Lateral Resolution:'):
+            elif key.endswith('Data Context.Lateral Resolution'):
                 continue  # duplicate
             elif key in ['Property Bag List', 'Group Number', 'TextCount']:
                 continue  # h5py particulars
@@ -411,6 +413,22 @@ def read_zygo_datx(file):
 
             meta[key] = value
 
+        # lastly, obliquity factor.  Because Mx is spaghetti code and it can appear in many places
+        # under different names, or not at all.  Thanks, Zygo.
+        try:
+            # "new style" datx files, Measurement is a branch of the h5 tree
+            # with duplicates of surface and intenisty, but different attrs.
+            # Pluck the obliquity from here, if possible.
+            obliq = f['Measurement']['Surface'].attrs['Obliquity Factor']
+        except KeyError:
+            try:
+                # possibly an "old style" datx file, "obliquity" in the master attrs
+                obliq = (meta['Obliquity'],)
+                del meta['Obliquity']
+            except KeyError:
+                obliq = (1,)
+
+    meta['Obliquity Factor'] = float(obliq[0])
     # 1e9 meters to nanometers
     phase *= (meta['Interf Scale Factor'] * meta['Obliquity Factor'] * meta['Wavelength']) * 1e9
     return {
