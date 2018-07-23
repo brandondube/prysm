@@ -150,13 +150,15 @@ def resample_2d_complex(array, sample_pts, query_pts):
     return interp_mag * m.exp(1j * interp_phase)
 
 
-def make_xy_grid(samples):
+def make_xy_grid(samples_x, samples_y=None):
     """Create an x, y grid from -1, 1 with n number of samples.
 
     Parameters
     ----------
-    samples : `int`
-        number of samples in the output grid, will have shape (samples, samples)
+    samples_x : `int`
+        number of samples in x direction
+    samples_y : `int`
+        number of samples in y direction, if None, copied from sample_x
 
     Returns
     -------
@@ -166,19 +168,23 @@ def make_xy_grid(samples):
         y meshgrid
 
     """
-    x = m.linspace(-1, 1, samples, dtype=config.precision)
-    y = m.linspace(-1, 1, samples, dtype=config.precision)
+    if samples_y is None:
+        samples_y = samples_x
+    x = m.linspace(-1, 1, samples_x, dtype=config.precision)
+    y = m.linspace(-1, 1, samples_y, dtype=config.precision)
     xx, yy = m.meshgrid(x, y)
     return xx, yy
 
 
-def make_rho_phi_grid(samples, aligned='x'):
+def make_rho_phi_grid(samples_x, samples_y=None, aligned='x'):
     """Create an rho, phi grid from -1, 1 with n number of samples.
 
     Parameters
     ----------
-    samples : `int`
-        number of samples in the output grid, will have shape (samples, samples)
+    samples_x : `int`
+        number of samples in x direction
+    samples_y : `int`
+        number of samples in y direction, if None, copied from sample_x
 
     Returns
     -------
@@ -188,7 +194,7 @@ def make_rho_phi_grid(samples, aligned='x'):
         angular meshgrid
 
     """
-    xx, yy = make_xy_grid(samples)
+    xx, yy = make_xy_grid(samples_x, samples_y)
     if aligned == 'x':
         rho, phi = cart_to_polar(xx, yy)
     else:
