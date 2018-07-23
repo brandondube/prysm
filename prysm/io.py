@@ -399,9 +399,6 @@ def read_zygo_datx(file):
                 continue  # duplicate
             elif key in ['Property Bag List', 'Group Number', 'TextCount']:
                 continue  # h5py particulars
-
-            if key.endswith(':'):
-                key = key[:-1]
             if value.dtype == 'object':
                 value = str(value[0])  # object dtype is a string
             elif value.dtype in ['uint8', 'int32']:
