@@ -112,6 +112,7 @@ allfuncs = set((
     'allclose',
     'frombuffer',
     'count_nonzero',
+    'trapz',
 ))
 
 allfuncs_cupy_missing = set((
