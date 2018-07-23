@@ -13,6 +13,7 @@ from prysm.conf import config
 # numba funcs
 try:
     from numba import jit, vectorize
+    numba_installed = True
 except ImportError:
     # if Numba is not installed, create the jit decorator and have it return the
     # original function.
@@ -46,6 +47,7 @@ except ImportError:
             return signature_or_function
 
     vectorize = jit
+    numba_installed = False
 
 # cuda
 try:
@@ -167,7 +169,10 @@ def jinc(r):
         return j1(r) / r
 
 
-jinc = np.vectorize(jinc)
+if numba_installed is True:
+    jinc = vectorize(jinc)
+else:
+    jinc = np.vectorize(jinc)
 
 
 def change_backend(to):
