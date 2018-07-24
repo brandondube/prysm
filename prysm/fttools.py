@@ -35,7 +35,7 @@ def pad2d(array, Q=2, value=0):
     if value is 0:
         out = m.zeros((out_x, out_y), dtype=array.dtype)
     else:
-        out = m.ones((out_x, out_y), dtype=array.dtype) * value
+        out = m.zeros((out_x, out_y), dtype=array.dtype) + value
     x_idx1, x_idx2 = pad_shape[0][0], pad_shape[0][1]
     y_idx1, y_idx2 = pad_shape[1][0], pad_shape[1][1]
     out[x_idx1:x_idx2 + x, y_idx1:y_idx2 + y] = array
@@ -62,7 +62,7 @@ def unpad2d(array, Q=2):
     ow, oh = iw / Q, ih / Q
     dw, dh = iw - ow, ih - oh
     cut_w, cut_h = int(dw // 2), int(dh // 2)
-    return array[cut_w:-cut_w,cut_h:-cut_h].copy()
+    return array[cut_w:-cut_w, cut_h:-cut_h].copy()
 
 
 def forward_ft_unit(sample_spacing, samples):
