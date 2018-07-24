@@ -158,12 +158,10 @@ class Pupil(OpticalPhase):
         """
         phase = self.change_phase_unit(to='waves', inplace=False)
 
-        # guard against nans in phase
-        nans = ~m.isfinite(phase)
-        if m.any(nans):
-            phase[nans] = 0
 
         self.fcn = m.exp(1j * 2 * m.pi * phase)  # phase implicitly in units of waves, no 2pi/l
+        # guard against nans in phase
+        self.fcn[m.isnan(phase)] = 0
         return self
 
     def mask(self, mask, target):
