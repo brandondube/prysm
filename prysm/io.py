@@ -372,9 +372,12 @@ def read_zygo_datx(file):
     # create a handle to the h5 file
     with h5py.File(file, 'r') as f:
         # cast intensity down to int16, saves memory and Zygo doesn't use cameras >> 16-bit
-        intens_block = list(f['Data']['Intensity'].keys())[0]
+        try:
+            intens_block = list(f['Data']['Intensity'].keys())[0]
+            intensity = f['Data']['Intensity'][intens_block].value.astype(m.uint16)
+        except KeyError:
+            intensity = None
         phase_block = list(f['Data']['Surface'].keys())[0]
-        intensity = f['Data']['Intensity'][intens_block].value.astype(m.uint16)
         phase = f['Data']['Surface'][phase_block].value
         phase[phase >= ZYGO_INVALID_PHASE] = m.nan
         phase = phase.astype(config.precision)  # cast to big endian
