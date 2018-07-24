@@ -233,6 +233,9 @@ class OpticalPhase(object):
         """
         fig, ax = share_fig_ax(fig, ax)
 
+        if not hasattr(clim, '__iter__'):
+            clim = (-clim, clim)
+
         im = ax.imshow(self.phase,
                        extent=[self.unit_x[0], self.unit_x[-1], self.unit_y[0], self.unit_y[-1]],
                        cmap=cmap,
