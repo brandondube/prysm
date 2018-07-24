@@ -103,6 +103,7 @@ allfuncs = set((
     'any',
     'all',
     'isfinite',
+    'isnan',
     'ceil',
     'floor',
     'outer',
