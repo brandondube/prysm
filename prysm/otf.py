@@ -441,12 +441,6 @@ def _difflim_mtf_core(normalized_frequency):
         The diffraction MTF function at a given normalized spatial frequency
 
     """
-    if normalized_frequency >= 1.0:
-        return 0
-    else:
-        return (2 / m.pi) * \
-               (m.arccos(normalized_frequency) - normalized_frequency *
-                m.sqrt(1 - normalized_frequency ** 2))
-
-
-_difflim_mtf_core = m.vectorize(_difflim_mtf_core)  # allow "if" in fcn to work with ndarrays
+    return (2 / m.pi) * \
+           (m.arccos(normalized_frequency) - normalized_frequency *
+            m.sqrt(1 - normalized_frequency ** 2))
