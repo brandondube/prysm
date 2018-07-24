@@ -2,10 +2,10 @@
 from scipy import interpolate
 
 from mpl_toolkits.axes_grid1.axes_rgb import make_rgb_axes
-from matplotlib import colors
+from matplotlib import colors, patches
 
 from .coordinates import cart_to_polar
-from .util import share_fig_ax
+from .util import share_fig_ax, rms
 from .convolution import Convolvable
 from .propagation import (
     prop_pupil_plane_to_psf_plane,
@@ -131,7 +131,8 @@ class PSF(Convolvable):
 
     def plot2d(self, axlim=25, power=1, interp_method='lanczos',
                pix_grid=None, fig=None, ax=None,
-               show_axlabels=True, show_colorbar=True):
+               show_axlabels=True, show_colorbar=True,
+               circle_ee=None):
         """Create a 2D plot of the PSF.
 
         Parameters
@@ -154,6 +155,9 @@ class PSF(Convolvable):
             whether or not to show the axis labels
         show_colorbar : `bool`
             whether or not to show the colorbar
+        circle_ee : `float`, optional
+            percent encircled energy to draw a circle at, in addition to
+            diffraction limited airy radius (1.22*λ*F#)
 
         Returns
         -------
@@ -198,6 +202,37 @@ class PSF(Convolvable):
             ax.set_xticks(pts, minor=True)
             ax.yaxis.grid(True, which='minor', color='white', alpha=0.25)
             ax.xaxis.grid(True, which='minor', color='white', alpha=0.25)
+
+        if circle_ee is not None:
+            if self.fno is None:
+                raise ValueError('F/# must be known to compute EE, set self.fno')
+            elif self.wavelength is None:
+                raise ValueError('wavelength must be known to compute EE, set self.wavelength')
+
+            first_null = 1.22 * self.wavelength * self.fno
+            rms = getattr(self, 'rmswfe', 0)
+            if rms < 0.25:
+                factor = 4
+            elif rms < 0.5:
+                factor = 5
+            elif rms < 0.75:
+                factor = 8
+            elif rms < 2:
+                factor = 10
+            else:
+                factor = 20
+
+            pts = m.linspace(0, factor * first_null, 100)
+            ee = self.encircled_energy(pts)
+
+            c = circle_ee / 100
+            radius = pts[m.searchsorted(ee, c)]
+            analytic = _analytical_encircled_energy(self.fno, self.wavelength, pts)
+            rad_analytic = pts[m.searchsorted(analytic, c)]
+            c_diff = patches.Circle((0, 0), rad_analytic, fill=False, color='r', ls='--')
+            c_true = patches.Circle((0, 0), radius, fill=False, color='r')
+            ax.add_artist(c_diff)
+            ax.add_artist(c_true)
 
         return fig, ax
 
@@ -314,9 +349,32 @@ class PSF(Convolvable):
             A new PSF instance
 
         """
-        data = prop_pupil_plane_to_psf_plane(pupil.fcn, pupil.sample_spacing, efl, pupil.wavelength, Q)
-        ux, uy = prop_pupil_plane_to_psf_plane_units(pupil.fcn, pupil.sample_spacing, efl, pupil.wavelength, Q)
-        return PSF(data, ux, uy)
+        # propagate PSF data
+        fcn, ss, wvl = pupil.fcn, pupil.sample_spacing, pupil.wavelength
+        data = prop_pupil_plane_to_psf_plane(fcn, ss, efl, wvl, Q)
+        ux, uy = prop_pupil_plane_to_psf_plane_units(fcn, ss, efl, wvl, Q)
+        psf = PSF(data, ux, uy)
+
+        # determine the F/#, assumes:
+        # - pupil fills x or y width of array
+        # - pupil is not elliptical at an odd angle
+        s = pupil.fcn.shape
+        if s[1] > s[0]:
+            u = pupil.unit_x
+        else:
+            u = pupil.unit_y
+
+        if u[0] == -1 * u[-1]:
+            epd = u[-1] * 2
+        else:
+            epd = u[-1]
+
+        psf.fno = efl / epd
+        psf.wavelength = wvl
+
+        # finally, store the RMS WFE
+        psf.rmswfe = rms(pupil.change_phase_unit(to='waves', inplace=False))
+        return psf
 
 
 class MultispectralPSF(PSF):
@@ -667,9 +725,52 @@ def _airydisk(unit_r, fno, wavelength):
 
 
 def _encircled_energy_core(mtf_data, radius, nu_p, dx, dy):
+    """Core computation of encircled energy, based on Baliga 1988.
+
+    Parameters
+    ----------
+    mtf_data : `numpy.ndarray`
+        unaliased MTF data
+    radius : `float`
+        radius of "detector"
+    nu_p : `numpy.ndarray`
+        radial spatial frequencies
+    dx : `float`
+        x frequency delta
+    dy : `float`
+        y frequency delta
+
+    Returns
+    -------
+    `float`
+        encircled energy for given radius
+
+    """
     integration_fourier = m.j1(2 * m.pi * radius * nu_p) / nu_p
     # division by nu_p will cause a NaN at the origin, 0.5 is the
     # analytical value of jinc there
     integration_fourier[m.isnan(integration_fourier)] = 0.5
     dat = mtf_data * integration_fourier
     return radius * dat.sum() * dx * dy
+
+
+def _analytical_encircled_energy(fno, wavelength, points):
+    """Compute the analytical encircled energy for a diffraction limited circular aperture
+
+    Parameters
+    ----------
+    fno : `float`
+        F/#
+    wavelength : `float`
+        wavelength of light
+    points : `numpy.ndarray`
+        radii of "detector"
+
+    Returns
+    -------
+    `numpy.ndarray`
+        encircled energy values
+
+    """
+    p = points / wavelength * fno / 1.22
+    return 1 - m.j0(p)**2 - m.j1(p)**2
