@@ -24,21 +24,20 @@ def pad2d(array, Q=2, value=0):
     padding will be symmetric.
 
     """
-    x, y = array.shape
+    y, x = array.shape
     out_x = int(x * Q)
     out_y = int(y * Q)
     factor_x = (out_x - x) / 2
-    factor_y = (out_y - x) / 2
+    factor_y = (out_y - y) / 2
     pad_shape = (
-        (int(m.floor(factor_x)), int(m.ceil(factor_x))),
-        (int(m.floor(factor_y)), int(m.ceil(factor_y))))
+        (int(m.floor(factor_y)), int(m.ceil(factor_y))),
+        (int(m.floor(factor_x)), int(m.ceil(factor_x))))
     if value is 0:
-        out = m.zeros((out_x, out_y), dtype=array.dtype)
+        out = m.zeros((out_y, out_x), dtype=array.dtype)
     else:
-        out = m.zeros((out_x, out_y), dtype=array.dtype) + value
-    x_idx1, x_idx2 = pad_shape[0][0], pad_shape[0][1]
-    y_idx1, y_idx2 = pad_shape[1][0], pad_shape[1][1]
-    out[x_idx1:x_idx2 + x, y_idx1:y_idx2 + y] = array
+        out = m.zeros((out_y, out_x), dtype=array.dtype) + value
+    yy, xx = pad_shape
+    out[yy[0]:yy[0] + y, xx[0]:xx[0] + x] = array
     return out
 
 
