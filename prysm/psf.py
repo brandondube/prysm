@@ -116,9 +116,9 @@ class PSF(Convolvable):
 
         # compute MTF from the PSF
         mtf = MTF.from_psf(self)
-        ny, nx = m.meshgrid(mtf.unit_x, mtf.unit_y)
+        ny, nx = m.meshgrid(mtf.unit_y, mtf.unit_x)
         nu_p = m.sqrt(nx ** 2 + ny ** 2)
-        dx, dy = nx[1, 0] - nx[0, 0], ny[0, 1] - ny[0, 0]
+        dy, dx = nx[1, 0] - nx[0, 0], ny[0, 1] - ny[0, 0]
 
         if radius_is_array:
             return [_encircled_energy_core(mtf.data, r, nu_p, dx, dy) for r in radius]
@@ -211,7 +211,9 @@ class PSF(Convolvable):
 
             first_null = 1.22 * self.wavelength * self.fno
             rms = getattr(self, 'rmswfe', 0)
-            if rms < 0.25:
+            if rms < 0.1:
+                factor = 3
+            elif rms < 0.25:
                 factor = 4
             elif rms < 0.5:
                 factor = 5
@@ -772,5 +774,5 @@ def _analytical_encircled_energy(fno, wavelength, points):
         encircled energy values
 
     """
-    p = points / wavelength * fno / 1.22
+    p = points * m.pi / fno / wavelength
     return 1 - m.j0(p)**2 - m.j1(p)**2
