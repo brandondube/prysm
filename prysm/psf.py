@@ -4,11 +4,13 @@ from scipy import interpolate
 from mpl_toolkits.axes_grid1.axes_rgb import make_rgb_axes
 from matplotlib import colors
 
-from .conf import config
-from .coordinates import uniform_cart_to_polar, cart_to_polar
+from .coordinates import cart_to_polar
 from .util import share_fig_ax
 from .convolution import Convolvable
-from .propagation import prop_pupil_plane_to_psf_plane, prop_pupil_plane_to_psf_plane_units
+from .propagation import (
+    prop_pupil_plane_to_psf_plane,
+    prop_pupil_plane_to_psf_plane_units,
+)
 
 from prysm import mathops as m
 
@@ -80,36 +82,48 @@ class PSF(Convolvable):
         """
         return self.unit_x, self.data[self.center_y, :]
 
-    def encircled_energy(self, azimuth=None):
-        """Compute the encircled energy at the requested azumith.
-
-        If azimuth is None, returns the azimuthal average.
+    def encircled_energy(self, radius):
+        """Compute the encircled energy of the PSF
 
         Parameters
         ----------
-        azimuth : `float`
-            azimuth to retrieve data along, in degrees.
+        radius : `float` or iterable
+            radius or radii to evaluate encircled energy at
 
         Returns
         -------
-        self.unit_x : `numpy.ndarray`
-            ordinate, spatial dimension in microns
-        enc_eng : `numpy.ndarray`
-            coordiante, encircled energy
+        encircled energy
+            if radius is a float, returns a float, else returns a list.
+
+        Notes
+        -----
+        implementation of "Simplified Method for Calculating Encircled Energy,"
+        Baliga, J. V. and Cohn, B. D., doi: 10.1117/12.944334
 
         """
-        # interp_dat is shaped with axis0=phi, axis1=rho
-        rho, phi, interp_dat = uniform_cart_to_polar(self.unit_x, self.unit_y, self.data)
+        # TODO: look if Notes should be above or below returns to be consistent
+        # with the rest of prysm
+        from .otf import MTF
 
-        if azimuth is None:
-            # take average of all azimuths as input data
-            dat = interp_dat.mean(axis=0)
+        if hasattr(radius, '__iter__'):
+            # user wants multiple points
+            # um to mm, cy/mm assumed in Fourier plane
+            radius = m.asarray(radius) / 1e3
+            radius_is_array = True
         else:
-            index = m.searchsorted(phi, m.radians(azimuth))
-            dat = interp_dat[index, :]
+            radius /= 1e3
+            radius_is_array = False
 
-        enc_eng = m.cumsum(dat, dtype=config.precision)
-        return self.unit_x[self.center_x:], enc_eng / enc_eng[-1]
+        # compute MTF from the PSF
+        mtf = MTF.from_psf(self)
+        ny, nx = m.meshgrid(mtf.unit_x, mtf.unit_y)
+        nu_p = m.sqrt(nx ** 2 + ny ** 2)
+        dx, dy = nx[1, 0] - nx[0, 0], ny[0, 1] - ny[0, 0]
+
+        if radius_is_array:
+            return [_encircled_energy_core(mtf.data, r, nu_p, dx, dy) for r in radius]
+        else:
+            return _encircled_energy_core(mtf.data, radius, nu_p, dx, dy)
 
     # quick-access slices ------------------------------------------------------
 
@@ -650,3 +664,12 @@ def _airydisk(unit_r, fno, wavelength):
     """
     u_eff = unit_r * m.pi / wavelength / fno
     return abs(2 * m.jinc(u_eff)) ** 2
+
+
+def _encircled_energy_core(mtf_data, radius, nu_p, dx, dy):
+    integration_fourier = m.j1(2 * m.pi * radius * nu_p) / nu_p
+    # division by nu_p will cause a NaN at the origin, 0.5 is the
+    # analytical value of jinc there
+    integration_fourier[m.isnan(integration_fourier)] = 0.5
+    dat = mtf_data * integration_fourier
+    return radius * dat.sum() * dx * dy
