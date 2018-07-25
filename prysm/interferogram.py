@@ -41,6 +41,9 @@ class Interferogram(OpticalPhase):
 
         left, right = nanrows.argmax(), nanrows[::-1].argmax()
         top, bottom = nancols.argmax(), nancols[::-1].argmax()
+        if left == right == top == bottom == 0:
+            return self
+
         self.phase = self.phase[left:-right, top:-bottom]
         self.unit_y, self.unit_x = self.unit_y[left:-right], self.unit_x[top:-bottom]
         return self
