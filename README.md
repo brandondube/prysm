@@ -47,8 +47,6 @@ Prysm uses numpy for array operations.  If your environment has [numba](http://n
 
 * * * user-provided masks
 
-* Thin lens / geometrical optics models
-
 * Point Spread Function (PSF) models
 
 * Modulation Transfer Function (MTF) models
@@ -59,9 +57,19 @@ Prysm uses numpy for array operations.  If your environment has [numba](http://n
 
 * Image synthesis
 
-* Shack-Hartmann sensor models
+* Tools for working with interferometric data
 
-* Utilities for processing MTF data
+* Utilities for working with MTF data
+
+* file readers for:
+
+* * Trioptics data files
+
+* * Zygo data files
+
+* Thin lens / geometrical optics models
+
+* Shack-Hartmann sensor models
 
 * An Object-Oriented Lens model based on physical optics
 
