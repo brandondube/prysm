@@ -51,6 +51,7 @@ class PSF(Convolvable):
         """
         super().__init__(data, unit_x, unit_y, has_analytic_ft=False)
         self.data /= self.data.max()
+        self._ee = {}
 
     # quick-access slices ------------------------------------------------------
 
@@ -121,9 +122,24 @@ class PSF(Convolvable):
         dy, dx = nx[1, 0] - nx[0, 0], ny[0, 1] - ny[0, 0]
 
         if radius_is_array:
-            return [_encircled_energy_core(mtf.data, r, nu_p, dx, dy) for r in radius]
+            for r in radius:
+                out = []
+                if round(r, 4) not in self._ee:
+                    self._ee[round(r, 4)] = _encircled_energy_core(mtf.data,
+                                                                   r,
+                                                                   nu_p,
+                                                                   dx,
+                                                                   dy)
+                out.append(self._ee[round(r, 4)])
+            return [out]
         else:
-            return _encircled_energy_core(mtf.data, radius, nu_p, dx, dy)
+            if round(r, 4) not in self._ee:
+                self._ee[round(radius, 4)] = _encircled_energy_core(mtf.data,
+                                                                    radius,
+                                                                    nu_p,
+                                                                    dx,
+                                                                    dy)
+            return self._ee[round(radius, 4)]
 
     # quick-access slices ------------------------------------------------------
 
