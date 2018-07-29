@@ -618,6 +618,11 @@ def radial_mtf_to_mtfffd_data(tan, sag, imagehts, azimuths, upsample):
     """
     azimuths = m.asarray(azimuths)
     imagehts = m.asarray(imagehts)
+
+    if imagehts[0] > imagehts[-1]:
+        # distortion profiled, values "reversed"
+        # just flip imagehts, since spacing matters and not exact values
+        imagehts = imagehts[::-1]
     amin, amax = min(azimuths), max(azimuths)
     imin, imax = min(imagehts), max(imagehts)
     aq = m.linspace(amin, amax, int(len(azimuths) * upsample))
