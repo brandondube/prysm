@@ -218,7 +218,6 @@ class FringeZernike(Pupil):
 
         strs = []
         for number, (coef, func) in enumerate(zip(self.coefs, z.zernikes)):
-            print(func)
             # skip 0 terms
             if coef == 0:
                 continue
