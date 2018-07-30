@@ -53,36 +53,6 @@ class PSF(Convolvable):
         self.data /= self.data.max()
         self._ee = {}
 
-    # quick-access slices ------------------------------------------------------
-
-    @property
-    def slice_x(self):
-        """Retrieve a slice through the x axis of the PSF.
-
-        Returns
-        -------
-        self.unit_x : `numpy.ndarray`
-            ordinate data
-        self.data : `numpy.ndarray`
-            coordinate data
-
-        """
-        return self.unit_y, self.data[:, self.center_x]
-
-    @property
-    def slice_y(self):
-        """Retrieve a slice through the y axis of the PSF.
-
-        Returns
-        -------
-        self.unit_y : `numpy.ndarray`
-            ordinate data
-        self.data : `numpy.ndarray`
-            coordinate data
-
-        """
-        return self.unit_x, self.data[self.center_y, :]
-
     def encircled_energy(self, radius):
         """Compute the encircled energy of the PSF
 
@@ -252,42 +222,6 @@ class PSF(Convolvable):
             ax.add_artist(c_diff)
             ax.add_artist(c_true)
 
-        return fig, ax
-
-    def plot_slice_xy(self, axlim=20, fig=None, ax=None):
-        """Create a plot of slices through the X and Y axes of the `PSF`.
-
-        Parameters
-        ----------
-        axlim : `float` or `int`
-            axis limits, in microns
-        fig : `matplotlib.figure.Figure`, optional
-            Figure to draw plot in
-        ax : `matplotlib.axes.Axis`
-            Axis to draw plot in
-
-        Returns
-        -------
-        fig : `matplotlib.figure.Figure`, optional
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`, optional
-            Axis containing the plot
-
-        """
-        ux, x = self.slice_x
-        uy, y = self.slice_y
-        label_str = 'Normalized Intensity [a.u.]'
-        lims = (0, 1)
-
-        fig, ax = share_fig_ax(fig, ax)
-
-        ax.plot(ux, x, label='Slice X', lw=3)
-        ax.plot(uy, y, label='Slice Y', lw=3)
-        ax.set(xlabel=r'Image Plane X [$\mu m$]',
-               ylabel=label_str,
-               xlim=(-axlim, axlim),
-               ylim=lims)
-        ax.legend(loc='upper right')
         return fig, ax
 
     def plot_encircled_energy(self, azimuth=None, axlim=20, fig=None, ax=None):
