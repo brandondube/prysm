@@ -50,7 +50,7 @@ class Convolvable(object):
         self.has_analytic_ft = has_analytic_ft
         if data is not None:
             self.samples_y, self.samples_x = data.shape
-            self.center_y, self.center_x = self.samples_x // 2, self.samples_y // 2
+            self.center_y, self.center_x = int(m.ceil(self.samples_y / 2)), int(m.ceil(self.samples_x / 2))
             self.sample_spacing = unit_x[1] - unit_x[0]
         else:
             self.sample_spacing = 1e99
@@ -105,8 +105,6 @@ class Convolvable(object):
         """
         ux, x = self.slice_x
         uy, y = self.slice_y
-        print(ux.shape, x.shape)
-        print(uy.shape, y.shape)
 
         label_str = 'Normalized Intensity [a.u.]'
         lims = (0, 1)

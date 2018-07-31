@@ -56,7 +56,7 @@ def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, prop
 
     """
     s = wavefunction.shape
-    samples_x, samples_y = s[0] * Q, s[1] * Q
+    samples_x, samples_y = s[1] * Q, s[0] * Q
     sample_spacing_x = pupil_sample_to_psf_sample(pupil_sample=input_sample_spacing,  # factor of
                                                   num_samples=samples_x,              # 1e3 corrects
                                                   wavelength=wavelength,              # for unit
@@ -65,8 +65,8 @@ def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, prop
                                                   num_samples=samples_y,              # 1e3 corrects
                                                   wavelength=wavelength,              # for unit
                                                   efl=prop_dist) / 1e3                # translation
-    unit_x = m.arange(-1 * (samples_x // 2), samples_x // 2) * sample_spacing_x
-    unit_y = m.arange(-1 * (samples_y // 2), samples_y // 2) * sample_spacing_y
+    unit_x = m.arange(-1 * int(m.ceil(samples_x / 2)), int(m.floor(samples_x / 2))) * sample_spacing_x
+    unit_y = m.arange(-1 * int(m.ceil(samples_y / 2)), int(m.floor(samples_y / 2))) * sample_spacing_y
     return unit_x, unit_y
 
 

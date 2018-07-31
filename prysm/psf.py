@@ -87,9 +87,9 @@ class PSF(Convolvable):
 
         # compute MTF from the PSF
         mtf = MTF.from_psf(self)
-        ny, nx = m.meshgrid(mtf.unit_y, mtf.unit_x)
+        nx, ny = m.meshgrid(mtf.unit_x, mtf.unit_y)
         nu_p = m.sqrt(nx ** 2 + ny ** 2)
-        dy, dx = nx[1, 0] - nx[0, 0], ny[0, 1] - ny[0, 0]
+        dy, dx = ny[1, 0] - ny[0, 0], nx[0, 1] - nx[0, 0]
 
         if radius_is_array:
             out = []
