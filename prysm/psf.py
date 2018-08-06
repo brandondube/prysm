@@ -103,7 +103,7 @@ class PSF(Convolvable):
                 out.append(self._ee[round(r, 4)])
             return m.asarray(out)
         else:
-            if round(r, 4) not in self._ee:
+            if round(radius, 4) not in self._ee:
                 self._ee[round(radius, 4)] = _encircled_energy_core(mtf.data,
                                                                     radius,
                                                                     nu_p,
