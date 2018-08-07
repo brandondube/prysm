@@ -1,11 +1,11 @@
 """A base point spread function interface."""
-from scipy import interpolate
+from scipy import interpolate, optimize
 
 from mpl_toolkits.axes_grid1.axes_rgb import make_rgb_axes
 from matplotlib import colors, patches
 
 from .coordinates import cart_to_polar
-from .util import share_fig_ax, rms
+from .util import share_fig_ax, sort_xy, rms
 from .convolution import Convolvable
 from .propagation import (
     prop_pupil_plane_to_psf_plane,
@@ -13,6 +13,9 @@ from .propagation import (
 )
 
 from prysm import mathops as m
+
+
+FIRST_AIRY_ENCIRCLED = 0.8377850436212378
 
 
 class PSF(Convolvable):
@@ -52,6 +55,10 @@ class PSF(Convolvable):
         super().__init__(data, unit_x, unit_y, has_analytic_ft=False)
         self.data /= self.data.max()
         self._ee = {}
+        self._mtf = None
+        self._nu_p = None
+        self._dnx = None
+        self._dny = None
 
     def encircled_energy(self, radius):
         """Compute the encircled energy of the PSF
@@ -79,39 +86,49 @@ class PSF(Convolvable):
         if hasattr(radius, '__iter__'):
             # user wants multiple points
             # um to mm, cy/mm assumed in Fourier plane
-            radius = m.asarray(radius) / 1e3
             radius_is_array = True
         else:
-            radius /= 1e3
             radius_is_array = False
 
         # compute MTF from the PSF
-        mtf = MTF.from_psf(self)
-        nx, ny = m.meshgrid(mtf.unit_x, mtf.unit_y)
-        nu_p = m.sqrt(nx ** 2 + ny ** 2)
-        dy, dx = ny[1, 0] - ny[0, 0], nx[0, 1] - nx[0, 0]
+        if self._mtf is None:
+            self._mtf = MTF.from_psf(self)
+            nx, ny = m.meshgrid(self._mtf.unit_x, self._mtf.unit_y)
+            self._nu_p = m.sqrt(nx ** 2 + ny ** 2)
+            self._dnx, self._dny = ny[1, 0] - ny[0, 0], nx[0, 1] - nx[0, 0]
 
         if radius_is_array:
             out = []
             for r in radius:
-                if round(r, 4) not in self._ee:
-                    self._ee[round(r, 4)] = _encircled_energy_core(mtf.data,
-                                                                   r,
-                                                                   nu_p,
-                                                                   dx,
-                                                                   dy)
-                out.append(self._ee[round(r, 4)])
+                if r not in self._ee:
+                    self._ee[r] = _encircled_energy_core(self._mtf.data,
+                                                         r / 1e3,
+                                                         self._nu_p,
+                                                         self._dnx,
+                                                         self._dny)
+                out.append(self._ee[r])
             return m.asarray(out)
         else:
-            if round(radius, 4) not in self._ee:
-                self._ee[round(radius, 4)] = _encircled_energy_core(mtf.data,
-                                                                    radius,
-                                                                    nu_p,
-                                                                    dx,
-                                                                    dy)
-            return self._ee[round(radius, 4)]
+            if radius not in self._ee:
+                self._ee[radius] = _encircled_energy_core(self._mtf.data,
+                                                          radius / 1e3,
+                                                          self._nu_p,
+                                                          self._dnx,
+                                                          self._dny)
+            return self._ee[radius]
 
-    # quick-access slices ------------------------------------------------------
+    def ee_radius(self, energy=FIRST_AIRY_ENCIRCLED):
+        k, v = list(self._ee.keys()), list(self._ee.values())
+        if energy in v:
+            idx = v.index(energy)
+            return k[idx]
+
+        def optfcn(x):
+            return abs(self.encircled_energy(x) - energy)
+
+        result = optimize.minimize(optfcn, 0, method='L-BFGS-B', bounds=((0, None),))
+
+        return result.x[0]
 
     # plotting -----------------------------------------------------------------
 
@@ -142,8 +159,9 @@ class PSF(Convolvable):
         show_colorbar : `bool`
             whether or not to show the colorbar
         circle_ee : `float`, optional
-            percent encircled energy to draw a circle at, in addition to
-            diffraction limited airy radius (1.22*λ*F#)
+            relative encircled energy to draw a circle at, in addition to
+            diffraction limited airy radius (1.22*λ*F#).  First airy zero occurs
+            at circle_ee=0.8377850436212378
 
         Returns
         -------
@@ -195,36 +213,16 @@ class PSF(Convolvable):
             elif self.wavelength is None:
                 raise ValueError('wavelength must be known to compute EE, set self.wavelength')
 
-            first_null = 1.22 * self.wavelength * self.fno
-            rms = getattr(self, 'rmswfe', 0)
-            if rms < 0.1:
-                factor = 3
-            elif rms < 0.25:
-                factor = 4
-            elif rms < 0.5:
-                factor = 5
-            elif rms < 0.75:
-                factor = 8
-            elif rms < 2:
-                factor = 10
-            else:
-                factor = 20
-
-            pts = m.linspace(0, factor * first_null, 100)
-            ee = self.encircled_energy(pts)
-
-            c = circle_ee / 100
-            radius = pts[m.searchsorted(ee, c)]
-            analytic = _analytical_encircled_energy(self.fno, self.wavelength, pts)
-            rad_analytic = pts[m.searchsorted(analytic, c)]
-            c_diff = patches.Circle((0, 0), rad_analytic, fill=False, color='r', ls='--')
+            radius = self.ee_radius(circle_ee)
+            analytic = _inverse_analytic_encircled_energy(self.fno, self.wavelength, circle_ee)
+            c_diff = patches.Circle((0, 0), analytic, fill=False, color='r', ls='--')
             c_true = patches.Circle((0, 0), radius, fill=False, color='r')
             ax.add_artist(c_diff)
             ax.add_artist(c_true)
 
         return fig, ax
 
-    def plot_encircled_energy(self, azimuth=None, axlim=20, fig=None, ax=None):
+    def plot_encircled_energy(self, axlim=None, fig=None, ax=None):
         """Make a 1D plot of the encircled energy at the given azimuth.
 
         Parameters
@@ -246,10 +244,17 @@ class PSF(Convolvable):
             Axis containing the plot
 
         """
-        unit, data = self.encircled_energy(azimuth)
+        if len(self._ee) is not 0:
+            xx, yy = sort_xy(self._ee.keys(), self._ee.values())
+        else:
+            if axlim is 0:
+                raise ValueError('if no values for encircled energy have been computed, axlim must be provided')
+
+            xx = m.linspace(0, axlim, 50)
+            yy = self.encircled_energy(xx)
 
         fig, ax = share_fig_ax(fig, ax)
-        ax.plot(unit, data, lw=3)
+        ax.plot(xx, yy, lw=3)
         ax.set(xlabel=r'Image Plane Distance [$\mu m$]',
                ylabel=r'Encircled Energy [Rel 1.0]',
                xlim=(0, axlim))
@@ -726,3 +731,12 @@ def _analytical_encircled_energy(fno, wavelength, points):
     """
     p = points * m.pi / fno / wavelength
     return 1 - m.j0(p)**2 - m.j1(p)**2
+
+
+def _inverse_analytic_encircled_energy(fno, wavelength, energy=FIRST_AIRY_ENCIRCLED):
+    def optfcn(x):
+        return abs(_analytical_encircled_energy(fno, wavelength, x) - energy)
+
+    result = optimize.minimize(optfcn, 0, method='L-BFGS-B', bounds=((0, None),))
+
+    return result.x[0]

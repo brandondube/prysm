@@ -354,10 +354,13 @@ class MTF(object):
             A new MTF instance
 
         """
-        dat = abs(m.fftshift(m.fft2(psf.data)))
-        unit_x = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_x)  # 1e3 for microns => mm
-        unit_y = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_y)
-        return MTF(dat / dat[psf.center_x, psf.center_y], unit_x, unit_y)
+        if psf._mtf is not None:
+            return psf._mtf
+        else:
+            dat = abs(m.fftshift(m.fft2(psf.data)))
+            unit_x = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_x)  # 1e3 for microns => mm
+            unit_y = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_y)
+            return MTF(dat / dat[psf.center_x, psf.center_y], unit_x, unit_y)
 
     @staticmethod
     def from_pupil(pupil, efl, Q=2):
