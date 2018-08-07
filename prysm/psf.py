@@ -126,7 +126,11 @@ class PSF(Convolvable):
         def optfcn(x):
             return abs(self.encircled_energy(x) - energy)
 
-        result = optimize.minimize(optfcn, 0, method='L-BFGS-B', bounds=((0, None),))
+        result = optimize.minimize(optfcn,
+                                   0,
+                                   method='L-BFGS-B',
+                                   bounds=((0, None),),
+                                   options={'eps': 3 * 1.22 * self.fno * self.wavelength * 1e-5})
 
         return result.x[0]
 
@@ -737,6 +741,12 @@ def _inverse_analytic_encircled_energy(fno, wavelength, energy=FIRST_AIRY_ENCIRC
     def optfcn(x):
         return abs(_analytical_encircled_energy(fno, wavelength, x) - energy)
 
-    result = optimize.minimize(optfcn, 0, method='L-BFGS-B', bounds=((0, None),))
-
+    # for some reason, BFGS will quit immediately without a "goldilocks" sized
+    # epsilon, ~1e-5 balances nonconvergence vs accuracy, take 3x airy radius
+    # as safe alternative, will end up close to 5e-4 or so.
+    result = optimize.minimize(optfcn,
+                               0,
+                               method='L-BFGS-B',
+                               bounds=((0, None),),
+                               options={'eps': 3 * 1.22 * fno * wavelength * 1e-5})
     return result.x[0]
