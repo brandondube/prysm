@@ -5,7 +5,7 @@ from mpl_toolkits.axes_grid1.axes_rgb import make_rgb_axes
 from matplotlib import colors, patches
 
 from .coordinates import cart_to_polar
-from .util import share_fig_ax, sort_xy, rms
+from .util import share_fig_ax, sort_xy
 from .convolution import Convolvable
 from .propagation import (
     prop_pupil_plane_to_psf_plane,
@@ -126,11 +126,12 @@ class PSF(Convolvable):
         def optfcn(x):
             return abs(self.encircled_energy(x) - energy)
 
+        starting_point = 1.22 * self.wavelength * self.fno * 0.5
         result = optimize.minimize(optfcn,
-                                   0,
+                                   starting_point,
                                    method='L-BFGS-B',
                                    bounds=((0, None),),
-                                   options={'eps': 3 * 1.22 * self.fno * self.wavelength * 1e-5})
+                                   options={'ftol': 2e-4, 'gtol': 1e-7})
 
         return result.x[0]
 
@@ -248,12 +249,14 @@ class PSF(Convolvable):
             Axis containing the plot
 
         """
-        if len(self._ee) is not 0:
-            xx, yy = sort_xy(self._ee.keys(), self._ee.values())
-        else:
-            if axlim is 0:
+        if axlim is None:
+            if len(self._ee) is not 0:
+                xx, yy = sort_xy(self._ee.keys(), self._ee.values())
+            else:
                 raise ValueError('if no values for encircled energy have been computed, axlim must be provided')
-
+        elif axlim is 0:
+            raise ValueError('computing from 0 to 0 is stupid')
+        else:
             xx = m.linspace(0, axlim, 50)
             yy = self.encircled_energy(xx)
 
@@ -325,16 +328,10 @@ class PSF(Convolvable):
         else:
             u = pupil.unit_y
 
-        if u[0] == -1 * u[-1]:
-            epd = u[-1] * 2
-        else:
-            epd = u[-1]
+        epd = u[-1] - u[0]
 
         psf.fno = efl / epd
         psf.wavelength = wvl
-
-        # finally, store the RMS WFE
-        psf.rmswfe = rms(pupil.change_phase_unit(to='waves', inplace=False))
         return psf
 
 
@@ -744,9 +741,10 @@ def _inverse_analytic_encircled_energy(fno, wavelength, energy=FIRST_AIRY_ENCIRC
     # for some reason, BFGS will quit immediately without a "goldilocks" sized
     # epsilon, ~1e-5 balances nonconvergence vs accuracy, take 3x airy radius
     # as safe alternative, will end up close to 5e-4 or so.
+    starting_point = 1.22 * fno * wavelength * 0.5
     result = optimize.minimize(optfcn,
-                               0,
+                               starting_point,
                                method='L-BFGS-B',
                                bounds=((0, None),),
-                               options={'eps': 3 * 1.22 * fno * wavelength * 1e-5})
+                               options={'ftol': 1e-4, 'gtol': 1e-8})
     return result.x[0]
