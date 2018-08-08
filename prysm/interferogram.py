@@ -46,6 +46,8 @@ class Interferogram(OpticalPhase):
 
         self.phase = self.phase[left:-right, top:-bottom]
         self.unit_y, self.unit_x = self.unit_y[left:-right], self.unit_x[top:-bottom]
+        self.unit_x -= self.unit_x[0]
+        self.unit_y -= self.unit_y[0]
         return self
 
     def remove_piston(self):
