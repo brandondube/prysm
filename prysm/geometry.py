@@ -331,13 +331,16 @@ def circle(samples=128, radius=1):
         binary ndarray representation of the mask
 
     """
-    x = m.linspace(-1, 1, samples)
-    y = x
-    xx, yy = m.meshgrid(x, y)
-    rho, phi = cart_to_polar(xx, yy)
-    mask = m.ones(rho.shape)
-    mask[rho > radius] = 0
-    return mask
+    if radius is 0:
+        return m.zeros((samples, samples))
+    else:
+        x = m.linspace(-1, 1, samples)
+        y = x
+        xx, yy = m.meshgrid(x, y)
+        rho, phi = cart_to_polar(xx, yy)
+        mask = m.ones(rho.shape)
+        mask[rho > radius] = 0
+        return mask
 
 
 def inverted_circle(samples=128, radius=1):
@@ -354,13 +357,16 @@ def inverted_circle(samples=128, radius=1):
         binary ndarray representation of the mask
 
     """
-    x = m.linspace(-1, 1, samples)
-    y = x
-    xx, yy = m.meshgrid(x, y)
-    rho, phi = cart_to_polar(xx, yy)
-    mask = m.ones(rho.shape)
-    mask[rho < radius] = 0
-    return mask
+    if radius is 0:
+        return m.ones((samples, samples))
+    else:
+        x = m.linspace(-1, 1, samples)
+        y = x
+        xx, yy = m.meshgrid(x, y)
+        rho, phi = cart_to_polar(xx, yy)
+        mask = m.ones(rho.shape)
+        mask[rho < radius] = 0
+        return mask
 
 
 def regular_polygon_mask(num_sides, num_samples):
