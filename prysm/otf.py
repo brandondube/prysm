@@ -354,7 +354,7 @@ class MTF(object):
             A new MTF instance
 
         """
-        if psf._mtf is not None:
+        if getattr(psf, '_mtf', None) is not None:
             return psf._mtf
         else:
             dat = abs(m.fftshift(m.fft2(psf.data)))
