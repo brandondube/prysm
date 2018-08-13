@@ -317,7 +317,7 @@ def trisdecagon(samples=128):
     return regular_polygon_mask(13, samples)
 
 
-def circle(samples=128):
+def circle(samples=128, radius=1):
     """Create a circular mask.
 
     Parameters
@@ -336,7 +336,30 @@ def circle(samples=128):
     xx, yy = m.meshgrid(x, y)
     rho, phi = cart_to_polar(xx, yy)
     mask = m.ones(rho.shape)
-    mask[rho > 1] = 0
+    mask[rho > radius] = 0
+    return mask
+
+
+def inverted_circle(samples=128, radius=1):
+    """ Create an inverted circular mask (obscuration).
+
+    Parameters
+    ----------
+    samples : `int`, optional
+        number of samples in the square output array
+
+    Returns
+    ------
+    `numpy.ndarray`
+        binary ndarray representation of the mask
+
+    """
+    x = m.linspace(-1, 1, samples)
+    y = x
+    xx, yy = m.meshgrid(x, y)
+    rho, phi = cart_to_polar(xx, yy)
+    mask = m.ones(rho.shape)
+    mask[rho < radius] = 0
     return mask
 
 
