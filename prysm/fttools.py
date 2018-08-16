@@ -24,21 +24,24 @@ def pad2d(array, Q=2, value=0):
     padding will be symmetric.
 
     """
-    y, x = array.shape
-    out_x = int(x * Q)
-    out_y = int(y * Q)
-    factor_x = (out_x - x) / 2
-    factor_y = (out_y - y) / 2
-    pad_shape = (
-        (int(m.floor(factor_y)), int(m.ceil(factor_y))),
-        (int(m.floor(factor_x)), int(m.ceil(factor_x))))
-    if value is 0:
-        out = m.zeros((out_y, out_x), dtype=array.dtype)
+    if Q is 1:
+        return array
     else:
-        out = m.zeros((out_y, out_x), dtype=array.dtype) + value
-    yy, xx = pad_shape
-    out[yy[0]:yy[0] + y, xx[0]:xx[0] + x] = array
-    return out
+        y, x = array.shape
+        out_x = int(x * Q)
+        out_y = int(y * Q)
+        factor_x = (out_x - x) / 2
+        factor_y = (out_y - y) / 2
+        pad_shape = (
+            (int(m.floor(factor_y)), int(m.ceil(factor_y))),
+            (int(m.floor(factor_x)), int(m.ceil(factor_x))))
+        if value is 0:
+            out = m.zeros((out_y, out_x), dtype=array.dtype)
+        else:
+            out = m.zeros((out_y, out_x), dtype=array.dtype) + value
+        yy, xx = pad_shape
+        out[yy[0]:yy[0] + y, xx[0]:xx[0] + x] = array
+        return out
 
 
 def unpad2d(array, Q=2):
