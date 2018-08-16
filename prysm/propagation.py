@@ -4,19 +4,13 @@ from .fttools import pad2d
 from prysm import mathops as m
 
 
-def prop_pupil_plane_to_psf_plane(wavefunction, input_sample_spacing, prop_dist, wavelength, Q):
+def prop_pupil_plane_to_psf_plane(wavefunction, Q):
     """Propagate a pupil plane to a PSF plane and compute the grid along which the PSF exists.
 
     Parameters
     ----------
     wavefunction : `numpy.ndarray`
         the pupil wavefunction
-    input_sample_spacing : `float`
-        spacing between samples in the pupil plane
-    prop_dist : `float`
-        propagation distance along the z distance
-    wavelength : `float`
-        wavelength of light
     Q : `float`
         oversampling / padding factor
 

@@ -315,7 +315,7 @@ class PSF(Convolvable):
         """
         # propagate PSF data
         fcn, ss, wvl = pupil.fcn, pupil.sample_spacing, pupil.wavelength
-        data = prop_pupil_plane_to_psf_plane(fcn, ss, efl, wvl, Q)
+        data = prop_pupil_plane_to_psf_plane(fcn, Q)
         ux, uy = prop_pupil_plane_to_psf_plane_units(fcn, ss, efl, wvl, Q)
         psf = PSF(data, ux, uy)
 
