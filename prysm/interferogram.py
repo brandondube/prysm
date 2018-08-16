@@ -4,6 +4,7 @@ from ._zernike import defocus
 from .io import read_zygo_dat, read_zygo_datx
 from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar
+from .propagation import prop_pupil_to_psf_plane
 
 
 from prysm import mathops as m
@@ -32,9 +33,29 @@ class Interferogram(OpticalPhase):
 
     @property
     def dropout_percentage(self):
+        """Percentage of pixels in the data that are invalid (NaN)."""
         return m.count_nonzero(~m.isfinite(self.phase)) / self.phase.size * 100
 
+    def fill(self, _with=0):
+        """Fill invalid (NaN) values.
+
+        Parameters
+        ----------
+        _with : `float`, optional
+            value to fill with
+
+        Returns
+        -------
+        `Interferogram`
+            self
+
+        """
+        nans = ~m.isfinite(self.phase)
+        self.phase[nans] = _with
+        return self
+
     def crop(self):
+        """Crop data to rectangle bounding non-NaN region."""
         nans = m.isfinite(self.phase)
         nancols = m.any(nans, axis=0)
         nanrows = m.any(nans, axis=1)
@@ -74,16 +95,23 @@ class Interferogram(OpticalPhase):
         return self
 
     def mask(self, mask):
-        """Apply a mask to the data, expects an array of zeros (remove) and ones (keep)
+        """Apply a mask to the data.
 
         Parameters
         ----------
-        mask : TYPE
-            Description
+        mask : `numpy.ndarray`
+            masking array; expects an array of zeros (remove) and ones (keep)
+
+        Returns
+        -------
+        `Interferogram`
+            self
+
         """
         hitpts = mask == 0
         self.phase[hitpts] = m.nan
         self.intensity[hitpts] = m.nan
+        return self
 
     def bandreject(self, wllow, wlhigh):
         """Apply a band-rejection filter to the phase (height) data.
@@ -104,6 +132,21 @@ class Interferogram(OpticalPhase):
         new_phase[~m.isfinite(self.phase)] = m.nan
         self.phase = new_phase
         return self
+
+    def psd(self):
+        """Power spectral density of the data., units (self.phase_unit^2)/(cy/self.spatial_unit).
+
+        Returns
+        -------
+        unit_x : `numpy.ndarray`
+            ordinate x frequency axis
+        unit_y : `numpy.ndarray`
+            ordinate y frequency axis
+        psd : `numpy.ndarray`
+            power spectral density
+
+        """
+        return psd(self.phase, self.sample_spacing)
 
     @staticmethod
     def from_zygo_dat(path, multi_intensity_action='first', scale='um'):
@@ -187,3 +230,33 @@ def bandreject_filter(array, sample_spacing, wllow, wlhigh):
     fourier[mask] = 0
     out = m.fftshift(m.ifft2(m.ifftshift(fourier)))
     return out.real
+
+
+def psd(height, sample_spacing, Q=2):
+    """Compute the power spectral density of a signal.
+
+    Parameters
+    ----------
+    height : `numpy.ndarray`
+        height or phase data
+    sample_spacing : `float`
+        spacing of samples in the input data
+    Q : `int`, optional
+        oversampling factor used to apply zero padding, Q=1 to bypass.
+
+    Returns
+    -------
+    unit_x : `numpy.ndarray`
+        ordinate x frequency axis
+    unit_y : `numpy.ndarray`
+        ordinate y frequency axis
+    psd : `numpy.ndarray`
+        power spectral density
+
+    """
+    pass
+    dat = prop_pupil_to_psf_plane(height, Q=Q)
+    psd = abs(dat)**2  # input units nm => nm^2/cy or nm^2?
+    ux = forward_ft_unit(sample_spacing, height.shape[1])
+    uy = forward_ft_unit(sample_spacing, height.shape[0])
+    return ux, uy, psd
