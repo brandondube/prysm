@@ -33,6 +33,6 @@ def test_psf_plot_slice_xy_functions(tpsf):
 
 
 def test_plot_encircled_energy_functions(tpsf):
-    fig, ax = tpsf.plot_encircled_energy()
+    fig, ax = tpsf.plot_encircled_energy(axlim=10)
     assert fig
     assert ax
