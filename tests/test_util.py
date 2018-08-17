@@ -40,18 +40,6 @@ def test_ecdf_binary_distribution():
     assert np.allclose(np.unique(x), np.asarray([0, 1]))  # TODO: more rigorous tests.
 
 
-def test_correct_gamma_unity_case():
-    arr = np.ones((ARR_SIZE, ARR_SIZE)) * 0.75
-    out = util.correct_gamma(arr, encoding=1)
-    assert np.allclose(arr, out)
-
-
-def test_correct_gamma_general_case():
-    arr = np.ones((ARR_SIZE, ARR_SIZE)) * 0.5
-    out = util.correct_gamma(arr, encoding=0.5)
-    assert np.allclose(arr**2, out)
-
-
 def test_fold_array_function():
     arr = np.ones((ARR_SIZE, ARR_SIZE))
     assert util.fold_array(arr).all()
