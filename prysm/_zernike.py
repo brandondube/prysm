@@ -374,10 +374,19 @@ _zernikes = [
     quinternary_spherical
 ]
 
+
+# need to disable this for now, numba doesn't preserve function attrs with vectorize
+# zernikes_cpu = [m.vectorize(func) for func in _zernikes[1:]]  # numba compiled zernikes
+# zernikes_cpu.insert(0, m.jit(_zernikes[0]))
+zernikes_cpu = [m.jit(_zernikes[0])]
+for func in _zernikes[1:]:
+    compfunc = m.vectorize(func)
+    compfunc.name = func.name
+    compfunc.norm = func.norm
+    zernikes_cpu.append(compfunc)
+
 zernikes_gpu = [m.fuse(func) for func in _zernikes[1:]]  # cupy compiled zernikes
-zernikes_cpu = [m.vectorize(func) for func in _zernikes[1:]]  # numba compiled zernikes
 zernikes_gpu.insert(0, _zernikes[0])
-zernikes_cpu.insert(0, m.jit(_zernikes[0]))
 
 
 def change_backend(to):

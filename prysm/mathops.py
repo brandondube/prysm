@@ -165,7 +165,7 @@ def jinc(r):
         the value of j1(x)/x for x != 0, 0.5 at 0
 
     """
-    if r == 0:
+    if r < 1e-8 and r > -1e-8:  # value of jinc for x < 1/2 machine precision  is 0.5
         return 0.5
     else:
         return j1(r) / r
