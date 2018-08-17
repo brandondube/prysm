@@ -101,12 +101,12 @@ class OpticalPhase(object):
         self.phase = phase
         self.wavelength = wavelength
         pul, sul = phase_unit.lower(), spatial_unit.lower()
-        if pul not in self.__class__.units:
-            raise ValueError(f'{pul} not a valid unit, must be in {set(self.__class__.units.keys())}')
-        if sul not in self.__class__.units:
-            raise ValueError(f'{sul} not a valid unit, must be in {set(self.__class__.units.keys())}')
-        self.phase_unit = self.__class__.units[phase_unit.lower()]
-        self.spatial_unit = self.__class__.units[spatial_unit.lower()]
+        if pul not in self.units:
+            raise ValueError(f'{pul} not a valid unit, must be in {set(self.units.keys())}')
+        if sul not in self.units:
+            raise ValueError(f'{sul} not a valid unit, must be in {set(self.units.keys())}')
+        self.phase_unit = self.units[phase_unit.lower()]
+        self.spatial_unit = self.units[spatial_unit.lower()]
         self.center_x = len(self.unit_x) // 2
         self.center_y = len(self.unit_y) // 2
         self.sample_spacing = unit_x[1] - unit_x[0]
@@ -167,11 +167,11 @@ class OpticalPhase(object):
         `self` : `OpticalPhase`
             self
         """
-        fctr = self.__class__.unit_changes['_'.join([self.phase_unit, self.__class__.units[to]])](self.wavelength)
+        fctr = self.unit_changes['_'.join([self.phase_unit, self.units[to]])](self.wavelength)
         new_phase = self.phase / fctr
         if inplace:
             self.phase = new_phase
-            self.phase_unit = self.__class__.units[to.lower()]
+            self.phase_unit = self.units[to.lower()]
             return self
         else:
             return new_phase
@@ -198,13 +198,13 @@ class OpticalPhase(object):
             self
 
         """
-        fctr = self.__class__.unit_changes['_'.join([self.spatial_unit, self.__class__.units[to]])](self.wavelength)
+        fctr = self.unit_changes['_'.join([self.spatial_unit, self.units[to]])](self.wavelength)
         new_ux = self.unit_x / fctr
         new_uy = self.unit_y / fctr
         if inplace:
             self.unit_x = new_ux
             self.unit_y = new_uy
-            self.spatial_unit = self.__class__.units[to.lower()]
+            self.spatial_unit = self.units[to.lower()]
             return self
         else:
             return new_ux, new_uy
