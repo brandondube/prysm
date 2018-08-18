@@ -1,6 +1,4 @@
 """Utilities for working with MTF data."""
-import pandas as pd
-
 from scipy.interpolate import griddata, RegularGridInterpolator as RGI
 
 from .util import share_fig_ax
@@ -369,6 +367,7 @@ def mtf_ts_to_dataframe(tan, sag, freqs, field=0, focus=0):
     pandas dataframe.
 
     """
+    import pandas as pd
     rows = []
     for f, t, s in zip(freqs, tan, sag):
         base_dict = {

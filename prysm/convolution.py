@@ -2,8 +2,6 @@
 """
 from scipy.interpolate import interp2d
 
-from imageio import imread, imsave
-
 import matplotlib as mpl
 
 from prysm import mathops as m
@@ -304,6 +302,7 @@ class Convolvable(object):
             number of bits in the output image
 
         '''
+        from imageio import imsave
         dat = (self.data * 255).astype(m.uint8)
         imsave(path, dat)
 
@@ -328,6 +327,7 @@ class Convolvable(object):
         TODO: proper handling of images with more than 8bpp.
 
         '''
+        from imageio import imread
         imgarr = imread(path, flatten=True, pilmode='F')
         s = imgarr.shape
         extx, exty = s[0] * scale // 2, s[1] * scale // 2

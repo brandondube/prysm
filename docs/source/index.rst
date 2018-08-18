@@ -3,14 +3,14 @@ prysm
 :Release: |release|
 :Date: |today|
 
-prysm is an open-source library for physical and first-order modeling of optical systems and analysis of related data.  It is an unaffiliated sister library to both PROPER and POPPY, codes developed for physical optics modeling of primarily space-based systems.  Prysm has a more restrictive capability in that domain, notably lacking multi-plane diffraction propagation, but also offers a broader set of features.
+prysm is an open-source library for physical and first-order modeling of optical systems and analysis of related data.  It is an unaffiliated sister library to PROPER and POPPY, codes developed for physical optics modeling of primarily space-based systems.  Prysm has a more restrictive capability in that domain, notably lacking multi-plane diffraction propagation, but also offers a broader set of features.
 
 Use Cases
 ---------
 prysm aims to be a swiss army knife for an optical engineer or student.  Its primary use cases include:
 
 * Analysis of optical data
-* robust numerical modeling of optical and opto-electronic systems
+* robust numerical modeling of optical and opto-electronic systems based on physical optics
 * wavefront sensing
 
 Please see the Features section for more details.
@@ -25,7 +25,17 @@ or github:
 
 >>> pip install git+git://github.com/brandondube/prysm.git
 
-It requires a minimal set of dependencies for scientific python; namely numpy, scipy, pandas, and matplotlib.  It optionally depends on numba (for acceleration of some routines on CPUs), cupy (for experimental use with nVidia GPUs), imageio (for reading and writing images), and h5py (for reading of Zygo's datx format).
+It requires a minimal set of dependencies for scientific python; namely `numpy <http://www.numpy.org/>`_, `scipy <https://www.scipy.org/>`_, and `matplotlib <https://matplotlib.org/>`_.  It optionally depends on `numba <https://numba.pydata.org/>`_ (for acceleration of some routines on CPUs), `cupy <https://cupy.chainer.org/>`_ (for experimental use with nVidia GPUs), `imageio <https://imageio.github.io/>`_ (for reading and writing images), `h5py <https://www.h5py.org/>`_ (for reading of Zygo's datx format), and `pandas <https://pandas.pydata.org/>`_ (for some advanced utility MTF functions.  Pip can be instructed to install these alongside prysm,
+
+>>> pip install prysm[cpu+]  // for numba
+
+>>> pip install prysm[cuda] // for cupy
+
+>>> pip install prysm[img] // for imageio
+
+>>> pip install prysm[Mx]  // for h5py
+
+>>> pip install prysm[mtf+] // for pandas
 
 Features
 --------
