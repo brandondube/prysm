@@ -5,6 +5,8 @@ prysm
 
 prysm is an open-source library for physical and first-order modeling of optical systems and analysis of related data.  It is an unaffiliated sister library to PROPER and POPPY, codes developed for physical optics modeling of primarily space-based systems.  Prysm has a more restrictive capability in that domain, notably lacking multi-plane diffraction propagation, but also offers a broader set of features.
 
+.. contents::
+
 Use Cases
 ---------
 prysm aims to be a swiss army knife for an optical engineer or student.  Its primary use cases include:
@@ -26,7 +28,7 @@ or github:
 
 >>> pip install git+git://github.com/brandondube/prysm.git
 
-It requires a minimal set of dependencies for scientific python; namely `numpy <http://www.numpy.org/>`_, `scipy <https://www.scipy.org/>`_, and `matplotlib <https://matplotlib.org/>`_.  It optionally depends on `numba <https://numba.pydata.org/>`_ (for acceleration of some routines on CPUs), `cupy <https://cupy.chainer.org/>`_ (for experimental use with nVidia GPUs), `imageio <https://imageio.github.io/>`_ (for reading and writing images), `h5py <https://www.h5py.org/>`_ (for reading of Zygo's datx format), and `pandas <https://pandas.pydata.org/>`_ (for some advanced utility MTF functions.  Pip can be instructed to install these alongside prysm,
+It requires a minimal set of dependencies for scientific python; namely `numpy <http://www.numpy.org/>`_, `scipy <https://www.scipy.org/>`_, and `matplotlib <https://matplotlib.org/>`_.  It optionally depends on `numba <https://numba.pydata.org/>`_ (for acceleration of some routines on CPUs), `cupy <https://cupy.chainer.org/>`_ (for experimental use with nVidia GPUs), `imageio <https://imageio.github.io/>`_ (for reading and writing images), `h5py <https://www.h5py.org/>`_ (for reading of Zygo's datx format), and `pandas <https://pandas.pydata.org/>`_ (for some advanced utility MTF functions).  Pip can be instructed to install these alongside prysm,
 
 >>> pip install prysm[cpu+]  # for numba
 
@@ -37,6 +39,8 @@ It requires a minimal set of dependencies for scientific python; namely `numpy <
 >>> pip install prysm[Mx]  # for h5py
 
 >>> pip install prysm[mtf+] # for pandas
+
+or they may be installed at any time.
 
 Features
 --------
@@ -75,7 +79,7 @@ Physical Optics
 * * slits
 * * Siemens stars
 * * tilted squares
-* display and reading of images
+* read, write, and display of images
 
 * Detector models for e.g. STOP analysis or image synthesis
 
