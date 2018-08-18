@@ -28,15 +28,15 @@ or github:
 
 It requires a minimal set of dependencies for scientific python; namely `numpy <http://www.numpy.org/>`_, `scipy <https://www.scipy.org/>`_, and `matplotlib <https://matplotlib.org/>`_.  It optionally depends on `numba <https://numba.pydata.org/>`_ (for acceleration of some routines on CPUs), `cupy <https://cupy.chainer.org/>`_ (for experimental use with nVidia GPUs), `imageio <https://imageio.github.io/>`_ (for reading and writing images), `h5py <https://www.h5py.org/>`_ (for reading of Zygo's datx format), and `pandas <https://pandas.pydata.org/>`_ (for some advanced utility MTF functions.  Pip can be instructed to install these alongside prysm,
 
->>> pip install prysm[cpu+]  // for numba
+>>> pip install prysm[cpu+]  # for numba
 
->>> pip install prysm[cuda] // for cupy
+>>> pip install prysm[cuda] # for cupy
 
->>> pip install prysm[img] // for imageio
+>>> pip install prysm[img] # for imageio
 
->>> pip install prysm[Mx]  // for h5py
+>>> pip install prysm[Mx]  # for h5py
 
->>> pip install prysm[mtf+] // for pandas
+>>> pip install prysm[mtf+] # for pandas
 
 Features
 --------
@@ -53,9 +53,9 @@ Physical Optics
 * * * circles and ellipses
 * * * n sided regular polygons
 * * * user-provided
-* * * synthetic interferograms
-* * * PV and rms evaluation
-* * * plotting
+* * synthetic interferograms
+* * PV and rms evaluation
+* * plotting
 
 * Propagation of pupil planes via Fresnel transforms to Point Spread Functions (PSFs), which support
 * * calculation and plotting of encircled energy
