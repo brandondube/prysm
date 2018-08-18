@@ -16,7 +16,8 @@ prysm aims to be a swiss army knife for an optical engineer or student.  Its pri
 Please see the Features section for more details.
 
 Installation
------------
+------------
+
 prysm is available from either PyPi:
 
 >>> pip install prysm

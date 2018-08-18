@@ -16,8 +16,8 @@ setup(
         'cpu+': ['numba'],
         'cuda': ['cupy'],
         'Mx': ['h5py'],
-        'img', ['imageio'],
-        'mtf+', ['pandas'],
+        'img': ['imageio'],
+        'mtf+': ['pandas'],
     },
     classifiers=[
         'Development Status :: 4 - Beta',
