@@ -6,7 +6,7 @@ back to more widely available options in the case that they do not.
 """
 import numpy as np
 
-from scipy.special import j1, j0
+from scipy.special import j1
 
 from prysm.conf import config
 
@@ -114,6 +114,7 @@ allfuncs = set((
     'frombuffer',
     'count_nonzero',
     'trapz',
+    'hanning',
 ))
 
 allfuncs_cupy_missing = set((
