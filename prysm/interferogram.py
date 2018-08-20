@@ -166,6 +166,35 @@ class Interferogram(OpticalPhase):
 
         return self._psd
 
+    def psd_xy(self, Q=1, window='hanning'):
+        """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
+
+        Parameters
+        ----------
+        Q : `int`, optional
+            value of Q, the oversampling or padding parameter
+        window : `str`, {'hanning'}, optional
+            window to apply to the signal prior to taking the fft
+
+        Returns
+        -------
+        unit_x : `numpy.ndarray`
+            ordinate x frequency axis
+        unit_y : `numpy.ndarray`
+            ordinate y frequency axis
+        psd : `numpy.ndarray`
+            power spectral density
+
+        """
+        args = locals()
+        if args != self._psdargs:
+            self._psdargs = args
+            self._psd = psd(self.phase, self.sample_spacing, Q=Q, window=window)
+
+        x, y, _psd = self._psd
+        lx, ly = len(x)//2, len(y)//2
+        return (x[lx:], _psd[ly, lx:]), (y[ly:], _psd[ly:, lx])
+
     def plot_psd2d(self, Q=1, window='hanning',
                    axlim=None, power=3, interp_method='lanczos', fig=None, ax=None):
         x, y, psd = self.psd()
@@ -186,9 +215,21 @@ class Interferogram(OpticalPhase):
         ax.set(xlim=lims, xlabel=r'$\nu_x$ [cy/m]',
                ylim=lims, ylabel=r'$\nu_y$ [cy/m]')
 
-        cb = fig.colorbar(im, label=r'PSD [nm$^2$/(cy/m)$^2$]', ax=ax, fraction=0.046, extend='both')
+        cb = fig.colorbar(im, label=r'PSD [nm$^2$/(cy/m)]', ax=ax, fraction=0.046, extend='both')
         cb.outline.set_edgecolor('k')
         cb.outline.set_linewidth(0.5)
+
+        return fig, ax
+
+    def plot_psdxy(self, Q=1, window='hanning', xlim=None, ylim=None, fig=None, ax=None):
+
+        (x, px), (y, py) = self.psd_xy(Q=Q, window=window)
+
+        fig, ax = share_fig_ax(fig, ax)
+        ax.loglog(x, px, label='x')
+        ax.loglog(y, py, label='y')
+        ax.legend()
+        ax.set(xlim=xlim, xlabel='Spatial Frequency [cy/m]', ylim=ylim, ylabel=r'PSD [nm$^2$/(cy/m)$^2$]')
 
         return fig, ax
 
