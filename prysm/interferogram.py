@@ -1,10 +1,13 @@
 """tools to analyze interferometric data."""
+from matplotlib import colors
+
 from ._phase import OpticalPhase
 from ._zernike import defocus
 from .io import read_zygo_dat, read_zygo_datx
 from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar
-from .propagation import prop_pupil_to_psf_plane
+from .propagation import prop_pupil_plane_to_psf_plane
+from .util import share_fig_ax
 
 
 from prysm import mathops as m
@@ -30,6 +33,9 @@ class Interferogram(OpticalPhase):
         self.meta = meta
         if scale != 'px':
             self.change_spatial_unit(to=scale, inplace=True)
+
+        self._psd = None
+        self._psdargs = {}
 
     @property
     def dropout_percentage(self):
@@ -133,8 +139,15 @@ class Interferogram(OpticalPhase):
         self.phase = new_phase
         return self
 
-    def psd(self):
-        """Power spectral density of the data., units (self.phase_unit^2)/(cy/self.spatial_unit).
+    def psd(self, Q=1, window='hanning'):
+        """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
+
+        Parameters
+        ----------
+        Q : `int`, optional
+            value of Q, the oversampling or padding parameter
+        window : `str`, {'hanning'}, optional
+            window to apply to the signal prior to taking the fft
 
         Returns
         -------
@@ -146,7 +159,38 @@ class Interferogram(OpticalPhase):
             power spectral density
 
         """
-        return psd(self.phase, self.sample_spacing)
+        args = locals()
+        if args != self._psdargs:
+            self._psdargs = args
+            self._psd = psd(self.phase, self.sample_spacing, Q=Q, window=window)
+
+        return self._psd
+
+    def plot_psd2d(self, Q=1, window='hanning',
+                   axlim=None, power=3, interp_method='lanczos', fig=None, ax=None):
+        x, y, psd = self.psd()
+
+        if axlim is None:
+            lims = (None, None)
+        else:
+            lims = (-axlim, axlim)
+
+        fig, ax = share_fig_ax(fig, ax)
+        im = ax.imshow(psd,
+                       extent=[x[0], x[-1], y[0], y[-1]],
+                       origin='lower',
+                       cmap='Greys_r',
+                       norm=colors.LogNorm(1e-12, 1e10),
+                       interpolation=interp_method)
+
+        ax.set(xlim=lims, xlabel=r'$\nu_x$ [cy/m]',
+               ylim=lims, ylabel=r'$\nu_y$ [cy/m]')
+
+        cb = fig.colorbar(im, label=r'PSD [nm$^2$/(cy/m)$^2$]', ax=ax, fraction=0.046, extend='both')
+        cb.outline.set_edgecolor('k')
+        cb.outline.set_linewidth(0.5)
+
+        return fig, ax
 
     @staticmethod
     def from_zygo_dat(path, multi_intensity_action='first', scale='um'):
@@ -232,7 +276,7 @@ def bandreject_filter(array, sample_spacing, wllow, wlhigh):
     return out.real
 
 
-def psd(height, sample_spacing, Q=2):
+def psd(height, sample_spacing, Q=1, window='hanning'):
     """Compute the power spectral density of a signal.
 
     Parameters
@@ -243,6 +287,8 @@ def psd(height, sample_spacing, Q=2):
         spacing of samples in the input data
     Q : `int`, optional
         oversampling factor used to apply zero padding, Q=1 to bypass.
+    window : `str`, {'hanning'}, optional
+        window to apply to the signal prior to taking the fft
 
     Returns
     -------
@@ -254,9 +300,16 @@ def psd(height, sample_spacing, Q=2):
         power spectral density
 
     """
-    pass
-    dat = prop_pupil_to_psf_plane(height, Q=Q)
-    psd = abs(dat)**2  # input units nm => nm^2/cy or nm^2?
-    ux = forward_ft_unit(sample_spacing, height.shape[1])
-    uy = forward_ft_unit(sample_spacing, height.shape[0])
+    s = height.shape
+    window = m.outer(m.hanning(s[0]), m.hanning(s[1]))
+    dat = prop_pupil_plane_to_psf_plane(height * window, Q=Q)
+    ux = forward_ft_unit(sample_spacing, int(round(height.shape[1]*Q, 0)))
+    uy = forward_ft_unit(sample_spacing, int(round(height.shape[0]*Q, 0)))
+
+    # input units nm => nm^2/cy
+    psd = abs(dat / height.size)**2 * 2
+
+    # now normalize by window, should be (1/sample_spacing * window.sum() / sample_spacing**2)
+    # but can avoid an op from redundant sample spacing
+    psd /= (window.sum() / sample_spacing)
     return ux, uy, psd
