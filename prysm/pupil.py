@@ -62,13 +62,13 @@ class Pupil(OpticalPhase):
 
         Parameters
         ----------
-        samples : int, optional
+        samples : `int`, optional
             number of samples across the pupil interior
-        epd : float, optional
+        epd : `float`, optional
             diameter of the pupil, mm
-        wavelength : float, optional
+        wavelength : `float`, optional
             wavelength of light, um
-        opd_unit : str, optional, {'waves', 'um', 'nm'}
+        opd_unit : `str`, optional, {'waves', 'um', 'nm'}
             unit used to m.express the OPD.  Equivalent strings may be used to the
             valid options, e.g. 'microns', or 'nanometers'
         mask : `str` or `numpy.ndarray`

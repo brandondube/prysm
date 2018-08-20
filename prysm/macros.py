@@ -1,8 +1,6 @@
 """Useful macros for performing more complicated tasks."""
 from collections import namedtuple
 
-import pandas as pd
-
 from .seidel import Seidel
 from .fringezernike import FringeZernike
 from .otf import MTF
@@ -55,6 +53,7 @@ def thrufocus_mtf_from_wavefront(focused_wavefront, sim_params):
     see macros.DEFAULT_SIM_PARAMS for an example config
 
     """
+    import pandas as pd
     s = sim_params
     focusdiv_wvs = m.linspace(-1*s.focus_range_waves, s.focus_range_waves, s.focus_planes)
     focusdiv_um = defocus_to_image_displacement(focusdiv_wvs, s.fno, s.wvl, s.focus_zernike, s.focus_normed)

@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='prysm',
-    version='0.12.0',
+    version='0.12.1',
     description='A python optics module',
     long_description='Uses geometrical and fourier optics to model optical systems',
     license='MIT',
@@ -11,11 +11,13 @@ setup(
     author_email='brandondube@gmail.com',
     url='https://github.com/brandondube/prysm',
     packages=['prysm'],
-    install_requires=['numpy', 'scipy', 'pandas', 'matplotlib', 'imageio'],
+    install_requires=['numpy', 'scipy', 'matplotlib'],
     extras_require={
-        'cpu+': ['numba>=0.37.0'],
-        'cuda': ['cupy>=4.0.0'],
-        'Mx': ['h5py>=2.8.0'],
+        'cpu+': ['numba'],
+        'cuda': ['cupy'],
+        'Mx': ['h5py'],
+        'img': ['imageio'],
+        'mtf+': ['pandas'],
     },
     classifiers=[
         'Development Status :: 4 - Beta',
