@@ -205,6 +205,7 @@ class OpticalPhase(object):
             self.unit_x = new_ux
             self.unit_y = new_uy
             self.spatial_unit = self.units[to.lower()]
+            self.sample_spacing /= fctr
             return self
         else:
             return new_ux, new_uy
