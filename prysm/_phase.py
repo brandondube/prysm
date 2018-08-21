@@ -122,7 +122,7 @@ class OpticalPhase(object):
         slice of self.phase : `numpy.ndarray`
 
         """
-        return self.unit_y, self.phase[:, self.center_x]
+        return self.unit_x, self.phase[self.center_y, :]
 
     @property
     def slice_y(self):
@@ -135,7 +135,7 @@ class OpticalPhase(object):
         slice of self.phase : `numpy.ndarray`
 
         """
-        return self.unit_x, self.phase[self.center_y, :]
+        return self.unit_y, self.phase[:, self.center_x]
 
     @property
     def pv(self):
