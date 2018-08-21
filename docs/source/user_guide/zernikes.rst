@@ -10,8 +10,8 @@ There are additional keyword arguments for each term, and the base (0 or 1) can 
 >>> p2 = FringeZernike(Z1=1, Z9=1, Z48=1, base=0, rms_norm=True)
 >>> print(p2)
 rms normalized Fringe Zernike description with:
-        +1.000 Z1 - Tip
-        +1.000 Z9 - Primary Trefoil X
+        +1.000 Z1 - Tip (Y)
+        +1.000 Z9 - Primary Trefoil Y
         +1.000 Z48 - Quinternary Spherical
         13.300 PV, 1.722 RMS
 
