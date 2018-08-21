@@ -79,8 +79,6 @@ class PSF(Convolvable):
         Baliga, J. V. and Cohn, B. D., doi: 10.1117/12.944334
 
         """
-        # TODO: look if Notes should be above or below returns to be consistent
-        # with the rest of prysm
         from .otf import MTF
 
         if hasattr(radius, '__iter__'):
