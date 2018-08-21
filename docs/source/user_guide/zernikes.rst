@@ -1,6 +1,6 @@
 Prysm supports two flavors of Zernike polynomials; the Fringe set up to the 49th term, and the Zemax Standard set up to the 48th term.  They have identical interfaces, so only one will be shown here.
 
-Zernike notations are a subclass of Pupil, so they support the same arguments to :code:`__init__`;
+Zernike notations are a subclass of :class:`Pupil`, so they support the same arguments to :code:`__init__`;
 
 >>> from prysm import FringeZernike, StandardZernike
 >>> p = FringeZernike(samples=123, epd=456.7, wavelength=1.0, opd_unit='nm', mask='dodecagon')
