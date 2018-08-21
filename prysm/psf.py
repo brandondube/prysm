@@ -61,7 +61,7 @@ class PSF(Convolvable):
         self._dny = None
 
     def encircled_energy(self, radius):
-        """Compute the encircled energy of the PSF
+        """Compute the encircled energy of the PSF.
 
         Parameters
         ----------
@@ -118,6 +118,7 @@ class PSF(Convolvable):
             return self._ee[radius]
 
     def ee_radius(self, energy=FIRST_AIRY_ENCIRCLED):
+
         k, v = list(self._ee.keys()), list(self._ee.values())
         if energy in v:
             idx = v.index(energy)
@@ -227,7 +228,7 @@ class PSF(Convolvable):
 
         return fig, ax
 
-    def plot_encircled_energy(self, axlim=None, fig=None, ax=None):
+    def plot_encircled_energy(self, axlim=None, npts=50, fig=None, ax=None):
         """Make a 1D plot of the encircled energy at the given azimuth.
 
         Parameters
@@ -236,6 +237,8 @@ class PSF(Convolvable):
             azimuth to plot at, in degrees
         axlim : `float`
             limits of axis, will plot [0, axlim]
+        npts : `int`, optional
+            number of points to use from [0, axlim]
         fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
@@ -257,7 +260,7 @@ class PSF(Convolvable):
         elif axlim is 0:
             raise ValueError('computing from 0 to 0 is stupid')
         else:
-            xx = m.linspace(0, axlim, 50)
+            xx = m.linspace(0, axlim, npts)
             yy = self.encircled_energy(xx)
 
         fig, ax = share_fig_ax(fig, ax)
@@ -713,7 +716,7 @@ def _encircled_energy_core(mtf_data, radius, nu_p, dx, dy):
 
 
 def _analytical_encircled_energy(fno, wavelength, points):
-    """Compute the analytical encircled energy for a diffraction limited circular aperture
+    """Compute the analytical encircled energy for a diffraction limited circular aperture.
 
     Parameters
     ----------
