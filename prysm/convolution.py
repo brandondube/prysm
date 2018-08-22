@@ -396,6 +396,7 @@ def single_analytical_ft_convolution(without_analytic, with_analytic):
     fourier_unit_x = forward_ft_unit(without_analytic.sample_spacing, without_analytic.samples_x)
     fourier_unit_y = forward_ft_unit(without_analytic.sample_spacing, without_analytic.samples_y)
     a_ft = with_analytic.analytic_ft(fourier_unit_x, fourier_unit_y)
+
     result = _conv_result_core(fourier_data, a_ft)
     return Convolvable(result, without_analytic.unit_x, without_analytic.unit_y, False)
 

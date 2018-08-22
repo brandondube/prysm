@@ -173,7 +173,8 @@ def jinc(r):
 
 
 if numba_installed is True:
-    jinc = vectorize(jinc)
+    # one day split numba jit and numpy jit
+    jinc = np.vectorize(jinc)
 else:
     jinc = np.vectorize(jinc)
 

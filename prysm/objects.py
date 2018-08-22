@@ -157,7 +157,10 @@ class Pinhole(Convolvable):
 
         '''
         xq, yq = m.meshgrid(unit_x, unit_y)
-        rho = m.sqrt(xq**2 + yq**2) / self.width / 1e3
+
+        # factor of pi corrects for jinc being modulo pi
+        # factor of 2 converts radius to diameter
+        rho = m.sqrt(xq**2 + yq**2) * self.width * 2 * m.pi
         return m.jinc(rho).astype(config.precision)
 
 
