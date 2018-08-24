@@ -194,7 +194,7 @@ class Interferogram(OpticalPhase):
         return {
             'x': (x[lx:], _psd[ly, lx:]),
             'y': (y[ly:], _psd[ly:, lx]),
-            'avg': rho, _psd.mean(axis=0),
+            'avg': (rho, _psd.mean(axis=0)),
         }
 
     def plot_psd2d(self, Q=1, window='hanning',
@@ -231,9 +231,9 @@ class Interferogram(OpticalPhase):
         r, pr = xyavg['avg']
 
         fig, ax = share_fig_ax(fig, ax)
-        ax.loglog(x, px, label='x', alpha=0.75, label='x')
-        ax.loglog(y, py, label='y', alpha=0.75, label='y')
-        ax.loglog(r, pr, label='avg', label='avg')
+        ax.loglog(x, px, label='x', alpha=0.75,)
+        ax.loglog(y, py, label='y', alpha=0.75,)
+        ax.loglog(r, pr, label='avg')
         ax.legend()
         ax.set(xlim=xlim, xlabel='Spatial Frequency [cy/m]', ylim=ylim, ylabel=r'PSD [nm$^2$/(cy/m)$^2$]')
 
