@@ -5,7 +5,7 @@ from ._phase import OpticalPhase
 from ._zernike import defocus
 from .io import read_zygo_dat, read_zygo_datx
 from .fttools import forward_ft_unit
-from .coordinates import cart_to_polar
+from .coordinates import cart_to_polar, uniform_cart_to_polar
 from .propagation import prop_pupil_plane_to_psf_plane
 from .util import share_fig_ax
 
@@ -166,7 +166,7 @@ class Interferogram(OpticalPhase):
 
         return self._psd
 
-    def psd_xy(self, Q=1, window='hanning'):
+    def psd_xy_avg(self, Q=1, window='hanning'):
         """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
 
         Parameters
@@ -178,12 +178,8 @@ class Interferogram(OpticalPhase):
 
         Returns
         -------
-        unit_x : `numpy.ndarray`
-            ordinate x frequency axis
-        unit_y : `numpy.ndarray`
-            ordinate y frequency axis
-        psd : `numpy.ndarray`
-            power spectral density
+        `dict`
+            with keys x, y, avg.  Each containing a tuple of (unit, psd)
 
         """
         args = locals()
@@ -193,7 +189,13 @@ class Interferogram(OpticalPhase):
 
         x, y, _psd = self._psd
         lx, ly = len(x)//2, len(y)//2
-        return (x[lx:], _psd[ly, lx:]), (y[ly:], _psd[ly:, lx])
+
+        rho, phi, _psdrp = uniform_cart_to_polar(x, y, _psd)
+        return {
+            'x': (x[lx:], _psd[ly, lx:]),
+            'y': (y[ly:], _psd[ly:, lx]),
+            'avg': rho, _psd.mean(axis=0),
+        }
 
     def plot_psd2d(self, Q=1, window='hanning',
                    axlim=None, power=3, interp_method='lanczos', fig=None, ax=None):
@@ -221,13 +223,17 @@ class Interferogram(OpticalPhase):
 
         return fig, ax
 
-    def plot_psdxy(self, Q=1, window='hanning', xlim=None, ylim=None, fig=None, ax=None):
+    def plot_psd_xyavg(self, Q=1, window='hanning', xlim=None, ylim=None, fig=None, ax=None):
 
-        (x, px), (y, py) = self.psd_xy(Q=Q, window=window)
+        xyavg = self.psd_xy(Q=Q, window=window)
+        x, px = xyavg['x']
+        y, py = xyavg['y']
+        r, pr = xyavg['avg']
 
         fig, ax = share_fig_ax(fig, ax)
-        ax.loglog(x, px, label='x')
-        ax.loglog(y, py, label='y')
+        ax.loglog(x, px, label='x', alpha=0.75, label='x')
+        ax.loglog(y, py, label='y', alpha=0.75, label='y')
+        ax.loglog(r, pr, label='avg', label='avg')
         ax.legend()
         ax.set(xlim=xlim, xlabel='Spatial Frequency [cy/m]', ylim=ylim, ylabel=r'PSD [nm$^2$/(cy/m)$^2$]')
 
