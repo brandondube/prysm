@@ -72,24 +72,23 @@ def uniform_cart_to_polar(x, y, data):
     f(rho,phi) : `numpy.ndarray`
         data uniformly sampled in (rho,phi)
 
-    Notes
-    -----
-    Assumes data is sampled along x = [-1,1] and y = [-1,1] over a square grid.
-
     """
     # create a set of polar coordinates to interpolate onto
-    xmax = x[-1]
-    num_pts = len(x)
-    rho = m.linspace(0, xmax, num_pts / 2)
-    phi = m.linspace(0, 2 * m.pi, num_pts)
+    xmin, xmax = min(x), max(x)
+    ymin, ymax = min(y), max(y)
+
+    _max = max(abs(m.asarray([xmin, xmax, ymin, ymax])))
+
+    rho = m.linspace(0, _max, len(x))
+    phi = m.linspace(0, 2 * m.pi, len(y))
     rv, pv = m.meshgrid(rho, phi)
 
     # map points to x, y and make a grid for the original samples
     xv, yv = polar_to_cart(rv, pv)
 
     # interpolate the function onto the new points
-    f = interpolate.RegularGridInterpolator((x, y), data)
-    return rho, phi, f((xv, yv), method='linear')
+    f = interpolate.RegularGridInterpolator((y, x), data, bounds_error=False, fill_value=0)
+    return rho, phi, f((yv, xv), method='linear')
 
 
 def resample_2d(array, sample_pts, query_pts):
