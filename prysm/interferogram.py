@@ -145,7 +145,9 @@ class Interferogram(OpticalPhase):
         Parameters
         ----------
         Q : `int`, optional
-            value of Q, the oversampling or padding parameter
+            padding factor used before taking the FFT.
+            Q=1 is no padding, Q=2 is padding equal to 1/2 the width of the input
+            on each side
         window : `str`, {'hanning'}, optional
             window to apply to the signal prior to taking the fft
 
@@ -172,7 +174,9 @@ class Interferogram(OpticalPhase):
         Parameters
         ----------
         Q : `int`, optional
-            value of Q, the oversampling or padding parameter
+            padding factor used before taking the FFT.
+            Q=1 is no padding, Q=2 is padding equal to 1/2 the width of the input
+            on each side
         window : `str`, {'hanning'}, optional
             window to apply to the signal prior to taking the fft
 
@@ -199,6 +203,36 @@ class Interferogram(OpticalPhase):
 
     def plot_psd2d(self, Q=1, window='hanning',
                    axlim=None, power=3, interp_method='lanczos', fig=None, ax=None):
+        """Summary
+
+        Parameters
+        ----------
+        Q : `int`, optional
+            padding factor used before taking the FFT.
+            Q=1 is no padding, Q=2 is padding equal to 1/2 the width of the input
+            on each side
+        window : `str`, {'hanning'}, optional
+            window to apply to the signal prior to taking the fft
+        axlim : `float`, optional
+            symmetrical axis limit
+        power : `float`, optional
+            inverse of power to stretch image by
+        interp_method : `str`, optional
+            method used to interpolate the image, passed directly to matplotlib
+            imshow
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        """
         x, y, psd = self.psd()
 
         if axlim is None:
@@ -223,8 +257,41 @@ class Interferogram(OpticalPhase):
 
         return fig, ax
 
-    def plot_psd_xyavg(self, Q=1, window='hanning', xlim=None, ylim=None, fig=None, ax=None):
+    def plot_psd_xyavg(self, Q=1, window='hanning', a=None, b=None, c=None,
+                       xlim=None, ylim=None, fig=None, ax=None):
+        """Plot the x, y, and average PSD on a linear x axis.
 
+        Parameters
+        ----------
+        Q : `int`, optional
+            padding factor used before taking the FFT.
+            Q=1 is no padding, Q=2 is padding equal to 1/2 the width of the input
+            on each side
+        window : `str`, {'hanning'}, optional
+            window to apply to the signal prior to taking the fft
+        a : None, optional
+            Description
+        b : None, optional
+            Description
+        c : None, optional
+            Description
+        xlim : `tuple`, optional
+            len 2 tuple of low, high x axis limits
+        ylim : `tuple`, optional
+            len 2 tuple of low, high y axis limits
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        """
         xyavg = self.psd_xy_avg(Q=Q, window=window)
         x, px = xyavg['x']
         y, py = xyavg['y']
