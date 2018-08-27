@@ -24,13 +24,14 @@ class Interferogram(OpticalPhase):
 
         super().__init__(unit_x=x, unit_y=y, phase=phase,
                          wavelength=meta.get('wavelength'), phase_unit='nm',
-                         spatial_unit='m' if scale != 'px' else scale)
+                         spatial_unit='m' if scale == 'px' else scale)
 
         self.xaxis_label = 'X'
         self.yaxis_label = 'Y'
         self.zaxis_label = 'Height'
         self.intensity = intensity
         self.meta = meta
+
         if scale != 'px':
             self.change_spatial_unit(to=scale, inplace=True)
 
