@@ -196,11 +196,18 @@ class Interferogram(OpticalPhase):
         lx, ly = len(x)//2, len(y)//2
 
         rho, phi, _psdrp = uniform_cart_to_polar(x, y, _psd)
+
         return {
             'x': (x[lx:], _psd[ly, lx:]),
             'y': (y[ly:], _psd[ly:, lx]),
             'avg': (rho, _psdrp.mean(axis=0)),
         }
+
+    def clear_psd(self):
+        """Clear cached PSD data."""
+        self._psdargs = {}
+        self._psd = None
+        return self
 
     def plot_psd2d(self, Q=1, window='hanning',
                    axlim=None, power=3, interp_method='lanczos', fig=None, ax=None):
