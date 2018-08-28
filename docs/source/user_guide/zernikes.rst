@@ -1,3 +1,7 @@
+********
+Zernikes
+********
+
 Prysm supports two flavors of Zernike polynomials; the Fringe set up to the 49th term, and the Zemax Standard set up to the 48th term.  They have identical interfaces, so only one will be shown here.
 
 Zernike notations are a subclass of :class:`Pupil`, so they support the same arguments to :code:`__init__`;

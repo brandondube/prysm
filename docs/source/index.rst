@@ -1,5 +1,6 @@
+*****
 prysm
-=====
+*****
 :Release: |release|
 :Date: |today|
 

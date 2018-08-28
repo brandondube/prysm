@@ -1,3 +1,7 @@
+******
+Pupils
+******
+
 Most any physical optics model begins with a description of a wave at a pupil plane.  This page will cover the core functionality of pupils; each analytical variety has its own documentation.
 
 
