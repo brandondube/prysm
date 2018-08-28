@@ -85,7 +85,7 @@ class MTF(object):
             coordiante
 
         """
-        return self.unit_x[self.center_x:], self.data[self.center_y:, self.center_x:]
+        return self.unit_x[self.center_x:], self.data[self.center_y:, self.center_x]
 
     @property
     def sag(self):
