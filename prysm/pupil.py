@@ -15,13 +15,18 @@ class Pupil(OpticalPhase):
 
     Properties
     ----------
-    slice_x: slice through the x axis of the pupil.  Returns (x,y)
-             data where x is the sample coordinate and y is the phase.
-    slice_y: slice through the y axis of the pupil.  Returns (x,y)
-             data where x is the sample coordinate and y is the phase.
-    pv: Peak-To-Valley wavefront error.
-    rms: Root Mean Square wavefront error.
-    Ra: Ra wavefront error.
+    slice_x: `numpy.ndarray`
+        slice through the x axis of the pupil.  Returns (x,y) data where x is
+        the sample coordinate and y is the phase.
+    slice_y: `numpy.ndarray`
+        slice through the y axis of the pupil.  Returns (x,y) data where x is
+        the sample coordinate and y is the phase.
+    pv: `float`
+        Peak-To-Valley wavefront error.
+    rms: `float`
+        Root Mean Square wavefront error.
+    Sa: `float`
+        Sa wavefront error.
 
     Notes
     -----
