@@ -100,7 +100,7 @@ First-Order Optics
 * two lens EFL and BFL
 
 Parsing Data from Commercial Instruments
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 * Trioptics ImageMaster MTF benches
 * Zygo Fizeau and white light interferometers
 

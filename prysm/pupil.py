@@ -158,7 +158,6 @@ class Pupil(OpticalPhase):
         """
         phase = self.change_phase_unit(to='waves', inplace=False)
 
-
         self.fcn = m.exp(1j * 2 * m.pi * phase)  # phase implicitly in units of waves, no 2pi/l
         # guard against nans in phase
         self.fcn[m.isnan(phase)] = 0
@@ -289,6 +288,26 @@ class Pupil(OpticalPhase):
 
     @staticmethod
     def from_interferogram(interferogram, wvl=None):
+        """Create a new Pupil instance from an interferogram.
+
+        Parameters
+        ----------
+        interferogram : `Interferogram`
+            an interferogram object
+        wvl : `float`, optional
+            wavelength of light, in micrometers, if not present in interferogram.meta
+
+        Returns
+        -------
+        `Pupil`
+            new Pupil instance
+
+        Raises
+        ------
+        ValueError
+            wavelength not present
+
+        """
         if wvl is None:  # not user specified
             wvl = interferogram.meta.get('Wavelength', None)
             if wvl is None:  # not from a datx file
