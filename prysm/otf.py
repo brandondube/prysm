@@ -85,7 +85,7 @@ class MTF(object):
             coordiante
 
         """
-        return self.unit_x[self.center_x:], self.data[self.center_x:, self.center_y]
+        return self.unit_x[self.center_x:], self.data[self.center_y:, self.center_x:]
 
     @property
     def sag(self):
@@ -104,7 +104,7 @@ class MTF(object):
             coordiante
 
         """
-        return self.unit_y[self.center_y:], self.data[self.center_x, self.center_y:]
+        return self.unit_y[self.center_y:], self.data[self.center_y, self.center_x:]
 
     def exact_polar(self, freqs, azimuths=None):
         """Retrieve the MTF at the specified frequency-azimuth pairs.
