@@ -108,6 +108,11 @@ Parsing Data from Commercial Instruments
 User's Guide
 ------------
 
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   user_guide/*
 
 Developer Guide
 ---------------
