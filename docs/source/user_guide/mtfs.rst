@@ -44,3 +44,12 @@ Finally, MTFs may be plotted:
 >>> mt.plot2d(max_freq=200, power=1, fig=None, ax=None)
 
 all arguments have these default values.  The axes of plot2d will span (-max_freq, max_freq) on both x and y.
+
+The complete API documentation is below.
+
+----
+
+.. autoclass:: prysm.otf.MTF
+    :members:
+    :undoc-members:
+    :show-inheritance:

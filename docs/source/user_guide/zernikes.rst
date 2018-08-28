@@ -21,4 +21,11 @@ rms normalized Fringe Zernike description with:
 
 Notice that the RMS value is equal to sqrt(1^2 + 1^2 + 1^2) = sqrt(3) = 1.732 ~= 1.722.  The difference of ~1% is due to the array sizes used by prysm by default, if increased, e.g. by adding :code:`samples=1204` to the above :code:`p2 = FringeZernike(...)` line, the value would converge to the analytical one.
 
-See :doc:`pupils <./pupils>` for information about general pupil functions.
+See :doc:`pupils <./pupils>` for information about general pupil functions.  Below, the Fringe type of Zernike description has its full documentation printed.
+
+----
+
+.. autoclass:: prysm.fringezernike.FringeZernike
+    :members:
+    :undoc-members:
+    :show-inheritance:

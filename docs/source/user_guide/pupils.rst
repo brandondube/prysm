@@ -60,7 +60,7 @@ The complete API documentation is below.
 
 ----
 
-.. automodule:: prysm.pupil
+.. autoclass:: prysm.pupil.Pupil
     :members:
     :undoc-members:
     :show-inheritance:

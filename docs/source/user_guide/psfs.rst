@@ -41,3 +41,8 @@ The PSF can be plotted in 2D,
 Both :code:`plot_encircled_energy` and :code:`plot2d` take the usual :code:`fig` and :code:`ax` kwargs as well.  For plot2d, the axlim arg sets the x and y axis limits to symmetrical values of :code:`axlim`, i.e. the limits above will be [0.8, 0.8], [0.8, 0.8].  :code:`power` controls the stretch of the color scale.  The image will be stretched by the 1/power power, e.g. 2 plots psf^(1/2).  :code:`interp_method` is passed to matplotlib.  :code:`pix_grid` will use the minor axis ticks to draw a light grid over the PSF, intended to show the size of a PSF relative to the pixels of a detector.  Units of microns.  :code:`show_axlabels` and :code:`show_colorbar` both default to True, and control whether the axis labels are set and if the colorbar is drawn.  :code:`circle_ee` will draw a dashed circle at the radius containing the specified portion of the energy, and another at the diffraction limited radius for a circular aperture.
 
 PSFs are a subclass of :class:`Convolvable` and inherit all methods and attributes
+
+.. autoclass:: prysm.psf.PSF
+    :members:
+    :undoc-members:
+    :show-inheritance:
