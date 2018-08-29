@@ -4,7 +4,7 @@ from .fttools import pad2d
 from prysm import mathops as m
 
 
-def prop_pupil_plane_to_psf_plane(wavefunction, Q):
+def prop_pupil_plane_to_psf_plane(wavefunction, Q, norm=None):
     """Propagate a pupil plane to a PSF plane and compute the grid along which the PSF exists.
 
     Parameters
@@ -13,6 +13,8 @@ def prop_pupil_plane_to_psf_plane(wavefunction, Q):
         the pupil wavefunction
     Q : `float`
         oversampling / padding factor
+    norm : `str`, {None, 'ortho'}
+        normalization parameter passed directly to numpy/cupy fft
 
     Returns
     -------
@@ -21,7 +23,7 @@ def prop_pupil_plane_to_psf_plane(wavefunction, Q):
 
     """
     padded_wavefront = pad2d(wavefunction, Q)
-    impulse_response = m.ifftshift(m.fft2(m.fftshift(padded_wavefront)))
+    impulse_response = m.ifftshift(m.fft2(m.fftshift(padded_wavefront), norm=norm))
     return abs(impulse_response) ** 2
 
 
