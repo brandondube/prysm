@@ -151,7 +151,7 @@ def rms(array):
     return m.sqrt((array[non_nan] ** 2).mean())
 
 
-def Ra(array):
+def Sa(array):
     """Return the Ra value for the valid elements of an array.
 
     Parameters

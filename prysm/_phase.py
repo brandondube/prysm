@@ -1,6 +1,6 @@
 """phase basics."""
 
-from .util import share_fig_ax, pv, rms, Ra
+from .util import share_fig_ax, pv, rms, Sa
 
 from prysm import mathops as m
 
@@ -146,8 +146,8 @@ class OpticalPhase(object):
         return rms(self.phase)
 
     @property
-    def Ra(self):
-        return Ra(self.phase)
+    def Sa(self):
+        return Sa(self.phase)
 
     def change_phase_unit(self, to, inplace=True):
         """Change the units used to describe the phase.
