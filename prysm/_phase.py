@@ -149,7 +149,7 @@ class OpticalPhase(object):
     def Ra(self):
         return Ra(self.phase)
 
-    def change_phase_unit(self, to, inplace=False):
+    def change_phase_unit(self, to, inplace=True):
         """Change the units used to describe the phase.
 
         Parameters
@@ -176,7 +176,7 @@ class OpticalPhase(object):
         else:
             return new_phase
 
-    def change_spatial_unit(self, to, inplace=False):
+    def change_spatial_unit(self, to, inplace=True):
         """Change the units used to describe the spatial dimensions.
 
         Parameters
