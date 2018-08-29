@@ -256,10 +256,11 @@ class Interferogram(OpticalPhase):
                        norm=colors.LogNorm(1e-12, 1e10),
                        interpolation=interp_method)
 
-        ax.set(xlim=lims, xlabel=r'$\nu_x$ [cy/m]',
-               ylim=lims, ylabel=r'$\nu_y$ [cy/m]')
+        ax.set(xlim=lims, xlabel=r'$\nu_x$' + f'[cy/{self.spatial_unit}]',
+               ylim=lims, ylabel=r'$\nu_y$' + f'[cy/{self.spatial_unit}]')
 
-        cb = fig.colorbar(im, label=r'PSD [nm$^2$/(cy/m)]', ax=ax, fraction=0.046, extend='both')
+        cb = fig.colorbar(im, label=r'PSD [nm$^2$' + f'/(cy/{self.spatial_unit})]',
+                          ax=ax, fraction=0.046, extend='both')
         cb.outline.set_edgecolor('k')
         cb.outline.set_linewidth(0.5)
 
@@ -310,7 +311,8 @@ class Interferogram(OpticalPhase):
         ax.loglog(y, py, lw=3, label='y', alpha=0.4)
         ax.loglog(r, pr, lw=3, label='avg')
         ax.legend(title='Orientation')
-        ax.set(xlim=xlim, xlabel='Spatial Frequency [cy/m]', ylim=ylim, ylabel=r'PSD [nm$^2$/(cy/m)$^2$]')
+        ax.set(xlim=xlim, xlabel=f'Spatial Frequency [cy/{self.spatial_unit}]',
+               ylim=ylim, ylabel=r'PSD [nm$^2$/' + f'(cy/{self.spatial_unit})$^2$]')
 
         return fig, ax
 
@@ -346,9 +348,10 @@ class Interferogram(OpticalPhase):
         if res == 0.0:
             res = 1
             scale = 'px'
-        return Interferogram(phase=phase, intensity=zydat['intensity'],
-                             x=m.arange(phase.shape[1]) * res, y=m.arange(phase.shape[0]) * res,
-                             scale=scale.lower(), meta=zydat['meta'])
+        i = Interferogram(phase=phase, intensity=zydat['intensity'],
+                          x=m.arange(phase.shape[1]) * res, y=m.arange(phase.shape[0]) * res,
+                          scale='m', meta=zydat['meta'])
+        return i.change_spatial_unit(to=scale.lower(), inplace=True)
 
 
 def fit_plane(x, y, z):
@@ -423,15 +426,30 @@ def psd(height, sample_spacing, Q=1, window='hanning'):
 
     """
     s = height.shape
-    window = m.outer(m.hanning(s[0]), m.hanning(s[1]))
-    dat = prop_pupil_plane_to_psf_plane(height * window, Q=Q)
+
+    window = window_2d_welch(m.arange(s[1])*sample_spacing, m.arange(s[0])*sample_spacing)
+    window = m.ones(height.shape)
+    psd = prop_pupil_plane_to_psf_plane(height * window, Q=Q, norm='ortho')
     ux = forward_ft_unit(sample_spacing, int(round(height.shape[1]*Q, 0)))
     uy = forward_ft_unit(sample_spacing, int(round(height.shape[0]*Q, 0)))
 
-    # input units nm => nm^2/cy
-    psd = abs(dat / height.size)**2 * 2
+    psd /= height.size
 
-    # now normalize by window, should be (1/sample_spacing * window.sum() / sample_spacing**2)
-    # but can avoid an op from redundant sample spacing
-    psd /= (window.sum() / sample_spacing)
+    # adjustment for 2D welch window bias, there is room for improvement to this
+    # approximate value from:
+    # Power Spectral Density Specification and Analysis of Large Optical Surfaces
+    # E. Sidick, JPL
+    psd /= 0.925
     return ux, uy, psd
+
+
+def window_2d_welch(x, y, alpha=8):
+    xx, yy = m.meshgrid(x, y)
+    r, _ = cart_to_polar(xx, yy)
+    rmax = m.sqrt(x.max()**2 + y.max()**2)
+    window = 1 - abs(r/rmax)**alpha
+    return window
+
+
+def abc_psd(a, b, c, nu):
+    return a / (1 + (nu/b)**2)**(c/2)
