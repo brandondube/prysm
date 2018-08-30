@@ -15,7 +15,7 @@ from prysm import mathops as m
 
 class Interferogram(OpticalPhase):
     """Class containing logic and data for working with interferometric data."""
-    def __init__(self, phase, intensity=None, x=None, y=None, scale='px', meta=None):
+    def __init__(self, phase, intensity=None, x=None, y=None, scale='px', phase_unit='nm', meta=None):
         if x is None:  # assume x, y given together
             x = m.arange(phase.shape[1])
             y = m.arange(phase.shape[0])
@@ -23,7 +23,7 @@ class Interferogram(OpticalPhase):
             self.lateral_res = 1
 
         super().__init__(unit_x=x, unit_y=y, phase=phase,
-                         wavelength=meta.get('wavelength'), phase_unit='nm',
+                         wavelength=meta.get('wavelength'), phase_unit=phase_unit,
                          spatial_unit='m' if scale == 'px' else scale)
 
         self.xaxis_label = 'X'
@@ -97,8 +97,15 @@ class Interferogram(OpticalPhase):
 
     def remove_piston_tiptilt(self):
         """Remove piston/tip/tilt from the data, see remove_tiptilt and remove_piston."""
-        self.remove_tiptilt()
         self.remove_piston()
+        self.remove_tiptilt()
+        return self
+
+    def remove_piston_tiptilt_power(self):
+        """Remove piston/tip/tilt/power from the data."""
+        self.remove_piston()
+        self.remove_piston_tiptilt()
+        self.remove_power()
         return self
 
     def mask(self, mask):
