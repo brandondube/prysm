@@ -141,23 +141,15 @@ class Interferogram(OpticalPhase):
         -------
         `Interferogram`
             in-place modified instance of self
+
         """
         new_phase = bandreject_filter(self.phase, self.sample_spacing, wllow, wlhigh)
         new_phase[~m.isfinite(self.phase)] = m.nan
         self.phase = new_phase
         return self
 
-    def psd(self, Q=1, window='hanning'):
+    def psd(self):
         """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
-
-        Parameters
-        ----------
-        Q : `int`, optional
-            padding factor used before taking the FFT.
-            Q=1 is no padding, Q=2 is padding equal to 1/2 the width of the input
-            on each side
-        window : `str`, {'hanning'}, optional
-            window to apply to the signal prior to taking the fft
 
         Returns
         -------
@@ -169,24 +161,13 @@ class Interferogram(OpticalPhase):
             power spectral density
 
         """
-        args = locals()
-        if args != self._psdargs:
-            self._psdargs = args
-            self._psd = psd(self.phase, self.sample_spacing, Q=Q, window=window)
+        if self._psd is None:
+            self._psd = psd(self.phase, self.sample_spacing)
 
         return self._psd
 
-    def psd_xy_avg(self, Q=1, window='hanning'):
+    def psd_xy_avg(self):
         """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
-
-        Parameters
-        ----------
-        Q : `int`, optional
-            padding factor used before taking the FFT.
-            Q=1 is no padding, Q=2 is padding equal to 1/2 the width of the input
-            on each side
-        window : `str`, {'hanning'}, optional
-            window to apply to the signal prior to taking the fft
 
         Returns
         -------
@@ -194,10 +175,8 @@ class Interferogram(OpticalPhase):
             with keys x, y, avg.  Each containing a tuple of (unit, psd)
 
         """
-        args = locals()
-        if args != self._psdargs:
-            self._psdargs = args
-            self._psd = psd(self.phase, self.sample_spacing, Q=Q, window=window)
+        if self._psd is None:
+            self._psd = psd(self.phase, self.sample_spacing)
 
         x, y, _psd = self._psd
         lx, ly = len(x)//2, len(y)//2
@@ -216,18 +195,11 @@ class Interferogram(OpticalPhase):
         self._psd = None
         return self
 
-    def plot_psd2d(self, Q=1, window='hanning',
-                   axlim=None, power=3, interp_method='lanczos', fig=None, ax=None):
-        """Summary
+    def plot_psd2d(self, axlim=None, interp_method='lanczos', fig=None, ax=None):
+        """Plot the two dimensional PSD.
 
         Parameters
         ----------
-        Q : `int`, optional
-            padding factor used before taking the FFT.
-            Q=1 is no padding, Q=2 is padding equal to 1/2 the width of the input
-            on each side
-        window : `str`, {'hanning'}, optional
-            window to apply to the signal prior to taking the fft
         axlim : `float`, optional
             symmetrical axis limit
         power : `float`, optional
@@ -260,7 +232,7 @@ class Interferogram(OpticalPhase):
                        extent=[x[0], x[-1], y[0], y[-1]],
                        origin='lower',
                        cmap='Greys_r',
-                       norm=colors.LogNorm(1e-12, 1e10),
+                       norm=colors.LogNorm(1e-10, 1e5),
                        interpolation=interp_method)
 
         ax.set(xlim=lims, xlabel=r'$\nu_x$' + f'[cy/{self.spatial_unit}]',
@@ -273,18 +245,12 @@ class Interferogram(OpticalPhase):
 
         return fig, ax
 
-    def plot_psd_xyavg(self, Q=1, window='hanning', a=None, b=None, c=None,
+    def plot_psd_xyavg(self, a=None, b=None, c=None,
                        xlim=None, ylim=None, fig=None, ax=None):
         """Plot the x, y, and average PSD on a linear x axis.
 
         Parameters
         ----------
-        Q : `int`, optional
-            padding factor used before taking the FFT.
-            Q=1 is no padding, Q=2 is padding equal to 1/2 the width of the input
-            on each side
-        window : `str`, {'hanning'}, optional
-            window to apply to the signal prior to taking the fft
         a : `float`, optional
             a coefficient of Lorentzian PSD model plotted alongside data
         b : `float`, optional
@@ -308,7 +274,7 @@ class Interferogram(OpticalPhase):
             Axis containing the plot
 
         """
-        xyavg = self.psd_xy_avg(Q=Q, window=window)
+        xyavg = self.psd_xy_avg()
         x, px = xyavg['x']
         y, py = xyavg['y']
         r, pr = xyavg['avg']
@@ -319,7 +285,7 @@ class Interferogram(OpticalPhase):
         ax.loglog(r, pr, lw=3, label='avg')
 
         if a is not None:
-            requirement = abc_psd(a,b,c, r)
+            requirement = abc_psd(a, b, c, r)
             ax.loglog(r, requirement, c='k', lw=3)
 
         ax.legend(title='Orientation')
@@ -413,7 +379,7 @@ def bandreject_filter(array, sample_spacing, wllow, wlhigh):
     return out.real
 
 
-def psd(height, sample_spacing, Q=1, window='hanning'):
+def psd(height, sample_spacing):
     """Compute the power spectral density of a signal.
 
     Parameters
@@ -422,10 +388,6 @@ def psd(height, sample_spacing, Q=1, window='hanning'):
         height or phase data
     sample_spacing : `float`
         spacing of samples in the input data
-    Q : `int`, optional
-        oversampling factor used to apply zero padding, Q=1 to bypass.
-    window : `str`, {'hanning'}, optional
-        window to apply to the signal prior to taking the fft
 
     Returns
     -------
@@ -441,9 +403,9 @@ def psd(height, sample_spacing, Q=1, window='hanning'):
 
     window = window_2d_welch(m.arange(s[1])*sample_spacing, m.arange(s[0])*sample_spacing)
     window = m.ones(height.shape)
-    psd = prop_pupil_plane_to_psf_plane(height * window, Q=Q, norm='ortho')
-    ux = forward_ft_unit(sample_spacing, int(round(height.shape[1]*Q, 0)))
-    uy = forward_ft_unit(sample_spacing, int(round(height.shape[0]*Q, 0)))
+    psd = prop_pupil_plane_to_psf_plane(height * window, norm='ortho')
+    ux = forward_ft_unit(sample_spacing, int(round(height.shape[1], 0)))
+    uy = forward_ft_unit(sample_spacing, int(round(height.shape[0], 0)))
 
     psd /= height.size
 
