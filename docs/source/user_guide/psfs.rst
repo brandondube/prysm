@@ -10,6 +10,10 @@ PSFs in prysm have a very simple constructor;
 >>> z = np.random.random((128,128))
 >>> ps = PSF(data=z, unit_x=x, unit_y=y)
 
+PSFs are usually created from a :doc:`pupil <./pupils>` instance in a model, but the constructor can be used with e.g. experimental data.
+
+>>> ps = PSF.from_pupil(your_pupil)
+
 The encircled energy can be computed, for either a single point or an iterable (tuple, list, numpy array, ...) of points;
 
 >>> print(ps.encircled_energy(0.1), ps.encircled_energy([0.1, 0.2, 0.3])

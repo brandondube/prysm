@@ -9,7 +9,7 @@ Prysm models often include analysis of Modulation Transfer Function (MTF) data. 
 
 It is nothing more and nothing less.  It may not be negative, complex-valued, or equal to any value other than unity at the origin.
 
-Initializing an MTF model should feel similar to a PSF,
+Initializing an MTF model should feel similar to a :doc:`PSF <./psfs>`,
 
 >>> import numpy as np
 >>> from prysm import MTF
