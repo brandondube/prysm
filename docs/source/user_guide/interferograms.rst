@@ -10,9 +10,7 @@ Prysm offers rich features for analysis of interferometric data.  :code:`Interfe
 >>> z = np.random.uniform((128,128))
 >>> interf = Interferogram(phase=z, intensity=None, unit_x=x, unit_y=y, scale='mm', phase_unit='nm', meta={'wavelength': 632.8e-9})
 
-Notable are the scale, and phase unit, which define the xy and z units, respectively.  Any SI unit is accepted as well as angstroms.  Imperial units not accepted.  :code:`meta` is a dictionary to store metadata.  For several interferogram methods to work, the wavelength must be present *in meters.*  This departure from prysm's convention of preferred units is used to maintain compatability with Zygo dat files.
-
-Interferograms are usually created from dat files,
+Notable are the scale, and phase unit, which define the xy and z units, respectively.  Any SI unit is accepted as well as angstroms.  Imperial units not accepted.  :code:`meta` is a dictionary to store metadata.  For several interferogram methods to work, the wavelength must be present *in meters.*  This departure from prysm's convention of preferred units is used to maintain compatability with Zygo dat files.  Interferograms are usually created from such files:
 
 >>> interf = Interferogram.from_zygo_dat(your_path_file_object_or_bytes)
 
@@ -20,7 +18,7 @@ and both the dat and datx format from Zygo are supported.  Dat carries no depend
 
 >>> interf.fill(_with=0)
 
-with 0 as a default value.  Only constants are supported, and the modification is done in-place and the method returns :code:`self`.  Piston, tip-tilt, and power may be removed in-place
+with 0 as a default value; only constants are supported.  The modification is done in-place and the method returns :code:`self`.  Piston, tip-tilt, and power may be removed in-place
 
 >>> interf.fill()\
 >>>     .remove_piston()\
