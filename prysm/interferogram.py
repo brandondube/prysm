@@ -285,12 +285,12 @@ class Interferogram(OpticalPhase):
             on each side
         window : `str`, {'hanning'}, optional
             window to apply to the signal prior to taking the fft
-        a : None, optional
-            Description
-        b : None, optional
-            Description
-        c : None, optional
-            Description
+        a : `float`, optional
+            a coefficient of Lorentzian PSD model plotted alongside data
+        b : `float`, optional
+            b coefficient of Lorentzian PSD model plotted alongside data
+        c : `float`, optional
+            c coefficient of Lorentzian PSD model plotted alongside data
         xlim : `tuple`, optional
             len 2 tuple of low, high x axis limits
         ylim : `tuple`, optional
@@ -317,6 +317,11 @@ class Interferogram(OpticalPhase):
         ax.loglog(x, px, lw=3, label='x', alpha=0.4)
         ax.loglog(y, py, lw=3, label='y', alpha=0.4)
         ax.loglog(r, pr, lw=3, label='avg')
+
+        if a is not None:
+            requirement = abc_psd(a,b,c, r)
+            ax.loglog(r, requirement, c='k', lw=3)
+
         ax.legend(title='Orientation')
         ax.set(xlim=xlim, xlabel=f'Spatial Frequency [cy/{self.spatial_unit}]',
                ylim=ylim, ylabel=r'PSD [nm$^2$/' + f'(cy/{self.spatial_unit})$^2$]')
