@@ -10,7 +10,7 @@ prysm is an open-source library for physical and first-order modeling of optical
 
 Use Cases
 ---------
-prysm aims to be a swiss army knife for an optical engineer or student.  Its primary use cases include:
+prysm aims to be a swiss army knife for optical engineers and students.  Its primary use cases include:
 
 * Analysis of optical data
 * robust numerical modeling of optical and opto-electronic systems based on physical optics
