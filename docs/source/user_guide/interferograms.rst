@@ -41,7 +41,7 @@ Interferograms may be cropped, deleting empty (NaN) regions around a measurment;
 
 >>> interf.crop()
 
-The two dimensional Power Spectral Density (PSD) may be computed.  The data may not contain NaNs, and piston tip and tilt should be removed prior.  A 2D welch window is used, so there is no need for concern about zero values creating a discontinuity at the edge of circular or other nonrectangular apertures.
+The two dimensional Power Spectral Density (PSD) may be computed.  The data may not contain NaNs, and piston tip and tilt should be removed prior.  A 2D Welch window is used, so there is no need for concern about zero values creating a discontinuity at the edge of circular or other nonrectangular apertures.
 
 >>> interf.crop().remove_piston_tiptilt_power().fill()
 >>> ux, uy, psd = interf.psd()
