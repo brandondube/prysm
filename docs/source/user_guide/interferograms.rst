@@ -18,14 +18,14 @@ and both the dat and datx format from Zygo are supported.  Dat carries no depend
 
 >>> interf.fill(_with=0)
 
-with 0 as a default value; only constants are supported.  The modification is done in-place and the method returns :code:`self`.  Piston, tip-tilt, and power may be removed in-place
+with 0 as a default value; only constants are supported.  The modification is done in-place and the method returns :code:`self`.  Piston, tip-tilt, and power may be removed:
 
 >>> interf.fill()\
 >>>     .remove_piston()\
 >>>     .remove_tiptilt()\
 >>>     .remove_power()
 
-again returning self, so methods can be chained.  One line convenience wrappers exist:
+again done in-place and returning self, so methods can be chained.  One line convenience wrappers exist:
 
 >>> interf.remove_piston_tiptilt()
 >>> interf.remove_piston_tiptilt_power()
