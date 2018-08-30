@@ -72,7 +72,7 @@ Physical Optics
 * * MTF vs Field vs Focus
 * * * Best Individual Focus
 * * * Best Average Focus
-* * evaluation at exact cartesian or polar spatial frequencies
+* * evaluation at exact Cartesian or polar spatial frequencies
 * * 2D and slice plotting
 
 * Rich tools for convolution of PSFs with images or synthetic objects:

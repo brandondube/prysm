@@ -3,7 +3,7 @@ MTFs
 ****
 
 
-Prysm models often include analysis of Modulation Transfer Function (MTF) data.  The MTF is formally defined
+Prysm models often include analysis of Modulation Transfer Function (MTF) data.  The MTF is formally defined as:
 
     the normalized magnitude of the Fourier transform of the point spread function
 

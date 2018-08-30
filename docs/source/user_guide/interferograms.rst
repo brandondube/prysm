@@ -2,7 +2,7 @@
 Interferograms
 **************
 
-Prysm offers rich features for analysis of interferometric data.  :code:`Interferogram` objects are conceptually similar to :doc:`Pupils <./pupils>` and both inherit from the same base class, as they both have to do with optical phase.  The construction of an Interferogram requires only a few parameters;
+Prysm offers rich features for analysis of interferometric data.  :code:`Interferogram` objects are conceptually similar to :doc:`Pupils <./pupils>` and both inherit from the same base class, as they both have to do with optical phase.  The construction of an Interferogram requires only a few parameters:
 
 >>> import numpy as np
 >>> from prysm import Interferogram
