@@ -78,7 +78,7 @@ and written out as 8-bit images,
 >>> p = 'foo.png'  # or jpg, any format imageio can handle
 >>> c.save(save_path)
 
-In practical use, one will generally only use the :code:`conv`, from_file, and save methods with any degree of regularity.  The complete API documentation is below.  Attention should be paid to the docstring of :code:`conv`, as it describes some of the details associated with convolutions in prysm, their accuracy, and when they are used.
+In practical use, one will generally only use the :code:`conv`, :code:`from_file`, and :code:`save` methods with any degree of regularity.  The complete API documentation is below.  Attention should be paid to the docstring of :code:`conv`, as it describes some of the details associated with convolutions in prysm, their accuracy, and when they are used.
 
 ----
 
