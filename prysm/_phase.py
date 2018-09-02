@@ -100,16 +100,37 @@ class OpticalPhase(object):
         self.unit_y = unit_y
         self.phase = phase
         self.wavelength = wavelength
-        pul, sul = phase_unit.lower(), spatial_unit.lower()
-        if pul not in self.units:
-            raise ValueError(f'{pul} not a valid unit, must be in {set(self.units.keys())}')
-        if sul not in self.units:
-            raise ValueError(f'{sul} not a valid unit, must be in {set(self.units.keys())}')
-        self.phase_unit = self.units[phase_unit.lower()]
-        self.spatial_unit = self.units[spatial_unit.lower()]
+        self.phase_unit = phase_unit
+        self.spatial_unit = spatial_unit
         self.center_x = len(self.unit_x) // 2
         self.center_y = len(self.unit_y) // 2
         self.sample_spacing = unit_x[1] - unit_x[0]
+
+    @property
+    def phase_unit(self):
+        return self._phase_unit
+
+    @phase_unit.setter
+    def phase_unit(self, unit):
+        unit = unit.lower()
+        if unit == 'å':
+            self._phase_unit = unit.upper()
+        else:
+            if unit not in self.units:
+                raise ValueError(f'{unit} not a valid unit, must be in {set(self.units.keys())}')
+            self._phase_unit = self.units[unit]
+
+    @property
+    def spatial_unit(self):
+        return self._spatial_unit
+
+    @spatial_unit.setter
+    def spatial_unit(self, unit):
+        unit = unit.lower()
+        if unit not in self.units:
+            raise ValueError(f'{unit} not a valid unit, must be in {set(self.units.keys())}')
+
+        self._spatial_unit = self.units[unit]
 
     @property
     def slice_x(self):
@@ -171,7 +192,7 @@ class OpticalPhase(object):
         new_phase = self.phase / fctr
         if inplace:
             self.phase = new_phase
-            self.phase_unit = self.units[to.lower()]
+            self.phase_unit = to
             return self
         else:
             return new_phase
@@ -204,7 +225,7 @@ class OpticalPhase(object):
         if inplace:
             self.unit_x = new_ux
             self.unit_y = new_uy
-            self.spatial_unit = self.units[to.lower()]
+            self.spatial_unit = to
             self.sample_spacing /= fctr
             return self
         else:

@@ -258,7 +258,7 @@ class PSF(Convolvable):
         elif axlim is 0:
             raise ValueError('computing from 0 to 0 is stupid')
         else:
-            xx = m.linspace(0, axlim, npts)
+            xx = m.linspace(1e-5, axlim, npts)
             yy = self.encircled_energy(xx)
 
         fig, ax = share_fig_ax(fig, ax)
