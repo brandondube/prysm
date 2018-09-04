@@ -125,21 +125,14 @@ class PSF(Convolvable):
         def optfcn(x):
             return abs(self.encircled_energy(x) - energy)
 
-        starting_point = 1.22 * self.wavelength * self.fno * 0.5
-        result = optimize.minimize(optfcn,
-                                   starting_point,
-                                   method='L-BFGS-B',
-                                   bounds=((0, None),),
-                                   options={'ftol': 2e-4, 'gtol': 1e-7})
-
-        return result.x[0]
+        return optimize.golden(optfcn)
 
     # plotting -----------------------------------------------------------------
 
     def plot2d(self, axlim=25, power=1, interp_method='lanczos',
                pix_grid=None, fig=None, ax=None,
                show_axlabels=True, show_colorbar=True,
-               circle_ee=None):
+               circle_ee=None, circle_ee_lw=None):
         """Create a 2D plot of the PSF.
 
         Parameters
@@ -166,6 +159,8 @@ class PSF(Convolvable):
             relative encircled energy to draw a circle at, in addition to
             diffraction limited airy radius (1.22*λ*F#).  First airy zero occurs
             at circle_ee=0.8377850436212378
+        circle_ee_lw : `float`, optional
+            linewidth passed to matplotlib for the encircled energy circles
 
         Returns
         -------
@@ -219,8 +214,9 @@ class PSF(Convolvable):
 
             radius = self.ee_radius(circle_ee)
             analytic = _inverse_analytic_encircled_energy(self.fno, self.wavelength, circle_ee)
-            c_diff = patches.Circle((0, 0), analytic, fill=False, color='r', ls='--')
-            c_true = patches.Circle((0, 0), radius, fill=False, color='r')
+
+            c_diff = patches.Circle((0, 0), analytic, fill=False, color='r', ls='--', lw=circle_ee_lw)
+            c_true = patches.Circle((0, 0), radius, fill=False, color='r', lw=circle_ee_lw)
             ax.add_artist(c_diff)
             ax.add_artist(c_true)
 
@@ -739,13 +735,4 @@ def _inverse_analytic_encircled_energy(fno, wavelength, energy=FIRST_AIRY_ENCIRC
     def optfcn(x):
         return abs(_analytical_encircled_energy(fno, wavelength, x) - energy)
 
-    # for some reason, BFGS will quit immediately without a "goldilocks" sized
-    # epsilon, ~1e-5 balances nonconvergence vs accuracy, take 3x airy radius
-    # as safe alternative, will end up close to 5e-4 or so.
-    starting_point = 1.22 * fno * wavelength * 0.5
-    result = optimize.minimize(optfcn,
-                               starting_point,
-                               method='L-BFGS-B',
-                               bounds=((0, None),),
-                               options={'ftol': 1e-4, 'gtol': 1e-8})
-    return result.x[0]
+    return optimize.golden(optfcn)
