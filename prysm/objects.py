@@ -173,7 +173,7 @@ class SiemensStar(Convolvable):
         number of spokes present in the star
 
     '''
-    def __init__(self, num_spokes, sinusoidal=True, background='black', sample_spacing=2, samples=384):
+    def __init__(self, num_spokes, sinusoidal=True, background='black', sample_spacing=2, samples=256):
         '''Produces a Siemen's Star.
 
         Parameters
@@ -228,7 +228,7 @@ class SiemensStar(Convolvable):
 class TiltedSquare(Convolvable):
     '''Describes a tilted square for e.g. slanted-edge '''
 
-    def __init__(self, angle=8, background='white', sample_spacing=2, samples=384):
+    def __init__(self, angle=8, background='white', sample_spacing=2, samples=256):
         '''Create a new TitledSquare instance.
 
         Parameters
