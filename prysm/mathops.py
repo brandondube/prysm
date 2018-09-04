@@ -6,7 +6,7 @@ back to more widely available options in the case that they do not.
 """
 import numpy as np
 
-from scipy.special import j1
+from scipy.special import j1, j0  # NOQA
 
 from prysm.conf import config
 
