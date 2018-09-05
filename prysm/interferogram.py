@@ -285,7 +285,7 @@ class Interferogram(OpticalPhase):
         ax.loglog(r, pr, lw=3, label='avg')
 
         if a is not None:
-            requirement = abc_psd(a, b, c, r)
+            requirement = abc_psd(a=a, b=b, c=c, nu=r)
             ax.loglog(r, requirement, c='k', lw=3)
 
         ax.legend(title='Orientation')
@@ -426,5 +426,5 @@ def window_2d_welch(x, y, alpha=8):
     return window
 
 
-def abc_psd(a, b, c, nu):
+def abc_psd(nu, a, b, c):
     return a / (1 + (nu/b)**2)**(c/2)
