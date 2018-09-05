@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from .conf import config
 from .pupil import Pupil
-from .coordinates import make_rho_phi_grid
+from .coordinates import make_rho_phi_grid, cart_to_polar
 
 from prysm import mathops as m
 
@@ -239,7 +239,7 @@ class FringeZernike(Pupil):
         return f'{header}{body}{footer}'
 
 
-def fit(data, num_terms=16, rms_norm=False, round_at=6):
+def fit(data, x=None, y=None, rho=None, phi=None, num_terms=16, rms_norm=False, round_at=6):
     ''' Fits a number of Zernike coefficients to provided data by minimizing
         the root sum square between each coefficient and the given data.  The
         data should be uniformly sampled in an x,y grid.
@@ -264,11 +264,16 @@ def fit(data, num_terms=16, rms_norm=False, round_at=6):
     # precompute the valid indexes in the original data
     pts = m.isfinite(data)
 
-    # set up an x/y rho/phi grid to evaluate Zernikes on
-    x, y = m.linspace(-1, 1, data.shape[1]), m.linspace(-1, 1, data.shape[0])
-    xx, yy = m.meshgrid(x, y)
-    rho = m.sqrt(xx**2 + yy**2)[pts].flatten()
-    phi = m.arctan2(xx, yy)[pts].flatten()
+    if x is None and rho is None:
+        # set up an x/y rho/phi grid to evaluate Zernikes on
+        x, y = m.linspace(-1, 1, data.shape[1]), m.linspace(-1, 1, data.shape[0])
+        xx, yy = m.meshgrid(x, y)
+        rho, phi = cart_to_polar(xx, yy)
+        rho = rho.flatten()
+        phi = phi.flatten()
+    elif rho is None:
+        rho, phi = cart_to_polar(x, y)
+        rho, phi = rho.flatten(), phi.flatten()
 
     # compute each Zernike term
     zernikes = []
@@ -282,7 +287,10 @@ def fit(data, num_terms=16, rms_norm=False, round_at=6):
 
     # use least squares to compute the coefficients
     coefs = m.lstsq(zerns, data[pts].flatten(), rcond=None)[0]
-    return coefs.round(round_at)
+    if round_at is not None:
+        return coefs.round(round_at)
+    else:
+        return coefs
 
 
 zcache = FZCache()
