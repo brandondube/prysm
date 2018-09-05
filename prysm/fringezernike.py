@@ -1,10 +1,10 @@
-''' A repository of fringe Zernike aberration descriptions used to model pupils of optical systems.
-'''
+'''A repository of fringe Zernike aberration descriptions used to model pupils of optical systems.'''
 from collections import defaultdict
 
 from .conf import config
 from .pupil import Pupil
 from .coordinates import make_rho_phi_grid, cart_to_polar
+from .util import rms
 
 from prysm import mathops as m
 
@@ -94,62 +94,7 @@ class FZCache(object):
 
 
 class FringeZernike(Pupil):
-    ''' Fringe Zernike pupil description.
-
-    Properties:
-        Inherited from :class:`Pupil`, please see that class.
-
-    Instance Methods:
-        build: computes the phase and wavefunction for the pupil.  This method
-            is automatically called by the constructor, and does not regularly
-            need to be changed by the user.
-
-    Private Instance Methods:
-        none
-
-    Static Methods:
-        none
-
-    '''
     def __init__(self, *args, **kwargs):
-        ''' Creates a FringeZernike Pupil object.
-
-        Args:
-            samples (`int`): number of samples across pupil diameter.
-
-            wavelength (`float`): wavelength of light, in um.
-
-            epd: (`float`): diameter of the pupil, in mm.
-
-            opd_unit (`string`): unit OPD is expressed in.  One of:
-                ($\lambda$, waves, $\mu m$, microns, um, nm , nanometers).
-
-            base (`int`): 0 or 1, adjusts the base index of the polynomial
-                expansion.
-
-            Zx (`float`): Zth fringe Zernike coefficient, in range [0,48] or [1,49] if base 1
-
-        Returns:
-            FringeZernike.  A new :class:`FringeZernike` pupil instance.
-
-        Notes:
-            Supports multiple syntaxes:
-                - args: pass coefficients as a list, including terms up to
-                        the highest given Z-index.
-                        e.g. passing [1,2,3] will be interpreted as Z0=1, Z1=2, Z3=3.
-
-                - kwargs: pass a named set of Zernike terms.
-                          e.g. FringeZernike(Z0=1, Z1=2, Z2=3)
-
-            Supports normalization and unit conversion, can pass kwargs:
-                - rms_norm=True: coefficients have unit rms value
-
-                - opd_unit='nm': coefficients are expressed in units of nm
-
-            The kwargs syntax overrides the args syntax.
-
-        '''
-
         if args is not None:
             if len(args) is 0:
                 self.coefs = [0] * len(zernmap)
@@ -189,12 +134,12 @@ class FringeZernike(Pupil):
         '''Uses the wavefront coefficients stored in this class instance to
             build a wavefront model.
 
-        Args:
-            none
-
-        Returns:
-            (numpy.ndarray, numpy.ndarray) arrays containing the phase, and the
-                wavefunction for the pupil.
+        Returns
+        -------
+        self.phase : `numpy.ndarray`
+            arrays containing the phase associated with the pupil
+        self.fcn : `numpy.ndarray`
+            array containing the wavefunction of the pupil plane
 
         '''
         # build a coordinate system over which to evaluate this function
@@ -209,8 +154,7 @@ class FringeZernike(Pupil):
         return self.phase, self.fcn
 
     def __repr__(self):
-        ''' Pretty-print pupil description.
-        '''
+        '''Pretty-print pupil description.'''
         if self.normalize is True:
             header = 'rms normalized Fringe Zernike description with:\n\t'
         else:
@@ -239,23 +183,44 @@ class FringeZernike(Pupil):
         return f'{header}{body}{footer}'
 
 
-def fit(data, x=None, y=None, rho=None, phi=None, num_terms=16, rms_norm=False, round_at=6):
-    ''' Fits a number of Zernike coefficients to provided data by minimizing
+def fit(data, x=None, y=None, rho=None, phi=None, num_terms=16, rms_norm=False, residual=False, round_at=6):
+    '''Fits a number of Zernike coefficients to provided data by minimizing
         the root sum square between each coefficient and the given data.  The
         data should be uniformly sampled in an x,y grid.
 
-    Args:
+    Parameters
+    ----------
+    data : `numpy.ndarray`
+        data to fit to.
 
-        data (`numpy.ndarray`): data to fit to.
+    x : `numpy.ndarray`, optional
+        x coordinates, same shape as data
+    y : `numpy.ndarray`, optional
+        y coordinates, same shape as data
+    rho : `numpy.ndarray`, optional
+        radial coordinates, same shape as data
+    phi : `numpy.ndarray`, optional
+        azimuthal
+    num_terms : `int`, optional
+        number of terms to fit, fits terms 0~num_terms
+    rms_norm : `bool`, optional
+        if True, normalize coefficients to unit RMS value
+    residual : `bool`, optional
+        if True, return a tuple of (coefficients, residual)
+    round_at : `int`
+        decimal place to round values at.
 
-        num_terms (`int`): number of terms to fit, fits terms 0~num_terms.
+    Returns
+    -------
+    coefficients : `numpy.ndarray`
+        an array of coefficients matching the input data.
+    residual : `float`
+        RMS error between the input data and the fit.
 
-        rms_norm (`bool`): if true, normalize coefficients to unit RMS value.
-
-        round_at (`int`): decimal place to round values at.
-
-    Returns:
-        numpy.ndarray: an array of coefficients matching the input data.
+    Raises
+    ------
+    ValueError
+        too many terms requested.
 
     '''
     if num_terms > len(zernmap):
@@ -286,9 +251,20 @@ def fit(data, x=None, y=None, rho=None, phi=None, num_terms=16, rms_norm=False, 
     zerns = m.asarray(zernikes).T
 
     # use least squares to compute the coefficients
-    coefs = m.lstsq(zerns, data[pts].flatten(), rcond=None)[0]
+    meas_pts = data[pts].flatten()
+    coefs = m.lstsq(zerns, meas_pts, rcond=None)[0]
     if round_at is not None:
-        return coefs.round(round_at)
+        coefs = coefs.round(round_at)
+
+    if residual is True:
+        components = []
+        for zern, coef in zip(zernikes, coefs):
+            components.append(coef * zern)
+
+        _fit = m.asarray(components)
+        _fit = _fit.sum(axis=0)
+        rmserr = rms(data - _fit)
+        return coefs, rmserr
     else:
         return coefs
 
