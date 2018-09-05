@@ -285,7 +285,7 @@ class Interferogram(OpticalPhase):
         ax.loglog(r, pr, lw=3, label='avg')
 
         if a is not None:
-            requirement = abc_psd(a, b, c, r)
+            requirement = abc_psd(a=a, b=b, c=c, nu=r)
             ax.loglog(r, requirement, c='k', lw=3)
 
         ax.legend(title='Orientation')
@@ -403,7 +403,7 @@ def psd(height, sample_spacing):
 
     window = window_2d_welch(m.arange(s[1])*sample_spacing, m.arange(s[0])*sample_spacing)
     window = m.ones(height.shape)
-    psd = prop_pupil_plane_to_psf_plane(height * window, norm='ortho')
+    psd = prop_pupil_plane_to_psf_plane(height * window, Q=1, norm='ortho')
     ux = forward_ft_unit(sample_spacing, int(round(height.shape[1], 0)))
     uy = forward_ft_unit(sample_spacing, int(round(height.shape[0], 0)))
 
@@ -425,5 +425,5 @@ def window_2d_welch(x, y, alpha=8):
     return window
 
 
-def abc_psd(a, b, c, nu):
+def abc_psd(nu, a, b, c):
     return a / (1 + (nu/b)**2)**(c/2)
