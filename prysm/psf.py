@@ -127,6 +127,14 @@ class PSF(Convolvable):
 
         return optimize.golden(optfcn)
 
+    def ee_radius_diffraction(self, energy=FIRST_AIRY_ENCIRCLED):
+        return _inverse_analytic_encircled_energy(self.fno, self.wavelength, energy)
+
+    def ee_radius_ratio_to_diffraction(self, energy=FIRST_AIRY_ENCIRCLED):
+        self_rad = self.ee_radius(energy)
+        diff_rad = _inverse_analytic_encircled_energy(self.fno, self.wavelength, energy)
+        return self_rad / diff_rad
+
     # plotting -----------------------------------------------------------------
 
     def plot2d(self, axlim=25, power=1, interp_method='lanczos',
@@ -219,10 +227,11 @@ class PSF(Convolvable):
             c_true = patches.Circle((0, 0), radius, fill=False, color='r', lw=circle_ee_lw)
             ax.add_artist(c_diff)
             ax.add_artist(c_true)
+            ax.legend([c_diff, c_true], ['Diff. Lim.', 'Actual'], ncol=2)
 
         return fig, ax
 
-    def plot_encircled_energy(self, axlim=None, npts=50, fig=None, ax=None):
+    def plot_encircled_energy(self, axlim=None, npts=50, lw=3, fig=None, ax=None):
         """Make a 1D plot of the encircled energy at the given azimuth.
 
         Parameters
@@ -233,6 +242,8 @@ class PSF(Convolvable):
             limits of axis, will plot [0, axlim]
         npts : `int`, optional
             number of points to use from [0, axlim]
+        lw : `float`, optional
+            linewidth provided directly to matplotlib
         fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
