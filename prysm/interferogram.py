@@ -245,7 +245,7 @@ class Interferogram(OpticalPhase):
 
         return fig, ax
 
-    def plot_psd_xyavg(self, a=None, b=None, c=None,
+    def plot_psd_xyavg(self, a=None, b=None, c=None, lw=3,
                        xlim=None, ylim=None, fig=None, ax=None):
         """Plot the x, y, and average PSD on a linear x axis.
 
@@ -257,6 +257,8 @@ class Interferogram(OpticalPhase):
             b coefficient of Lorentzian PSD model plotted alongside data
         c : `float`, optional
             c coefficient of Lorentzian PSD model plotted alongside data
+        lw : `float`, optional
+            linewidth provided directly to matplotlib
         xlim : `tuple`, optional
             len 2 tuple of low, high x axis limits
         ylim : `tuple`, optional
@@ -280,13 +282,13 @@ class Interferogram(OpticalPhase):
         r, pr = xyavg['avg']
 
         fig, ax = share_fig_ax(fig, ax)
-        ax.loglog(x, px, lw=3, label='x', alpha=0.4)
-        ax.loglog(y, py, lw=3, label='y', alpha=0.4)
-        ax.loglog(r, pr, lw=3, label='avg')
+        ax.loglog(x, px, lw=lw, label='x', alpha=0.4)
+        ax.loglog(y, py, lw=lw, label='y', alpha=0.4)
+        ax.loglog(r, pr, lw=lw*1.5, label='avg')
 
         if a is not None:
             requirement = abc_psd(a=a, b=b, c=c, nu=r)
-            ax.loglog(r, requirement, c='k', lw=3)
+            ax.loglog(r, requirement, c='k', lw=lw*2)
 
         ax.legend(title='Orientation')
         ax.set(xlim=xlim, xlabel=f'Spatial Frequency [cy/{self.spatial_unit}]',

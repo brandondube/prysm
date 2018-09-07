@@ -81,13 +81,15 @@ class Convolvable(object):
         """
         return self.unit_y, self.data[:, self.center_x]
 
-    def plot_slice_xy(self, axlim=20, fig=None, ax=None):
+    def plot_slice_xy(self, axlim=20, lw=3, fig=None, ax=None):
         """Create a plot of slices through the X and Y axes of the `PSF`.
 
         Parameters
         ----------
-        axlim : `float` or `int`
+        axlim : `float` or `int`, optional
             axis limits, in microns
+        lw : `float`, optional
+            linewidth provided directly to matplotlib
         fig : `matplotlib.figure.Figure`, optional
             Figure to draw plot in
         ax : `matplotlib.axes.Axis`
@@ -109,9 +111,9 @@ class Convolvable(object):
 
         fig, ax = share_fig_ax(fig, ax)
 
-        ax.plot(ux, x, label='Slice X', lw=3)
-        ax.plot(uy, y, label='Slice Y', lw=3)
-        ax.set(xlabel=r'Image Plane X [$\mu m$]',
+        ax.plot(ux, x, label='Slice X', lw=lw)
+        ax.plot(uy, y, label='Slice Y', lw=lw)
+        ax.set(xlabel=r'Image Plane [$\mu m$]',
                ylabel=label_str,
                xlim=(-axlim, axlim),
                ylim=lims)
