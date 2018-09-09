@@ -115,6 +115,15 @@ User's Guide
 
    user_guide/*
 
+Examples
+--------
+
+.. toctree::
+    :maxdepth 1
+    :glob:
+
+    examples/*
+
 Developer Guide
 ---------------
 
