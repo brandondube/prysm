@@ -68,3 +68,6 @@ target/
 .idea
 .ropeproject
 Examples/testing.ipynb
+
+# macs
+.DS_store
