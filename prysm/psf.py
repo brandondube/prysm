@@ -138,7 +138,7 @@ class PSF(Convolvable):
     # plotting -----------------------------------------------------------------
 
     def plot2d(self, axlim=25, power=1, interp_method='lanczos',
-               pix_grid=None, fig=None, ax=None,
+               pix_grid=None, invert=False, fig=None, ax=None,
                show_axlabels=True, show_colorbar=True,
                circle_ee=None, circle_ee_lw=None):
         """Create a 2D plot of the PSF.
@@ -155,6 +155,8 @@ class PSF(Convolvable):
             if not None, overlays gridlines with spacing equal to pix_grid.
             Intended to show the collection into camera pixels while still in
             the oversampled domain
+        invert : `bool`, optional
+            whether to invert the color scale
         fig : `matplotlib.figure.Figure`, optional:
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
@@ -184,12 +186,17 @@ class PSF(Convolvable):
         left, right = self.unit_x[0], self.unit_x[-1]
         bottom, top = self.unit_y[0], self.unit_y[-1]
 
+        if invert:
+            cmap = 'Greys'
+        else:
+            cmap = 'Greys_r'
+
         fig, ax = share_fig_ax(fig, ax)
 
         im = ax.imshow(self.data,
                        extent=[left, right, bottom, top],
                        origin='lower',
-                       cmap='Greys_r',
+                       cmap=cmap,
                        norm=colors.PowerNorm(1/power),
                        interpolation=interp_method,
                        clim=lims)
