@@ -403,9 +403,8 @@ def psd(height, sample_spacing):
     """
     s = height.shape
 
-    window = window_2d_welch(m.arange(s[1]) * sample_spacing,
-                             m.arange(s[0]) * sample_spacing)
-    window = m.ones(height.shape)
+    # looks wrong but 2D welch takes x, y while indices are y, x
+    window = window_2d_welch(m.arange(s[1])*sample_spacing, m.arange(s[0])*sample_spacing)
     psd = prop_pupil_plane_to_psf_plane(height * window, Q=1, norm='ortho')
     ux = forward_ft_unit(sample_spacing, int(round(height.shape[1], 0)))
     uy = forward_ft_unit(sample_spacing, int(round(height.shape[0], 0)))
