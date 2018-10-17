@@ -131,6 +131,12 @@ class Pupil(OpticalPhase):
             self.mask_target = mask_target
             self.build()
             self.mask(self._mask, self.mask_target)
+        else:
+            protomask = m.isnan(phase)
+            mask = m.ones(protomask.shape)
+            mask[protomask] = 0
+            self._mask = mask
+            self.mask_target = 'fcn'
 
     @property
     def strehl(self):
