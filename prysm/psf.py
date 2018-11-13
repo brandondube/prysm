@@ -137,7 +137,7 @@ class PSF(Convolvable):
 
     # plotting -----------------------------------------------------------------
 
-    def plot2d(self, axlim=25, power=1, interp_method='lanczos',
+    def plot2d(self, axlim=25, power=1, clim=(None, None), interp_method='lanczos',
                pix_grid=None, invert=False, fig=None, ax=None,
                show_axlabels=True, show_colorbar=True,
                circle_ee=None, circle_ee_lw=None):
@@ -149,6 +149,9 @@ class PSF(Convolvable):
             limits of axis, symmetric. xlim=(-axlim,axlim), ylim=(-axlim, axlim)
         power : `float`
             power to stretch the data by for plotting
+        clim : iterable
+            limits to use for log color scaling.  If power != 1 and
+            clim != (None, None), clim (log axes) takes precedence
         interp_method : `string`
             method used to interpolate the image between samples of the PSF
         pix_grid : `float`
@@ -181,7 +184,6 @@ class PSF(Convolvable):
 
         """
         label_str = 'Normalized Intensity [a.u.]'
-        lims = (0, 1)
 
         left, right = self.unit_x[0], self.unit_x[-1]
         bottom, top = self.unit_y[0], self.unit_y[-1]
@@ -193,15 +195,23 @@ class PSF(Convolvable):
 
         fig, ax = share_fig_ax(fig, ax)
 
-        im = ax.imshow(self.data,
-                       extent=[left, right, bottom, top],
-                       origin='lower',
-                       cmap=cmap,
-                       norm=colors.PowerNorm(1/power),
-                       interpolation=interp_method,
-                       clim=lims)
+        plt_opts = {
+            'extent': [left, right, bottom, top],
+            'origin': 'lower',
+            'cmap': cmap,
+            'interpolation': interp_method,
+        }
+        cb_opts = {}
+        if power is not 1:
+            plt_opts['norm'] = colors.PowerNorm(1/power)
+            plt_opts['clim'] = (0, 1)
+        elif clim[1] is not None:
+            plt_opts['norm'] = colors.LogNorm(*clim)
+            cb_opts = {'extend': 'both'}
+
+        im = ax.imshow(self.data, **plt_opts)
         if show_colorbar:
-            cb = fig.colorbar(im, label=label_str, ax=ax, fraction=0.046)
+            cb = fig.colorbar(im, label=label_str, ax=ax, fraction=0.046, **cb_opts)
             cb.outline.set_edgecolor('k')
             cb.outline.set_linewidth(0.5)
         if show_axlabels:
