@@ -35,9 +35,6 @@ class Interferogram(OpticalPhase):
         if scale != 'px':
             self.change_spatial_unit(to=scale, inplace=True)
 
-        self._psd = None
-        self._psdargs = {}
-
     @property
     def dropout_percentage(self):
         """Percentage of pixels in the data that are invalid (NaN)."""
@@ -161,10 +158,7 @@ class Interferogram(OpticalPhase):
             power spectral density
 
         """
-        if self._psd is None:
-            self._psd = psd(self.phase, self.sample_spacing)
-
-        return self._psd
+        return psd(self.phase, self.sample_spacing)
 
     def psd_xy_avg(self):
         """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
@@ -175,10 +169,7 @@ class Interferogram(OpticalPhase):
             with keys x, y, avg.  Each containing a tuple of (unit, psd)
 
         """
-        if self._psd is None:
-            self._psd = psd(self.phase, self.sample_spacing)
-
-        x, y, _psd = self._psd
+        x, y, _psd = self.psd()
         lx, ly = len(x)//2, len(y)//2
 
         rho, phi, _psdrp = uniform_cart_to_polar(x, y, _psd)
@@ -189,13 +180,7 @@ class Interferogram(OpticalPhase):
             'avg': (rho, _psdrp.mean(axis=0)),
         }
 
-    def clear_psd(self):
-        """Clear cached PSD data."""
-        self._psdargs = {}
-        self._psd = None
-        return self
-
-    def plot_psd2d(self, axlim=None, interp_method='lanczos', fig=None, ax=None):
+    def plot_psd2d(self, axlim=None, clim=(1e-9, 1e2), interp_method='lanczos', fig=None, ax=None):
         """Plot the two dimensional PSD.
 
         Parameters
@@ -232,13 +217,14 @@ class Interferogram(OpticalPhase):
                        extent=[x[0], x[-1], y[0], y[-1]],
                        origin='lower',
                        cmap='Greys_r',
-                       norm=colors.LogNorm(1e-10, 1e5),
+                       norm=colors.LogNorm(*clim),
                        interpolation=interp_method)
 
-        ax.set(xlim=lims, xlabel=r'$\nu_x$' + f'[cy/{self.spatial_unit}]',
-               ylim=lims, ylabel=r'$\nu_y$' + f'[cy/{self.spatial_unit}]')
+        ax.set(xlim=lims, xlabel=r'$\nu_x$' + f' [cy/{self.spatial_unit}]',
+               ylim=lims, ylabel=r'$\nu_y$' + f' [cy/{self.spatial_unit}]')
 
-        cb = fig.colorbar(im, label=r'PSD [nm$^2$' + f'/(cy/{self.spatial_unit})]',
+        cb = fig.colorbar(im,
+                          label='PSD [' + self.phase_unit + r'$^2$' + f'/(cy/{self.spatial_unit})]',
                           ax=ax, fraction=0.046, extend='both')
         cb.outline.set_edgecolor('k')
         cb.outline.set_linewidth(0.5)
