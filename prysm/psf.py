@@ -683,6 +683,27 @@ class AiryDisk(PSF):
         self.fno = fno
         self.wavelength = wavelength
         super().__init__(data, x, y)
+        self.has_analytic_ft = True
+
+    def analytic_ft(self, unit_x, unit_y):
+        """Analytic fourier transform of an airy disk.
+
+        Parameters
+        ----------
+        unit_x : `numpy.ndarray`
+            sample points in x axis
+        unit_y : `numpy.ndarray`
+            sample points in y axis
+
+        Returns
+        -------
+        `numpy.ndarray`
+            2D numpy array containing the analytic fourier transform
+
+        """
+        from .otf import diffraction_limited_mtf
+        r, p = cart_to_polar(unit_x, unit_y)
+        return diffraction_limited_mtf(self.fno, self.wavelength, r*1e3)  # um to mm
 
 
 def _airydisk(unit_r, fno, wavelength):
