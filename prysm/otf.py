@@ -421,7 +421,11 @@ def diffraction_limited_mtf(fno, wavelength, frequencies=None, num_pts=128):
         normalized_frequency = m.linspace(0, 1, num_pts)
     else:
         normalized_frequency = m.asarray(frequencies) / extinction
-        normalized_frequency[normalized_frequency > 1] = 1  # clamp values
+        try:
+            normalized_frequency[normalized_frequency > 1] = 1  # clamp values
+        except TypeError:  # single freq
+            if normalized_frequency > 1:
+                normalized_frequency = 1
 
     mtf = _difflim_mtf_core(normalized_frequency)
 
