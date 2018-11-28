@@ -29,7 +29,11 @@ Once a pupil is created, you can access quick access slices,
 
 or evaluate the wavefront,
 
->>> p.pv, p.rms  # in units of opd_unit
+>>> p.pv, p.rms # in units of opd_unit
+
+or Strehl ratio under the approximation given in [Welford]_,
+
+>>> p.strehl  # ∈ [0,1]
 
 The pupil may also be plotted.  Plotting functions have defaults for all arguments, but may be overriden
 
@@ -46,15 +50,12 @@ A synthetic interferogram may be generated,
 >>> fig, ax = plt.subplots(figsize=(4,4))
 >>> p.interferogram(passes=2, visibility=0.5, fig=fig, ax=ax)
 
-Pupils also support addition and subtraction,
+Pupils also support addition and subtraction with other pupil objects,
 
 >>> p2 = p + p - p
 
-these actions modify the *phase* attribute of a pupil out-of-place.  After doing so, you must explicitly update the wavefunction,
+.. [Welford] W. T. Welford, Aberrations of Optical Systems.  CRC Press, 1986.
 
->>> p2._phase_to_wavefunction()
-
-or downstream objects that rely on optical propagation e.g. PSFs will be incorrect.
 
 The complete API documentation is below.
 
