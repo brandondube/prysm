@@ -125,7 +125,7 @@ class Pupil(OpticalPhase):
 
         if need_to_build:
             if type(mask) is not m.ndarray:
-                mask = mcache.get_mask(self.samples, mask)
+                mask = mcache(self.samples, mask)
 
             self._mask = mask
             self.mask_target = mask_target
