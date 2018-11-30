@@ -38,6 +38,9 @@ class MaskCache(object):
 
         return mask
 
+    def __call__(self, samples, shape):
+        return self.get_mask(samples, shape)
+
     def clear(self, *args):
         self.masks = defaultdict(dict)
 

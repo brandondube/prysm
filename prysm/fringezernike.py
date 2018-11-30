@@ -88,6 +88,9 @@ class FZCache(object):
 
         return zern
 
+    def __call__(self, number, norm, samples):
+        return self.get_zernike(number, norm, samples)
+
     def clear(self, *args):
         self.normed = defaultdict(dict)
         self.regular = defaultdict(dict)
@@ -148,7 +151,7 @@ class FringeZernike(Pupil):
             # short circuit for speed
             if coef == 0:
                 continue
-            self.phase += coef * zcache.get_zernike(term, self.normalize, self.samples)
+            self.phase += coef * zcache(term, self.normalize, self.samples)
 
         return self
 
