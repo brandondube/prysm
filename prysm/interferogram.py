@@ -159,6 +159,32 @@ class Interferogram(OpticalPhase):
         """
         return psd(self.phase, self.sample_spacing)
 
+    def bandlimited_rms(self, wllow=None, wlhigh=None, flow=None, fhigh=None):
+        """Calculate the bandlimited RMS of a signal from its PSD.
+
+        Parameters
+        ----------
+        wllow : `float`
+            short spatial scale
+        wlhigh : `float`
+            long spatial scale
+        flow : `float`
+            low frequency
+        fhigh : `float`
+            high frequency
+
+        Returns
+        -------
+        `float`
+            band-limited RMS value.
+
+        """
+        return bandlimited_rms(*self.psd(),
+                               wllow=wllow,
+                               wlhigh=wlhigh,
+                               flow=flow,
+                               fhigh=fhigh)
+
     def psd_xy_avg(self):
         """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
 
@@ -366,7 +392,70 @@ def bandreject_filter(array, sample_spacing, wllow, wlhigh):
     return out.real
 
 
-def psd(height, sample_spacing):
+def make_window(signal, sample_spacing, which='welch'):
+    """Generates a window function to be used in PSD analysis.
+
+    Parameters
+    ----------
+    signal : `numpy.ndarray`
+        signal or phase data
+    sample_spacing : `float`
+        spacing of samples in the input data
+    which : `str,` {'welch', 'hann', 'auto'}, optional
+        which window to produce.  If auto, attempts to guess the appropriate
+        window based on the input signal
+
+    Notes
+    -----
+    For 2D welch, see:
+    Power Spectral Density Specification and Analysis of Large Optical Surfaces
+    E. Sidick, JPL
+
+    Returns
+    -------
+    `numpy.ndarray`
+        window array
+
+    """
+    s = signal.shape
+
+    if which is None:
+        # attempt to guess best window
+        ysamples = int(round(s[0] * 0.02, 0))
+        xsamples = int(round(s[1] * 0.02, 0))
+        corner1 = signal[:ysamples, :xsamples] == 0
+        corner2 = signal[-ysamples:, :xsamples] == 0
+        corner3 = signal[:ysamples, -xsamples:] == 0
+        corner4 = signal[-ysamples:, -xsamples:] == 0
+        if corner1.all() and corner2.all() and corner3.all() and corner4.all():
+            # four corners all "black" -- circular data, Welch window is best
+            # looks wrong but 2D welch takes x, y while indices are y, x
+            y = m.arange(s[1]) * sample_spacing
+            x = m.arange(s[0]) * sample_spacing
+            return window_2d_welch(y, x)
+        else:
+            y = m.hanning(s[0])
+            x = m.hanning(s[1])
+            return m.outer(y, x)
+    else:
+        if type(which) is str:
+            # known window type
+            wl = which.lower()
+            if wl == 'welch':
+                y = m.arange(s[1]) * sample_spacing
+                x = m.arange(s[0]) * sample_spacing
+                return window_2d_welch(y, x)
+            elif wl in ('hann', 'hanning'):
+                y = m.hanning(s[0])
+                x = m.hanning(s[1])
+                return m.outer(y, x)
+            else:
+                raise ValueError('unknown window type')
+        else:
+            return which  # window provided as ndarray
+
+
+def psd(height, sample_spacing, window=None):
     """Compute the power spectral density of a signal.
 
     Parameters
@@ -375,6 +464,7 @@ def psd(height, sample_spacing):
         height or phase data
     sample_spacing : `float`
         spacing of samples in the input data
+    window : {'welch', 'hann'} or ndarray, optional
 
     Returns
     -------
@@ -386,22 +476,63 @@ def psd(height, sample_spacing):
         power spectral density
 
     """
-    s = height.shape
-
-    # looks wrong but 2D welch takes x, y while indices are y, x
-    window = window_2d_welch(m.arange(s[1])*sample_spacing, m.arange(s[0])*sample_spacing)
+    window = make_window(height, sample_spacing, window)
     psd = prop_pupil_plane_to_psf_plane(height * window, Q=1, norm='ortho')
-    ux = forward_ft_unit(sample_spacing, int(round(height.shape[1], 0)))
-    uy = forward_ft_unit(sample_spacing, int(round(height.shape[0], 0)))
-
-    psd /= height.size
-
-    # adjustment for 2D welch window bias, there is room for improvement to this
-    # approximate value from:
-    # Power Spectral Density Specification and Analysis of Large Optical Surfaces
-    # E. Sidick, JPL
-    psd /= 0.925
+    ux = forward_ft_unit(sample_spacing, height.shape[1])
+    uy = forward_ft_unit(sample_spacing, height.shape[0])
+    psd /= (window**2).sum()  # correct by "S", see GH_FFT
     return ux, uy, psd
+
+
+def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
+    """Calculate the bandlimited RMS of a signal from its PSD.
+
+    Parameters
+    ----------
+    ux : `numpy.ndarray`
+        x spatial frequencies
+    uy : `numpy.ndarray`
+        y spatial frequencies
+    psd : `numpy.ndarray`
+        power spectral density
+    wllow : `float`
+        short spatial scale
+    wlhigh : `float`
+        long spatial scale
+    flow : `float`
+        low frequency
+    fhigh : `float`
+        high frequency
+
+    Returns
+    -------
+    `float`
+        band-limited RMS value.
+
+    """
+    if wllow is not None or wlhigh is not None:
+        # spatial period given
+        if wllow is None:
+            flow = 0
+        elif wlhigh is None:
+            fhigh = max(ux[-1], uy[-1])
+        else:
+            flow, fhigh = 1 / wlhigh, 1 / wllow
+    elif flow is not None or fhigh is not None:
+        # spatial frequency given
+        if flow is None:
+            flow = 0
+        if fhigh is None:
+            fhigh = max(ux[-1], uy[-1])
+    else:
+        raise ValueError('must specify either period (wavelength) or frequency')
+
+    r, p = cart_to_polar(ux, uy)
+
+    work = psd.copy()
+    work[r < flow] = 0
+    work[r > fhigh] = 0
+    return m.sqrt(work.sum())
 
 
 def window_2d_welch(x, y, alpha=8):
