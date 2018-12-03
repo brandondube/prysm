@@ -413,7 +413,7 @@ def generate_mask(vertices, num_samples=128):
     xxyy = m.stack(m.meshgrid(unit, unit), axis=2)
 
     # use delaunay to fill from the vertices and produce a mask
-    triangles = Delaunay(vertices, qhull_options='Qj Qf')
+    triangles = Delaunay(vertices, qhull_options='QJ Qf')
     mask = ~(triangles.find_simplex(xxyy) < 0)
     return mask
 

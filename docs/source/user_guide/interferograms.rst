@@ -53,10 +53,6 @@ x, y, and azimuthally averaged cuts of the PSD are also available
 >>> uy, psd_y = psd_dict['y']
 >>> ur, psd_r = psd_Dict['avg']
 
-The PSD computation is cached and the cache must be cleared if the data is modified and PSD recomputed;
-
->>> interf.clear_psd()
-
 band-rejection filters may be applied,
 
 >>> interf.bandreject(wllow=1, wlhigh=10)

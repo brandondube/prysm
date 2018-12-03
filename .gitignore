@@ -68,3 +68,5 @@ target/
 .idea
 .ropeproject
 Examples/testing.ipynb
+
+.DS_store

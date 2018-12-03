@@ -144,6 +144,20 @@ class Pupil(OpticalPhase):
         phase = self.change_phase_unit(to='um', inplace=False)
         return 1 - ((4 * m.pi**2) / self.wavelength**2) * (rms(phase)**2)
 
+    @property
+    def fcn(self):
+        """Complex wavefunction associated with the pupil."""
+        phase = self.change_phase_unit(to='waves', inplace=False)
+
+        fcn = m.exp(1j * 2 * m.pi * phase)  # phase implicitly in units of waves, no 2pi/l
+        # guard against nans in phase
+        fcn[m.isnan(phase)] = 0
+
+        if self.mask_target in ('fcn', 'both'):
+            fcn *= self._mask
+
+        return fcn
+
     def build(self):
         """Construct a numerical model of a `Pupil`.
 
@@ -161,24 +175,7 @@ class Pupil(OpticalPhase):
 
         # fill in the phase of the pupil
         self.phase = m.zeros((self.samples, self.samples), dtype=config.precision)
-        self._phase_to_wavefunction()
 
-        return self
-
-    def _phase_to_wavefunction(self):
-        """Compute the wavefunction from the phase.
-
-        Returns
-        -------
-        `Pupil`
-            this pupil instance
-
-        """
-        phase = self.change_phase_unit(to='waves', inplace=False)
-
-        self.fcn = m.exp(1j * 2 * m.pi * phase)  # phase implicitly in units of waves, no 2pi/l
-        # guard against nans in phase
-        self.fcn[m.isnan(phase)] = 0
         return self
 
     def mask(self, mask, target):
@@ -200,16 +197,8 @@ class Pupil(OpticalPhase):
             self, the pupil instance
 
         """
-        tl = target.lower()
-        if tl == 'both':
-            idx = mask == 0
-            self.phase[idx] = m.nan
-            self.fcn *= mask
-        elif tl == 'phase':
-            idx = mask == 0
-            self.phase[idx] = m.nan
-        else:
-            self.fcn *= mask
+        if target in ('phase', 'both'):
+            self.phase *= mask
 
         return self
 
