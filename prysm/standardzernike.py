@@ -457,7 +457,6 @@ class StandardZernike(Pupil):
                                              phi=self.phi)
 
         self._correct_phase_units()
-        self._phase_to_wavefunction()
         return self.phase, self.fcn
 
     def __repr__(self):
