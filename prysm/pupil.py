@@ -260,7 +260,6 @@ class Pupil(OpticalPhase):
         result = self.clone()
         result.phase = self.phase + other.phase
         result._mask = self._mask * other._mask
-        result = result._phase_to_wavefunction()
         result.mask(result._mask, result.mask_target)
         return result
 
@@ -289,7 +288,6 @@ class Pupil(OpticalPhase):
         result = self.clone()
         result.phase = self.phase - other.phase
         result._mask = self._mask * other._mask
-        result = result._phase_to_wavefunction()
         result.mask(result._mask, result.mask_target)
         return result
 
@@ -323,6 +321,6 @@ class Pupil(OpticalPhase):
                 raise ValueError('wavelength must be give or carried in interferogram.meta')
             wvl *= 1e6  # convert zygo meters to prysm microns
 
-        p = Pupil(wavelength=wvl, phase=interferogram.phase, opd_unit=interferogram.phase_unit,
-                  ux=interferogram.unit_x, uy=interferogram.unit_y)
-        return p._phase_to_wavefunction()
+        return Pupil(wavelength=wvl, phase=interferogram.phase,
+                     opd_unit=interferogram.phase_unit,
+                     ux=interferogram.unit_x, uy=interferogram.unit_y)
