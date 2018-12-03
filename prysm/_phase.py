@@ -170,6 +170,22 @@ class OpticalPhase(object):
     def Sa(self):
         return Sa(self.phase)
 
+    @property
+    def shape(self):
+        return self.phase.shape
+
+    @property
+    def diameter_x(self):
+        return self.unit_x[-1] - self.unit_x[0]
+
+    @property
+    def diameter_y(self):
+        return self.unit_y[-1] - self.unit_x[0]
+
+    @property
+    def diameter(self):
+        return max((self.diameter_x, self.diameter_y))
+
     def change_phase_unit(self, to, inplace=True):
         """Change the units used to describe the phase.
 

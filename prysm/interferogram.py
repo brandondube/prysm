@@ -124,7 +124,6 @@ class Interferogram(OpticalPhase):
         """
         hitpts = mask == 0
         self.phase[hitpts] = m.nan
-        self.intensity[hitpts] = m.nan
         return self
 
     def bandreject(self, wllow, wlhigh):
