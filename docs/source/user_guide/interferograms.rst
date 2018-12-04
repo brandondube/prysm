@@ -14,7 +14,7 @@ Notable are the scale, and phase unit, which define the xy and z units, respecti
 
 >>> interf = Interferogram.from_zygo_dat(your_path_file_object_or_bytes)
 
-and both the dat and datx format from Zygo are supported.  Dat carries no dependencies, while datx requries the installation of h5py.  In addition to properties inherited from the OpticalPhase class (pv, rms, Sa), :code:`Interferograms` have a :code:`dropout_percentage` property, which gives the percentage of NaN values within the phase array.  These NaNs may be filled,
+and both the dat and datx format from Zygo are supported.  Dat carries no dependencies, while datx requries the installation of h5py.  In addition to properties inherited from the :class:`OpticalPhase` class (pv, rms, Sa), :code:`Interferograms` have a :code:`dropout_percentage` property, which gives the percentage of NaN values within the phase array.  These NaNs may be filled,
 
 >>> interf.fill(_with=0)
 
@@ -41,6 +41,12 @@ Interferograms may be cropped, deleting empty (NaN) regions around a measurment;
 
 >>> interf.crop()
 
+Convenience properties are provided for data size,
+
+>>> interf.shape, interf.diameter_x, interf.diameter_y, interf.diameter
+
+:code:`shape` mirrors the shape of the underlying ndarray.  The x and y diameters are in units of :code:`interf.spatial_unit` and :code:`diameter` is the greater of the two.
+
 The two dimensional Power Spectral Density (PSD) may be computed.  The data may not contain NaNs, and piston tip and tilt should be removed prior.  A 2D Welch window is used, so there is no need for concern about zero values creating a discontinuity at the edge of circular or other nonrectangular apertures.
 
 >>> interf.crop().remove_piston_tiptilt_power().fill()
@@ -53,10 +59,6 @@ x, y, and azimuthally averaged cuts of the PSD are also available
 >>> uy, psd_y = psd_dict['y']
 >>> ur, psd_r = psd_Dict['avg']
 
-band-rejection filters may be applied,
-
->>> interf.bandreject(wllow=1, wlhigh=10)
-
 and the PSD may be plotted,
 
 >>> interf.plot_psd2d(axlim=1, interp_method='lanczos', fig=None, ax=None)
@@ -65,6 +67,12 @@ and the PSD may be plotted,
 For the x/y and average plot, a Lorentzian model may be plotted alongside the data for e.g. visual verification of a requirement:
 
 >>> interf.plot_psd_xyavg(a=1,b=1,c=1)
+
+A bandlimited RMS value derived from the 2D PSD may also be evaluated,
+
+>>> interf.bandlimited_rms(wllow=1, wlhigh=10, flow=1, fhigh=10)
+
+only one of wavelength (wl; spatial period) or frequency (f) should be provided.  f will overrule wavelength.
 
 The complete API documentation is below.
 
