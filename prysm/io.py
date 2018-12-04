@@ -379,8 +379,6 @@ def read_zygo_datx(file):
             intensity = None
         phase_block = list(f['Data']['Surface'].keys())[0]
         phase = f['Data']['Surface'][phase_block].value
-        phase[phase >= ZYGO_INVALID_PHASE] = m.nan
-        phase = phase.astype(config.precision)  # cast to big endian
 
         # now get attrs
         attrs = f['Attributes']
@@ -428,9 +426,30 @@ def read_zygo_datx(file):
             except KeyError:
                 obliq = (1,)
 
-    meta['Obliquity Factor'] = float(obliq[0])
-    # 1e9 meters to nanometers
-    phase *= (meta['Interf Scale Factor'] * meta['Obliquity Factor'] * meta['Wavelength']) * 1e9
+        meta['Obliquity Factor'] = float(obliq[0])
+
+        was_nx2 = False
+
+        # These may be Mx 7.3 and not NX2 problems, I don't know.
+        if 'Interf Scale Factor' not in meta:
+            # NX2-type datx file, look under surface attributes...
+            meta['Interf Scale Factor'] = f['Measurement']['Surface'].attrs['Interferometric Scale Factor'][0]
+            was_nx2 = True
+
+        if 'Lateral Resolution' not in meta:
+            # NX2-type.  magic numbers [0][2][1], h5 is such a great format...
+            meta['Lateral Resolution'] = f['Measurement']['Surface'].attrs['X Converter'][0][2][1]
+            was_nx2 = True
+
+        if 'No Data' not in meta:
+            meta['No Data'] = f['Measurement']['Surface'].attrs['No Data'][0]
+
+
+    phase[phase >= meta['No Data']] = m.nan
+    phase = phase.astype(config.precision)  # cast to big endian
+    if not was_nx2:
+        phase *= (meta['Interf Scale Factor'] * meta['Obliquity Factor'] * meta['Wavelength']) * 1e9
+
     return {
         'phase': phase,
         'intensity': intensity,
