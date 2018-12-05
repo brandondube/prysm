@@ -14,7 +14,7 @@ Notable are the scale, and phase unit, which define the xy and z units, respecti
 
 >>> interf = Interferogram.from_zygo_dat(your_path_file_object_or_bytes)
 
-and both the dat and datx format from Zygo are supported.  Dat carries no dependencies, while datx requries the installation of h5py.  In addition to properties inherited from the :class:`OpticalPhase` class (pv, rms, Sa), :code:`Interferograms` have a :code:`dropout_percentage` property, which gives the percentage of NaN values within the phase array.  These NaNs may be filled,
+and both the dat and datx format from Zygo are supported.  Dat carries no dependencies, while datx requries the installation of h5py.  In addition to properties inherited from the :class:`OpticalPhase` class (pv, rms, Sa, std), :code:`Interferograms` have a :code:`dropout_percentage` property, which gives the percentage of NaN values within the phase array.  These NaNs may be filled,
 
 >>> interf.fill(_with=0)
 
@@ -30,7 +30,11 @@ again done in-place and returning self, so methods can be chained.  One line con
 >>> interf.remove_piston_tiptilt()
 >>> interf.remove_piston_tiptilt_power()
 
-Masks may be applied;
+spikes may also be clipped,
+
+>>> interf.spike_clip(nsigma=3)  # default is 3
+
+setting points with a value more than nsigma standard deviations from the mean to :code:`NaN`.  Masks may be applied:
 
 >>> your_mask = np.ones(interf.phase.shape)
 >>> interf.mask(your_mask)

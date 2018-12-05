@@ -123,25 +123,22 @@ class Interferogram(OpticalPhase):
         self.phase[hitpts] = m.nan
         return self
 
-    def bandreject(self, wllow, wlhigh):
-        """Apply a band-rejection filter to the phase (height) data.
+    def spike_clip(self, nsigma=3):
+        """Clip points in the data that exceed a certain multiple of the standard deviation.
 
         Parameters
         ----------
-        wllow : `float`
-            low wavelength (spatial period), units of self.scale
-        wlhigh : `float`
-            high wavelength (spatial period), units of self.scale
+        nsigma : `float`
+            number of standard deviations to keep
 
         Returns
         -------
-        `Interferogram`
-            in-place modified instance of self
+        self
+            this Interferogram instance.
 
         """
-        new_phase = bandreject_filter(self.phase, self.sample_spacing, wllow, wlhigh)
-        new_phase[~m.isfinite(self.phase)] = m.nan
-        self.phase = new_phase
+        pts_over_nsigma = abs(self.phase) > nsigma * self.std
+        self.phase[pts_over_nsigma] = m.nan
         return self
 
     def psd(self):
