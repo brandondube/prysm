@@ -170,6 +170,24 @@ def Sa(array):
     return abs(ary - mean).sum() / ary.size
 
 
+def std(array):
+    """Return the standard deviation of the valid elements of an array.
+
+    Parameters
+    ----------
+    array: `numpy.ndarray`
+        array of values
+
+    Returns
+    -------
+    `float`
+        std of the array
+
+    """
+    non_nan = m.isfinite(array)
+    ary = array[non_nan]
+    return ary.std()
+
 def guarantee_array(variable):
     """Guarantee that a varaible is a numpy ndarray and supports -, *, +, and other operators.
 

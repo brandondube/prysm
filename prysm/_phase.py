@@ -1,6 +1,6 @@
 """phase basics."""
 
-from .util import share_fig_ax, pv, rms, Sa
+from .util import share_fig_ax, pv, rms, Sa, std
 
 from prysm import mathops as m
 
@@ -169,6 +169,10 @@ class OpticalPhase(object):
     @property
     def Sa(self):
         return Sa(self.phase)
+
+    @property
+    def std(self):
+        return std(self.phase)
 
     @property
     def shape(self):
