@@ -503,6 +503,7 @@ def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None)
     else:
         raise ValueError('must specify either period (wavelength) or frequency')
 
+    ux, uy = m.meshgrid(ux, uy)
     r, p = cart_to_polar(ux, uy)
 
     work = psd.copy()
