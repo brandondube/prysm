@@ -370,28 +370,6 @@ def fit_sphere(z):
     return sphere
 
 
-def bandreject_filter(array, sample_spacing, wllow, wlhigh):
-    sy, sx = array.shape
-
-    # compute the bandpass in sample coordinates
-    ux, uy = forward_ft_unit(sample_spacing, sx), forward_ft_unit(sample_spacing, sy)
-    fhigh, flow = 1/wllow, 1/wlhigh
-
-    # make an ordinate array in frequency space and use it to make a mask
-    uxx, uyy = m.meshgrid(ux, uy)
-    highpass = ((uxx < -fhigh) | (uxx > fhigh)) | ((uyy < -fhigh) | (uyy > fhigh))
-    lowpass = ((uxx > -flow) & (uxx < flow)) & ((uyy > -flow) & (uyy < flow))
-    mask = highpass | lowpass
-
-    # adjust NaNs and FFT
-    work = array.copy()
-    work[~m.isfinite(work)] = 0
-    fourier = m.fftshift(m.fft2(m.ifftshift(work)))
-    fourier[mask] = 0
-    out = m.fftshift(m.ifft2(m.ifftshift(fourier)))
-    return out.real
-
-
 def make_window(signal, sample_spacing, which='welch'):
     """Generates a window function to be used in PSD analysis.
 
@@ -434,6 +412,7 @@ def make_window(signal, sample_spacing, which='welch'):
             x = m.arange(s[0]) * sample_spacing
             return window_2d_welch(y, x)
         else:
+            # if not circular, square data; use Hanning window
             y = m.hanning(s[0])
             x = m.hanning(s[1])
             return m.outer(y, x)
