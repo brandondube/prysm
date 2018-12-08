@@ -405,7 +405,7 @@ class AiryDisk(PSF):
 
         """
         from .otf import diffraction_limited_mtf
-        r, p = cart_to_polar(unit_x, unit_y)
+        r, p = cart_to_polar(*m.meshgrid(unit_x, unit_y))
         return diffraction_limited_mtf(self.fno, self.wavelength, r*1e3)  # um to mm
 
 
