@@ -200,6 +200,38 @@ class Convolvable(object):
         """
         return _conv(self, other)
 
+    def deconv(self, other, balance=1000, reg=None, is_real=True, clip=False):
+        """Perform the deconvolution of this convolvable object by another.
+
+        Parameters
+        ----------
+        other : `Convolvable`
+            another convolvable object, used as the PSF in a Wiener deconvolution
+        balance : `float`, optional
+            regularization parameter; passed through to skimage
+        reg : `numpy.ndarray`, optional
+            regularization operator, passed through to skimage
+        is_real : `bool`, optional
+            True if self and other are both real
+        clip : `bool`, optional
+            clips self and other into (0,1).
+
+
+        Returns
+        -------
+        `Convolvable`
+            a new Convolable object
+
+        Notes
+        -----
+        See skimage:
+        http://scikit-image.org/docs/dev/api/skimage.restoration.html#skimage.restoration.wiener
+        """
+        from skimage.restoration import wiener
+
+        result = wiener(self.data, other.data, balance=balance, reg=reg, is_real=is_real, clip=clip)
+        return Convolvable(result, self.unit_x, self.unit_y, False)
+
     def show(self, xlim=None, ylim=None, interp_method=None, power=1, show_colorbar=True, fig=None, ax=None):
         '''Display the image.
 
