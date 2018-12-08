@@ -18,6 +18,7 @@ setup(
         'Mx': ['h5py'],
         'img': ['imageio'],
         'mtf+': ['pandas'],
+        'deconv': ['scikit-image'],
     },
     classifiers=[
         'Development Status :: 4 - Beta',
