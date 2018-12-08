@@ -87,9 +87,12 @@ Physical Optics
 * Interferometric analysis
 * * cropping, masking
 * * least-squares fitting and subtraction of Zernike modes, planes, and spheres
-* * band-reject filters
-* * evaluation of PV, RMS, Sa
-* * computation of 2D PSD
+* * evaluation of PV, RMS, Sa, standard deviation, band-limited RMS
+* * computation of PSD
+* * * 2D
+* * * x, y, azimuthally averaged slices
+* * * evaluation and/or comparison to lorentzian model
+* * spike clipping
 * * plotting
 
 First-Order Optics
@@ -114,8 +117,3 @@ User's Guide
    :glob:
 
    user_guide/*
-
-Developer Guide
----------------
-
-prysm's development has been a one-man affair for some number of years.  Contributions are appreciated in earnest.  These may take the form of e.g. improvements to documentation or docstrings, new unit tests to expand coverage and depth of testing, or development of new or expanded features.  Please contact the primary author to begin contributing, or file a PR/issue on github.
