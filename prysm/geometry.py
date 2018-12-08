@@ -147,7 +147,7 @@ def triangle(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon_mask(3, samples)
+    return regular_polygon(3, samples)
 
 
 def square(samples=128):
@@ -181,7 +181,7 @@ def pentagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon_mask(5, samples)
+    return regular_polygon(5, samples)
 
 
 def hexagon(samples=128):
@@ -198,7 +198,7 @@ def hexagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon_mask(6, samples)
+    return regular_polygon(6, samples)
 
 
 def heptagon(samples=128):
@@ -215,7 +215,7 @@ def heptagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon_mask(7, samples)
+    return regular_polygon(7, samples)
 
 
 def octagon(samples=128):
@@ -232,7 +232,7 @@ def octagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon_mask(8, samples)
+    return regular_polygon(8, samples)
 
 
 def nonagon(samples=128):
@@ -249,7 +249,7 @@ def nonagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon_mask(9, samples)
+    return regular_polygon(9, samples)
 
 
 def decagon(samples=128):
@@ -266,7 +266,7 @@ def decagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon_mask(10, samples)
+    return regular_polygon(10, samples)
 
 
 def hendecagon(samples=128):
@@ -283,7 +283,7 @@ def hendecagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon_mask(11, samples)
+    return regular_polygon(11, samples)
 
 
 def dodecagon(samples=128):
@@ -300,7 +300,7 @@ def dodecagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon_mask(12, samples)
+    return regular_polygon(12, samples)
 
 
 def trisdecagon(samples=128):
@@ -317,7 +317,7 @@ def trisdecagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon_mask(13, samples)
+    return regular_polygon(13, samples)
 
 
 def circle(samples=128, radius=1):
@@ -372,7 +372,7 @@ def inverted_circle(samples=128, radius=1):
         return mask
 
 
-def regular_polygon_mask(num_sides, num_samples):
+def regular_polygon(num_sides, num_samples):
     """Generate a regular polygon mask with the given number of sides and samples in the mask array.
 
     Parameters
