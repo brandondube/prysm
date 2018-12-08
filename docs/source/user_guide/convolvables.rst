@@ -23,7 +23,7 @@ Objects that take a background parameter will be black-on-white for :code:`backg
 
 >>> monstrosity = s.conv(p).conv(t).conv(star).conv(pa).conv(ol)
 
-Some models require sample spacing and samples parameters while others do not.  This is because prysm has many methods of executing an FFT-based Fourier domain convolution under the hood.  If an object has a known analytical Fourier transform, the class has a method :code:`(Convolvable).analytic_ft` which has ordinate units of reciprocal microns.  If the analytic FT is present, it is used in lieu of numerical data.  Models that have analytical Fourier transforms also accept sample_spacing and samples parameters, which are used to define a grid in the spatial domain.  If two objects with analytical Fourier transforms are convolved, the output grid will have the finer sample spacing of the two inputs, and the larger span or window width of the two inputs.
+Some models require sample spacing and samples parameters while others do not.  This is because prysm has many methods of executing an FFT-based Fourier domain convolution under the hood.  If an object has a known analytical Fourier transform, the class has a method :code:`(Convolvable).analytic_ft` which has abscissa units of reciprocal microns.  If the analytic FT is present, it is used in lieu of numerical data.  Models that have analytical Fourier transforms also accept sample_spacing and samples parameters, which are used to define a grid in the spatial domain.  If two objects with analytical Fourier transforms are convolved, the output grid will have the finer sample spacing of the two inputs, and the larger span or window width of the two inputs.
 
 The Convolvable constructor takes only four parameters,
 
@@ -65,7 +65,7 @@ Minimal labor is required to subclass :code:`Convolvable`.  For example, the :co
 
 which is less than 20 lines long.
 
-:code:`Convolvable` objects have a few convenience properties and methods.  :code:`(Convolvable).slice_x` and its y variant exist and behave the same as slices on subclasses of :code:`OpticalPhase` such as :code:`Pupil`.  :code:`(Convolvable).plot_slice_xy` also works the same way.
+:code:`Convolvable` objects have a few convenience properties and methods.  :code:`(Convolvable).slice_x` and its y variant exist and behave the same as slices on subclasses of :code:`OpticalPhase` such as :code:`Pupil`.  :code:`(Convolvable).plot_slice_xy` also works the same way.  :code:`(Convolvable).shape` is a convenience wrapper for :code:`(Convolvable).data.shape`, an :code:`(Convolvable).support_x, .support_y,` an :code:`.support` mimic the equivalent :code:`diameter` properties on :code:`OpticalPhase` inheritants.
 
 :code:`(Convolvable).show` and :code:`(Convolvable).show_fourier` behave the same way as :code:`plot2d` methods found throughout prysm, except there are :code:`xlim` and :code:`ylim` parameters, which may be either single values, taken to be symmetric axis limits, or length-2 iterables of lower and upper limits.
 

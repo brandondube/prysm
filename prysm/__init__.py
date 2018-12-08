@@ -7,13 +7,14 @@ from prysm.pupil import Pupil
 from prysm.fringezernike import FringeZernike
 from prysm.standardzernike import StandardZernike
 from prysm.seidel import Seidel
-from prysm.psf import PSF, MultispectralPSF, RGBPSF, AiryDisk
+from prysm.psf import PSF, AiryDisk
 from prysm.otf import MTF
 from prysm.interferogram import Interferogram
 from prysm.geometry import (
     gaussian,
     rotated_ellipse,
     square,
+    regular_polygon,
     pentagon,
     hexagon,
     heptagon,
@@ -45,13 +46,12 @@ __all__ = [
     'Interferogram',
     'Seidel',
     'PSF',
-    'MultispectralPSF',
-    'RGBPSF',
     'AiryDisk',
     'MTF',
     'Lens',
     'gaussian',
     'rotated_ellipse',
+    'regular_polygon',
     'square',
     'pentagon',
     'hexagon',

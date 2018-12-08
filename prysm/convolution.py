@@ -81,6 +81,22 @@ class Convolvable(object):
         """
         return self.unit_y, self.data[:, self.center_x]
 
+    @property
+    def shape(self):
+        return self.data.shape
+
+    @property
+    def support_x(self):
+        return self.unit_x[-1] - self.unit_x[0]
+
+    @property
+    def support_y(self):
+        return self.unit_y[-1] - self.unit_x[0]
+
+    @property
+    def support(self):
+        return max((self.support_x, self.support_y))
+
     def plot_slice_xy(self, axlim=20, lw=3, fig=None, ax=None):
         """Create a plot of slices through the X and Y axes of the `PSF`.
 
