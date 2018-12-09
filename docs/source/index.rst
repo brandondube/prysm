@@ -117,17 +117,3 @@ User's Guide
    :glob:
 
    user_guide/*
-
-Examples
---------
-
-.. toctree::
-    :maxdepth 1
-    :glob:
-
-    examples/*
-
-Developer Guide
----------------
-
-prysm's development has been a one-man affair for some number of years.  Contributions are appreciated in earnest.  These may take the form of e.g. improvements to documentation or docstrings, new unit tests to expand coverage and depth of testing, or development of new or expanded features.  Please contact the primary author to begin contributing, or file a PR/issue on github.
