@@ -200,7 +200,7 @@ class Convolvable(object):
         """
         return _conv(self, other)
 
-    def deconv(self, other, balance=1000, reg=None, is_real=True, clip=False):
+    def deconv(self, other, balance=1000, reg=None, is_real=True, clip=False, postnormalize=True):
         """Perform the deconvolution of this convolvable object by another.
 
         Parameters
@@ -214,7 +214,9 @@ class Convolvable(object):
         is_real : `bool`, optional
             True if self and other are both real
         clip : `bool`, optional
-            clips self and other into (0,1).
+            clips self and other into (0,1)
+        postnormalize : `bool`, optional
+            normalize the result such that it falls in [0,1]
 
 
         Returns
@@ -230,6 +232,9 @@ class Convolvable(object):
         from skimage.restoration import wiener
 
         result = wiener(self.data, other.data, balance=balance, reg=reg, is_real=is_real, clip=clip)
+        if postnormalize:
+            result += result.min()
+            result /= result.max()
         return Convolvable(result, self.unit_x, self.unit_y, False)
 
     def show(self, xlim=None, ylim=None, interp_method=None, power=1, show_colorbar=True, fig=None, ax=None):
