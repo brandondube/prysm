@@ -31,7 +31,7 @@ def test_all_predefined_shapes():  # TODO: test more than just that these are nd
     [5,  256],
     [25, 68]])
 def test_regular_polygon(sides, samples):  # TODO: test more than just that these are ndarrays
-    assert type(geometry.regular_polygon_mask(sides, samples)) is np.ndarray
+    assert type(geometry.regular_polygon(sides, samples)) is np.ndarray
 
 
 @pytest.mark.parametrize('sigma, samples', [
