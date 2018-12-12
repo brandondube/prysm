@@ -442,7 +442,10 @@ def read_zygo_datx(file):
             was_nx2 = True
 
         if 'No Data' not in meta:
-            meta['No Data'] = f['Measurement']['Surface'].attrs['No Data'][0]
+            try:
+                meta['No Data'] = f['Measurement']['Surface'].attrs['No Data'][0]
+            except KeyError:
+                meta['No Data'] = ZYGO_INVALID_PHASE
 
 
     phase[phase >= meta['No Data']] = m.nan
