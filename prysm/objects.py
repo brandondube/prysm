@@ -256,6 +256,7 @@ class TiltedSquare(Convolvable):
         x = m.linspace(-0.5, 0.5, samples)
         y = m.linspace(-0.5, 0.5, samples)
         xx, yy = m.meshgrid(x, y)
+        sf = samples * sample_spacing
 
         # TODO: convert inline operation to use of rotation matrix
         angle = m.radians(angle)
@@ -263,4 +264,4 @@ class TiltedSquare(Convolvable):
         yp = xx * m.sin(angle) + yy * m.cos(angle)
         mask = (abs(xp) < radius) * (abs(yp) < radius)
         arr[mask] = fill_with
-        super().__init__(data=arr, unit_x=x, unit_y=y, has_analytic_ft=False)
+        super().__init__(data=arr, unit_x=x * sf, unit_y=y * sf, has_analytic_ft=False)
