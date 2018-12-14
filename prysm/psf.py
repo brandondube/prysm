@@ -348,7 +348,7 @@ class PSF(Convolvable):
         # determine the F/#, assumes:
         # - pupil fills x or y width of array
         # - pupil is not elliptical at an odd angle
-        s = pupil.fcn.shape
+        s = fcn.shape
         if s[1] > s[0]:
             u = pupil.unit_x
         else:

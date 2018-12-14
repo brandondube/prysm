@@ -6,7 +6,7 @@ import matplotlib as mpl
 from .psf import PSF
 from .fttools import forward_ft_unit
 from .util import share_fig_ax
-from .coordinates import polar_to_cart
+from .coordinates import polar_to_cart, uniform_cart_to_polar
 
 from prysm import mathops as m
 
@@ -219,6 +219,21 @@ class MTF(object):
         """
         self._make_interp_function_tansag()
         return self.interpf_sag(freq)
+
+    def azimuthal_average(self):
+        """Return the azimuthally averaged MTF.
+
+        Returns
+        -------
+        nu : `numpy.ndarray`
+            spatial frequencies
+        mtf : `numpy.ndarray`
+            mtf values
+
+        """
+        nu, theta, mtf = uniform_cart_to_polar(self.unit_x, self.unit_y, self.data)
+        l = len(nu) // 2
+        return nu[l:], mtf.mean(axis=0)
 
     # quick-access slices ------------------------------------------------------
 

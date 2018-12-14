@@ -323,4 +323,5 @@ class Pupil(OpticalPhase):
 
         return Pupil(wavelength=wvl, phase=interferogram.phase,
                      opd_unit=interferogram.phase_unit,
-                     ux=interferogram.unit_x, uy=interferogram.unit_y)
+                     ux=interferogram.unit_x, uy=interferogram.unit_y,
+                     mask = ~(interferogram.phase == m.nan))
