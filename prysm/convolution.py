@@ -83,7 +83,7 @@ class Convolvable(object):
 
     @property
     def shape(self):
-        return self.data.shape
+        return self.shape
 
     @property
     def support_x(self):
@@ -474,7 +474,7 @@ def pure_numerical_ft_convolution(convolvable1, convolvable2):
     """
     # logic tree of convolvable cases with specific implementations
     if (convolvable1.sample_spacing - convolvable2.sample_spacing) < 1e-4:
-        s1, s2 = convolvable1.data.shape, convolvable2.data.shape
+        s1, s2 = convolvable1.shape, convolvable2.shape
         if s1[0] > s2[0]:
             return _numerical_ft_convolution_core_equalspacing_unequalsamplecount(convolvable1, convolvable2)
         elif s1[0] < s2[0]:
@@ -498,10 +498,10 @@ def _numerical_ft_convolution_core_equalspacing(convolvable1, convolvable2):
 
 def _numerical_ft_convolution_core_equalspacing_unequalsamplecount(more_samples, less_samples):
     # compute the ordinate axes of the input and output
-    in_x = forward_ft_unit(less_samples.sample_spacing, less_samples.data.shape[0])
-    in_y = forward_ft_unit(less_samples.sample_spacing, less_samples.data.shape[1])
-    output_x = forward_ft_unit(more_samples.sample_spacing, more_samples.data.shape[0])
-    output_y = forward_ft_unit(more_samples.sample_spacing, more_samples.data.shape[1])
+    in_x = forward_ft_unit(less_samples.sample_spacing, less_samples.shape[0])
+    in_y = forward_ft_unit(less_samples.sample_spacing, less_samples.shape[1])
+    output_x = forward_ft_unit(more_samples.sample_spacing, more_samples.shape[0])
+    output_y = forward_ft_unit(more_samples.sample_spacing, more_samples.shape[1])
 
     # FFT the less sampled one and map it onto the denser grid
     less_fourier = m.fftshift(m.fft2(m.fftshift(less_samples.data)))
@@ -516,11 +516,11 @@ def _numerical_ft_convolution_core_equalspacing_unequalsamplecount(more_samples,
 
 def _numerical_ft_convolution_core_unequalspacing(finer_sampled, coarser_sampled):
     # compute the ordinate axes of the input of each
-    in_x_more = forward_ft_unit(finer_sampled.sample_spacing, finer_sampled.data.shape[0])
-    in_y_more = forward_ft_unit(finer_sampled.sample_spacing, finer_sampled.data.shape[1])
+    in_x_more = forward_ft_unit(finer_sampled.sample_spacing, finer_sampled.shape[0])
+    in_y_more = forward_ft_unit(finer_sampled.sample_spacing, finer_sampled.shape[1])
 
-    in_x_less = forward_ft_unit(coarser_sampled.sample_spacing, coarser_sampled.data.shape[0])
-    in_y_less = forward_ft_unit(coarser_sampled.sample_spacing, coarser_sampled.data.shape[1])
+    in_x_less = forward_ft_unit(coarser_sampled.sample_spacing, coarser_sampled.shape[0])
+    in_y_less = forward_ft_unit(coarser_sampled.sample_spacing, coarser_sampled.shape[1])
 
     # fourier-space interpolate the larger bandwidth signal onto the grid defined by the lower
     # bandwidth signal.  This assumes the lower bandwidth signal is Nyquist sampled, which is
@@ -537,31 +537,13 @@ def _numerical_ft_convolution_core_unequalspacing(finer_sampled, coarser_sampled
 
 def _compute_output_grid(convolvable1, convolvable2):
     # determine output spacing
-    if convolvable1.sample_spacing < convolvable2.sample_spacing:
-        output_spacing = convolvable1.sample_spacing
-    else:
-        output_spacing = convolvable2.sample_spacing
+    output_spacing = min(convolvable1.sample_spacing, convolvable2.sample_spacing)
 
     # determine region of output
-    if convolvable1.unit_x[0] < convolvable2.unit_x[0]:
-        output_x_left = convolvable1.unit_x[0]
-    else:
-        output_x_left = convolvable2.unit_x[0]
-
-    if convolvable1.unit_x[-1] > convolvable2.unit_x[-1]:
-        output_x_right = convolvable1.unit_x[-1]
-    else:
-        output_x_right = convolvable2.unit_x[-1]
-
-    if convolvable1.unit_y[0] < convolvable2.unit_y[0]:
-        output_y_left = convolvable1.unit_y[0]
-    else:
-        output_y_left = convolvable2.unit_y[0]
-
-    if convolvable1.unit_y[-1] > convolvable2.unit_y[-1]:
-        output_y_right = convolvable1.unit_y[-1]
-    else:
-        output_y_right = convolvable2.unit_y[-1]
+    output_x_left = min(convolvable1.unit_x[0], convolvable2.unit_x[0])
+    output_x_right = max(convolvable1.unit_x[-1], convolvable2.unit_x[-1])
+    output_y_left = min(convolvable1.unit_y[0], convolvable2.unit_y[0])
+    output_y_right = max(convolvable1.unit_y[-1], convolvable2.unit_y[-1])
 
     # if region is not an integer multiple of sample spacings, enlarge to make this true
     x_rem = (output_x_right - output_x_left) % output_spacing
