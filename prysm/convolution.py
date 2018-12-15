@@ -83,7 +83,7 @@ class Convolvable(object):
 
     @property
     def shape(self):
-        return self.shape
+        return self.data.shape
 
     @property
     def support_x(self):
