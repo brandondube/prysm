@@ -226,7 +226,7 @@ class SiemensStar(Convolvable):
 
 
 class TiltedSquare(Convolvable):
-    '''Describes a tilted square for e.g. slanted-edge '''
+    '''Represents a tilted square for e.g. slanted-edge MTF calculation.'''
 
     def __init__(self, angle=8, background='white', sample_spacing=2, samples=256):
         '''Create a new TitledSquare instance.
@@ -264,4 +264,40 @@ class TiltedSquare(Convolvable):
         yp = xx * m.sin(angle) + yy * m.cos(angle)
         mask = (abs(xp) < radius) * (abs(yp) < radius)
         arr[mask] = fill_with
+        super().__init__(data=arr, unit_x=x * sf, unit_y=y * sf, has_analytic_ft=False)
+
+
+class SlantedEdge(Convolvable):
+    """Representation of a slanted edge."""
+
+    def __init__(self, angle=8, contrast=0.9, sample_spacing=2, samples=256):
+        '''Create a new TitledSquare instance.
+
+        Parameters
+        ----------
+        angle : `float`
+            angle in degrees to tilt w.r.t. the y axis
+        contrast : `float`
+            difference between minimum and maximum values in the image
+        sample_spacing : `float`
+            spacing of samples
+        samples : `int`
+            number of samples
+
+        '''
+        diff = (1 - contrast) / 2
+        arr = m.full((samples, samples), 1 - diff)
+        x = m.linspace(-0.5, 0.5, samples)
+        y = m.linspace(-0.5, 0.5, samples)
+        xx, yy = m.meshgrid(x, y)
+        sf = samples * sample_spacing
+
+        angle = m.radians(angle)
+        xp = xx * m.cos(angle) - yy * m.sin(angle)
+        # yp = xx * m.sin(angle) + yy * m.cos(angle)  # do not need this
+        mask = xp > 0
+        arr[mask] = diff
+        self.contrast = contrast
+        self.black = diff
+        self.white = 1 - diff
         super().__init__(data=arr, unit_x=x * sf, unit_y=y * sf, has_analytic_ft=False)

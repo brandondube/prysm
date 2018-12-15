@@ -30,6 +30,7 @@ from prysm.objects import (
     Pinhole,
     SiemensStar,
     TiltedSquare,
+    SlantedEdge,
 )
 
 from prysm.lens import Lens
@@ -66,4 +67,5 @@ __all__ = [
     'Pinhole',
     'SiemensStar',
     'TiltedSquare',
+    'SlantedEdge',
 ]

@@ -115,6 +115,7 @@ allfuncs = set((
     'count_nonzero',
     'trapz',
     'hanning',
+    'full',
 ))
 
 allfuncs_cupy_missing = set((
