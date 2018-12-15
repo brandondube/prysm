@@ -5,6 +5,7 @@ from scipy.interpolate import interp2d
 import matplotlib as mpl
 
 from prysm import mathops as m
+from .conf import config
 from .fttools import forward_ft_unit, pad2d
 from .util import share_fig_ax
 
@@ -380,20 +381,17 @@ class Convolvable(object):
 
         Returns
         -------
-        `Image`
+        `Convolvable`
             a new image object
-
-        Notes
-        -----
-        TODO: proper handling of images with more than 8bpp.
 
         '''
         from imageio import imread
-        imgarr = imread(path, flatten=True, pilmode='F')
+        imgarr = imread(path)
         s = imgarr.shape
         extx, exty = s[0] * scale // 2, s[1] * scale // 2
         ux, uy = m.arange(-extx, exty, scale), m.arange(-exty, exty, scale)
-        return Convolvable(data=m.flip(imgarr, axis=0) / 255, unit_x=ux, unit_y=uy, has_analytic_ft=False)
+        return Convolvable(data=m.flip(imgarr, axis=0).astype(config.precision),
+                           unit_x=ux, unit_y=uy, has_analytic_ft=False)
 
 
 def _conv(convolvable1, convolvable2):
