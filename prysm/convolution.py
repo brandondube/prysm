@@ -358,7 +358,13 @@ class Convolvable(object):
 
         '''
         from imageio import imsave
-        dat = (self.data * 255).astype(m.uint8)
+        if nbits is 8:
+            typ = m.unit8
+        elif nbits is 16:
+            typ = m.uint16
+        else:
+            raise ValueError('must use either 8 or 16 bpp.')
+        dat = (self.data * 2**nbits - 1).astype(typ)
         imsave(path, dat)
 
     @staticmethod
