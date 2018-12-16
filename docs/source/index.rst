@@ -59,20 +59,23 @@ Physical Optics
 * * * n sided regular polygons
 * * * user-provided
 * * synthetic interferograms
-* * PV and rms evaluation
+* * PV, rms, standard deviation, strehl evaluation
 * * plotting
 
 * Propagation of pupil planes via Fresnel transforms to Point Spread Functions (PSFs), which support
 * * calculation and plotting of encircled energy
 * * evaluation and plotting of slices
-* * 2D plotting with or without power law scaling
+* * 2D plotting with or without power law or logarithmic scaling
 
 * Computation of MTF from PSFs via the FFT method
 * * MTF Full-Field Displays
 * * MTF vs Field vs Focus
 * * * Best Individual Focus
 * * * Best Average Focus
-* * evaluation at exact Cartesian or polar spatial frequencies
+* * evaluation at
+* * * exact Cartesian spatial frequencies
+* * * exact polar spatial frequencies
+* * * Azimuthal average
 * * 2D and slice plotting
 
 * Rich tools for convolution of PSFs with images or synthetic objects:
@@ -80,6 +83,7 @@ Physical Optics
 * * slits
 * * Siemens stars
 * * tilted squares
+* * slanted edges
 * read, write, and display of images
 
 * Detector models for e.g. STOP analysis or image synthesis
