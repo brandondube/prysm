@@ -1,6 +1,7 @@
 """prysm, a python optics module."""
 
 from prysm.conf import config
+from prysm.convolution import Convolvable
 from prysm.extras import plot_fourier_chain
 from prysm.detector import Detector, OLPF, PixelAperture
 from prysm.pupil import Pupil
@@ -68,4 +69,5 @@ __all__ = [
     'SiemensStar',
     'TiltedSquare',
     'SlantedEdge',
+    'Convolvable',
 ]

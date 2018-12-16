@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='prysm',
-    version='0.13',
+    version='0.13.1',
     description='A python optics module',
     long_description='Uses geometrical and fourier optics to model optical systems',
     license='MIT',
