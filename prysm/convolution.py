@@ -328,7 +328,7 @@ class Convolvable(object):
 
             data = self.analytic_ft(freq_x, freq_y)
         else:
-            data = abs(m.fftshift(m.fft2(pad2d(self.data))))
+            data = abs(m.fftshift(m.fft2(pad2d(self.data, 2))))
             data /= data.max()
             freq_x = forward_ft_unit(self.sample_spacing, self.samples_x)
             freq_y = forward_ft_unit(self.sample_spacing, self.samples_y)
