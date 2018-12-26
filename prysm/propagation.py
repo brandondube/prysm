@@ -6,7 +6,7 @@ from prysm import mathops as m
 DEFAULT_Q = 2
 
 
-def prop_pupil_plane_to_psf_plane(wavefunction, Q=DEFAULT_Q, norm=None):
+def prop_pupil_plane_to_psf_plane(wavefunction, Q=DEFAULT_Q, incoherent=True, norm=None):
     """Propagate a pupil plane to a PSF plane and compute the grid along which the PSF exists.
 
     Parameters
@@ -15,6 +15,9 @@ def prop_pupil_plane_to_psf_plane(wavefunction, Q=DEFAULT_Q, norm=None):
         the pupil wavefunction
     Q : `float`
         oversampling / padding factor
+    incoherent : `bool`, optional
+        whether to return the incoherent (real valued) PSF, or the
+        coherent (complex-valued) PSF.  Incoherent = |coherent|^2
     norm : `str`, {None, 'ortho'}
         normalization parameter passed directly to numpy/cupy fft
 
@@ -26,7 +29,10 @@ def prop_pupil_plane_to_psf_plane(wavefunction, Q=DEFAULT_Q, norm=None):
     """
     padded_wavefront = pad2d(wavefunction, Q)
     impulse_response = m.ifftshift(m.fft2(m.fftshift(padded_wavefront), norm=norm))
-    return abs(impulse_response) ** 2
+    if incoherent:
+        return abs(impulse_response) ** 2
+    else:
+        return impulse_response
 
 
 def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, prop_dist, wavelength, Q=DEFAULT_Q):
