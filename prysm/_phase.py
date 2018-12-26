@@ -102,8 +102,6 @@ class OpticalPhase(object):
         self.wavelength = wavelength
         self.phase_unit = phase_unit
         self.spatial_unit = spatial_unit
-        self.center_x = len(self.unit_x) // 2
-        self.center_y = len(self.unit_y) // 2
         self.sample_spacing = unit_x[1] - unit_x[0]
 
     @property
@@ -189,6 +187,26 @@ class OpticalPhase(object):
     @property
     def diameter(self):
         return max((self.diameter_x, self.diameter_y))
+
+    @property
+    def samples_x(self):
+        """Number of samples in the x dimension."""
+        return self.data.shape[1]
+
+    @property
+    def samples_y(self):
+        """Number of samples in the y dimension."""
+        return self.data.shape[0]
+
+    @property
+    def center_x(self):
+        """Center "pixel" in x."""
+        return len(self.unit_x) // 2
+
+    @property
+    def center_y(self):
+        """Center "pixel" in y."""
+        return len(self.unit_y) // 2
 
     def change_phase_unit(self, to, inplace=True):
         """Change the units used to describe the phase.
