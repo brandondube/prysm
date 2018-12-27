@@ -1,4 +1,6 @@
 """tools to analyze interferometric data."""
+import warnings
+
 from matplotlib import colors
 
 from ._phase import OpticalPhase
@@ -181,6 +183,99 @@ class Interferogram(OpticalPhase):
                                wlhigh=wlhigh,
                                flow=flow,
                                fhigh=fhigh)
+
+    def rayleigh_rice_scattering_2d(self, wavelength=None, reflectance=1):
+        """Calculate the Angle Resolved Scattering via the Rayleigh-Rice method.
+
+        Parameters
+        ----------
+        theta_x : `numpy.ndarray`
+            x angle
+        theta_y : `numpy.ndarray`
+            y angle
+        wavelength : `float`
+            wavelength of light in microns.  If None, use interferogram.meta['wavelength']
+        reflectance : `float`
+            reflectance value used in the calculation
+
+        Returns
+        -------
+        `numpy.ndarray`
+            ARS value from the Rayleigh-Rice method.
+
+        Notes
+        -----
+        Assumes illumination at normal incidence
+
+        See Schroder et al, "Modeling of light scattering in different regimes
+        of surface roughness" Opt. Expr. (19)
+        https://www.osapublishing.org/oe/abstract.cfm?uri=oe-19-10-9820
+
+        ARS = 16pi^2 / lambda^4 * gamma_i * gamma_s^2 * Q * PSD(f)
+        """
+        if self.phase_unit != 'nm':
+            raise ValueError('Convert phase unit to nm before calculating ARS.')
+        if self.spatial_unit != 'nm':
+            raise ValueError('Convert spatial unit to nm before calculating ARS.')
+
+        if wavelength is None:
+            wavelength = self.meta['Wavelength'] * 1e6
+
+        wavelength *= 1e3  # um to nm
+        coefficient = 16 * m.pi ** 2 / wavelength ** 4
+        # gamma_i = 1, skip
+
+        # convert spatial frequencies in reciprocal spatial units to
+        # "f" from the grating equation
+        ux, uy, psd = self.psd()
+        ux /= wavelength
+        uy /= wavelength
+
+        theta_x, theta_y = m.arcsin(ux), m.arcsin(uy)
+        gamma_x, gamma_y = m.cos(theta_x), m.cos(theta_y)
+        Q = reflectance
+
+        gamma_factors = m.outer(gamma_y**2, gamma_x**2)
+        theta_factors = m.outer(theta_y, theta_x)
+
+        # out of order -- coef * Q is 1 x 1 multiplication,
+        # putting Q in the right place will result in much more work being done
+        print(ux)
+        ars = coefficient * Q * gamma_factors * theta_factors * psd
+        return theta_x, theta_y, ars
+
+    def rayleigh_rice_scattering_1d(self, wavelength=None, reflectance=1):
+        if wavelength is None:
+            wavelength = self.meta['Wavelength'] * 1e6
+
+        wavelength *= 1e3  # um to nm
+        coefficient = 16 * m.pi ** 2 / wavelength ** 4
+        sf = self.unit_changes[self.spatial_unit + '_nm'](self.meta['Wavelength'])
+        pass
+
+    def total_integrated_scatter(self, wavelength, incident_angle=0):
+        """Calculate the total integrated scatter (TIS) for an angle or angles.
+
+        Parameters
+        ----------
+        wavelength : `float`
+            wavelength of light in microns.
+        incident_angle : `float` or `numpy.ndarray`
+            incident angle(s) of light.
+
+        Returns
+        -------
+        `float` or `numpy.ndarray`
+            TIS value.
+
+        """
+        if self.spatial_unit != 'μm':
+            raise ValueError('Use microns for spatial unit when evaluating TIS.')
+
+        upper_limit = 1 / wavelength
+        kernel = 4 * m.pi * m.cos(m.radians(incident_angle))
+        kernel *= self.bandlimited_rms(upper_limit, None) / wavelength
+        return 1 - m.exp(-kernel**2)
 
     def psd_xy_avg(self):
         """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
@@ -490,10 +585,13 @@ def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None)
         # spatial period given
         if wllow is None:
             flow = 0
-        elif wlhigh is None:
+        else:
+            fhigh = 1 / wllow
+
+        if wlhigh is None:
             fhigh = max(ux[-1], uy[-1])
         else:
-            flow, fhigh = 1 / wlhigh, 1 / wllow
+            flow = 1 / wlhigh
     elif flow is not None or fhigh is not None:
         # spatial frequency given
         if flow is None:
@@ -505,6 +603,14 @@ def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None)
 
     ux, uy = m.meshgrid(ux, uy)
     r, p = cart_to_polar(ux, uy)
+
+    if flow is None:
+        warnings.warn('no lower limit given, using 0 for low frequency')
+        flow = 0
+
+    if fhigh is None:
+        warnings.warn('no upper limit given, using limit imposed by data.')
+        fhigh = r.max()
 
     work = psd.copy()
     work[r < flow] = 0
