@@ -72,7 +72,9 @@ def _padshape(array, Q):
     return (
         (int(m.floor(factor_y)), int(m.ceil(factor_y))),
         (int(m.floor(factor_x)), int(m.ceil(factor_x))))
-def forward_ft_unit(sample_spacing, samples):
+
+
+def forward_ft_unit(sample_spacing, samples, shift=True):
     """Compute the units resulting from a fourier transform.
 
     Parameters
@@ -81,6 +83,9 @@ def forward_ft_unit(sample_spacing, samples):
         center-to-center spacing of samples in an array
     samples : `int`
         number of samples in the data
+    shift : `bool`, optional
+        whether to shift the output.  If True, first element is a negative freq
+        if False, first element is 0 freq.
 
     Returns
     -------
@@ -88,4 +93,9 @@ def forward_ft_unit(sample_spacing, samples):
         array of sample frequencies in the output of an fft
 
     """
-    return m.fftshift(m.fftfreq(samples, sample_spacing))
+    unit = m.fftfreq(samples, sample_spacing)
+
+    if shift:
+        return m.fftshift(unit)
+    else:
+        return unit

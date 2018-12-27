@@ -276,6 +276,12 @@ class Convolvable(object):
         if xlim is not None and ylim is None:
             ylim = xlim
 
+        if not hasattr(xlim, '__iter__'):
+            xlim = (-xlim, xlim)
+
+        if not hasattr(ylim, '__iter__'):
+            ylim = (-ylim, ylim)
+
         fig, ax = share_fig_ax(fig, ax)
         im = ax.imshow(self.data,
                        extent=ext,
@@ -358,7 +364,7 @@ class Convolvable(object):
             number of bits in the output image
 
         '''
-        from imageio import imsave
+        from imageio import imwrite
         if nbits is 8:
             typ = m.unit8
         elif nbits is 16:
@@ -366,7 +372,7 @@ class Convolvable(object):
         else:
             raise ValueError('must use either 8 or 16 bpp.')
         dat = (self.data * 2**nbits - 1).astype(typ)
-        imsave(path, dat)
+        imwrite(path, dat)
 
     @staticmethod
     def from_file(path, scale):
