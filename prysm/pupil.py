@@ -178,7 +178,7 @@ class Pupil(OpticalPhase):
 
         return self
 
-    def mask(self, mask, target):
+    def mask(self, mask, target, nanify=True):
         """Apply a mask to the pupil.
 
         Used to implement vignetting, chief ray angles, etc.
@@ -189,7 +189,9 @@ class Pupil(OpticalPhase):
             if a string, uses geometry.mcache for high speed access to a mask with a given shape,
             e.g. mask='circle' or mask='hexagon'.  If an ndarray, directly use the mask.
         target : `str`, {'phase', 'fcn', 'both'}
-            which array to mask;
+            which array to mask
+        nanify: `bool`, optional
+            if True, make (target) equal to NaN where the mask is zero.
 
         Returns
         -------
@@ -199,6 +201,9 @@ class Pupil(OpticalPhase):
         """
         if target in ('phase', 'both'):
             self.phase *= mask
+            if nanify:
+                nans = mask == 0
+                self.phase[nans] = m.nan
 
         return self
 

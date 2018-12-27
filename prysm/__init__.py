@@ -12,6 +12,7 @@ from prysm.psf import PSF, AiryDisk
 from prysm.otf import MTF
 from prysm.interferogram import Interferogram
 from prysm.geometry import (
+    circle,
     gaussian,
     rotated_ellipse,
     square,
@@ -70,4 +71,5 @@ __all__ = [
     'TiltedSquare',
     'SlantedEdge',
     'Convolvable',
+    'circle',
 ]
