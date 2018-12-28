@@ -110,7 +110,6 @@ class Pupil(OpticalPhase):
             self.epd = epd
             ux = m.linspace(-epd / 2, epd / 2, samples)
             uy = m.linspace(-epd / 2, epd / 2, samples)
-            self.samples_x = self.samples_y = samples
             self.samples = samples
             need_to_build = True
         else:
