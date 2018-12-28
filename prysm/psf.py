@@ -354,9 +354,7 @@ class PSF(Convolvable):
         else:
             u = pupil.unit_y
 
-        epd = u[-1] - u[0]
-
-        psf.fno = efl / epd
+        psf.fno = efl / pupil.diameter
         psf.wavelength = wvl
         return psf
 
