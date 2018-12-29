@@ -5,7 +5,7 @@ from collections import defaultdict
 from scipy.spatial import Delaunay
 
 from .conf import config
-from .coordinates import cart_to_polar
+from .coordinates import cart_to_polar, make_rho_phi_grid
 
 from prysm import mathops as m
 
@@ -320,6 +320,33 @@ def trisdecagon(samples=128):
     return regular_polygon(13, samples)
 
 
+def truecircle(samples=128, radius=1):
+    """Create a "true" circular mask with anti-aliasing.
+
+    Parameters
+    ----------
+    samples : `int`, optional
+        number of samples in the square output array
+
+    Returns
+    -------
+    `numpy.ndarray`
+        nonbinary ndarray representation of the mask
+
+    Notes
+    -----
+    Based on a more general algorithm by Jim Fienup
+    """
+    if radius is 0:
+        return m.zeros((samples, samples))
+    else:
+        rho, phi = make_rho_phi_grid(samples, samples)
+        one_pixel = 2 / samples
+        radius_plus = radius + (one_pixel / 2)
+        intermediate = (radius_plus - rho) * (samples / 2)
+        return m.minimum(m.maximum(intermediate, 0), 1)
+
+
 def circle(samples=128, radius=1):
     """Create a circular mask.
 
@@ -337,10 +364,7 @@ def circle(samples=128, radius=1):
     if radius is 0:
         return m.zeros((samples, samples))
     else:
-        x = m.linspace(-1, 1, samples)
-        y = x
-        xx, yy = m.meshgrid(x, y)
-        rho, phi = cart_to_polar(xx, yy)
+        rho, phi = make_rho_phi_grid(samples, samples)
         mask = m.ones(rho.shape)
         mask[rho > radius] = 0
         return mask
@@ -363,10 +387,7 @@ def inverted_circle(samples=128, radius=1):
     if radius is 0:
         return m.ones((samples, samples))
     else:
-        x = m.linspace(-1, 1, samples)
-        y = x
-        xx, yy = m.meshgrid(x, y)
-        rho, phi = cart_to_polar(xx, yy)
+        rho, phi = make_rho_phi_grid(samples, samples)
         mask = m.ones(rho.shape)
         mask[rho < radius] = 0
         return mask
@@ -448,6 +469,7 @@ def generate_vertices(num_sides, radius=1):
 
 
 shapes = {
+    'truecircle': truecircle,
     'circle': circle,
     'triangle': triangle,
     'square': square,

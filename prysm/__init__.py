@@ -13,6 +13,7 @@ from prysm.otf import MTF
 from prysm.interferogram import Interferogram
 from prysm.geometry import (
     circle,
+    truecircle,
     gaussian,
     rotated_ellipse,
     square,
@@ -72,4 +73,5 @@ __all__ = [
     'SlantedEdge',
     'Convolvable',
     'circle',
+    'truecircle',
 ]

@@ -117,6 +117,8 @@ allfuncs = set((
     'hanning',
     'full',
     'pad',
+    'minimum',
+    'maximum',
 ))
 
 allfuncs_cupy_missing = set((
