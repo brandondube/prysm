@@ -169,8 +169,7 @@ def make_xy_grid(samples_x, samples_y=None):
     """
     if samples_y is None:
         samples_y = samples_x
-    x = m.linspace(-1, 1, samples_x, dtype=config.precision)
-    y = m.linspace(-1, 1, samples_y, dtype=config.precision)
+    x = y = m.linspace(-1, 1, samples_x, dtype=config.precision)
     xx, yy = m.meshgrid(x, y)
     return xx, yy
 
