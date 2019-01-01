@@ -119,6 +119,7 @@ allfuncs = set((
     'pad',
     'minimum',
     'maximum',
+    'fromstring',
 ))
 
 allfuncs_cupy_missing = set((
