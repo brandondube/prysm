@@ -1,8 +1,6 @@
 """A base optical transfer function interface."""
 from scipy import interpolate
 
-import matplotlib as mpl
-
 from .psf import PSF
 from .fttools import forward_ft_unit
 from .util import share_fig_ax
@@ -261,6 +259,8 @@ class MTF(object):
             Axis to draw plot in
 
         """
+        from matplotlib import colors
+
         left, right = self.unit_x[0], self.unit_x[-1]
         bottom, top = self.unit_y[0], self.unit_y[-1]
 
@@ -271,7 +271,7 @@ class MTF(object):
                        origin='lower',
                        cmap='Greys_r',
                        clim=(0, 1),
-                       norm=mpl.colors.PowerNorm(1/power),
+                       norm=colors.PowerNorm(1/power),
                        interpolation='lanczos')
         cb = fig.colorbar(im, label='MTF [Rel 1.0]', ax=ax, fraction=0.046)
         cb.outline.set_edgecolor('k')

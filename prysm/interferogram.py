@@ -1,8 +1,6 @@
 """tools to analyze interferometric data."""
 import warnings
 
-from matplotlib import colors
-
 from .conf import config
 from ._phase import OpticalPhase
 from ._zernike import defocus
@@ -372,6 +370,7 @@ class Interferogram(OpticalPhase):
             Axis containing the plot
 
         """
+        from matplotlib import colors
         x, y, psd = self.psd()
 
         if axlim is None:

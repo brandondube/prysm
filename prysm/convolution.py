@@ -1,6 +1,5 @@
 """Defines behavior of convolvable items and a base class to encapsulate that behavior.
 """
-import matplotlib as mpl
 
 from prysm import mathops as m
 from .coordinates import resample_2d_complex
@@ -265,6 +264,8 @@ class Convolvable(object):
             Axis containing the plot
 
         '''
+        from matplotlib import colors
+
         if self.unit_x is not None:
             extx = [self.unit_x[0], self.unit_x[-1]]
             exty = [self.unit_y[0], self.unit_y[-1]]
@@ -285,7 +286,7 @@ class Convolvable(object):
         im = ax.imshow(self.data,
                        extent=ext,
                        origin='lower',
-                       norm=mpl.colors.PowerNorm(1/power),
+                       norm=colors.PowerNorm(1/power),
                        clim=(0, 1),
                        cmap='Greys_r',
                        interpolation=interp_method)
