@@ -70,8 +70,13 @@ class OpticalPhase(object):
         'λ_um': lambda x: x,
         'λ_nm': lambda x: 1e-3 * x,
         'λ_Å': lambda x: 1e-4 * x,
-        'px_px': lambda x: 1,
-
+        'px_px': lambda x: 1,  # beware changing pixels to other units
+        'px_m': lambda x: 1,
+        'px_mm': lambda x: 1,
+        'px_μm': lambda x: 1,
+        'px_nm': lambda x: 1,
+        'px_Å': lambda x: 1,
+        'px_λ': lambda x: 1,
     }
 
     def __init__(self, unit_x, unit_y, phase, phase_unit, spatial_unit, wavelength=None):

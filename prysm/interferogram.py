@@ -150,6 +150,26 @@ class Interferogram(OpticalPhase):
         self.phase[hitpts] = m.nan
         return self
 
+    def latcal(self, plate_scale, unit='mm'):
+        """Perform lateral calibration.
+
+        Parameters
+        ----------
+        plate_scale : `float`
+            center-to-center sample spacing of pixels, in (unit)s.
+        unit : `str`, optional
+            unit associated with the plate scale.
+
+        Returns
+        -------
+        self
+            modified `Interferogram` instance.
+
+        """
+        self.sample_spacing = plate_scale
+        self.change_spatial_unit(to=unit, inplace=True)
+        return self
+
     def spike_clip(self, nsigma=3):
         """Clip points in the data that exceed a certain multiple of the standard deviation.
 
@@ -424,7 +444,7 @@ class Interferogram(OpticalPhase):
         return fig, ax
 
     @staticmethod
-    def from_zygo_dat(path, multi_intensity_action='first', scale='um'):
+    def from_zygo_dat(path, multi_intensity_action='first', scale='mm'):
         """Create a new interferogram from a zygo dat file.
 
         Parameters
