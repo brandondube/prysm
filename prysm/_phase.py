@@ -103,6 +103,9 @@ class OpticalPhase(object):
         self.phase_unit = phase_unit
         self.spatial_unit = spatial_unit
         self.sample_spacing = unit_x[1] - unit_x[0]
+        self.xaxis_label = 'x'  # these should be overriden by subclasses or instances
+        self.yaxis_label = 'y'
+        self.zaxis_label = 'z'
 
     @property
     def phase_unit(self):
@@ -377,7 +380,7 @@ class OpticalPhase(object):
             Axis containing the plot
 
         """
-        epd = self.epd
+        epd = self.diameter
 
         fig, ax = share_fig_ax(fig, ax)
         plotdata = (visibility * m.sin(2 * m.pi * passes * self.phase))
