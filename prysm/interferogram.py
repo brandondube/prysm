@@ -465,7 +465,7 @@ class Interferogram(OpticalPhase):
         if str(path).endswith('datx'):
             # datx file, use datx reader
             zydat = read_zygo_datx(path)
-            res = zydat['meta']['Lateral Resolution']
+            res = zydat['meta']['Lateral Resolution'] / 1e6  # microns instead of meters
         else:
             # dat file, use dat file reader
             zydat = read_zygo_dat(path, multi_intensity_action=multi_intensity_action)
