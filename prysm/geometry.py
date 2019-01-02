@@ -12,17 +12,19 @@ from prysm import mathops as m
 
 class MaskCache(object):
     def __init__(self):
-        self.masks = defaultdict(dict)
+        self.masks = {}
 
-    def get_mask(self, samples, shape):
+    def get_mask(self, shape, samples, radius=1):
         """Get a mask with the given number of samples and shape.
 
         Parameters
         ----------
-        samples : `int`
-            number of samples, mask is (samples,samples) in shape
         shape : `str`
             string of a regular n-sided polygon, e.g. 'square', 'hexagon'.
+        samples : `int`
+            number of samples, mask is (samples,samples) in shape
+        radius : `float`, optional
+            normalized radius of the mask.  radius=1 will fill the x, y extent
 
         Returns
         -------
@@ -31,18 +33,35 @@ class MaskCache(object):
 
         """
         try:
-            mask = self.masks[samples][shape]
+            mask = self.masks[(shape, samples, radius)]
         except KeyError:
-            mask = shapes[shape](samples=samples)
-            self.masks[samples][shape] = mask.copy()
+            mask = shapes[shape](samples=samples, radius=radius)
+            self.masks[(shape, samples, radius)] = mask.copy()
 
         return mask
 
-    def __call__(self, samples, shape):
-        return self.get_mask(samples, shape)
+    def __call__(self, shape, samples, radius=1):
+        """Get a mask with the given number of samples and shape.
+
+        Parameters
+        ----------
+        shape : `str`
+            string of a regular n-sided polygon, e.g. 'square', 'hexagon'.
+        samples : `int`
+            number of samples, mask is (samples,samples) in shape
+        radius : `float`, optional
+            normalized radius of the mask.  radius=1 will fill the x, y extent
+
+        Returns
+        -------
+        `numpy.ndarray`
+            ndarray; ones inside the shape, zeros outside
+
+        """
+        return self.get_mask(shape=shape, samples=samples, radius=radius)
 
     def clear(self, *args):
-        self.masks = defaultdict(dict)
+        self.masks = {}
 
 
 def gaussian(sigma=0.5, samples=128):
@@ -133,13 +152,16 @@ def rotated_ellipse(width_major, width_minor, major_axis_angle=0, samples=128):
     return arr
 
 
-def triangle(samples=128):
+def triangle(samples=128, radius=1):
     """Create a square mask.
 
     Parameters
     ----------
     samples : `int`, optional
         number of samples in the square output array
+    radius : `float`, optional
+        radius of the shape in the square output array.  radius=1 will fill the
+        x
 
     Returns
     -------
@@ -147,16 +169,19 @@ def triangle(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon(3, samples)
+    return regular_polygon(3, samples=samples, radius=radius)
 
 
-def square(samples=128):
+def square(samples=128, radius=1):
     """Create a square mask.
 
     Parameters
     ----------
     samples : `int`, optional
         number of samples in the square output array
+    radius : `float`, optional
+        radius of the shape in the square output array.  radius=1 will fill the
+        x
 
     Returns
     -------
@@ -167,13 +192,16 @@ def square(samples=128):
     return m.ones((samples, samples), dtype=bool)
 
 
-def pentagon(samples=128):
+def pentagon(samples=128, radius=1):
     """Create a pentagon mask.
 
     Parameters
     ----------
     samples : `int`, optional
         number of samples in the square output array
+    radius : `float`, optional
+        radius of the shape in the square output array.  radius=1 will fill the
+        x
 
     Returns
     -------
@@ -181,16 +209,19 @@ def pentagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon(5, samples)
+    return regular_polygon(5, samples=samples, radius=radius)
 
 
-def hexagon(samples=128):
+def hexagon(samples=128, radius=1):
     """Create a hexagon mask.
 
     Parameters
     ----------
     samples : `int`, optional
         number of samples in the square output array
+    radius : `float`, optional
+        radius of the shape in the square output array.  radius=1 will fill the
+        x
 
     Returns
     -------
@@ -198,16 +229,19 @@ def hexagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon(6, samples)
+    return regular_polygon(6, samples=samples, radius=radius)
 
 
-def heptagon(samples=128):
+def heptagon(samples=128, radius=1):
     """Create a heptagon mask.
 
     Parameters
     ----------
     samples : `int`, optional
         number of samples in the square output array
+    radius : `float`, optional
+        radius of the shape in the square output array.  radius=1 will fill the
+        x
 
     Returns
     -------
@@ -215,16 +249,19 @@ def heptagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon(7, samples)
+    return regular_polygon(7, samples=samples, radius=radius)
 
 
-def octagon(samples=128):
+def octagon(samples=128, radius=1):
     """Create a octagon mask.
 
     Parameters
     ----------
     samples : `int`, optional
         number of samples in the square output array
+    radius : `float`, optional
+        radius of the shape in the square output array.  radius=1 will fill the
+        x
 
     Returns
     -------
@@ -232,16 +269,19 @@ def octagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon(8, samples)
+    return regular_polygon(8, samples=samples, radius=radius)
 
 
-def nonagon(samples=128):
+def nonagon(samples=128, radius=1):
     """Create a nonagon mask.
 
     Parameters
     ----------
     samples : `int`, optional
         number of samples in the square output array
+    radius : `float`, optional
+        radius of the shape in the square output array.  radius=1 will fill the
+        x
 
     Returns
     -------
@@ -249,16 +289,19 @@ def nonagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon(9, samples)
+    return regular_polygon(9, samples=samples, radius=radius)
 
 
-def decagon(samples=128):
+def decagon(samples=128, radius=1):
     """Create a decagon mask.
 
     Parameters
     ----------
     samples : `int`, optional
         number of samples in the square output array
+    radius : `float`, optional
+        radius of the shape in the square output array.  radius=1 will fill the
+        x
 
     Returns
     -------
@@ -266,16 +309,19 @@ def decagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon(10, samples)
+    return regular_polygon(10, samples=samples, radius=radius)
 
 
-def hendecagon(samples=128):
+def hendecagon(samples=128, radius=1):
     """Create a hendecagon mask.
 
     Parameters
     ----------
     samples : `int`, optional
         number of samples in the square output array
+    radius : `float`, optional
+        radius of the shape in the square output array.  radius=1 will fill the
+        x
 
     Returns
     -------
@@ -283,16 +329,19 @@ def hendecagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon(11, samples)
+    return regular_polygon(11, samples=samples, radius=radius)
 
 
-def dodecagon(samples=128):
+def dodecagon(samples=128, radius=1):
     """Create a dodecagon mask.
 
     Parameters
     ----------
     samples : `int`, optional
         number of samples in the square output array
+    radius : `float`, optional
+        radius of the shape in the square output array.  radius=1 will fill the
+        x
 
     Returns
     -------
@@ -300,16 +349,19 @@ def dodecagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon(12, samples)
+    return regular_polygon(12, samples=samples, radius=radius)
 
 
-def trisdecagon(samples=128):
+def trisdecagon(samples=128, radius=1):
     """Create a trisdecagonal mask.
 
     Parameters
     ----------
     samples : `int`, optional
         number of samples in the square output array
+    radius : `float`, optional
+        radius of the shape in the square output array.  radius=1 will fill the
+        x
 
     Returns
     -------
@@ -317,7 +369,7 @@ def trisdecagon(samples=128):
         binary ndarray representation of the mask
 
     """
-    return regular_polygon(13, samples)
+    return regular_polygon(13, samples=samples, radius=radius)
 
 
 def truecircle(samples=128, radius=1):
@@ -327,6 +379,9 @@ def truecircle(samples=128, radius=1):
     ----------
     samples : `int`, optional
         number of samples in the square output array
+    radius : `float`, optional
+        radius of the shape in the square output array.  radius=1 will fill the
+        x
 
     Returns
     -------
@@ -338,7 +393,7 @@ def truecircle(samples=128, radius=1):
     Based on a more general algorithm by Jim Fienup
     """
     if radius is 0:
-        return m.zeros((samples, samples))
+        return m.zeros((samples, samples), dtype=config.precision)
     else:
         rho, phi = make_rho_phi_grid(samples, samples)
         one_pixel = 2 / samples
@@ -354,6 +409,9 @@ def circle(samples=128, radius=1):
     ----------
     samples : `int`, optional
         number of samples in the square output array
+    radius : `float`, optional
+        radius of the shape in the square output array.  radius=1 will fill the
+        x
 
     Returns
     -------
@@ -362,10 +420,10 @@ def circle(samples=128, radius=1):
 
     """
     if radius is 0:
-        return m.zeros((samples, samples))
+        return m.zeros((samples, samples), dtype=config.precision)
     else:
         rho, phi = make_rho_phi_grid(samples, samples)
-        mask = m.ones(rho.shape)
+        mask = m.ones(rho.shape, dtype=config.precision)
         mask[rho > radius] = 0
         return mask
 
@@ -377,6 +435,9 @@ def inverted_circle(samples=128, radius=1):
     ----------
     samples : `int`, optional
         number of samples in the square output array
+    radius : `float`, optional
+        radius of the shape in the square output array.  radius=1 will fill the
+        x
 
     Returns
     ------
@@ -385,24 +446,25 @@ def inverted_circle(samples=128, radius=1):
 
     """
     if radius is 0:
-        return m.ones((samples, samples))
+        return m.ones((samples, samples), dtype=config.precision)
     else:
         rho, phi = make_rho_phi_grid(samples, samples)
-        mask = m.ones(rho.shape)
+        mask = m.ones(rho.shape, dtype=config.precision)
         mask[rho < radius] = 0
         return mask
 
 
-def regular_polygon(num_sides, num_samples):
+def regular_polygon(sides, samples, radius=1):
     """Generate a regular polygon mask with the given number of sides and samples in the mask array.
 
     Parameters
     ----------
-    num_sides : `int`
+    sides : `int`
         number of sides to the polygon
-
-    num_samples : `int`
+    samples : `int`
         number of samples in the output polygon
+    radius : `float`, optional
+        radius of the regular polygon.  For R=1, will fill the x and y extent
 
     Returns
     -------
@@ -410,10 +472,10 @@ def regular_polygon(num_sides, num_samples):
         mask for regular polygon with radius equal to the array radius
 
     """
-    verts = generate_vertices(num_sides, num_samples // 2)
-    verts[:, 0] += num_samples // 2  # shift y to center
-    verts[:, 1] += num_samples // 2  # shift x to center
-    return generate_mask(verts, num_samples)
+    verts = generate_vertices(sides, int(m.floor((samples // 2) * radius)))
+    verts[:, 0] += samples // 2  # shift y to center
+    verts[:, 1] += samples // 2  # shift x to center
+    return generate_mask(verts, samples).astype(config.precision)
 
 
 def generate_mask(vertices, num_samples=128):
@@ -442,12 +504,12 @@ def generate_mask(vertices, num_samples=128):
     return mask
 
 
-def generate_vertices(num_sides, radius=1):
+def generate_vertices(sides, radius=1):
     """Generate a list of vertices for a convex regular polygon with the given number of sides and radius.
 
     Parameters
     ----------
-    num_sides : `int`
+    sides : `int`
         number of sides to the polygon
     radius : `float`
         radius of the polygon
@@ -458,9 +520,9 @@ def generate_vertices(num_sides, radius=1):
         array with first column X points, second column Y points
 
     """
-    angle = 2 * m.pi / num_sides
+    angle = 2 * m.pi / sides
     pts = []
-    for point in range(num_sides):
+    for point in range(sides):
         x = radius * m.sin(point * angle)
         y = radius * m.cos(point * angle)
         pts.append((int(x), int(y)))
