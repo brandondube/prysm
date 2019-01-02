@@ -282,15 +282,17 @@ class OpticalPhase(object):
         else:
             return new_ux, new_uy
 
-    def plot2d(self, cmap='inferno', clim=(None, None), interp_method='lanczos', fig=None, ax=None):
+    def plot2d(self, cmap='inferno', clim=(None, None), interp_method='lanczos', show_colorbar=True, fig=None, ax=None):
         """Plot the phase in 2D.
 
         Parameters
         ----------
         cmap : `str`
             colormap to use, passed directly to matplotlib
-        interp_method : `str`
+        interp_method : `str`, optional
             interpolation method to use, passed directly to matplotlib
+        show_colorbar : `bool`, optional
+            whether to draw the colorbar
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
@@ -306,7 +308,7 @@ class OpticalPhase(object):
         """
         fig, ax = share_fig_ax(fig, ax)
 
-        if not hasattr(clim, '__iter__'):
+        if clim and not hasattr(clim, '__iter__'):
             clim = (-clim, clim)
 
         im = ax.imshow(self.phase,
@@ -314,7 +316,10 @@ class OpticalPhase(object):
                        cmap=cmap,
                        clim=clim,
                        interpolation=interp_method)
-        fig.colorbar(im, label=f'{self.zaxis_label} [{self.phase_unit}]', ax=ax, fraction=0.046)
+
+        if show_colorbar:
+            fig.colorbar(im, label=f'{self.zaxis_label} [{self.phase_unit}]', ax=ax, fraction=0.046)
+
         xlab = f'{self.xaxis_label} [{self.spatial_unit}]'
         ylab = f'{self.yaxis_label} [{self.spatial_unit}]'
         ax.set(xlabel=xlab, ylabel=ylab)
