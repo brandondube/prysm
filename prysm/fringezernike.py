@@ -4,7 +4,7 @@ from collections import defaultdict
 from .conf import config
 from .pupil import Pupil
 from .coordinates import make_rho_phi_grid, cart_to_polar
-from .util import rms
+from .util import rms, share_fig_ax
 
 from prysm import mathops as m
 
@@ -62,6 +62,11 @@ zernmap = {
     47: 47,
     48: 48,
  }
+
+
+def fzname(idx):
+    """Return the name of a Fringe Zernike with the given (base-1) index."""
+    return z.zernikes[zernmap[idx]].name
 
 
 class FZCache(object):
@@ -154,6 +159,51 @@ class FringeZernike(Pupil):
             self.phase += coef * zcache(term, self.normalize, self.samples)
 
         return self
+
+    def barplot(self, fig=None, ax=None, lrbuffer=1):
+        from matplotlib import pyplot as plt
+        fig, ax = share_fig_ax(fig, ax)
+
+        coefs = m.asarray(self.coefs)
+        idxs = m.asarray(range(len(coefs))) + self.base
+        names = [fzname(i) for i in (idxs - self.base)]
+        vmin, vmax = coefs.min(), coefs.max()
+        drange = vmax - vmin
+        offset = drange * 0.01
+
+        ax.bar(idxs, self.coefs)
+        plt.xticks(idxs, names, rotation=90)
+
+        for i in idxs:
+            ax.text(i, offset, str(i), ha='center')
+
+        ax.set(ylabel=f'{self.zaxis_label} [{self.phase_unit}]',
+               xlim=(idxs[0] - lrbuffer, idxs[-1] + lrbuffer))
+        return fig, ax
+
+    def top_n(self, n=5):
+        """Identify the top n terms in the wavefront.
+
+        Parameters
+        ----------
+        n : `int`, optional
+            identify the top n terms.
+
+        Returns
+        -------
+        `list`
+            list of tuples (magnitude, index, term)
+
+        """
+        coefs = m.asarray(self.coefs)
+        coefs_work = abs(coefs)
+        oidxs = m.arange(len(coefs)) + self.base  # "original indexes"
+        idxs = m.argpartition(coefs_work, -n)[-n:]  # argpartition does some magic to identify the top n (unsorted)
+        idxs = idxs[m.argsort(coefs_work[idxs])[::-1]]  # use argsort to sort them in ascending order and reverse
+        big_terms = coefs[idxs]  # finally, take the values from the
+        big_idxs = oidxs[idxs]
+        names = [fzname(i) for i in idxs]
+        return list(zip(big_terms, big_idxs, names))
 
     def __repr__(self):
         '''Pretty-print pupil description.'''

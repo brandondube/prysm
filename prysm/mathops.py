@@ -124,6 +124,8 @@ allfuncs = set((
     'flipud',
     'fliplr',
     'ascontiguousarray',
+    'argpartition',
+    'argsort',
 ))
 
 allfuncs_cupy_missing = set((
