@@ -232,6 +232,28 @@ class FringeZernike(Pupil):
         names = [fzname(i) for i in idxs]
         return list(zip(big_terms, big_idxs, names))
 
+    def truncate(self, n):
+        """Truncate the wavefront to the first n terms.
+
+        Parameters
+        ----------
+        n : `int`
+            number of terms to keep.
+
+        Returns
+        -------
+        `self`
+            modified FringeZernike instance.
+
+        """
+        if n > len(self.coefs):
+            return self
+        else:
+            self.coefs = self.coefs[:n]
+            self.build()
+            self.mask(self._mask, self.mask_target)
+            return self
+
     def __repr__(self):
         '''Pretty-print pupil description.'''
         if self.normalize is True:
