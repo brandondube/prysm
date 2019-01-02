@@ -153,6 +153,9 @@ class Interferogram(OpticalPhase):
     def latcal(self, plate_scale, unit='mm'):
         """Perform lateral calibration.
 
+        This probably won't do what you want if your data already has spatial
+        units of anything but pixels (px).
+
         Parameters
         ----------
         plate_scale : `float`
@@ -168,6 +171,9 @@ class Interferogram(OpticalPhase):
         """
         self.sample_spacing = plate_scale
         self.change_spatial_unit(to=unit, inplace=True)
+        # sloppy to do this here...
+        self.unit_x *= plate_scale
+        self.unit_y *= plate_scale
         return self
 
     def spike_clip(self, nsigma=3):
