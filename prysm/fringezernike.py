@@ -254,8 +254,6 @@ def fit(data, x=None, y=None, rho=None, phi=None, num_terms=16, rms_norm=False, 
 
     # use least squares to compute the coefficients
     meas_pts = data[pts].flatten()
-    print(zerns.shape)
-    print(meas_pts.shape)
     coefs = m.lstsq(zerns, meas_pts, rcond=None)[0]
     if round_at is not None:
         coefs = coefs.round(round_at)
