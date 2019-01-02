@@ -70,6 +70,7 @@ class OpticalPhase(object):
         'λ_um': lambda x: x,
         'λ_nm': lambda x: 1e-3 * x,
         'λ_Å': lambda x: 1e-4 * x,
+        'px_px': lambda x: 1,
 
     }
 
