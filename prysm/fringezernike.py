@@ -236,11 +236,11 @@ def fit(data, x=None, y=None, rho=None, phi=None, num_terms=16, rms_norm=False, 
         x, y = m.linspace(-1, 1, data.shape[1]), m.linspace(-1, 1, data.shape[0])
         xx, yy = m.meshgrid(x, y)
         rho, phi = cart_to_polar(xx, yy)
-        rho = rho.flatten()
-        phi = phi.flatten()
+        rho = rho[pts].flatten()
+        phi = phi[pts].flatten()
     elif rho is None:
         rho, phi = cart_to_polar(x, y)
-        rho, phi = rho.flatten(), phi.flatten()
+        rho, phi = rho[pts].flatten(), phi[pts].flatten()
 
     # compute each Zernike term
     zernikes = []
