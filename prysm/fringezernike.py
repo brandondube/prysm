@@ -160,25 +160,52 @@ class FringeZernike(Pupil):
 
         return self
 
-    def barplot(self, fig=None, ax=None, lrbuffer=1):
+    def barplot(self, orientation='h', buffer=1, fig=None, ax=None):
+        """Create a barplot of coefficients and their names.
+
+        Parameters
+        ----------
+        orientation : `str`, {'h', 'v', 'horizontal', 'vertical'}
+            orientation of the plot
+        buffer : `float`, optional
+            buffer to use around the left and right (or top and bottom) bars
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        """
         from matplotlib import pyplot as plt
         fig, ax = share_fig_ax(fig, ax)
 
         coefs = m.asarray(self.coefs)
         idxs = m.asarray(range(len(coefs))) + self.base
         names = [fzname(i) for i in (idxs - self.base)]
-        vmin, vmax = coefs.min(), coefs.max()
-        drange = vmax - vmin
-        offset = drange * 0.01
+        lab = f'{self.zaxis_label} [{self.phase_unit}]'
+        lims = (idxs[0] - buffer, idxs[-1] + buffer)
+        if orientation.lower() in ('h', 'horizontal'):
+            vmin, vmax = coefs.min(), coefs.max()
+            drange = vmax - vmin
+            offset = drange * 0.01
 
-        ax.bar(idxs, self.coefs)
-        plt.xticks(idxs, names, rotation=90)
-
-        for i in idxs:
-            ax.text(i, offset, str(i), ha='center')
-
-        ax.set(ylabel=f'{self.zaxis_label} [{self.phase_unit}]',
-               xlim=(idxs[0] - lrbuffer, idxs[-1] + lrbuffer))
+            ax.bar(idxs, self.coefs)
+            plt.xticks(idxs, names, rotation=90)
+            for i in idxs:
+                ax.text(i, offset, str(i), ha='center')
+            ax.set(ylabel=lab, xlim=lims)
+        else:
+            ax.barh(idxs, self.coefs)
+            plt.yticks(idxs, names)
+            for i in idxs:
+                ax.text(0, i, str(i), ha='center')
+            ax.set(xlabel=lab, ylim=lims)
         return fig, ax
 
     def top_n(self, n=5):
