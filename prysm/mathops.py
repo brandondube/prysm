@@ -120,6 +120,10 @@ allfuncs = set((
     'minimum',
     'maximum',
     'fromstring',
+    'rot90',
+    'flipud',
+    'fliplr',
+    'ascontiguousarray',
 ))
 
 allfuncs_cupy_missing = set((

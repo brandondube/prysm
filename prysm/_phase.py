@@ -324,6 +324,7 @@ class OpticalPhase(object):
                        extent=[self.unit_x[0], self.unit_x[-1], self.unit_y[0], self.unit_y[-1]],
                        cmap=cmap,
                        clim=clim,
+                       origin='lower',
                        interpolation=interp_method)
 
         if show_colorbar:
@@ -364,7 +365,7 @@ class OpticalPhase(object):
         ax.legend()
         return fig, ax
 
-    def interferogram(self, visibility=1, passes=2, fig=None, ax=None):
+    def interferogram(self, visibility=1, passes=2, interp_method='lanczos', fig=None, ax=None):
         """Create an interferogram of the `Pupil`.
 
         Parameters
@@ -373,6 +374,8 @@ class OpticalPhase(object):
             Visibility of the interferogram
         passes : `float`
             Number of passes (double-pass, quadra-pass, etc.)
+        interp_method : `str`, optional
+            interpolation method, passed directly to matplotlib
         fig : `matplotlib.figure.Figure`, optional
             Figure to draw plot in
         ax : `matplotlib.axes.Axis`
@@ -387,13 +390,14 @@ class OpticalPhase(object):
 
         """
         epd = self.diameter
+        phase = self.change_phase_unit(to='waves', inplace=False)
 
         fig, ax = share_fig_ax(fig, ax)
-        plotdata = (visibility * m.sin(2 * m.pi * passes * self.phase))
+        plotdata = (visibility * m.sin(2 * m.pi * passes * phase))
         im = ax.imshow(plotdata,
                        extent=[-epd / 2, epd / 2, -epd / 2, epd / 2],
                        cmap='Greys_r',
-                       interpolation='lanczos',
+                       interpolation=interp_method,
                        clim=(-1, 1),
                        origin='lower')
         fig.colorbar(im, label=r'Wrapped Phase [$\lambda$]', ax=ax, fraction=0.046)

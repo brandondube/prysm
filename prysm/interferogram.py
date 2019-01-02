@@ -24,8 +24,15 @@ class Interferogram(OpticalPhase):
             scale = 'px'
             self.lateral_res = 1
 
+        wvl = meta.get('wavelength', None)
+        if wvl is None:
+            wvl = meta.get('Wavelength')
+
+        if wvl is not None:
+            wvl *= 1e6  # m to um
+
         super().__init__(unit_x=x, unit_y=y, phase=phase,
-                         wavelength=meta.get('wavelength'), phase_unit=phase_unit,
+                         wavelength=wvl, phase_unit=phase_unit,
                          spatial_unit=scale)
 
         self.xaxis_label = 'X'
