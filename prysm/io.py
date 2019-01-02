@@ -403,11 +403,11 @@ def read_zygo_datx(file):
         # cast intensity down to int16, saves memory and Zygo doesn't use cameras >> 16-bit
         try:
             intens_block = list(f['Data']['Intensity'].keys())[0]
-            intensity = f['Data']['Intensity'][intens_block].value.astype(m.uint16)
+            intensity = m.flipud(f['Data']['Intensity'][intens_block][()].astype(m.uint16))
         except KeyError:
             intensity = None
         phase_block = list(f['Data']['Surface'].keys())[0]
-        phase = f['Data']['Surface'][phase_block].value
+        phase = m.flipud(f['Data']['Surface'][phase_block][()])
 
         # now get attrs
         attrs = f['Attributes']
