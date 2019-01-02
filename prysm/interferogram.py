@@ -135,7 +135,7 @@ class Interferogram(OpticalPhase):
             raise ValueError('must provide either a shape or a mask')
 
         if mask is None:
-            mask = mcache(shape, min(self.shape), radius=diameter / self.diameter)
+            mask = mcache(shape, min(self.shape), radius=diameter / min(self.diameter_x, self.diameter_y))
             base = m.zeros(self.shape, dtype=config.precision)
             difference = abs(self.shape[0] - self.shape[1])
             l, u = int(m.floor(difference / 2)), int(m.ceil(difference / 2))
