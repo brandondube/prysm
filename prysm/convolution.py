@@ -275,10 +275,10 @@ class Convolvable(object):
         if xlim is not None and ylim is None:
             ylim = xlim
 
-        if not hasattr(xlim, '__iter__'):
+        if xlim and not hasattr(xlim, '__iter__'):
             xlim = (-xlim, xlim)
 
-        if not hasattr(ylim, '__iter__'):
+        if ylim and not hasattr(ylim, '__iter__'):
             ylim = (-ylim, ylim)
 
         fig, ax = share_fig_ax(fig, ax)
