@@ -531,6 +531,7 @@ def generate_vertices(sides, radius=1):
 
 
 shapes = {
+    'invertedcircle': inverted_circle,
     'truecircle': truecircle,
     'circle': circle,
     'triangle': triangle,
