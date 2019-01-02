@@ -228,14 +228,14 @@ def fit(data, x=None, y=None, rho=None, phi=None, num_terms=16, rms_norm=False, 
     if num_terms > len(zernmap):
         raise ValueError(f'number of terms must be less than {len(zernmap)}')
 
+    data = data.T  # transpose to mimic transpose of zernikes
+
     # precompute the valid indexes in the original data
     pts = m.isfinite(data)
 
     if x is None and rho is None:
         # set up an x/y rho/phi grid to evaluate Zernikes on
-        x, y = m.linspace(-1, 1, data.shape[1]), m.linspace(-1, 1, data.shape[0])
-        xx, yy = m.meshgrid(x, y)
-        rho, phi = cart_to_polar(xx, yy)
+        rho, phi = make_rho_phi_grid(*reversed(data.shape))
         rho = rho[pts].flatten()
         phi = phi[pts].flatten()
     elif rho is None:
