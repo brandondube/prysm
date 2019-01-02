@@ -158,45 +158,58 @@ class OpticalPhase(object):
 
     @property
     def pv(self):
+        """Peak-to-Valley phase error.  DIN/ISO 'St.'"""
         return pv(self.phase)
 
     @property
     def rms(self):
+        """RMS phase error.  DIN/ISO 'Sq.'"""
         return rms(self.phase)
 
     @property
     def Sa(self):
+        """Sa phase error.  DIN/ISO 'Sa.'"""
         return Sa(self.phase)
 
     @property
     def std(self):
+        """Standard deviation of phase error."""
         return std(self.phase)
 
     @property
     def shape(self):
+        """Proxy to self.phase.shape."""
         return self.phase.shape
 
     @property
     def diameter_x(self):
+        """Diameter of the data in x."""
         return self.unit_x[-1] - self.unit_x[0]
 
     @property
     def diameter_y(self):
+        """Diameter of the data in y."""
         return self.unit_y[-1] - self.unit_x[0]
 
     @property
     def diameter(self):
+        """Greater of (self.diameter_x, self.diameter_y)."""
         return max((self.diameter_x, self.diameter_y))
+
+    @property
+    def semidiameter(self):
+        """Half of self.diameter."""
+        return self.diameter / 2
 
     @property
     def samples_x(self):
         """Number of samples in the x dimension."""
-        return self.data.shape[1]
+        return self.phase.shape[1]
 
     @property
     def samples_y(self):
         """Number of samples in the y dimension."""
-        return self.data.shape[0]
+        return self.phase.shape[0]
 
     @property
     def center_x(self):
