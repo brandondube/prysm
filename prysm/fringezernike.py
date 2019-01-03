@@ -232,6 +232,52 @@ class FringeZernike(Pupil):
         names = [fzname(i) for i in idxs]
         return list(zip(big_terms, big_idxs, names))
 
+    def barplot_topn(self, n=5, orientation='h', buffer=1, fig=None, ax=None):
+        """Plot the top n terms in the wavefront.
+
+        Parameters
+        ----------
+        n : `int`, optional
+            plot the top n terms.
+        orientation : `str`, {'h', 'v', 'horizontal', 'vertical'}
+            orientation of the plot
+        buffer : `float`, optional
+            buffer to use around the left and right (or top and bottom) bars
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        """
+        from matplotlib import pyplot as plt
+
+        topn = self.top_n(n)
+        magnitudes = [n[0] for n in topn]
+        names = [n[2] for n in topn]
+        idxs = range(len(names))
+
+        fig, ax = share_fig_ax(fig, ax)
+
+        lab = f'{self.zaxis_label} [{self.phase_unit}]'
+        lims = (idxs[0] - buffer, idxs[-1] + buffer)
+        if orientation.lower() in ('h', 'horizontal'):
+            ax.bar(idxs, magnitudes)
+            plt.xticks(idxs, names, rotation=90)
+            ax.set(ylabel=lab, xlim=lims)
+        else:
+            ax.barh(idxs, self.coefs)
+            plt.yticks(idxs, names)
+            ax.set(xlabel=lab, ylim=lims)
+        return fig, ax
+
+
     def truncate(self, n):
         """Truncate the wavefront to the first n terms.
 
