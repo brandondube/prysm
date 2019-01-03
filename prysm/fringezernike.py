@@ -246,7 +246,7 @@ class FringeZernike(Pupil):
             ax.set(xlabel=lab, ylim=lims)
         return fig, ax
 
-    def barplot_magnitudes(self, orientation='h', sorted=False, buffer=1, zorder=3, fig=None, ax=None):
+    def barplot_magnitudes(self, orientation='h', sort=False, buffer=1, zorder=3, fig=None, ax=None):
         """Create a barplot of magnitudes of coefficient pairs and their names.
 
         E.g., astigmatism will get one bar.
@@ -255,7 +255,7 @@ class FringeZernike(Pupil):
         ----------
         orientation : `str`, {'h', 'v', 'horizontal', 'vertical'}
             orientation of the plot
-        sorted : `bool`, optional
+        sort : `bool`, optional
             whether to sort the zernikes in descending order
         buffer : `float`, optional
             buffer to use around the left and right (or top and bottom) bars
@@ -281,7 +281,7 @@ class FringeZernike(Pupil):
         names = magang.keys()
         idxs = list(range(len(names)))
 
-        if sorted:
+        if sort:
             mags, names = sort_xy(mags, names)
             mags = list(reversed(mags))
             names = list(reversed(names))
