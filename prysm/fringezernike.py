@@ -4,7 +4,7 @@ from collections import defaultdict
 from .conf import config
 from .pupil import Pupil
 from .coordinates import make_rho_phi_grid, cart_to_polar
-from .util import rms, share_fig_ax
+from .util import rms, share_fig_ax, sort_xy
 
 from prysm import mathops as m
 
@@ -68,6 +68,42 @@ def fzname(idx):
     """Return the name of a Fringe Zernike with the given (base-1) index."""
     return z.zernikes[zernmap[idx]].name
 
+
+def fzset_to_magnitude_angle(coefs):
+    """Convert Fringe Zernike polynomial set to a magnitude and phase representation."""
+
+    def mkary():  # default for defaultdict
+        return m.zeros(2)
+
+    # make a list of names to go with the coefficients
+    names = [fzname(i) for i in range(len(coefs))]
+    combinations = defaultdict(mkary)
+
+    # for each name and coefficient, make a len 2 array.  Put the Y or 0 degree values in the first slot
+    for coef, name in zip(coefs, names):
+        if name.endswith(('X', 'Y', '°')):
+            newname = ' '.join(name.split(' ')[:-1])
+            if name.endswith('Y'):
+                combinations[newname][0] = coef
+            elif name.endswith('X'):
+                combinations[newname][1] = coef
+            elif name[-2] == '5':  # 45 degree case
+                combinations[newname][1] = coef
+            else:
+                combinations[newname][0] = coef
+        else:
+            combinations[name][0] = coef
+
+    # print(combinations)
+    # now go over the combinations and compute the L2 norms and angles
+    for name in combinations:
+        ovals = combinations[name]
+        magnitude = m.sqrt((ovals**2).sum())
+        phase = m.degrees(m.arctan2(*ovals))
+        values = (magnitude, phase)
+        combinations[name] = values
+
+    return dict(combinations)  # cast to regular dict for return
 
 class FZCache(object):
     def __init__(self):
@@ -207,6 +243,58 @@ class FringeZernike(Pupil):
                 ax.text(0, i, str(i), ha='center')
             ax.set(xlabel=lab, ylim=lims)
         return fig, ax
+
+    def barplot_magnitudes(self, orientation='h', sorted=False, buffer=1, fig=None, ax=None):
+        """Create a barplot of magnitudes of coefficient pairs and their names.
+
+        E.g., astigmatism will get one bar.
+
+        Parameters
+        ----------
+        orientation : `str`, {'h', 'v', 'horizontal', 'vertical'}
+            orientation of the plot
+        sorted : `bool`, optional
+            whether to sort the zernikes in descending order
+        buffer : `float`, optional
+            buffer to use around the left and right (or top and bottom) bars
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        """
+        from matplotlib import pyplot as plt
+
+        magang = fzset_to_magnitude_angle(self.coefs)
+        mags = [m[0] for m in magang.values()]
+        names = magang.keys()
+        idxs = list(range(len(names)))
+
+        if sorted:
+            mags, names = sort_xy(mags, names)
+            mags = list(reversed(mags))
+            names = list(reversed(names))
+        lab = f'{self.zaxis_label} [{self.phase_unit}]'
+        lims = (idxs[0] - buffer, idxs[-1] + buffer)
+        fig, ax = share_fig_ax(fig, ax)
+        if orientation.lower() in ('h', 'horizontal'):
+            ax.bar(idxs, mags)
+            plt.xticks(idxs, names, rotation=90)
+            ax.set(ylabel=lab, xlim=lims)
+        else:
+            ax.barh(idxs, mags)
+            plt.yticks(idxs, names)
+            ax.set(xlabel=lab, ylim=lims)
+        return fig, ax
+
+
 
     def top_n(self, n=5):
         """Identify the top n terms in the wavefront.
