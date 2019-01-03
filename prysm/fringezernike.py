@@ -105,9 +105,9 @@ class FringeZernike(Pupil):
     def __init__(self, *args, **kwargs):
         if args is not None:
             if len(args) is 0:
-                self.coefs = [0] * len(zernmap)
+                self.coefs = np.asarray([0] * len(zernmap))
             else:
-                self.coefs = [*args[0]]
+                self.coefs = np.asarray([*args[0]])
 
         self.normalize = False
         pass_args = {}
