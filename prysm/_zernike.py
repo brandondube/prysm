@@ -273,7 +273,7 @@ quinternary_spherical.norm = m.sqrt(13)
 
 # names
 piston.name = 'Piston'
-tip.name = 'Tip Y'
+tip.name = 'Tilt Y'
 tilt.name = 'Tilt X'
 defocus.name = 'Defocus'
 primary_astigmatism_00.name = 'Primary Astigmatism 0°'
