@@ -144,10 +144,14 @@ class Interferogram(OpticalPhase):
             base = m.zeros(self.shape, dtype=config.precision)
             difference = abs(self.shape[0] - self.shape[1])
             l, u = int(m.floor(difference / 2)), int(m.ceil(difference / 2))
-            if self.shape[0] < self.shape[1]:
-                base[:, l:-u] = mask
+            if u is 0:  # guard against nocrop scenario
+                _slice = slice(None)
             else:
-                base[l:-u, :] = mask
+                _slice = slice(l, -u)
+            if self.shape[0] < self.shape[1]:
+                base[:, _slice] = mask
+            else:
+                base[_slice, :] = mask
 
             mask = base
 

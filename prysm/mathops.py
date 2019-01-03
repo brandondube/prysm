@@ -126,6 +126,7 @@ allfuncs = set((
     'ascontiguousarray',
     'argpartition',
     'argsort',
+    'degrees',
 ))
 
 allfuncs_cupy_missing = set((
