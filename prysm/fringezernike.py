@@ -64,9 +64,9 @@ zernmap = {
  }
 
 
-def fzname(idx):
-    """Return the name of a Fringe Zernike with the given (base-1) index."""
-    return z.zernikes[zernmap[idx]].name
+def fzname(idx, base=0):
+    """Return the name of a Fringe Zernike with the given index and base."""
+    return z.zernikes[zernmap[idx-base]].name
 
 
 def fzset_to_magnitude_angle(coefs):
@@ -196,7 +196,7 @@ class FringeZernike(Pupil):
 
         return self
 
-    def barplot(self, orientation='h', buffer=1, fig=None, ax=None):
+    def barplot(self, orientation='h', buffer=1, zorder=3, fig=None, ax=None):
         """Create a barplot of coefficients and their names.
 
         Parameters
@@ -205,6 +205,8 @@ class FringeZernike(Pupil):
             orientation of the plot
         buffer : `float`, optional
             buffer to use around the left and right (or top and bottom) bars
+        zorder : `int`, optional
+            zorder of the bars.  Use zorder > 3 to put bars in front of gridlines
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
@@ -231,20 +233,20 @@ class FringeZernike(Pupil):
             drange = vmax - vmin
             offset = drange * 0.01
 
-            ax.bar(idxs, self.coefs)
+            ax.bar(idxs, self.coefs, zorder=zorder)
             plt.xticks(idxs, names, rotation=90)
             for i in idxs:
                 ax.text(i, offset, str(i), ha='center')
             ax.set(ylabel=lab, xlim=lims)
         else:
-            ax.barh(idxs, self.coefs)
+            ax.barh(idxs, self.coefs, zorder=zorder)
             plt.yticks(idxs, names)
             for i in idxs:
                 ax.text(0, i, str(i), ha='center')
             ax.set(xlabel=lab, ylim=lims)
         return fig, ax
 
-    def barplot_magnitudes(self, orientation='h', sorted=False, buffer=1, fig=None, ax=None):
+    def barplot_magnitudes(self, orientation='h', sorted=False, buffer=1, zorder=3, fig=None, ax=None):
         """Create a barplot of magnitudes of coefficient pairs and their names.
 
         E.g., astigmatism will get one bar.
@@ -257,6 +259,8 @@ class FringeZernike(Pupil):
             whether to sort the zernikes in descending order
         buffer : `float`, optional
             buffer to use around the left and right (or top and bottom) bars
+        zorder : `int`, optional
+            zorder of the bars.  Use zorder > 3 to put bars in front of gridlines
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
@@ -285,11 +289,11 @@ class FringeZernike(Pupil):
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         fig, ax = share_fig_ax(fig, ax)
         if orientation.lower() in ('h', 'horizontal'):
-            ax.bar(idxs, mags)
+            ax.bar(idxs, mags, zorder=zorder)
             plt.xticks(idxs, names, rotation=90)
             ax.set(ylabel=lab, xlim=lims)
         else:
-            ax.barh(idxs, mags)
+            ax.barh(idxs, mags, zorder=zorder)
             plt.yticks(idxs, names)
             ax.set(xlabel=lab, ylim=lims)
         return fig, ax
@@ -320,7 +324,7 @@ class FringeZernike(Pupil):
         names = [fzname(i) for i in idxs]
         return list(zip(big_terms, big_idxs, names))
 
-    def barplot_topn(self, n=5, orientation='h', buffer=1, fig=None, ax=None):
+    def barplot_topn(self, n=5, orientation='h', buffer=1, zorder=3, fig=None, ax=None):
         """Plot the top n terms in the wavefront.
 
         Parameters
@@ -331,6 +335,8 @@ class FringeZernike(Pupil):
             orientation of the plot
         buffer : `float`, optional
             buffer to use around the left and right (or top and bottom) bars
+        zorder : `int`, optional
+            zorder of the bars.  Use zorder > 3 to put bars in front of gridlines
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
@@ -356,11 +362,11 @@ class FringeZernike(Pupil):
         lab = f'{self.zaxis_label} [{self.phase_unit}]'
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         if orientation.lower() in ('h', 'horizontal'):
-            ax.bar(idxs, magnitudes)
+            ax.bar(idxs, magnitudes, zorder=zorder)
             plt.xticks(idxs, names, rotation=90)
             ax.set(ylabel=lab, xlim=lims)
         else:
-            ax.barh(idxs, self.coefs)
+            ax.barh(idxs, self.coefs, zorder=zorder)
             plt.yticks(idxs, names)
             ax.set(xlabel=lab, ylim=lims)
         return fig, ax
