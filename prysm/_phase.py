@@ -108,7 +108,6 @@ class OpticalPhase(object):
         self.wavelength = wavelength
         self.phase_unit = phase_unit
         self.spatial_unit = spatial_unit
-        self.sample_spacing = unit_x[1] - unit_x[0]
         self.xaxis_label = 'x'  # these should be overriden by subclasses or instances
         self.yaxis_label = 'y'
         self.zaxis_label = 'z'
@@ -219,6 +218,11 @@ class OpticalPhase(object):
     def samples_y(self):
         """Number of samples in the y dimension."""
         return self.phase.shape[0]
+
+    @property
+    def sample_spacing(self):
+        """center-to-center sample spacing."""
+        return self.unit_x[1] - self.unit_x[0]
 
     @property
     def center_x(self):
