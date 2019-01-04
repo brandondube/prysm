@@ -196,8 +196,13 @@ class FringeZernike(Pupil):
 
         return self
 
+    @property
+    def magnitudes(self):
+        """Returns the magnitude of the zernike components in this wavefront."""
+        return fzset_to_magnitude_angle(self.coefs)
+
     def barplot(self, orientation='h', buffer=1, zorder=3, fig=None, ax=None):
-        """Create a barplot of coefficients and their names.
+        """Creates a barplot of coefficients and their names.
 
         Parameters
         ----------
