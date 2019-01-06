@@ -282,8 +282,30 @@ class PixelAperture(Convolvable):
 
         """
         xq, yq = m.meshgrid(unit_x, unit_y)
-        return (m.sinc(xq * self.width_x) *
-                m.sinc(yq * self.width_y)).astype(config.precision)
+        return abs(pixelaperture_analytic_otf(self.width_x, self.width_y, xq, yq))
+
+
+def pixelaperture_analytic_otf(width_x, width_y, freq_x, freq_y):
+    """Analytic MTF of a rectangular pixel aperture.
+
+    Parameters
+    ----------
+    width_x : `float`
+        x diameter of the pixel, in microns
+    width_y : `float`
+        y diameter of the pixel, in microns
+    freq_x : `numpy.ndarray`
+        x spatial frequency, in cycles per micron
+    freq_y : `numpy.ndarray`
+        y spatial frequency, in cycles per micron
+
+    Returns
+    -------
+    `numpy.ndarray`
+        MTF of the pixel aperture
+
+    """
+    return m.sinc(freq_x * width_x) * m.sinc(freq_y * width_y)
 
 
 def generate_mtf(pixel_aperture=1, azimuth=0, num_samples=128):
