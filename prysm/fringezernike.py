@@ -64,7 +64,7 @@ zernmap = {
  }
 
 
-def fzname(idx, base=0):
+def fzname(idx, base=1):
     """Return the name of a Fringe Zernike with the given index and base."""
     return z.zernikes[zernmap[idx-base]].name
 
@@ -104,6 +104,7 @@ def fzset_to_magnitude_angle(coefs):
         combinations[name] = values
 
     return dict(combinations)  # cast to regular dict for return
+
 
 class FZCache(object):
     def __init__(self):
@@ -303,8 +304,6 @@ class FringeZernike(Pupil):
             ax.set(xlabel=lab, ylim=lims)
         return fig, ax
 
-
-
     def top_n(self, n=5):
         """Identify the top n terms in the wavefront.
 
@@ -375,7 +374,6 @@ class FringeZernike(Pupil):
             plt.yticks(idxs, names)
             ax.set(xlabel=lab, ylim=lims)
         return fig, ax
-
 
     def truncate(self, n):
         """Truncate the wavefront to the first n terms.
