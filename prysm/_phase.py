@@ -70,7 +70,13 @@ class OpticalPhase(object):
         'λ_um': lambda x: x,
         'λ_nm': lambda x: 1e-3 * x,
         'λ_Å': lambda x: 1e-4 * x,
-
+        'px_px': lambda x: 1,  # beware changing pixels to other units
+        'px_m': lambda x: 1,
+        'px_mm': lambda x: 1,
+        'px_μm': lambda x: 1,
+        'px_nm': lambda x: 1,
+        'px_Å': lambda x: 1,
+        'px_λ': lambda x: 1,
     }
 
     def __init__(self, unit_x, unit_y, phase, phase_unit, spatial_unit, wavelength=None):
@@ -102,7 +108,9 @@ class OpticalPhase(object):
         self.wavelength = wavelength
         self.phase_unit = phase_unit
         self.spatial_unit = spatial_unit
-        self.sample_spacing = unit_x[1] - unit_x[0]
+        self.xaxis_label = 'x'  # these should be overriden by subclasses or instances
+        self.yaxis_label = 'y'
+        self.zaxis_label = 'z'
 
     @property
     def phase_unit(self):
@@ -158,45 +166,63 @@ class OpticalPhase(object):
 
     @property
     def pv(self):
+        """Peak-to-Valley phase error.  DIN/ISO 'St.'"""
         return pv(self.phase)
 
     @property
     def rms(self):
+        """RMS phase error.  DIN/ISO 'Sq.'"""
         return rms(self.phase)
 
     @property
     def Sa(self):
+        """Sa phase error.  DIN/ISO 'Sa.'"""
         return Sa(self.phase)
 
     @property
     def std(self):
+        """Standard deviation of phase error."""
         return std(self.phase)
 
     @property
     def shape(self):
+        """Proxy to self.phase.shape."""
         return self.phase.shape
 
     @property
     def diameter_x(self):
+        """Diameter of the data in x."""
         return self.unit_x[-1] - self.unit_x[0]
 
     @property
     def diameter_y(self):
+        """Diameter of the data in y."""
         return self.unit_y[-1] - self.unit_x[0]
 
     @property
     def diameter(self):
+        """Greater of (self.diameter_x, self.diameter_y)."""
         return max((self.diameter_x, self.diameter_y))
+
+    @property
+    def semidiameter(self):
+        """Half of self.diameter."""
+        return self.diameter / 2
 
     @property
     def samples_x(self):
         """Number of samples in the x dimension."""
-        return self.data.shape[1]
+        return self.phase.shape[1]
 
     @property
     def samples_y(self):
         """Number of samples in the y dimension."""
-        return self.data.shape[0]
+        return self.phase.shape[0]
+
+    @property
+    def sample_spacing(self):
+        """center-to-center sample spacing."""
+        return self.unit_x[1] - self.unit_x[0]
 
     @property
     def center_x(self):
@@ -264,20 +290,21 @@ class OpticalPhase(object):
             self.unit_x = new_ux
             self.unit_y = new_uy
             self.spatial_unit = to
-            self.sample_spacing /= fctr
             return self
         else:
             return new_ux, new_uy
 
-    def plot2d(self, cmap='inferno', clim=(None, None), interp_method='lanczos', fig=None, ax=None):
+    def plot2d(self, cmap='inferno', clim=(None, None), interp_method='lanczos', show_colorbar=True, fig=None, ax=None):
         """Plot the phase in 2D.
 
         Parameters
         ----------
         cmap : `str`
             colormap to use, passed directly to matplotlib
-        interp_method : `str`
+        interp_method : `str`, optional
             interpolation method to use, passed directly to matplotlib
+        show_colorbar : `bool`, optional
+            whether to draw the colorbar
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
@@ -293,15 +320,19 @@ class OpticalPhase(object):
         """
         fig, ax = share_fig_ax(fig, ax)
 
-        if not hasattr(clim, '__iter__'):
+        if clim and not hasattr(clim, '__iter__'):
             clim = (-clim, clim)
 
         im = ax.imshow(self.phase,
                        extent=[self.unit_x[0], self.unit_x[-1], self.unit_y[0], self.unit_y[-1]],
                        cmap=cmap,
                        clim=clim,
+                       origin='lower',
                        interpolation=interp_method)
-        fig.colorbar(im, label=f'{self.zaxis_label} [{self.phase_unit}]', ax=ax, fraction=0.046)
+
+        if show_colorbar:
+            fig.colorbar(im, label=f'{self.zaxis_label} [{self.phase_unit}]', ax=ax, fraction=0.046)
+
         xlab = f'{self.xaxis_label} [{self.spatial_unit}]'
         ylab = f'{self.yaxis_label} [{self.spatial_unit}]'
         ax.set(xlabel=xlab, ylabel=ylab)
@@ -337,7 +368,7 @@ class OpticalPhase(object):
         ax.legend()
         return fig, ax
 
-    def interferogram(self, visibility=1, passes=2, fig=None, ax=None):
+    def interferogram(self, visibility=1, passes=2, interp_method='lanczos', fig=None, ax=None):
         """Create an interferogram of the `Pupil`.
 
         Parameters
@@ -346,6 +377,8 @@ class OpticalPhase(object):
             Visibility of the interferogram
         passes : `float`
             Number of passes (double-pass, quadra-pass, etc.)
+        interp_method : `str`, optional
+            interpolation method, passed directly to matplotlib
         fig : `matplotlib.figure.Figure`, optional
             Figure to draw plot in
         ax : `matplotlib.axes.Axis`
@@ -359,14 +392,15 @@ class OpticalPhase(object):
             Axis containing the plot
 
         """
-        epd = self.epd
+        epd = self.diameter
+        phase = self.change_phase_unit(to='waves', inplace=False)
 
         fig, ax = share_fig_ax(fig, ax)
-        plotdata = (visibility * m.sin(2 * m.pi * passes * self.phase))
+        plotdata = (visibility * m.sin(2 * m.pi * passes * phase))
         im = ax.imshow(plotdata,
                        extent=[-epd / 2, epd / 2, -epd / 2, epd / 2],
                        cmap='Greys_r',
-                       interpolation='lanczos',
+                       interpolation=interp_method,
                        clim=(-1, 1),
                        origin='lower')
         fig.colorbar(im, label=r'Wrapped Phase [$\lambda$]', ax=ax, fraction=0.046)

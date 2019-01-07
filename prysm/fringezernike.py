@@ -4,7 +4,7 @@ from collections import defaultdict
 from .conf import config
 from .pupil import Pupil
 from .coordinates import make_rho_phi_grid, cart_to_polar
-from .util import rms
+from .util import rms, share_fig_ax, sort_xy
 
 from prysm import mathops as m
 
@@ -64,6 +64,47 @@ zernmap = {
  }
 
 
+def fzname(idx, base=0):
+    """Return the name of a Fringe Zernike with the given index and base."""
+    return z.zernikes[zernmap[idx-base]].name
+
+
+def fzset_to_magnitude_angle(coefs):
+    """Convert Fringe Zernike polynomial set to a magnitude and phase representation."""
+
+    def mkary():  # default for defaultdict
+        return m.zeros(2)
+
+    # make a list of names to go with the coefficients
+    names = [fzname(i) for i in range(len(coefs))]
+    combinations = defaultdict(mkary)
+
+    # for each name and coefficient, make a len 2 array.  Put the Y or 0 degree values in the first slot
+    for coef, name in zip(coefs, names):
+        if name.endswith(('X', 'Y', '°')):
+            newname = ' '.join(name.split(' ')[:-1])
+            if name.endswith('Y'):
+                combinations[newname][0] = coef
+            elif name.endswith('X'):
+                combinations[newname][1] = coef
+            elif name[-2] == '5':  # 45 degree case
+                combinations[newname][1] = coef
+            else:
+                combinations[newname][0] = coef
+        else:
+            combinations[name][0] = coef
+
+    # print(combinations)
+    # now go over the combinations and compute the L2 norms and angles
+    for name in combinations:
+        ovals = combinations[name]
+        magnitude = m.sqrt((ovals**2).sum())
+        phase = m.degrees(m.arctan2(*ovals))
+        values = (magnitude, phase)
+        combinations[name] = values
+
+    return dict(combinations)  # cast to regular dict for return
+
 class FZCache(object):
     def __init__(self):
         self.normed = defaultdict(dict)
@@ -100,9 +141,9 @@ class FringeZernike(Pupil):
     def __init__(self, *args, **kwargs):
         if args is not None:
             if len(args) is 0:
-                self.coefs = [0] * len(zernmap)
+                self.coefs = m.asarray([0] * len(zernmap))
             else:
-                self.coefs = [*args[0]]
+                self.coefs = m.asarray([*args[0]])
 
         self.normalize = False
         pass_args = {}
@@ -154,6 +195,209 @@ class FringeZernike(Pupil):
             self.phase += coef * zcache(term, self.normalize, self.samples)
 
         return self
+
+    @property
+    def magnitudes(self):
+        """Returns the magnitude of the zernike components in this wavefront."""
+        return fzset_to_magnitude_angle(self.coefs)
+
+    def barplot(self, orientation='h', buffer=1, zorder=3, fig=None, ax=None):
+        """Creates a barplot of coefficients and their names.
+
+        Parameters
+        ----------
+        orientation : `str`, {'h', 'v', 'horizontal', 'vertical'}
+            orientation of the plot
+        buffer : `float`, optional
+            buffer to use around the left and right (or top and bottom) bars
+        zorder : `int`, optional
+            zorder of the bars.  Use zorder > 3 to put bars in front of gridlines
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        """
+        from matplotlib import pyplot as plt
+        fig, ax = share_fig_ax(fig, ax)
+
+        coefs = m.asarray(self.coefs)
+        idxs = m.asarray(range(len(coefs))) + self.base
+        names = [fzname(i) for i in (idxs - self.base)]
+        lab = f'{self.zaxis_label} [{self.phase_unit}]'
+        lims = (idxs[0] - buffer, idxs[-1] + buffer)
+        if orientation.lower() in ('h', 'horizontal'):
+            vmin, vmax = coefs.min(), coefs.max()
+            drange = vmax - vmin
+            offset = drange * 0.01
+
+            ax.bar(idxs, self.coefs, zorder=zorder)
+            plt.xticks(idxs, names, rotation=90)
+            for i in idxs:
+                ax.text(i, offset, str(i), ha='center')
+            ax.set(ylabel=lab, xlim=lims)
+        else:
+            ax.barh(idxs, self.coefs, zorder=zorder)
+            plt.yticks(idxs, names)
+            for i in idxs:
+                ax.text(0, i, str(i), ha='center')
+            ax.set(xlabel=lab, ylim=lims)
+        return fig, ax
+
+    def barplot_magnitudes(self, orientation='h', sort=False, buffer=1, zorder=3, fig=None, ax=None):
+        """Create a barplot of magnitudes of coefficient pairs and their names.
+
+        E.g., astigmatism will get one bar.
+
+        Parameters
+        ----------
+        orientation : `str`, {'h', 'v', 'horizontal', 'vertical'}
+            orientation of the plot
+        sort : `bool`, optional
+            whether to sort the zernikes in descending order
+        buffer : `float`, optional
+            buffer to use around the left and right (or top and bottom) bars
+        zorder : `int`, optional
+            zorder of the bars.  Use zorder > 3 to put bars in front of gridlines
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        """
+        from matplotlib import pyplot as plt
+
+        magang = fzset_to_magnitude_angle(self.coefs)
+        mags = [m[0] for m in magang.values()]
+        names = magang.keys()
+        idxs = list(range(len(names)))
+
+        if sort:
+            mags, names = sort_xy(mags, names)
+            mags = list(reversed(mags))
+            names = list(reversed(names))
+        lab = f'{self.zaxis_label} [{self.phase_unit}]'
+        lims = (idxs[0] - buffer, idxs[-1] + buffer)
+        fig, ax = share_fig_ax(fig, ax)
+        if orientation.lower() in ('h', 'horizontal'):
+            ax.bar(idxs, mags, zorder=zorder)
+            plt.xticks(idxs, names, rotation=90)
+            ax.set(ylabel=lab, xlim=lims)
+        else:
+            ax.barh(idxs, mags, zorder=zorder)
+            plt.yticks(idxs, names)
+            ax.set(xlabel=lab, ylim=lims)
+        return fig, ax
+
+
+
+    def top_n(self, n=5):
+        """Identify the top n terms in the wavefront.
+
+        Parameters
+        ----------
+        n : `int`, optional
+            identify the top n terms.
+
+        Returns
+        -------
+        `list`
+            list of tuples (magnitude, index, term)
+
+        """
+        coefs = m.asarray(self.coefs)
+        coefs_work = abs(coefs)
+        oidxs = m.arange(len(coefs)) + self.base  # "original indexes"
+        idxs = m.argpartition(coefs_work, -n)[-n:]  # argpartition does some magic to identify the top n (unsorted)
+        idxs = idxs[m.argsort(coefs_work[idxs])[::-1]]  # use argsort to sort them in ascending order and reverse
+        big_terms = coefs[idxs]  # finally, take the values from the
+        big_idxs = oidxs[idxs]
+        names = [fzname(i) for i in idxs]
+        return list(zip(big_terms, big_idxs, names))
+
+    def barplot_topn(self, n=5, orientation='h', buffer=1, zorder=3, fig=None, ax=None):
+        """Plot the top n terms in the wavefront.
+
+        Parameters
+        ----------
+        n : `int`, optional
+            plot the top n terms.
+        orientation : `str`, {'h', 'v', 'horizontal', 'vertical'}
+            orientation of the plot
+        buffer : `float`, optional
+            buffer to use around the left and right (or top and bottom) bars
+        zorder : `int`, optional
+            zorder of the bars.  Use zorder > 3 to put bars in front of gridlines
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        """
+        from matplotlib import pyplot as plt
+
+        topn = self.top_n(n)
+        magnitudes = [n[0] for n in topn]
+        names = [n[2] for n in topn]
+        idxs = range(len(names))
+
+        fig, ax = share_fig_ax(fig, ax)
+
+        lab = f'{self.zaxis_label} [{self.phase_unit}]'
+        lims = (idxs[0] - buffer, idxs[-1] + buffer)
+        if orientation.lower() in ('h', 'horizontal'):
+            ax.bar(idxs, magnitudes, zorder=zorder)
+            plt.xticks(idxs, names, rotation=90)
+            ax.set(ylabel=lab, xlim=lims)
+        else:
+            ax.barh(idxs, self.coefs, zorder=zorder)
+            plt.yticks(idxs, names)
+            ax.set(xlabel=lab, ylim=lims)
+        return fig, ax
+
+
+    def truncate(self, n):
+        """Truncate the wavefront to the first n terms.
+
+        Parameters
+        ----------
+        n : `int`
+            number of terms to keep.
+
+        Returns
+        -------
+        `self`
+            modified FringeZernike instance.
+
+        """
+        if n > len(self.coefs):
+            return self
+        else:
+            self.coefs = self.coefs[:n]
+            self.build()
+            self.mask(self._mask, self.mask_target)
+            return self
 
     def __repr__(self):
         '''Pretty-print pupil description.'''
@@ -228,19 +472,19 @@ def fit(data, x=None, y=None, rho=None, phi=None, num_terms=16, rms_norm=False, 
     if num_terms > len(zernmap):
         raise ValueError(f'number of terms must be less than {len(zernmap)}')
 
+    data = data.T  # transpose to mimic transpose of zernikes
+
     # precompute the valid indexes in the original data
     pts = m.isfinite(data)
 
     if x is None and rho is None:
         # set up an x/y rho/phi grid to evaluate Zernikes on
-        x, y = m.linspace(-1, 1, data.shape[1]), m.linspace(-1, 1, data.shape[0])
-        xx, yy = m.meshgrid(x, y)
-        rho, phi = cart_to_polar(xx, yy)
-        rho = rho.flatten()
-        phi = phi.flatten()
+        rho, phi = make_rho_phi_grid(*reversed(data.shape))
+        rho = rho[pts].flatten()
+        phi = phi[pts].flatten()
     elif rho is None:
         rho, phi = cart_to_polar(x, y)
-        rho, phi = rho.flatten(), phi.flatten()
+        rho, phi = rho[pts].flatten(), phi[pts].flatten()
 
     # compute each Zernike term
     zernikes = []

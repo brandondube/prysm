@@ -1,8 +1,6 @@
 """A base point spread function interface."""
 from scipy import optimize
 
-from matplotlib import colors, patches
-
 from .coordinates import cart_to_polar
 from .util import share_fig_ax, sort_xy
 from .convolution import Convolvable
@@ -184,6 +182,8 @@ class PSF(Convolvable):
             Axis containing the plot
 
         """
+        from matplotlib import colors, patches
+
         label_str = 'Normalized Intensity [a.u.]'
 
         left, right = self.unit_x[0], self.unit_x[-1]

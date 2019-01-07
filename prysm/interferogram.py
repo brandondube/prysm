@@ -1,8 +1,7 @@
 """tools to analyze interferometric data."""
 import warnings
 
-from matplotlib import colors
-
+from .conf import config
 from ._phase import OpticalPhase
 from ._zernike import defocus
 from .io import read_zygo_dat, read_zygo_datx
@@ -10,6 +9,7 @@ from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar, uniform_cart_to_polar
 from .propagation import prop_pupil_plane_to_psf_plane
 from .util import share_fig_ax
+from .geometry import mcache
 
 
 from prysm import mathops as m
@@ -24,9 +24,16 @@ class Interferogram(OpticalPhase):
             scale = 'px'
             self.lateral_res = 1
 
+        wvl = meta.get('wavelength', None)
+        if wvl is None:
+            wvl = meta.get('Wavelength')
+
+        if wvl is not None:
+            wvl *= 1e6  # m to um
+
         super().__init__(unit_x=x, unit_y=y, phase=phase,
-                         wavelength=meta.get('wavelength'), phase_unit=phase_unit,
-                         spatial_unit='m' if scale == 'px' else scale)
+                         wavelength=wvl, phase_unit=phase_unit,
+                         spatial_unit=scale)
 
         self.xaxis_label = 'X'
         self.yaxis_label = 'Y'
@@ -107,22 +114,75 @@ class Interferogram(OpticalPhase):
         self.remove_power()
         return self
 
-    def mask(self, mask):
-        """Apply a mask to the data.
+    def mask(self, shape=None, diameter=0, mask=None):
+        """Mask the signal.
+
+        The mask will be inscribed in the axis with fewer pixels.  I.e., for
+        a interferogram with 1280x1000 pixels, the mask will be 1000x1000 at
+        largest.
 
         Parameters
         ----------
+        shape : `str`
+            valid shape from prysm.geometry
+        diameter : `float`
+            diameter of the mask, in self.spatial_units
         mask : `numpy.ndarray`
-            masking array; expects an array of zeros (remove) and ones (keep)
+            user-provided mask
 
         Returns
         -------
-        `Interferogram`
-            self
+        self
+            modified Interferogram instance.
 
         """
+        if shape is None and mask is None:
+            raise ValueError('must provide either a shape or a mask')
+
+        if mask is None:
+            mask = mcache(shape, min(self.shape), radius=diameter / min(self.diameter_x, self.diameter_y))
+            base = m.zeros(self.shape, dtype=config.precision)
+            difference = abs(self.shape[0] - self.shape[1])
+            l, u = int(m.floor(difference / 2)), int(m.ceil(difference / 2))
+            if u is 0:  # guard against nocrop scenario
+                _slice = slice(None)
+            else:
+                _slice = slice(l, -u)
+            if self.shape[0] < self.shape[1]:
+                base[:, _slice] = mask
+            else:
+                base[_slice, :] = mask
+
+            mask = base
+
         hitpts = mask == 0
         self.phase[hitpts] = m.nan
+        return self
+
+    def latcal(self, plate_scale, unit='mm'):
+        """Perform lateral calibration.
+
+        This probably won't do what you want if your data already has spatial
+        units of anything but pixels (px).
+
+        Parameters
+        ----------
+        plate_scale : `float`
+            center-to-center sample spacing of pixels, in (unit)s.
+        unit : `str`, optional
+            unit associated with the plate scale.
+
+        Returns
+        -------
+        self
+            modified `Interferogram` instance.
+
+        """
+        self.sample_spacing = plate_scale
+        self.change_spatial_unit(to=unit, inplace=True)
+        # sloppy to do this here...
+        self.unit_x *= plate_scale
+        self.unit_y *= plate_scale
         return self
 
     def spike_clip(self, nsigma=3):
@@ -240,7 +300,6 @@ class Interferogram(OpticalPhase):
 
         # out of order -- coef * Q is 1 x 1 multiplication,
         # putting Q in the right place will result in much more work being done
-        print(ux)
         ars = coefficient * Q * gamma_factors * theta_factors * psd
         return theta_x, theta_y, ars
 
@@ -322,6 +381,7 @@ class Interferogram(OpticalPhase):
             Axis containing the plot
 
         """
+        from matplotlib import colors
         x, y, psd = self.psd()
 
         if axlim is None:
@@ -400,7 +460,7 @@ class Interferogram(OpticalPhase):
         return fig, ax
 
     @staticmethod
-    def from_zygo_dat(path, multi_intensity_action='first', scale='um'):
+    def from_zygo_dat(path, multi_intensity_action='first', scale='mm'):
         """Create a new interferogram from a zygo dat file.
 
         Parameters
@@ -421,7 +481,7 @@ class Interferogram(OpticalPhase):
         if str(path).endswith('datx'):
             # datx file, use datx reader
             zydat = read_zygo_datx(path)
-            res = zydat['meta']['Lateral Resolution']
+            res = zydat['meta']['Lateral Resolution'] / 1e6  # microns instead of meters
         else:
             # dat file, use dat file reader
             zydat = read_zygo_dat(path, multi_intensity_action=multi_intensity_action)
@@ -431,9 +491,15 @@ class Interferogram(OpticalPhase):
         if res == 0.0:
             res = 1
             scale = 'px'
+
+        if scale != 'px':
+            _scale = 'm'
+        else:
+            _scale = 'px'
+
         i = Interferogram(phase=phase, intensity=zydat['intensity'],
                           x=m.arange(phase.shape[1]) * res, y=m.arange(phase.shape[0]) * res,
-                          scale='m', meta=zydat['meta'])
+                          scale=_scale, meta=zydat['meta'])
         return i.change_spatial_unit(to=scale.lower(), inplace=True)
 
 

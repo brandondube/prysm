@@ -1,8 +1,6 @@
 """Utility functions."""
 from operator import itemgetter
 
-from matplotlib import pyplot as plt
-
 from prysm import mathops as m
 
 
@@ -108,6 +106,8 @@ def share_fig_ax(fig=None, ax=None, numax=1, sharex=False, sharey=False):
         An axis object
 
     """
+    from matplotlib import pyplot as plt
+
     if fig is None and ax is None:
         fig, ax = plt.subplots(nrows=1, ncols=numax, sharex=sharex, sharey=sharey)
     elif ax is None:

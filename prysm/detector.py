@@ -23,7 +23,7 @@ class Detector(object):
 
     """
 
-    def __init__(self, pixel_size, resolution=(1024, 1024), nbits=14, framebuffer=24):
+    def __init__(self, pixel_size, resolution=(1024, 1024), nbits=16, framebuffer=24):
         """Create a new Detector object.
 
         Parameters
