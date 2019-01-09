@@ -400,7 +400,7 @@ class MTF(object):
         return MTF.from_psf(psf)
 
 
-def diffraction_limited_mtf(fno, wavelength, frequencies=None, num_pts=128):
+def diffraction_limited_mtf(fno, wavelength, frequencies=None, samples=128):
     """Give the diffraction limited MTF for a circular pupil and the given parameters.
 
     Parameters
@@ -410,8 +410,8 @@ def diffraction_limited_mtf(fno, wavelength, frequencies=None, num_pts=128):
     wavelength : `float`
         wavelength of light, in microns.
     frequencies : `numpy.ndarray`
-        spatial frequencies of interest, in cy/mm if frequencies are given, num_pts is ignored.
-    num_pts : `int`
+        spatial frequencies of interest, in cy/mm if frequencies are given, samples is ignored.
+    samples : `int`
         number of points in the output array, if frequencies not given.
 
     Returns
@@ -433,7 +433,7 @@ def diffraction_limited_mtf(fno, wavelength, frequencies=None, num_pts=128):
     """
     extinction = 1 / (wavelength / 1000 * fno)
     if frequencies is None:
-        normalized_frequency = m.linspace(0, 1, num_pts)
+        normalized_frequency = m.linspace(0, 1, samples)
     else:
         normalized_frequency = m.asarray(frequencies) / extinction
         try:

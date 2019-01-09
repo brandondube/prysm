@@ -76,7 +76,7 @@ def fzset_to_magnitude_angle(coefs):
         return m.zeros(2)
 
     # make a list of names to go with the coefficients
-    names = [fzname(i) for i in range(len(coefs))]
+    names = [fzname(i, base=0) for i in range(len(coefs))]
     combinations = defaultdict(mkary)
 
     # for each name and coefficient, make a len 2 array.  Put the Y or 0 degree values in the first slot
@@ -166,7 +166,7 @@ class FringeZernike(Pupil):
                 if key[0].lower() == 'z':
                     idx = int(key[1:])  # strip 'Z' from index
                     self.coefs[idx - self.base] = value
-                elif key in ('rms_norm'):
+                elif key in ('norm'):
                     self.normalize = True
                 elif key.lower() == 'base':
                     self.base = value
@@ -199,7 +199,7 @@ class FringeZernike(Pupil):
 
     @property
     def magnitudes(self):
-        """Returns the magnitude of the zernike components in this wavefront."""
+        """Returns the magnitude and angles of the zernike components in this wavefront."""
         return fzset_to_magnitude_angle(self.coefs)
 
     def barplot(self, orientation='h', buffer=1, zorder=3, fig=None, ax=None):
@@ -427,7 +427,7 @@ class FringeZernike(Pupil):
         return f'{header}{body}{footer}'
 
 
-def fit(data, x=None, y=None, rho=None, phi=None, num_terms=16, rms_norm=False, residual=False, round_at=6):
+def fit(data, x=None, y=None, rho=None, phi=None, terms=16, norm=False, residual=False, round_at=6):
     '''Fits a number of Zernike coefficients to provided data by minimizing
         the root sum square between each coefficient and the given data.  The
         data should be uniformly sampled in an x,y grid.
@@ -445,9 +445,9 @@ def fit(data, x=None, y=None, rho=None, phi=None, num_terms=16, rms_norm=False, 
         radial coordinates, same shape as data
     phi : `numpy.ndarray`, optional
         azimuthal
-    num_terms : `int`, optional
-        number of terms to fit, fits terms 0~num_terms
-    rms_norm : `bool`, optional
+    terms : `int`, optional
+        number of terms to fit, fits terms 0~terms
+    norm : `bool`, optional
         if True, normalize coefficients to unit RMS value
     residual : `bool`, optional
         if True, return a tuple of (coefficients, residual)
@@ -467,7 +467,7 @@ def fit(data, x=None, y=None, rho=None, phi=None, num_terms=16, rms_norm=False, 
         too many terms requested.
 
     '''
-    if num_terms > len(zernmap):
+    if terms > len(zernmap):
         raise ValueError(f'number of terms must be less than {len(zernmap)}')
 
     data = data.T  # transpose to mimic transpose of zernikes
@@ -486,10 +486,10 @@ def fit(data, x=None, y=None, rho=None, phi=None, num_terms=16, rms_norm=False, 
 
     # compute each Zernike term
     zernikes = []
-    for i in range(num_terms):
+    for i in range(terms):
         func = z.zernikes[zernmap[i]]
         base_zern = func(rho, phi)
-        if rms_norm:
+        if norm:
             base_zern *= func.norm
         zernikes.append(base_zern)
     zerns = m.asarray(zernikes).T

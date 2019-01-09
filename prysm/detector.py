@@ -308,7 +308,7 @@ def pixelaperture_analytic_otf(width_x, width_y, freq_x, freq_y):
     return m.sinc(freq_x * width_x) * m.sinc(freq_y * width_y)
 
 
-def generate_mtf(pixel_aperture=1, azimuth=0, num_samples=128):
+def generate_mtf(pixel_aperture=1, azimuth=0, samples=128):
     """Generate the 1D diffraction-limited MTF for a given pixel width and azimuth.
 
     Parameters
@@ -317,7 +317,7 @@ def generate_mtf(pixel_aperture=1, azimuth=0, num_samples=128):
         aperture of the pixel, microns.  Pixel is assumed to be square
     azimuth : `float`
         azimuth to retrieve the MTF at, in degrees
-    num_samples : `int`
+    samples : `int`
         number of samples in the output array
 
     Returns
@@ -333,7 +333,7 @@ def generate_mtf(pixel_aperture=1, azimuth=0, num_samples=128):
 
     """
     pitch_unit = pixel_aperture / 1e3
-    normalized_frequencies = m.linspace(0, 2, num_samples)
+    normalized_frequencies = m.linspace(0, 2, samples)
     otf = m.sinc(normalized_frequencies)
     mtf = abs(otf)
     return normalized_frequencies / pitch_unit, mtf

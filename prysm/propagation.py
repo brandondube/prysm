@@ -62,11 +62,11 @@ def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, prop
     s = wavefunction.shape
     samples_x, samples_y = s[1] * Q, s[0] * Q
     sample_spacing_x = pupil_sample_to_psf_sample(pupil_sample=input_sample_spacing,  # factor of
-                                                  num_samples=samples_x,              # 1e3 corrects
+                                                  samples=samples_x,              # 1e3 corrects
                                                   wavelength=wavelength,              # for unit
                                                   efl=prop_dist) / 1e3                # translation
     sample_spacing_y = pupil_sample_to_psf_sample(pupil_sample=input_sample_spacing,  # factor of
-                                                  num_samples=samples_y,              # 1e3 corrects
+                                                  samples=samples_y,              # 1e3 corrects
                                                   wavelength=wavelength,              # for unit
                                                   efl=prop_dist) / 1e3                # translation
     unit_x = m.arange(-1 * int(m.ceil(samples_x / 2)), int(m.floor(samples_x / 2))) * sample_spacing_x
@@ -74,14 +74,14 @@ def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, prop
     return unit_x, unit_y
 
 
-def pupil_sample_to_psf_sample(pupil_sample, num_samples, wavelength, efl):
+def pupil_sample_to_psf_sample(pupil_sample, samples, wavelength, efl):
     """Convert pupil sample spacing to PSF sample spacing.
 
     Parameters
     ----------
     pupil_sample : `float`
         sample spacing in the pupil plane
-    num_samples : `int`
+    samples : `int`
         number of samples present in both planes (must be equal)
     wavelength : `float`
         wavelength of light, in microns
@@ -94,17 +94,17 @@ def pupil_sample_to_psf_sample(pupil_sample, num_samples, wavelength, efl):
         the sample spacing in the PSF plane
 
     """
-    return (wavelength * efl * 1e3) / (pupil_sample * num_samples)
+    return (wavelength * efl * 1e3) / (pupil_sample * samples)
 
 
-def psf_sample_to_pupil_sample(psf_sample, num_samples, wavelength, efl):
+def psf_sample_to_pupil_sample(psf_sample, samples, wavelength, efl):
     """Convert PSF sample spacing to pupil sample spacing.
 
     Parameters
     ----------
     psf_sample : `float`
         sample spacing in the PSF plane
-    num_samples : `int`
+    samples : `int`
         number of samples present in both planes (must be equal)
     wavelength : `float`
         wavelength of light, in microns
@@ -117,4 +117,4 @@ def psf_sample_to_pupil_sample(psf_sample, num_samples, wavelength, efl):
         the sample spacing in the pupil plane
 
     """
-    return (wavelength * efl * 1e3) / (psf_sample * num_samples)
+    return (wavelength * efl * 1e3) / (psf_sample * samples)

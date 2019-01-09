@@ -38,7 +38,7 @@ class Pupil(OpticalPhase):
     ----------
     center : `int`
         index of the center sample, may be sheared by 1/2 for even sample counts
-    epd : `float`
+    dia : `float`
         entrance pupil diameter, mm
     fcn : `numpy.ndarray`
         wavefunction, complex 2D array
@@ -62,7 +62,7 @@ class Pupil(OpticalPhase):
         target for automatic masking on pupil creation
 
     """
-    def __init__(self, samples=128, epd=1.0, wavelength=0.55, opd_unit='waves',
+    def __init__(self, samples=128, dia=1.0, wavelength=0.55, opd_unit='waves',
                  mask='circle', mask_target='both', ux=None, uy=None, phase=None):
         """Create a new `Pupil` instance.
 
@@ -70,7 +70,7 @@ class Pupil(OpticalPhase):
         ----------
         samples : `int`, optional
             number of samples across the pupil interior
-        epd : `float`, optional
+        dia : `float`, optional
             diameter of the pupil, mm
         wavelength : `float`, optional
             wavelength of light, um
@@ -107,9 +107,9 @@ class Pupil(OpticalPhase):
         """
         if ux is None:
             # must build a pupil
-            self.epd = epd
-            ux = m.linspace(-epd / 2, epd / 2, samples)
-            uy = m.linspace(-epd / 2, epd / 2, samples)
+            self.dia = dia
+            ux = m.linspace(-dia / 2, dia / 2, samples)
+            uy = m.linspace(-dia / 2, dia / 2, samples)
             self.samples = samples
             need_to_build = True
         else:

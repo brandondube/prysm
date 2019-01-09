@@ -169,16 +169,16 @@ class SiemensStar(Convolvable):
 
     Attributes
     ----------
-    num_spokes : `int`
+    spokes : `int`
         number of spokes present in the star
 
     '''
-    def __init__(self, num_spokes, sinusoidal=True, background='black', sample_spacing=2, samples=256):
+    def __init__(self, spokes, sinusoidal=True, background='black', sample_spacing=2, samples=256):
         '''Produces a Siemen's Star.
 
         Parameters
         ----------
-        num_spokes : `int`
+        spokes : `int`
             number of spokes in the star.
         sinusoidal : `bool`
             if True, generates a sinusoidal Siemen' star, else, generates a bar/block siemen's star
@@ -196,7 +196,7 @@ class SiemensStar(Convolvable):
 
         '''
         relative_width = 0.9
-        self.num_spokes = num_spokes
+        self.spokes = spokes
 
         # generate a coordinate grid
         x = m.linspace(-1, 1, samples)
@@ -207,7 +207,7 @@ class SiemensStar(Convolvable):
         ux, uy = m.arange(-ext, ext, sample_spacing), m.arange(-ext, ext, sample_spacing)
 
         # generate the siemen's star as a (rho,phi) polynomial
-        arr = m.cos(num_spokes / 2 * pv)
+        arr = m.cos(spokes / 2 * pv)
 
         if not sinusoidal:  # make binary
             arr[arr < 0] = -1
