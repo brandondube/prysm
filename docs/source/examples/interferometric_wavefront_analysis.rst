@@ -6,11 +6,10 @@ In this example, we will see how to use prysm to almost entirely supplant the so
 
 >>> from pathlib import Path
 >>>
->>> from matplotlib import pyplot as plt
->>>
 >>> from prysm import Interferogram, FringeZernike
 >>> from prysm.fringezernike import fit
 >>>
+>>> from matplotlib import pyplot as plt
 >>> plt.style.use('bmh')
 
 We point prysm to the file, create a new interferogram, mask it to a circular region 100 mm across, subtract piston, tip/tilt and power, and evalute the PV and RMS wavefront error.  We also plot the wavefront to make sure all has gone well
