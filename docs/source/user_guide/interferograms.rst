@@ -34,12 +34,21 @@ spikes may also be clipped,
 
 >>> interf.spike_clip(nsigma=3)  # default is 3
 
-setting points with a value more than nsigma standard deviations from the mean to :code:`NaN`.  Masks may be applied:
+setting points with a value more than nsigma standard deviations from the mean to :code:`NaN`.
+
+If the data did not have a lateral calibration baked into it, you can provide one in prysm,
+
+>>> i.latcal(plate_scale=0.1, unit='mm')
+>>> i.latcal(0.1, 'mm')  # these two invocations are equal
+
+Masks may be applied:
 
 >>> your_mask = np.ones(interf.phase.shape)
 >>> interf.mask(your_mask)
+>>> interf.mask('circle', diameter=100)  # 100 <spatial_unit> diameter circle
+>>> interf.mask('hexagon', diameter=5)
 
-the phase is deleted (replaced with NaN) wherever the mask is equal to zero.  The same applies to the intensity.
+The truecircle mask should not be used on interferometric data.  the phase is deleted (replaced with NaN) wherever the mask is equal to zero.
 
 Interferograms may be cropped, deleting empty (NaN) regions around a measurment;
 
@@ -47,7 +56,7 @@ Interferograms may be cropped, deleting empty (NaN) regions around a measurment;
 
 Convenience properties are provided for data size,
 
->>> interf.shape, interf.diameter_x, interf.diameter_y, interf.diameter
+>>> interf.shape, interf.diameter_x, interf.diameter_y, interf.diameter, interf.semidiameter
 
 :code:`shape` mirrors the shape of the underlying ndarray.  The x and y diameters are in units of :code:`interf.spatial_unit` and :code:`diameter` is the greater of the two.
 
