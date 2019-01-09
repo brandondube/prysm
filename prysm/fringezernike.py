@@ -141,9 +141,9 @@ class FringeZernike(Pupil):
     def __init__(self, *args, **kwargs):
         if args is not None:
             if len(args) is 0:
-                self.coefs = m.asarray([0] * len(zernmap))
+                self.coefs = m.zeros(len(zernmap), dtype=config.precision)
             else:
-                self.coefs = m.asarray([*args[0]])
+                self.coefs = m.asarray([*args[0]], dtype=config.precision)
 
         self.normalize = False
         pass_args = {}
@@ -371,7 +371,7 @@ class FringeZernike(Pupil):
             plt.xticks(idxs, names, rotation=90)
             ax.set(ylabel=lab, xlim=lims)
         else:
-            ax.barh(idxs, self.coefs, zorder=zorder)
+            ax.barh(idxs, magnitudes, zorder=zorder)
             plt.yticks(idxs, names)
             ax.set(xlabel=lab, ylim=lims)
         return fig, ax
