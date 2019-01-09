@@ -178,8 +178,7 @@ class Interferogram(OpticalPhase):
             modified `Interferogram` instance.
 
         """
-        self.sample_spacing = plate_scale
-        self.change_spatial_unit(to=unit, inplace=True)
+        self.change_spatial_unit(to=unit, inplace=True)  # will be 0..n spatial units
         # sloppy to do this here...
         self.unit_x *= plate_scale
         self.unit_y *= plate_scale

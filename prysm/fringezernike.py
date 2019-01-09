@@ -142,9 +142,9 @@ class FringeZernike(Pupil):
     def __init__(self, *args, **kwargs):
         if args is not None:
             if len(args) is 0:
-                self.coefs = m.asarray([0] * len(zernmap))
+                self.coefs = m.zeros(len(zernmap), dtype=config.precision)
             else:
-                self.coefs = m.asarray([*args[0]])
+                self.coefs = m.asarray([*args[0]], dtype=config.precision)
 
         self.normalize = False
         pass_args = {}
@@ -370,7 +370,7 @@ class FringeZernike(Pupil):
             plt.xticks(idxs, names, rotation=90)
             ax.set(ylabel=lab, xlim=lims)
         else:
-            ax.barh(idxs, self.coefs, zorder=zorder)
+            ax.barh(idxs, magnitudes, zorder=zorder)
             plt.yticks(idxs, names)
             ax.set(xlabel=lab, ylim=lims)
         return fig, ax
@@ -396,6 +396,31 @@ class FringeZernike(Pupil):
             self.build()
             self.mask(self._mask, self.mask_target)
             return self
+
+    def truncate_topn(self, n):
+        """Truncate the pupil to only the top n terms.
+
+        Parameters
+        ----------
+        n : `int`
+            number of parameters to keep
+
+        Returns
+        -------
+        `self`
+            modified FringeZernike instance.
+
+        """
+        topn = self.top_n(n)
+        new_coefs = m.zeros(len(self.coefs), dtype=config.precision)
+        for coef in topn:
+            mag, index, *_ = coef
+            new_coefs[index-self.base] = mag
+
+        self.coefs = new_coefs
+        self.build()
+        self.mask(self._mask, self.mask_target)
+        return self
 
     def __repr__(self):
         '''Pretty-print pupil description.'''
