@@ -399,6 +399,31 @@ class FringeZernike(Pupil):
             self.mask(self._mask, self.mask_target)
             return self
 
+    def truncate_topn(self, n):
+        """Truncate the pupil to only the top n terms.
+
+        Parameters
+        ----------
+        n : `int`
+            number of parameters to keep
+
+        Returns
+        -------
+        `self`
+            modified FringeZernike instance.
+
+        """
+        topn = self.top_n(n)
+        new_coefs = m.zeros(len(self.coefs), dtype=config.precision)
+        for coef in topn:
+            mag, index, *_ = coef
+            new_coefs[index-self.base] = mag
+
+        self.coefs = new_coefs
+        self.build()
+        self.mask(self._mask, self.mask_target)
+        return self
+
     def __repr__(self):
         '''Pretty-print pupil description.'''
         if self.normalize is True:
