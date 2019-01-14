@@ -270,7 +270,7 @@ class TiltedSquare(Convolvable):
 class SlantedEdge(Convolvable):
     """Representation of a slanted edge."""
 
-    def __init__(self, angle=8, contrast=0.9, sample_spacing=2, samples=256):
+    def __init__(self, angle=8, contrast=0.9, crossed=False, sample_spacing=2, samples=256):
         '''Create a new TitledSquare instance.
 
         Parameters
@@ -279,6 +279,9 @@ class SlantedEdge(Convolvable):
             angle in degrees to tilt w.r.t. the y axis
         contrast : `float`
             difference between minimum and maximum values in the image
+        crossed : `bool`, optional
+            whether to make a single edge (crossed=False) or pair of crossed edges (crossed=True)
+            aka a "BMW target"
         sample_spacing : `float`
             spacing of samples
         samples : `int`
@@ -295,7 +298,13 @@ class SlantedEdge(Convolvable):
         angle = m.radians(angle)
         xp = xx * m.cos(angle) - yy * m.sin(angle)
         # yp = xx * m.sin(angle) + yy * m.cos(angle)  # do not need this
-        mask = xp > 0
+        mask = xp > 0  # single edge
+        if crossed:
+            mask = xp > 0  # set of 4 edges
+            upperright = mask & m.rot90(mask)
+            lowerleft = m.rot90(upperright, 2)
+            mask = upperright | lowerleft
+
         arr[mask] = diff
         self.contrast = contrast
         self.black = diff

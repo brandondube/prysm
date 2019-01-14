@@ -127,6 +127,16 @@ class Detector(object):
             fig, ax = self.captures[which].show(fig=fig, ax=ax)
         return fig, ax
 
+    @property
+    def fs(self):
+        """Sampling frequency in cy/mm."""
+        return 1 / self.pixel_size * 1e3
+
+    @property
+    def nyquist(self):
+        """Nyquist frequency in cy/mm."""
+        return self.fs / 2
+
 
 class OLPF(Convolvable):
     """Optical Low Pass Filter.
