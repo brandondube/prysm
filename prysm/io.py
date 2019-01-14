@@ -367,9 +367,7 @@ def read_mtfmapper_sfr_single(file, pixel_pitch=None):
     floats = [float(d) for d in data.splitlines()[0].split(' ')[:-1]]
     edge_angle, *mtf = floats
     mtf = m.asarray(mtf)
-    freqs = m.arange(len(mtf)) / len(mtf)
-    if len(mtf) > 64:
-        freqs *= 2  # full_sfr option
+    freqs = m.arange(len(mtf)) / 64
     if pixel_pitch is not None:  # convert cy/px to cy/mm
         freqs /= (pixel_pitch / 1e3)
 
