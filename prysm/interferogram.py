@@ -49,6 +49,25 @@ class Interferogram(OpticalPhase):
         """Percentage of pixels in the data that are invalid (NaN)."""
         return m.count_nonzero(~m.isfinite(self.phase)) / self.phase.size * 100
 
+    @property
+    def pvr(self):
+        """Peak-to-Valley residual.
+
+        Notes
+        -----
+
+        See:
+        C. Evans, "Robust Estimation of PV for Optical Surface Specification and Testing"
+        in Optical Fabrication and Testing, OSA Technical Digest (CD)
+        (Optical Society of America, 2008), paper OWA4.
+        http://www.opticsinfobase.org/abstract.cfm?URI=OFT-2008-OWA4
+
+        """
+        from .fringezernike import fit, FringeZernike
+        coefs, residual = fit(self.phase, terms=36, residual=True)
+        fz = FringeZernike(coefs, samples=self.shape[0])
+        return fz.pv + 3 * residual
+
     def fill(self, _with=0):
         """Fill invalid (NaN) values.
 
