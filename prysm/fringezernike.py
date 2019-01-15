@@ -532,7 +532,7 @@ def fit(data, x=None, y=None, rho=None, phi=None, terms=16, norm=False, residual
 
         _fit = m.asarray(components)
         _fit = _fit.sum(axis=0)
-        rmserr = rms(data - _fit)
+        rmserr = rms(data[pts].flatten() - _fit)
         return coefs, rmserr
     else:
         return coefs
