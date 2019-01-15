@@ -358,7 +358,7 @@ class Interferogram(OpticalPhase):
 
         return fig, ax
 
-    def plot_psd_xyavg(self, a=None, b=None, c=None, lw=3,
+    def plot_psd_xy_avg(self, a=None, b=None, c=None, lw=3,
                        xlim=None, ylim=None, fig=None, ax=None):
         """Plot the x, y, and average PSD on a linear x axis.
 
@@ -388,6 +388,11 @@ class Interferogram(OpticalPhase):
         ax : `matplotlib.axes.Axis`
             Axis containing the plot
 
+        Notes
+        -----
+        if a, b given but not c, an AB / inverse power model will be used for the PSD.
+        If a, b, c are given the Lorentzian model will be used.
+
         """
         xyavg = self.psd_xy_avg()
         x, px = xyavg['x']
@@ -400,7 +405,10 @@ class Interferogram(OpticalPhase):
         ax.loglog(r, pr, lw=lw*1.5, label='avg')
 
         if a is not None:
-            requirement = abc_psd(a=a, b=b, c=c, nu=r)
+            if c is not None:
+                requirement = abc_psd(a=a, b=b, c=c, nu=r)
+            else:
+                requirement = ab_psd(a=a, b=b, nu=r)
             ax.loglog(r, requirement, c='k', lw=lw*2)
 
         ax.legend(title='Orientation')
