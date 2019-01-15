@@ -648,6 +648,23 @@ def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None)
 
 
 def window_2d_welch(x, y, alpha=8):
+    """Return a 2D welch window for a given alpha.
+
+    Parameters
+    ----------
+    x : `numpy.ndarray`
+        x values, 1D array
+    y : `numpy.ndarray`
+        y values, 1D array
+    alpha : `float`
+        alpha (edge roll) parameter
+
+    Returns
+    -------
+    `numpy.ndarray`
+        window
+
+    """
     xx, yy = m.meshgrid(x, y)
     r, _ = cart_to_polar(xx, yy)
     rmax = m.sqrt(x.max()**2 + y.max()**2)
@@ -656,4 +673,44 @@ def window_2d_welch(x, y, alpha=8):
 
 
 def abc_psd(nu, a, b, c):
+    """Lorentzian model of a Power Spectral Density.
+
+    Parameters
+    ----------
+    nu : `numpy.ndarray` or `float`
+        spatial frequency
+    a : `float`
+        a coefficient
+    b : `float`
+        b coefficient
+    c : `float`
+        c coefficient
+
+    Returns
+    -------
+    `numpy.ndarray`
+        value of PSD model
+
+    """
     return a / (1 + (nu/b)**2)**(c/2)
+
+
+def ab_psd(nu, a, b):
+    """inverse power model of a Power Spectral Density.
+
+    Parameters
+    ----------
+    nu : `numpy.ndarray` or `float`
+        spatial frequency
+    a : `float`
+        a coefficient
+    b : `float`
+        b coefficient
+
+    Returns
+    -------
+    `numpy.ndarray`
+        value of PSD model
+
+    """
+    return a * nu ** (-b)
