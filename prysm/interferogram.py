@@ -562,12 +562,23 @@ def psd(height, sample_spacing, window=None):
     psd : `numpy.ndarray`
         power spectral density
 
+    Notes
+    -----
+    See GH_FFT for a rigorous treatment of FFT scalings
+    https://holometer.fnal.gov/GH_FFT.pdf
+
     """
     window = make_window(height, sample_spacing, window)
-    psd = prop_pupil_plane_to_psf_plane(height * window, Q=1, norm='ortho')
+    fft = m.ifftshift(m.fft2(m.fftshift(height * window)))
+    psd = abs(fft)**2  # mag squared first as per GH_FFT
+
+    fs = 1 / sample_spacing
+    S2 = (window**2).sum()
+    coef = S2 * fs * fs
+    psd /= coef
+
     ux = forward_ft_unit(sample_spacing, height.shape[1])
     uy = forward_ft_unit(sample_spacing, height.shape[0])
-    psd /= (window**2).sum()  # correct by "S", see GH_FFT
     return ux, uy, psd
 
 
@@ -617,8 +628,8 @@ def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None)
     else:
         raise ValueError('must specify either period (wavelength) or frequency')
 
-    ux, uy = m.meshgrid(ux, uy)
-    r, p = cart_to_polar(ux, uy)
+    ux2, uy2 = m.meshgrid(ux, uy)
+    r, p = cart_to_polar(ux2, uy2)
 
     if flow is None:
         warnings.warn('no lower limit given, using 0 for low frequency')
@@ -631,7 +642,9 @@ def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None)
     work = psd.copy()
     work[r < flow] = 0
     work[r > fhigh] = 0
-    return m.sqrt(work.sum())
+    first = m.trapz(work, uy, axis=0)
+    second = m.trapz(first, ux, axis=0)
+    return m.sqrt(second)
 
 
 def window_2d_welch(x, y, alpha=8):
