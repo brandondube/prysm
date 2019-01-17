@@ -24,12 +24,15 @@ class Interferogram(OpticalPhase):
             scale = 'px'
             self.lateral_res = 1
 
-        wvl = meta.get('wavelength', None)
-        if wvl is None:
-            wvl = meta.get('Wavelength')
+        if meta:
+            wvl = meta.get('wavelength', None)
+            if wvl is None:
+                wvl = meta.get('Wavelength')
 
-        if wvl is not None:
-            wvl *= 1e6  # m to um
+            if wvl is not None:
+                wvl *= 1e6  # m to um
+        else:
+            wvl = 1
 
         super().__init__(unit_x=x, unit_y=y, phase=phase,
                          wavelength=wvl, phase_unit=phase_unit,
@@ -97,8 +100,26 @@ class Interferogram(OpticalPhase):
         if left == right == top == bottom == 0:
             return self
 
-        self.phase = self.phase[left:-right, top:-bottom]
-        self.unit_y, self.unit_x = self.unit_y[left:-right], self.unit_x[top:-bottom]
+        if left == 0 and bottom == 0:
+            lr = slice(None)
+        if left == 0:
+            lr = slice(-right)
+        elif right == 0:
+            lr = slice(left,self.phase.shape[0])
+        else:
+            lr = slice(left, -right)
+
+        if top == 0 and bottom == 0:
+            tb = slice(None)
+        elif top == 0:
+            tb = slice(-bottom)
+        elif bottom == 0:
+            tb = slice(top, self.phase.shape[1])
+        else:
+            tb = slice(top, -bottom)
+
+        self.phase = self.phase[lr, tb]
+        self.unit_y, self.unit_x = self.unit_y[lr], self.unit_x[tb]
         self.unit_x -= self.unit_x[0]
         self.unit_y -= self.unit_y[0]
         return self
