@@ -4,7 +4,7 @@ import warnings
 from .conf import config
 from ._phase import OpticalPhase
 from ._zernike import defocus
-from .io import read_zygo_dat, read_zygo_datx
+from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar, uniform_cart_to_polar
 from .propagation import prop_pupil_plane_to_psf_plane
@@ -150,7 +150,7 @@ class Interferogram(OpticalPhase):
     def remove_piston_tiptilt_power(self):
         """Remove piston/tip/tilt/power from the data."""
         self.remove_piston()
-        self.remove_piston_tiptilt()
+        self.remove_tiptilt()
         self.remove_power()
         return self
 
@@ -437,6 +437,21 @@ class Interferogram(OpticalPhase):
                ylim=ylim, ylabel=r'PSD [nm$^2$/' + f'(cy/{self.spatial_unit})$^2$]')
 
         return fig, ax
+
+    def save_zygo_ascii(self, file, high_phase_res=True):
+        """Save out the interferogram to a Zygo ASCII file.
+
+        Parameters
+        ----------
+        file : Path_like, `str`, or File_like
+            where to save to.
+
+        """
+        phase = self.change_phase_unit(to='waves', inplace=False)
+        write_zygo_ascii(file, phase=phase,
+                         unit_x=self.unit_x, unit_y=self.unit_y,
+                         intensity=None, wavelength=self.wavelength,
+                         high_phase_res=high_phase_res)
 
     @staticmethod
     def from_zygo_dat(path, multi_intensity_action='first', scale='mm'):
