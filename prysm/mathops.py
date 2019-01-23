@@ -127,6 +127,8 @@ allfuncs = set((
     'argpartition',
     'argsort',
     'degrees',
+    'array_str',
+    'savetxt',
 ))
 
 allfuncs_cupy_missing = set((

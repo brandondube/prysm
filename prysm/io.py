@@ -1,10 +1,12 @@
 """File readers for various commercial instruments."""
+from io import StringIO, IOBase
 import os
 import re
 import struct
 import codecs
 import datetime
 import calendar
+import shutil
 
 from .conf import config
 from prysm import mathops as m
@@ -982,3 +984,69 @@ def read_zygo_metadata(file_contents):
     ]
 
     return {k: v for k, v in zip(all_keys, all_vars)}
+
+
+def write_zygo_ascii(file, phase, unit_x, unit_y, wavelength=0.6328, intensity=None, high_phase_res=False):
+
+    # construct the header
+    timestamp = datetime.datetime.now()
+    line1 = 'Zygo ASCII Data File - Format 2'
+    line2 = '0 0 0 0 ' + timestamp.strftime('"%a %b %d %H:%M:%S %Y').ljust(30, ' ') + '"'
+    if intensity is None:
+        line3 = '0 0 0 0 0 0'
+    else:
+        raise NotImplementedError('writing of ASCII files with nonempty intensity not yet supported.')
+    px, py = phase.shape
+    ox = m.searchsorted(unit_x, 0)
+    oy = m.searchsorted(unit_y, 0)
+    line4 = f'{oy} {ox} {py} {px}'
+    line5 = '"' + ' ' * 81 + '"'
+    line6 = '"' + ' ' * 39 + '"'
+    line7 = '"' + ' ' * 39 + '"'
+
+    timestamp_int = int(str(timestamp.timestamp()).split('.')[0])
+    res = (unit_x[1] - unit_x[0]) * 1e-3 # mm to m
+    line8 = f'0 0.5 {wavelength*1e-6} 0 1 0 {res} {timestamp_int}' # end is timestamp in integer seconds
+    line9 = f'{py} {px} 0 0 0 0 ' + '"' + ' ' * 9 + '"'
+    line10 = '0 0 0 0 0 0 0 0 0 0'
+    line11 = f'{int(high_phase_res)} 1 20 2 0 0 0 0 0'
+    line12 = '0 ' + '"' + ' ' * 12 + '"'
+    line13 = '1 0'
+    line14 = '"' + ' ' * 7 + '"'
+
+    header_lines = (line1, line2, line3, line4, line5, line6, line7, line8, line9, line10, line11, line12, line13, line14)
+    header = '\n'.join(header_lines) + '\n'
+
+    if intensity is None:
+        line15 = '#'
+
+    line16 = '#'
+
+
+    # process the phase and write out
+    coef = 0.5 / ZYGO_PHASE_RES_FACTORS[int(high_phase_res)]
+    encoded_phase = (phase / coef)
+    encoded_phase[m.isnan(encoded_phase)] = ZYGO_INVALID_PHASE
+    encoded_phase = m.flipud(encoded_phase.astype(m.int64))
+    #encoded_phase = m.rot90(encoded_phase)
+    encoded_phase = encoded_phase.flatten()
+    npts = encoded_phase.shape[0]
+    fits_by_ten = npts // 10
+    boundary = 10 * fits_by_ten
+
+    # create an in-memory buffer and write out the phase to it
+    s = StringIO()
+    s.write(header)
+    s.write('#\n#\n')
+    m.savetxt(s, encoded_phase[:boundary].reshape(-1, 10), fmt='%d', delimiter=' ', newline=' \n')
+    tail = ' '.join((str(d) for d in encoded_phase[boundary:]))
+    s.write(tail)
+    s.write('\n#\n')
+    s.seek(0)
+
+    if not isinstance(file, IOBase):
+        with open(file, 'w') as fd:
+            shutil.copyfileobj(s, fd)
+    else:
+        shutil.copyfileobj(s, fd)
+
