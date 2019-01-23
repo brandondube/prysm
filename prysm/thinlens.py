@@ -130,6 +130,23 @@ def object_dist_to_mag(efl, object_dist):
     object_dist = guarantee_array(object_dist)
     return efl / (efl - object_dist)
 
+def mag_to_object_dist(efl, mag):
+    """Compute the object distance for a given focal length and magnification.
+
+    Parameters
+    ----------
+    efl : `float`
+        focal length of the lens
+    mag : `float`
+        signed magnification
+
+    Returns
+    -------
+    `float`
+        object distance
+
+    """
+    return efl * ((1/mag) + 1)
 
 def linear_to_long_mag(lateral_mag):
     """Compute the longitudinal (along optical axis) magnification from the lateral mag.
@@ -170,7 +187,7 @@ def mag_to_fno(mag, infinite_fno, pupil_mag=1):
     return (1 + abs(mag) / pupil_mag) * infinite_fno
 
 
-def defocus_to_image_displacement(defocus, fno, wavelength, zernike=False, rms_norm=False):
+def defocus_to_image_displacement(defocus, fno, wavelength, zernike=False, norm=False):
     """Compute image displacment from wavefront defocus expressed in waves 0-P to.
 
     Parameters
@@ -183,7 +200,7 @@ def defocus_to_image_displacement(defocus, fno, wavelength, zernike=False, rms_n
         wavelength of light, expressed in micron
     zernike : `bool`
         zernike model of defocus (otherwise model is Seidel)
-    rms_norm : `bool`
+    norm : `bool`
         if zernike model, term is rms normalized
 
     Returns
@@ -196,13 +213,13 @@ def defocus_to_image_displacement(defocus, fno, wavelength, zernike=False, rms_n
 
     # if the defocus is a zernike, make it match Seidel notation for equation validity
     if zernike is True:
-        if rms_norm is True:
+        if norm is True:
             defocus = defocus * _defocus.norm  # not using *= on these to avoid side effects with in-place ops
         defocus = defocus * 2
     return 8 * fno**2 * wavelength * defocus
 
 
-def image_displacement_to_defocus(image_displacement, fno, wavelength, zernike=False, rms_norm=False):
+def image_displacement_to_defocus(image_displacement, fno, wavelength, zernike=False, norm=False):
     """Compute the wavefront defocus from image shift, expressed in the same units as the shift.
 
     Parameters
@@ -215,7 +232,7 @@ def image_displacement_to_defocus(image_displacement, fno, wavelength, zernike=F
         wavelength of light, expressed in microns
     zernike : `bool`
         return in Zernike notation
-    rms_norm : `bool`
+    norm : `bool`
         subset of zernike -- return rms normalized zernike
 
     Returns
@@ -227,7 +244,7 @@ def image_displacement_to_defocus(image_displacement, fno, wavelength, zernike=F
     image_displacement = guarantee_array(image_displacement)
     defocus = image_displacement / (8 * fno ** 2 * wavelength)
     if zernike is True:
-        if rms_norm is True:
+        if norm is True:
             return defocus / 2 / _defocus.norm
         else:
             return defocus / 2
