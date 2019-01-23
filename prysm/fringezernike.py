@@ -94,12 +94,14 @@ def fzset_to_magnitude_angle(coefs):
         else:
             combinations[name][0] = coef
 
-    # print(combinations)
     # now go over the combinations and compute the L2 norms and angles
     for name in combinations:
         ovals = combinations[name]
         magnitude = m.sqrt((ovals**2).sum())
-        phase = m.degrees(m.arctan2(*ovals))
+        if 'Spheric' in name or 'focus' in name or 'iston' in name:
+            phase = 0
+        else:
+            phase = m.degrees(m.arctan2(*ovals))
         values = (magnitude, phase)
         combinations[name] = values
 
