@@ -379,8 +379,8 @@ class Interferogram(OpticalPhase):
 
         return fig, ax
 
-    def plot_psd_xy_avg(self, a=None, b=None, c=None, lw=3,
-                       xlim=None, ylim=None, fig=None, ax=None):
+    def plot_psd_xy_avg(self, a=None, b=None, c=None, mode='freq',
+                        lw=3, zorder=3, xlim=None, ylim=None, fig=None, ax=None):
         """Plot the x, y, and average PSD on a linear x axis.
 
         Parameters
@@ -391,8 +391,12 @@ class Interferogram(OpticalPhase):
             b coefficient of Lorentzian PSD model plotted alongside data
         c : `float`, optional
             c coefficient of Lorentzian PSD model plotted alongside data
+        mode : `str`, {'freq', 'period'}
+            x-axis mode, either frequency or period
         lw : `float`, optional
             linewidth provided directly to matplotlib
+        zorder : `int`, optional
+            zorder provided directly to matplotlib
         xlim : `tuple`, optional
             len 2 tuple of low, high x axis limits
         ylim : `tuple`, optional
@@ -420,6 +424,13 @@ class Interferogram(OpticalPhase):
         y, py = xyavg['y']
         r, pr = xyavg['avg']
 
+        if mode != 'freq':
+            label = 'Period'
+            unit = 'mm'
+        else:
+            label = 'Frequency'
+            unit = f'cy/{self.spatial_unit}'
+
         fig, ax = share_fig_ax(fig, ax)
         ax.loglog(x, px, lw=lw, label='x', alpha=0.4)
         ax.loglog(y, py, lw=lw, label='y', alpha=0.4)
@@ -432,8 +443,15 @@ class Interferogram(OpticalPhase):
                 requirement = ab_psd(a=a, b=b, nu=r)
             ax.loglog(r, requirement, c='k', lw=lw*2)
 
+        if mode != 'freq':
+            from matplotlib import pyplot as plt
+            locs, labs = plt.xticks()
+            labs = [str(1/loc) if loc != 0 else str(loc) for loc in locs]
+            plt.xticks(locs, labs)
+            xlim = [1/x if x != 0 else x for x in xlim]
+
         ax.legend(title='Orientation')
-        ax.set(xlim=xlim, xlabel=f'Spatial Frequency [cy/{self.spatial_unit}]',
+        ax.set(xlim=xlim, xlabel=f'Spatial {label} [{unit}]',
                ylim=ylim, ylabel=r'PSD [nm$^2$/' + f'(cy/{self.spatial_unit})$^2$]')
 
         return fig, ax
