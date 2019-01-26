@@ -216,8 +216,8 @@ class PSF(Convolvable):
             cb.outline.set_edgecolor('k')
             cb.outline.set_linewidth(0.5)
         if show_axlabels:
-            ax.set(xlabel=r'Image Plane $x$ [$\mu m$]',
-                   ylabel=r'Image Plane $y$ [$\mu m$]')
+            ax.set(xlabel='Image Plane x [μm]',
+                   ylabel='Image Plane y [μm]')
 
         ax.set(xlim=(-axlim, axlim),
                ylim=(-axlim, axlim))
@@ -288,8 +288,8 @@ class PSF(Convolvable):
 
         fig, ax = share_fig_ax(fig, ax)
         ax.plot(xx, yy, lw=3)
-        ax.set(xlabel=r'Image Plane Distance [$\mu m$]',
-               ylabel=r'Encircled Energy [Rel 1.0]',
+        ax.set(xlabel='Image Plane Distance [μm]',
+               ylabel='Encircled Energy [Rel 1.0]',
                xlim=(0, axlim))
         return fig, ax
 

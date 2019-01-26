@@ -128,7 +128,7 @@ class Convolvable(object):
 
         ax.plot(ux, x, label='Slice X', lw=lw)
         ax.plot(uy, y, label='Slice Y', lw=lw)
-        ax.set(xlabel=r'Image Plane [$\mu m$]',
+        ax.set(xlabel=f'Image Plane [μm]',
                ylabel=label_str,
                xlim=(-axlim, axlim),
                ylim=lims)
