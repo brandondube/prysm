@@ -318,14 +318,9 @@ class Pupil(OpticalPhase):
 
         """
         if wvl is None:  # not user specified
-            wvl = interferogram.meta.get('Wavelength', None)
-            if wvl is None:  # not from a datx file
-                wvl = interferogram.meta.get('wavelength', None)
-            if wvl is None:
-                raise ValueError('wavelength must be give or carried in interferogram.meta')
-            wvl *= 1e6  # convert zygo meters to prysm microns
+            wvl = interferogram.wavelength
 
         return Pupil(wavelength=wvl, phase=interferogram.phase,
                      opd_unit=interferogram.phase_unit,
                      ux=interferogram.unit_x, uy=interferogram.unit_y,
-                     mask = ~(interferogram.phase == m.nan))
+                     mask=~(interferogram.phase == m.nan))
