@@ -154,7 +154,7 @@ class Interferogram(OpticalPhase):
         self.remove_power()
         return self
 
-    def mask(self, shape=None, diameter=0, mask=None):
+    def mask(self, shape_or_mask, diameter=None):
         """Mask the signal.
 
         The mask will be inscribed in the axis with fewer pixels.  I.e., for
@@ -163,7 +163,7 @@ class Interferogram(OpticalPhase):
 
         Parameters
         ----------
-        shape : `str`
+        shape_or_mask : `str` or `numpy.ndarray`
             valid shape from prysm.geometry
         diameter : `float`
             diameter of the mask, in self.spatial_units
@@ -176,11 +176,8 @@ class Interferogram(OpticalPhase):
             modified Interferogram instance.
 
         """
-        if shape is None and mask is None:
-            raise ValueError('must provide either a shape or a mask')
-
-        if mask is None:
-            mask = mcache(shape, min(self.shape), radius=diameter / min(self.diameter_x, self.diameter_y))
+        if isinstance(shape_or_mask, str):
+            mask = mcache(shape_or_mask, min(self.shape), radius=diameter / min(self.diameter_x, self.diameter_y))
             base = m.zeros(self.shape, dtype=config.precision)
             difference = abs(self.shape[0] - self.shape[1])
             l, u = int(m.floor(difference / 2)), int(m.ceil(difference / 2))
@@ -194,6 +191,8 @@ class Interferogram(OpticalPhase):
                 base[_slice, :] = mask
 
             mask = base
+        else:
+            mask = shape_or_mask
 
         hitpts = mask == 0
         self.phase[hitpts] = m.nan
