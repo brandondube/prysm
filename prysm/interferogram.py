@@ -50,7 +50,7 @@ class Interferogram(OpticalPhase):
     @property
     def dropout_percentage(self):
         """Percentage of pixels in the data that are invalid (NaN)."""
-        return m.count_nonzero(~m.isfinite(self.phase)) / self.phase.size * 100
+        return m.count_nonzero(m.isnan(self.phase)) / self.phase.size * 100
 
     @property
     def pvr(self):
@@ -85,7 +85,7 @@ class Interferogram(OpticalPhase):
             self
 
         """
-        nans = ~m.isfinite(self.phase)
+        nans = m.isnan(self.phase)
         self.phase[nans] = _with
         return self
 
@@ -372,7 +372,7 @@ class Interferogram(OpticalPhase):
                ylim=lims, ylabel=r'$\nu_y$' + f' [cy/{self.spatial_unit}]')
 
         cb = fig.colorbar(im,
-                          label='PSD [' + self.phase_unit + r'$^2$' + f'/(cy/{self.spatial_unit})]',
+                          label='PSD [' + self.phase_unit + r'$^2$' + f'/(cy/{self.spatial_unit})' + r'$^2$]',
                           ax=ax, fraction=0.046, extend='both')
         cb.outline.set_edgecolor('k')
         cb.outline.set_linewidth(0.5)
