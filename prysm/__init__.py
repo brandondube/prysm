@@ -1,4 +1,6 @@
 """prysm, a python optics module."""
+from pkg_resources import get_distribution
+
 
 from prysm.conf import config
 from prysm.convolution import Convolvable
@@ -75,3 +77,5 @@ __all__ = [
     'circle',
     'truecircle',
 ]
+
+__version__ = get_distribution('prysm')
