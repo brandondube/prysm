@@ -254,6 +254,39 @@ class Interferogram(OpticalPhase):
         """
         return psd(self.phase, self.sample_spacing)
 
+    def psd_slices(self, x=True, y=True, azavg=True, azmin=False, azmax=False):
+        """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
+
+        Returns
+        -------
+        `dict`
+            with keys x, y, avg.  Each containing a tuple of (unit, psd)
+
+        """
+        xx, yy, _psd = self.psd()
+        lx, ly = len(xx)//2, len(yy)//2
+
+        out = {}
+        if x:
+            out['x'] = (xx[lx:], _psd[ly, lx:])
+
+        if y:
+            out['y'] = (yy[ly:], _psd[ly:, lx])
+
+        if azavg or azmin or azmax:
+            rho, phi, _psdrp = uniform_cart_to_polar(xx, yy, _psd)
+
+        if azavg:
+            out['azavg'] = (rho, _psdrp.mean(axis=0))
+
+        if azmin:
+            out['azmin'] = (rho, _psdrp.min(axis=0))
+
+        if azmax:
+            out['azmax'] = (rho, _psdrp.max(axis=0))
+
+        return out
+
     def bandlimited_rms(self, wllow=None, wlhigh=None, flow=None, fhigh=None):
         """Calculate the bandlimited RMS of a signal from its PSD.
 
@@ -303,41 +336,6 @@ class Interferogram(OpticalPhase):
         kernel = 4 * m.pi * m.cos(m.radians(incident_angle))
         kernel *= self.bandlimited_rms(upper_limit, None) / wavelength
         return 1 - m.exp(-kernel**2)
-
-    def psd_slices(self, x=True, y=True, azavg=True, azmin=False, azmax=False):
-        """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
-
-        Returns
-        -------
-        `dict`
-            with keys x, y, avg.  Each containing a tuple of (unit, psd)
-
-        """
-        x, y, _psd = self.psd()
-        lx, ly = len(x)//2, len(y)//2
-
-        rho, phi, _psdrp = uniform_cart_to_polar(x, y, _psd)
-
-        out = {}
-        if x:
-            out['x'] = (x[lx:], _psd[ly, lx:])
-
-        if y:
-            out['y'] = (y[ly:], _psd[ly:, lx])
-
-        if azavg or azmin or azmax:
-            rho, phi, _psdrp = uniform_cart_to_polar(x, y, _psd)
-
-        if azavg:
-            out['azavg'] = (rho, _psdrp.mean(axis=0))
-
-        if azmin:
-            out['azmin'] = (rho, _psdrp.min(axis=0))
-
-        if azmax:
-            out['azmax'] = (rho, _psdrp.max(axis=0))
-
-        return out
 
     def plot_psd2d(self, axlim=None, clim=(1e-9, 1e2), interp_method='lanczos', fig=None, ax=None):
         """Plot the two dimensional PSD.
@@ -391,12 +389,23 @@ class Interferogram(OpticalPhase):
 
         return fig, ax
 
-    def plot_psd_xy_avg(self, a=None, b=None, c=None, mode='freq',
+    def plot_psd_slices(self, x=True, y=True, azavg=True, azmin=False, azmax=False,
+                        a=None, b=None, c=None, mode='freq', alpha=1, legend=True,
                         lw=3, zorder=3, xlim=None, ylim=None, fig=None, ax=None):
         """Plot the x, y, and average PSD on a linear x axis.
 
         Parameters
         ----------
+        x : `bool`, optional
+            whether to plot the "x" PSD
+        y : `bool`, optional
+            whether to plot the "y" PSD
+        azavg: `bool`, optional
+            whether to plot the azimuthally averaged PSD
+        azmin : `bool`, optional
+            whether to plot the azimuthal minimum PSD
+        azmax : `bool`, optional
+            whether to plot the azimuthal maximum PSD
         a : `float`, optional
             a coefficient of Lorentzian PSD model plotted alongside data
         b : `float`, optional
@@ -405,6 +414,10 @@ class Interferogram(OpticalPhase):
             c coefficient of Lorentzian PSD model plotted alongside data
         mode : `str`, {'freq', 'period'}
             x-axis mode, either frequency or period
+        alpha : `float`, optional
+            alpha value for the line(s), passed directly to matplotlib
+        legend : `bool`, optional
+            if True, display the legend
         lw : `float`, optional
             linewidth provided directly to matplotlib
         zorder : `int`, optional
@@ -431,10 +444,7 @@ class Interferogram(OpticalPhase):
         If a, b, c are given the Lorentzian model will be used.
 
         """
-        xyavg = self.psd_xy_avg()
-        x, px = xyavg['x']
-        y, py = xyavg['y']
-        r, pr = xyavg['avg']
+        data = self.psd_slices(x=x, y=y, azavg=azavg, azmin=azmin, azmax=azmax)
 
         if mode != 'freq':
             label = 'Period'
@@ -444,9 +454,8 @@ class Interferogram(OpticalPhase):
             unit = f'cy/{self.spatial_unit}'
 
         fig, ax = share_fig_ax(fig, ax)
-        ax.loglog(x, px, lw=lw, label='x', alpha=0.4)
-        ax.loglog(y, py, lw=lw, label='y', alpha=0.4)
-        ax.loglog(r, pr, lw=lw*1.5, label='avg')
+        for dat in data:
+            ax.loglog(*data[dat], lw=lw, label=dat, alpha=alpha)
 
         if a is not None:
             if c is not None:
@@ -462,7 +471,9 @@ class Interferogram(OpticalPhase):
             plt.xticks(locs, labs)
             xlim = [1/x if x != 0 else x for x in xlim]
 
-        ax.legend(title='Orientation')
+        if legend:
+            ax.legend(title='Slice')
+
         ax.set(xlim=xlim, xlabel=f'Spatial {label} [{unit}]',
                ylim=ylim, ylabel=r'PSD [nm$^2$/' + f'(cy/{self.spatial_unit})$^2$]')
 
