@@ -445,6 +445,11 @@ class Interferogram(OpticalPhase):
 
         """
         data = self.psd_slices(x=x, y=y, azavg=azavg, azmin=azmin, azmax=azmax)
+        keys = list(data.keys())
+        # keys 0 => first item
+        # second 0 => first item in tuple of (unit, value)
+        # 1: => skip the 0 frequency bin
+        r = data[keys[0]][0][1:]
 
         if mode != 'freq':
             label = 'Period'
