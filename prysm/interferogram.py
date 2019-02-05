@@ -7,7 +7,6 @@ from ._zernike import defocus
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar, uniform_cart_to_polar
-from .propagation import prop_pupil_plane_to_psf_plane
 from .util import share_fig_ax
 from .geometry import mcache
 
@@ -58,7 +57,6 @@ class Interferogram(OpticalPhase):
 
         Notes
         -----
-
         See:
         C. Evans, "Robust Estimation of PV for Optical Surface Specification and Testing"
         in Optical Fabrication and Testing, OSA Technical Digest (CD)
@@ -105,7 +103,7 @@ class Interferogram(OpticalPhase):
         if left == 0:
             lr = slice(-right)
         elif right == 0:
-            lr = slice(left,self.phase.shape[0])
+            lr = slice(left, self.phase.shape[0])
         else:
             lr = slice(left, -right)
 
@@ -306,7 +304,7 @@ class Interferogram(OpticalPhase):
         kernel *= self.bandlimited_rms(upper_limit, None) / wavelength
         return 1 - m.exp(-kernel**2)
 
-    def psd_xy_avg(self):
+    def psd_slices(self, x=True, y=True, azavg=True, azmin=False, azmax=False):
         """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
 
         Returns
@@ -320,11 +318,26 @@ class Interferogram(OpticalPhase):
 
         rho, phi, _psdrp = uniform_cart_to_polar(x, y, _psd)
 
-        return {
-            'x': (x[lx:], _psd[ly, lx:]),
-            'y': (y[ly:], _psd[ly:, lx]),
-            'avg': (rho, _psdrp.mean(axis=0)),
-        }
+        out = {}
+        if x:
+            out['x'] = (x[lx:], _psd[ly, lx:])
+
+        if y:
+            out['y'] = (y[ly:], _psd[ly:, lx])
+
+        if azavg or azmin or azmax:
+            rho, phi, _psdrp = uniform_cart_to_polar(x, y, _psd)
+
+        if azavg:
+            out['azavg'] = (rho, _psdrp.mean(axis=0))
+
+        if azmin:
+            out['azmin'] = (rho, _psdrp.min(axis=0))
+
+        if azmax:
+            out['azmax'] = (rho, _psdrp.max(axis=0))
+
+        return out
 
     def plot_psd2d(self, axlim=None, clim=(1e-9, 1e2), interp_method='lanczos', fig=None, ax=None):
         """Plot the two dimensional PSD.
@@ -456,7 +469,7 @@ class Interferogram(OpticalPhase):
         return fig, ax
 
     def save_zygo_ascii(self, file, high_phase_res=True):
-        """Save out the interferogram to a Zygo ASCII file.
+        """Save the interferogram to a Zygo ASCII file.
 
         Parameters
         ----------
@@ -540,7 +553,7 @@ def fit_sphere(z):
 
 
 def make_window(signal, sample_spacing, which='welch'):
-    """Generates a window function to be used in PSD analysis.
+    """Generate a window function to be used in PSD analysis.
 
     Parameters
     ----------
@@ -757,7 +770,7 @@ def abc_psd(nu, a, b, c):
 
 
 def ab_psd(nu, a, b):
-    """inverse power model of a Power Spectral Density.
+    """Inverse power model of a Power Spectral Density.
 
     Parameters
     ----------
