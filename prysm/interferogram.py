@@ -544,13 +544,17 @@ class Interferogram(OpticalPhase):
 
 
 def fit_plane(x, y, z):
-    xx, yy = m.meshgrid(x, y)
     pts = m.isfinite(z)
-    xx_, yy_ = xx[pts].flatten(), yy[pts].flatten()
-    flat = m.ones(xx_.shape)
+    if len(z.shape) > 1:
+        x, y = m.meshgrid(x, y)
+        xx, yy = x[pts].flatten(), y[pts].flatten()
+    else:
+        xx, yy = x, y
 
-    coefs = m.lstsq(m.stack([xx_, yy_, flat]).T, z[pts].flatten(), rcond=None)[0]
-    plane_fit = coefs[0] * xx + coefs[1] * yy + coefs[2]
+    flat = m.ones(xx.shape)
+
+    coefs = m.lstsq(m.stack([xx, yy, flat]).T, z[pts].flatten(), rcond=None)[0]
+    plane_fit = coefs[0] * x + coefs[1] * y + coefs[2]
     return plane_fit
 
 
