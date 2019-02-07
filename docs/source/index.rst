@@ -121,3 +121,13 @@ User's Guide
    :glob:
 
    user_guide/*
+
+
+Examples
+--------
+
+.. toctree::
+    :maxdepth: 1
+    :glob:
+
+    examples/*
