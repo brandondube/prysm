@@ -2,7 +2,6 @@
 
 from prysm.conf import config
 from prysm.convolution import Convolvable
-from prysm.extras import plot_fourier_chain
 from prysm.detector import Detector, OLPF, PixelAperture
 from prysm.pupil import Pupil
 from prysm.fringezernike import FringeZernike
@@ -38,9 +37,10 @@ from prysm.objects import (
 
 from prysm.lens import Lens
 
+from prysm.sample_data import sample_files
+
 __all__ = [
     'config',
-    'plot_fourier_chain',
     'Detector',
     'OLPF',
     'PixelAperture',
@@ -74,4 +74,5 @@ __all__ = [
     'Convolvable',
     'circle',
     'truecircle',
+    'sample_files',
 ]
