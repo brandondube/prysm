@@ -63,7 +63,7 @@ def test_fringezernike_rejects_base_not_0_or_1():
 
 def test_fringezernike_takes_all_named_args():
     params = {
-        'rms_norm': True,
+        'norm': True,
         'base': 1,
     }
     p = fringezernike.FringeZernike(**params)

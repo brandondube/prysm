@@ -23,7 +23,7 @@ TEST_PARAMETERS = [
 def test_diffprop_matches_airydisk(efl, epd, wvl):
     fno = efl / epd
 
-    p = Pupil(wavelength=wvl, epd=epd)
+    p = Pupil(wavelength=wvl, dia=epd)
     psf = PSF.from_pupil(p, efl, Q=3)  # use Q=3 not Q=4 for improved accuracy
     u, sx = psf.slice_x
     u, sy = psf.slice_y
@@ -36,7 +36,7 @@ def test_diffprop_matches_airydisk(efl, epd, wvl):
 @pytest.mark.parametrize('efl, epd, wvl', TEST_PARAMETERS)
 def test_diffprop_matches_analyticmtf(efl, epd, wvl):
     fno = efl / epd
-    p = Pupil(wavelength=wvl, epd=epd)
+    p = Pupil(wavelength=wvl, dia=epd)
     psf = PSF.from_pupil(p, efl)
     mtf = MTF.from_psf(psf)
     u, t = mtf.tan

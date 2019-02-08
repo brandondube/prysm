@@ -20,7 +20,7 @@ def p_tlt():
 def test_create_pupil():
     p = Pupil()
     assert hasattr(p, 'wavelength')
-    assert hasattr(p, 'epd')
+    assert hasattr(p, 'diameter')
     assert hasattr(p, 'sample_spacing')
     assert hasattr(p, 'samples')
     assert hasattr(p, 'phase_unit')
@@ -38,7 +38,7 @@ def test_create_pupil():
 def test_pupil_passes_valid_params():
     parameters = {
         'samples': 16,
-        'epd': 128.2,
+        'dia': 128.2,
         'wavelength': 0.6328,
         'opd_unit': 'nm'}
     p = Pupil(**parameters)

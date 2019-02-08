@@ -80,7 +80,7 @@ def test_defocus_to_image_displacement_all_cases():
     fno, wvl = 4, 0.55
     result_nonzern = thinlens.defocus_to_image_displacement(defocus, fno, wvl, zernike=False)
     result_zern = thinlens.defocus_to_image_displacement(defocus, fno, wvl, zernike=True)
-    result_zern_rms = thinlens.defocus_to_image_displacement(defocus, fno, wvl, zernike=True, rms_norm=True)
+    result_zern_rms = thinlens.defocus_to_image_displacement(defocus, fno, wvl, zernike=True, norm=True)
 
     assert result_nonzern.all()
     assert ~np.allclose(result_nonzern, result_zern)
