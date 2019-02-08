@@ -2,9 +2,7 @@ language: python
 python:
   - "3.6"
 install:
-  - pip install .
-  - pip install -r requirements.txt
-  - pip install -q pytest pytest-cov coveralls
+  - pip install -q pytest pytest-cov coveralls numpy scipy matplotlib imageio
 cache: pip
 before_script:
   - "export DISPLAY=:99.0"
