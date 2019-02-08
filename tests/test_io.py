@@ -1,22 +1,17 @@
-''' Tests the io functions of prysm.
-'''
-from pathlib import Path
-
+"""Tests the io functions of prysm."""
 import numpy as np
 
-from prysm import io
-
-data_root = Path(__file__).parent / 'io_files'
+from prysm import io, sample_files
 
 
 def test_read_mtfvfvf_functions():
-    p = data_root / 'valid_sample_MTFvFvF_Sag.txt'
+    p = sample_files('mtfvfvf')
     result = io.read_trioptics_mtfvfvf(p)
     assert result
 
 
 def test_read_mtf_vs_field():
-    p = data_root / 'valid_sample_trioptics_mtf_vs_field.mht'
+    p = sample_files('mtfvf')
     result = io.read_trioptics_mtf_vs_field(p)
     assert 'sag' in result
     assert 'tan' in result
@@ -30,7 +25,7 @@ def test_read_mtf_vs_field():
 
 
 def test_read_zygodat():
-    p = data_root / 'valid_zygo_dat_file.dat'
+    p = sample_files('dat')
     result = io.read_zygo_dat(p)
     assert 'phase' in result
     assert 'intensity' in result

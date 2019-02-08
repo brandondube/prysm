@@ -43,7 +43,7 @@ def test_pupil_passes_valid_params():
         'opd_unit': 'nm'}
     p = Pupil(**parameters)
     assert p.samples == parameters['samples']
-    assert p.epd == parameters['epd']
+    assert p.dia == parameters['dia']
     assert p.wavelength == parameters['wavelength']
     assert p.phase_unit == 'nm'
 
