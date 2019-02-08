@@ -3,6 +3,7 @@ python:
   - "3.6"
 install:
   - pip install -q --force-reinstall pytest==4.1.1 pytest-cov==2.6.1 coveralls numpy scipy matplotlib imageio
+  - python setup.py install
 cache: pip
 before_script:
   - "export DISPLAY=:99.0"
