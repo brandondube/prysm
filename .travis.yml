@@ -2,7 +2,7 @@ language: python
 python:
   - "3.6"
 install:
-  - pip install -q pytest pytest-cov coveralls numpy scipy matplotlib imageio
+  - pip install -q --force-reinstall pytest==4.1.1 pytest-cov==2.6.1 coveralls numpy scipy matplotlib imageio
 cache: pip
 before_script:
   - "export DISPLAY=:99.0"
