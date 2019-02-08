@@ -1,8 +1,9 @@
 """Sample data for prysm tests and documentation."""
+import shutil
 from pathlib import Path
-from urllib.request import urlretrieve
+from urllib.request import urlopen
 
-baseremote = Path(r'https://github.com/brandondube/prysm/sampledata')
+baseremote = r'https://github.com/brandondube/prysm/raw/master/sample_files/'
 baselocal = Path(__file__)
 root = baselocal.parent / 'sampledata'
 root.mkdir(exist_ok=True)
@@ -19,11 +20,13 @@ class SampleFiles:
         dtype = dtype.lower()
         if hasattr(self, dtype):
             filename = getattr(self, dtype)
-            path_ = (root / getattr(self, dtype)).absolute()
-            if not path_.exists():
-                urlretrieve(baseremote / filename, path_)
+            local = (root / getattr(self, dtype)).absolute()
+            remote = baseremote + filename
+            if not local.exists():
+                with urlopen(remote) as response, open(local, 'wb') as fid:
+                    shutil.copyfileobj(response, fid)
 
-            return path_.absolute()
+            return local
 
         else:
             raise ValueError('invalid sample filetype requested.')
