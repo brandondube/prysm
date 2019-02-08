@@ -79,4 +79,4 @@ __all__ = [
     'sample_files',
 ]
 
-__version__ = get_distribution('prysm')
+__version__ = get_distribution('prysm').version
