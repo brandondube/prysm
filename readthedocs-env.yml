@@ -9,5 +9,7 @@ dependencies:
   - numpy
   - scipy
   - matplotlib
+  - pandas
+  - imageio
   - pip:
     - .
