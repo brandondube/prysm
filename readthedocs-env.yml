@@ -6,6 +6,7 @@ dependencies:
   - pandoc
   - nbconvert
   - ipykernel
+  - nbsphinx
   - numpy
   - scipy
   - matplotlib
