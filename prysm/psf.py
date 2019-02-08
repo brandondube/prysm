@@ -345,15 +345,6 @@ class PSF(Convolvable):
         ux, uy = prop_pupil_plane_to_psf_plane_units(fcn, ss, efl, wvl, Q)
         psf = PSF(data, ux, uy)
 
-        # determine the F/#, assumes:
-        # - pupil fills x or y width of array
-        # - pupil is not elliptical at an odd angle
-        s = fcn.shape
-        if s[1] > s[0]:
-            u = pupil.unit_x
-        else:
-            u = pupil.unit_y
-
         psf.fno = efl / pupil.diameter
         psf.wavelength = wvl
         return psf

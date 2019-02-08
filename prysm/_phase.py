@@ -190,6 +190,11 @@ class OpticalPhase(object):
         return self.phase.shape
 
     @property
+    def size(self):
+        """Proxy to self.phase.size."""
+        return self.phase.size
+
+    @property
     def diameter_x(self):
         """Diameter of the data in x."""
         return self.unit_x[-1] - self.unit_x[0]
