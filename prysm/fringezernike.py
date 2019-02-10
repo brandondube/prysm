@@ -71,7 +71,6 @@ def fzname(idx, base=1):
 
 def fzset_to_magnitude_angle(coefs):
     """Convert Fringe Zernike polynomial set to a magnitude and phase representation."""
-
     def mkary():  # default for defaultdict
         return m.zeros(2)
 
@@ -199,13 +198,37 @@ class FringeZernike(Pupil):
 
         return self
 
+    def top_n(self, n=5):
+        """Identify the top n terms in the wavefront.
+
+        Parameters
+        ----------
+        n : `int`, optional
+            identify the top n terms.
+
+        Returns
+        -------
+        `list`
+            list of tuples (magnitude, index, term)
+
+        """
+        coefs = m.asarray(self.coefs)
+        coefs_work = abs(coefs)
+        oidxs = m.arange(len(coefs)) + self.base  # "original indexes"
+        idxs = m.argpartition(coefs_work, -n)[-n:]  # argpartition does some magic to identify the top n (unsorted)
+        idxs = idxs[m.argsort(coefs_work[idxs])[::-1]]  # use argsort to sort them in ascending order and reverse
+        big_terms = coefs[idxs]  # finally, take the values from the
+        big_idxs = oidxs[idxs]
+        names = [fzname(i, base=self.base) for i in big_idxs]
+        return list(zip(big_terms, big_idxs, names))
+
     @property
     def magnitudes(self):
-        """Returns the magnitude and angles of the zernike components in this wavefront."""
+        """Return the magnitude and angles of the zernike components in this wavefront."""
         return fzset_to_magnitude_angle(self.coefs)
 
     def barplot(self, orientation='h', buffer=1, zorder=3, fig=None, ax=None):
-        """Creates a barplot of coefficients and their names.
+        """Create a barplot of coefficients and their names.
 
         Parameters
         ----------
@@ -233,7 +256,7 @@ class FringeZernike(Pupil):
 
         coefs = m.asarray(self.coefs)
         idxs = m.asarray(range(len(coefs))) + self.base
-        names = [fzname(i) for i in (idxs - self.base)]
+        names = [fzname(i, base=self.base) for i in idxs]
         lab = f'{self.zaxis_label} [{self.phase_unit}]'
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         if orientation.lower() in ('h', 'horizontal'):
@@ -305,30 +328,6 @@ class FringeZernike(Pupil):
             plt.yticks(idxs, names)
             ax.set(xlabel=lab, ylim=lims)
         return fig, ax
-
-    def top_n(self, n=5):
-        """Identify the top n terms in the wavefront.
-
-        Parameters
-        ----------
-        n : `int`, optional
-            identify the top n terms.
-
-        Returns
-        -------
-        `list`
-            list of tuples (magnitude, index, term)
-
-        """
-        coefs = m.asarray(self.coefs)
-        coefs_work = abs(coefs)
-        oidxs = m.arange(len(coefs)) + self.base  # "original indexes"
-        idxs = m.argpartition(coefs_work, -n)[-n:]  # argpartition does some magic to identify the top n (unsorted)
-        idxs = idxs[m.argsort(coefs_work[idxs])[::-1]]  # use argsort to sort them in ascending order and reverse
-        big_terms = coefs[idxs]  # finally, take the values from the
-        big_idxs = oidxs[idxs]
-        names = [fzname(i) for i in idxs]
-        return list(zip(big_terms, big_idxs, names))
 
     def barplot_topn(self, n=5, orientation='h', buffer=1, zorder=3, fig=None, ax=None):
         """Plot the top n terms in the wavefront.
