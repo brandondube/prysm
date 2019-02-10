@@ -35,7 +35,7 @@ class SampleFiles:
 
         else:
             local = root / dtype_or_filename
-            remote = baseremote + filename
+            remote = baseremote + dtype_or_filename
             return fetch_if_not_present(local, remote)
 
 
