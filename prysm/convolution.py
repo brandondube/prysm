@@ -236,6 +236,11 @@ class Convolvable(object):
             result /= result.max()
         return Convolvable(result, self.unit_x, self.unit_y, False)
 
+    def renorm(self):
+        """Renormalize so that the peak is at a value of unity."""
+        self.data /= self.data.max()
+        return self
+
     def show(self, xlim=None, ylim=None, interp_method=None, power=1, show_colorbar=True, fig=None, ax=None):
         '''Display the image.
 
