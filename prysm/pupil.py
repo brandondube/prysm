@@ -12,56 +12,7 @@ from prysm import mathops as m
 
 
 class Pupil(OpticalPhase):
-    """Pupil of an optical system.
-
-    Properties
-    ----------
-    slice_x: `numpy.ndarray`
-        slice through the x axis of the pupil.  Returns (x,y) data where x is
-        the sample coordinate and y is the phase.
-    slice_y: `numpy.ndarray`
-        slice through the y axis of the pupil.  Returns (x,y) data where x is
-        the sample coordinate and y is the phase.
-    pv: `float`
-        Peak-To-Valley wavefront error.
-    rms: `float`
-        Root Mean Square wavefront error.
-    Sa: `float`
-        Sa wavefront error.
-
-    Notes
-    -----
-    subclasses should implement a build() method and their own way of
-    expressing OPD.
-
-    Attributes
-    ----------
-    center : `int`
-        index of the center sample, may be sheared by 1/2 for even sample counts
-    dia : `float`
-        entrance pupil diameter, mm
-    fcn : `numpy.ndarray`
-        wavefunction, complex 2D array
-    opd_unit : `str`
-        unit used to m.express phase errors
-    phase : `numpy.ndarray`
-        phase, real 2D array
-    rho : `numpy.ndarray`
-        radial ordinate axis, normalized units
-    sample_spacing : `float`
-        spacing of samples, mm
-    samples : `int`
-        number of samples across the pupil diameter
-    unit : `numpy.ndarray`
-        1D array which gives the sample locations across the 2D pupil region
-    wavelength : `float`
-        wavelength of light, um
-    _mask : `numpy.ndarray`
-        mask used to define pupil extent and amplitude
-    mask_target : `str`
-        target for automatic masking on pupil creation
-
-    """
+    """Pupil of an optical system."""
     def __init__(self, samples=128, dia=1.0, wavelength=0.55, opd_unit='waves',
                  mask='circle', mask_target='both', ux=None, uy=None, phase=None):
         """Create a new `Pupil` instance.

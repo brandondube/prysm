@@ -16,6 +16,7 @@ from prysm import mathops as m
 
 class Interferogram(OpticalPhase):
     """Class containing logic and data for working with interferometric data."""
+
     def __init__(self, phase, intensity=None, x=None, y=None, scale='px', phase_unit='nm', meta=None):
         if x is None:  # assume x, y given together
             x = m.arange(phase.shape[1])

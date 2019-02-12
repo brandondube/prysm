@@ -2,29 +2,17 @@
 """
 
 from prysm import mathops as m
+from ._basicdata import BasicData
 from .coordinates import resample_2d_complex
 from .conf import config
 from .fttools import forward_ft_unit, pad2d
 from .util import share_fig_ax
 
 
-class Convolvable(object):
-    """A base class for convolvable objects to inherit from.
+class Convolvable(BasicData):
+    """A base class for convolvable objects to inherit from."""
+    _data_attr = 'data'
 
-    Attributes
-    ----------
-    data : `numpy.ndarray`
-        numerical representation of object
-    has_analytic_ft : `bool`
-        whether this convolvable has an analytical Fourier transform
-    sample_spacing : `float`
-        center to center spacing of samples
-    unit_x : `numpy.ndarray`
-        x-axis unit
-    unit_y : `numpy.ndarray`
-        y-axis unit
-
-    """
     def __init__(self, data, unit_x, unit_y, has_analytic_ft=False):
         """Create a new Convolvable object.
 
@@ -45,55 +33,20 @@ class Convolvable(object):
         self.unit_x = unit_x
         self.unit_y = unit_y
         self.has_analytic_ft = has_analytic_ft
-        if data is not None:
-            self.samples_y, self.samples_x = data.shape
-            self.center_y, self.center_x = int(m.ceil(self.samples_y / 2)), int(m.ceil(self.samples_x / 2))
-            self.sample_spacing = unit_x[1] - unit_x[0]
-        else:
-            self.sample_spacing = 1e99
-
-    @property
-    def slice_x(self):
-        """Retrieve a slice through the x axis of the PSF.
-
-        Returns
-        -------
-        self.unit_x : `numpy.ndarray`
-            ordinate data
-        self.data : `numpy.ndarray`
-            coordinate data
-
-        """
-        return self.unit_x, self.data[self.center_y, :]
-
-    @property
-    def slice_y(self):
-        """Retrieve a slice through the y axis of the PSF.
-
-        Returns
-        -------
-        self.unit_y : `numpy.ndarray`
-            ordinate data
-        self.data : `numpy.ndarray`
-            coordinate data
-
-        """
-        return self.unit_y, self.data[:, self.center_x]
-
-    @property
-    def shape(self):
-        return self.data.shape
 
     @property
     def support_x(self):
+        """Width of the domain in X."""
         return self.unit_x[-1] - self.unit_x[0]
 
     @property
     def support_y(self):
+        """Width of the domain in Y."""
         return self.unit_y[-1] - self.unit_x[0]
 
     @property
     def support(self):
+        """Width of the domain."""
         return max((self.support_x, self.support_y))
 
     def plot_slice_xy(self, axlim=20, lw=3, fig=None, ax=None):
@@ -227,6 +180,7 @@ class Convolvable(object):
         -----
         See skimage:
         http://scikit-image.org/docs/dev/api/skimage.restoration.html#skimage.restoration.wiener
+
         """
         from skimage.restoration import wiener
 

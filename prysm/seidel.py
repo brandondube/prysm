@@ -9,22 +9,7 @@ from prysm import mathops as m
 
 
 class Seidel(Pupil):
-    """Seidel pupil description.
-
-    Attributes
-    ----------
-    coefs : `list`
-        list of coefficient values
-    eqns : `list`
-        list of Wxxx expressions
-    field : `int`
-        field point associated with this pupil
-    phase : `numpy.ndarray`
-        phase errors of this pupil
-    fcn : `numpy.ndarray`
-        wavefunction of this pupil
-
-    """
+    """Seidel pupil description."""
 
     def __init__(self, *args, **kwargs):
         """Create a new Seidel instance.

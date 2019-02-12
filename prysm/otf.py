@@ -1,6 +1,7 @@
 """A base optical transfer function interface."""
 from scipy import interpolate
 
+from ._basicdata import BasicData
 from .psf import PSF
 from .fttools import forward_ft_unit
 from .util import share_fig_ax
@@ -9,35 +10,10 @@ from .coordinates import polar_to_cart, uniform_cart_to_polar
 from prysm import mathops as m
 
 
-class MTF(object):
-    """Modulation Transfer Function.
+class MTF(BasicData):
+    """Modulation Transfer Function."""
+    _data_attr = 'data'
 
-    Properties
-    ----------
-    tan: slice along the X axis of the MTF object.
-
-    sag: slice along the Y axis of the MTF object.
-
-    Attributes
-    ----------
-    center_x : `int`
-        x center pixel location (MTF == 1 here by definition)
-    center_y : `int`
-        y center pixel location (MTF == 1 here by definition)
-    data : `numpy.ndarray`
-        MTF data array, 2D
-    interpf_2d : `scipy.interpolate.RegularGridInterpolator`
-        2D interpolation function used to compute exact values of the 2D MTF
-    interpf_sag : `scipy.interpolate.interp1d`
-        1D interpolation function used to compute exact values of the sagittal MTF
-    interpf_tan : `scipy.interpolate.interp1d`
-        1D interpolation function used to compute exact values of the tangential MTF
-    unit_x : `numpy.ndarray`
-        ordinate x coordinates
-    unit_y : TYPE
-        ordinate y coordinates
-
-    """
     def __init__(self, data, unit_x, unit_y=None):
         """Create an MTF object.
 
@@ -56,9 +32,6 @@ class MTF(object):
         self.data = data
         self.unit_x = unit_x
         self.unit_y = unit_y
-        self.samples_y, self.samples_x = data.shape
-        self.center_x = self.samples_x // 2
-        self.center_y = self.samples_y // 2
 
         self.interpf_2d = None
         self.interpf_tan = None
@@ -83,7 +56,7 @@ class MTF(object):
             coordiante
 
         """
-        return self.unit_x[self.center_x:], self.data[self.center_y:, self.center_x]
+        return self.slice_x
 
     @property
     def sag(self):
@@ -102,7 +75,7 @@ class MTF(object):
             coordiante
 
         """
-        return self.unit_y[self.center_y:], self.data[self.center_y, self.center_x:]
+        return self.slice_y
 
     def exact_polar(self, freqs, azimuths=None):
         """Retrieve the MTF at the specified frequency-azimuth pairs.

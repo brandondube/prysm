@@ -1,11 +1,14 @@
 """phase basics."""
 
+from ._basicdata import BasicData
 from .util import share_fig_ax, pv, rms, Sa, std
 
 from prysm import mathops as m
 
 
-class OpticalPhase(object):
+class OpticalPhase(BasicData):
+    """Phase of an optical field."""
+    _data_attr = 'phase'
     units = {
         'm': 'm',
         'meter': 'm',
@@ -114,6 +117,7 @@ class OpticalPhase(object):
 
     @property
     def phase_unit(self):
+        """Unit used to describe the optical phase."""
         return self._phase_unit
 
     @phase_unit.setter
@@ -128,6 +132,7 @@ class OpticalPhase(object):
 
     @property
     def spatial_unit(self):
+        """Unit used to describe the spatial phase."""
         return self._spatial_unit
 
     @spatial_unit.setter
@@ -139,60 +144,24 @@ class OpticalPhase(object):
         self._spatial_unit = self.units[unit]
 
     @property
-    def slice_x(self):
-        """Retrieve a slice through the X axis of the phase.
-
-        Returns
-        -------
-        self.unit : `numpy.ndarray`
-            ordinate axis
-        slice of self.phase : `numpy.ndarray`
-
-        """
-        return self.unit_x, self.phase[self.center_y, :]
-
-    @property
-    def slice_y(self):
-        """Retrieve a slice through the Y axis of the phase.
-
-        Returns
-        -------
-        self.unit : `numpy.ndarray`
-            ordinate axis
-        slice of self.phase : `numpy.ndarray`
-
-        """
-        return self.unit_y, self.phase[:, self.center_x]
-
-    @property
     def pv(self):
-        """Peak-to-Valley phase error.  DIN/ISO 'St.'"""
+        """Peak-to-Valley phase error.  DIN/ISO St."""
         return pv(self.phase)
 
     @property
     def rms(self):
-        """RMS phase error.  DIN/ISO 'Sq.'"""
+        """RMS phase error.  DIN/ISO Sq."""
         return rms(self.phase)
 
     @property
     def Sa(self):
-        """Sa phase error.  DIN/ISO 'Sa.'"""
+        """Sa phase error.  DIN/ISO Sa."""
         return Sa(self.phase)
 
     @property
     def std(self):
         """Standard deviation of phase error."""
         return std(self.phase)
-
-    @property
-    def shape(self):
-        """Proxy to self.phase.shape."""
-        return self.phase.shape
-
-    @property
-    def size(self):
-        """Proxy to self.phase.size."""
-        return self.phase.size
 
     @property
     def diameter_x(self):
@@ -214,31 +183,6 @@ class OpticalPhase(object):
         """Half of self.diameter."""
         return self.diameter / 2
 
-    @property
-    def samples_x(self):
-        """Number of samples in the x dimension."""
-        return self.phase.shape[1]
-
-    @property
-    def samples_y(self):
-        """Number of samples in the y dimension."""
-        return self.phase.shape[0]
-
-    @property
-    def sample_spacing(self):
-        """center-to-center sample spacing."""
-        return self.unit_x[1] - self.unit_x[0]
-
-    @property
-    def center_x(self):
-        """Center "pixel" in x."""
-        return len(self.unit_x) // 2
-
-    @property
-    def center_y(self):
-        """Center "pixel" in y."""
-        return len(self.unit_y) // 2
-
     def change_phase_unit(self, to, inplace=True):
         """Change the units used to describe the phase.
 
@@ -256,6 +200,7 @@ class OpticalPhase(object):
         OR
         `self` : `OpticalPhase`
             self
+
         """
         fctr = self.unit_changes['_'.join([self.phase_unit, self.units[to]])](self.wavelength)
         new_phase = self.phase / fctr
