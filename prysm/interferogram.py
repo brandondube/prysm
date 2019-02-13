@@ -3,7 +3,7 @@ import warnings
 
 from .conf import config
 from ._phase import OpticalPhase
-from ._zernike import defocus
+from .zernike import defocus
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar, uniform_cart_to_polar

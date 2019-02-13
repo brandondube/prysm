@@ -6,8 +6,6 @@ from prysm.conf import config
 from prysm.convolution import Convolvable
 from prysm.detector import Detector, OLPF, PixelAperture
 from prysm.pupil import Pupil
-from prysm.fringezernike import FringeZernike
-from prysm.standardzernike import StandardZernike
 from prysm.psf import PSF, AiryDisk
 from prysm.otf import MTF
 from prysm.interferogram import Interferogram
@@ -35,7 +33,7 @@ from prysm.objects import (
     TiltedSquare,
     SlantedEdge,
 )
-
+from prysm.zernike import FringeZernike
 from prysm.sample_data import sample_files
 
 __all__ = [
@@ -45,7 +43,6 @@ __all__ = [
     'PixelAperture',
     'Pupil',
     'FringeZernike',
-    'StandardZernike',
     'Interferogram',
     'PSF',
     'AiryDisk',
