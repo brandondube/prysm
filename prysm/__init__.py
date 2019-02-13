@@ -8,7 +8,6 @@ from prysm.detector import Detector, OLPF, PixelAperture
 from prysm.pupil import Pupil
 from prysm.fringezernike import FringeZernike
 from prysm.standardzernike import StandardZernike
-from prysm.seidel import Seidel
 from prysm.psf import PSF, AiryDisk
 from prysm.otf import MTF
 from prysm.interferogram import Interferogram
@@ -37,8 +36,6 @@ from prysm.objects import (
     SlantedEdge,
 )
 
-from prysm.lens import Lens
-
 from prysm.sample_data import sample_files
 
 __all__ = [
@@ -50,11 +47,9 @@ __all__ = [
     'FringeZernike',
     'StandardZernike',
     'Interferogram',
-    'Seidel',
     'PSF',
     'AiryDisk',
     'MTF',
-    'Lens',
     'gaussian',
     'rotated_ellipse',
     'regular_polygon',
