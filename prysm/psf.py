@@ -371,7 +371,7 @@ class AiryDisk(PSF):
         y = m.linspace(-extent, extent, samples)
         xx, yy = m.meshgrid(x, y)
         rho, phi = cart_to_polar(xx, yy)
-        data = _airydisk(rho, fno, wavelength)
+        data = airydisk(rho, fno, wavelength)
         self.fno = fno
         self.wavelength = wavelength
         super().__init__(data, x, y)
@@ -398,7 +398,7 @@ class AiryDisk(PSF):
         return diffraction_limited_mtf(self.fno, self.wavelength, r*1e3)  # um to mm
 
 
-def _airydisk(unit_r, fno, wavelength):
+def airydisk(unit_r, fno, wavelength):
     """Compute the airy disk function over a given spatial distance.
 
     Parameters
