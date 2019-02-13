@@ -113,7 +113,7 @@ class PSF(Convolvable):
             return self._ee[radius]
 
     def ee_radius(self, energy=FIRST_AIRY_ENCIRCLED):
-
+        """Radius associated with a certain amount of enclosed energy."""
         k, v = list(self._ee.keys()), list(self._ee.values())
         if energy in v:
             idx = v.index(energy)
@@ -127,9 +127,11 @@ class PSF(Convolvable):
         return optimize.golden(optfcn)
 
     def ee_radius_diffraction(self, energy=FIRST_AIRY_ENCIRCLED):
+        """Radius associated with a certain amount of enclosed energy for a diffraction limited circular pupil."""
         return _inverse_analytic_encircled_energy(self.fno, self.wavelength, energy)
 
     def ee_radius_ratio_to_diffraction(self, energy=FIRST_AIRY_ENCIRCLED):
+        """Ratio of this PSF and the diffraction limited PSFs' radii enclosing a certain amount of energy."""
         self_rad = self.ee_radius(energy)
         diff_rad = _inverse_analytic_encircled_energy(self.fno, self.wavelength, energy)
         return self_rad / diff_rad
