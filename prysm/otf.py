@@ -56,7 +56,8 @@ class MTF(BasicData):
             coordiante
 
         """
-        return self.slice_x
+        u, s = self.slice_x
+        return u[self.center_x:], s[self.center_x:]
 
     @property
     def sag(self):
@@ -75,7 +76,8 @@ class MTF(BasicData):
             coordiante
 
         """
-        return self.slice_y
+        u, s = self.slice_y
+        return u[self.center_y:], s[self.center_y:]
 
     def exact_polar(self, freqs, azimuths=None):
         """Retrieve the MTF at the specified frequency-azimuth pairs.
