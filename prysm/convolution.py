@@ -526,13 +526,35 @@ def _crop_output(original, padded):
 def _compute_output_grid(convolvable1, convolvable2):
     """Calculate the output grid to be used when two convolvables are on different grids."""
     # determine output spacing
-    output_spacing = min(convolvable1.sample_spacing, convolvable2.sample_spacing)
+    errorstr = 'when convolving two analytic objects, one must have a grid.'
+    if m.isnan(convolvable1.sample_spacing):
+        if m.isnan(convolvable2.sample_spacing):
+            raise ValueError(errorstr)
+        else:
+            output_spacing = convolvable2.sample_spacing
+    elif m.isnan(convolvable2.sample_spacing):
+        if m.isnan(convolvable1.sample_spacing):
+            raise ValueError(errorstr)
+        else:
+            output_spacing = convolvable1.sample_spacing
+    else:
+        output_spacing = min(convolvable1.sample_spacing, convolvable2.sample_spacing)
 
     # determine region of output
-    output_x_left = min(convolvable1.unit_x[0], convolvable2.unit_x[0])
-    output_x_right = max(convolvable1.unit_x[-1], convolvable2.unit_x[-1])
-    output_y_left = min(convolvable1.unit_y[0], convolvable2.unit_y[0])
-    output_y_right = max(convolvable1.unit_y[-1], convolvable2.unit_y[-1])
+    if convolvable1.unit_x is None:
+        c1ux, c1uy = (0, 0), (0, 0)
+    else:
+        c1ux, c1uy = convolvable1.unit_x, convolvable1.unit_y
+
+    if convolvable2.unit_x is None:  # this isn't totally DRY
+        c2ux, c2uy = (0, 0), (0, 0)
+    else:
+        c2ux, c2uy = convolvable2.unit_x, convolvable2.unit_y
+
+    output_x_left = min(c1ux[0], c2ux[0])
+    output_x_right = max(c1ux[-1], c2ux[-1])
+    output_y_left = min(c1uy[0], c2uy[0])
+    output_y_right = max(c1uy[-1], c2uy[-1])
 
     # if region is not an integer multiple of sample spacings, enlarge to make this true
     x_rem = (output_x_right - output_x_left) % output_spacing
