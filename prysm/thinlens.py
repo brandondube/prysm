@@ -1,7 +1,7 @@
 """A collection of thin lens equations for system modeling."""
 
 from .util import guarantee_array
-from ._zernike import defocus as _defocus
+from .zernike import defocus as _defocus
 
 from prysm import mathops as m
 

@@ -8,20 +8,7 @@ from prysm import mathops as m
 
 
 class Detector(object):
-    """Model of a image sensor.
-
-    Attributes
-    ----------
-    bit_depth : `int`
-        number of bits to quantize to
-    captures : `deque`
-        stack of frames that have been captured
-    pixel_size : `float`
-        size of pixels, in microns
-    resolution : `tuple` of ints
-        resolution in px
-
-    """
+    """Model of a image sensor."""
 
     def __init__(self, pixel_size, resolution=(1024, 1024), nbits=16, framebuffer=24):
         """Create a new Detector object.
@@ -259,7 +246,7 @@ class PixelAperture(Convolvable):
         self.width_y = width_y
 
         if samples_x is None:  # do no math
-            data, ux, uy = None, m.zeros(2), m.zeros(2)
+            data, ux, uy = None, None, None
         else:  # build PixelAperture model
             center_x = samples_x // 2
             center_y = samples_y // 2
