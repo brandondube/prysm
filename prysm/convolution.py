@@ -569,8 +569,8 @@ def _compute_output_grid(convolvable1, convolvable2):
         output_y_right += adj
 
     # finally, compute the output window
-    samples_x = (output_x_right - output_x_left) // output_spacing
-    samples_y = (output_y_right - output_y_left) // output_spacing
+    samples_x = int((output_x_right - output_x_left) // output_spacing)
+    samples_y = int((output_y_right - output_y_left) // output_spacing)
     unit_out_x = m.linspace(output_x_left, output_x_right, samples_x)
     unit_out_y = m.linspace(output_y_left, output_y_right, samples_y)
     return unit_out_x, unit_out_y

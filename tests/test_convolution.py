@@ -5,6 +5,9 @@ import pytest
 
 from prysm import PixelAperture, Pupil, PSF
 
+import matplotlib
+matplotlib.use('TkAgg')
+
 
 @pytest.fixture
 def sample_psf():

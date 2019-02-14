@@ -7,8 +7,8 @@ import numpy as np
 
 import pytest
 
-from prysm import Pupil, PSF, MTF, Seidel
-from prysm.psf import _airydisk
+from prysm import Pupil, PSF, MTF, FringeZernike
+from prysm.psf import airydisk
 from prysm.otf import diffraction_limited_mtf
 
 PRECISION = 1e-3  # ~0.1%
@@ -27,7 +27,7 @@ def test_diffprop_matches_airydisk(efl, epd, wvl):
     psf = PSF.from_pupil(p, efl, Q=3)  # use Q=3 not Q=4 for improved accuracy
     u, sx = psf.slice_x
     u, sy = psf.slice_y
-    analytic = _airydisk(u, fno, wvl)
+    analytic = airydisk(u, fno, wvl)
     assert np.allclose(sx, analytic, atol=PRECISION)
     assert np.allclose(sy, analytic, atol=PRECISION)
 
@@ -55,18 +55,11 @@ def test_array_orientation_consistency_tilt():
         a shift in the +y direction.
     '''
     samples = 128
-    p = Seidel(W111=1, samples=samples)
+    p = FringeZernike(Z2=1, base=1, samples=samples)
     ps = PSF.from_pupil(p, 1)
     idx_y, idx_x = np.unravel_index(ps.data.argmax(), ps.data.shape)  # row-major y, x
     assert idx_x == ps.center_x
     assert idx_y > ps.center_y
-
-
-def test_array_orientation_consistency_astigmatic_blur():
-    ''' A quadratic phase error of the pupil in y should cause the
-        PSF to dilate in y, and the MTF to contract in y.
-    '''
-    pass
 
 
 FNOS = [1, 1.4, 2, 2.8, 4, 5.6, 8]
@@ -75,4 +68,4 @@ WVLS = [.5, .55, 1, 10]
 
 @pytest.mark.parametrize('fno, wvl', product(FNOS, WVLS))
 def test_airydisk_has_unit_peak(fno, wvl):
-    assert _airydisk(0, fno=fno, wavelength=wvl) == 1
+    assert airydisk(0, fno=fno, wavelength=wvl) == 1

@@ -1,5 +1,4 @@
-''' Unit tests for the fringezernike submodule.
-'''
+""" Unit tests for the Zernike submodule."""
 import os
 
 import pytest
@@ -7,7 +6,7 @@ import pytest
 import numpy as np
 
 from prysm.coordinates import cart_to_polar
-from prysm import fringezernike
+from prysm import zernike
 
 
 SAMPLES = 32
@@ -29,36 +28,36 @@ def phi():
 
 @pytest.fixture
 def fit_data():
-    p = fringezernike.FringeZernike(Z9=1, samples=SAMPLES)
+    p = zernike.FringeZernike(Z9=1, samples=SAMPLES)
     return p.phase, p.coefs
 
 
 def test_all_zernfcns_run_without_error_or_nans(rho, phi):
     for i in range(48):
-        assert fringezernike.zcache.get_zernike(i, norm=False, samples=SAMPLES).all()
+        assert zernike.fzcache(i, norm=False, samples=SAMPLES).all()
 
 
 def test_all_zernfcns_run_without_errors_or_nans_with_norms(rho, phi):
     for i in range(48):
-        assert fringezernike.zcache.get_zernike(i, norm=True, samples=SAMPLES).all()
+        assert zernike.fzcache(i, norm=True, samples=SAMPLES).all()
 
 
 def test_can_build_fringezernike_pupil_with_vector_args():
     abers = np.random.rand(48)
-    p = fringezernike.FringeZernike(abers, samples=SAMPLES)
+    p = zernike.FringeZernike(abers, samples=SAMPLES)
     assert p
 
 
 def test_repr_is_a_str():
-    p = fringezernike.FringeZernike()
+    p = zernike.FringeZernike()
     assert type(repr(p)) is str
 
 
 def test_fringezernike_rejects_base_not_0_or_1():
     with pytest.raises(ValueError):
-        fringezernike.FringeZernike(base=2)
+        zernike.FringeZernike(base=2)
     with pytest.raises(ValueError):
-        fringezernike.FringeZernike(base=-1)
+        zernike.FringeZernike(base=-1)
 
 
 def test_fringezernike_takes_all_named_args():
@@ -66,7 +65,7 @@ def test_fringezernike_takes_all_named_args():
         'norm': True,
         'base': 1,
     }
-    p = fringezernike.FringeZernike(**params)
+    p = zernike.FringeZernike(**params)
     assert p
 
 
@@ -75,14 +74,14 @@ def test_fringezernike_will_pass_pupil_args():
         'samples': 32,
         'wavelength': 0.5,
     }
-    p = fringezernike.FringeZernike(**params)
+    p = zernike.FringeZernike(**params)
     assert p
 
 
 @pytest.mark.skipif('TRAVIS' in os.environ and os.environ['TRAVIS'] == 'true', reason='lapack error on travis')
 def test_fit_agrees_with_truth(fit_data):
     data, real_coefs = fit_data
-    coefs = fringezernike.fit(data)
+    coefs = zernike.fringefit(data)
     real_coefs = np.asarray(real_coefs)
     assert coefs[8] == pytest.approx(real_coefs[8])
 
@@ -90,11 +89,11 @@ def test_fit_agrees_with_truth(fit_data):
 @pytest.mark.skipif('TRAVIS' in os.environ and os.environ['TRAVIS'] == 'true', reason='lapack error on travis')
 def test_fit_does_not_throw_on_normalize(fit_data):
     data, real_coefs = fit_data
-    coefs = fringezernike.fit(data, norm=True)
+    coefs = zernike.fringefit(data, norm=True)
     assert coefs[8] != 0
 
 
 def test_fit_raises_on_too_many_terms(fit_data):
     data, real_coefs = fit_data
     with pytest.raises(ValueError):
-        fringezernike.fit(data, terms=100)
+        zernike.fringefit(data, terms=100)

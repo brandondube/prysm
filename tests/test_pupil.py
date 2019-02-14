@@ -4,7 +4,7 @@ import pytest
 
 import numpy as np
 
-from prysm import Pupil, Seidel
+from prysm import Pupil, FringeZernike
 
 
 @pytest.fixture
@@ -14,7 +14,7 @@ def p():
 
 @pytest.fixture
 def p_tlt():
-    return Seidel(W111=1, samples=65)
+    return FringeZernike(Z2=1, base=1, samples=65)
 
 
 def test_create_pupil():
