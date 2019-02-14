@@ -1,4 +1,5 @@
 """Basic class holding data, used to recycle code."""
+from prysm import mathops as m
 
 
 class BasicData:
@@ -8,27 +9,42 @@ class BasicData:
     @property
     def shape(self):
         """Proxy to data shape."""
-        return getattr(self, self._data_attr).shape
+        try:
+            return getattr(self, self._data_attr).shape
+        except TypeError:
+            return (0,0)
 
     @property
     def size(self):
         """Proxy to data size."""
-        return getattr(self, self._data_attr).size
+        try:
+            return getattr(self, self._data_attr).size
+        except TypeError:
+            return 0
 
     @property
     def samples_x(self):
         """Number of samples in the x dimension."""
-        return self.shape[1]
+        try:
+            return self.shape[1]
+        except TypeError:
+            return 0
 
     @property
     def samples_y(self):
         """Number of samples in the y dimension."""
-        return self.shape[0]
+        try:
+            return self.shape[0]
+        except TypeError:
+            return 0
 
     @property
     def sample_spacing(self):
         """center-to-center sample spacing."""
-        return self.unit_x[1] - self.unit_x[0]
+        try:
+            return self.unit_x[1] - self.unit_x[0]
+        except TypeError:
+            return m.nan
 
     @property
     def center_x(self):
