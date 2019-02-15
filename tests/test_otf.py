@@ -6,6 +6,8 @@ import numpy as np
 from prysm import otf
 from prysm.fttools import forward_ft_unit
 
+import matplotlib
+matplotlib.use('TkAgg')
 
 SAMPLES = 32
 LIM = 1e3
@@ -51,3 +53,20 @@ def test_mtf_exact_tan_functions(mtf):
 
 def test_mtf_exact_sag_functions(mtf):
     assert type(mtf.exact_sag(0)) is np.ndarray
+
+
+def test_frompupil_functions():
+    from prysm import Pupil
+    pu = Pupil()
+    mt = otf.MTF.from_pupil(pu, 2)
+    assert mt
+
+
+def test_doesnt_recalculate_when_psf_caches_mtf():
+    from prysm import Pupil, PSF
+    pu = Pupil()
+    ps = PSF.from_pupil(pu, 2)
+    mt = otf.MTF.from_psf(ps)
+    ps._mtf = mt
+    mt2 = otf.MTF.from_psf(ps)
+    assert id(mt) == id(mt2)
