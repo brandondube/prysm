@@ -8,20 +8,10 @@ from prysm import mathops as m
 
 
 class Slit(Convolvable):
-    '''Representation of a slit or pair of slits.
-
-    Attributes
-    ----------
-    orientation : `str`
-        orientation of the slit
-    width_x : `float`
-        x-width of the slit
-    width_y : `float`
-        y-width of the slit
-    '''
+    """Representation of a slit or pair of slits."""
 
     def __init__(self, width, orientation='Vertical', sample_spacing=0.075, samples=0):
-        '''Create a new Slit instance.
+        """Create a new Slit instance.
 
         Parameters
         ----------
@@ -39,7 +29,7 @@ class Slit(Convolvable):
         Default of 0 samples allows quick creation for convolutions without
         generating the image; use samples > 0 for an actual image.
 
-        '''
+        """
         w = width / 2
 
         if samples > 0:
@@ -72,7 +62,7 @@ class Slit(Convolvable):
         super().__init__(arr, x, y, has_analytic_ft=True)
 
     def analytic_ft(self, unit_x, unit_y):
-        '''Analytic fourier transform of a slit.
+        """Analytic fourier transform of a slit.
 
         Parameters
         ----------
@@ -86,7 +76,7 @@ class Slit(Convolvable):
         `numpy.ndarray`
             2D numpy array containing the analytic fourier transform
 
-        '''
+        """
         xq, yq = m.meshgrid(unit_x, unit_y)
         if self.width_x > 0 and self.width_y > 0:
             return (m.sinc(xq * self.width_x) +
@@ -98,16 +88,9 @@ class Slit(Convolvable):
 
 
 class Pinhole(Convolvable):
-    '''Representation of a pinhole.
-
-    Attributes
-    ----------
-    width : `float`
-        diameter of the pinhole
-
-    '''
+    """Representation of a pinhole."""
     def __init__(self, width, sample_spacing=0.025, samples=0):
-        '''Produce a Pinhole.
+        """Create a Pinhole instance.
 
         Parameters
         ----------
@@ -123,7 +106,7 @@ class Pinhole(Convolvable):
         Default of 0 samples allows quick creation for convolutions without
         generating the image; use samples > 0 for an actual image.
 
-        '''
+        """
         self.width = width
 
         # produce coordinate arrays
@@ -141,7 +124,7 @@ class Pinhole(Convolvable):
         super().__init__(data=arr, unit_x=x, unit_y=y, has_analytic_ft=True)
 
     def analytic_ft(self, unit_x, unit_y):
-        '''Analytic fourier transform of a slit.
+        """Analytic fourier transform of a slit.
 
         Parameters
         ----------
@@ -155,7 +138,7 @@ class Pinhole(Convolvable):
         `numpy.ndarray`
             2D numpy array containing the analytic fourier transform
 
-        '''
+        """
         xq, yq = m.meshgrid(unit_x, unit_y)
 
         # factor of pi corrects for jinc being modulo pi
@@ -165,16 +148,9 @@ class Pinhole(Convolvable):
 
 
 class SiemensStar(Convolvable):
-    '''Representation of a Siemen's star object.
-
-    Attributes
-    ----------
-    spokes : `int`
-        number of spokes present in the star
-
-    '''
+    """Representation of a Siemen's star object."""
     def __init__(self, spokes, sinusoidal=True, background='black', sample_spacing=2, samples=256):
-        '''Produces a Siemen's Star.
+        """Produces a Siemen's Star.
 
         Parameters
         ----------
@@ -194,7 +170,7 @@ class SiemensStar(Convolvable):
         ValueError
             background other than black or white
 
-        '''
+        """
         relative_width = 0.9
         self.spokes = spokes
 
@@ -226,10 +202,9 @@ class SiemensStar(Convolvable):
 
 
 class TiltedSquare(Convolvable):
-    '''Represents a tilted square for e.g. slanted-edge MTF calculation.'''
-
+    """Represents a tilted square for e.g. slanted-edge MTF calculation."""
     def __init__(self, angle=8, background='white', sample_spacing=2, samples=256):
-        '''Create a new TitledSquare instance.
+        """Create a new TitledSquare instance.
 
         Parameters
         ----------
@@ -242,7 +217,7 @@ class TiltedSquare(Convolvable):
         samples : `int`
             number of samples
 
-        '''
+        """
         radius = 0.3
         if background.lower() == 'white':
             arr = m.ones((samples, samples))
@@ -269,9 +244,8 @@ class TiltedSquare(Convolvable):
 
 class SlantedEdge(Convolvable):
     """Representation of a slanted edge."""
-
     def __init__(self, angle=8, contrast=0.9, crossed=False, sample_spacing=2, samples=256):
-        '''Create a new TitledSquare instance.
+        """Create a new TitledSquare instance.
 
         Parameters
         ----------
@@ -287,7 +261,7 @@ class SlantedEdge(Convolvable):
         samples : `int`
             number of samples
 
-        '''
+        """
         diff = (1 - contrast) / 2
         arr = m.full((samples, samples), 1 - diff)
         x = m.linspace(-0.5, 0.5, samples)
