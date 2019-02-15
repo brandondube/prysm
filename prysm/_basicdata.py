@@ -25,18 +25,12 @@ class BasicData:
     @property
     def samples_x(self):
         """Number of samples in the x dimension."""
-        try:
-            return self.shape[1]
-        except TypeError:
-            return 0
+        return self.shape[1]
 
     @property
     def samples_y(self):
         """Number of samples in the y dimension."""
-        try:
-            return self.shape[0]
-        except TypeError:
-            return 0
+        return self.shape[0]
 
     @property
     def sample_spacing(self):
