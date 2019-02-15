@@ -56,3 +56,9 @@ def test_rotated_ellipse(maj, min, majang):
     assert type(geometry.rotated_ellipse(width_major=maj,
                                          width_minor=min,
                                          major_axis_angle=majang)) is np.ndarray
+
+
+def test_allcircles_zeros():
+    funcs = ['circle', 'truecircle', 'inverted_circle']
+    for func in funcs:
+        assert (getattr(geometry, func)(32, 0) == 0).all()

@@ -1,17 +1,18 @@
 """Functions used to generate various geometrical constructs.
 """
-from collections import defaultdict
 
 from scipy.spatial import Delaunay
 
 from .conf import config
-from .coordinates import cart_to_polar, make_rho_phi_grid
+from .coordinates import make_rho_phi_grid
 
 from prysm import mathops as m
 
 
 class MaskCache(object):
+    """Cache for geometric masks."""
     def __init__(self):
+        """Create a new cache instance."""
         self.masks = {}
 
     def get_mask(self, shape, samples, radius=1):
@@ -61,6 +62,7 @@ class MaskCache(object):
         return self.get_mask(shape=shape, samples=samples, radius=radius)
 
     def clear(self, *args):
+        """Empty the cache."""
         self.masks = {}
 
 
@@ -391,6 +393,7 @@ def truecircle(samples=128, radius=1):
     Notes
     -----
     Based on a more general algorithm by Jim Fienup
+
     """
     if radius is 0:
         return m.zeros((samples, samples), dtype=config.precision)
@@ -429,7 +432,7 @@ def circle(samples=128, radius=1):
 
 
 def inverted_circle(samples=128, radius=1):
-    """ Create an inverted circular mask (obscuration).
+    """Create an inverted circular mask (obscuration).
 
     Parameters
     ----------
@@ -440,13 +443,13 @@ def inverted_circle(samples=128, radius=1):
         x
 
     Returns
-    ------
+    -------
     `numpy.ndarray`
         binary ndarray representation of the mask
 
     """
     if radius is 0:
-        return m.ones((samples, samples), dtype=config.precision)
+        return m.zeros((samples, samples), dtype=config.precision)
     else:
         rho, phi = make_rho_phi_grid(samples, samples)
         mask = m.ones(rho.shape, dtype=config.precision)
