@@ -82,3 +82,8 @@ def test_share_fig_ax_produces_an_axis():
     fig = plt.figure()
     fig, ax = util.share_fig_ax(fig)
     assert ax is not None
+
+
+def test_Sa_gives_correct_value():
+    ary = np.array([1, 2, 3, 4, 5])
+    assert util.Sa(ary) == 1.2
