@@ -11,15 +11,15 @@ class BasicData:
         """Proxy to data shape."""
         try:
             return getattr(self, self._data_attr).shape
-        except TypeError:
-            return (0,0)
+        except AttributeError:
+            return (0, 0)
 
     @property
     def size(self):
         """Proxy to data size."""
         try:
             return getattr(self, self._data_attr).size
-        except TypeError:
+        except AttributeError:
             return 0
 
     @property
