@@ -123,6 +123,9 @@ class OpticalPhase(BasicData):
     @phase_unit.setter
     def phase_unit(self, unit):
         unit = unit.lower()
+        if unit == 'aa':
+            unit = 'å'
+
         if unit == 'å':
             self._phase_unit = unit.upper()
         else:
