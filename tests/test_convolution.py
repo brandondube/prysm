@@ -1,4 +1,4 @@
-
+"""Tests for convolution code."""
 import numpy as np
 
 import pytest
@@ -72,7 +72,7 @@ def test_show_fourier_raises_analytic_with_no_xy(sample_pixel):
 
 
 def test_sensical_attributes_dataless_convolvable(sample_pixel):
-        assert sample_pixel.shape == (0,0)
+        assert sample_pixel.shape == (0, 0)
         assert sample_pixel.size == 0
         assert sample_pixel.samples_x == 0
         assert sample_pixel.samples_y == 0

@@ -1,4 +1,4 @@
-""" Unit tests for the Zernike submodule."""
+"""Tests for the Zernike submodule."""
 import os
 
 import pytest

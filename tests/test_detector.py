@@ -1,3 +1,4 @@
+"""Tests for detector modeling capabilities."""
 import pytest
 
 from prysm import detector, psf

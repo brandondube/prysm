@@ -1,5 +1,4 @@
-''' Unit tests for basic geometry.
-'''
+"""Tests for basic geometry."""
 import pytest
 
 import numpy as np

@@ -1,5 +1,4 @@
-''' Unit tests verifying the functionality of the global prysm config.
-'''
+"""Tests verifying the functionality of the global prysm config."""
 import pytest
 
 import numpy as np

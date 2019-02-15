@@ -1,5 +1,4 @@
-''' Optical Transfer Function (OTF) unit tests.
-'''
+"""Optical Transfer Function (OTF) unit tests."""
 import pytest
 
 import numpy as np

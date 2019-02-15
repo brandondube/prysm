@@ -1,5 +1,4 @@
-''' Unit tests for pupil objects
-'''
+"""Tests for pupil objects."""
 import pytest
 
 import numpy as np

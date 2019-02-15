@@ -1,5 +1,4 @@
-''' Unit tests for thinlens functions.
-'''
+"""Tests for thinlens functions."""
 import pytest
 
 import numpy as np

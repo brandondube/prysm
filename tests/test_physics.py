@@ -1,5 +1,4 @@
-''' Unit tests for the physics of prysm.
-'''
+"""Unit tests for the physics of prysm."""
 import os
 from itertools import product
 
@@ -49,11 +48,12 @@ def test_diffprop_matches_analyticmtf(efl, epd, wvl):
 
 
 def test_array_orientation_consistency_tilt():
-    ''' The pupil array should be shaped as arr[y,x], as should the psf and MTF.
+    """The pupil array should be shaped as arr[y,x], as should the psf and MTF.
+
         A linear phase error in the pupil along y should cause a motion of the
         PSF in y.  Specifically, for a positive-signed phase, that should cause
         a shift in the +y direction.
-    '''
+    """
     samples = 128
     p = FringeZernike(Z2=1, base=1, samples=samples)
     ps = PSF.from_pupil(p, 1)

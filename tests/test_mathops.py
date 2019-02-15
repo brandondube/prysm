@@ -1,5 +1,4 @@
-''' unit tests for the mathops submodule.
-'''
+"""Tests for the mathops submodule."""
 import pytest
 
 import numpy as np

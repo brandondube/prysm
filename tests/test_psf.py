@@ -1,5 +1,4 @@
-''' Unit tests for PSFs.
-'''
+"""Tests for PSFs."""
 import pytest
 
 import numpy as np

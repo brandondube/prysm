@@ -1,5 +1,4 @@
-''' Unit tests for coordinate conversion.
-'''
+"""Tests for coordinate conversion."""
 import pytest
 
 import numpy as np
