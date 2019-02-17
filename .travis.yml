@@ -25,6 +25,9 @@ before_script:
   - sleep 5 # give the virtual display time to boot up
 script:
   - pytest --cov=prysm tests/
+cache:
+  directories:
+    /home/travis/miniconda3/pkgs
 notifications:
   email: false
 after_success:
