@@ -4,7 +4,7 @@ before_install:
   - chmod +x miniconda.sh
   - ./miniconda.sh -b
   - export PATH=/home/travis/miniconda/bin:$PATH
-  - conda update --yes conda
+  - conda update -n base conda --yes
 install:
   - conda create -n prysmci --yes python=3.7
   - source activate prysmci
