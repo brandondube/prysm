@@ -65,8 +65,8 @@ class Interferogram(OpticalPhase):
         http://www.opticsinfobase.org/abstract.cfm?URI=OFT-2008-OWA4
 
         """
-        from .fringezernike import fit, FringeZernike
-        coefs, residual = fit(self.phase, terms=36, residual=True)
+        from .zernike import fringefit, FringeZernike
+        coefs, residual = fringefit(self.phase, terms=36, residual=True)
         fz = FringeZernike(coefs, samples=self.shape[0])
         return fz.pv + 3 * residual
 

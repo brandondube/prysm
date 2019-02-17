@@ -983,14 +983,14 @@ def fringefit(data, x=None, y=None, rho=None, phi=None, terms=16, norm=False, re
         rho, phi = rho[pts].flatten(), phi[pts].flatten()
 
     # compute each Zernike term
-    zerns = []
+    zerns_raw = []
     for i in range(terms):
         func = zernikes[fringemap[i]]
         base_zern = func(rho, phi)
         if norm:
             base_zern *= func.norm
-        zerns.append(base_zern)
-    zerns = m.asarray(zerns).T
+        zerns_raw.append(base_zern)
+    zerns = m.asarray(zerns_raw).T
 
     # use least squares to compute the coefficients
     meas_pts = data[pts].flatten()
@@ -1000,7 +1000,7 @@ def fringefit(data, x=None, y=None, rho=None, phi=None, terms=16, norm=False, re
 
     if residual is True:
         components = []
-        for zern, coef in zip(zernikes, coefs):
+        for zern, coef in zip(zerns_raw, coefs):
             components.append(coef * zern)
 
         _fit = m.asarray(components)
