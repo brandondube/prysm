@@ -56,3 +56,7 @@ def test_plot_psd_2d_functions(sample_i_mutate):
     fig, ax = sample_i_mutate.plot_psd2d()
     assert fig
     assert ax
+
+
+def test_save_ascii_works(sample_i, tmpdir):
+    sample_i.save_zygo_ascii(tmpdir / 'z.asc')
