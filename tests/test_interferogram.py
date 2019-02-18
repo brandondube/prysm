@@ -60,3 +60,19 @@ def test_plot_psd_2d_functions(sample_i_mutate):
 
 def test_save_ascii_works(sample_i, tmpdir):
     sample_i.save_zygo_ascii(tmpdir / 'z.asc')
+
+
+def test_doublecrop_has_no_effect(sample_i_mutate):
+    sample_i_mutate.crop()
+    shape = sample_i_mutate.shape
+    sample_i_mutate.crop()
+    shape2 = sample_i_mutate.shape
+    assert shape == shape2
+
+
+def test_descale_latcal_ok(sample_i_mutate):
+    plate_scale = sample_i_mutate.sample_spacing
+    sample_i_mutate.change_spatial_unit(to='px')
+    assert pytest.approx(sample_i_mutate.sample_spacing, 1, abs=1e-8)
+    sample_i_mutate.latcal(plate_scale, 'mm')
+    assert pytest.approx(plate_scale, sample_i_mutate.sample_spacing, abs=1e-8)

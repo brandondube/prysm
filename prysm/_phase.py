@@ -1,5 +1,6 @@
 """phase basics."""
 
+from .conf import config
 from ._basicdata import BasicData
 from .util import share_fig_ax, pv, rms, Sa, std
 
@@ -233,9 +234,14 @@ class OpticalPhase(BasicData):
             self
 
         """
-        fctr = self.unit_changes['_'.join([self.spatial_unit, self.units[to]])](self.wavelength)
-        new_ux = self.unit_x / fctr
-        new_uy = self.unit_y / fctr
+        if to.lower() != 'px':
+            fctr = self.unit_changes['_'.join([self.spatial_unit, self.units[to]])](self.wavelength)
+            new_ux = self.unit_x / fctr
+            new_uy = self.unit_y / fctr
+        else:
+            sy, sx = self.shape
+            new_ux = m.arange(sx, dtype=config.precision)
+            new_uy = m.arange(sy, dtype=config.precision)
         if inplace:
             self.unit_x = new_ux
             self.unit_y = new_uy
