@@ -33,7 +33,7 @@ from prysm.objects import (
     TiltedSquare,
     SlantedEdge,
 )
-from prysm.zernike import FringeZernike
+from prysm.zernike import FringeZernike, NollZernike, zernikefit
 from prysm.sample_data import sample_files
 
 __all__ = [
@@ -43,6 +43,8 @@ __all__ = [
     'PixelAperture',
     'Pupil',
     'FringeZernike',
+    'NollZernike',
+    'zernikefit',
     'Interferogram',
     'PSF',
     'AiryDisk',

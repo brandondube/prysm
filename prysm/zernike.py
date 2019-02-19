@@ -618,7 +618,6 @@ zernikefuncs.update({
 })
 
 
-
 class ZCache(object):
     """Cache of Zernike terms evaluated over the unit circle."""
     def __init__(self):
@@ -1008,6 +1007,7 @@ class NollZernike(BaseZernike):
     _namer = zernikefuncs['name']['noll']
     _name = 'Noll'
 
+
 def zernikefit(data, x=None, y=None, rho=None, phi=None, terms=16, norm=False, residual=False, round_at=6, map_='fringe'):
     """Fits a number of Zernike coefficients to provided data.
 
@@ -1018,7 +1018,6 @@ def zernikefit(data, x=None, y=None, rho=None, phi=None, terms=16, norm=False, r
     ----------
     data : `numpy.ndarray`
         data to fit to.
-
     x : `numpy.ndarray`, optional
         x coordinates, same shape as data
     y : `numpy.ndarray`, optional
