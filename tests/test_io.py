@@ -24,6 +24,17 @@ def test_read_mtf_vs_field():
     assert np.allclose(real_freqs, result['freq'])
 
 
+def test_read_mtf_and_meta():
+    p = sample_files('mtf')
+    result = io.read_trioptics_mtf(p, metadata=True)
+    assert result['focus'] == 2.8484
+    assert max(result['freq']) == 900
+    assert result['wavelength'] == 0.56
+    assert result['efl'] == 97.4
+    assert result['tan'][-1] == 0.007
+    assert result['sag'][-1] == 0.001
+
+
 def test_read_zygodat():
     p = sample_files('dat')
     result = io.read_zygo_dat(p)
