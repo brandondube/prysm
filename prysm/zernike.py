@@ -1,5 +1,6 @@
 """Zernike functions."""
 from collections import defaultdict
+from functools import partial
 
 from prysm import mathops as m
 from .conf import config
@@ -272,6 +273,15 @@ def quinternary_spherical(rho, phi):
         + 1
 
 
+def primary_septafoil_y(rho, phi):
+    """Zernike primary septafoil."""
+    return 4 * rho**7 * m.cos(7 * phi)
+
+
+def primary_septafoil_x(rho, phi):
+    """Zernike primary septafoil."""
+    return 4 * rho**7 * m.sin(7 * phi)
+
 # norms
 piston.norm = 1
 tip.norm = 2
@@ -322,6 +332,8 @@ quinternary_astigmatism_45.norm = m.sqrt(22)
 quinternary_coma_y.norm = 2 * m.sqrt(6)
 quinternary_coma_x.norm = 2 * m.sqrt(6)
 quinternary_spherical.norm = m.sqrt(13)
+primary_septafoil_y.norm = m.sqrt(16)
+primary_septafoil_x.norm = m.sqrt(16)
 
 # names
 piston.name = 'Piston'
@@ -373,6 +385,8 @@ quinternary_astigmatism_45.name = 'Quinternary Astigmatism 45°'
 quinternary_coma_y.name = 'Quinternary Coma Y'
 quinternary_coma_x.name = 'Quinternary Coma X'
 quinternary_spherical.name = 'Quinternary Spherical'
+primary_septafoil_y.name = 'Primary Septafoil X'
+primary_septafoil_x.name = 'Primary Septafoil Y'
 
 zernikes = [
     piston,
@@ -423,7 +437,9 @@ zernikes = [
     quinternary_astigmatism_45,
     quinternary_coma_y,
     quinternary_coma_x,
-    quinternary_spherical
+    quinternary_spherical,
+    primary_septafoil_y,
+    primary_septafoil_x,
 ]
 
 zernikes_cpu = [m.jit(zernikes[0])]
@@ -447,6 +463,201 @@ def change_backend(to):
 
 config.chbackend_observers.append(change_backend)
 config.backend = config.backend  # trigger import of math functions
+
+
+fringemap = {
+    0: 0,
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 4,
+    5: 5,
+    6: 6,
+    7: 7,
+    8: 8,
+    9: 9,
+    10: 10,
+    11: 11,
+    12: 12,
+    13: 13,
+    14: 14,
+    15: 15,
+    16: 16,
+    17: 17,
+    18: 18,
+    19: 19,
+    20: 20,
+    21: 21,
+    22: 22,
+    23: 23,
+    24: 24,
+    25: 25,
+    26: 26,
+    27: 27,
+    28: 28,
+    29: 29,
+    30: 30,
+    31: 31,
+    32: 32,
+    33: 33,
+    34: 34,
+    35: 35,
+    36: 36,
+    37: 37,
+    38: 38,
+    39: 39,
+    40: 40,
+    41: 41,
+    42: 42,
+    43: 43,
+    44: 44,
+    45: 45,
+    46: 46,
+    47: 47,
+    48: 48,
+}
+nollmap = {
+    0: 0,
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 4,
+    5: 5,
+    6: 6,
+    7: 7,
+    8: 9,
+    9: 10,
+    10: 8,
+    11: 11,
+    12: 12,
+    13: 16,
+    14: 17,
+    15: 13,
+    16: 14,
+    17: 18,
+    18: 19,
+    19: 25,
+    20: 26,
+    21: 15,
+    22: 20,
+    23: 21,
+    24: 27,
+    25: 28,
+    26: 36,
+    27: 37,
+    28: 22,
+    29: 23,
+    30: 29,
+    31: 30,
+    32: 38,
+    33: 39,
+    34: 49,
+    35: 50,
+    36: 24,
+}
+maps = {
+    'fringe': fringemap,
+    'noll': nollmap,
+}
+
+
+def zernikename(idx, base, map_):
+    """Return the name of a Fringe Zernike with the given index and base."""
+    return zernikes[map_[idx-base]].name
+
+
+def zernikes_to_magnitude_angle(coefs, namer):
+    """Convert Fringe Zernike polynomial set to a magnitude and phase representation."""
+    def mkary():  # default for defaultdict
+        return m.zeros(2)
+
+    # make a list of names to go with the coefficients
+    names = [namer(i, base=0) for i in range(len(coefs))]
+    combinations = defaultdict(mkary)
+
+    # for each name and coefficient, make a len 2 array.  Put the Y or 0 degree values in the first slot
+    for coef, name in zip(coefs, names):
+        if name.endswith(('X', 'Y', '°')):
+            newname = ' '.join(name.split(' ')[:-1])
+            if name.endswith('Y'):
+                combinations[newname][0] = coef
+            elif name.endswith('X'):
+                combinations[newname][1] = coef
+            elif name[-2] == '5':  # 45 degree case
+                combinations[newname][1] = coef
+            else:
+                combinations[newname][0] = coef
+        else:
+            combinations[name][0] = coef
+
+    # now go over the combinations and compute the L2 norms and angles
+    for name in combinations:
+        ovals = combinations[name]
+        magnitude = m.sqrt((ovals**2).sum())
+        if 'Spheric' in name or 'focus' in name or 'iston' in name:
+            phase = 0
+        else:
+            phase = m.degrees(m.arctan2(*ovals))
+        values = (magnitude, phase)
+        combinations[name] = values
+
+    return dict(combinations)  # cast to regular dict for return
+
+
+zernikefuncs = {
+    'name': {
+        'fringe': partial(zernikename, map_=fringemap),
+        'noll': partial(zernikename, map_=nollmap),
+    }
+}
+zernikefuncs.update({
+    'magnitude_angle': {
+        'fringe': partial(zernikes_to_magnitude_angle, namer=zernikefuncs['name']['fringe']),
+        'noll': partial(zernikes_to_magnitude_angle, namer=zernikefuncs['name']['noll']),
+    }
+})
+
+
+
+class ZCache(object):
+    """Cache of Zernike terms evaluated over the unit circle."""
+    def __init__(self):
+        """Create a new FZCache instance."""
+        self.normed = defaultdict(dict)
+        self.regular = defaultdict(dict)
+
+    def get_zernike(self, number, norm, samples):
+        """Get an array of phase values for a given index, norm, and number of samples."""
+        if norm is True:
+            target = self.normed
+        else:
+            target = self.regular
+
+        try:
+            zern = target[samples][number]
+        except KeyError:
+            rho, phi = make_rho_phi_grid(samples, aligned='y')
+            func = zernikes[number]
+            zern = func(rho, phi)
+            if norm is True:
+                zern *= func.norm
+
+            target[samples][number] = zern.copy()
+
+        return zern
+
+    def __call__(self, number, norm, samples):
+        """Get an array of phase values for a given index, norm, and number of samples."""
+        return self.get_zernike(number, norm, samples)
+
+    def clear(self, *args):
+        """Empty the cache."""
+        self.normed = defaultdict(dict)
+        self.regular = defaultdict(dict)
+
+
+zcache = ZCache()
+config.chbackend_observers.append(zcache.clear)
 
 
 class BaseZernike(Pupil):
@@ -511,7 +722,9 @@ class BaseZernike(Pupil):
             # short circuit for speed
             if coef == 0:
                 continue
-            self.phase += coef * self._cache(term, self.normalize, self.samples)
+            else:
+                idx = self._map[term]
+                self.phase += coef * self._cache(idx, self.normalize, self.samples)  # NOQA
 
         return self
 
@@ -543,14 +756,14 @@ class BaseZernike(Pupil):
     def magnitudes(self):
         """Return the magnitude and angles of the zernike components in this wavefront."""
         # need to call through class variable to avoid insertion of self as arg
-        return self.__class__._magnituder(self.coefs)
+        return self.__class__._magnituder(self.coefs)  # NOQA
 
     @property
     def names(self):
         """Names of the terms in self."""
         # need to call through class variable to avoid insertion of self as arg
         idxs = m.asarray(range(len(self.coefs))) + self.base
-        return [self.__class__._namer(i, base=self.base) for i in idxs]
+        return [self.__class__._namer(i, base=self.base) for i in idxs]  # NOQA
 
     def barplot(self, orientation='h', buffer=1, zorder=3, fig=None, ax=None):
         """Create a barplot of coefficients and their names.
@@ -778,153 +991,24 @@ class BaseZernike(Pupil):
         return f'{header}{body}{footer}'
 
 
-fringemap = {
-    0: 0,
-    1: 1,
-    2: 2,
-    3: 3,
-    4: 4,
-    5: 5,
-    6: 6,
-    7: 7,
-    8: 8,
-    9: 9,
-    10: 10,
-    11: 11,
-    12: 12,
-    13: 13,
-    14: 14,
-    15: 15,
-    16: 16,
-    17: 17,
-    18: 18,
-    19: 19,
-    20: 20,
-    21: 21,
-    22: 22,
-    23: 23,
-    24: 24,
-    25: 25,
-    26: 26,
-    27: 27,
-    28: 28,
-    29: 29,
-    30: 30,
-    31: 31,
-    32: 32,
-    33: 33,
-    34: 34,
-    35: 35,
-    36: 36,
-    37: 37,
-    38: 38,
-    39: 39,
-    40: 40,
-    41: 41,
-    42: 42,
-    43: 43,
-    44: 44,
-    45: 45,
-    46: 46,
-    47: 47,
-    48: 48,
- }
-
-
-def fzname(idx, base=1):
-    """Return the name of a Fringe Zernike with the given index and base."""
-    return zernikes[fringemap[idx-base]].name
-
-
-def fzset_to_magnitude_angle(coefs, *args):
-    """Convert Fringe Zernike polynomial set to a magnitude and phase representation."""
-    def mkary():  # default for defaultdict
-        return m.zeros(2)
-
-    # make a list of names to go with the coefficients
-    names = [fzname(i, base=0) for i in range(len(coefs))]
-    combinations = defaultdict(mkary)
-
-    # for each name and coefficient, make a len 2 array.  Put the Y or 0 degree values in the first slot
-    for coef, name in zip(coefs, names):
-        if name.endswith(('X', 'Y', '°')):
-            newname = ' '.join(name.split(' ')[:-1])
-            if name.endswith('Y'):
-                combinations[newname][0] = coef
-            elif name.endswith('X'):
-                combinations[newname][1] = coef
-            elif name[-2] == '5':  # 45 degree case
-                combinations[newname][1] = coef
-            else:
-                combinations[newname][0] = coef
-        else:
-            combinations[name][0] = coef
-
-    # now go over the combinations and compute the L2 norms and angles
-    for name in combinations:
-        ovals = combinations[name]
-        magnitude = m.sqrt((ovals**2).sum())
-        if 'Spheric' in name or 'focus' in name or 'iston' in name:
-            phase = 0
-        else:
-            phase = m.degrees(m.arctan2(*ovals))
-        values = (magnitude, phase)
-        combinations[name] = values
-
-    return dict(combinations)  # cast to regular dict for return
-
-
-class FZCache(object):
-    """Cache of Fringe Zernike terms evaluated over the unit circle."""
-    def __init__(self):
-        """Create a new FZCache instance."""
-        self.normed = defaultdict(dict)
-        self.regular = defaultdict(dict)
-
-    def get_zernike(self, number, norm, samples):
-        """Get an array of phase values for a given index, norm, and number of samples."""
-        if norm is True:
-            target = self.normed
-        else:
-            target = self.regular
-
-        try:
-            zern = target[samples][number]
-        except KeyError:
-            rho, phi = make_rho_phi_grid(samples, aligned='y')
-            func = zernikes[fringemap[number]]
-            zern = func(rho, phi)
-            if norm is True:
-                zern *= func.norm
-
-            target[samples][number] = zern.copy()
-
-        return zern
-
-    def __call__(self, number, norm, samples):
-        """Get an array of phase values for a given index, norm, and number of samples."""
-        return self.get_zernike(number, norm, samples)
-
-    def clear(self, *args):
-        """Empty the cache."""
-        self.normed = defaultdict(dict)
-        self.regular = defaultdict(dict)
-
-
-fzcache = FZCache()
-config.chbackend_observers.append(fzcache.clear)
-
-
 class FringeZernike(BaseZernike):
     """Fringe Zernike description of an optical pupil."""
     _map = fringemap
-    _cache = fzcache
-    _magnituder = fzset_to_magnitude_angle
-    _namer = fzname
+    _cache = zcache
+    _magnituder = zernikefuncs['magnitude_angle']['fringe']
+    _namer = zernikefuncs['name']['fringe']
     _name = 'Fringe'
 
 
-def fringefit(data, x=None, y=None, rho=None, phi=None, terms=16, norm=False, residual=False, round_at=6):
+class NollZernike(BaseZernike):
+    """Noll Zernike deswcription of an optical pupil."""
+    _map = nollmap
+    _cache = zcache
+    _magnituder = zernikefuncs['magnitude_angle']['noll']
+    _namer = zernikefuncs['name']['noll']
+    _name = 'Noll'
+
+def zernikefit(data, x=None, y=None, rho=None, phi=None, terms=16, norm=False, residual=False, round_at=6, map_='fringe'):
     """Fits a number of Zernike coefficients to provided data.
 
     Works by minimizing the mean square error  between each coefficient and the
@@ -942,15 +1026,17 @@ def fringefit(data, x=None, y=None, rho=None, phi=None, terms=16, norm=False, re
     rho : `numpy.ndarray`, optional
         radial coordinates, same shape as data
     phi : `numpy.ndarray`, optional
-        azimuthal
+        azimuthal coordinates, same shape as data
     terms : `int`, optional
         number of terms to fit, fits terms 0~terms
     norm : `bool`, optional
         if True, normalize coefficients to unit RMS value
     residual : `bool`, optional
         if True, return a tuple of (coefficients, residual)
-    round_at : `int`
+    round_at : `int`, optional
         decimal place to round values at.
+    map_ : `str`, optional, {'fringe', 'noll'}
+        which ordering of Zernikes to use
 
     Returns
     -------
@@ -965,6 +1051,7 @@ def fringefit(data, x=None, y=None, rho=None, phi=None, terms=16, norm=False, re
         too many terms requested.
 
     """
+    map_ = maps[map_]
     if terms > len(fringemap):
         raise ValueError(f'number of terms must be less than {len(fringemap)}')
 
@@ -985,7 +1072,7 @@ def fringefit(data, x=None, y=None, rho=None, phi=None, terms=16, norm=False, re
     # compute each Zernike term
     zerns_raw = []
     for i in range(terms):
-        func = zernikes[fringemap[i]]
+        func = zernikes[map_[i]]
         base_zern = func(rho, phi)
         if norm:
             base_zern *= func.norm
