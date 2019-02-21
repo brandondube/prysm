@@ -1,5 +1,5 @@
 """A base point spread function interface."""
-from scipy import optimize
+from scipy import optimize, interpolate
 
 from .coordinates import cart_to_polar
 from .util import share_fig_ax, sort_xy
@@ -349,6 +349,49 @@ class PSF(Convolvable):
 
         psf.fno = efl / pupil.diameter
         psf.wavelength = wvl
+        return psf
+
+    @staticmethod
+    def polychromatic(psfs, spectral_weights=None, interp_method='linear'):
+        """Create a new PSF instance from an ensemble of monochromatic PSFs given spectral weights.
+
+        The new PSF is the polychromatic PSF, assuming the wavelengths are
+        sufficiently different that they do not interfere and the mode of
+        imaging is incoherent.
+
+        """
+        if spectral_weights is None:
+            spectral_weights = [1] * len(psfs)
+
+        # find the most densely sampled PSF
+        min_spacing = 1e99
+        ref_idx = None
+        ref_unit_x = None
+        ref_unit_y = None
+        ref_samples_x = None
+        ref_samples_y = None
+        for idx, psf in enumerate(psfs):
+            if psf.sample_spacing < min_spacing:
+                min_spacing = psf.sample_spacing
+                ref_idx = idx
+                ref_unit_x = psf.unit_x
+                ref_unit_y = psf.unit_y
+                ref_samples_x = psf.samples_x
+                ref_samples_y = psf.samples_y
+
+        merge_data = m.zeros((ref_samples_x, ref_samples_y, len(psfs)))
+        for idx, psf in enumerate(psfs):
+            # don't do anything to the reference PSF besides spectral scaling
+            if idx is ref_idx:
+                merge_data[:, :, idx] = psf.data * spectral_weights[idx]
+            else:
+                xv, yv = m.meshgrid(ref_unit_x, ref_unit_y)
+                interpf = interpolate.RegularGridInterpolator((psf.unit_y, psf.unit_x), psf.data)
+                merge_data[:, :, idx] = interpf((yv, xv), method=interp_method) * spectral_weights[idx]
+
+        psf = PSF(data=merge_data.sum(axis=2), unit_x=ref_unit_x, unit_y=ref_unit_y)
+        psf.spectral_weights = spectral_weights
+        psf._renorm()
         return psf
 
 
