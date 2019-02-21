@@ -206,7 +206,7 @@ class MTF(BasicData):
         """
         nu, theta, mtf = uniform_cart_to_polar(self.unit_x, self.unit_y, self.data)
         l = len(nu) // 2
-        return nu[l:], mtf.mean(axis=0)
+        return nu[:l], mtf.mean(axis=0)[:l]
 
     # quick-access slices ------------------------------------------------------
 
@@ -290,6 +290,40 @@ class MTF(BasicData):
                xlim=(0, max_freq),
                ylim=(0, 1))
         ax.legend(loc='lower left')
+        return fig, ax
+
+    def plot_azimuthal_average(self, max_freq=200, fig=None, ax=None):
+        """Create a plot of the azimuthally averaged MTF.
+
+        Parameters
+        ----------
+        max_freq : `float`
+            Maximum frequency to plot to.  Axis limits will be ((-max_freq, max_freq), (-max_freq, max_freq))
+        fig : `matplotlib.figure.Figure`, optional:
+            Figure to draw plot in
+        ax : `matplotlib.axes.Axis`, optional:
+            Axis to draw plot in
+        labels : `iterable`
+            set of labels for the two lines that will be plotted
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            Figure to draw plot in
+        ax : `matplotlib.axes.Axis`
+            Axis to draw plot in
+
+        """
+
+        u, azavg = self.azimuthal_average()
+
+        fig, ax = share_fig_ax(fig, ax)
+        ax.plot(u, azavg)
+        ax.set(xlabel='Spatial Frequency [cy/mm]',
+               ylabel='MTF [Rel 1.0]',
+               xlim=(0, max_freq),
+               ylim=(0, 1))
+
         return fig, ax
 
     # plotting -----------------------------------------------------------------
