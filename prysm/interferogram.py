@@ -3,7 +3,7 @@ import warnings
 
 from .conf import config
 from ._phase import OpticalPhase
-from .zernike import defocus
+from .zernike import defocus, zernikefit, FringeZernike
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar, uniform_cart_to_polar
@@ -65,8 +65,7 @@ class Interferogram(OpticalPhase):
         http://www.opticsinfobase.org/abstract.cfm?URI=OFT-2008-OWA4
 
         """
-        from .zernike import fringefit, FringeZernike
-        coefs, residual = fringefit(self.phase, terms=36, residual=True)
+        coefs, residual = zernikefit(self.phase, terms=36, residual=True, map_='fringe')
         fz = FringeZernike(coefs, samples=self.shape[0])
         return fz.pv + 3 * residual
 
