@@ -8,7 +8,7 @@ class BasicData:
 
     @property
     def shape(self):
-        """Proxy to data shape."""
+        """Proxy to phase or data shape."""
         try:
             return getattr(self, self._data_attr).shape
         except AttributeError:
@@ -16,7 +16,7 @@ class BasicData:
 
     @property
     def size(self):
-        """Proxy to data size."""
+        """Proxy to phase or data size."""
         try:
             return getattr(self, self._data_attr).size
         except AttributeError:
@@ -58,7 +58,7 @@ class BasicData:
         -------
         self.unit : `numpy.ndarray`
             ordinate axis
-        slice of self.phase : `numpy.ndarray`
+        slice of self.phase or self.data : `numpy.ndarray`
 
         """
         return self.unit_x, getattr(self, self._data_attr)[self.center_y, :]
@@ -71,7 +71,7 @@ class BasicData:
         -------
         self.unit : `numpy.ndarray`
             ordinate axis
-        slice of self.phase : `numpy.ndarray`
+        slice of self.phase or self.data : `numpy.ndarray`
 
         """
         return self.unit_y, getattr(self, self._data_attr)[:, self.center_x]
