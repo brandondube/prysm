@@ -3,10 +3,8 @@ from .fttools import pad2d
 
 from prysm import mathops as m
 
-DEFAULT_Q = 2
 
-
-def prop_pupil_plane_to_psf_plane(wavefunction, Q=DEFAULT_Q, incoherent=True, norm=None):
+def prop_pupil_plane_to_psf_plane(wavefunction, Q, incoherent=True, norm=None):
     """Propagate a pupil plane to a PSF plane and compute the grid along which the PSF exists.
 
     Parameters
@@ -35,7 +33,7 @@ def prop_pupil_plane_to_psf_plane(wavefunction, Q=DEFAULT_Q, incoherent=True, no
         return impulse_response
 
 
-def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, prop_dist, wavelength, Q=DEFAULT_Q):
+def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, prop_dist, wavelength, Q):
     """Compute the ordinate axes for a pupil plane to PSF plane propagation.
 
     Parameters
