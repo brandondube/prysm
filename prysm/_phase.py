@@ -250,7 +250,13 @@ class OpticalPhase(BasicData):
         else:
             return new_ux, new_uy
 
-    def plot2d(self, cmap='inferno', clim=(None, None), interp_method='lanczos', show_colorbar=True, fig=None, ax=None):
+    def plot2d(self,
+               cmap=config.phase_colormap,
+               clim=(None, None),
+               interp_method='lanczos',
+               show_colorbar=True,
+               fig=None,
+               ax=None):
         """Plot the phase in 2D.
 
         Parameters
@@ -294,11 +300,15 @@ class OpticalPhase(BasicData):
         ax.set(xlabel=xlab, ylabel=ylab)
         return fig, ax
 
-    def plot_slice_xy(self, fig=None, ax=None):
+    def plot_slice_xy(self, lw=config.lw, zorder=config.zorder, fig=None, ax=None):
         """Create a plot of slices through the X and Y axes of the `Pupil`.
 
         Parameters
         ----------
+        lw : `float`, optional
+            line width
+        zorder : `int`, optional
+            zorder
         fig : `matplotlib.figure.Figure`, optional
             Figure to draw plot in
         ax : `matplotlib.axes.Axis`
@@ -317,11 +327,11 @@ class OpticalPhase(BasicData):
 
         fig, ax = share_fig_ax(fig, ax)
 
-        ax.plot(ux, x, lw=3, label='Slice X')
-        ax.plot(uy, y, lw=3, label='Slice Y')
+        ax.plot(ux, x, lw=lw, zorder=zorder, label='X')
+        ax.plot(uy, y, lw=lw, zorder=zorder, label='Y')
         ax.set(xlabel=f'{self.xaxis_label} [{self.spatial_unit}]',
                ylabel=f'{self.zaxis_label} [{self.phase_unit}]')
-        ax.legend()
+        ax.legend(title='Slice')
         return fig, ax
 
     def interferogram(self, visibility=1, passes=2, interp_method='lanczos', fig=None, ax=None):

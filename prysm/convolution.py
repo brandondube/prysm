@@ -49,7 +49,7 @@ class Convolvable(BasicData):
         """Width of the domain."""
         return max((self.support_x, self.support_y))
 
-    def plot_slice_xy(self, axlim=20, lw=3, fig=None, ax=None):
+    def plot_slice_xy(self, axlim=20, lw=config.lw, zorder=config.zorder, fig=None, ax=None):
         """Create a plot of slices through the X and Y axes of the `PSF`.
 
         Parameters
@@ -57,7 +57,9 @@ class Convolvable(BasicData):
         axlim : `float` or `int`, optional
             axis limits, in microns
         lw : `float`, optional
-            linewidth provided directly to matplotlib
+            line width
+        zorder : `int`, optional
+            zorder
         fig : `matplotlib.figure.Figure`, optional
             Figure to draw plot in
         ax : `matplotlib.axes.Axis`
@@ -79,13 +81,13 @@ class Convolvable(BasicData):
 
         fig, ax = share_fig_ax(fig, ax)
 
-        ax.plot(ux, x, label='Slice X', lw=lw)
-        ax.plot(uy, y, label='Slice Y', lw=lw)
+        ax.plot(ux, x, label='X', lw=lw, zorder=zorder)
+        ax.plot(uy, y, label='Y', lw=lw, zorder=zorder)
         ax.set(xlabel=f'Image Plane [μm]',
                ylabel=label_str,
                xlim=(-axlim, axlim),
                ylim=lims)
-        ax.legend(loc='upper right')
+        ax.legend(title='Slice', loc='upper right')
         return fig, ax
 
     def conv(self, other):

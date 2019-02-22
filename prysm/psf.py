@@ -1,6 +1,7 @@
 """A base point spread function interface."""
 from scipy import optimize, interpolate
 
+from .conf import config
 from .coordinates import cart_to_polar
 from .util import share_fig_ax, sort_xy
 from .convolution import Convolvable
@@ -139,7 +140,7 @@ class PSF(Convolvable):
     # plotting -----------------------------------------------------------------
 
     def plot2d(self, axlim=25, power=1, clim=(None, None), interp_method='lanczos',
-               pix_grid=None, invert=False, fig=None, ax=None,
+               pix_grid=None, cmap=config.image_colormap, fig=None, ax=None,
                show_axlabels=True, show_colorbar=True,
                circle_ee=None, circle_ee_lw=None):
         """Create a 2D plot of the PSF.
@@ -159,8 +160,8 @@ class PSF(Convolvable):
             if not None, overlays gridlines with spacing equal to pix_grid.
             Intended to show the collection into camera pixels while still in
             the oversampled domain
-        invert : `bool`, optional
-            whether to invert the color scale
+        cmap : `str`, optional
+            colormap, passed directly to matplotlib
         fig : `matplotlib.figure.Figure`, optional:
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
@@ -190,11 +191,6 @@ class PSF(Convolvable):
 
         left, right = self.unit_x[0], self.unit_x[-1]
         bottom, top = self.unit_y[0], self.unit_y[-1]
-
-        if invert:
-            cmap = 'Greys'
-        else:
-            cmap = 'Greys_r'
 
         fig, ax = share_fig_ax(fig, ax)
 
@@ -251,7 +247,7 @@ class PSF(Convolvable):
 
         return fig, ax
 
-    def plot_encircled_energy(self, axlim=None, npts=50, lw=3, fig=None, ax=None):
+    def plot_encircled_energy(self, axlim=None, npts=50, lw=config.lw, zorder=config.zorder, fig=None, ax=None):
         """Make a 1D plot of the encircled energy at the given azimuth.
 
         Parameters
@@ -263,7 +259,9 @@ class PSF(Convolvable):
         npts : `int`, optional
             number of points to use from [0, axlim]
         lw : `float`, optional
-            linewidth provided directly to matplotlib
+            line width
+        zorder : `int` optional
+            zorder
         fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
@@ -289,7 +287,7 @@ class PSF(Convolvable):
             yy = self.encircled_energy(xx)
 
         fig, ax = share_fig_ax(fig, ax)
-        ax.plot(xx, yy, lw=3)
+        ax.plot(xx, yy, lw=lw, zorder=zorder)
         ax.set(xlabel='Image Plane Distance [μm]',
                ylabel='Encircled Energy [Rel 1.0]',
                xlim=(0, axlim))
@@ -323,7 +321,7 @@ class PSF(Convolvable):
     # helpers ------------------------------------------------------------------
 
     @staticmethod
-    def from_pupil(pupil, efl, Q=2):
+    def from_pupil(pupil, efl, Q=None):
         """Use scalar diffraction propogation to generate a PSF from a pupil.
 
         Parameters

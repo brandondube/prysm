@@ -337,7 +337,7 @@ class Interferogram(OpticalPhase):
         kernel *= self.bandlimited_rms(upper_limit, None) / wavelength
         return 1 - m.exp(-kernel**2)
 
-    def plot_psd2d(self, axlim=None, clim=(1e-9, 1e2), interp_method='lanczos', fig=None, ax=None):
+    def plot_psd2d(self, axlim=None, clim=(1e-9, 1e2), cmap=config.image_colormap, interp_method='lanczos', fig=None, ax=None):
         """Plot the two dimensional PSD.
 
         Parameters
@@ -374,7 +374,7 @@ class Interferogram(OpticalPhase):
         im = ax.imshow(psd,
                        extent=[x[0], x[-1], y[0], y[-1]],
                        origin='lower',
-                       cmap='Greys_r',
+                       cmap=cmap,
                        norm=colors.LogNorm(*clim),
                        interpolation=interp_method)
 
@@ -391,7 +391,9 @@ class Interferogram(OpticalPhase):
 
     def plot_psd_slices(self, x=True, y=True, azavg=True, azmin=False, azmax=False,
                         a=None, b=None, c=None, mode='freq', alpha=1, legend=True,
-                        lw=3, zorder=3, xlim=None, ylim=None, fig=None, ax=None):
+                        lw=config.lw, zorder=config.zorder,
+                        xlim=None, ylim=None,
+                        fig=None, ax=None):
         """Plot the x, y, and average PSD on a linear x axis.
 
         Parameters
