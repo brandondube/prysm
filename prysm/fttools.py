@@ -30,14 +30,8 @@ def pad2d(array, Q=2, value=0, mode='constant'):
         return array
     else:
         if mode == 'constant':
+            pad_shape, out_x, out_y = _padshape(array, Q)
             y, x = array.shape
-            out_x = int(m.ceil(x * Q))
-            out_y = int(m.ceil(y * Q))
-            factor_x = (out_x - x) / 2
-            factor_y = (out_y - y) / 2
-            pad_shape = (
-                (int(m.floor(factor_y)), int(m.ceil(factor_y))),
-                (int(m.floor(factor_x)), int(m.ceil(factor_x))))
             if value is 0:
                 out = m.zeros((out_y, out_x), dtype=array.dtype)
             else:
@@ -46,15 +40,7 @@ def pad2d(array, Q=2, value=0, mode='constant'):
             out[yy[0]:yy[0] + y, xx[0]:xx[0] + x] = array
             return out
         else:
-            # TODO: refactor this at some point to remove duplication
-            y, x = array.shape
-            out_x = int(m.ceil(x * Q))
-            out_y = int(m.ceil(y * Q))
-            factor_x = (out_x - x) / 2
-            factor_y = (out_y - y) / 2
-            pad_shape = (
-                (int(m.floor(factor_y)), int(m.ceil(factor_y))),
-                (int(m.floor(factor_x)), int(m.ceil(factor_x))))
+            pad_shape, *_ = _padshape(array, Q)
 
             if mode == 'constant':
                 kwargs = {'constant_values': value, 'mode': mode}
@@ -71,7 +57,7 @@ def _padshape(array, Q):
     factor_y = (out_y - y) / 2
     return (
         (int(m.floor(factor_y)), int(m.ceil(factor_y))),
-        (int(m.floor(factor_x)), int(m.ceil(factor_x))))
+        (int(m.floor(factor_x)), int(m.ceil(factor_x)))), out_x, out_y
 
 
 def forward_ft_unit(sample_spacing, samples, shift=True):
