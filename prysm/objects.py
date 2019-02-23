@@ -1,4 +1,4 @@
-'''Object to convolve lens PSFs with.'''
+"""Objects for image simulation with."""
 
 from .conf import config
 from .convolution import Convolvable
@@ -89,7 +89,7 @@ class Slit(Convolvable):
 
 class Pinhole(Convolvable):
     """Representation of a pinhole."""
-    def __init__(self, width, sample_spacing=0.025, samples=0):
+    def __init__(self, width, sample_spacing=None, samples=0):
         """Create a Pinhole instance.
 
         Parameters
@@ -203,7 +203,7 @@ class SiemensStar(Convolvable):
 
 class TiltedSquare(Convolvable):
     """Represents a tilted square for e.g. slanted-edge MTF calculation."""
-    def __init__(self, angle=8, background='white', sample_spacing=2, samples=256):
+    def __init__(self, angle=4, background='white', sample_spacing=2, samples=256):
         """Create a new TitledSquare instance.
 
         Parameters
@@ -244,7 +244,7 @@ class TiltedSquare(Convolvable):
 
 class SlantedEdge(Convolvable):
     """Representation of a slanted edge."""
-    def __init__(self, angle=8, contrast=0.9, crossed=False, sample_spacing=2, samples=256):
+    def __init__(self, angle=4, contrast=0.9, crossed=False, sample_spacing=2, samples=256):
         """Create a new TitledSquare instance.
 
         Parameters
