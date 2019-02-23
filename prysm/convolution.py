@@ -247,6 +247,7 @@ class Convolvable(BasicData):
         im = ax.imshow(self.data,
                        extent=ext,
                        origin='lower',
+                       aspect='equal',
                        norm=colors.PowerNorm(1/power),
                        clim=(0, 1),
                        cmap='Greys_r',
@@ -355,8 +356,9 @@ class Convolvable(BasicData):
         from imageio import imread
         imgarr = imread(path)
         s = imgarr.shape
-        extx, exty = s[0] * scale // 2, s[1] * scale // 2
-        ux, uy = m.arange(-extx, exty, scale), m.arange(-exty, exty, scale)
+        extx, exty = (s[1] * scale) / 2, (s[0] * scale) / 2
+        print(extx, exty, scale)
+        ux, uy = m.arange(-extx, extx, scale), m.arange(-exty, exty, scale)
         return Convolvable(data=m.flip(imgarr, axis=0).astype(config.precision),
                            unit_x=ux, unit_y=uy, has_analytic_ft=False)
 
