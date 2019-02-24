@@ -393,9 +393,9 @@ class PSF(Convolvable):
         return psf
 
 
-class AiryDisk(PSF):
+class AiryDisk(Convolvable):
     """An airy disk, the PSF of a circular aperture."""
-    def __init__(self, fno, wavelength, extent, samples):
+    def __init__(self, fno, wavelength, extent=None, samples=None):
         """Create a new AiryDisk.
 
         Parameters
@@ -410,11 +410,14 @@ class AiryDisk(PSF):
             number of samples across full width
 
         """
-        x = m.linspace(-extent, extent, samples)
-        y = m.linspace(-extent, extent, samples)
-        xx, yy = m.meshgrid(x, y)
-        rho, phi = cart_to_polar(xx, yy)
-        data = airydisk(rho, fno, wavelength)
+        if samples is not None:
+            x = m.linspace(-extent, extent, samples)
+            y = m.linspace(-extent, extent, samples)
+            xx, yy = m.meshgrid(x, y)
+            rho, phi = cart_to_polar(xx, yy)
+            data = airydisk(rho, fno, wavelength)
+        else:
+            x, y, data = None, None, None
         self.fno = fno
         self.wavelength = wavelength
         super().__init__(data, x, y)
