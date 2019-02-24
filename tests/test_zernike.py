@@ -78,7 +78,6 @@ def test_fringezernike_will_pass_pupil_args():
     assert p
 
 
-@pytest.mark.skipif('TRAVIS' in os.environ and os.environ['TRAVIS'] == 'true', reason='lapack error on travis')
 def test_fit_agrees_with_truth(fit_data):
     data, real_coefs = fit_data
     coefs = zernike.zernikefit(data, map_='fringe')
@@ -86,7 +85,6 @@ def test_fit_agrees_with_truth(fit_data):
     assert coefs[8] == pytest.approx(real_coefs[8])
 
 
-@pytest.mark.skipif('TRAVIS' in os.environ and os.environ['TRAVIS'] == 'true', reason='lapack error on travis')
 def test_fit_does_not_throw_on_normalize(fit_data):
     data, real_coefs = fit_data
     coefs = zernike.zernikefit(data, norm=True, map_='fringe')
