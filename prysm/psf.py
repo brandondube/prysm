@@ -12,9 +12,18 @@ from .propagation import (
 
 from prysm import mathops as m
 
-
+FIRST_AIRY_ZERO = 1.220
+SECOND_AIRY_ZERO = 2.233
+THIRD_AIRY_ZERO = 3.238
 FIRST_AIRY_ENCIRCLED = 0.8377850436212378
+SECOND_AIRY_ENCIRCLED = 0.9099305350850819
+THIRD_AIRY_ENCIRCLED = 0.9376474743695488
 
+AIRYDATA = {
+    1: (FIRST_AIRY_ZERO, FIRST_AIRY_ENCIRCLED),
+    2: (SECOND_AIRY_ZERO, SECOND_AIRY_ENCIRCLED),
+    3: (THIRD_AIRY_ZERO, THIRD_AIRY_ENCIRCLED)
+}
 
 class PSF(Convolvable):
     """A Point Spread Function.
@@ -91,6 +100,8 @@ class PSF(Convolvable):
             self._mtf = MTF.from_psf(self)
             nx, ny = m.meshgrid(self._mtf.unit_x, self._mtf.unit_y)
             self._nu_p = m.sqrt(nx ** 2 + ny ** 2)
+            # this is meaninglessly small and will avoid division by 0
+            self._nu_p[self._nu_p == 0] = 1e-99
             self._dnx, self._dny = ny[1, 0] - ny[0, 0], nx[0, 1] - nx[0, 0]
 
         if radius_is_array:
@@ -121,7 +132,7 @@ class PSF(Convolvable):
             return k[idx]
 
         def optfcn(x):
-            return abs(self.encircled_energy(x) - energy)
+            return (self.encircled_energy(x) - energy) ** 2
 
         # golden seems to perform best in presence of shallow local minima as in
         # the encircled energy
@@ -489,9 +500,6 @@ def _encircled_energy_core(mtf_data, radius, nu_p, dx, dy):
 
     """
     integration_fourier = m.j1(2 * m.pi * radius * nu_p) / nu_p
-    # division by nu_p will cause a NaN at the origin, 0.5 is the
-    # analytical value of jinc there
-    integration_fourier[m.isnan(integration_fourier)] = 0.5
     dat = mtf_data * integration_fourier
     return radius * dat.sum() * dx * dy
 
@@ -520,6 +528,6 @@ def _analytical_encircled_energy(fno, wavelength, points):
 
 def _inverse_analytic_encircled_energy(fno, wavelength, energy=FIRST_AIRY_ENCIRCLED):
     def optfcn(x):
-        return abs(_analytical_encircled_energy(fno, wavelength, x) - energy)
+        return (_analytical_encircled_energy(fno, wavelength, x) - energy) ** 2
 
     return optimize.golden(optfcn)
