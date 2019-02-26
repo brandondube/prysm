@@ -25,6 +25,7 @@ AIRYDATA = {
     3: (THIRD_AIRY_ZERO, THIRD_AIRY_ENCIRCLED)
 }
 
+
 class PSF(Convolvable):
     """A Point Spread Function.
 
