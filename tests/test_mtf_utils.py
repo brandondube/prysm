@@ -1,10 +1,16 @@
 """Tests for MTF utils."""
+import random
+
 import numpy as np
 
 import pytest
 
+import matplotlib as mpl
+
 from prysm import sample_files
 from prysm import mtf_utils
+
+mpl.use('TkAgg')
 
 
 @pytest.fixture
@@ -61,7 +67,38 @@ def test_mtfvfvf_plot_singlefield_throughfocus_functions(sample_data):
 
 
 @pytest.mark.parametrize('algo', ['0.5', 'avg'])
-def mtfvfvf_trace_focus_functions(sample_data, algo):
-    focuses, fields = sample_data.trace_focus(algo)
-    assert focuses
-    assert fields
+def test_mtfvfvf_trace_focus_functions(sample_data, algo):
+    fields, focuses = sample_data.trace_focus(algo)
+    assert any(focuses)
+    assert any(fields)
+
+
+def test_mtfvfvf_from_dataframe_correct_data_order():
+    from itertools import product
+    import pandas as pd
+    fields = np.arange(21) - 11
+    focus = np.arange(21) - 11
+    focus *= 10  # +/- 100 microns
+    freq = np.arange(21) * 10  # 0..10..210 cy/mm
+    fff = product(fields, focus, freq)
+    data = []
+    for field, focus, freq in fff:
+        data_base = {
+            'Field': field,
+            'Focus': focus,
+            'Freq': freq,
+        }
+        data.append({
+            **data_base,
+            'Azimuth': 'Tan',
+            'MTF': random.random(),
+        })
+        data.append({
+            **data_base,
+            'Azimuth': 'Sag',
+            'MTF': random.random(),
+        })
+    df = pd.DataFrame(data=data)
+    t, s = mtf_utils.MTFvFvF.from_dataframe(df)
+    assert t.data.shape == (21, 21, 21)
+    assert s.data.shape == (21, 21, 21)
