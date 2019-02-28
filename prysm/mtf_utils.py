@@ -163,8 +163,10 @@ class MTFvFvF(object):
 
         Returns
         -------
-        `numpy.ndarray`
-            focal surface sag, in microns, vs field
+        field : `numpy.ndarray`
+            array of field values, mm
+        focus : `numpy.ndarray`
+            array of focus values, microns
 
         Notes
         -----
@@ -194,9 +196,9 @@ class MTFvFvF(object):
         if algorithm == '0.5':
             # locate the frequency index on axis
             idx_axis = m.searchsorted(self.field, 0)
-            idx_freq = abs(self.data[:, idx_axis, :].max(axis=0) - 0.5).argmin(axis=1)
+            idx_freq = abs(self.data[:, idx_axis, :].max(axis=0) - 0.5).argmin(axis=0)
             focus_idx = self.data[:, m.arange(self.data.shape[1]), idx_freq].argmax(axis=0)
-            return self.focus[focus_idx], self.field
+            return self.field, self.focus[focus_idx],
         elif algorithm.lower() in ('avg', 'average'):
             if self.freq[0] == 0:
                 # if the zero frequency is included, exclude it from our calculations
@@ -207,13 +209,13 @@ class MTFvFvF(object):
             # account for fractional indexes
             focus_out = avg_idxs.copy()
             for i, idx in enumerate(avg_idxs):
-                li, ri = m.floor(idx), m.ceil(idx)
+                li, ri = int(m.floor(idx)), int(m.ceil(idx))
                 lf, rf = self.focus[li], self.focus[ri]
                 diff = rf - lf
                 part = idx % 1
                 focus_out[i] = lf + diff * part
 
-            return focus_out, self.field
+            return self.field, focus_out
         else:
             raise ValueError('0.5 is only algorithm supported')
 
@@ -276,7 +278,7 @@ class MTFvFvF(object):
         Parameters
         ----------
         df : `pandas.DataFrame`
-            a dataframe
+            a dataframe with columns Focus, Field, Freq, Azimuth, MTF
 
         Returns
         -------
@@ -297,8 +299,8 @@ class MTFvFvF(object):
         fields = m.unique(df.Fields.as_matrix())
         freqs = m.unique(df.Freq.as_matrix())
         d1, d2, d3 = len(focus), len(fields), len(freqs)
-        t_mat = T.as_matrix.reshape((d1, d2, d3))
-        s_mat = S.as_matrix.reshape((d1, d2, d3))
+        t_mat = T.MTF.as_matrix().reshape((d1, d2, d3))
+        s_mat = S.MTF.as_matrix().reshape((d1, d2, d3))
         t_cube = MTFvFvF(data=t_mat, focus=focus, field=fields, freq=freqs, azimuth='Tan')
         s_cube = MTFvFvF(data=s_mat, focus=focus, field=fields, freq=freqs, azimuth='Sag')
         return t_cube, s_cube
