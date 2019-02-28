@@ -165,7 +165,7 @@ class OLPF(Convolvable):
         self.width_y = width_y
 
         if samples_x is None:  # do no math
-            data, ux, uy = None, m.zeros(2), m.zeros(2)
+            data, ux, uy = None, None, None
         else:
             space_x = width_x / 2
             space_y = width_y / 2
@@ -182,6 +182,7 @@ class OLPF(Convolvable):
             data[center_y + shift_y, center_x + shift_x] = 1
             ux = m.linspace(-space_x, space_x, samples_x)
             uy = m.linspace(-space_y, space_y, samples_y)
+
         super().__init__(data=data, unit_x=ux, unit_y=uy, has_analytic_ft=True)
 
     def analytic_ft(self, unit_x, unit_y):
