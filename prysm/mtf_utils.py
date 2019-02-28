@@ -295,12 +295,12 @@ class MTFvFvF(object):
         sorted_df = df.sort_values(by=['Focus', 'Field', 'Freq'])
         T = sorted_df[sorted_df.Azimuth == 'Tan']
         S = sorted_df[sorted_df.Azimuth == 'Sag']
-        focus = m.unique(df.Focus.as_matrix())
-        fields = m.unique(df.Fields.as_matrix())
-        freqs = m.unique(df.Freq.as_matrix())
+        focus = m.unique(df.Focus.values)
+        fields = m.unique(df.Fields.values)
+        freqs = m.unique(df.Freq.values)
         d1, d2, d3 = len(focus), len(fields), len(freqs)
-        t_mat = T.MTF.as_matrix().reshape((d1, d2, d3))
-        s_mat = S.MTF.as_matrix().reshape((d1, d2, d3))
+        t_mat = T.MTF.values.reshape((d1, d2, d3))
+        s_mat = S.MTF.values.reshape((d1, d2, d3))
         t_cube = MTFvFvF(data=t_mat, focus=focus, field=fields, freq=freqs, azimuth='Tan')
         s_cube = MTFvFvF(data=s_mat, focus=focus, field=fields, freq=freqs, azimuth='Sag')
         return t_cube, s_cube
