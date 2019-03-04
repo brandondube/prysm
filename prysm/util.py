@@ -116,6 +116,23 @@ def share_fig_ax(fig=None, ax=None, numax=1, sharex=False, sharey=False):
     return fig, ax
 
 
+def mean(array):
+    """Return the mean value of the valid elements of an array.
+
+    Parameters
+    ----------
+    array : `numpy.ndarray`
+        array of values
+
+    Returns
+    -------
+    `float`
+        mean value
+
+    """
+    non_nan = m.isfinite(array)
+    return array[non_nan].mean()
+
 def pv(array):
     """Return the PV value of the valid elements of an array.
 

@@ -131,7 +131,7 @@ allfuncs = set((
     'savetxt',
 ))
 
-allfuncs_cupy_missing = set((
+allfuncs_cupy_missing = frozenset((
     'searchsorted',
     'gradient',
     ))
@@ -142,6 +142,10 @@ fftfuncs = frozenset((
     'fftshift',
     'ifftshift',
     'fftfreq',
+))
+
+randomfuncs = frozenset((
+    'rand',
 ))
 
 linalgfuncs = frozenset((
@@ -201,12 +205,14 @@ def change_backend(to):
             target_base = 'cupy'
             target_fft = 'cupy.fft'
             target_linalg = 'cupy.linalg'
+            target_rand = 'cupy.random'
             # target_scipy = 'cupyx.scipy'
 
     elif to == 'np':
         target_base = 'numpy'
         target_fft = 'numpy.fft'
         target_linalg = 'numpy.linalg'
+        target_rand = 'numpy.random'
         # target_scipy = 'scipy'
 
         # two sets of functionality unavailable via cupy
@@ -228,6 +234,10 @@ def change_backend(to):
 
     for func in fftfuncs:
         exec(f'from {target_fft} import {func}')
+        globals()[func] = eval(func)
+
+    for func in randomfuncs:
+        exec(f'from {target_rand} import {func}')
         globals()[func] = eval(func)
 
 

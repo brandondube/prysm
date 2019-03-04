@@ -7,11 +7,373 @@ from .zernike import defocus, zernikefit, FringeZernike
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar, uniform_cart_to_polar
-from .util import share_fig_ax
+from .util import share_fig_ax, rms, mean
 from .geometry import mcache
 
 
 from prysm import mathops as m
+
+
+def fit_plane(x, y, z):
+    pts = m.isfinite(z)
+    if len(z.shape) > 1:
+        x, y = m.meshgrid(x, y)
+        xx, yy = x[pts].flatten(), y[pts].flatten()
+    else:
+        xx, yy = x, y
+
+    flat = m.ones(xx.shape)
+
+    coefs = m.lstsq(m.stack([xx, yy, flat]).T, z[pts].flatten(), rcond=None)[0]
+    plane_fit = coefs[0] * x + coefs[1] * y + coefs[2]
+    return plane_fit
+
+
+def fit_sphere(z):
+    x, y = m.linspace(-1, 1, z.shape[1]), m.linspace(-1, 1, z.shape[0])
+    xx, yy = m.meshgrid(x, y)
+    pts = m.isfinite(z)
+    xx_, yy_ = xx[pts].flatten(), yy[pts].flatten()
+    rho, phi = cart_to_polar(xx_, yy_)
+    focus = defocus(rho, phi)
+
+    coefs = m.lstsq(m.stack([focus, m.ones(focus.shape)]).T, z[pts].flatten(), rcond=None)[0]
+    rho, phi = cart_to_polar(xx, yy)
+    sphere = defocus(rho, phi) * coefs[0]
+    return sphere
+
+
+def make_window(signal, sample_spacing, which='welch'):
+    """Generate a window function to be used in PSD analysis.
+
+    Parameters
+    ----------
+    signal : `numpy.ndarray`
+        signal or phase data
+    sample_spacing : `float`
+        spacing of samples in the input data
+    which : `str,` {'welch', 'hann', 'auto'}, optional
+        which window to produce.  If auto, attempts to guess the appropriate
+        window based on the input signal
+
+    Notes
+    -----
+    For 2D welch, see:
+    Power Spectral Density Specification and Analysis of Large Optical Surfaces
+    E. Sidick, JPL
+
+    Returns
+    -------
+    `numpy.ndarray`
+        window array
+
+    """
+    s = signal.shape
+
+    if which is None:
+        # attempt to guess best window
+        ysamples = int(round(s[0] * 0.02, 0))
+        xsamples = int(round(s[1] * 0.02, 0))
+        corner1 = signal[:ysamples, :xsamples] == 0
+        corner2 = signal[-ysamples:, :xsamples] == 0
+        corner3 = signal[:ysamples, -xsamples:] == 0
+        corner4 = signal[-ysamples:, -xsamples:] == 0
+        if corner1.all() and corner2.all() and corner3.all() and corner4.all():
+            # four corners all "black" -- circular data, Welch window is best
+            # looks wrong but 2D welch takes x, y while indices are y, x
+            y = m.arange(s[1]) * sample_spacing
+            x = m.arange(s[0]) * sample_spacing
+            return window_2d_welch(y, x)
+        else:
+            # if not circular, square data; use Hanning window
+            y = m.hanning(s[0])
+            x = m.hanning(s[1])
+            return m.outer(y, x)
+    else:
+        if type(which) is str:
+            # known window type
+            wl = which.lower()
+            if wl == 'welch':
+                y = m.arange(s[1]) * sample_spacing
+                x = m.arange(s[0]) * sample_spacing
+                return window_2d_welch(y, x)
+            elif wl in ('hann', 'hanning'):
+                y = m.hanning(s[0])
+                x = m.hanning(s[1])
+                return m.outer(y, x)
+            else:
+                raise ValueError('unknown window type')
+        else:
+            return which  # window provided as ndarray
+
+
+def psd(height, sample_spacing, window=None):
+    """Compute the power spectral density of a signal.
+
+    Parameters
+    ----------
+    height : `numpy.ndarray`
+        height or phase data
+    sample_spacing : `float`
+        spacing of samples in the input data
+    window : {'welch', 'hann'} or ndarray, optional
+
+    Returns
+    -------
+    unit_x : `numpy.ndarray`
+        ordinate x frequency axis
+    unit_y : `numpy.ndarray`
+        ordinate y frequency axis
+    psd : `numpy.ndarray`
+        power spectral density
+
+    Notes
+    -----
+    See GH_FFT for a rigorous treatment of FFT scalings
+    https://holometer.fnal.gov/GH_FFT.pdf
+
+    """
+    window = make_window(height, sample_spacing, window)
+    fft = m.ifftshift(m.fft2(m.fftshift(height * window)))
+    psd = abs(fft)**2  # mag squared first as per GH_FFT
+
+    fs = 1 / sample_spacing
+    S2 = (window**2).sum()
+    coef = S2 * fs * fs
+    psd /= coef
+
+    ux = forward_ft_unit(sample_spacing, height.shape[1])
+    uy = forward_ft_unit(sample_spacing, height.shape[0])
+    return ux, uy, psd
+
+
+def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
+    """Calculate the bandlimited RMS of a signal from its PSD.
+
+    Parameters
+    ----------
+    ux : `numpy.ndarray`
+        x spatial frequencies
+    uy : `numpy.ndarray`
+        y spatial frequencies
+    psd : `numpy.ndarray`
+        power spectral density
+    wllow : `float`
+        short spatial scale
+    wlhigh : `float`
+        long spatial scale
+    flow : `float`
+        low frequency
+    fhigh : `float`
+        high frequency
+
+    Returns
+    -------
+    `float`
+        band-limited RMS value.
+
+    """
+    if wllow is not None or wlhigh is not None:
+        # spatial period given
+        if wllow is None:
+            flow = 0
+        else:
+            fhigh = 1 / wllow
+
+        if wlhigh is None:
+            fhigh = max(ux[-1], uy[-1])
+        else:
+            flow = 1 / wlhigh
+    elif flow is not None or fhigh is not None:
+        # spatial frequency given
+        if flow is None:
+            flow = 0
+        if fhigh is None:
+            fhigh = max(ux[-1], uy[-1])
+    else:
+        raise ValueError('must specify either period (wavelength) or frequency')
+
+    ux2, uy2 = m.meshgrid(ux, uy)
+    r, p = cart_to_polar(ux2, uy2)
+
+    if flow is None:
+        warnings.warn('no lower limit given, using 0 for low frequency')
+        flow = 0
+
+    if fhigh is None:
+        warnings.warn('no upper limit given, using limit imposed by data.')
+        fhigh = r.max()
+
+    work = psd.copy()
+    work[r < flow] = 0
+    work[r > fhigh] = 0
+    first = m.trapz(work, uy, axis=0)
+    second = m.trapz(first, ux, axis=0)
+    return m.sqrt(second)
+
+
+def window_2d_welch(x, y, alpha=8):
+    """Return a 2D welch window for a given alpha.
+
+    Parameters
+    ----------
+    x : `numpy.ndarray`
+        x values, 1D array
+    y : `numpy.ndarray`
+        y values, 1D array
+    alpha : `float`
+        alpha (edge roll) parameter
+
+    Returns
+    -------
+    `numpy.ndarray`
+        window
+
+    """
+    xx, yy = m.meshgrid(x, y)
+    r, _ = cart_to_polar(xx, yy)
+    rmax = m.sqrt(x.max()**2 + y.max()**2)
+    window = 1 - abs(r/rmax)**alpha
+    return window
+
+
+def abc_psd(nu, a, b, c):
+    """Lorentzian model of a Power Spectral Density.
+
+    Parameters
+    ----------
+    nu : `numpy.ndarray` or `float`
+        spatial frequency
+    a : `float`
+        a coefficient
+    b : `float`
+        b coefficient
+    c : `float`
+        c coefficient
+
+    Returns
+    -------
+    `numpy.ndarray`
+        value of PSD model
+
+    """
+    return a / (1 + (nu/b)**2)**(c/2)
+
+
+def ab_psd(nu, a, b):
+    """Inverse power model of a Power Spectral Density.
+
+    Parameters
+    ----------
+    nu : `numpy.ndarray` or `float`
+        spatial frequency
+    a : `float`
+        a coefficient
+    b : `float`
+        b coefficient
+
+    Returns
+    -------
+    `numpy.ndarray`
+        value of PSD model
+
+    """
+    return a * nu ** (-b)
+
+
+def synthesize_surface_from_psd(psd, nu_x, nu_y):
+    """Synthesize a surface height map from PSD data.
+
+    Parameters
+    ----------
+    psd : `numpy.ndarray`
+        PSD data, units nm^2/(cy/mm)^2
+    nu_x : `numpy.ndarray`
+        x spatial frequency, cy/mm
+    nu_y : `numpy.ndarray`
+        y spatial frequency, cy_mm
+
+    """
+    # generate a random phase to be matched to the PSD
+    center_y, center_x = (i // 2 for i in psd.shape)
+    randnums = m.rand(*psd.shape)
+    randfft = m.fft2(randnums)
+    phase = m.angle(randfft)
+
+
+    # calculate the output window
+    # the 0th element of nu_y has the greatest frequency in magnitude because of
+    # the convention to put the nyquist sample at -fs instead of +fs for even-size arrays
+    fs = -2 * nu_y[0]
+    dx = dy = 1 / fs
+    ny, nx = psd.shape
+    x, y = m.arange(nx) * dx, m.arange(ny) * dy
+
+    # calculate the area of the output window, "S2" in GH_FFT notation
+    A = x[-1] * y[-1]
+
+    # use ifft to compute the PSD
+    signal = m.exp(1j * phase) * m.sqrt(A * psd)
+
+    coef = 1 / dx / dy
+    out = m.ifftshift(m.ifft2(m.fftshift(signal))) * coef
+    out = out.real
+    return x, y, out
+
+def render_synthetic_surface(size, samples, rms=None, mask='circle', psd_fcn=abc_psd, **psd_fcn_kwargs):
+    """Render a synthetic surface with a given RMS value given a PSD function.
+
+    Parameters
+    ----------
+    size : `float`
+        diameter of the output surface, mm
+    samples : `int`
+        number of samples across the output surface
+    rms : `float`
+        desired RMS value of the output, if rms=None, no normalization is done
+    mask : `str`, optional
+        mask defining the clear aperture
+    psd_fcn : `callable`
+        function used to generate the PSD
+    **psd_fcn_kwargs:
+        keyword arguments passed to psd_fcn in addition to nu
+        if psd_fcn == abc_psd, kwargs are a, b, c
+        elif psd_Fcn == ab_psd kwargs are a, b
+
+        kwargs will be user-defined for user PSD functions
+
+    Returns
+    -------
+    x : `numpy.ndarray`
+        x coordinates, mm
+    y: `numpy.ndarray`
+        y coordinates, mm
+    z : `numpy.ndarray`
+        height data, nm
+
+    """
+    # compute the grid and PSD
+    sample_spacing = size / (samples - 1)
+    nu_x = nu_y = forward_ft_unit(sample_spacing, samples)
+    nu_xx, nu_yy = m.meshgrid(nu_x, nu_y)
+
+    nu_r, _ = cart_to_polar(nu_xx, nu_yy)
+    psd = psd_fcn(nu_r, **psd_fcn_kwargs)
+
+    # synthesize a surface from the PSD
+    x, y, z = synthesize_surface_from_psd(psd, nu_x, nu_y)
+
+    # mask
+    mask = mcache(mask, samples)
+    z[mask == 0] = m.nan
+
+    # possibly scale RMS
+    if rms is not None:
+        z_rms = globals()['rms'](z)  # rms function is shadowed by rms kwarg
+        scale_factor = rms / z_rms
+        z *= scale_factor
+
+    return x, y, z
 
 
 class Interferogram(OpticalPhase):
@@ -124,7 +486,7 @@ class Interferogram(OpticalPhase):
 
     def remove_piston(self):
         """Remove piston from the data by subtracting the mean value."""
-        self.phase -= self.phase[m.isfinite(self.phase)].mean()
+        self.phase -= mean(self.phase)
         return self
 
     def remove_tiptilt(self):
@@ -542,269 +904,34 @@ class Interferogram(OpticalPhase):
                           scale=_scale, meta=zydat['meta'])
         return i.change_spatial_unit(to=scale.lower(), inplace=True)
 
+    @staticmethod
+    def render_from_psd(size, samples, rms=None, mask='circle', phase_unit='nm', psd_fcn=abc_psd, **psd_fcn_kwargs):
+        """Render a synthetic surface with a given RMS value given a PSD function.
 
-def fit_plane(x, y, z):
-    pts = m.isfinite(z)
-    if len(z.shape) > 1:
-        x, y = m.meshgrid(x, y)
-        xx, yy = x[pts].flatten(), y[pts].flatten()
-    else:
-        xx, yy = x, y
+        Parameters
+        ----------
+        size : `float`
+            diameter of the output surface, mm
+        samples : `int`
+            number of samples across the output surface
+        rms : `float`
+            desired RMS value of the output, if rms=None, no normalization is done
+        mask : `str`, optional
+            mask defining the clear aperture
+        psd_fcn : `callable`
+            function used to generate the PSD
+        **psd_fcn_kwargs:
+            keyword arguments passed to psd_fcn in addition to nu
+            if psd_fcn == abc_psd, kwargs are a, b, c
+            elif psd_Fcn == ab_psd kwargs are a, b
 
-    flat = m.ones(xx.shape)
+            kwargs will be user-defined for user PSD functions
 
-    coefs = m.lstsq(m.stack([xx, yy, flat]).T, z[pts].flatten(), rcond=None)[0]
-    plane_fit = coefs[0] * x + coefs[1] * y + coefs[2]
-    return plane_fit
+        Returns
+        -------
+        `Interferogram`
+            new interferogram instance
 
-
-def fit_sphere(z):
-    x, y = m.linspace(-1, 1, z.shape[1]), m.linspace(-1, 1, z.shape[0])
-    xx, yy = m.meshgrid(x, y)
-    pts = m.isfinite(z)
-    xx_, yy_ = xx[pts].flatten(), yy[pts].flatten()
-    rho, phi = cart_to_polar(xx_, yy_)
-    focus = defocus(rho, phi)
-
-    coefs = m.lstsq(m.stack([focus, m.ones(focus.shape)]).T, z[pts].flatten(), rcond=None)[0]
-    rho, phi = cart_to_polar(xx, yy)
-    sphere = defocus(rho, phi) * coefs[0]
-    return sphere
-
-
-def make_window(signal, sample_spacing, which='welch'):
-    """Generate a window function to be used in PSD analysis.
-
-    Parameters
-    ----------
-    signal : `numpy.ndarray`
-        signal or phase data
-    sample_spacing : `float`
-        spacing of samples in the input data
-    which : `str,` {'welch', 'hann', 'auto'}, optional
-        which window to produce.  If auto, attempts to guess the appropriate
-        window based on the input signal
-
-    Notes
-    -----
-    For 2D welch, see:
-    Power Spectral Density Specification and Analysis of Large Optical Surfaces
-    E. Sidick, JPL
-
-    Returns
-    -------
-    `numpy.ndarray`
-        window array
-
-    """
-    s = signal.shape
-
-    if which is None:
-        # attempt to guess best window
-        ysamples = int(round(s[0] * 0.02, 0))
-        xsamples = int(round(s[1] * 0.02, 0))
-        corner1 = signal[:ysamples, :xsamples] == 0
-        corner2 = signal[-ysamples:, :xsamples] == 0
-        corner3 = signal[:ysamples, -xsamples:] == 0
-        corner4 = signal[-ysamples:, -xsamples:] == 0
-        if corner1.all() and corner2.all() and corner3.all() and corner4.all():
-            # four corners all "black" -- circular data, Welch window is best
-            # looks wrong but 2D welch takes x, y while indices are y, x
-            y = m.arange(s[1]) * sample_spacing
-            x = m.arange(s[0]) * sample_spacing
-            return window_2d_welch(y, x)
-        else:
-            # if not circular, square data; use Hanning window
-            y = m.hanning(s[0])
-            x = m.hanning(s[1])
-            return m.outer(y, x)
-    else:
-        if type(which) is str:
-            # known window type
-            wl = which.lower()
-            if wl == 'welch':
-                y = m.arange(s[1]) * sample_spacing
-                x = m.arange(s[0]) * sample_spacing
-                return window_2d_welch(y, x)
-            elif wl in ('hann', 'hanning'):
-                y = m.hanning(s[0])
-                x = m.hanning(s[1])
-                return m.outer(y, x)
-            else:
-                raise ValueError('unknown window type')
-        else:
-            return which  # window provided as ndarray
-
-
-def psd(height, sample_spacing, window=None):
-    """Compute the power spectral density of a signal.
-
-    Parameters
-    ----------
-    height : `numpy.ndarray`
-        height or phase data
-    sample_spacing : `float`
-        spacing of samples in the input data
-    window : {'welch', 'hann'} or ndarray, optional
-
-    Returns
-    -------
-    unit_x : `numpy.ndarray`
-        ordinate x frequency axis
-    unit_y : `numpy.ndarray`
-        ordinate y frequency axis
-    psd : `numpy.ndarray`
-        power spectral density
-
-    Notes
-    -----
-    See GH_FFT for a rigorous treatment of FFT scalings
-    https://holometer.fnal.gov/GH_FFT.pdf
-
-    """
-    window = make_window(height, sample_spacing, window)
-    fft = m.ifftshift(m.fft2(m.fftshift(height * window)))
-    psd = abs(fft)**2  # mag squared first as per GH_FFT
-
-    fs = 1 / sample_spacing
-    S2 = (window**2).sum()
-    coef = S2 * fs * fs
-    psd /= coef
-
-    ux = forward_ft_unit(sample_spacing, height.shape[1])
-    uy = forward_ft_unit(sample_spacing, height.shape[0])
-    return ux, uy, psd
-
-
-def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
-    """Calculate the bandlimited RMS of a signal from its PSD.
-
-    Parameters
-    ----------
-    ux : `numpy.ndarray`
-        x spatial frequencies
-    uy : `numpy.ndarray`
-        y spatial frequencies
-    psd : `numpy.ndarray`
-        power spectral density
-    wllow : `float`
-        short spatial scale
-    wlhigh : `float`
-        long spatial scale
-    flow : `float`
-        low frequency
-    fhigh : `float`
-        high frequency
-
-    Returns
-    -------
-    `float`
-        band-limited RMS value.
-
-    """
-    if wllow is not None or wlhigh is not None:
-        # spatial period given
-        if wllow is None:
-            flow = 0
-        else:
-            fhigh = 1 / wllow
-
-        if wlhigh is None:
-            fhigh = max(ux[-1], uy[-1])
-        else:
-            flow = 1 / wlhigh
-    elif flow is not None or fhigh is not None:
-        # spatial frequency given
-        if flow is None:
-            flow = 0
-        if fhigh is None:
-            fhigh = max(ux[-1], uy[-1])
-    else:
-        raise ValueError('must specify either period (wavelength) or frequency')
-
-    ux2, uy2 = m.meshgrid(ux, uy)
-    r, p = cart_to_polar(ux2, uy2)
-
-    if flow is None:
-        warnings.warn('no lower limit given, using 0 for low frequency')
-        flow = 0
-
-    if fhigh is None:
-        warnings.warn('no upper limit given, using limit imposed by data.')
-        fhigh = r.max()
-
-    work = psd.copy()
-    work[r < flow] = 0
-    work[r > fhigh] = 0
-    first = m.trapz(work, uy, axis=0)
-    second = m.trapz(first, ux, axis=0)
-    return m.sqrt(second)
-
-
-def window_2d_welch(x, y, alpha=8):
-    """Return a 2D welch window for a given alpha.
-
-    Parameters
-    ----------
-    x : `numpy.ndarray`
-        x values, 1D array
-    y : `numpy.ndarray`
-        y values, 1D array
-    alpha : `float`
-        alpha (edge roll) parameter
-
-    Returns
-    -------
-    `numpy.ndarray`
-        window
-
-    """
-    xx, yy = m.meshgrid(x, y)
-    r, _ = cart_to_polar(xx, yy)
-    rmax = m.sqrt(x.max()**2 + y.max()**2)
-    window = 1 - abs(r/rmax)**alpha
-    return window
-
-
-def abc_psd(nu, a, b, c):
-    """Lorentzian model of a Power Spectral Density.
-
-    Parameters
-    ----------
-    nu : `numpy.ndarray` or `float`
-        spatial frequency
-    a : `float`
-        a coefficient
-    b : `float`
-        b coefficient
-    c : `float`
-        c coefficient
-
-    Returns
-    -------
-    `numpy.ndarray`
-        value of PSD model
-
-    """
-    return a / (1 + (nu/b)**2)**(c/2)
-
-
-def ab_psd(nu, a, b):
-    """Inverse power model of a Power Spectral Density.
-
-    Parameters
-    ----------
-    nu : `numpy.ndarray` or `float`
-        spatial frequency
-    a : `float`
-        a coefficient
-    b : `float`
-        b coefficient
-
-    Returns
-    -------
-    `numpy.ndarray`
-        value of PSD model
-
-    """
-    return a * nu ** (-b)
+        """
+        x, y, z = render_synthetic_surface(size=size, samples=samples, rms=rms, mask=mask, psd_fcn=psd_fcn, **psd_fcn_kwargs)
+        return Interferogram(phase=z, x=x, y=y, scale='mm', phase_unit=phase_unit)
