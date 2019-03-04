@@ -295,7 +295,6 @@ def synthesize_surface_from_psd(psd, nu_x, nu_y):
 
     """
     # generate a random phase to be matched to the PSD
-    center_y, center_x = (i // 2 for i in psd.shape)
     randnums = m.rand(*psd.shape)
     randfft = m.fft2(randnums)
     phase = m.angle(randfft)
