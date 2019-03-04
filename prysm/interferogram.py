@@ -431,6 +431,9 @@ class Interferogram(OpticalPhase):
         fz = FringeZernike(coefs, samples=self.shape[0])
         return fz.pv + 3 * residual
 
+    def fit_zernikes(self, terms, map_='noll', norm=True, residual=False):
+        return zernikefit(self.phase, terms=terms, map_=map_, norm=norm, residual=residual)
+
     def fill(self, _with=0):
         """Fill invalid (NaN) values.
 
@@ -537,6 +540,8 @@ class Interferogram(OpticalPhase):
 
         """
         if isinstance(shape_or_mask, str):
+            if diameter is None:
+                diameter = self.diameter
             mask = mcache(shape_or_mask, min(self.shape), radius=diameter / min(self.diameter_x, self.diameter_y))
             base = m.zeros(self.shape, dtype=config.precision)
             difference = abs(self.shape[0] - self.shape[1])
