@@ -593,6 +593,12 @@ class Interferogram(OpticalPhase):
         `Interferogram`
             self
 
+        Notes
+        -----
+        These filters are implemented using scipy.signal and are a rigorous treatment that defaults to use of higher
+        order filters with strong out-of-band rejection.  This choices is not in accord with the one in made by
+        some software shipping with commercial interferometers.
+
         """
         fs = 1 / self.sample_spacing
         nyquist = fs / 2
