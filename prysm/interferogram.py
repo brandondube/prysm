@@ -1,6 +1,8 @@
 """tools to analyze interferometric data."""
 import warnings
 
+from scipy import signal
+
 from .conf import config
 from ._phase import OpticalPhase
 from .zernike import defocus, zernikefit, FringeZernike
@@ -561,6 +563,67 @@ class Interferogram(OpticalPhase):
         hitpts = mask == 0
         self.phase[hitpts] = m.nan
         return self
+
+    def filter(self, critical_frequency=None, critical_period=None, kind='bessel', type_=None, order=4, filtkwargs=dict()):
+        """Apply a frequency-domain filter to the phase data.
+
+        Parameters
+        ----------
+        critical_frequency : `float` or length-2 tuple
+            critical ("cutoff") frequency/frequencies of the filter.  Units of cy/self.spatial_unit
+        critical_period : `float` or length-2 tuple
+            critical ("cutoff") period/s of the filter.  Units of self.spatial_unit.
+            Will clobber critical_frequency if both given
+        kind : `str`, optional
+            filter type -- see scipy.signal for filter types and possible extra arguments.  Examples are:
+            - bessel
+            - butter
+            - ellip
+            - cheby2
+        type_ : `str`, optional, {'lowpass', 'highpass', 'bandpass', 'bandreject'}
+            filter type -- lowpass, highpass, bandpass, or bandreject
+            defaults to lowpass if single freq/period given or bandpass if two given
+        order : `int`, optional
+            order of the filter
+        filtkwargs : `dict`, optional
+            kwargs passed to the filter constructor
+
+        Returns
+        -------
+        `Interferogram`
+            self
+
+        """
+        fs = 1 / self.sample_spacing
+        nyquist = fs / 2
+
+        if critical_frequency is None and critical_period is None:
+            raise ValueError('must provide critical frequenc(ies) or critical period(s).')
+
+        if critical_period is not None:
+            if hasattr(critical_period, '__iter__'):
+                critical_frequency = [1 / x for x in reversed(critical_period)]
+            else:
+                critical_frequency = 1 / critical_period
+
+        if hasattr(critical_frequency, '__iter__'):
+            critical_frequency = [c / nyquist for c in critical_frequency]
+            if type_ is None:
+                type_ = 'bandpass'
+        else:
+            critical_frequency = critical_frequency / nyquist
+            if type_ is None:
+                type_ = 'lowpass'
+
+        filtfunc = getattr(signal, kind)
+
+        b, a = filtfunc(N=order, Wn=critical_frequency, btype=type_, analog=False, output='ba', **filtkwargs)
+
+        filt_y = signal.lfilter(b, a, self.phase, axis=0)
+        filt_both = signal.lfilter(b, a, filt_y, axis=1)
+        self.phase = filt_both
+        return self
+
 
     def latcal(self, plate_scale, unit='mm'):
         """Perform lateral calibration.
