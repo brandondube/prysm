@@ -157,19 +157,6 @@ class Pupil(OpticalPhase):
 
         return self
 
-    def clone(self):
-        """Create a copy of this pupil.
-
-        Returns
-        -------
-        `Pupil`
-            a deep copy duplicate of this pupil
-
-        """
-        props = deepcopy(self.__dict__)
-        retpupil = Pupil()
-        retpupil.__dict__ = props
-        return retpupil
 
     def _gengrid(self):
         """Generate a uniform (x,y) grid and maps it to (rho,phi) coordinates for radial polynomials.

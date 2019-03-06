@@ -865,6 +865,7 @@ class Interferogram(OpticalPhase):
                          intensity=None, wavelength=self.wavelength,
                          high_phase_res=high_phase_res)
 
+
     @staticmethod
     def from_zygo_dat(path, multi_intensity_action='first', scale='mm'):
         """Create a new interferogram from a zygo dat file.

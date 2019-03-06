@@ -1,4 +1,5 @@
 """Basic class holding data, used to recycle code."""
+import copy
 from prysm import mathops as m
 
 
@@ -75,3 +76,7 @@ class BasicData:
 
         """
         return self.unit_y, getattr(self, self._data_attr)[:, self.center_x]
+
+    def copy(self):
+        """Return a (deep) copy of this instance)."""
+        return copy.deepcopy(self)
