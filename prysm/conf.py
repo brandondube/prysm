@@ -4,23 +4,35 @@ import numpy as np
 
 class Config(object):
     """Global configuration of prysm."""
-    def __init__(self, precision=64, backend='np', zernike_base=1):
+    def __init__(self,
+                 precision=64,
+                 backend='np',
+                 zernike_base=1,
+                 Q=2,
+                 phase_colormap='inferno',
+                 image_colormap='Greys_r',
+                 lw=3,
+                 zorder=3):
         """Create a new `Config` object.
 
         Parameters
         ----------
         precision : `int`
             32 or 64, number of bits of precision
-        parallel_rgb : `bool`
-            whether to parallelize RGB computations or not.  This improves
-            performance for large arrays, but may slow things down if arrays are
-            relatively small due to the spinup time of new processes
-
         backend : `str`, {'np'}
             a supported backend.  Current options are only "np" for numpy
-
         zernike_base : `int`, {0, 1}
             base for zernikes; start at 0 or 1
+        Q : `float`
+            oversampling parameter for numerical propagations
+        phase_colormap : `str`
+            colormap used for plotting optical phases
+        image_colormap: `str`
+            colormap used for plotting greyscale images
+        lw : `float`
+            linewidth
+        `zorder` : int
+            z order used for line plots
 
         """
         self.initialized = False
@@ -28,6 +40,11 @@ class Config(object):
         self.backend = backend
         self.zernike_base = zernike_base
         self.chbackend_observers = []
+        self.Q = Q
+        self.phase_colormap = phase_colormap
+        self.image_colormap = image_colormap
+        self.lw = lw
+        self.zorder = zorder
         self.initialized = True
 
     @property

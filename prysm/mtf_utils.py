@@ -1,4 +1,6 @@
 """Utilities for working with MTF data."""
+import operator
+
 from scipy.interpolate import griddata, RegularGridInterpolator as RGI
 
 from .util import share_fig_ax
@@ -161,8 +163,10 @@ class MTFvFvF(object):
 
         Returns
         -------
-        `numpy.ndarray`
-            focal surface sag, in microns, vs field
+        field : `numpy.ndarray`
+            array of field values, mm
+        focus : `numpy.ndarray`
+            array of focus values, microns
 
         Notes
         -----
@@ -192,9 +196,9 @@ class MTFvFvF(object):
         if algorithm == '0.5':
             # locate the frequency index on axis
             idx_axis = m.searchsorted(self.field, 0)
-            idx_freq = abs(self.data[:, idx_axis, :].max(axis=0) - 0.5).argmin(axis=1)
+            idx_freq = abs(self.data[:, idx_axis, :].max(axis=0) - 0.5).argmin(axis=0)
             focus_idx = self.data[:, m.arange(self.data.shape[1]), idx_freq].argmax(axis=0)
-            return self.focus[focus_idx], self.field
+            return self.field, self.focus[focus_idx],
         elif algorithm.lower() in ('avg', 'average'):
             if self.freq[0] == 0:
                 # if the zero frequency is included, exclude it from our calculations
@@ -205,59 +209,54 @@ class MTFvFvF(object):
             # account for fractional indexes
             focus_out = avg_idxs.copy()
             for i, idx in enumerate(avg_idxs):
-                li, ri = m.floor(idx), m.ceil(idx)
+                li, ri = int(m.floor(idx)), int(m.ceil(idx))
                 lf, rf = self.focus[li], self.focus[ri]
                 diff = rf - lf
                 part = idx % 1
                 focus_out[i] = lf + diff * part
 
-            return focus_out, self.field
+            return self.field, focus_out
         else:
             raise ValueError('0.5 is only algorithm supported')
 
-    def __add__(self, other):
+    def __arithmatic_bus__(self, other, op):
+        """Core checking and return logic for arithmatic operations."""
         if type(other) == type(self):
-            # both MTF FFDs, check alignment of data
-            same_x = m.allclose(self.field_x, other.field_x)
-            same_y = m.allclose(self.field_y, other.field_y)
+            # both MTFvFvFs, check alignment of data
+            same_x = m.allclose(self.field, other.field)
+            same_y = m.allclose(self.focus, other.focus)
             same_freq = m.allclose(self.freq, other.freq)
             if not same_x and same_y and same_freq:
-                raise ValueError('x or y coordinates or frequencies mismatch between MTF FFDs')
+                raise ValueError('x or y coordinates or frequencies mismatch between MTFvFvFs')
             else:
-                return MTFFFD(self.data + other.data, self.field_x, self.field_y, self.freq)
+                target = other.data
         elif type(other) in {int, float}:
-            return MTFFFD(self.data + other, self.field_x, self.field_y, self.freq)
+            target = other
         else:
-            raise ValueError('MTF FFDs can only be added to each other')
+            raise ValueError('MTFvFvFs can only be added to each other')
+
+        op = getattr(operator, op)
+        data = op(self.data, target)
+        return MTFvFvF(data, self.focus, self.field, self.freq, self.azimuth)
+
+    def __add__(self, other):
+        """Add something to an MTFvFvF."""
+        return self.__arithmatic_bus__(other, 'add')
 
     def __sub__(self, other):
-        if type(other) == type(self):
-            # both MTF FFDs, check alignment of data
-            same_x = m.allclose(self.field_x, other.field_x)
-            same_y = m.allclose(self.field_y, other.field_y)
-            same_freq = m.allclose(self.freq, other.freq)
-            if not same_x and same_y and same_freq:
-                raise ValueError('x or y coordinates or frequencies mismatch between MTF FFDs')
-            else:
-                return MTFFFD(self.data - other.data, self.field_x, self.field_y, self.freq)
-        elif type(other) in {int, float}:
-            return MTFFFD(self.data - other, self.field_x, self.field_y, self.freq)
-        else:
-            raise ValueError('MTF FFDs can only be added to each other')
+        """Subtract something from an MTFvFvF."""
+        return self.__arithmatic_bus__(other, 'sub')
 
     def __mul__(self, other):
-        if type(other) not in {int, float}:
-            raise ValueError('can only mul by ints and floats')
-
-        return MTFFFD(self.data * other, self.field_x, self.field_y, self.freq)
+        """Multiply an MTFvFvF by something."""
+        return self.__arithmatic_bus__(other, 'mul')
 
     def __truediv__(self, other):
-        if type(other) not in {int, float}:
-            raise ValueError('can only div by ints and floats')
-
-        return MTFFFD(self.data / other, self.field_x, self.field_y, self.freq)
+        """Divide an MTFvFvF by something."""
+        return self.__arithmatic_bus__(other, 'truediv')
 
     def __imul__(self, other):
+        """Multiply an MTFvFvF by something in-place."""
         if type(other) not in {int, float}:
             raise ValueError('can only mul by ints and floats')
 
@@ -265,6 +264,7 @@ class MTFvFvF(object):
         return self
 
     def __itruediv__(self, other):
+        """Divide an MTFvFvF by something in-place."""
         if type(other) not in {int, float}:
             raise ValueError('can only div by ints and floats')
 
@@ -278,7 +278,7 @@ class MTFvFvF(object):
         Parameters
         ----------
         df : `pandas.DataFrame`
-            a dataframe
+            a dataframe with columns Focus, Field, Freq, Azimuth, MTF
 
         Returns
         -------
@@ -295,12 +295,12 @@ class MTFvFvF(object):
         sorted_df = df.sort_values(by=['Focus', 'Field', 'Freq'])
         T = sorted_df[sorted_df.Azimuth == 'Tan']
         S = sorted_df[sorted_df.Azimuth == 'Sag']
-        focus = m.unique(df.Focus.as_matrix())
-        fields = m.unique(df.Fields.as_matrix())
-        freqs = m.unique(df.Freq.as_matrix())
+        focus = m.unique(df.Focus.values)
+        fields = m.unique(df.Fields.values)
+        freqs = m.unique(df.Freq.values)
         d1, d2, d3 = len(focus), len(fields), len(freqs)
-        t_mat = T.as_matrix.reshape((d1, d2, d3))
-        s_mat = S.as_matrix.reshape((d1, d2, d3))
+        t_mat = T.MTF.values.reshape((d1, d2, d3))
+        s_mat = S.MTF.values.reshape((d1, d2, d3))
         t_cube = MTFvFvF(data=t_mat, focus=focus, field=fields, freq=freqs, azimuth='Tan')
         s_cube = MTFvFvF(data=s_mat, focus=focus, field=fields, freq=freqs, azimuth='Sag')
         return t_cube, s_cube
@@ -464,49 +464,44 @@ class MTFFFD(object):
             fig.colorbar(im, label=f'MTF @ {freq} cy/mm', ax=ax, fraction=0.046)
         return fig, ax
 
-    def __add__(self, other):
+    def __arithmatic_bus__(self, other, op):
+        """Centralized checking logic for arithmatic operations."""
         if type(other) == type(self):
-            # both MTF FFDs, check alignment of data
+            # both MTFvFvFs, check alignment of data
             same_x = m.allclose(self.field_x, other.field_x)
             same_y = m.allclose(self.field_y, other.field_y)
             same_freq = m.allclose(self.freq, other.freq)
             if not same_x and same_y and same_freq:
-                raise ValueError('x or y coordinates or frequencies mismatch between MTF FFDs')
+                raise ValueError('x or y coordinates or frequencies mismatch between MTFFFDs')
             else:
-                return MTFFFD(self.data + other.data, self.field_x, self.field_y, self.freq)
+                target = other.data
         elif type(other) in {int, float}:
-            return MTFFFD(self.data + other, self.field_x, self.field_y, self.freq)
+            target = other
         else:
-            raise ValueError('MTF FFDs can only be added to each other')
+            raise ValueError('MTFFFDs can only be added to each other')
+
+        op = getattr(operator, op)
+        data = op(self.data, target)
+        return MTFvFvF(data, self.field_x, self.field_y, self.freq)
+
+    def __add__(self, other):
+        """Add something to an MTF FFD."""
+        return self.__arithmatic_bus__(other, 'add')
 
     def __sub__(self, other):
-        if type(other) == type(self):
-            # both MTF FFDs, check alignment of data
-            same_x = m.allclose(self.field_x, other.field_x)
-            same_y = m.allclose(self.field_y, other.field_y)
-            same_freq = m.allclose(self.freq, other.freq)
-            if not same_x and same_y and same_freq:
-                raise ValueError('x or y coordinates or frequencies mismatch between MTF FFDs')
-            else:
-                return MTFFFD(self.data - other.data, self.field_x, self.field_y, self.freq)
-        elif type(other) in {int, float}:
-            return MTFFFD(self.data - other, self.field_x, self.field_y, self.freq)
-        else:
-            raise ValueError('MTF FFDs can only be added to each other')
+        """Subtract something from an MTF FFD."""
+        return self.__arithmatic_bus__(other, 'sub')
 
     def __mul__(self, other):
-        if type(other) not in {int, float}:
-            raise ValueError('can only mul by ints and floats')
-
-        return MTFFFD(self.data * other, self.field_x, self.field_y, self.freq)
+        """Multiply an MTF FFD by something."""
+        return self.__arithmatic_bus__(other, 'mul')
 
     def __truediv__(self, other):
-        if type(other) not in {int, float}:
-            raise ValueError('can only div by ints and floats')
-
-        return MTFFFD(self.data / other, self.field_x, self.field_y, self.freq)
+        """Divide an MTF FFD by something."""
+        return self.__arithmatic_bus__(other, 'truediv')
 
     def __imul__(self, other):
+        """Multiply an MTF FFD by something in-place."""
         if type(other) not in {int, float}:
             raise ValueError('can only mul by ints and floats')
 
@@ -514,31 +509,12 @@ class MTFFFD(object):
         return self
 
     def __itruediv__(self, other):
+        """Divide an MTF FFD by something in place."""
         if type(other) not in {int, float}:
             raise ValueError('can only div by ints and floats')
 
         self.data /= other
         return self
-
-    @staticmethod
-    def from_dataframe(df, azimuth):
-        """Create a new MTFFFD from a DataFrame.
-
-        Parameters
-        ----------
-        df : `pandas.DataFrame`
-            a pandas df
-        azimuth : `str`
-            which azimuth to extract
-
-        Returns
-        -------
-        `MTFFFD`
-            a new MTFFD object
-
-        """
-        raise NotImplemented('not yet complete, df schema needs to be designed')
-        # return MTFFFD(data=dat, field_x=x, field_y=y, freq=freqs)
 
     @staticmethod
     def from_trioptics_files(paths, azimuths, upsample=10, ret=('tan', 'sag')):
@@ -577,7 +553,7 @@ class MTFFFD(object):
         if ret == ('tan', 'sag'):
             return MTFFFD(tan, xx, yy, freq), MTFFFD(sag, xx, yy, freq)
         else:
-            raise NotImplemented('other returns not implemented')
+            raise NotImplementedError('other returns not implemented')
 
     @staticmethod
     def from_polar_data(tan, sag, fields, azimuths, freqs, upsample=10):

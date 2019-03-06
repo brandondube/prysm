@@ -24,3 +24,8 @@ def test_detector_can_save_result(tmpdir, sample_detector, sample_psf):
     p = tmpdir.mkdir('detector_out').join('out.png')
     sample_detector.capture(sample_psf)
     sample_detector.save_image(str(p))
+
+
+def test_olpf_render_doesnt_crash():
+    olpf = detector.OLPF(5, samples_x=32, sample_spacing=0.5)
+    assert olpf

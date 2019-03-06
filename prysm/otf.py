@@ -1,6 +1,7 @@
 """A base optical transfer function interface."""
 from scipy import interpolate
 
+from .conf import config
 from ._basicdata import BasicData
 from .psf import PSF
 from .fttools import forward_ft_unit
@@ -212,7 +213,7 @@ class MTF(BasicData):
 
     # plotting -----------------------------------------------------------------
 
-    def plot2d(self, max_freq=200, power=1, fig=None, ax=None):
+    def plot2d(self, max_freq=200, power=1, cmap=config.image_colormap, fig=None, ax=None):
         """Create a 2D plot of the MTF.
 
         Parameters
@@ -257,13 +258,17 @@ class MTF(BasicData):
                ylim=(-max_freq, max_freq))
         return fig, ax
 
-    def plot_tan_sag(self, max_freq=200, fig=None, ax=None, labels=('Tangential', 'Sagittal')):
+    def plot_tan_sag(self, max_freq=200, lw=config.lw, zorder=config.zorder, fig=None, ax=None, labels=('Tangential', 'Sagittal')):
         """Create a plot of the tangential and sagittal MTF.
 
         Parameters
         ----------
         max_freq : `float`
             Maximum frequency to plot to.  Axis limits will be ((-max_freq, max_freq), (-max_freq, max_freq))
+        lw : `float`, optional
+            line width
+        zorder : `int`
+            zorder
         fig : `matplotlib.figure.Figure`, optional:
             Figure to draw plot in
         ax : `matplotlib.axes.Axis`, optional:
@@ -283,8 +288,8 @@ class MTF(BasicData):
         us, sag = self.sag
 
         fig, ax = share_fig_ax(fig, ax)
-        ax.plot(ut, tan, label=labels[0], linestyle='-', lw=3)
-        ax.plot(us, sag, label=labels[1], linestyle='--', lw=3)
+        ax.plot(ut, tan, label=labels[0], linestyle='-', lw=lw, zorder=zorder)
+        ax.plot(us, sag, label=labels[1], linestyle='--', lw=lw, zorder=zorder)
         ax.set(xlabel='Spatial Frequency [cy/mm]',
                ylabel='MTF [Rel 1.0]',
                xlim=(0, max_freq),
@@ -292,13 +297,16 @@ class MTF(BasicData):
         ax.legend(loc='lower left')
         return fig, ax
 
-    def plot_azimuthal_average(self, max_freq=200, fig=None, ax=None):
+    def plot_azimuthal_average(self, max_freq=200, lw=config.lw, zorder=config.zorder, fig=None, ax=None):
         """Create a plot of the azimuthally averaged MTF.
 
         Parameters
         ----------
         max_freq : `float`
             Maximum frequency to plot to.  Axis limits will be ((-max_freq, max_freq), (-max_freq, max_freq))
+        lw : `float`, optional
+            line width
+        zorder : `int`, optional
         fig : `matplotlib.figure.Figure`, optional:
             Figure to draw plot in
         ax : `matplotlib.axes.Axis`, optional:
@@ -318,7 +326,7 @@ class MTF(BasicData):
         u, azavg = self.azimuthal_average()
 
         fig, ax = share_fig_ax(fig, ax)
-        ax.plot(u, azavg)
+        ax.plot(u, azavg, lw=lw, zorder=zorder)
         ax.set(xlabel='Spatial Frequency [cy/mm]',
                ylabel='MTF [Rel 1.0]',
                xlim=(0, max_freq),

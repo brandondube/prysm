@@ -968,7 +968,7 @@ class BaseZernike(Pupil):
             header = f'{self._name} Zernike description with:\n\t'
 
         strs = []
-        for number, (coef, func) in enumerate(zip(self.coefs, zernikes)):
+        for number, coef in enumerate(self.coefs):
             # skip 0 terms
             if coef == 0:
                 continue
@@ -981,7 +981,8 @@ class BaseZernike(Pupil):
                 _ = f'{coef:.3f}'
 
             # create the name
-            name = f'Z{number+self.base} - {func.name}'
+            idx = self._map[number]
+            name = f'Z{number+self.base} - {zernikes[idx].name}'
 
             strs.append(' '.join([_, name]))
         body = '\n\t'.join(strs)

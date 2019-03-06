@@ -1,4 +1,4 @@
-'''Object to convolve lens PSFs with.'''
+"""Objects for image simulation with."""
 
 from .conf import config
 from .convolution import Convolvable
@@ -10,7 +10,7 @@ from prysm import mathops as m
 class Slit(Convolvable):
     """Representation of a slit or pair of slits."""
 
-    def __init__(self, width, orientation='Vertical', sample_spacing=0.075, samples=0):
+    def __init__(self, width, orientation='Vertical', sample_spacing=None, samples=0):
         """Create a new Slit instance.
 
         Parameters
@@ -37,7 +37,7 @@ class Slit(Convolvable):
             x, y = m.linspace(-ext, ext, samples), m.linspace(-ext, ext, samples)
             arr = m.zeros((samples, samples))
         else:
-            arr, x, y = None, m.zeros(2), m.zeros(2)
+            arr, x, y = None, None, None
 
         # paint in the slit
         if orientation.lower() in ('v', 'vert', 'vertical'):
@@ -89,7 +89,7 @@ class Slit(Convolvable):
 
 class Pinhole(Convolvable):
     """Representation of a pinhole."""
-    def __init__(self, width, sample_spacing=0.025, samples=0):
+    def __init__(self, width, sample_spacing=None, samples=0):
         """Create a Pinhole instance.
 
         Parameters
@@ -119,7 +119,7 @@ class Pinhole(Convolvable):
             arr = m.zeros((samples, samples))
             arr[m.sqrt(xv**2 + yv**2) < w] = 1
         else:
-            arr, x, y = None, m.zeros(2), m.zeros(2)
+            arr, x, y = None, None, None
 
         super().__init__(data=arr, unit_x=x, unit_y=y, has_analytic_ft=True)
 
@@ -203,7 +203,7 @@ class SiemensStar(Convolvable):
 
 class TiltedSquare(Convolvable):
     """Represents a tilted square for e.g. slanted-edge MTF calculation."""
-    def __init__(self, angle=8, background='white', sample_spacing=2, samples=256):
+    def __init__(self, angle=4, background='white', sample_spacing=2, samples=256):
         """Create a new TitledSquare instance.
 
         Parameters
@@ -244,7 +244,7 @@ class TiltedSquare(Convolvable):
 
 class SlantedEdge(Convolvable):
     """Representation of a slanted edge."""
-    def __init__(self, angle=8, contrast=0.9, crossed=False, sample_spacing=2, samples=256):
+    def __init__(self, angle=4, contrast=0.9, crossed=False, sample_spacing=2, samples=256):
         """Create a new TitledSquare instance.
 
         Parameters

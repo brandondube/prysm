@@ -138,7 +138,7 @@ class OLPF(Convolvable):
         y width parameter
 
     """
-    def __init__(self, width_x, width_y=None, sample_spacing=0.1, samples_x=384, samples_y=None):
+    def __init__(self, width_x, width_y=None, sample_spacing=0, samples_x=None, samples_y=None):
         """Create a new OLPF object.
 
         Parameters
@@ -165,7 +165,7 @@ class OLPF(Convolvable):
         self.width_y = width_y
 
         if samples_x is None:  # do no math
-            data, ux, uy = None, m.zeros(2), m.zeros(2)
+            data, ux, uy = None, None, None
         else:
             space_x = width_x / 2
             space_y = width_y / 2
@@ -182,6 +182,7 @@ class OLPF(Convolvable):
             data[center_y + shift_y, center_x + shift_x] = 1
             ux = m.linspace(-space_x, space_x, samples_x)
             uy = m.linspace(-space_y, space_y, samples_y)
+
         super().__init__(data=data, unit_x=ux, unit_y=uy, has_analytic_ft=True)
 
     def analytic_ft(self, unit_x, unit_y):
@@ -303,37 +304,6 @@ def pixelaperture_analytic_otf(width_x, width_y, freq_x, freq_y):
 
     """
     return m.sinc(freq_x * width_x) * m.sinc(freq_y * width_y)
-
-
-def generate_mtf(pixel_aperture=1, azimuth=0, samples=128):
-    """Generate the 1D diffraction-limited MTF for a given pixel width and azimuth.
-
-    Parameters
-    ----------
-    pixel_aperture : `float`
-        aperture of the pixel, microns.  Pixel is assumed to be square
-    azimuth : `float`
-        azimuth to retrieve the MTF at, in degrees
-    samples : `int`
-        number of samples in the output array
-
-    Returns
-    -------
-    frequencies : `numpy.ndarray`
-        unit axis, cy/mm
-    mtf : `numpy.ndarray`
-        MTF values (rel. 1.0).
-
-    Notes
-    -----
-    Azimuth is not actually implemented yet.
-
-    """
-    pitch_unit = pixel_aperture / 1e3
-    normalized_frequencies = m.linspace(0, 2, samples)
-    otf = m.sinc(normalized_frequencies)
-    mtf = abs(otf)
-    return normalized_frequencies / pitch_unit, mtf
 
 
 def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):

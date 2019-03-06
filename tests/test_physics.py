@@ -31,7 +31,6 @@ def test_diffprop_matches_airydisk(efl, epd, wvl):
     assert np.allclose(sy, analytic, atol=PRECISION)
 
 
-@pytest.mark.skipif('TRAVIS' in os.environ and os.environ['TRAVIS'] == 'true', reason='lapack error on travis')
 @pytest.mark.parametrize('efl, epd, wvl', TEST_PARAMETERS)
 def test_diffprop_matches_analyticmtf(efl, epd, wvl):
     fno = efl / epd

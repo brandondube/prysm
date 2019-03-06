@@ -1,6 +1,7 @@
 """A base point spread function interface."""
 from scipy import optimize, interpolate
 
+from .conf import config
 from .coordinates import cart_to_polar
 from .util import share_fig_ax, sort_xy
 from .convolution import Convolvable
@@ -11,8 +12,18 @@ from .propagation import (
 
 from prysm import mathops as m
 
-
+FIRST_AIRY_ZERO = 1.220
+SECOND_AIRY_ZERO = 2.233
+THIRD_AIRY_ZERO = 3.238
 FIRST_AIRY_ENCIRCLED = 0.8377850436212378
+SECOND_AIRY_ENCIRCLED = 0.9099305350850819
+THIRD_AIRY_ENCIRCLED = 0.9376474743695488
+
+AIRYDATA = {
+    1: (FIRST_AIRY_ZERO, FIRST_AIRY_ENCIRCLED),
+    2: (SECOND_AIRY_ZERO, SECOND_AIRY_ENCIRCLED),
+    3: (THIRD_AIRY_ZERO, THIRD_AIRY_ENCIRCLED)
+}
 
 
 class PSF(Convolvable):
@@ -90,6 +101,8 @@ class PSF(Convolvable):
             self._mtf = MTF.from_psf(self)
             nx, ny = m.meshgrid(self._mtf.unit_x, self._mtf.unit_y)
             self._nu_p = m.sqrt(nx ** 2 + ny ** 2)
+            # this is meaninglessly small and will avoid division by 0
+            self._nu_p[self._nu_p == 0] = 1e-99
             self._dnx, self._dny = ny[1, 0] - ny[0, 0], nx[0, 1] - nx[0, 0]
 
         if radius_is_array:
@@ -120,7 +133,7 @@ class PSF(Convolvable):
             return k[idx]
 
         def optfcn(x):
-            return abs(self.encircled_energy(x) - energy)
+            return (self.encircled_energy(x) - energy) ** 2
 
         # golden seems to perform best in presence of shallow local minima as in
         # the encircled energy
@@ -139,7 +152,7 @@ class PSF(Convolvable):
     # plotting -----------------------------------------------------------------
 
     def plot2d(self, axlim=25, power=1, clim=(None, None), interp_method='lanczos',
-               pix_grid=None, invert=False, fig=None, ax=None,
+               pix_grid=None, cmap=config.image_colormap, fig=None, ax=None,
                show_axlabels=True, show_colorbar=True,
                circle_ee=None, circle_ee_lw=None):
         """Create a 2D plot of the PSF.
@@ -159,8 +172,8 @@ class PSF(Convolvable):
             if not None, overlays gridlines with spacing equal to pix_grid.
             Intended to show the collection into camera pixels while still in
             the oversampled domain
-        invert : `bool`, optional
-            whether to invert the color scale
+        cmap : `str`, optional
+            colormap, passed directly to matplotlib
         fig : `matplotlib.figure.Figure`, optional:
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
@@ -190,11 +203,6 @@ class PSF(Convolvable):
 
         left, right = self.unit_x[0], self.unit_x[-1]
         bottom, top = self.unit_y[0], self.unit_y[-1]
-
-        if invert:
-            cmap = 'Greys'
-        else:
-            cmap = 'Greys_r'
 
         fig, ax = share_fig_ax(fig, ax)
 
@@ -251,7 +259,7 @@ class PSF(Convolvable):
 
         return fig, ax
 
-    def plot_encircled_energy(self, axlim=None, npts=50, lw=3, fig=None, ax=None):
+    def plot_encircled_energy(self, axlim=None, npts=50, lw=config.lw, zorder=config.zorder, fig=None, ax=None):
         """Make a 1D plot of the encircled energy at the given azimuth.
 
         Parameters
@@ -263,7 +271,9 @@ class PSF(Convolvable):
         npts : `int`, optional
             number of points to use from [0, axlim]
         lw : `float`, optional
-            linewidth provided directly to matplotlib
+            line width
+        zorder : `int` optional
+            zorder
         fig : `matplotlib.figure.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
@@ -289,7 +299,7 @@ class PSF(Convolvable):
             yy = self.encircled_energy(xx)
 
         fig, ax = share_fig_ax(fig, ax)
-        ax.plot(xx, yy, lw=3)
+        ax.plot(xx, yy, lw=lw, zorder=zorder)
         ax.set(xlabel='Image Plane Distance [μm]',
                ylabel='Encircled Energy [Rel 1.0]',
                xlim=(0, axlim))
@@ -323,7 +333,7 @@ class PSF(Convolvable):
     # helpers ------------------------------------------------------------------
 
     @staticmethod
-    def from_pupil(pupil, efl, Q=2):
+    def from_pupil(pupil, efl, Q=config.Q):
         """Use scalar diffraction propogation to generate a PSF from a pupil.
 
         Parameters
@@ -395,9 +405,9 @@ class PSF(Convolvable):
         return psf
 
 
-class AiryDisk(PSF):
+class AiryDisk(Convolvable):
     """An airy disk, the PSF of a circular aperture."""
-    def __init__(self, fno, wavelength, extent, samples):
+    def __init__(self, fno, wavelength, extent=None, samples=None):
         """Create a new AiryDisk.
 
         Parameters
@@ -412,11 +422,14 @@ class AiryDisk(PSF):
             number of samples across full width
 
         """
-        x = m.linspace(-extent, extent, samples)
-        y = m.linspace(-extent, extent, samples)
-        xx, yy = m.meshgrid(x, y)
-        rho, phi = cart_to_polar(xx, yy)
-        data = airydisk(rho, fno, wavelength)
+        if samples is not None:
+            x = m.linspace(-extent, extent, samples)
+            y = m.linspace(-extent, extent, samples)
+            xx, yy = m.meshgrid(x, y)
+            rho, phi = cart_to_polar(xx, yy)
+            data = airydisk(rho, fno, wavelength)
+        else:
+            x, y, data = None, None, None
         self.fno = fno
         self.wavelength = wavelength
         super().__init__(data, x, y)
@@ -488,9 +501,6 @@ def _encircled_energy_core(mtf_data, radius, nu_p, dx, dy):
 
     """
     integration_fourier = m.j1(2 * m.pi * radius * nu_p) / nu_p
-    # division by nu_p will cause a NaN at the origin, 0.5 is the
-    # analytical value of jinc there
-    integration_fourier[m.isnan(integration_fourier)] = 0.5
     dat = mtf_data * integration_fourier
     return radius * dat.sum() * dx * dy
 
@@ -519,6 +529,6 @@ def _analytical_encircled_energy(fno, wavelength, points):
 
 def _inverse_analytic_encircled_energy(fno, wavelength, energy=FIRST_AIRY_ENCIRCLED):
     def optfcn(x):
-        return abs(_analytical_encircled_energy(fno, wavelength, x) - energy)
+        return (_analytical_encircled_energy(fno, wavelength, x) - energy) ** 2
 
     return optimize.golden(optfcn)
