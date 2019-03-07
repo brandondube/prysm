@@ -621,6 +621,9 @@ class Interferogram(OpticalPhase):
             if type_ is None:
                 type_ = 'lowpass'
 
+        if type_ == 'bandreject':
+            type_ = 'bandstop'
+
         filtfunc = getattr(signal, kind)
 
         b, a = filtfunc(N=order, Wn=critical_frequency, btype=type_, analog=False, output='ba', **filtkwargs)
