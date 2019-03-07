@@ -484,3 +484,60 @@ def _difflim_mtf_core(normalized_frequency):
     return (2 / m.pi) * \
            (m.arccos(normalized_frequency) - normalized_frequency *
             m.sqrt(1 - normalized_frequency ** 2))
+
+
+def longexposure_otf(nu, Cn, z, f, lambdabar, h_z_by_r=2.91):
+    """Compute the long exposure OTF for given parameters.
+
+    Parameters
+    ----------
+    nu : `numpy.ndarray`
+        spatial frequencies, cy/mm
+    Cn: `float`
+        atmospheric structure constant of refractive index, ranges ~ 10^-13 - 10^-17
+    z : `float`
+        propagation distance through atmosphere, m
+    f : `float`
+        effective focal length of the optical system, mm
+    lambdabar : `float`
+        mean wavelength, microns
+    h_z_by_r : `float`, optional
+        constant for h[z/r] -- see Eq. 8.5-37 & 8.5-38 in Statistical Optics, J. Goodman, 2nd ed.
+
+    Returns
+    -------
+    `numpy.ndarray`
+        the OTF
+
+    """
+    # homogenize units
+    nu = nu / 1e3
+    f = f / 1e3
+    lambdabar = lambdabar / 1e6
+
+    power = 5/3
+    const1 = - m.pi ** 2 * 2 * h_z_by_r * Cn ** 2
+    const2 = z * f ** power / (lambdabar ** 3)
+    nupow = nu ** power
+    const = const1 * const2
+    return m.exp(const * nupow)
+
+
+def estimate_Cn(P=1013, T=273.15, Ct=1e-4):
+    """Use Weng et al to estimate Cn from meteorological data.
+
+    Parameters
+    ----------
+    P : `float`
+        atmospheric pressure in hPa
+    T : `float`
+        temperature in Kelvin
+    Ct : `float`
+        atmospheric struction constant of temperature, typically 10^-5 - 10^-2 near the surface
+
+    Returns
+    `float`
+        Cn
+
+    """
+    return (79 * P / (T ** 2)) * Ct ** 2 * 1e-12
