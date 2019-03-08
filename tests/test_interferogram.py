@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 
 from prysm import sample_files
-from prysm.interferogram import Interferogram
+from prysm.interferogram import Interferogram, make_window
 
 import matplotlib
 matplotlib.use('TkAgg')
@@ -46,6 +46,17 @@ def test_bandlimited_rms_is_correct(sample_i_mutate):
     assert pytest.approx(sample_i_mutate.bandlimited_rms(1, 10), 10.6, abs=1e-3)
 
 
+def test_spike_clip_functions(sample_i_mutate):
+    sample_i_mutate.spike_clip(3)
+    assert sample_i_mutate
+
+
+def test_tis_functions(sample_i_mutate):
+    sample_i_mutate.set_spatial_unit('um')
+    sample_i_mutate.fill()
+    assert sample_i_mutate.total_integrated_scatter(0.4, 0)
+
+
 def test_plot_psd_slices_functions(sample_i_mutate):
     fig, ax = sample_i_mutate.plot_psd_slices(x=True, y=True, azavg=True, azmin=True, azmax=True)
     assert fig
@@ -58,7 +69,7 @@ def test_plot_psd_2d_functions(sample_i_mutate):
     assert ax
 
 
-def test_save_ascii_works(sample_i, tmpdir):
+def test_save_ascii_functions(sample_i, tmpdir):
     sample_i.save_zygo_ascii(tmpdir / 'z.asc')
 
 
@@ -76,3 +87,32 @@ def test_descale_latcal_ok(sample_i_mutate):
     assert pytest.approx(sample_i_mutate.sample_spacing, 1, abs=1e-8)
     sample_i_mutate.latcal(plate_scale, 'mm')
     assert pytest.approx(plate_scale, sample_i_mutate.sample_spacing, abs=1e-8)
+
+
+def test_make_window_passes_array():
+    win = signal = np.empty((2, 2))
+    win2 = make_window(signal, 1, win)
+    assert (win == win2).all()
+
+
+@pytest.mark.parametrize('win', ['welch', 'hanning'])
+def test_make_window_functions_for_known_geometries(win):
+    signal = np.empty((2, 2))
+    window = make_window(signal, 1, win)
+    assert window
+
+
+def test_synthesize_from_psd_functions():
+    assert Interferogram.render_from_psd(100, 64, rms=5, a=1e4, b=1/100, c=2)
+
+
+@pytest.mark.parametrize('freq period', [
+    [None, 5],
+    [None, (25, 5)],
+    [5, None],
+    [(25, 5), None]
+])
+def test_filter_functions(sample_i_mutate, freq, period):
+    sample_i_mutate.fill()
+    sample_i_mutate.filter(freq, period)
+    assert sample_i_mutate
