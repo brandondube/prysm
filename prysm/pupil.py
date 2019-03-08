@@ -6,7 +6,7 @@ from ._phase import OpticalPhase
 from .conf import config
 from .coordinates import make_rho_phi_grid
 from .geometry import mcache
-from .util import rms
+from .util import std
 
 from prysm import mathops as m
 
@@ -92,7 +92,7 @@ class Pupil(OpticalPhase):
     def strehl(self):
         """Strehl ratio of the pupil."""
         phase = self.change_phase_unit(to='um', inplace=False)
-        return 1 - ((4 * m.pi**2) / self.wavelength**2) * (rms(phase)**2)
+        return 1 - ((4 * m.pi**2) / self.wavelength**2) * (std(phase)**2)
 
     @property
     def fcn(self):
