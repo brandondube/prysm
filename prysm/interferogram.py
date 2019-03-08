@@ -488,6 +488,16 @@ class Interferogram(OpticalPhase):
         self.unit_y -= self.unit_y[0]
         return self
 
+    def recenter(self):
+        """Adjust the x and y coordinates so the data is centered on 0,0."""
+        mxx, mnx = self.unit_x[-1], self.unit_x[0]
+        mxy, mny = self.unit_y[-1], self.unit_y[0]
+        cx = (mxx + mnx) / 2
+        cy = (mxy + mny) / 2
+        self.unit_x -= cx
+        self.unit_y -= cy
+        return self
+
     def remove_piston(self):
         """Remove piston from the data by subtracting the mean value."""
         self.phase -= mean(self.phase)
