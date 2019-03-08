@@ -356,6 +356,9 @@ def render_synthetic_surface(size, samples, rms=None, mask='circle', psd_fcn=abc
     # compute the grid and PSD
     sample_spacing = size / (samples - 1)
     nu_x = nu_y = forward_ft_unit(sample_spacing, samples)
+    center = samples // 2  # some bullshit here to gloss over zeros for ab_psd
+    nu_x[center] = nu_x[center+1] / 10
+    nu_y[center] = nu_y[center+1] / 10
     nu_xx, nu_yy = m.meshgrid(nu_x, nu_y)
 
     nu_r, _ = cart_to_polar(nu_xx, nu_yy)
