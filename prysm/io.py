@@ -1022,13 +1022,11 @@ def write_zygo_ascii(file, phase, unit_x, unit_y, wavelength=0.6328, intensity=N
 
     line16 = '#'
 
-
     # process the phase and write out
-    coef = 0.5 / ZYGO_PHASE_RES_FACTORS[int(high_phase_res)]
-    encoded_phase = (phase / coef)
+    coef = ZYGO_PHASE_RES_FACTORS[int(high_phase_res)]
+    encoded_phase = phase * (coef / wavelength / wavelength / 0.5)
     encoded_phase[m.isnan(encoded_phase)] = ZYGO_INVALID_PHASE
     encoded_phase = m.flipud(encoded_phase.astype(m.int64))
-    #encoded_phase = m.rot90(encoded_phase)
     encoded_phase = encoded_phase.flatten()
     npts = encoded_phase.shape[0]
     fits_by_ten = npts // 10
