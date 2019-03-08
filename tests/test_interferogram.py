@@ -106,7 +106,7 @@ def test_synthesize_from_psd_functions():
     assert Interferogram.render_from_psd(100, 64, rms=5, a=1e4, b=1/100, c=2)
 
 
-@pytest.mark.parametrize('freq period', [
+@pytest.mark.parametrize('freq, period', [
     [None, 5],
     [None, (25, 5)],
     [5, None],
