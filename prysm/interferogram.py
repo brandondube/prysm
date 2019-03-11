@@ -289,7 +289,7 @@ def synthesize_surface_from_psd(psd, nu_x, nu_y):
     Parameters
     ----------
     psd : `numpy.ndarray`
-        PSD data, units nm^2/(cy/mm)^2
+        PSD data, units nm²/(cy/mm)²
     nu_x : `numpy.ndarray`
         x spatial frequency, cy/mm
     nu_y : `numpy.ndarray`
@@ -834,7 +834,7 @@ class Interferogram(OpticalPhase):
                ylim=lims, ylabel=r'$\nu_y$' + f' [cy/{self.spatial_unit}]')
 
         cb = fig.colorbar(im,
-                          label='PSD [' + self.phase_unit + r'$^2$' + f'/(cy/{self.spatial_unit})' + r'$^2$]',
+                          label='PSD [' + self.phase_unit + '²' + f'/(cy/{self.spatial_unit})' + '²]',
                           ax=ax, fraction=0.046, extend='both')
         cb.outline.set_edgecolor('k')
         cb.outline.set_linewidth(0.5)
@@ -932,7 +932,7 @@ class Interferogram(OpticalPhase):
             ax.legend(title='Slice')
 
         ax.set(xlim=xlim, xlabel=f'Spatial {label} [{unit}]',
-               ylim=ylim, ylabel=r'PSD [nm$^2$/' + f'(cy/{self.spatial_unit})$^2$]')
+               ylim=ylim, ylabel=r'PSD [nm²/' + f'(cy/{self.spatial_unit})²]')
 
         return fig, ax
 
