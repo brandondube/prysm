@@ -1,7 +1,7 @@
 # Prysm
 
 [![Build Status](https://travis-ci.org/brandondube/prysm.svg?branch=master)](https://travis-ci.org/brandondube/prysm)
-[![Documentation Status](https://readthedocs.org/projects/prysm/badge/?version=latest)](http://prysm.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/prysm/badge/?version=stable)](http://prysm.readthedocs.io/en/latest/?badge=stable)
 [![Coverage Status](https://coveralls.io/repos/github/brandondube/prysm/badge.svg?branch=master)](https://coveralls.io/github/brandondube/prysm?branch=master)
 
 A python3.6+ optics module.
