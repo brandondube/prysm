@@ -1,5 +1,4 @@
-"""Defines behavior of convolvable items and a base class to encapsulate that behavior.
-"""
+"""Defines behavior of convolvable items and a base class to encapsulate that behavior."""
 
 from prysm import mathops as m
 from ._basicdata import BasicData
@@ -198,7 +197,7 @@ class Convolvable(BasicData):
         return self
 
     def show(self, xlim=None, ylim=None, interp_method=None, power=1, show_colorbar=True, fig=None, ax=None):
-        '''Display the image.
+        """Display the image.
 
         Parameters
         ----------
@@ -224,7 +223,7 @@ class Convolvable(BasicData):
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
-        '''
+        """
         from matplotlib import colors
 
         if self.unit_x is not None:
@@ -259,7 +258,7 @@ class Convolvable(BasicData):
         return fig, ax
 
     def show_fourier(self, freq_x=None, freq_y=None, interp_method='lanczos', fig=None, ax=None):
-        '''Display the fourier transform of the image.
+        """Display the fourier transform of the image.
 
         Parameters
         ----------
@@ -285,7 +284,7 @@ class Convolvable(BasicData):
         -----
         freq_x and freq_y are unused when the convolvable has a .data field.
 
-        '''
+        """
         if self.has_analytic_ft:
             if self.data is None:
                 if freq_x is None or freq_y is None:
@@ -316,7 +315,7 @@ class Convolvable(BasicData):
         return fig, ax
 
     def save(self, path, nbits=8):
-        '''Write the image to a png, jpg, tiff, etc.
+        """Write the image to a png, jpg, tiff, etc.
 
         Parameters
         ----------
@@ -325,7 +324,7 @@ class Convolvable(BasicData):
         nbits : `int`
             number of bits in the output image
 
-        '''
+        """
         from imageio import imwrite
         if nbits is 8:
             typ = m.unit8
@@ -338,7 +337,7 @@ class Convolvable(BasicData):
 
     @staticmethod
     def from_file(path, scale):
-        '''Read a monochrome 8 bit per pixel file into a new Image instance.
+        """Read a monochrome 8 bit per pixel file into a new Image instance.
 
         Parameters
         ----------
@@ -352,12 +351,11 @@ class Convolvable(BasicData):
         `Convolvable`
             a new image object
 
-        '''
+        """
         from imageio import imread
         imgarr = imread(path)
         s = imgarr.shape
         extx, exty = (s[1] * scale) / 2, (s[0] * scale) / 2
-        print(extx, exty, scale)
         ux, uy = m.arange(-extx, extx, scale), m.arange(-exty, exty, scale)
         return Convolvable(data=m.flip(imgarr, axis=0).astype(config.precision),
                            unit_x=ux, unit_y=uy, has_analytic_ft=False)

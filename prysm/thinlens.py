@@ -130,6 +130,7 @@ def object_dist_to_mag(efl, object_dist):
     object_dist = guarantee_array(object_dist)
     return efl / (efl - object_dist)
 
+
 def mag_to_object_dist(efl, mag):
     """Compute the object distance for a given focal length and magnification.
 
@@ -147,6 +148,7 @@ def mag_to_object_dist(efl, mag):
 
     """
     return efl * ((1/mag) + 1)
+
 
 def linear_to_long_mag(lateral_mag):
     """Compute the longitudinal (along optical axis) magnification from the lateral mag.
