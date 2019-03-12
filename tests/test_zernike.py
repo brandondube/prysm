@@ -8,6 +8,8 @@ import numpy as np
 from prysm.coordinates import cart_to_polar
 from prysm import zernike
 
+import matplotlib
+matplotlib.use('TkAgg')
 
 SAMPLES = 32
 
@@ -30,6 +32,11 @@ def phi():
 def fit_data():
     p = zernike.FringeZernike(Z9=1, samples=SAMPLES)
     return p.phase, p.coefs
+
+
+@pytest.fixture
+def sample():
+    return zernike.NollZernike(np.random.rand(9), samples=64)
 
 
 def test_all_zernfcns_run_without_error_or_nans(rho, phi):
@@ -95,3 +102,40 @@ def test_fit_raises_on_too_many_terms(fit_data):
     data, real_coefs = fit_data
     with pytest.raises(ValueError):
         zernike.zernikefit(data, terms=100)
+
+
+def test_names_functions(sample):
+    assert any(sample.names)
+
+
+def test_magnitudes_functions(sample):
+    assert any(sample.magnitudes)
+
+
+@pytest.mark.parametrize('orientation', ['h', 'v'])
+def test_barplot_functions(sample, orientation):
+    fig, ax = sample.barplot(orientation=orientation)
+    assert fig
+    assert ax
+
+
+@pytest.mark.parametrize('orientation, sort', [['h', True], ['v', False]])
+def test_barplot_magnitudes_functions(sample, orientation, sort):
+    fig, ax = sample.barplot_magnitudes(orientation=orientation, sort=sort)
+    assert fig
+    assert ax
+
+
+@pytest.mark.parametrize('orientation', ['h', 'v'])
+def test_barplot_topn_functions(sample, orientation):
+    fig, ax = sample.barplot_topn(orientation=orientation)
+    assert fig
+    assert ax
+
+
+def test_truncate_functions(sample):
+    assert sample.truncate(9)
+
+
+def test_truncate_topn_functions(sample):
+    assert sample.truncate_topn(9)
