@@ -52,7 +52,7 @@ def test_spike_clip_functions(sample_i_mutate):
 
 
 def test_tis_functions(sample_i_mutate):
-    sample_i_mutate.set_spatial_unit('um')
+    sample_i_mutate.change_spatial_unit('um')
     sample_i_mutate.fill()
     assert sample_i_mutate.total_integrated_scatter(0.4, 0)
 
@@ -97,9 +97,9 @@ def test_make_window_passes_array():
 
 @pytest.mark.parametrize('win', ['welch', 'hanning'])
 def test_make_window_functions_for_known_geometries(win):
-    signal = np.empty((2, 2))
+    signal = np.empty((10, 10))
     window = make_window(signal, 1, win)
-    assert window
+    assert window.any()
 
 
 def test_synthesize_from_psd_functions():
@@ -107,10 +107,10 @@ def test_synthesize_from_psd_functions():
 
 
 @pytest.mark.parametrize('freq, period', [
-    [None, 5],
-    [None, (25, 5)],
-    [5, None],
-    [(25, 5), None]
+    [None, 10],
+    [None, (25, 10)],
+    [1, None],
+    [(0.1, 1), None]
 ])
 def test_filter_functions(sample_i_mutate, freq, period):
     sample_i_mutate.fill()
