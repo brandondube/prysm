@@ -17,7 +17,7 @@ prysm requires only [numpy](http://www.numpy.org/) and [scipy](https://www.scipy
 
 ### Optional Dependencies
 
-Prysm uses numpy for array operations.  If your environment has [numba](http://numba.pydata.org/) installed, it will automatically accelerate many of prysm's compuations.  To use an nVidia GPU, you must have [cupy](https://cupy.chainer.org/) installed.  Plotting uses [matplotlib](https://matplotlib.org/).  Images are read and written with [imageio](https://imageio.github.io/).  Some MTF utilities utilize [pandas](https://pandas.pydata.org/).
+Prysm uses numpy for array operations.  If your environment has [numba](http://numba.pydata.org/) installed, it will automatically accelerate many of prysm's compuations.  To use an nVidia GPU, you must have [cupy](https://cupy.chainer.org/) installed.  Plotting uses [matplotlib](https://matplotlib.org/).  Images are read and written with [imageio](https://imageio.github.io/).  Some MTF utilities utilize [pandas](https://pandas.pydata.org/).  Reading of Zygo datx files requires [h5py](https://www.h5py.org/).
 
 ## Features
 
