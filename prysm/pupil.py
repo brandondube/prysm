@@ -199,7 +199,7 @@ class Pupil(OpticalPhase):
         if self.sample_spacing != other.sample_spacing or self.samples != other.samples:
             raise ValueError('Pupils must be identically sampled')
 
-        result = self.clone()
+        result = self.copy()
         result.phase = self.phase + other.phase
         result._mask = self._mask * other._mask
         result.mask(result._mask, result.mask_target)
@@ -227,7 +227,7 @@ class Pupil(OpticalPhase):
         if self.sample_spacing != other.sample_spacing or self.samples != other.samples:
             raise ValueError('Pupils must be identically sampled')
 
-        result = self.clone()
+        result = self.copy()
         result.phase = self.phase - other.phase
         result._mask = self._mask * other._mask
         result.mask(result._mask, result.mask_target)

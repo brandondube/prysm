@@ -1,6 +1,4 @@
 """Tests for the Zernike submodule."""
-import os
-
 import pytest
 
 import numpy as np
