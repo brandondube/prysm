@@ -18,28 +18,22 @@ prysm aims to be a swiss army knife for optical engineers and students.  Its pri
 
 Please see the Features section for more details.
 
-Installation
-------------
-
-prysm is available from either PyPi:
+prysm is on pypi:
 
 >>> pip install prysm
 
-or github:
+prysm requires only [numpy](http://www.numpy.org/) and [scipy](https://www.scipy.org/).
 
->>> pip install git+git://github.com/brandondube/prysm.git
+If your environment has [numba](http://numba.pydata.org/) installed, it will automatically accelerate many of prysm's compuations.  To use an nVidia GPU, you must have [cupy](https://cupy.chainer.org/) installed.  Plotting uses [matplotlib](https://matplotlib.org/).  Images are read and written with [imageio](https://imageio.github.io/).  Some MTF utilities utilize [pandas](https://pandas.pydata.org/).  Reading of Zygo datx files requires [h5py](https://www.h5py.org/).
 
-It requires a minimal set of dependencies for scientific python; namely `numpy <http://www.numpy.org/>`_, `scipy <https://www.scipy.org/>`_, and `matplotlib <https://matplotlib.org/>`_.  It optionally depends on `numba <https://numba.pydata.org/>`_ (for acceleration of some routines on CPUs), `cupy <https://cupy.chainer.org/>`_ (for experimental use with nVidia GPUs), `imageio <https://imageio.github.io/>`_ (for reading and writing images), `h5py <https://www.h5py.org/>`_ (for reading of Zygo's datx format), and `pandas <https://pandas.pydata.org/>`_ (for some advanced utility MTF functions).  Pip can be instructed to install these alongside prysm,
+pip can be directed to install these,
 
->>> pip install prysm[cpu+]  # for numba
-
->>> pip install prysm[cuda] # for cupy
-
->>> pip install prysm[img] # for imageio
-
->>> pip install prysm[Mx]  # for h5py
-
->>> pip install prysm[mtf+] # for pandas
+>>> pip install prysm[cpu]     # for numba
+>>> pip install prysm[cuda]    # for cupy
+>>> pip install prysm[img]     # for imageio
+>>> pip install prysm[Mx]      # for h5py
+>>> pip install prysm[mtf]     # for pandas
+>>> pip install prysm[deluxe]  # I want it all
 
 or they may be installed at any time.
 
@@ -50,16 +44,15 @@ Physical Optics
 ~~~~~~~~~~~~~~~
 
 * Modeing of pupil planes via or with:
-* * Hopkins' wave aberration expansion, "Seidel aberrations"
 * * Fringe Zernike polynomials up to Z48, unit amplitude or RMS
-* * Zemax Standard Zernike polynomials up to Z48, unit amplitude
+* * Noll ("Zemax Standard") Zernike polynomials up to Z36, unit amplitude or RMS
 * * apodization
 * * masks
 * * * circles and ellipses
 * * * n sided regular polygons
 * * * user-provided
-* * synthetic interferograms
-* * PV, rms, standard deviation, strehl evaluation
+* * synthetic fringe maps
+* * PV, RMS, stdev, Sa, Strehl evaluation
 * * plotting
 
 * Propagation of pupil planes via Fresnel transforms to Point Spread Functions (PSFs), which support
@@ -89,13 +82,15 @@ Physical Optics
 * Detector models for e.g. STOP analysis or image synthesis
 
 * Interferometric analysis
-* * cropping, masking
+* * cropping
+* * masking
+* * lowpass/highpass/bandpass/band-reject filtering
 * * least-squares fitting and subtraction of Zernike modes, planes, and spheres
-* * evaluation of PV, RMS, Sa, standard deviation, band-limited RMS
+* * evaluation of PV, RMS, stdev, Sa, band-limited RMS, total integrated scatter
 * * computation of PSD
 * * * 2D
 * * * x, y, azimuthally averaged slices
-* * * evaluation and/or comparison to lorentzian model
+* * * evaluation and/or comparison to ab (power law) or abc (Lorentzian) models
 * * spike clipping
 * * plotting
 
@@ -107,27 +102,24 @@ First-Order Optics
 * defocus-deltaZ relation
 * two lens EFL and BFL
 
-Parsing Data from Commercial Instruments
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Parsing Data from Commercial & Open Source Instruments
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 * Trioptics ImageMaster MTF benches
 * Zygo Fizeau and white light interferometers
+* MTF Mapper
 
 
 User's Guide
 ------------
 
 .. toctree::
-   :maxdepth: 1
-   :glob:
 
-   user_guide/*
+   user_guide/index.rst
 
 
 Examples
 --------
 
 .. toctree::
-    :maxdepth: 1
-    :glob:
 
-    examples/*
+    examples/index.rst
