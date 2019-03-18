@@ -1048,3 +1048,42 @@ def write_zygo_ascii(file, phase, unit_x, unit_y, wavelength=0.6328, intensity=N
     else:
         shutil.copyfileobj(s, fd)
 
+
+def read_sigfit_zernikes(file):
+    with open(file, 'r') as fid:
+        data = fid.read()
+
+    lines = data.splitlines()
+    _, rest = lines[1].split('Rnorm=')
+    rest = rest.lstrip()
+    rnorm, rest = rest.split('Type')
+    _, rest = rest.split('WVL=')
+    rest = rest.lstrip()
+    wvl, rest = rest.split()
+    unit = rest.lstrip()
+    fctr = 25.4e3 if unit.lower() == 'in' else 1e3
+    typ = 'Noll' if 'ZEMAX' in lines[3] else 'Fringe'
+    normed = True if 'RMS' in lines[3] else False
+    rnorm = float(rnorm.lstrip()) * fctr / 1e3
+    coefs = []
+    for line in lines[5:-1]:  # last line is blank
+        idx, *coef = line.split(',')
+        if isinstance(coef, list):
+            coef, *_ = coef
+
+        if coef == '':
+            coefs.append(0)
+        else:
+            coefs.append(float(coef))
+
+    coefs = m.asarray(coefs)
+
+
+    return {
+        'type': typ,
+        'normed': normed,
+        'wavelength': fctr * float(wvl),
+        'coefs': coefs,
+        'rnorm': rnorm,
+    }
+
