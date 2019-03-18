@@ -1050,7 +1050,24 @@ def write_zygo_ascii(file, phase, unit_x, unit_y, wavelength=0.6328, intensity=N
 
 
 def read_sigfit_zernikes(file):
-    with open(file, 'r') as fid:
+    """Read Zernikes from a SigFit OUTCOF3 file.
+
+    Parameters
+    ----------
+    file : `str` or Path_like
+        path to a file
+
+    Returns
+    -------
+    `dict` with keys:
+        - type | Noll ("Zemax Standard") or Fringe Zernikes
+        - normed | if True, the terms are orthonormalized and have unit standard deviation, else unit amplitude
+        - wavelength | wavelength of light in microns
+        - rnorm | normalization radius, mm
+        - coefs | Zernike mode coefficients, waves
+
+    """
+    with open(str(file), 'r') as fid:
         data = fid.read()
 
     lines = data.splitlines()
@@ -1078,12 +1095,11 @@ def read_sigfit_zernikes(file):
 
     coefs = m.asarray(coefs)
 
-
     return {
         'type': typ,
         'normed': normed,
-        'wavelength': fctr * float(wvl),
-        'coefs': coefs,
+        'wavelength': float(wvl) * fctr,
+        'coefs': coefs * fctr,
         'rnorm': rnorm,
     }
 
