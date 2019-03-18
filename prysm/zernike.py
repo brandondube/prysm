@@ -282,6 +282,7 @@ def primary_septafoil_x(rho, phi):
     """Zernike primary septafoil."""
     return 4 * rho**7 * m.sin(7 * phi)
 
+
 # norms
 piston.norm = 1
 tip.norm = 2
@@ -960,7 +961,7 @@ class BaseZernike(Pupil):
         self.mask(self._mask, self.mask_target)
         return self
 
-    def __repr__(self):
+    def __str__(self):
         """Pretty-print pupil description."""
         if self.normalize is True:
             header = f'rms normalized {self._name} Zernike description with:\n\t'
