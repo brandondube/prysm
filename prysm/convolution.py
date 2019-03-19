@@ -40,12 +40,12 @@ class Convolvable(BasicData):
     @property
     def support_x(self):
         """Width of the domain in X."""
-        return self.unit_x[-1] - self.unit_x[0]
+        return self.samples_x * self.sample_spacing
 
     @property
     def support_y(self):
         """Width of the domain in Y."""
-        return self.unit_y[-1] - self.unit_x[0]
+        return self.samples_y * self.sample_spacing
 
     @property
     def support(self):
@@ -375,16 +375,16 @@ def _conv(convolvable1, convolvable2, dryrun=False):
             return double_analytical_ft_convolution(convolvable1, convolvable2)
     elif convolvable1.has_analytic_ft and not convolvable2.has_analytic_ft:
         if dryrun:
-            header = 'Single analytical convolution:'
-            line1 = f'Result computed using numerical data from {convolvable2}'
+            header = 'Single analytical convolution, result computed using:'
+            line1 = f'numerical data from {convolvable2}'
             line2 = f'and analyical equation from {convolvable1}.'
             return '\n'.join([header, line1, line2])
         else:
             return single_analytical_ft_convolution(convolvable2, convolvable1)
     elif not convolvable1.has_analytic_ft and convolvable2.has_analytic_ft:
         if dryrun:  # could refactor the duplicate of header/line1/line2
-            header = 'Single analytical convolution:'
-            line1 = f'Result computed using numerical data from {convolvable1}'
+            header = 'Single analytical convolution, result computed using:'
+            line1 = f'numerical data from {convolvable1}'
             line2 = f'and analyical equation from {convolvable2}.'
             return '\n'.join([header, line1, line2])
         else:
