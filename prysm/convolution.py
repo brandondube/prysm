@@ -33,6 +33,10 @@ class Convolvable(BasicData):
         self.unit_y = unit_y
         self.has_analytic_ft = has_analytic_ft
 
+    def __str__(self):
+        """Pretty print description."""
+        return f'{type(self)} with sample spacing {self.sample_spacing:.3f} and support {self.support:.3f} μm'
+
     @property
     def support_x(self):
         """Width of the domain in X."""
@@ -89,7 +93,7 @@ class Convolvable(BasicData):
         ax.legend(title='Slice', loc='upper right')
         return fig, ax
 
-    def conv(self, other):
+    def conv(self, other, dryrun=False):
         """Convolves this convolvable with another.
 
         Parameters
@@ -151,7 +155,7 @@ class Convolvable(BasicData):
                 correct.
 
         """
-        return _conv(self, other)
+        return _conv(self, other, dryrun=dryrun)
 
     def deconv(self, other, balance=1000, reg=None, is_real=True, clip=False, postnormalize=True):
         """Perform the deconvolution of this convolvable object by another.
@@ -361,19 +365,49 @@ class Convolvable(BasicData):
                            unit_x=ux, unit_y=uy, has_analytic_ft=False)
 
 
-def _conv(convolvable1, convolvable2):
+def _conv(convolvable1, convolvable2, dryrun=False):
     if convolvable1.has_analytic_ft and convolvable2.has_analytic_ft:
-        return double_analytical_ft_convolution(convolvable1, convolvable2)
+        if dryrun:
+            return """Double analytical convolution:
+                      Result is a new Convolvable with .analytic_ft that calls
+                      both of the "parent" convolvables' .analytic_ft methods."""
+        else:
+            return double_analytical_ft_convolution(convolvable1, convolvable2)
     elif convolvable1.has_analytic_ft and not convolvable2.has_analytic_ft:
-        return single_analytical_ft_convolution(convolvable2, convolvable1)
+        if dryrun:
+            header = 'Single analytical convolution:'
+            line1 = f'Result computed using numerical data from {convolvable2}'
+            line2 = f'and analyical equation from {convolvable1}.'
+            return '\n'.join([header, line1, line2])
+        else:
+            return single_analytical_ft_convolution(convolvable2, convolvable1)
     elif not convolvable1.has_analytic_ft and convolvable2.has_analytic_ft:
-        return single_analytical_ft_convolution(convolvable1, convolvable2)
+        if dryrun:  # could refactor the duplicate of header/line1/line2
+            header = 'Single analytical convolution:'
+            line1 = f'Result computed using numerical data from {convolvable1}'
+            line2 = f'and analyical equation from {convolvable2}.'
+            return '\n'.join([header, line1, line2])
+        else:
+            return single_analytical_ft_convolution(convolvable1, convolvable2)
     else:
-        return pure_numerical_ft_convolution(convolvable1, convolvable2)
+        if dryrun:
+            header = 'numerical convolution:'
+            line1 = f'{convolvable1}'
+            line2 = f'{convolvable2}'
+            outputwindow = max(convolvable1.support, convolvable2.support)
+            output_spacing = min(convolvable1.sample_spacing, convolvable2.sample_spacing)
+            nsamples = int(outputwindow // output_spacing)
+            line3 = 'output window will have:'
+            line4 = f'\t{nsamples} samples'
+            line5 = f'\t{outputwindow:.3f} μm support'
+            line6 = f'\t{output_spacing:.3f} μm sample spacing'
+            return '\n'.join([header, line1, line2, line3, line4, line5, line6])
+        else:
+            return pure_numerical_ft_convolution(convolvable1, convolvable2)
 
 
 def _conv_result_core(data1, data2):
-        return abs(m.ifft2(data1 * data2))
+    return abs(m.ifft2(data1 * data2))
 
 
 def double_analytical_ft_convolution(convolvable1, convolvable2):
@@ -401,7 +435,7 @@ def double_analytical_ft_convolution(convolvable1, convolvable2):
     return Convolvable(out_data, spatial_x, spatial_y, has_analytic_ft=False)
 
 
-def single_analytical_ft_convolution(without_analytic, with_analytic):
+def single_analytical_ft_convolution(without_analytic, with_analytic, dryrun=False):
     """Convolves two convolvable objects utilizing their analytic fourier transforms.
 
     Parameters
