@@ -40,12 +40,12 @@ class Convolvable(BasicData):
     @property
     def support_x(self):
         """Width of the domain in X."""
-        return self.samples_x * self.sample_spacing
+        return self.samples_x * (self.sample_spacing - 1)
 
     @property
     def support_y(self):
         """Width of the domain in Y."""
-        return self.samples_y * self.sample_spacing
+        return self.samples_y * (self.sample_spacing - 1)
 
     @property
     def support(self):

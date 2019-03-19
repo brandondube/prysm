@@ -34,7 +34,7 @@ class Slit(Convolvable):
 
         if samples > 0:
             ext = samples / 2 * sample_spacing
-            x, y = m.linspace(-ext, ext, samples), m.linspace(-ext, ext, samples)
+            x, y = m.arange(-ext, ext, sample_spacing), m.arange(-ext, ext, sample_spacing)
             arr = m.zeros((samples, samples))
         else:
             arr, x, y = None, None, None
@@ -112,7 +112,7 @@ class Pinhole(Convolvable):
         # produce coordinate arrays
         if samples > 0:
             ext = samples / 2 * sample_spacing
-            x, y = m.linspace(-ext, ext, samples), m.linspace(-ext, ext, samples)
+            x, y = m.arange(-ext, ext, sample_spacing), m.arange(-ext, ext, sample_spacing)
             xv, yv = m.meshgrid(x, y)
             w = width / 2
             # paint a circle on a black background
@@ -150,7 +150,7 @@ class Pinhole(Convolvable):
 class SiemensStar(Convolvable):
     """Representation of a Siemen's star object."""
     def __init__(self, spokes, sinusoidal=True, background='black', sample_spacing=2, samples=256):
-        """Produces a Siemen's Star.
+        """Produce a Siemen's Star.
 
         Parameters
         ----------
@@ -179,7 +179,7 @@ class SiemensStar(Convolvable):
         y = m.linspace(-1, 1, samples)
         xx, yy = m.meshgrid(x, y)
         rv, pv = cart_to_polar(xx, yy)
-        ext = sample_spacing * samples / 2
+        ext = sample_spacing * (samples / 2)
         ux, uy = m.arange(-ext, ext, sample_spacing), m.arange(-ext, ext, sample_spacing)
 
         # generate the siemen's star as a (rho,phi) polynomial
@@ -203,7 +203,7 @@ class SiemensStar(Convolvable):
 
 class TiltedSquare(Convolvable):
     """Represents a tilted square for e.g. slanted-edge MTF calculation."""
-    def __init__(self, angle=4, background='white', sample_spacing=2, samples=256):
+    def __init__(self, angle=4, background='white', sample_spacing=2, samples=256, radius=0.3, contrast=0.9):
         """Create a new TitledSquare instance.
 
         Parameters
@@ -216,22 +216,23 @@ class TiltedSquare(Convolvable):
             spacing of samples
         samples : `int`
             number of samples
+        radius : `float`
+            fractional
+        contrast : `float`
+            contrast, anywhere from 0 to 1
 
         """
-        radius = 0.3
         if background.lower() == 'white':
             arr = m.ones((samples, samples))
-            fill_with = 0
+            fill_with = 1 - contrast
         else:
             arr = m.zeros((samples, samples))
             fill_with = 1
 
-        # TODO: optimize by working with index numbers directly and avoid
-        # creation of X,Y arrays for performance.
-        x = m.linspace(-0.5, 0.5, samples)
-        y = m.linspace(-0.5, 0.5, samples)
+        ext = samples / 2 * sample_spacing
+        radius = radius * ext * 2
+        x = y = m.arange(-ext, ext, sample_spacing)
         xx, yy = m.meshgrid(x, y)
-        sf = samples * sample_spacing
 
         # TODO: convert inline operation to use of rotation matrix
         angle = m.radians(angle)
@@ -239,7 +240,7 @@ class TiltedSquare(Convolvable):
         yp = xx * m.sin(angle) + yy * m.cos(angle)
         mask = (abs(xp) < radius) * (abs(yp) < radius)
         arr[mask] = fill_with
-        super().__init__(data=arr, unit_x=x * sf, unit_y=y * sf, has_analytic_ft=False)
+        super().__init__(data=arr, unit_x=x, unit_y=y, has_analytic_ft=False)
 
 
 class SlantedEdge(Convolvable):
@@ -264,8 +265,8 @@ class SlantedEdge(Convolvable):
         """
         diff = (1 - contrast) / 2
         arr = m.full((samples, samples), 1 - diff)
-        x = m.linspace(-0.5, 0.5, samples)
-        y = m.linspace(-0.5, 0.5, samples)
+        ext = samples / 2 * sample_spacing
+        x = y = m.arange(-ext, ext, sample_spacing)
         xx, yy = m.meshgrid(x, y)
         sf = samples * sample_spacing
 
