@@ -5,7 +5,7 @@ from urllib.request import urlopen
 
 baseremote = r'https://github.com/brandondube/prysm/raw/master/sample_files/'
 baselocal = Path(__file__)
-root = baselocal.parent / 'sampledata'
+root = baselocal.parent / '..' / 'prysm-sampledata'
 root.mkdir(exist_ok=True)
 
 
