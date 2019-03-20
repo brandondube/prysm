@@ -92,7 +92,7 @@ class Pupil(OpticalPhase):
     def strehl(self):
         """Strehl ratio of the pupil."""
         phase = self.change_phase_unit(to='um', inplace=False)
-        return 1 - ((4 * m.pi**2) / self.wavelength**2) * (std(phase)**2)
+        return m.exp(-4 * m.pi / self.wavelength / self.wavelength * std(phase) ** 2)
 
     @property
     def fcn(self):
