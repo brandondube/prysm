@@ -552,9 +552,9 @@ def _crop_output(original, padded):
     """Crop the output of a padded convolution."""
     ry, rx = original.shape
     sy, sx = padded.shape
-    dy, dx = (sy - ry) // 2, (sx - rx) // 2
-    t, b = dy, -dy  # top, bottom
-    l, r = dx, -dx  # left, right
+    dy, dx = (sy - ry) / 2, (sx - rx) / 2
+    t, b = int(m.ceil(dy)), -int(m.floor(dy))  # top, bottom
+    l, r = int(m.ceil(dx)), -int(m.floor(dx))  # left, right
     # crop out the wanted bit
     return padded[t:b, l:r]
 
