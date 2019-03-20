@@ -18,7 +18,7 @@ install:
       pytest=4.2.1
       pytest-cov=2.6.1
       coveralls=1.5.1
-  - python setup.py install
+  - pip install .
 before_script:
   - "export DISPLAY=:99.0"
   - "sh -e /etc/init.d/xvfb start"
