@@ -123,3 +123,11 @@ Examples
 .. toctree::
 
     examples/index.rst
+
+
+API Reference
+-------------
+
+.. toctree::
+
+    api/index.rst
