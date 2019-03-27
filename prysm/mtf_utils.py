@@ -173,19 +173,23 @@ class MTFvFvF(object):
         Algorithm '0.5' uses the frequency that has its peak closest to 0.5
         on-axis to estimate the focus coresponding to the minimum RMS WFE
         condition.  This is based on the following assumptions:
-            - Any combination of third, fifth, and seventh order spherical
-                aberration will produce a focus shift that depends on
-                frequency, and this dependence can be well fit by an
-                equation of the form y(x) = ax^2 + bx + c.  If this is true,
-                then the frequency which peaks at 0.5 will be near the
-                vertex of the quadratic, which converges to the min RMS WFE
-                condition.
-            - Coma, while it enhances depth of field, does not shift the
-                focus peak.
-            - Astigmatism and field curvature are the dominant cause of any
-                shift in best focus with field.
-            - Chromatic aberrations do not influence the thru-focus MTF peak
-                in a way that varies with field.
+
+        - Any combination of third, fifth, and seventh order spherical
+            aberration will produce a focus shift that depends on
+            frequency, and this dependence can be well fit by an
+            equation of the form y(x) = ax^2 + bx + c.  If this is true,
+            then the frequency which peaks at 0.5 will be near the
+            vertex of the quadratic, which converges to the min RMS WFE
+            condition.
+
+        - Coma, while it enhances depth of field, does not shift the
+            focus peak.
+
+        - Astigmatism and field curvature are the dominant cause of any
+            shift in best focus with field.
+
+        - Chromatic aberrations do not influence the thru-focus MTF peak
+            in a way that varies with field.
 
         Raises
         ------
