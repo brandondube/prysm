@@ -40,12 +40,12 @@ class Convolvable(BasicData):
     @property
     def support_x(self):
         """Width of the domain in X."""
-        return self.samples_x * (self.sample_spacing - 1)
+        return (self.samples_x - 1) * self.sample_spacing
 
     @property
     def support_y(self):
         """Width of the domain in Y."""
-        return self.samples_y * (self.sample_spacing - 1)
+        return (self.samples_y - 1) * self.sample_spacing
 
     @property
     def support(self):
@@ -396,7 +396,7 @@ def _conv(convolvable1, convolvable2, dryrun=False):
             line2 = f'{convolvable2}'
             outputwindow = max(convolvable1.support, convolvable2.support)
             output_spacing = min(convolvable1.sample_spacing, convolvable2.sample_spacing)
-            nsamples = int(outputwindow // output_spacing)
+            nsamples = int(outputwindow // output_spacing) + 1
             line3 = 'output window will have:'
             line4 = f'\t{nsamples} samples'
             line5 = f'\t{outputwindow:.3f} μm support'
@@ -435,7 +435,7 @@ def double_analytical_ft_convolution(convolvable1, convolvable2):
     return Convolvable(out_data, spatial_x, spatial_y, has_analytic_ft=False)
 
 
-def single_analytical_ft_convolution(without_analytic, with_analytic, dryrun=False):
+def single_analytical_ft_convolution(without_analytic, with_analytic):
     """Convolves two convolvable objects utilizing their analytic fourier transforms.
 
     Parameters
