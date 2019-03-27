@@ -2,6 +2,10 @@
 prysm v0.15
 ***********
 
+Version 0.15 introduces a host of new features and many internal changes that improve the maintainability of the library, users are encouraged to upgrade.
+
+With version 0.16, a FWHM feature is expected to be added to the PSF class and improvements made to convolution and image simulation code.  The abilities of the :class:`~prysm.detector.Detector` class are likely to be greatly enhanced.  A `SigFit <http://sigmadyne.com/sigfit-software/>`_ parser will be be implemented.
+
 New Features
 ============
 
