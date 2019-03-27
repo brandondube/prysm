@@ -72,7 +72,11 @@ target/
 
 # sample data
 prysm/sampledata/*
+prysm-sampledata/*
 
 # testing files
 Examples/testing.ipynb
 **/Untitled.ipynb
+
+# docs trash
+docs/source/user_guide/foo.png
