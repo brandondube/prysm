@@ -987,7 +987,26 @@ def read_zygo_metadata(file_contents):
 
 
 def write_zygo_ascii(file, phase, unit_x, unit_y, wavelength=0.6328, intensity=None, high_phase_res=False):
+    """Write a Zygo ASCII interferogram file.
 
+    Parameters
+    ----------
+    file : `str`
+        filename
+    phase : `numpy.ndarray`
+        array of phase values
+    unit_x : `numpy.ndarray`
+        (1-d) x coordinates, mm
+    unit_y: `numpy.ndarray`
+        (1-d) y coordinates, mm
+    wavelength : `float`, optional
+        wavelength of light, um
+    intensity : `numpy.ndarray`, optional
+        intensity data
+    high_phase_res : `float`, optional
+        whether to save with high phase resolution
+
+    """
     # construct the header
     timestamp = datetime.datetime.now()
     line1 = 'Zygo ASCII Data File - Format 2'
