@@ -282,6 +282,7 @@ def primary_septafoil_x(rho, phi):
     """Zernike primary septafoil."""
     return 4 * rho**7 * m.sin(7 * phi)
 
+
 # norms
 piston.norm = 1
 tip.norm = 2
