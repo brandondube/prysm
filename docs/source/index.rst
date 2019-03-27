@@ -131,3 +131,10 @@ API Reference
 .. toctree::
 
     api/index.rst
+
+Release History
+---------------
+
+.. toctree::
+
+    releases/index.rst
