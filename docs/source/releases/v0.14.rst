@@ -6,7 +6,8 @@ Version 0.14 introduces a host of new features and critical improvements to exis
 
 With version 0.15, work will continue on improving the documentation and tests.  When documentation becomes "complete" and coverage exceeds 90%, version 1.0 will be released and prysm will follow more typical semver release patterns.
 
-## New Features
+New Features
+============
 
 * :func:`~prysm.fttools.pad2d` from :mod:`prysm.fttools` now takes the :code:`mode` kwarg, wrapping `numpy.pad <https://docs.scipy.org/doc/numpy-1.15.1/reference/generated/numpy.pad.html>`_ in the non-constant case.
 
@@ -52,7 +53,8 @@ With version 0.15, work will continue on improving the documentation and tests. 
 
 * :func:`~prysm.interferogram.ab_psd` function in :mod:`prysm.interferogram` for inverse power law PSD curves.
 
-## API changes
+Breaking API Changes
+===========
 
 * :code:`rms_norm` in functions related to Zernikes has been renamed to :code:`norm`.  This affects the :func:`~prysm.fringezernike.fit` function from :mod:`prysm.fringezernike` as well as the :class:`FringeZernike` class.
 
@@ -68,7 +70,8 @@ With version 0.15, work will continue on improving the documentation and tests. 
 
 * :meth:`prysm.interferogram.Interferogram.plot_psd_xyavg` has been renamed to :code:`plot_psd_xy_avg`.
 
-## Under-the-hood changes
+Under-the-hood Changes
+======================
 
 * :attr:`samples_x`, :attr:`samples_y`, :attr:`center_x`, and :attr:`center_y` are now properties of :class:`~prysm._phase.OpticalPhase` instances (:class:`Pupils`, :class:`Interferograms`, ...) instead of attrs.  This helps eliminate synchronization problems when the data is modified.
 
@@ -94,7 +97,8 @@ With version 0.15, work will continue on improving the documentation and tests. 
 
 * PSD calculation has been rewritten.  PSD results are now properly normalized to be a true PSD.  Prior results should be considered in error.
 
-## bugfixes
+Bugfixes
+========
 
 * fix :meth:`prysm.convolution.Convolvable.show` errors when no xlim or ylim provided.
 
