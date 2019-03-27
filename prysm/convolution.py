@@ -407,7 +407,7 @@ def _conv(convolvable1, convolvable2, dryrun=False):
 
 
 def _conv_result_core(data1, data2):
-    return abs(m.ifft2(data1 * data2))
+    return abs(m.fftshift(m.ifft2(data1 * data2)))
 
 
 def double_analytical_ft_convolution(convolvable1, convolvable2):
@@ -501,8 +501,8 @@ def pure_numerical_ft_convolution(convolvable1, convolvable2):
 
 def _numerical_ft_convolution_core_equalspacing(convolvable1, convolvable2):
     # two are identically sampled; just FFT convolve them without modification
-    ft1 = m.fft2(pad2d(convolvable1.data, 2, mode='reflect'))
-    ft2 = m.fft2(pad2d(convolvable2.data, 2, mode='reflect'))
+    ft1 = m.fft2(m.ifftshift(pad2d(convolvable1.data, 2, mode='linear_ramp')))
+    ft2 = m.fft2(m.ifftshift(pad2d(convolvable2.data, 2, mode='linear_ramp')))
     data = _crop_output(convolvable1.data, _conv_result_core(ft1, ft2))
     return Convolvable(data, convolvable1.unit_x, convolvable1.unit_y, False)
 
@@ -553,8 +553,8 @@ def _crop_output(original, padded):
     ry, rx = original.shape
     sy, sx = padded.shape
     dy, dx = (sy - ry) / 2, (sx - rx) / 2
-    t, b = int(m.ceil(dy)), -int(m.floor(dy))  # top, bottom
-    l, r = int(m.ceil(dx)), -int(m.floor(dx))  # left, right
+    t, b = int(m.floor(dy)), -int(m.ceil(dy))  # top, bottom
+    l, r = int(m.floor(dx)), -int(m.ceil(dx))  # left, right
     # crop out the wanted bit
     return padded[t:b, l:r]
 
