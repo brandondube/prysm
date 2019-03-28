@@ -25,6 +25,14 @@ Prysm features robust tools for modeling and propagation of wavefronts to image 
 
 For a complete list of features, see [the docs](https://prysm.readthedocs.io/en/stable/).
 
+## Examples
+
+Several [examples](https://prysm.readthedocs.io/en/stable/examples/index.html) are provided in the documentation.
+
+## User's Guide
+
+A [guide](https://prysm.readthedocs.io/en/stable/user_guide/index.html) for using the library is provided in the documentation.
+
 ## Contributing
 
 If you find an issue with prysm, please open an [issue](https://github.com/brandondube/prysm/issues) or [pull request](https://github.com/brandondube/prysm/pulls).  Prysm has some usage of f-strings, so any code contributed is only expected to work on python 3.6+, and is licensed under the [MIT license](https://github.com/brandondube/prysm/blob/master/LICENSE.md).  The library is
