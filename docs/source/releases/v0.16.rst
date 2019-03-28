@@ -22,4 +22,4 @@ Bugfixes
 Under-the-hood Changes
 ======================
 
-* :attribute:`prysm.pupil.Pupil.strehl` now uses a more accurate formula.
+* :attr:`prysm.pupil.Pupil.strehl` now uses a more accurate formula.
