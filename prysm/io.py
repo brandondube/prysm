@@ -8,6 +8,8 @@ import datetime
 import calendar
 import shutil
 
+import numpy as np
+
 from .conf import config
 from prysm import mathops as m
 
@@ -1093,12 +1095,12 @@ def read_sigfit_zernikes(file):
     data = data.split('Surface')
     out = {}
     for dat in data[1:]:
-        sid, data = _read_sigfit_core(dat)
+        sid, data = _read_sigfit_zernike_core(dat)
         out[sid] = data
     return out
 
 
-def _read_sigfit_core(text):
+def _read_sigfit_zernike_core(text):
     lines = text.splitlines()
     _, rest = lines[0].split('SID=')
     rest = rest.lstrip()
@@ -1122,10 +1124,10 @@ def _read_sigfit_core(text):
         slice_ = slice(4, total_lines - 1)
     for line in lines[slice_]:  # last line is blank
         idx, *coef = line.split(',')
-        if isinstance(coef, list):
+        if isinstance(coef, list) and len(coef) > 0:
             coef, *_ = coef
 
-        if coef == '':
+        if coef == '' or coef == []:
             coefs.append(0)
         else:
             coefs.append(float(coef))
@@ -1140,3 +1142,43 @@ def _read_sigfit_core(text):
         'coefs': coefs * wvl,
         'rnorm': rnorm,
     }
+
+
+def read_sigfit_rigidbody(file):
+    """Read rigid body perturbation data from a SigFit sum1.csv file.
+
+    Parameters
+    ----------
+    file : `str` or path_like
+        location of a sigfit sum1.csv file
+
+    Returns
+    -------
+    `dict` with keys of surface IDs, which have values of dicts with keys of dx, dy, dz, rx, ry, rz, dR
+        all values in mm
+
+    """
+    file = str(file)
+    with open(file, 'r') as fid:
+        data = fid.readlines()
+
+    if '= in' in data[4]:
+        fctr = 25.4
+    else:
+        fctr = 1
+
+    data = np.genfromtxt(file, skip_header=7, delimiter=',')[:, 4:12]
+    data[:, 1:] *= fctr
+    out = {}
+    for row in data:
+        sid, dx, dy, dz, rx, ry, rz, dR = row
+        out[int(sid)] = {
+            'dx': dx,
+            'dy': dy,
+            'dz': dz,
+            'rx': rx,
+            'ry': ry,
+            'rz': rz,
+            'dR': dR
+        }
+    return out
