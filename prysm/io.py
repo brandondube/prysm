@@ -39,12 +39,13 @@ def is_mtfvfvf_file(file):
     file : `str` or path_like or file_like
         file to read from, if string of file body, must provide filename
 
-    Returns:
+    Returns
+    -------
     boolean : `bool`
         if the file is an MTFvFvF file
     data : `str`
         contents of the file
-    `
+
     """
     data = read_file_stream_or_path(file)
     if data.startswith('ImgHeight'):
@@ -222,13 +223,13 @@ def read_trioptics_mtf(file, metadata=False):
 def parse_trioptics_metadata(file_contents):
     """Read metadata from the contents of a Trioptics .mht file.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     file_contents : `str`
         contents of a .mht file.
 
-    Returns:
-    --------
+    Returns
+    -------
     `dict`
         dictionary with keys:
             - operator
@@ -1024,8 +1025,8 @@ def write_zygo_ascii(file, phase, unit_x, unit_y, wavelength=0.6328, intensity=N
     line7 = '"' + ' ' * 39 + '"'
 
     timestamp_int = int(str(timestamp.timestamp()).split('.')[0])
-    res = (unit_x[1] - unit_x[0]) * 1e-3 # mm to m
-    line8 = f'0 0.5 {wavelength*1e-6} 0 1 0 {res} {timestamp_int}' # end is timestamp in integer seconds
+    res = (unit_x[1] - unit_x[0]) * 1e-3  # mm to m
+    line8 = f'0 0.5 {wavelength*1e-6} 0 1 0 {res} {timestamp_int}'  # end is timestamp in integer seconds
     line9 = f'{py} {px} 0 0 0 0 ' + '"' + ' ' * 9 + '"'
     line10 = '0 0 0 0 0 0 0 0 0 0'
     line11 = f'{int(high_phase_res)} 1 20 2 0 0 0 0 0'
@@ -1054,7 +1055,7 @@ def write_zygo_ascii(file, phase, unit_x, unit_y, wavelength=0.6328, intensity=N
     # create an in-memory buffer and write out the phase to it
     s = StringIO()
     s.write(header)
-    s.write('#\n#\n')
+    s.write('\n'.join([line15, line16, '']))
     m.savetxt(s, encoded_phase[:boundary].reshape(-1, 10), fmt='%d', delimiter=' ', newline=' \n')
     tail = ' '.join((str(d) for d in encoded_phase[boundary:]))
     s.write(tail)
@@ -1078,19 +1079,31 @@ def read_sigfit_zernikes(file):
 
     Returns
     -------
-    `dict` with keys:
+    `dict` with keys of surface IDs, which have values of dicts with keys of:
         - type | Noll ("Zemax Standard") or Fringe Zernikes
         - normed | if True, the terms are orthonormalized and have unit standard deviation, else unit amplitude
         - wavelength | wavelength of light in microns
         - rnorm | normalization radius, mm
-        - coefs | Zernike mode coefficients, waves
+        - coefs | Zernike mode coefficients, microns
 
     """
     with open(str(file), 'r') as fid:
         data = fid.read()
 
-    lines = data.splitlines()
-    _, rest = lines[1].split('Rnorm=')
+    data = data.split('Surface')
+    out = {}
+    for dat in data[1:]:
+        sid, data = _read_sigfit_core(dat)
+        out[sid] = data
+    return out
+
+
+def _read_sigfit_core(text):
+    lines = text.splitlines()
+    _, rest = lines[0].split('SID=')
+    rest = rest.lstrip()
+    surface, rest = rest.split('Rnorm=')
+    surface = int(surface.strip())
     rest = rest.lstrip()
     rnorm, rest = rest.split('Type')
     _, rest = rest.split('WVL=')
@@ -1098,11 +1111,16 @@ def read_sigfit_zernikes(file):
     wvl, rest = rest.split()
     unit = rest.lstrip()
     fctr = 25.4e3 if unit.lower() == 'in' else 1e3
-    typ = 'Noll' if 'ZEMAX' in lines[3] else 'Fringe'
-    normed = True if 'RMS' in lines[3] else False
+    typ = 'Noll' if 'ZEMAX' in lines[2] else 'Fringe'
+    normed = True if 'RMS' in lines[2] else False
     rnorm = float(rnorm.lstrip()) * fctr / 1e3
     coefs = []
-    for line in lines[5:-1]:  # last line is blank
+    total_lines = len(lines)
+    if lines[-1].strip() == '':
+        slice_ = slice(4, -1)
+    else:
+        slice_ = slice(4, total_lines - 1)
+    for line in lines[slice_]:  # last line is blank
         idx, *coef = line.split(',')
         if isinstance(coef, list):
             coef, *_ = coef
@@ -1114,11 +1132,11 @@ def read_sigfit_zernikes(file):
 
     coefs = m.asarray(coefs)
 
-    return {
+    wvl = float(wvl) * fctr
+    return surface, {
         'type': typ,
         'normed': normed,
-        'wavelength': float(wvl) * fctr,
-        'coefs': coefs * fctr,
+        'wavelength': wvl,
+        'coefs': coefs * wvl,
         'rnorm': rnorm,
     }
-
