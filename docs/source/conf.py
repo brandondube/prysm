@@ -172,3 +172,11 @@ intersphinx_mapping = {'python': ('https://docs.python.org/', None)}
 # NumPy [latest]: ('http://docs.scipy.org/doc/numpy/', None)
 # SciPy [latest]: ('http://docs.scipy.org/doc/scipy/reference', None)
 # matplotlib [latest]: ('http://matplotlib.org', None)}
+
+
+# user-added below here
+autodoc_default_options = {
+    'member-order': 'bysource',
+    'show-inheritance': True,
+    'inherited-members': True,
+}

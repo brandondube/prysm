@@ -127,7 +127,7 @@ def read_trioptics_mtf_vs_field(file, metadata=False):
     data = data[:len(data)//10]  # only search in a subset of the file for speed
 
     # compile a pattern that will search for the image heights in the file and extract
-    fields_pattern = re.compile(f'MTF=09{os.linesep}(.*?){os.linesep}Legend=09', flags=re.DOTALL)
+    fields_pattern = re.compile(f'MTF=09(.*?)Legend=09', flags=re.DOTALL)
     fields = fields_pattern.findall(data)[0]  # two copies, only need 1st
 
     # make a pattern that will search for and extract the tan and sag MTF data.  The match will

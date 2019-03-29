@@ -1,0 +1,111 @@
+***********
+prysm v0.14
+***********
+
+Version 0.14 introduces a host of new features and critical improvements to existing features of prysm.  Users are encouraged to upgrade from prior releases.
+
+With version 0.15, work will continue on improving the documentation and tests.  When documentation becomes "complete" and coverage exceeds 90%, version 1.0 will be released and prysm will follow more typical semver release patterns.
+
+New Features
+============
+
+* :func:`~prysm.fttools.pad2d` from :mod:`prysm.fttools` now takes the :code:`mode` kwarg, wrapping `numpy.pad <https://docs.scipy.org/doc/numpy-1.15.1/reference/generated/numpy.pad.html>`_ in the non-constant case.
+
+* :func:`~prysm.propagation.prop_pupil_plane_to_psf_plane` now takes the :code:`incoherent` (default :code:`True`) argument.  When :code:`incoherent=False`, the (complex-valued) coherent impulse response is returned.
+
+* wrap-around effects in convolutions have been reduced.
+
+* there is a new :func:`~prysm.geometry.truecircle` mask in :mod:`prysm.geometry` which has anti-aliased edges for improved simulation accuracy.
+
+* :func:`~prysm.io.read_mtfmapper_sfr_single` function in :mod:`prysm.io` to read outputs from `MTF Mapper <http://mtfmapper.blogspot.com/>`_ with the :code:`-f --single-roi` arguments.
+
+* :attr:`semidiameter` attr on :class:`~prysm._phase.OpticalPhase` class and subclasses (:class:`FringeZernike`, :class:`Interferogram`, ...).
+
+* :code:`show_colorbar` option on :meth:`~prysm._phase.OpticalPhase.plot2d`.
+
+* all masks in :mod:`prysm.geometry` now take a :code:`radius` argument.
+
+* :meth:`prysm.interferogram.Interferogram.mask` now takes descriptive arguments, e.g. :code:`i.mask('circle', diameter=100)` for a 100mm diameter circle.  The :code:`mask` kwarg still exists for user-provided masks.
+
+* :attr:`prysm.interferogram.Interferogram.pvr` for PVr analysis.
+
+* in :mod:`prysm.fringezernike`: :func:`fzname` function to return the name of the nth Fringe Zernike with :code:`base` (0 or 1).
+
+* :func:`fzset_to_magnitude_angle` function to convert a list of (X-Y) Zernikes to (magnitude-angle) form.
+
+* :attr:`FringeZernike.magnitudes` property to access :func:`fzset_to_magnitude_angle` on a :class:`FringeZernike` instance.
+
+* :meth:`~prysm.fringezernike.FringeZernike.top_n` method for :class:`FringeZernike` pupils to list the top n coefficients by magnitude.
+
+* :meth:`~prysm.fringezernike.FringeZernike.barplot` method for :class:`FringeZernike` pupils to plot their coefficients.
+
+* :meth:`~prysm.fringezernike.FringeZernike.barplot_magnitudes` method to plot their pairwise magnitudes (e.g, one bar for primary astigmatism).
+
+* :meth:`~prysm.fringezernike.FringeZernike.barplot_topn` method to plot the top n coefficients only.
+
+* :meth:`~prysm.fringezernike.FringeZernike.truncate` method to reduce :class:`FringeZernike` pupils to the first n terms.
+
+* :meth:`~prysm.fringezernike.FringeZernike.truncate_topn` method to reduce to top n terms.
+
+* :attr:`~prysm.detector.Detector.fs` and :attr:`~prysm.detector.Detector.nyquist` properties on the :class:`~prysm.detector.Detector` class for the sampling and nyquist frequencies in cy/mm.
+
+* :code:`crossed` parameter in :class:`~prysm.objects.SlantedEdge` constructor to produce a "BMW target"
+
+* :func:`~prysm.interferogram.ab_psd` function in :mod:`prysm.interferogram` for inverse power law PSD curves.
+
+Breaking API Changes
+===========
+
+* :code:`rms_norm` in functions related to Zernikes has been renamed to :code:`norm`.  This affects the :func:`~prysm.fringezernike.fit` function from :mod:`prysm.fringezernike` as well as the :class:`FringeZernike` class.
+
+* :code:`num_terms` on the :func:`fit` function is now renamed to :code:`terms`.
+
+* :code:`num_spokes` on :class:`~prysm.objects.SiemensStar` has been renamed to :code:`spokes`.
+
+* :code:`num_pts` on :func:`prysm.otf.diffraction_limited_mtf` has been renamed to :code:`samples`.
+
+* :code:`num_samples` has been renamed to :code:`samples` in :func:`prysm.propagation.pupil_sample_to_psf_sample` and :func:`~prysm.propagation.psf_sample_to_pupil_sample`.
+
+* the :code:`epd` keyword argument on :class:`~prysm.pupil.Pupil` instances has been renamed to :code:`dia`.  This also affects the :class:`FringeZernike` and :class:`Seidel` subclasses.
+
+* :meth:`prysm.interferogram.Interferogram.plot_psd_xyavg` has been renamed to :code:`plot_psd_xy_avg`.
+
+Under-the-hood Changes
+======================
+
+* :attr:`samples_x`, :attr:`samples_y`, :attr:`center_x`, and :attr:`center_y` are now properties of :class:`~prysm._phase.OpticalPhase` instances (:class:`Pupils`, :class:`Interferograms`, ...) instead of attrs.  This helps eliminate synchronization problems when the data is modified.
+
+* :code:`imwrite` is used from imageio, not :code:`imsave` to follow best practice.
+
+* :func:`~prysm.geometry.circle` from :mod:`prysm.geometry` is now exported at the top level.
+
+* :class:`~prysm.detector.Detector` now defaults to 16-bit precision.
+
+* import of :code:`h5py` for datx files is now deferred for faster imports of prysm.
+
+* :code:`matplotlib` is now an optional dependency and its import is deferred for faster imports of prysm.
+
+* :class:`~prysm._phase.OpticalPhase` now provides default values for :attr:`xaxis_label`, :attr:`yaxis_label`, and :attr:`zaxis_label` to avoid errors on subclasses.  Users should still provide better values for subclasses.
+
+* :class:`~prysm.geometry.MaskCache` argument order has changed from :code:`samples, shape` to :code:`shape, samples, radius`.
+
+* data from Zygo datx files is now flipped to maintain consistent orientation with the representation in Mx.
+
+* in :mod:`prysm._zernikes`, :code:`Tip (Y)` has been renamed :code:`Tilt Y`.  :code:`Tilt (X)` has been renamed :code:`Tilt X`.
+
+* the :attr:`coefs` attr on :class:`FringeZernike` instances is now a numpy array.  Piston tip and tilt can be suppressed by invoking :code:`fz.coefs[:3] = 0; fz.build(); fz.mask(fz._mask, fz._mask_target);`.
+
+* PSD calculation has been rewritten.  PSD results are now properly normalized to be a true PSD.  Prior results should be considered in error.
+
+Bugfixes
+========
+
+* fix :meth:`prysm.convolution.Convolvable.show` errors when no xlim or ylim provided.
+
+* fix :attr:`OpticalPhase.samples_x` and :attr:`samples_y` lookup.
+
+* coefficients from :func:`prysm.fringezernike.fit` are no longer transposed in the Cartesian plane.
+
+* calling :meth:`Interferogram.crop` with data spanning the entire array no longer causes an error.
+
+* Initializing an :class:`Interferogram` with no :code:`meta` dictionary no longer causes an error.

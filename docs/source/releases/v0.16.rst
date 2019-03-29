@@ -1,0 +1,25 @@
+***********
+prysm v0.16
+***********
+
+New Features
+============
+
+* :meth:`~prysm.convolution.Convolable.conv` now has a :code:`dryrun` argument which will return a string describing the result and codepath that would be followed.
+
+* :func:`prysm.coordinates.make_xy_grid` and :func:`~prysm.coordinates.make_rho_phi_grid` now take a :code:`radius` argument.
+
+* :meth:`prysm.objects.TiltedSquare.__init__` now takes :code:`radius` and :code:`contrast` arguments.
+
+* :func:`prysm.io.read_sigfit_zernike` function to read Zernike coefficients from `SigFit <http://sigmadyne.com/sigfit-software/>`_ :code:`OUTCOF3` files.
+
+
+Bugfixes
+========
+
+* :meth:`~prysm.convolution.Convolvable.conv` now produces the correct number of output samples in all cases.  Fixes #3.
+
+Under-the-hood Changes
+======================
+
+* :attr:`prysm.pupil.Pupil.strehl` now uses a more accurate formula.
