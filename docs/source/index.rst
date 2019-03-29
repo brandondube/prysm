@@ -106,6 +106,7 @@ Parsing Data from Commercial & Open Source Instruments
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 * Trioptics ImageMaster MTF benches
 * Zygo Fizeau and white light interferometers
+* SigFit
 * MTF Mapper
 
 
