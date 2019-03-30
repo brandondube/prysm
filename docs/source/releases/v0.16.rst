@@ -5,7 +5,7 @@ prysm v0.16
 New Features
 ============
 
-* :meth:`~prysm.convolution.Convolable.conv` now has a :code:`dryrun` argument which will return a string describing the result and codepath that would be followed.
+* :meth:`~prysm.convolution.Convolvable.conv` now has a :code:`dryrun` argument which will return a string describing the result and codepath that would be followed.
 
 * :func:`prysm.coordinates.make_xy_grid` and :func:`~prysm.coordinates.make_rho_phi_grid` now take a :code:`radius` argument.
 
@@ -13,6 +13,7 @@ New Features
 
 * :func:`prysm.io.read_sigfit_zernike` function to read Zernike coefficients from `SigFit <http://sigmadyne.com/sigfit-software/>`_ :code:`OUTCOF3` files.
 
+* :func:`prysm.io.read_sigfit_rigidbody` function to read rigid body motion and radius error coefficients from SigFit :code:`SUM2` files.
 
 Bugfixes
 ========
