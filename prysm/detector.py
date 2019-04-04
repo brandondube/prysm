@@ -10,7 +10,7 @@ from prysm import mathops as m
 class Detector(object):
     """Model of a image sensor."""
 
-    def __init__(self, pixel_size, resolution=(1024, 1024), nbits=16, framebuffer=24):
+    def __init__(self, pixel='rectangle', pitch_x=None, pitch_y=None, resolution=(1024, 1024), nbits=16, framebuffer=10):
         """Create a new Detector object.
 
         Parameters
@@ -25,7 +25,24 @@ class Detector(object):
             number of frames of data to store
 
         """
-        self.pixel_size = pixel_size
+        if pixel == 'rectangle' and pitch_x is None and pitch_y is None:
+            raise ValueError('must provide at least x pitch for rectangular pixels.')
+
+        self.pixel = pixel
+
+        if pitch_x is None:
+            pitch_x = getattr(pixel, 'pitch_x', pixel.width_x)
+        if pitch_y is None:
+            if pixel == 'rectangle':
+                pitch_y = pitch_x
+            else:
+                pitch_y = getattr(pixel, 'pitch_y', pixel.width_y)
+
+        if not hasattr(resolution, '__iter__'):
+            resolution = (resolution, resolution)
+
+        self.pitch_x = pitch_x
+        self.pitch_y = pitch_y
         self.resolution = resolution
         self.bit_depth = nbits
         self.captures = deque(maxlen=framebuffer)
@@ -50,19 +67,17 @@ class Detector(object):
             this would lead to an inaccurate result and is not supported
 
         """
-        # we assume the pixels are bigger than the samples in the convolvable
-        samples_per_pixel = self.pixel_size / convolvable.sample_spacing
-        if samples_per_pixel < 1:
-            raise ValueError('Pixels smaller than samples, bindown not possible.')
+        if self.pixel == 'rectangle':
+            ux, uy, data = bindown_with_units(self.pitch_x,
+                                              self.pitch_y,
+                                              convolvable.sample_spacing,
+                                              convolvable.data)
+            c_out = Convolvable(data=data, unit_x=ux, unit_y=uy, has_analytic_ft=False)
         else:
-            samples_per_pixel = int(m.ceil(samples_per_pixel))
+            c_out = convolvable.conv(self.pixel)
 
-        data = bindown(convolvable.data, samples_per_pixel)
-        s = data.shape
-        extx, exty = s[0] * self.pixel_size // 2, s[1] * self.pixel_size // 2
-        ux, uy = m.arange(-extx, exty, self.pixel_size), m.arange(-exty, exty, self.pixel_size)
-        self.captures.append(Convolvable(data=data, unit_x=ux, unit_y=uy, has_analytic_ft=False))
-        return self.captures[-1]
+        self.captures.append(c_out)
+        return c_out
 
     def save_image(self, path, which='last'):
         """Save an image captured by the detector.
@@ -115,9 +130,19 @@ class Detector(object):
         return fig, ax
 
     @property
+    def pitch(self):
+        """1D pixel pitch - minimum of x/y pitches."""
+        return min(self.pitch_x, self.pitch_y)
+
+    @pitch.setter
+    def set_pitch(self, pitch):
+        self.pitch_x = pitch
+        self.pitch_y = pitch
+
+    @property
     def fs(self):
         """Sampling frequency in cy/mm."""
-        return 1 / self.pixel_size * 1e3
+        return 1 / self.pitch * 1e3
 
     @property
     def nyquist(self):
@@ -393,3 +418,42 @@ def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
         trim_y = 1
 
     return output_data[:px_y - trim_y, :px_x - trim_x]
+
+
+def bindown_with_units(px_x, px_y, source_spacing, source_data):
+    """Perform bindown, returning unit axes and data.
+
+    Parameters
+    ----------
+    px_x : `float`
+        pixel pitch in the x direction, microns
+    px_y : `float`
+        pixel pitch in the y direction, microns
+    source_spacing : `float`
+        pixel pitch in the source data, microns
+    source_data : `numpy.ndarray`
+        ndarray of regularly spaced data
+
+    Returns
+    -------
+    ux : `numpy.ndarray`
+        1D array of sample coordinates in the x direction
+    uy : `numpy.ndarray`
+        1D array of sample coordinates in the y direction
+    data : `numpy.ndarray`
+        binned-down data
+
+    """
+    # we assume the pixels are bigger than the samples in the source
+    spp_x = px_x / source_spacing
+    spp_y = px_y / source_spacing
+    if min(spp_x, spp_y) < 1:
+        raise ValueError('Pixels smaller than samples, bindown not possible.')
+    else:
+        spp_x, spp_y = int(m.ceil(spp_x)), int(m.ceil(spp_y))
+
+    data = bindown(source_data, spp_x, spp_y, 'avg')
+    s = data.shape
+    extx, exty = s[0] * px_x // 2, s[1] * px_y // 2
+    ux, uy = m.arange(-extx, extx, self.pixel_size), m.arange(-exty, exty, self.pixel_size)
+    return ux, uy, data
