@@ -905,7 +905,7 @@ class Interferogram(OpticalPhase):
 
         if mode != 'freq':
             label = 'Period'
-            unit = 'mm'
+            unit = self.spatial_unit
         else:
             label = 'Frequency'
             unit = f'cy/{self.spatial_unit}'
