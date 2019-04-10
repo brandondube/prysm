@@ -636,3 +636,52 @@ def _compute_output_grid(convolvable1, convolvable2):
     unit_out_x = m.linspace(output_x_left, output_x_right, samples_x)
     unit_out_y = m.linspace(output_y_left, output_y_right, samples_y)
     return unit_out_x, unit_out_y
+
+
+class ConvolutionEngine:
+    """An engine to facilitate fine-grained control over convolutions."""
+    def __init__(self, c1, c2=None, spatial_finalization=(abs,)):
+        self.c1 = c1
+        self.c2 = c2
+        self.spatial_finalization = spatial_finalization
+        self.spatial_unit_x = None
+        self.spatial_unit_y = None
+        self.spatial_data = None
+        self.kspace_unit_x = None
+        self.kspace_unit_y = None
+        self.kspace_data = None
+
+    def fire(self):
+        self.compute_kspace_representations()
+        self.ifft()
+        self.crop_output()
+
+
+    def compute_kspace_representations(self):
+        pass
+
+    def compute_kspace_units(self):
+        pass
+
+    def compute_spatial_units(self):
+        pass
+
+    def ifft(self):
+        pass
+
+    def crop_output(self):
+        _= _crop_output(self.spatial_data, self.kspace_data)
+
+    def postprocess_spatial(self):
+        if self.spatial_finalization is not None:
+            for func in self.spatial_finalization:
+                self.spatial_data = func(self.spatial_data)
+
+    @property
+    def spatial(self):
+        return self.spatial_unit_x, self.spatial_unit_y, self.spatial_data
+
+    @property
+    def kspace(self):
+        return self.kspace_unit_x, self.kspace_unit_y, self.kspace_data
+
