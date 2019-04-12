@@ -696,8 +696,8 @@ class BaseZernike(Pupil):
                 if key[0].lower() == 'z':
                     idx = int(key[1:])  # strip 'Z' from index
                     self.coefs[idx - self.base] = value
-                elif key in ('norm'):
-                    self.normalize = True
+                elif key.lower() == 'norm':
+                    self.normalize = value
                 elif key.lower() == 'base':
                     self.base = value
                 else:
