@@ -337,7 +337,7 @@ class Convolvable(BasicData):
         """
         from imageio import imwrite
         if nbits is 8:
-            typ = m.unit8
+            typ = m.uint8
         elif nbits is 16:
             typ = m.uint16
         else:
@@ -655,10 +655,11 @@ class ConvolutionEngine:
         self.compute_kspace_representations()
         self.ifft()
         self.crop_output()
+        return self.spatial
 
 
     def compute_kspace_representations(self):
-        pass
+
 
     def compute_kspace_units(self):
         pass
