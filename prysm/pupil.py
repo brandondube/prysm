@@ -1,6 +1,4 @@
-'''A base pupil interface for different aberration models.
-'''
-from copy import deepcopy
+"""A base pupil interface for different aberration models."""
 
 from ._phase import OpticalPhase
 from .conf import config
@@ -155,8 +153,8 @@ class Pupil(OpticalPhase):
                 nans = mask == 0
                 self.phase[nans] = m.nan
 
+        self._mask = mask
         return self
-
 
     def _gengrid(self):
         """Generate a uniform (x,y) grid and maps it to (rho,phi) coordinates for radial polynomials.
