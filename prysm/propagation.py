@@ -25,7 +25,11 @@ def prop_pupil_plane_to_psf_plane(wavefunction, Q, incoherent=True, norm=None):
         incoherent point spread function
 
     """
-    padded_wavefront = pad2d(wavefunction, Q)
+    if Q != 1:
+        padded_wavefront = pad2d(wavefunction, Q)
+    else:
+        padded_wavefront = wavefunction
+
     impulse_response = m.ifftshift(m.fft2(m.fftshift(padded_wavefront), norm=norm))
     if incoherent:
         return abs(impulse_response) ** 2
