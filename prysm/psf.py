@@ -61,7 +61,6 @@ class PSF(Convolvable):
 
         """
         super().__init__(data, unit_x, unit_y, has_analytic_ft=False)
-        self.data /= self.data.max()
         self._ee = {}
         self._mtf = None
         self._nu_p = None
@@ -333,7 +332,7 @@ class PSF(Convolvable):
     # helpers ------------------------------------------------------------------
 
     @staticmethod
-    def from_pupil(pupil, efl, Q=config.Q):
+    def from_pupil(pupil, efl, Q=config.Q, norm='max'):
         """Use scalar diffraction propogation to generate a PSF from a pupil.
 
         Parameters
@@ -353,7 +352,15 @@ class PSF(Convolvable):
         """
         # propagate PSF data
         fcn, ss, wvl = pupil.fcn, pupil.sample_spacing, pupil.wavelength
-        data = prop_pupil_plane_to_psf_plane(fcn, Q)
+        norm = norm.lower()
+        if norm == 'radiometric':
+            data = prop_pupil_plane_to_psf_plane(fcn, Q, norm='ortho')
+        else:
+            data = prop_pupil_plane_to_psf_plane(fcn, Q)
+            if norm == 'max':
+                data /= data.max()
+            else:
+                raise ValueError('unknown norm')
         ux, uy = prop_pupil_plane_to_psf_plane_units(fcn, ss, efl, wvl, Q)
         psf = PSF(data, ux, uy)
 
