@@ -28,6 +28,8 @@ Bugfixes
 
 * calls to :meth:`prysm.pupil.Pupil.mask` now properly capture the mask for application to the :code:`fcn` property.
 
+* units on PSD plots are now properly referenced to spatial and phase units, not nm.  This fix affects axis labels, not data.
+
 Under-the-hood Changes
 ======================
 
