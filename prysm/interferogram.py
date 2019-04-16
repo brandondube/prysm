@@ -577,7 +577,7 @@ class Interferogram(OpticalPhase):
         self.phase[hitpts] = m.nan
         return self
 
-    def filter(self, critical_frequency=None, critical_period=None, kind='bessel', type_=None, order=4, filtkwargs=dict()):
+    def filter(self, critical_frequency=None, critical_period=None, kind='bessel', type_=None, order=1, filtkwargs=dict()):
         """Apply a frequency-domain filter to the phase data.
 
         Parameters

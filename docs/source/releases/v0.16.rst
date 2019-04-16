@@ -15,6 +15,10 @@ New Features
 
 * :func:`prysm.io.read_sigfit_rigidbody` function to read rigid body motion and radius error coefficients from SigFit :code:`SUM2` files.
 
+API changes
+===========
+
+* :meth:`prysm.interferogram.Interferogram.filter` now has :code:`order=1` as default (changed from 4).
 Bugfixes
 ========
 
