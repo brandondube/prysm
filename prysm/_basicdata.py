@@ -7,6 +7,28 @@ class BasicData:
     """Abstract base class holding some data properties."""
     _data_attr = 'data'
 
+    def __init__(self, unit_x, unit_y, data):
+        """Initialize a new BasicData instance.
+
+        Parameters
+        ----------
+        unit_x : `numpy.ndarray`
+            x unit axis
+        unit_y : `numpy.ndarray`
+            y unit axis
+        data : `numpy.ndarray`
+            data
+
+        Returns
+        -------
+        BasicData
+            the BasicData instance
+
+        """
+        self.unit_x = unit_x
+        self.unit_y = unit_y
+        setattr(self, self._data_attr, data)
+
     @property
     def shape(self):
         """Proxy to phase or data shape."""
