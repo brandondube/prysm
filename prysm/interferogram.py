@@ -434,8 +434,8 @@ class Interferogram(OpticalPhase):
 
         """
         if x is None:  # assume x, y given together
-            x = m.arange(phase.shape[1])
-            y = m.arange(phase.shape[0])
+            x = m.arange(phase.shape[1], dtype=config.precision)
+            y = m.arange(phase.shape[0], dtype=config.precision)
             scale = 'px'
             self.lateral_res = 1
 

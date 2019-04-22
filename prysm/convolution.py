@@ -656,7 +656,6 @@ class ConvolutionEngine:
         self.ifft()
         self.crop_output()
 
-
     def compute_kspace_representations(self):
         pass
 
@@ -670,7 +669,7 @@ class ConvolutionEngine:
         pass
 
     def crop_output(self):
-        _= _crop_output(self.spatial_data, self.kspace_data)
+        _ = _crop_output(self.spatial_data, self.kspace_data)
 
     def postprocess_spatial(self):
         if self.spatial_finalization is not None:
@@ -684,4 +683,3 @@ class ConvolutionEngine:
     @property
     def kspace(self):
         return self.kspace_unit_x, self.kspace_unit_y, self.kspace_data
-
