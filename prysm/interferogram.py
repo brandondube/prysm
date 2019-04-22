@@ -742,6 +742,45 @@ class Interferogram(OpticalPhase):
         self.unit_y *= plate_scale
         return self
 
+    def pad(self, value, unit='spatial'):
+        """Pad the interferogram.
+
+        Parameters
+        ----------
+        value : `float`
+            how much to pad the interferogram
+        unit : `str`, {'spatial', 'px'}, optional
+            what unit to use for padding, spatial units (self.spatial_unit), or pixels
+
+        Returns
+        -------
+        `Interferogram`
+            self
+
+        """
+        unit = unit.lower()
+        if unit in ('px', 'pixel', 'pixels'):
+            npx = value
+        else:
+            npx = int(m.ceil(value / self.sample_spacing))
+
+        if m.isnan(self.phase[0, 0]):
+            fill_val = m.nan
+        else:
+            fill_val = 0
+
+        s = self.shape
+        out = m.empty((s[0] + 2 * npx, s[1] + 2 * npx), dtype=self.phase.dtype)
+        out[:, :] = fill_val
+        out[npx:-npx, npx:-npx] = self.phase
+        self.phase = out
+
+        x = m.arange(out.shape[1], dtype=config.precision) * self.sample_spacing
+        y = m.arange(out.shape[0], dtype=config.precision) * self.sample_spacing
+        self.unit_x = x
+        self.unit_y = y
+        return self
+
     def spike_clip(self, nsigma=3):
         """Clip points in the data that exceed a certain multiple of the standard deviation.
 
