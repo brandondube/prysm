@@ -648,7 +648,7 @@ class Interferogram(OpticalPhase):
         self.phase[hitpts] = m.nan
         return self
 
-    def filter(self, critical_frequency=None, critical_period=None, kind='bessel', type_=None, order=4, filtkwargs=dict()):
+    def filter(self, critical_frequency=None, critical_period=None, kind='bessel', type_=None, order=1, filtkwargs=dict()):
         """Apply a frequency-domain filter to the phase data.
 
         Parameters
@@ -1041,7 +1041,7 @@ class Interferogram(OpticalPhase):
             ax.legend(title='Slice')
 
         ax.set(xlim=xlim, xlabel=f'Spatial {label} [{unit}]',
-               ylim=ylim, ylabel=r'PSD [nm²/' + f'(cy/{self.spatial_unit})²]')
+               ylim=ylim, ylabel=r'PSD [' + f'{self.phase_unit}²/(cy/{self.spatial_unit})²]')
 
         return fig, ax
 

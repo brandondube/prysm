@@ -22,9 +22,15 @@ Bugfixes
 
 * :meth:`~prysm.convolution.Convolvable.conv` now produces the correct number of output samples in all cases.  Fixes #3.
 
-* unit changes have been corrected - prior results were incorrect
+* unit changes have been corrected - prior results were incorrect.
 
 * the :code:`norm` kwarg has improved behavior for Zernike classes, no longer setting :code:`z.normalize = True` when the :code:`norm=False` kwarg is passed.
+
+* an error is no longer raised when calling :meth:`prysm.convolution.Convolvable.save` with :code:`nbits=8`.
+
+* calls to :meth:`prysm.pupil.Pupil.mask` now properly capture the mask for application to the :code:`fcn` property.
+
+* units on PSD plots are now properly referenced to spatial and phase units, not nm.  This fix affects axis labels, not data.
 
 Under-the-hood Changes
 ======================
