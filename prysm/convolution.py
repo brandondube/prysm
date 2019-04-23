@@ -650,6 +650,7 @@ class ConvolutionEngine:
         self.kspace_data = None
 
     def fire(self):
+        """Convolve self.c1 and self.c2 with no fuss."""
         try:
             return self.merge_analytics()
         except ValueError:
@@ -659,27 +660,41 @@ class ConvolutionEngine:
             self.crop_output()
             return Convolvable(*self.spatial, has_analytic_ft=False)
 
-    def compute_kspace_representations(self):
+    def compute_kspace_representation(self):
+        """Compute the k-space representation of the convolution of c1 and c2."""
         pass
 
     def compute_kspace_units(self):
+        """Compute the k-space domain of the convolution of c1 and c2."""
         pass
 
     def compute_spatial_units(self):
+        """Compute the spatial domain units of the convolution of c1 and c2."""
         pass
 
     def ifft(self):
+        """Take the iFT to compute the spatial representation of the convolution of c1 and c2."""
         pass
 
     def crop_output(self):
+        """Crop the output in the spatial domain to remove the padded area."""
         _ = _crop_output(self.spatial_data, self.kspace_data)
 
     def postprocess_spatial(self):
+        """Post-process the spatial domain."""
         if self.spatial_finalization is not None:
             for func in self.spatial_finalization:
                 self.spatial_data = func(self.spatial_data)
 
     def merge_analytics(self):
+        """Merge c1 and c2 if they both have analytic FTs, else raise.
+
+        Raises
+        ------
+        ValueError
+            c1 or c2 does not have an analytic FT.
+
+        """
         if not (self.c1.has_analytic_ft and self.c2.has_analytic_ft):
             raise ValueError('both convolvables must have analytic FTs')
         else:
@@ -697,8 +712,10 @@ class ConvolutionEngine:
 
     @property
     def spatial(self):
+        """Spatial representation, x, y, data."""
         return self.spatial_x, self.spatial_y, self.spatial_data
 
     @property
     def kspace(self):
+        """k-space representation, fx, fy, data."""
         return self.kspace_x, self.kspace_y, self.kspace_data

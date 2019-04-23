@@ -171,7 +171,7 @@ class Detector(object):
 
     @property
     def fs(self):
-        """Sampling frequency in cy/mm."""
+        """Sampling frequency in cy/mm."""  # NQOA
         return 1 / self.pitch * 1e3
 
     @property
@@ -182,6 +182,7 @@ class Detector(object):
 
 class OLPF(Convolvable):
     """Optical Low Pass Filter."""
+
     def __init__(self, width_x, width_y=None, sample_spacing=0, samples_x=None, samples_y=None):
         """Create a new OLPF object.
 
