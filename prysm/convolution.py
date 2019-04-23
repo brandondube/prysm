@@ -699,8 +699,8 @@ class ConvolutionEngine:
             raise ValueError('both convolvables must have analytic FTs')
         else:
             c_out = Convolvable(None, None, None, has_analytic_ft=True)
-            c_out.s1 = self.c1
-            c_out.s2 = self.c2
+            c_out.s1 = self.c1.copy()
+            c_out.s2 = self.c2.copy()
 
             def aft(self, x, y):
                 part1 = self.s1.analytic_ft(x, y)
