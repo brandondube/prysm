@@ -15,24 +15,24 @@ class MTF(BasicData):
     """Modulation Transfer Function."""
     _data_attr = 'data'
 
-    def __init__(self, data, unit_x, unit_y=None):
+    def __init__(self, data, x, y=None):
         """Create an MTF object.
 
         Parameters
         ----------
         data : `numpy.ndarray`
             MTF values on 2D grid
-        unit_x : `numpy.ndarray`
+        x : `numpy.ndarray`
             array of x units, 1D
-        unit_y : `numpy.ndarray`
+        y : `numpy.ndarray`
             array of y units, 1D
 
         """
-        if unit_y is None:
-            unit_y = unit_x
+        if y is None:
+            y = x
         self.data = data
-        self.unit_x = unit_x
-        self.unit_y = unit_y
+        self.x = x
+        self.y = y
 
         self.interpf_2d = None
         self.interpf_tan = None
@@ -51,7 +51,7 @@ class MTF(BasicData):
 
         Returns
         -------
-        self.unit_x : `numpy.ndarray`
+        self.x : `numpy.ndarray`
             ordinate
         self.data : `numpy.ndarray`
             coordiante
@@ -71,7 +71,7 @@ class MTF(BasicData):
 
         Returns
         -------
-        self.unit_x : `numpy.ndarray`
+        self.x : `numpy.ndarray`
             ordinate
         self.data : `numpy.ndarray`
             coordiante
@@ -205,7 +205,7 @@ class MTF(BasicData):
             mtf values
 
         """
-        nu, theta, mtf = uniform_cart_to_polar(self.unit_x, self.unit_y, self.data)
+        nu, theta, mtf = uniform_cart_to_polar(self.x, self.y, self.data)
         l = len(nu) // 2
         return nu[:l], mtf.mean(axis=0)[:l]
 
@@ -237,8 +237,8 @@ class MTF(BasicData):
         """
         from matplotlib import colors
 
-        left, right = self.unit_x[0], self.unit_x[-1]
-        bottom, top = self.unit_y[0], self.unit_y[-1]
+        left, right = self.x[0], self.x[-1]
+        bottom, top = self.y[0], self.y[-1]
 
         fig, ax = share_fig_ax(fig, ax)
 
@@ -347,7 +347,7 @@ class MTF(BasicData):
 
         """
         if self.interpf_2d is None:
-            self.interpf_2d = interpolate.RegularGridInterpolator((self.unit_x, self.unit_y), self.data)
+            self.interpf_2d = interpolate.RegularGridInterpolator((self.x, self.y), self.data)
 
         return self.interpf_2d
 
@@ -390,9 +390,9 @@ class MTF(BasicData):
             return psf._mtf
         else:
             dat = abs(m.fftshift(m.fft2(psf.data)))
-            unit_x = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_x)  # 1e3 for microns => mm
-            unit_y = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_y)
-            return MTF(dat / dat[psf.center_y, psf.center_x], unit_x, unit_y)
+            x = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_x)  # 1e3 for microns => mm
+            y = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_y)
+            return MTF(dat / dat[psf.center_y, psf.center_x], x, y)
 
     @staticmethod
     def from_pupil(pupil, efl, Q=2):

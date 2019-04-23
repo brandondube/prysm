@@ -18,7 +18,7 @@ def mtf():
     x, y = forward_ft_unit(1/1e3, 128), forward_ft_unit(1/1e3, 128)
     xx, yy = np.meshgrid(x, y)
     dat = np.sin(xx)
-    return otf.MTF(data=dat, unit_x=x)  # do not pass unit_y, simultaneous test for unit_y=None
+    return otf.MTF(data=dat, x=x)  # do not pass y, simultaneous test for y=None
 
 
 def test_mtf_plot2d_functions(mtf):

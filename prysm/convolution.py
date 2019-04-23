@@ -12,25 +12,23 @@ class Convolvable(BasicData):
     """A base class for convolvable objects to inherit from."""
     _data_attr = 'data'
 
-    def __init__(self, data, unit_x, unit_y, has_analytic_ft=False):
+    def __init__(self, x, y, data, has_analytic_ft=False):
         """Create a new Convolvable object.
 
         Parameters
         ----------
+        x : `numpy.ndarray`
+            1D ndarray defining x data grid
+        y : `numpy.ndarray`
+            1D ndarray defining y data grid
         data : `numpy.ndarray`
             2D ndarray of data
-        unit_x : `numpy.ndarray`
-            1D ndarray defining x data grid
-        unit_y : `numpy.ndarray`
-            1D ndarray defining y data grid
         has_analytic_ft : `bool`, optional
             Whether this convolvable overrides self.analytic_ft, and has a known
             analytical fourier tansform
 
         """
-        self.data = data
-        self.unit_x = unit_x
-        self.unit_y = unit_y
+        self.x, self.y, self.data = x, y, data
         self.has_analytic_ft = has_analytic_ft
 
     def __str__(self):
@@ -199,7 +197,7 @@ class Convolvable(BasicData):
         if postnormalize:
             result += result.min()
             result /= result.max()
-        return Convolvable(result, self.unit_x, self.unit_y, False)
+        return Convolvable(result, self.x, self.y, False)
 
     def renorm(self):
         """Renormalize so that the peak is at a value of unity."""
@@ -236,9 +234,9 @@ class Convolvable(BasicData):
         """
         from matplotlib import colors
 
-        if self.unit_x is not None:
-            extx = [self.unit_x[0], self.unit_x[-1]]
-            exty = [self.unit_y[0], self.unit_y[-1]]
+        if self.x is not None:
+            extx = [self.x[0], self.x[-1]]
+            exty = [self.y[0], self.y[-1]]
             ext = [*extx, *exty]
         else:
             ext = None
@@ -300,7 +298,7 @@ class Convolvable(BasicData):
                 if freq_x is None or freq_y is None:
                     raise ValueError('Convolvable has analytic FT and no data, must provide x and y coordinates')
             else:
-                lx, ly, ss = len(self.unit_x), len(self.unit_y), self.sample_spacing
+                lx, ly, ss = len(self.x), len(self.y), self.sample_spacing
                 freq_x, freq_y = forward_ft_unit(ss, lx), forward_ft_unit(ss, ly)
 
             data = self.analytic_ft(freq_x, freq_y)
@@ -368,7 +366,7 @@ class Convolvable(BasicData):
         extx, exty = (s[1] * scale) / 2, (s[0] * scale) / 2
         ux, uy = m.arange(-extx, extx, scale), m.arange(-exty, exty, scale)
         return Convolvable(data=m.flip(imgarr, axis=0).astype(config.precision),
-                           unit_x=ux, unit_y=uy, has_analytic_ft=False)
+                           x=ux, y=uy, has_analytic_ft=False)
 
 
 def _conv(convolvable1, convolvable2, postprocess=(abs,), dryrun=False):
@@ -481,12 +479,12 @@ def single_analytical_ft_convolution(without_analytic, with_analytic, postproces
     padded_data = pad2d(without_analytic.data, 2, mode='reflect')
     fourier_data = m.fft2(padded_data)
     sy, sx = padded_data.shape
-    fourier_unit_x = forward_ft_unit(without_analytic.sample_spacing, sx, shift=False)
-    fourier_unit_y = forward_ft_unit(without_analytic.sample_spacing, sy, shift=False)
-    a_ft = with_analytic.analytic_ft(fourier_unit_x, fourier_unit_y)
+    fourier_x = forward_ft_unit(without_analytic.sample_spacing, sx, shift=False)
+    fourier_y = forward_ft_unit(without_analytic.sample_spacing, sy, shift=False)
+    a_ft = with_analytic.analytic_ft(fourier_x, fourier_y)
 
     result = _crop_output(without_analytic.data, _conv_result_core(fourier_data, a_ft))
-    return Convolvable(result, without_analytic.unit_x, without_analytic.unit_y, False)
+    return Convolvable(result, without_analytic.x, without_analytic.y, False)
 
 
 def pure_numerical_ft_convolution(convolvable1, convolvable2, postprocess):
@@ -530,7 +528,7 @@ def _numerical_ft_convolution_core_equalspacing(convolvable1, convolvable2, post
     ft1 = m.fft2(m.ifftshift(pad2d(convolvable1.data, 2, mode='linear_ramp')))
     ft2 = m.fft2(m.ifftshift(pad2d(convolvable2.data, 2, mode='linear_ramp')))
     data = _crop_output(convolvable1.data, _conv_result_core(ft1, ft2, postprocess))
-    return Convolvable(data, convolvable1.unit_x, convolvable1.unit_y, False)
+    return Convolvable(data, convolvable1.x, convolvable1.y, False)
 
 
 def _numerical_ft_convolution_core_equalspacing_unequalsamplecount(more_samples, less_samples, postprocess):
@@ -547,7 +545,7 @@ def _numerical_ft_convolution_core_equalspacing_unequalsamplecount(more_samples,
     # FFT convolve the two convolvables
     more_fourier = m.fft2(more_samples.data)
     data = _crop_output(more_fourier, _conv_result_core(resampled_less, more_fourier, postprocess))
-    return Convolvable(data, more_samples.unit_x, more_samples.unit_y, False)
+    return Convolvable(data, more_samples.x, more_samples.y, False)
 
 
 def _numerical_ft_convolution_core_unequalspacing(finer_sampled, coarser_sampled, postprocess):
@@ -603,15 +601,15 @@ def _compute_output_grid(convolvable1, convolvable2):
         output_spacing = min(convolvable1.sample_spacing, convolvable2.sample_spacing)
 
     # determine region of output
-    if convolvable1.unit_x is None:
+    if convolvable1.x is None:
         c1ux, c1uy = (0, 0), (0, 0)
     else:
-        c1ux, c1uy = convolvable1.unit_x, convolvable1.unit_y
+        c1ux, c1uy = convolvable1.x, convolvable1.y
 
-    if convolvable2.unit_x is None:  # this isn't totally DRY
+    if convolvable2.x is None:  # this isn't totally DRY
         c2ux, c2uy = (0, 0), (0, 0)
     else:
-        c2ux, c2uy = convolvable2.unit_x, convolvable2.unit_y
+        c2ux, c2uy = convolvable2.x, convolvable2.y
 
     output_x_left = min(c1ux[0], c2ux[0])
     output_x_right = max(c1ux[-1], c2ux[-1])
@@ -644,17 +642,22 @@ class ConvolutionEngine:
         self.c1 = c1
         self.c2 = c2
         self.spatial_finalization = spatial_finalization
-        self.spatial_unit_x = None
-        self.spatial_unit_y = None
+        self.spatial_x = None
+        self.spatial_y = None
         self.spatial_data = None
-        self.kspace_unit_x = None
-        self.kspace_unit_y = None
+        self.kspace_x = None
+        self.kspace_y = None
         self.kspace_data = None
 
     def fire(self):
-        self.compute_kspace_representations()
-        self.ifft()
-        self.crop_output()
+        try:
+            return self.merge_analytics()
+        except ValueError:
+            self.compute_kspace_units()
+            self.compute_kspace_representations()
+            self.ifft()
+            self.crop_output()
+            return Convolvable(*self.spatial, has_analytic_ft=False)
 
     def compute_kspace_representations(self):
         pass
@@ -676,10 +679,26 @@ class ConvolutionEngine:
             for func in self.spatial_finalization:
                 self.spatial_data = func(self.spatial_data)
 
+    def merge_analytics(self):
+        if not (self.c1.has_analytic_ft and self.c2.has_analytic_ft):
+            raise ValueError('both convolvables must have analytic FTs')
+        else:
+            c_out = Convolvable(None, None, None, has_analytic_ft=True)
+            c_out.s1 = self.c1
+            c_out.s2 = self.c2
+
+            def aft(self, x, y):
+                part1 = self.s1.analytic_ft(x, y)
+                part2 = self.s2.analytic_ft(x, y)
+                return part1 * part2
+
+            c_out.analytic_ft = aft
+            return c_out
+
     @property
     def spatial(self):
-        return self.spatial_unit_x, self.spatial_unit_y, self.spatial_data
+        return self.spatial_x, self.spatial_y, self.spatial_data
 
     @property
     def kspace(self):
-        return self.kspace_unit_x, self.kspace_unit_y, self.kspace_data
+        return self.kspace_x, self.kspace_y, self.kspace_data

@@ -83,7 +83,7 @@ class OpticalPhase(BasicData):
         'px_λ': lambda x: 1,
     }
 
-    def __init__(self, unit_x, unit_y, phase, phase_unit, spatial_unit, wavelength=None):
+    def __init__(self, x, y, phase, phase_unit, spatial_unit, wavelength=None):
         """Create a new instance of an OpticalPhase.
 
         Note that this class is not intended to be used directly, and is meant
@@ -92,22 +92,22 @@ class OpticalPhase(BasicData):
 
         Parameters
         ----------
-        unit_x : `np.ndarray`
+        x : `np.ndarray`
             x spatial units
-        unit_y : `np.ndarray`
+        y : `np.ndarray`
             y spatial units
         phase : `np.ndarray`
             phase/height/opd data
         phase_unit : `str`
             unit used to describe the phase, see `OpticalPhase`.units
         spatial_unit : `str`
-            unit used to describe unit_x and unit_y, see `OpticalPhase`.units
+            unit used to describe x and y, see `OpticalPhase`.units
         wavelength : `float`, optional
             wavelength of light, in microns
 
         """
-        self.unit_x = unit_x
-        self.unit_y = unit_y
+        self.x = x
+        self.y = y
         self.phase = phase
         self.wavelength = wavelength
         self.phase_unit = phase_unit
@@ -167,12 +167,12 @@ class OpticalPhase(BasicData):
     @property
     def diameter_x(self):
         """Diameter of the data in x."""
-        return self.unit_x[-1] - self.unit_x[0]
+        return self.x[-1] - self.x[0]
 
     @property
     def diameter_y(self):
         """Diameter of the data in y."""
-        return self.unit_y[-1] - self.unit_x[0]
+        return self.y[-1] - self.x[0]
 
     @property
     def diameter(self):
@@ -220,7 +220,7 @@ class OpticalPhase(BasicData):
         to : `str`
             new unit, a member of `OpticalPhase`.units.keys()
         inplace : `bool`, optional
-            whether to change self.unit_x and self.unit_y.
+            whether to change self.x and self.y.
             If False, returns updated phase, if True, returns self
 
         Returns
@@ -236,15 +236,15 @@ class OpticalPhase(BasicData):
         """
         if to.lower() != 'px':
             fctr = self.unit_changes['_'.join([self.spatial_unit, self.units[to]])](self.wavelength)
-            new_ux = self.unit_x / fctr
-            new_uy = self.unit_y / fctr
+            new_ux = self.x / fctr
+            new_uy = self.y / fctr
         else:
             sy, sx = self.shape
             new_ux = m.arange(sx, dtype=config.precision)
             new_uy = m.arange(sy, dtype=config.precision)
         if inplace:
-            self.unit_x = new_ux
-            self.unit_y = new_uy
+            self.x = new_ux
+            self.y = new_uy
             self.spatial_unit = to
             return self
         else:
@@ -286,7 +286,7 @@ class OpticalPhase(BasicData):
             clim = (-clim, clim)
 
         im = ax.imshow(self.phase,
-                       extent=[self.unit_x[0], self.unit_x[-1], self.unit_y[0], self.unit_y[-1]],
+                       extent=[self.x[0], self.x[-1], self.y[0], self.y[-1]],
                        cmap=cmap,
                        clim=clim,
                        origin='lower',

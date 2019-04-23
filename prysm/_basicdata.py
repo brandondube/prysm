@@ -37,7 +37,7 @@ class BasicData:
     def sample_spacing(self):
         """center-to-center sample spacing."""
         try:
-            return self.unit_x[1] - self.unit_x[0]
+            return self.x[1] - self.x[0]
         except TypeError:
             return m.nan
 
@@ -62,7 +62,7 @@ class BasicData:
         slice of self.phase or self.data : `numpy.ndarray`
 
         """
-        return self.unit_x, getattr(self, self._data_attr)[self.center_y, :]
+        return self.x, getattr(self, self._data_attr)[self.center_y, :]
 
     @property
     def slice_y(self):
@@ -75,7 +75,7 @@ class BasicData:
         slice of self.phase or self.data : `numpy.ndarray`
 
         """
-        return self.unit_y, getattr(self, self._data_attr)[:, self.center_x]
+        return self.y, getattr(self, self._data_attr)[:, self.center_x]
 
     def copy(self):
         """Return a (deep) copy of this instance)."""

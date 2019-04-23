@@ -152,9 +152,9 @@ def psd(height, sample_spacing, window=None):
 
     Returns
     -------
-    unit_x : `numpy.ndarray`
+    x : `numpy.ndarray`
         ordinate x frequency axis
-    unit_y : `numpy.ndarray`
+    y : `numpy.ndarray`
         ordinate y frequency axis
     psd : `numpy.ndarray`
         power spectral density
@@ -449,7 +449,7 @@ class Interferogram(OpticalPhase):
         else:
             wvl = 1
 
-        super().__init__(unit_x=x, unit_y=y, phase=phase,
+        super().__init__(x=x, y=y, phase=phase,
                          wavelength=wvl, phase_unit=phase_unit,
                          spatial_unit=scale)
 
@@ -557,19 +557,19 @@ class Interferogram(OpticalPhase):
             tb = slice(top, -bottom)
 
         self.phase = self.phase[lr, tb]
-        self.unit_y, self.unit_x = self.unit_y[lr], self.unit_x[tb]
-        self.unit_x -= self.unit_x[0]
-        self.unit_y -= self.unit_y[0]
+        self.y, self.x = self.y[lr], self.x[tb]
+        self.x -= self.x[0]
+        self.y -= self.y[0]
         return self
 
     def recenter(self):
         """Adjust the x and y coordinates so the data is centered on 0,0."""
-        mxx, mnx = self.unit_x[-1], self.unit_x[0]
-        mxy, mny = self.unit_y[-1], self.unit_y[0]
+        mxx, mnx = self.x[-1], self.x[0]
+        mxy, mny = self.y[-1], self.y[0]
         cx = (mxx + mnx) / 2
         cy = (mxy + mny) / 2
-        self.unit_x -= cx
-        self.unit_y -= cy
+        self.x -= cx
+        self.y -= cy
         return self
 
     def remove_piston(self):
@@ -579,7 +579,7 @@ class Interferogram(OpticalPhase):
 
     def remove_tiptilt(self):
         """Remove tip/tilt from the data by least squares fitting and subtracting a plane."""
-        plane = fit_plane(self.unit_x, self.unit_y, self.phase)
+        plane = fit_plane(self.x, self.y, self.phase)
         self.phase -= plane
         return self
 
@@ -738,8 +738,8 @@ class Interferogram(OpticalPhase):
         """
         self.change_spatial_unit(to=unit, inplace=True)  # will be 0..n spatial units
         # sloppy to do this here...
-        self.unit_x *= plate_scale
-        self.unit_y *= plate_scale
+        self.x *= plate_scale
+        self.y *= plate_scale
         return self
 
     def pad(self, value, unit='spatial'):
@@ -777,8 +777,8 @@ class Interferogram(OpticalPhase):
 
         x = m.arange(out.shape[1], dtype=config.precision) * self.sample_spacing
         y = m.arange(out.shape[0], dtype=config.precision) * self.sample_spacing
-        self.unit_x = x
-        self.unit_y = y
+        self.x = x
+        self.y = y
         return self
 
     def spike_clip(self, nsigma=3):
@@ -804,9 +804,9 @@ class Interferogram(OpticalPhase):
 
         Returns
         -------
-        unit_x : `numpy.ndarray`
+        x : `numpy.ndarray`
             ordinate x frequency axis
-        unit_y : `numpy.ndarray`
+        y : `numpy.ndarray`
             ordinate y frequency axis
         psd : `numpy.ndarray`
             power spectral density
@@ -1056,7 +1056,7 @@ class Interferogram(OpticalPhase):
         """
         phase = self.change_phase_unit(to='waves', inplace=False)
         write_zygo_ascii(file, phase=phase,
-                         unit_x=self.unit_x, unit_y=self.unit_y,
+                         x=self.x, y=self.y,
                          intensity=None, wavelength=self.wavelength,
                          high_phase_res=high_phase_res)
 
