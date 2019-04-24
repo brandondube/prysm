@@ -243,3 +243,29 @@ def change_backend(to):
 
 config.chbackend_observers.append(change_backend)
 config.backend = config.backend  # trigger import of math functions
+
+
+
+class MathEngine:
+    def __init__(self, source=np):
+        self.source = np
+
+    def __getattr__(self, key):
+        try:
+            return getattr(self.source, key)
+        except AttributeError:
+            # function not found, fall back to numpy
+            # this will actually work nicely for numpy 1.16+
+            # due to the __array_function__ and __array_ufunc__ interfaces
+            # that were implemented
+            return getattr(self.source, key)  # this can raise, but we don't *need* to catch
+
+    def change_backend(self, backend):
+        if isinstance(backend, str):
+            exec(f'import {backend}')
+            self.source = eval(backend)
+        else:
+            # backend is a module
+            self.source = backend
+
+engine = MathEngine()
