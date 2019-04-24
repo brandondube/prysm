@@ -1,6 +1,4 @@
-'''A base pupil interface for different aberration models.
-'''
-from copy import deepcopy
+"""A base pupil interface for different aberration models."""
 
 from ._phase import OpticalPhase
 from .conf import config
@@ -66,7 +64,7 @@ class Pupil(OpticalPhase):
         else:
             # data already known
             need_to_build = False
-        super().__init__(unit_x=ux, unit_y=uy, phase=phase,
+        super().__init__(x=ux, y=uy, phase=phase,
                          wavelength=wavelength, phase_unit=opd_unit, spatial_unit='mm')
         self.xaxis_label = 'Pupil ξ'
         self.yaxis_label = 'Pupil η'
@@ -155,8 +153,8 @@ class Pupil(OpticalPhase):
                 nans = mask == 0
                 self.phase[nans] = m.nan
 
+        self._mask = mask
         return self
-
 
     def _gengrid(self):
         """Generate a uniform (x,y) grid and maps it to (rho,phi) coordinates for radial polynomials.
@@ -260,5 +258,5 @@ class Pupil(OpticalPhase):
 
         return Pupil(wavelength=wvl, phase=interferogram.phase,
                      opd_unit=interferogram.phase_unit,
-                     ux=interferogram.unit_x, uy=interferogram.unit_y,
+                     ux=interferogram.x, uy=interferogram.y,
                      mask=~(interferogram.phase == m.nan))

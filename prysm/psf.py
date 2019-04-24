@@ -39,28 +39,28 @@ class PSF(Convolvable):
         PSF normalized intensity data
     sample_spacing : `float`
         center to center spacing of samples
-    unit_x : `numpy.ndarray`
+    x : `numpy.ndarray`
         x Cartesian axis locations of samples, 1D ndarray
-    unit_y `numpy.ndarray`
+    y `numpy.ndarray`
         y Cartesian axis locations of samples, 1D ndarray
 
     """
-    def __init__(self, data, unit_x, unit_y):
+    def __init__(self, data, x, y):
         """Create a PSF object.
 
         Parameters
         ----------
         data : `numpy.ndarray`
             intensity data for the PSF
-        unit_x : `numpy.ndarray`
+        x : `numpy.ndarray`
             1D ndarray defining x data grid
-        unit_y  : `numpy.ndarray`
+        y  : `numpy.ndarray`
             1D ndarray defining y data grid
         sample_spacing : `float`
             center-to-center spacing of samples, expressed in microns
 
         """
-        super().__init__(data, unit_x, unit_y, has_analytic_ft=False)
+        super().__init__(data, x, y, has_analytic_ft=False)
         self._ee = {}
         self._mtf = None
         self._nu_p = None
@@ -98,7 +98,7 @@ class PSF(Convolvable):
         # compute MTF from the PSF
         if self._mtf is None:
             self._mtf = MTF.from_psf(self)
-            nx, ny = m.meshgrid(self._mtf.unit_x, self._mtf.unit_y)
+            nx, ny = m.meshgrid(self._mtf.x, self._mtf.y)
             self._nu_p = m.sqrt(nx ** 2 + ny ** 2)
             # this is meaninglessly small and will avoid division by 0
             self._nu_p[self._nu_p == 0] = 1e-99
@@ -200,8 +200,8 @@ class PSF(Convolvable):
 
         label_str = 'Normalized Intensity [a.u.]'
 
-        left, right = self.unit_x[0], self.unit_x[-1]
-        bottom, top = self.unit_y[0], self.unit_y[-1]
+        left, right = self.x[0], self.x[-1]
+        bottom, top = self.y[0], self.y[-1]
 
         fig, ax = share_fig_ax(fig, ax)
 
@@ -383,16 +383,16 @@ class PSF(Convolvable):
         # find the most densely sampled PSF
         min_spacing = 1e99
         ref_idx = None
-        ref_unit_x = None
-        ref_unit_y = None
+        ref_x = None
+        ref_y = None
         ref_samples_x = None
         ref_samples_y = None
         for idx, psf in enumerate(psfs):
             if psf.sample_spacing < min_spacing:
                 min_spacing = psf.sample_spacing
                 ref_idx = idx
-                ref_unit_x = psf.unit_x
-                ref_unit_y = psf.unit_y
+                ref_x = psf.x
+                ref_y = psf.y
                 ref_samples_x = psf.samples_x
                 ref_samples_y = psf.samples_y
 
@@ -402,11 +402,11 @@ class PSF(Convolvable):
             if idx is ref_idx:
                 merge_data[:, :, idx] = psf.data * spectral_weights[idx]
             else:
-                xv, yv = m.meshgrid(ref_unit_x, ref_unit_y)
-                interpf = interpolate.RegularGridInterpolator((psf.unit_y, psf.unit_x), psf.data)
+                xv, yv = m.meshgrid(ref_x, ref_y)
+                interpf = interpolate.RegularGridInterpolator((psf.y, psf.x), psf.data)
                 merge_data[:, :, idx] = interpf((yv, xv), method=interp_method) * spectral_weights[idx]
 
-        psf = PSF(data=merge_data.sum(axis=2), unit_x=ref_unit_x, unit_y=ref_unit_y)
+        psf = PSF(data=merge_data.sum(axis=2), x=ref_x, y=ref_y)
         psf.spectral_weights = spectral_weights
         psf._renorm()
         return psf
@@ -442,14 +442,14 @@ class AiryDisk(Convolvable):
         super().__init__(data, x, y)
         self.has_analytic_ft = True
 
-    def analytic_ft(self, unit_x, unit_y):
+    def analytic_ft(self, x, y):
         """Analytic fourier transform of an airy disk.
 
         Parameters
         ----------
-        unit_x : `numpy.ndarray`
+        x : `numpy.ndarray`
             sample points in x axis
-        unit_y : `numpy.ndarray`
+        y : `numpy.ndarray`
             sample points in y axis
 
         Returns
@@ -459,7 +459,7 @@ class AiryDisk(Convolvable):
 
         """
         from .otf import diffraction_limited_mtf
-        r, p = cart_to_polar(*m.meshgrid(unit_x, unit_y))
+        r, p = cart_to_polar(*m.meshgrid(x, y))
         return diffraction_limited_mtf(self.fno, self.wavelength, r*1e3)  # um to mm
 
 

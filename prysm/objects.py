@@ -61,14 +61,14 @@ class Slit(Convolvable):
 
         super().__init__(arr, x, y, has_analytic_ft=True)
 
-    def analytic_ft(self, unit_x, unit_y):
+    def analytic_ft(self, x, y):
         """Analytic fourier transform of a slit.
 
         Parameters
         ----------
-        unit_x : `numpy.ndarray`
+        x : `numpy.ndarray`
             sample points in x frequency axis
-        unit_y : `numpy.ndarray`
+        y : `numpy.ndarray`
             sample points in y frequency axis
 
         Returns
@@ -77,7 +77,7 @@ class Slit(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        xq, yq = m.meshgrid(unit_x, unit_y)
+        xq, yq = m.meshgrid(x, y)
         if self.width_x > 0 and self.width_y > 0:
             return (m.sinc(xq * self.width_x) +
                     m.sinc(yq * self.width_y)).astype(config.precision)
@@ -121,16 +121,16 @@ class Pinhole(Convolvable):
         else:
             arr, x, y = None, None, None
 
-        super().__init__(data=arr, unit_x=x, unit_y=y, has_analytic_ft=True)
+        super().__init__(data=arr, x=x, y=y, has_analytic_ft=True)
 
-    def analytic_ft(self, unit_x, unit_y):
+    def analytic_ft(self, x, y):
         """Analytic fourier transform of a slit.
 
         Parameters
         ----------
-        unit_x : `numpy.ndarray`
+        x : `numpy.ndarray`
             sample points in x frequency axis
-        unit_y : `numpy.ndarray`
+        y : `numpy.ndarray`
             sample points in y frequency axis
 
         Returns
@@ -139,7 +139,7 @@ class Pinhole(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        xq, yq = m.meshgrid(unit_x, unit_y)
+        xq, yq = m.meshgrid(x, y)
 
         # factor of pi corrects for jinc being modulo pi
         # factor of 2 converts radius to diameter
@@ -198,7 +198,7 @@ class SiemensStar(Convolvable):
         else:
             raise ValueError('invalid background color')
 
-        super().__init__(data=arr, unit_x=ux, unit_y=uy, has_analytic_ft=False)
+        super().__init__(data=arr, x=ux, y=uy, has_analytic_ft=False)
 
 
 class TiltedSquare(Convolvable):
@@ -240,7 +240,7 @@ class TiltedSquare(Convolvable):
         yp = xx * m.sin(angle) + yy * m.cos(angle)
         mask = (abs(xp) < radius) * (abs(yp) < radius)
         arr[mask] = fill_with
-        super().__init__(data=arr, unit_x=x, unit_y=y, has_analytic_ft=False)
+        super().__init__(data=arr, x=x, y=y, has_analytic_ft=False)
 
 
 class SlantedEdge(Convolvable):
@@ -284,4 +284,4 @@ class SlantedEdge(Convolvable):
         self.contrast = contrast
         self.black = diff
         self.white = 1 - diff
-        super().__init__(data=arr, unit_x=x * sf, unit_y=y * sf, has_analytic_ft=False)
+        super().__init__(data=arr, x=x * sf, y=y * sf, has_analytic_ft=False)

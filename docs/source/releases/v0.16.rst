@@ -15,12 +15,28 @@ New Features
 
 * :func:`prysm.io.read_sigfit_rigidbody` function to read rigid body motion and radius error coefficients from SigFit :code:`SUM2` files.
 
+* :meth:`prysm.interferogram.Interferogram.pad` function to pad interferograms; useful for dealing with group delay from spatial filtering.
+
 Bugfixes
 ========
 
 * :meth:`~prysm.convolution.Convolvable.conv` now produces the correct number of output samples in all cases.  Fixes #3.
 
+* unit changes have been corrected - prior results were incorrect.
+
+* the :code:`norm` kwarg has improved behavior for Zernike classes, no longer setting :code:`z.normalize = True` when the :code:`norm=False` kwarg is passed.
+
+* an error is no longer raised when calling :meth:`prysm.convolution.Convolvable.save` with :code:`nbits=8`.
+
+* calls to :meth:`prysm.pupil.Pupil.mask` now properly capture the mask for application to the :code:`fcn` property.
+
+* units on PSD plots are now properly referenced to spatial and phase units, not nm.  This fix affects axis labels, not data.
+
 Under-the-hood Changes
 ======================
 
 * :attr:`prysm.pupil.Pupil.strehl` now uses a more accurate formula.
+
+* :func:`prysm.propagation.prop_pupil_to_psf_plane` performance has been improved when Q=1.
+
+* some functions have had their conformance with :attr:`prysm.config.precision` improved.

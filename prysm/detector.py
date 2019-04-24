@@ -10,7 +10,7 @@ from prysm import mathops as m
 class Detector(object):
     """Model of a image sensor."""
 
-    def __init__(self, pixel='rectangle', pitch_x=None, pitch_y=None, resolution=(1024, 1024), nbits=16, framebuffer=10):
+    def __init__(self, pitch_x=None, pitch_y=None, pixel='rectangle', resolution=(1024, 1024), nbits=16, framebuffer=10):
         """Create a new Detector object.
 
         Parameters
@@ -25,8 +25,12 @@ class Detector(object):
             number of frames of data to store
 
         """
+        pixel = pixel.lower()
         if pixel == 'rectangle' and pitch_x is None and pitch_y is None:
             raise ValueError('must provide at least x pitch for rectangular pixels.')
+
+        if pixel == 'rectangle':
+            pixel = PixelAperture(pitch_x, pitch_y)
 
         self.pixel = pixel
 
@@ -72,7 +76,7 @@ class Detector(object):
                                               self.pitch_y,
                                               convolvable.sample_spacing,
                                               convolvable.data)
-            c_out = Convolvable(data=data, unit_x=ux, unit_y=uy, has_analytic_ft=False)
+            c_out = Convolvable(data=data, x=ux, y=uy, has_analytic_ft=False)
         else:
             c_out = convolvable.conv(self.pixel)
 
@@ -135,13 +139,39 @@ class Detector(object):
         return min(self.pitch_x, self.pitch_y)
 
     @pitch.setter
-    def set_pitch(self, pitch):
-        self.pitch_x = pitch
-        self.pitch_y = pitch
+    def set_pitch(self, pitch_x, pitch_y=None):
+        """Set the pixel pitch.
+
+        Parameters
+        ----------
+        pitch_x : `float`
+            x axis pixel pitch
+        pitch_y : `float`, optional
+            y axis pixel pitch, copies x pitch if not given.
+
+        """
+        pitch_y = pitch_x or pitch_y
+        self.pitch_x = pitch_x
+        self.pitch_y = pitch_y
+
+    @property
+    def fill_factor_x(self):
+        """Fill factor in the X axis."""
+        return self.pixel.width_x / self.pitch_x
+
+    @property
+    def fill_factor_y(self):
+        """Fill factor in the Y axis."""
+        return self.pixel.width_y / self.pitch_y
+
+    @property
+    def fill_factor(self):
+        """1D fill factor -- minimum of x/y fill factors."""
+        return min(self.fill_factor_x, self.fill_factor_y)
 
     @property
     def fs(self):
-        """Sampling frequency in cy/mm."""
+        """Sampling frequency in cy/mm."""  # NQOA
         return 1 / self.pitch * 1e3
 
     @property
@@ -151,18 +181,8 @@ class Detector(object):
 
 
 class OLPF(Convolvable):
-    """Optical Low Pass Filter.
+    """Optical Low Pass Filter."""
 
-    Applies blur to an image to suppress high frequency MTF and aliasing when combined with a PixelAperture.
-
-    Attributes
-    ----------
-    width_x : `float`
-        x width parameter
-    width_y : `float`
-        y width parameter
-
-    """
     def __init__(self, width_x, width_y=None, sample_spacing=0, samples_x=None, samples_y=None):
         """Create a new OLPF object.
 
@@ -208,16 +228,16 @@ class OLPF(Convolvable):
             ux = m.linspace(-space_x, space_x, samples_x)
             uy = m.linspace(-space_y, space_y, samples_y)
 
-        super().__init__(data=data, unit_x=ux, unit_y=uy, has_analytic_ft=True)
+        super().__init__(data=data, x=ux, y=uy, has_analytic_ft=True)
 
-    def analytic_ft(self, unit_x, unit_y):
+    def analytic_ft(self, x, y):
         """Analytic fourier transform of a pixel aperture.
 
         Parameters
         ----------
-        unit_x : `numpy.ndarray`
+        x : `numpy.ndarray`
             sample points in x axis
-        unit_y : `numpy.ndarray`
+        y : `numpy.ndarray`
             sample points in y axis
 
         Returns
@@ -226,26 +246,13 @@ class OLPF(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        xq, yq = m.meshgrid(unit_x, unit_y)
+        xq, yq = m.meshgrid(x, y)
         return (m.cos(2 * xq * self.width_x) *
                 m.cos(2 * yq * self.width_y)).astype(config.precision)
 
 
 class PixelAperture(Convolvable):
-    """The aperture of a pixel.
-
-    Attributes
-    ----------
-    center_x : `int`
-        x axis center pixel
-    center_y : `int`
-        y axis center pixel
-    width_x : `float`
-        x-width of the pixel aperture, um, full wide
-    width_y : `float`
-        y-width of the pixel aperture, um, full width
-
-    """
+    """The aperture of a rectangular pixel."""
     def __init__(self, width_x, width_y=None, sample_spacing=0, samples_x=None, samples_y=None):
         """Create a new `PixelAperture` object.
 
@@ -286,16 +293,16 @@ class PixelAperture(Convolvable):
                  center_x - steps_x:center_x + steps_x] = 1
             extx, exty = samples_x // 2 * sample_spacing, samples_y // 2 * sample_spacing
             ux, uy = m.linspace(-extx, extx, samples_x), m.linspace(-exty, exty, samples_y)
-        super().__init__(data=data, unit_x=ux, unit_y=uy, has_analytic_ft=True)
+        super().__init__(data=data, x=ux, y=uy, has_analytic_ft=True)
 
-    def analytic_ft(self, unit_x, unit_y):
+    def analytic_ft(self, x, y):
         """Analytic fourier transform of a pixel aperture.
 
         Parameters
         ----------
-        unit_x : `numpy.ndarray`
+        x : `numpy.ndarray`
             sample points in x axis
-        unit_y : `numpy.ndarray`
+        y : `numpy.ndarray`
             sample points in y axis
 
         Returns
@@ -304,7 +311,7 @@ class PixelAperture(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        xq, yq = m.meshgrid(unit_x, unit_y)
+        xq, yq = m.meshgrid(x, y)
         return abs(pixelaperture_analytic_otf(self.width_x, self.width_y, xq, yq))
 
 
@@ -455,5 +462,5 @@ def bindown_with_units(px_x, px_y, source_spacing, source_data):
     data = bindown(source_data, spp_x, spp_y, 'avg')
     s = data.shape
     extx, exty = s[0] * px_x // 2, s[1] * px_y // 2
-    ux, uy = m.arange(-extx, extx, self.pixel_size), m.arange(-exty, exty, self.pixel_size)
+    ux, uy = m.arange(-extx, extx, px_x), m.arange(-exty, exty, px_y)
     return ux, uy, data

@@ -25,7 +25,11 @@ def prop_pupil_plane_to_psf_plane(wavefunction, Q, incoherent=True, norm=None):
         incoherent point spread function
 
     """
-    padded_wavefront = pad2d(wavefunction, Q)
+    if Q != 1:
+        padded_wavefront = pad2d(wavefunction, Q)
+    else:
+        padded_wavefront = wavefunction
+
     impulse_response = m.ifftshift(m.fft2(m.fftshift(padded_wavefront), norm=norm))
     if incoherent:
         return abs(impulse_response) ** 2
@@ -51,9 +55,9 @@ def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, prop
 
     Returns
     -------
-    unit_x : `numpy.ndarray`
+    x : `numpy.ndarray`
         x axis unit, 1D ndarray
-    unit_y : `numpy.ndarray`
+    y : `numpy.ndarray`
         y axis unit, 1D ndarray
 
     """
@@ -67,9 +71,9 @@ def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, prop
                                                   samples=samples_y,              # 1e3 corrects
                                                   wavelength=wavelength,              # for unit
                                                   efl=prop_dist) / 1e3                # translation
-    unit_x = m.arange(-1 * int(m.ceil(samples_x / 2)), int(m.floor(samples_x / 2))) * sample_spacing_x
-    unit_y = m.arange(-1 * int(m.ceil(samples_y / 2)), int(m.floor(samples_y / 2))) * sample_spacing_y
-    return unit_x, unit_y
+    x = m.arange(-1 * int(m.ceil(samples_x / 2)), int(m.floor(samples_x / 2))) * sample_spacing_x
+    y = m.arange(-1 * int(m.ceil(samples_y / 2)), int(m.floor(samples_y / 2))) * sample_spacing_y
+    return x, y
 
 
 def pupil_sample_to_psf_sample(pupil_sample, samples, wavelength, efl):

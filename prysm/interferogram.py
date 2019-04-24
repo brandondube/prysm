@@ -9,7 +9,7 @@ from .zernike import defocus, zernikefit, FringeZernike
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar, uniform_cart_to_polar
-from .util import share_fig_ax, rms, mean
+from .util import share_fig_ax, mean
 from .geometry import mcache
 
 
@@ -17,6 +17,23 @@ from prysm import mathops as m
 
 
 def fit_plane(x, y, z):
+    """Fit a plane to data.
+
+    Parameters
+    ----------
+    x : `numpy.ndarray`
+        1D array of x (axis 1) values
+    y : `numpy.ndarray`
+        1D array of y (axis 0) values
+    z : `numpy.ndarray`
+        2D array of z values
+
+    Returns
+    -------
+    `numpy.ndarray`
+        array representation of plane
+
+    """
     pts = m.isfinite(z)
     if len(z.shape) > 1:
         x, y = m.meshgrid(x, y)
@@ -32,6 +49,19 @@ def fit_plane(x, y, z):
 
 
 def fit_sphere(z):
+    """Fit a sphere to data.
+
+    Parameters
+    ----------
+    z : `numpy.ndarray`
+        2D array of data
+
+    Returns
+    -------
+    `numpy.ndarray`
+        sphere data
+
+    """
     x, y = m.linspace(-1, 1, z.shape[1]), m.linspace(-1, 1, z.shape[0])
     xx, yy = m.meshgrid(x, y)
     pts = m.isfinite(z)
@@ -122,9 +152,9 @@ def psd(height, sample_spacing, window=None):
 
     Returns
     -------
-    unit_x : `numpy.ndarray`
+    x : `numpy.ndarray`
         ordinate x frequency axis
-    unit_y : `numpy.ndarray`
+    y : `numpy.ndarray`
         ordinate y frequency axis
     psd : `numpy.ndarray`
         power spectral density
@@ -301,7 +331,6 @@ def synthesize_surface_from_psd(psd, nu_x, nu_y):
     randfft = m.fft2(randnums)
     phase = m.angle(randfft)
 
-
     # calculate the output window
     # the 0th element of nu_y has the greatest frequency in magnitude because of
     # the convention to put the nyquist sample at -fs instead of +fs for even-size arrays
@@ -320,6 +349,7 @@ def synthesize_surface_from_psd(psd, nu_x, nu_y):
     out = m.ifftshift(m.ifft2(m.fftshift(signal))) * coef
     out = out.real
     return x, y, out
+
 
 def render_synthetic_surface(size, samples, rms=None, mask='circle', psd_fcn=abc_psd, **psd_fcn_kwargs):
     """Render a synthetic surface with a given RMS value given a PSD function.
@@ -384,9 +414,28 @@ class Interferogram(OpticalPhase):
     """Class containing logic and data for working with interferometric data."""
 
     def __init__(self, phase, intensity=None, x=None, y=None, scale='px', phase_unit='nm', meta=None):
+        """Create a new Interferogram instance.
+
+        Parameters
+        ----------
+        phase : `numpy.ndarray`
+            phase values, units of phase_unit
+        intensity : `numpy.ndarray`, optional
+            intensity array from interferometer camera
+        x : `numpy.ndarray`, optional
+            x (axis 1) values, units of scale
+        y : `numpy.ndarray`, optional
+            y (axis 0) values, units of scale
+        phase_unit : `str`, optional
+            unit to use to represent phase
+        meta : `dict`
+            dictionary of any metadata.  if a wavelength or Wavelength key is
+            present, this will also be stored in self.wavelength
+
+        """
         if x is None:  # assume x, y given together
-            x = m.arange(phase.shape[1])
-            y = m.arange(phase.shape[0])
+            x = m.arange(phase.shape[1], dtype=config.precision)
+            y = m.arange(phase.shape[0], dtype=config.precision)
             scale = 'px'
             self.lateral_res = 1
 
@@ -400,7 +449,7 @@ class Interferogram(OpticalPhase):
         else:
             wvl = 1
 
-        super().__init__(unit_x=x, unit_y=y, phase=phase,
+        super().__init__(x=x, y=y, phase=phase,
                          wavelength=wvl, phase_unit=phase_unit,
                          spatial_unit=scale)
 
@@ -436,6 +485,28 @@ class Interferogram(OpticalPhase):
         return fz.pv + 3 * residual
 
     def fit_zernikes(self, terms, map_='noll', norm=True, residual=False):
+        """Fit Zernikes to the interferometric data.
+
+        Parameters
+        ----------
+        terms : `int`
+            number of terms to fit
+        map_ : `str`, {'noll', 'fringe'}, optional
+            which set ("map") of Zernikes to fit to
+        norm : `bool`, optional
+            whether to orthonormalize the terms to unit RMS value
+        residual : `bool`
+            if true, return two values (coefficients, residual), else return
+            only coefficients
+
+        Returns
+        -------
+        coefs : `numpy.ndarray`
+            Zernike coefficients, same units as self.phase_unit
+        residual : `float`
+            RMS residual of the fit, same units as self.phase_unit
+
+        """
         return zernikefit(self.phase, terms=terms, map_=map_, norm=norm, residual=residual)
 
     def fill(self, _with=0):
@@ -486,19 +557,19 @@ class Interferogram(OpticalPhase):
             tb = slice(top, -bottom)
 
         self.phase = self.phase[lr, tb]
-        self.unit_y, self.unit_x = self.unit_y[lr], self.unit_x[tb]
-        self.unit_x -= self.unit_x[0]
-        self.unit_y -= self.unit_y[0]
+        self.y, self.x = self.y[lr], self.x[tb]
+        self.x -= self.x[0]
+        self.y -= self.y[0]
         return self
 
     def recenter(self):
         """Adjust the x and y coordinates so the data is centered on 0,0."""
-        mxx, mnx = self.unit_x[-1], self.unit_x[0]
-        mxy, mny = self.unit_y[-1], self.unit_y[0]
+        mxx, mnx = self.x[-1], self.x[0]
+        mxy, mny = self.y[-1], self.y[0]
         cx = (mxx + mnx) / 2
         cy = (mxy + mny) / 2
-        self.unit_x -= cx
-        self.unit_y -= cy
+        self.x -= cx
+        self.y -= cy
         return self
 
     def remove_piston(self):
@@ -508,7 +579,7 @@ class Interferogram(OpticalPhase):
 
     def remove_tiptilt(self):
         """Remove tip/tilt from the data by least squares fitting and subtracting a plane."""
-        plane = fit_plane(self.unit_x, self.unit_y, self.phase)
+        plane = fit_plane(self.x, self.y, self.phase)
         self.phase -= plane
         return self
 
@@ -560,7 +631,7 @@ class Interferogram(OpticalPhase):
             base = m.zeros(self.shape, dtype=config.precision)
             difference = abs(self.shape[0] - self.shape[1])
             l, u = int(m.floor(difference / 2)), int(m.ceil(difference / 2))
-            if u is 0:  # guard against nocrop scenario
+            if u == 0:  # guard against nocrop scenario
                 _slice = slice(None)
             else:
                 _slice = slice(l, -u)
@@ -577,7 +648,7 @@ class Interferogram(OpticalPhase):
         self.phase[hitpts] = m.nan
         return self
 
-    def filter(self, critical_frequency=None, critical_period=None, kind='bessel', type_=None, order=4, filtkwargs=dict()):
+    def filter(self, critical_frequency=None, critical_period=None, kind='bessel', type_=None, order=1, filtkwargs=dict()):
         """Apply a frequency-domain filter to the phase data.
 
         Parameters
@@ -646,7 +717,6 @@ class Interferogram(OpticalPhase):
         self.phase = filt_both
         return self
 
-
     def latcal(self, plate_scale, unit='mm'):
         """Perform lateral calibration.
 
@@ -668,8 +738,47 @@ class Interferogram(OpticalPhase):
         """
         self.change_spatial_unit(to=unit, inplace=True)  # will be 0..n spatial units
         # sloppy to do this here...
-        self.unit_x *= plate_scale
-        self.unit_y *= plate_scale
+        self.x *= plate_scale
+        self.y *= plate_scale
+        return self
+
+    def pad(self, value, unit='spatial'):
+        """Pad the interferogram.
+
+        Parameters
+        ----------
+        value : `float`
+            how much to pad the interferogram
+        unit : `str`, {'spatial', 'px'}, optional
+            what unit to use for padding, spatial units (self.spatial_unit), or pixels
+
+        Returns
+        -------
+        `Interferogram`
+            self
+
+        """
+        unit = unit.lower()
+        if unit in ('px', 'pixel', 'pixels'):
+            npx = value
+        else:
+            npx = int(m.ceil(value / self.sample_spacing))
+
+        if m.isnan(self.phase[0, 0]):
+            fill_val = m.nan
+        else:
+            fill_val = 0
+
+        s = self.shape
+        out = m.empty((s[0] + 2 * npx, s[1] + 2 * npx), dtype=self.phase.dtype)
+        out[:, :] = fill_val
+        out[npx:-npx, npx:-npx] = self.phase
+        self.phase = out
+
+        x = m.arange(out.shape[1], dtype=config.precision) * self.sample_spacing
+        y = m.arange(out.shape[0], dtype=config.precision) * self.sample_spacing
+        self.x = x
+        self.y = y
         return self
 
     def spike_clip(self, nsigma=3):
@@ -695,9 +804,9 @@ class Interferogram(OpticalPhase):
 
         Returns
         -------
-        unit_x : `numpy.ndarray`
+        x : `numpy.ndarray`
             ordinate x frequency axis
-        unit_y : `numpy.ndarray`
+        y : `numpy.ndarray`
             ordinate y frequency axis
         psd : `numpy.ndarray`
             power spectral density
@@ -932,7 +1041,7 @@ class Interferogram(OpticalPhase):
             ax.legend(title='Slice')
 
         ax.set(xlim=xlim, xlabel=f'Spatial {label} [{unit}]',
-               ylim=ylim, ylabel=r'PSD [nm²/' + f'(cy/{self.spatial_unit})²]')
+               ylim=ylim, ylabel=r'PSD [' + f'{self.phase_unit}²/(cy/{self.spatial_unit})²]')
 
         return fig, ax
 
@@ -947,10 +1056,9 @@ class Interferogram(OpticalPhase):
         """
         phase = self.change_phase_unit(to='waves', inplace=False)
         write_zygo_ascii(file, phase=phase,
-                         unit_x=self.unit_x, unit_y=self.unit_y,
+                         x=self.x, y=self.y,
                          intensity=None, wavelength=self.wavelength,
                          high_phase_res=high_phase_res)
-
 
     @staticmethod
     def from_zygo_dat(path, multi_intensity_action='first', scale='mm'):
