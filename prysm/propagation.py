@@ -1,4 +1,5 @@
 """Numerical optical propagation."""
+from ._basicdata import BasicData
 from .fttools import pad2d
 
 from prysm import mathops as m
@@ -64,11 +65,11 @@ def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, prop
     s = wavefunction.shape
     samples_x, samples_y = s[1] * Q, s[0] * Q
     sample_spacing_x = pupil_sample_to_psf_sample(pupil_sample=input_sample_spacing,  # factor of
-                                                  samples=samples_x,              # 1e3 corrects
+                                                  samples=samples_x,                  # 1e3 corrects
                                                   wavelength=wavelength,              # for unit
                                                   efl=prop_dist) / 1e3                # translation
     sample_spacing_y = pupil_sample_to_psf_sample(pupil_sample=input_sample_spacing,  # factor of
-                                                  samples=samples_y,              # 1e3 corrects
+                                                  samples=samples_y,                  # 1e3 corrects
                                                   wavelength=wavelength,              # for unit
                                                   efl=prop_dist) / 1e3                # translation
     x = m.arange(-1 * int(m.ceil(samples_x / 2)), int(m.floor(samples_x / 2))) * sample_spacing_x
@@ -120,3 +121,26 @@ def psf_sample_to_pupil_sample(psf_sample, samples, wavelength, efl):
 
     """
     return (wavelength * efl * 1e3) / (psf_sample * samples)
+
+
+class Wavefront(BasicData):
+    """(Complex) representation of a wavefront."""
+    _data_attr = 'fcn'
+
+    def __init__(self, x, y, fcn, wavelength):
+        """Create a new Wavefront instance.
+
+        Parameters
+        ----------
+        x : `numpy.ndarray`
+            x coordinates
+        y : `numpy.ndarray`
+            y coordinates
+        fcn : `numpy.ndarray`
+            complex-valued wavefront array
+        wavelength : `float`
+            wavelength of light, microns
+
+        """
+        super.__init__(x=x, y=y, data=fcn)
+        self.wavelength = wavelength
