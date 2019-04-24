@@ -17,6 +17,14 @@ New Features
 
 * :meth:`prysm.interferogram.Interferogram.pad` function to pad interferograms; useful for dealing with group delay from spatial filtering.
 
+* Convolutions reworked - The code that manages convolutions in prysm has been rewritten.
+
+* * New :class:`~prysm.convolution.ConvolutionEngine` which allows users to control the execution flow of a convolution, adjust the data in k-space before returning to the spatial domain, and other advanced features.  For more information see the updated User's Guide.
+
+* * prysm has slimmed by 300 SLOC.
+
+* * Several bugs have been squashed in the process.
+
 Bugfixes
 ========
 
