@@ -481,7 +481,6 @@ class ConvolutionEngine:
         self.spatial_data = m.fftshift(m.ifft2(m.ifftshift(self.kspace_data)))
         return self
 
-
     def crop_output(self):
         """Crop the output in the spatial domain to remove the padded area."""
         s = self.kspace_data.shape

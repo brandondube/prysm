@@ -26,13 +26,13 @@ def pad2d(array, Q=2, value=0, mode='constant'):
     padding will be symmetric.
 
     """
-    if Q is 1:
+    if Q == 1:
         return array
     else:
         if mode == 'constant':
             pad_shape, out_x, out_y = _padshape(array, Q)
             y, x = array.shape
-            if value is 0:
+            if value == 0:
                 out = m.zeros((out_y, out_x), dtype=array.dtype)
             else:
                 out = m.zeros((out_y, out_x), dtype=array.dtype) + value
