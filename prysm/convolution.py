@@ -336,7 +336,7 @@ class Convolvable(BasicData):
         """
         from imageio import imwrite
         if nbits == 8:
-            typ = m.unit8
+            typ = m.uint8
         elif nbits == 16:
             typ = m.uint16
         else:
