@@ -40,13 +40,8 @@ class Detector(object):
 
         self.pixel = pixel
 
-        if pitch_x is None:
-            pitch_x = getattr(pixel, 'pitch_x', pixel.width_x)
         if pitch_y is None:
-            if pixel == 'rectangle':
-                pitch_y = pitch_x
-            else:
-                pitch_y = getattr(pixel, 'pitch_y', pixel.width_y)
+            pitch_y = pitch_x
 
         if not hasattr(resolution, '__iter__'):
             resolution = (resolution, resolution)
