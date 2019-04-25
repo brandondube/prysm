@@ -141,16 +141,8 @@ def resample_2d_complex(array, sample_pts, query_pts, bounds_error=True, fill_va
 
     '''
     xq, yq = m.meshgrid(*query_pts)
-    mag = abs(array)
-    phase = m.angle(array)
-
-    magfunc = interpolate.RegularGridInterpolator(sample_pts, mag, bounds_error=bounds_error, fill_value=fill_value)
-    phasefunc = interpolate.RegularGridInterpolator(sample_pts, phase, bounds_error=bounds_error, fill_value=fill_value)
-
-    interp_mag = magfunc((yq, xq))
-    interp_phase = phasefunc((yq, xq))
-
-    return interp_mag * m.exp(1j * interp_phase)
+    interpf = interpolate.RegularGridInterpolator(sample_pts, array, bounds_error=bounds_error, fill_value=fill_value)
+    return interpf((yq, xq))
 
 
 def make_xy_grid(samples_x, samples_y=None, radius=1):
