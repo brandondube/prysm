@@ -439,7 +439,7 @@ class AiryDisk(Convolvable):
             x, y, data = None, None, None
         self.fno = fno
         self.wavelength = wavelength
-        super().__init__(data, x, y)
+        super().__init__(data=data, x=x, y=y)
         self.has_analytic_ft = True
 
     def analytic_ft(self, x, y):
