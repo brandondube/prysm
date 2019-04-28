@@ -34,6 +34,28 @@ def object_to_image_dist(efl, object_distance):
     return 1 / ret
 
 
+def image_to_object_dist(efl, image_distance):
+    """Compute the object distance from the image distance.
+
+    Parameters
+    ----------
+    efl : `float`
+        focal length of the lens
+    object_distance : `float` or `numpy.ndarray`
+        distance from the object to the front principal plane of the lens,
+        positive for an object in front of a lens of positive focal length.
+
+    Notes
+    -----
+    efl and image distance should be in the same units.  Return value will
+    be in the same units as the input.
+
+    """
+    image_distance = guarantee_array(image_distance)
+    ret = 1 / efl - 1 / image_distance
+    return 1 / ret
+
+
 def image_dist_epd_to_na(image_distance, epd):
     """Compute the NA from an image distance and entrance pupil diameter.
 
