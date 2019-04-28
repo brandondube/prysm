@@ -2,13 +2,12 @@
 from scipy import interpolate
 
 from .conf import config
+from .mathops import engine as e
 from ._basicdata import BasicData
 from .psf import PSF
 from .fttools import forward_ft_unit
 from .util import share_fig_ax
 from .coordinates import polar_to_cart, uniform_cart_to_polar
-
-from prysm import mathops as m
 
 
 class MTF(BasicData):
@@ -109,7 +108,7 @@ class MTF(BasicData):
         elif type(azimuths) in (int, float):
             azimuths = [azimuths] * len(freqs)
 
-        azimuths = m.radians(azimuths)
+        azimuths = e.radians(azimuths)
         # handle single value case
         if type(freqs) in (int, float):
             x, y = polar_to_cart(freqs, azimuths)
@@ -119,7 +118,7 @@ class MTF(BasicData):
         for freq, az in zip(freqs, azimuths):
             x, y = polar_to_cart(freq, az)
             outs.append(float(self.interpf_2d((x, y), method='linear')))
-        return m.asarray(outs)
+        return e.asarray(outs)
 
     def exact_xy(self, x, y=None):
         """Retrieve the MTF at the specified X-Y frequency pairs.
@@ -154,11 +153,11 @@ class MTF(BasicData):
         if type(x) in (int, float):
             x = [x] * len(y)
 
-        x, y = m.asarray(x), m.asarray(y)
+        x, y = e.asarray(x), e.asarray(y)
         outs = []
         for x, y in zip(x, y):
             outs.append(float(self.interpf_2d((x, y), method='linear')))
-        return m.asarray(outs)
+        return e.asarray(outs)
 
     def exact_tan(self, freq):
         """Return data at an exact x coordinate along the y=0 axis.
@@ -389,7 +388,7 @@ class MTF(BasicData):
         if getattr(psf, '_mtf', None) is not None:
             return psf._mtf
         else:
-            dat = abs(m.fftshift(m.fft2(psf.data)))
+            dat = abs(e.fft.fftshift(e.fft.fft2(psf.data)))  # no need to ifftshift first - phase is unimportant
             x = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_x)  # 1e3 for microns => mm
             y = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_y)
             return MTF(dat / dat[psf.center_y, psf.center_x], x, y)
@@ -450,9 +449,9 @@ def diffraction_limited_mtf(fno, wavelength, frequencies=None, samples=128):
     """
     extinction = 1 / (wavelength / 1000 * fno)
     if frequencies is None:
-        normalized_frequency = m.linspace(0, 1, samples)
+        normalized_frequency = e.linspace(0, 1, samples)
     else:
-        normalized_frequency = m.asarray(frequencies) / extinction
+        normalized_frequency = e.asarray(frequencies) / extinction
         try:
             normalized_frequency[normalized_frequency > 1] = 1  # clamp values
         except TypeError:  # single freq
@@ -481,9 +480,9 @@ def _difflim_mtf_core(normalized_frequency):
         The diffraction MTF function at a given normalized spatial frequency
 
     """
-    return (2 / m.pi) * \
-           (m.arccos(normalized_frequency) - normalized_frequency *
-            m.sqrt(1 - normalized_frequency ** 2))
+    return (2 / e.pi) * \
+           (e.arccos(normalized_frequency) - normalized_frequency *
+            e.sqrt(1 - normalized_frequency ** 2))
 
 
 def longexposure_otf(nu, Cn, z, f, lambdabar, h_z_by_r=2.91):
@@ -516,11 +515,11 @@ def longexposure_otf(nu, Cn, z, f, lambdabar, h_z_by_r=2.91):
     lambdabar = lambdabar / 1e6
 
     power = 5/3
-    const1 = - m.pi ** 2 * 2 * h_z_by_r * Cn ** 2
+    const1 = - e.pi ** 2 * 2 * h_z_by_r * Cn ** 2
     const2 = z * f ** power / (lambdabar ** 3)
     nupow = nu ** power
     const = const1 * const2
-    return m.exp(const * nupow)
+    return e.exp(const * nupow)
 
 
 def estimate_Cn(P=1013, T=273.15, Ct=1e-4):

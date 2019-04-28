@@ -4,9 +4,8 @@
 from scipy.spatial import Delaunay
 
 from .conf import config
+from .mathops import engine as e
 from .coordinates import make_rho_phi_grid
-
-from prysm import mathops as m
 
 
 class MaskCache(object):
@@ -85,12 +84,12 @@ def gaussian(sigma=0.5, samples=128):
     """
     s = sigma
 
-    x = m.arange(0, samples, 1, dtype=config.precision)
-    y = x[:, m.newaxis]
+    x = e.arange(0, samples, 1, dtype=config.precision)
+    y = x[:, e.newaxis]
 
     # // is floor division in python
     x0 = y0 = samples // 2
-    return m.exp(-4 * m.log(2) * ((x - x0) ** 2 + (y - y0) ** 2) / (s * samples) ** 2)
+    return e.exp(-4 * e.log(2) * ((x - x0) ** 2 + (y - y0) ** 2) / (s * samples) ** 2)
 
 
 def rotated_ellipse(width_major, width_minor, major_axis_angle=0, samples=128):
@@ -142,14 +141,14 @@ def rotated_ellipse(width_major, width_minor, major_axis_angle=0, samples=128):
     if width_minor > width_major:
         raise ValueError('By definition, major axis must be larger than minor.')
 
-    arr = m.ones((samples, samples))
+    arr = e.ones((samples, samples))
     lim = width_major
-    x, y = m.linspace(-lim, lim, samples), m.linspace(-lim, lim, samples)
-    xv, yv = m.meshgrid(x, y)
-    A = m.radians(-major_axis_angle)
+    x, y = e.linspace(-lim, lim, samples), e.linspace(-lim, lim, samples)
+    xv, yv = e.meshgrid(x, y)
+    A = e.radians(-major_axis_angle)
     a, b = width_major, width_minor
-    major_axis_term = ((xv * m.cos(A) + yv * m.sin(A)) ** 2) / a ** 2
-    minor_axis_term = ((xv * m.sin(A) - yv * m.cos(A)) ** 2) / b ** 2
+    major_axis_term = ((xv * e.cos(A) + yv * e.sin(A)) ** 2) / a ** 2
+    minor_axis_term = ((xv * e.sin(A) - yv * e.cos(A)) ** 2) / b ** 2
     arr[major_axis_term + minor_axis_term > 1] = 0
     return arr
 
@@ -191,7 +190,7 @@ def square(samples=128, radius=1):
         binary ndarray representation of the mask
 
     """
-    return m.ones((samples, samples), dtype=bool)
+    return e.ones((samples, samples), dtype=bool)
 
 
 def pentagon(samples=128, radius=1):
@@ -395,14 +394,14 @@ def truecircle(samples=128, radius=1):
     Based on a more general algorithm by Jim Fienup
 
     """
-    if radius is 0:
-        return m.zeros((samples, samples), dtype=config.precision)
+    if radius == 0:
+        return e.zeros((samples, samples), dtype=config.precision)
     else:
         rho, phi = make_rho_phi_grid(samples, samples)
         one_pixel = 2 / samples
         radius_plus = radius + (one_pixel / 2)
         intermediate = (radius_plus - rho) * (samples / 2)
-        return m.minimum(m.maximum(intermediate, 0), 1)
+        return e.minimum(e.maximum(intermediate, 0), 1)
 
 
 def circle(samples=128, radius=1):
@@ -422,11 +421,11 @@ def circle(samples=128, radius=1):
         binary ndarray representation of the mask
 
     """
-    if radius is 0:
-        return m.zeros((samples, samples), dtype=config.precision)
+    if radius == 0:
+        return e.zeros((samples, samples), dtype=config.precision)
     else:
         rho, phi = make_rho_phi_grid(samples, samples)
-        mask = m.ones(rho.shape, dtype=config.precision)
+        mask = e.ones(rho.shape, dtype=config.precision)
         mask[rho > radius] = 0
         return mask
 
@@ -448,11 +447,11 @@ def inverted_circle(samples=128, radius=1):
         binary ndarray representation of the mask
 
     """
-    if radius is 0:
-        return m.zeros((samples, samples), dtype=config.precision)
+    if radius == 0:
+        return e.zeros((samples, samples), dtype=config.precision)
     else:
         rho, phi = make_rho_phi_grid(samples, samples)
-        mask = m.ones(rho.shape, dtype=config.precision)
+        mask = e.ones(rho.shape, dtype=config.precision)
         mask[rho < radius] = 0
         return mask
 
@@ -475,7 +474,7 @@ def regular_polygon(sides, samples, radius=1):
         mask for regular polygon with radius equal to the array radius
 
     """
-    verts = generate_vertices(sides, int(m.floor((samples // 2) * radius)))
+    verts = generate_vertices(sides, int(e.floor((samples // 2) * radius)))
     verts[:, 0] += samples // 2  # shift y to center
     verts[:, 1] += samples // 2  # shift x to center
     return generate_mask(verts, samples).astype(config.precision)
@@ -497,9 +496,9 @@ def generate_mask(vertices, num_samples=128):
         polygon mask
 
     """
-    vertices = m.asarray(vertices)
-    unit = m.arange(num_samples)
-    xxyy = m.stack(m.meshgrid(unit, unit), axis=2)
+    vertices = e.asarray(vertices)
+    unit = e.arange(num_samples)
+    xxyy = e.stack(e.meshgrid(unit, unit), axis=2)
 
     # use delaunay to fill from the vertices and produce a mask
     triangles = Delaunay(vertices, qhull_options='QJ Qf')
@@ -523,14 +522,14 @@ def generate_vertices(sides, radius=1):
         array with first column X points, second column Y points
 
     """
-    angle = 2 * m.pi / sides
+    angle = 2 * e.pi / sides
     pts = []
     for point in range(sides):
-        x = radius * m.sin(point * angle)
-        y = radius * m.cos(point * angle)
+        x = radius * e.sin(point * angle)
+        y = radius * e.cos(point * angle)
         pts.append((int(x), int(y)))
 
-    return m.asarray(pts)
+    return e.asarray(pts)
 
 
 shapes = {

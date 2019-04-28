@@ -1,7 +1,8 @@
 """A base point spread function interface."""
-from scipy import optimize, interpolate
+from scipy import optimize, interpolate, special
 
 from .conf import config
+from .mathops import engine as e, jinc
 from .coordinates import cart_to_polar
 from .util import share_fig_ax, sort_xy
 from .convolution import Convolvable
@@ -9,8 +10,6 @@ from .propagation import (
     prop_pupil_plane_to_psf_plane,
     prop_pupil_plane_to_psf_plane_units,
 )
-
-from prysm import mathops as m
 
 FIRST_AIRY_ZERO = 1.220
 SECOND_AIRY_ZERO = 2.233
@@ -98,8 +97,8 @@ class PSF(Convolvable):
         # compute MTF from the PSF
         if self._mtf is None:
             self._mtf = MTF.from_psf(self)
-            nx, ny = m.meshgrid(self._mtf.x, self._mtf.y)
-            self._nu_p = m.sqrt(nx ** 2 + ny ** 2)
+            nx, ny = e.meshgrid(self._mtf.x, self._mtf.y)
+            self._nu_p = e.sqrt(nx ** 2 + ny ** 2)
             # this is meaninglessly small and will avoid division by 0
             self._nu_p[self._nu_p == 0] = 1e-99
             self._dnx, self._dny = ny[1, 0] - ny[0, 0], nx[0, 1] - nx[0, 0]
@@ -114,7 +113,7 @@ class PSF(Convolvable):
                                                          self._dnx,
                                                          self._dny)
                 out.append(self._ee[r])
-            return m.asarray(out)
+            return e.asarray(out)
         else:
             if radius not in self._ee:
                 self._ee[radius] = _encircled_energy_core(self._mtf.data,
@@ -233,9 +232,9 @@ class PSF(Convolvable):
 
         if pix_grid is not None:
             # if pixel grid is desired, add it
-            mult = m.floor(axlim / pix_grid)
+            mult = e.floor(axlim / pix_grid)
             gmin, gmax = -mult * pix_grid, mult * pix_grid
-            pts = m.arange(gmin, gmax, pix_grid)
+            pts = e.arange(gmin, gmax, pix_grid)
             ax.set_yticks(pts, minor=True)
             ax.set_xticks(pts, minor=True)
             ax.yaxis.grid(True, which='minor', color='white', alpha=0.25)
@@ -294,7 +293,7 @@ class PSF(Convolvable):
         elif axlim is 0:
             raise ValueError('computing from 0 to 0 is stupid')
         else:
-            xx = m.linspace(1e-5, axlim, npts)
+            xx = e.linspace(1e-5, axlim, npts)
             yy = self.encircled_energy(xx)
 
         fig, ax = share_fig_ax(fig, ax)
@@ -396,13 +395,13 @@ class PSF(Convolvable):
                 ref_samples_x = psf.samples_x
                 ref_samples_y = psf.samples_y
 
-        merge_data = m.zeros((ref_samples_x, ref_samples_y, len(psfs)))
+        merge_data = e.zeros((ref_samples_x, ref_samples_y, len(psfs)))
         for idx, psf in enumerate(psfs):
             # don't do anything to the reference PSF besides spectral scaling
             if idx is ref_idx:
                 merge_data[:, :, idx] = psf.data * spectral_weights[idx]
             else:
-                xv, yv = m.meshgrid(ref_x, ref_y)
+                xv, yv = e.meshgrid(ref_x, ref_y)
                 interpf = interpolate.RegularGridInterpolator((psf.y, psf.x), psf.data)
                 merge_data[:, :, idx] = interpf((yv, xv), method=interp_method) * spectral_weights[idx]
 
@@ -430,9 +429,9 @@ class AiryDisk(Convolvable):
 
         """
         if samples is not None:
-            x = m.linspace(-extent, extent, samples)
-            y = m.linspace(-extent, extent, samples)
-            xx, yy = m.meshgrid(x, y)
+            x = e.linspace(-extent, extent, samples)
+            y = e.linspace(-extent, extent, samples)
+            xx, yy = e.meshgrid(x, y)
             rho, phi = cart_to_polar(xx, yy)
             data = airydisk(rho, fno, wavelength)
         else:
@@ -459,7 +458,7 @@ class AiryDisk(Convolvable):
 
         """
         from .otf import diffraction_limited_mtf
-        r, p = cart_to_polar(*m.meshgrid(x, y))
+        r, p = cart_to_polar(*e.meshgrid(x, y))
         return diffraction_limited_mtf(self.fno, self.wavelength, r*1e3)  # um to mm
 
 
@@ -481,8 +480,8 @@ def airydisk(unit_r, fno, wavelength):
         ndarray containing the airy pattern
 
     """
-    u_eff = unit_r * m.pi / wavelength / fno
-    return abs(2 * m.jinc(u_eff)) ** 2
+    u_eff = unit_r * e.pi / wavelength / fno
+    return abs(2 * jinc(u_eff)) ** 2
 
 
 def _encircled_energy_core(mtf_data, radius, nu_p, dx, dy):
@@ -507,7 +506,7 @@ def _encircled_energy_core(mtf_data, radius, nu_p, dx, dy):
         encircled energy for given radius
 
     """
-    integration_fourier = m.j1(2 * m.pi * radius * nu_p) / nu_p
+    integration_fourier = special.j1(2 * e.pi * radius * nu_p) / nu_p
     dat = mtf_data * integration_fourier
     return radius * dat.sum() * dx * dy
 
@@ -530,8 +529,8 @@ def _analytical_encircled_energy(fno, wavelength, points):
         encircled energy values
 
     """
-    p = points * m.pi / fno / wavelength
-    return 1 - m.j0(p)**2 - m.j1(p)**2
+    p = points * e.pi / fno / wavelength
+    return 1 - special.j0(p)**2 - special.j1(p)**2
 
 
 def _inverse_analytic_encircled_energy(fno, wavelength, energy=FIRST_AIRY_ENCIRCLED):

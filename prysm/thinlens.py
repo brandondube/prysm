@@ -1,9 +1,8 @@
 """A collection of thin lens equations for system modeling."""
 
+from .mathops import engine as e
 from .util import guarantee_array
 from .zernike import defocus as _defocus
-
-from prysm import mathops as m
 
 
 def object_to_image_dist(efl, object_distance):
@@ -75,7 +74,7 @@ def image_dist_epd_to_na(image_distance, epd):
     image_distance = guarantee_array(image_distance)
 
     rho = epd / 2
-    marginal_ray_angle = abs(m.arctan2(rho, image_distance))
+    marginal_ray_angle = abs(e.arctan2(rho, image_distance))
     return marginal_ray_angle
 
 
@@ -130,7 +129,7 @@ def na_to_fno(na):
         fno.  The f/# of the system.
 
     """
-    return 1 / (2 * m.sin(na))
+    return 1 / (2 * e.sin(na))
 
 
 def object_dist_to_mag(efl, object_dist):

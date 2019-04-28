@@ -1,7 +1,7 @@
 """Utility functions."""
 from operator import itemgetter
 
-from prysm import mathops as m
+from .mathops import engine as e
 
 
 def is_odd(int):
@@ -67,17 +67,17 @@ def fold_array(array, axis=1):
         xh = xs // 2
         left_chunk = array[:, :xh]
         right_chunk = array[:, xh:]
-        folded_array = m.concatenate((right_chunk[:, :, m.newaxis],
-                                     m.flip(m.flip(left_chunk, axis=1),
-                                            axis=0)[:, :, m.newaxis]),
+        folded_array = e.concatenate((right_chunk[:, :, e.newaxis],
+                                     e.flip(e.flip(left_chunk, axis=1),
+                                            axis=0)[:, :, e.newaxis]),
                                      axis=2)
     else:
         yh = ys // 2
         top_chunk = array[:yh, :]
         bottom_chunk = array[yh:, :]
-        folded_array = m.concatenate((bottom_chunk[:, :, m.newaxis],
-                                     m.flip(m.flip(top_chunk, axis=1),
-                                            axis=0)[:, :, m.newaxis]),
+        folded_array = e.concatenate((bottom_chunk[:, :, e.newaxis],
+                                     e.flip(e.flip(top_chunk, axis=1),
+                                            axis=0)[:, :, e.newaxis]),
                                      axis=2)
     return folded_array.mean(axis=2)
 
@@ -130,7 +130,7 @@ def mean(array):
         mean value
 
     """
-    non_nan = m.isfinite(array)
+    non_nan = e.isfinite(array)
     return array[non_nan].mean()
 
 def pv(array):
@@ -146,7 +146,7 @@ def pv(array):
     `float`
         PV of the array
     """
-    non_nan = m.isfinite(array)
+    non_nan = e.isfinite(array)
     return array[non_nan].max() - array[non_nan].min()
 
 
@@ -164,8 +164,8 @@ def rms(array):
         RMS of the array
 
     """
-    non_nan = m.isfinite(array)
-    return m.sqrt((array[non_nan] ** 2).mean())
+    non_nan = e.isfinite(array)
+    return e.sqrt((array[non_nan] ** 2).mean())
 
 
 def Sa(array):
@@ -181,7 +181,7 @@ def Sa(array):
     `float`
         Ra of the array
     """
-    non_nan = m.isfinite(array)
+    non_nan = e.isfinite(array)
     ary = array[non_nan]
     mean = ary.mean()
     return abs(ary - mean).sum() / ary.size
@@ -201,7 +201,7 @@ def std(array):
         std of the array
 
     """
-    non_nan = m.isfinite(array)
+    non_nan = e.isfinite(array)
     ary = array[non_nan]
     return ary.std()
 
@@ -224,12 +224,12 @@ def guarantee_array(variable):
         non-numeric type
 
     """
-    if type(variable) in [float, m.ndarray, m.int32, m.int64, m.float32, m.float64, m.complex64, m.complex128]:
+    if type(variable) in [float, e.ndarray, e.int32, e.int64, e.float32, e.float64, e.complex64, e.complex128]:
         return variable
     elif type(variable) is int:
         return float(variable)
     elif type(variable) is list:
-        return m.asarray(variable)
+        return e.asarray(variable)
     else:
         raise ValueError(f'variable is of invalid type {type(variable)}')
 
@@ -250,8 +250,8 @@ def ecdf(x):
         cumulative distribution function of the data
 
     """
-    xs = m.sort(x)
-    ys = m.arange(1, len(xs) + 1) / float(len(xs))
+    xs = e.sort(x)
+    ys = e.arange(1, len(xs) + 1) / float(len(xs))
     return xs, ys
 
 

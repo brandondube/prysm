@@ -1,5 +1,5 @@
 """Supplimental tools for computing fourier transforms."""
-from prysm import mathops as m
+from .mathops import engine as e
 
 
 def pad2d(array, Q=2, value=0, mode='constant'):
@@ -33,9 +33,9 @@ def pad2d(array, Q=2, value=0, mode='constant'):
             pad_shape, out_x, out_y = _padshape(array, Q)
             y, x = array.shape
             if value == 0:
-                out = m.zeros((out_y, out_x), dtype=array.dtype)
+                out = e.zeros((out_y, out_x), dtype=array.dtype)
             else:
-                out = m.zeros((out_y, out_x), dtype=array.dtype) + value
+                out = e.zeros((out_y, out_x), dtype=array.dtype) + value
             yy, xx = pad_shape
             out[yy[0]:yy[0] + y, xx[0]:xx[0] + x] = array
             return out
@@ -46,18 +46,18 @@ def pad2d(array, Q=2, value=0, mode='constant'):
                 kwargs = {'constant_values': value, 'mode': mode}
             else:
                 kwargs = {'mode': mode}
-            return m.pad(array, pad_shape, **kwargs)
+            return e.pad(array, pad_shape, **kwargs)
 
 
 def _padshape(array, Q):
     y, x = array.shape
-    out_x = int(m.ceil(x * Q))
-    out_y = int(m.ceil(y * Q))
+    out_x = int(e.ceil(x * Q))
+    out_y = int(e.ceil(y * Q))
     factor_x = (out_x - x) / 2
     factor_y = (out_y - y) / 2
     return (
-        (int(m.floor(factor_y)), int(m.ceil(factor_y))),
-        (int(m.floor(factor_x)), int(m.ceil(factor_x)))), out_x, out_y
+        (int(e.floor(factor_y)), int(e.ceil(factor_y))),
+        (int(e.floor(factor_x)), int(e.ceil(factor_x)))), out_x, out_y
 
 
 def forward_ft_unit(sample_spacing, samples, shift=True):
@@ -79,9 +79,9 @@ def forward_ft_unit(sample_spacing, samples, shift=True):
         array of sample frequencies in the output of an fft
 
     """
-    unit = m.fftfreq(samples, sample_spacing)
+    unit = e.fft.fftfreq(samples, sample_spacing)
 
     if shift:
-        return m.fftshift(unit)
+        return e.fft.fftshift(unit)
     else:
         return unit

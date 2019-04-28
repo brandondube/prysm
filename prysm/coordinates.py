@@ -2,7 +2,7 @@
 from scipy import interpolate
 
 from .conf import config
-from prysm import mathops as m
+from .mathops import engine as e
 
 
 def cart_to_polar(x, y):
@@ -23,8 +23,8 @@ def cart_to_polar(x, y):
         azimuthal coordinate
 
     '''
-    rho = m.sqrt(x ** 2 + y ** 2)
-    phi = m.arctan2(y, x)
+    rho = e.sqrt(x ** 2 + y ** 2)
+    phi = e.arctan2(y, x)
     return rho, phi
 
 
@@ -46,8 +46,8 @@ def polar_to_cart(rho, phi):
         y coordinate
 
     '''
-    x = rho * m.cos(phi)
-    y = rho * m.sin(phi)
+    x = rho * e.cos(phi)
+    y = rho * e.sin(phi)
     return x, y
 
 
@@ -77,11 +77,11 @@ def uniform_cart_to_polar(x, y, data):
     xmin, xmax = min(x), max(x)
     ymin, ymax = min(y), max(y)
 
-    _max = max(abs(m.asarray([xmin, xmax, ymin, ymax])))
+    _max = max(abs(e.asarray([xmin, xmax, ymin, ymax])))
 
-    rho = m.linspace(0, _max, len(x))
-    phi = m.linspace(0, 2 * m.pi, len(y))
-    rv, pv = m.meshgrid(rho, phi)
+    rho = e.linspace(0, _max, len(x))
+    phi = e.linspace(0, 2 * e.pi, len(y))
+    rv, pv = e.meshgrid(rho, phi)
 
     # map points to x, y and make a grid for the original samples
     xv, yv = polar_to_cart(rv, pv)
@@ -110,7 +110,7 @@ def resample_2d(array, sample_pts, query_pts):
         array resampled onto query_pts via bivariate spline
 
     """
-    xq, yq = m.meshgrid(*query_pts)
+    xq, yq = e.meshgrid(*query_pts)
     interpf = interpolate.RectBivariateSpline(*sample_pts, array)
     return interpf.ev(yq, xq)
 
@@ -140,7 +140,7 @@ def resample_2d_complex(array, sample_pts, query_pts, bounds_error=True, fill_va
         array resampled onto query_pts via bivariate spline
 
     '''
-    xq, yq = m.meshgrid(*query_pts)
+    xq, yq = e.meshgrid(*query_pts)
     interpf = interpolate.RegularGridInterpolator(sample_pts, array, bounds_error=bounds_error, fill_value=fill_value)
     return interpf((yq, xq))
 
@@ -167,9 +167,9 @@ def make_xy_grid(samples_x, samples_y=None, radius=1):
     """
     if samples_y is None:
         samples_y = samples_x
-    x = m.linspace(-radius, radius, samples_x, dtype=config.precision)
-    y = m.linspace(-radius, radius, samples_y, dtype=config.precision)
-    xx, yy = m.meshgrid(x, y)
+    x = e.linspace(-radius, radius, samples_x, dtype=config.precision)
+    y = e.linspace(-radius, radius, samples_y, dtype=config.precision)
+    xx, yy = e.meshgrid(x, y)
     return xx, yy
 
 

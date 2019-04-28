@@ -2,17 +2,18 @@
 from collections import deque
 
 from .conf import config
+from .mathops import engine as e
 from .coordinates import resample_2d_complex
 from .convolution import Convolvable, ConvolutionEngine
 from .fttools import forward_ft_unit
 from .util import is_odd
-from prysm import mathops as m
 
 
 class Detector(object):
     """Model of a image sensor."""
 
-    def __init__(self, pitch_x=None, pitch_y=None, pixel='rectangle', resolution=(1024, 1024), nbits=16, framebuffer=10):
+    def __init__(self, pitch_x=None, pitch_y=None, pixel='rectangle',
+                 resolution=(1024, 1024), nbits=16, framebuffer=10):
         """Create a new Detector object.
 
         Parameters
@@ -90,8 +91,8 @@ class Detector(object):
                 sy, sx = engine.kspace_data.shape
                 support_x = pitch_x * sx
                 support_y = pitch_y * sy
-                sx_new = int(m.ceil(support_x / self.pitch_x))
-                sy_new = int(m.ceil(support_y / self.pitch_y))
+                sx_new = int(e.ceil(support_x / self.pitch_x))  # NOQA pyright "e may be unbound"
+                sy_new = int(e.ceil(support_y / self.pitch_y))  # NOQA e comes from import at top of file
 
                 new_x = forward_ft_unit(self.pitch_x, sx_new)
                 new_y = forward_ft_unit(self.pitch_y, sy_new)
@@ -101,15 +102,15 @@ class Detector(object):
                 engine.kspace_x = new_x
                 engine.kspace_y = new_y
 
-            e = ConvolutionEngine(self.pixel, convolvable)
-            e.compute_kspace_units()
-            e.compute_kspace_data()
-            mutate_sample_latice(self, e)
-            e.compute_spatial_units()
-            e.ifft()
-            e.crop_output()
-            e.postprocess_spatial()
-            c_out = Convolvable(*e.spatial)
+            eng = ConvolutionEngine(self.pixel, convolvable)
+            eng.compute_kspace_units()
+            eng.compute_kspace_data()
+            mutate_sample_latice(self, eng)
+            eng.compute_spatial_units()
+            eng.ifft()
+            eng.crop_output()
+            eng.postprocess_spatial()
+            c_out = Convolvable(*eng.spatial)
 
         self.captures.append(c_out)
         return c_out
@@ -250,14 +251,14 @@ class OLPF(Convolvable):
             center_x = samples_x // 2
             center_y = samples_y // 2
 
-            data = m.zeros((samples_x, samples_y))
+            data = e.zeros((samples_x, samples_y))
 
             data[center_y - shift_y, center_x - shift_x] = 1
             data[center_y - shift_y, center_x + shift_x] = 1
             data[center_y + shift_y, center_x - shift_x] = 1
             data[center_y + shift_y, center_x + shift_x] = 1
-            ux = m.linspace(-space_x, space_x, samples_x)
-            uy = m.linspace(-space_y, space_y, samples_y)
+            ux = e.linspace(-space_x, space_x, samples_x)
+            uy = e.linspace(-space_y, space_y, samples_y)
 
         super().__init__(data=data, x=ux, y=uy, has_analytic_ft=True)
 
@@ -277,9 +278,9 @@ class OLPF(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        xq, yq = m.meshgrid(x, y)
-        return (m.cos(2 * xq * self.width_x) *
-                m.cos(2 * yq * self.width_y)).astype(config.precision)
+        xq, yq = e.meshgrid(x, y)
+        return (e.cos(2 * xq * self.width_x) *
+                e.cos(2 * yq * self.width_y)).astype(config.precision)
 
 
 class PixelAperture(Convolvable):
@@ -319,11 +320,11 @@ class PixelAperture(Convolvable):
             steps_x = int(half_width // sample_spacing)
             steps_y = int(half_height // sample_spacing)
 
-            data = m.zeros((samples_x, samples_y))
+            data = e.zeros((samples_x, samples_y))
             data[center_y - steps_y:center_y + steps_y,
                  center_x - steps_x:center_x + steps_x] = 1
             extx, exty = samples_x // 2 * sample_spacing, samples_y // 2 * sample_spacing
-            ux, uy = m.linspace(-extx, extx, samples_x), m.linspace(-exty, exty, samples_y)
+            ux, uy = e.linspace(-extx, extx, samples_x), e.linspace(-exty, exty, samples_y)
         super().__init__(data=data, x=ux, y=uy, has_analytic_ft=True)
 
     def analytic_ft(self, x, y):
@@ -342,7 +343,7 @@ class PixelAperture(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        xq, yq = m.meshgrid(x, y)
+        xq, yq = e.meshgrid(x, y)
         return abs(pixelaperture_analytic_otf(self.width_x, self.width_y, xq, yq))
 
 
@@ -366,7 +367,7 @@ def pixelaperture_analytic_otf(width_x, width_y, freq_x, freq_y):
         MTF of the pixel aperture
 
     """
-    return m.sinc(freq_x * width_x) * m.sinc(freq_y * width_y)
+    return e.sinc(freq_x * width_x) * e.sinc(freq_y * width_y)
 
 
 def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
@@ -429,10 +430,10 @@ def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
     else:
         samples_tmp_x = (samples_x - final_idx_x) // 2
         samples_tmp_y = (samples_y - final_idx_y) // 2
-        samples_top = int(m.floor(samples_tmp_y))
-        samples_bottom = int(m.ceil(samples_tmp_y))
-        samples_left = int(m.ceil(samples_tmp_x))
-        samples_right = int(m.floor(samples_tmp_x))
+        samples_top = int(e.floor(samples_tmp_y))
+        samples_bottom = int(e.ceil(samples_tmp_y))
+        samples_left = int(e.ceil(samples_tmp_x))
+        samples_right = int(e.floor(samples_tmp_x))
         trimmed_data = array[samples_left:final_idx_x + samples_right,
                              samples_bottom:final_idx_y + samples_top]
 
@@ -488,10 +489,10 @@ def bindown_with_units(px_x, px_y, source_spacing, source_data):
     if min(spp_x, spp_y) < 1:
         raise ValueError('Pixels smaller than samples, bindown not possible.')
     else:
-        spp_x, spp_y = int(m.ceil(spp_x)), int(m.ceil(spp_y))
+        spp_x, spp_y = int(e.ceil(spp_x)), int(e.ceil(spp_y))
 
     data = bindown(source_data, spp_x, spp_y, 'avg')
     s = data.shape
     extx, exty = s[0] * px_x // 2, s[1] * px_y // 2
-    ux, uy = m.arange(-extx, extx, px_x), m.arange(-exty, exty, px_y)
+    ux, uy = e.arange(-extx, extx, px_x), e.arange(-exty, exty, px_y)
     return ux, uy, data

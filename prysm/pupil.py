@@ -1,12 +1,11 @@
 """A base pupil interface for different aberration models."""
 
-from ._phase import OpticalPhase
 from .conf import config
+from .mathops import engine as e
+from ._phase import OpticalPhase
 from .coordinates import make_rho_phi_grid
 from .geometry import mcache
 from .util import std
-
-from prysm import mathops as m
 
 
 class Pupil(OpticalPhase):
@@ -57,8 +56,8 @@ class Pupil(OpticalPhase):
         if ux is None:
             # must build a pupil
             self.dia = dia
-            ux = m.linspace(-dia / 2, dia / 2, samples)
-            uy = m.linspace(-dia / 2, dia / 2, samples)
+            ux = e.linspace(-dia / 2, dia / 2, samples)
+            uy = e.linspace(-dia / 2, dia / 2, samples)
             self.samples = samples
             need_to_build = True
         else:
@@ -72,7 +71,7 @@ class Pupil(OpticalPhase):
         self.rho = self.phi = None
 
         if need_to_build:
-            if type(mask) is not m.ndarray:
+            if type(mask) is not e.ndarray:
                 mask = mcache(mask, self.samples)
 
             self._mask = mask
@@ -80,8 +79,8 @@ class Pupil(OpticalPhase):
             self.build()
             self.mask(self._mask, self.mask_target)
         else:
-            protomask = m.isnan(phase)
-            mask = m.ones(protomask.shape)
+            protomask = e.isnan(phase)
+            mask = e.ones(protomask.shape)
             mask[protomask] = 0
             self._mask = mask
             self.mask_target = 'fcn'
@@ -90,16 +89,16 @@ class Pupil(OpticalPhase):
     def strehl(self):
         """Strehl ratio of the pupil."""
         phase = self.change_phase_unit(to='um', inplace=False)
-        return m.exp(-4 * m.pi / self.wavelength / self.wavelength * std(phase) ** 2)
+        return e.exp(-4 * e.pi / self.wavelength / self.wavelength * std(phase) ** 2)
 
     @property
     def fcn(self):
         """Complex wavefunction associated with the pupil."""
         phase = self.change_phase_unit(to='waves', inplace=False)
 
-        fcn = m.exp(1j * 2 * m.pi * phase)  # phase implicitly in units of waves, no 2pi/l
+        fcn = e.exp(1j * 2 * e.pi * phase)  # phase implicitly in units of waves, no 2pi/l
         # guard against nans in phase
-        fcn[m.isnan(phase)] = 0
+        fcn[e.isnan(phase)] = 0
 
         if self.mask_target in ('fcn', 'both'):
             fcn *= self._mask
@@ -122,7 +121,7 @@ class Pupil(OpticalPhase):
         self._gengrid()
 
         # fill in the phase of the pupil
-        self.phase = m.zeros((self.samples, self.samples), dtype=config.precision)
+        self.phase = e.zeros((self.samples, self.samples), dtype=config.precision)
 
         return self
 
@@ -151,7 +150,7 @@ class Pupil(OpticalPhase):
             self.phase *= mask
             if nanify:
                 nans = mask == 0
-                self.phase[nans] = m.nan
+                self.phase[nans] = e.nan
 
         self._mask = mask
         return self
@@ -259,4 +258,4 @@ class Pupil(OpticalPhase):
         return Pupil(wavelength=wvl, phase=interferogram.phase,
                      opd_unit=interferogram.phase_unit,
                      ux=interferogram.x, uy=interferogram.y,
-                     mask=~(interferogram.phase == m.nan))
+                     mask=~(interferogram.phase == e.nan))

@@ -86,7 +86,6 @@ class Config(object):
             if precision is not a valid option
 
         """
-
         if precision not in (32, 64):
             raise ValueError('invalid precision.  Precision should be 32 or 64.')
 

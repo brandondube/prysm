@@ -1,10 +1,9 @@
 """Objects for image simulation with."""
 
 from .conf import config
+from .mathops import engine as e, jinc
 from .convolution import Convolvable
 from .coordinates import cart_to_polar
-
-from prysm import mathops as m
 
 
 class Slit(Convolvable):
@@ -34,8 +33,8 @@ class Slit(Convolvable):
 
         if samples > 0:
             ext = samples / 2 * sample_spacing
-            x, y = m.arange(-ext, ext, sample_spacing), m.arange(-ext, ext, sample_spacing)
-            arr = m.zeros((samples, samples))
+            x, y = e.arange(-ext, ext, sample_spacing), e.arange(-ext, ext, sample_spacing)
+            arr = e.zeros((samples, samples))
         else:
             arr, x, y = None, None, None
 
@@ -77,14 +76,14 @@ class Slit(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        xq, yq = m.meshgrid(x, y)
+        xq, yq = e.meshgrid(x, y)
         if self.width_x > 0 and self.width_y > 0:
-            return (m.sinc(xq * self.width_x) +
-                    m.sinc(yq * self.width_y)).astype(config.precision)
+            return (e.sinc(xq * self.width_x) +
+                    e.sinc(yq * self.width_y)).astype(config.precision)
         elif self.width_x > 0 and self.width_y == 0:
-            return m.sinc(xq * self.width_x).astype(config.precision)
+            return e.sinc(xq * self.width_x).astype(config.precision)
         else:
-            return m.sinc(yq * self.width_y).astype(config.precision)
+            return e.sinc(yq * self.width_y).astype(config.precision)
 
 
 class Pinhole(Convolvable):
@@ -112,12 +111,12 @@ class Pinhole(Convolvable):
         # produce coordinate arrays
         if samples > 0:
             ext = samples / 2 * sample_spacing
-            x, y = m.arange(-ext, ext, sample_spacing), m.arange(-ext, ext, sample_spacing)
-            xv, yv = m.meshgrid(x, y)
+            x, y = e.arange(-ext, ext, sample_spacing), e.arange(-ext, ext, sample_spacing)
+            xv, yv = e.meshgrid(x, y)
             w = width / 2
             # paint a circle on a black background
-            arr = m.zeros((samples, samples))
-            arr[m.sqrt(xv**2 + yv**2) < w] = 1
+            arr = e.zeros((samples, samples))
+            arr[e.sqrt(xv**2 + yv**2) < w] = 1
         else:
             arr, x, y = None, None, None
 
@@ -139,12 +138,12 @@ class Pinhole(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        xq, yq = m.meshgrid(x, y)
+        xq, yq = e.meshgrid(x, y)
 
         # factor of pi corrects for jinc being modulo pi
         # factor of 2 converts radius to diameter
-        rho = m.sqrt(xq**2 + yq**2) * self.width * 2 * m.pi
-        return m.jinc(rho).astype(config.precision)
+        rho = e.sqrt(xq**2 + yq**2) * self.width * 2 * e.pi
+        return jinc(rho).astype(config.precision)
 
 
 class SiemensStar(Convolvable):
@@ -175,15 +174,15 @@ class SiemensStar(Convolvable):
         self.spokes = spokes
 
         # generate a coordinate grid
-        x = m.linspace(-1, 1, samples)
-        y = m.linspace(-1, 1, samples)
-        xx, yy = m.meshgrid(x, y)
+        x = e.linspace(-1, 1, samples)
+        y = e.linspace(-1, 1, samples)
+        xx, yy = e.meshgrid(x, y)
         rv, pv = cart_to_polar(xx, yy)
         ext = sample_spacing * (samples / 2)
-        ux, uy = m.arange(-ext, ext, sample_spacing), m.arange(-ext, ext, sample_spacing)
+        ux, uy = e.arange(-ext, ext, sample_spacing), e.arange(-ext, ext, sample_spacing)
 
         # generate the siemen's star as a (rho,phi) polynomial
-        arr = m.cos(spokes / 2 * pv)
+        arr = e.cos(spokes / 2 * pv)
 
         if not sinusoidal:  # make binary
             arr[arr < 0] = -1
@@ -223,21 +222,21 @@ class TiltedSquare(Convolvable):
 
         """
         if background.lower() == 'white':
-            arr = m.ones((samples, samples))
+            arr = e.ones((samples, samples))
             fill_with = 1 - contrast
         else:
-            arr = m.zeros((samples, samples))
+            arr = e.zeros((samples, samples))
             fill_with = 1
 
         ext = samples / 2 * sample_spacing
         radius = radius * ext * 2
-        x = y = m.arange(-ext, ext, sample_spacing)
-        xx, yy = m.meshgrid(x, y)
+        x = y = e.arange(-ext, ext, sample_spacing)
+        xx, yy = e.meshgrid(x, y)
 
         # TODO: convert inline operation to use of rotation matrix
-        angle = m.radians(angle)
-        xp = xx * m.cos(angle) - yy * m.sin(angle)
-        yp = xx * m.sin(angle) + yy * m.cos(angle)
+        angle = e.radians(angle)
+        xp = xx * e.cos(angle) - yy * e.sin(angle)
+        yp = xx * e.sin(angle) + yy * e.cos(angle)
         mask = (abs(xp) < radius) * (abs(yp) < radius)
         arr[mask] = fill_with
         super().__init__(data=arr, x=x, y=y, has_analytic_ft=False)
@@ -264,19 +263,19 @@ class SlantedEdge(Convolvable):
 
         """
         diff = (1 - contrast) / 2
-        arr = m.full((samples, samples), 1 - diff)
+        arr = e.full((samples, samples), 1 - diff)
         ext = samples / 2 * sample_spacing
-        x = y = m.arange(-ext, ext, sample_spacing)
-        xx, yy = m.meshgrid(x, y)
+        x = y = e.arange(-ext, ext, sample_spacing)
+        xx, yy = e.meshgrid(x, y)
 
-        angle = m.radians(angle)
-        xp = xx * m.cos(angle) - yy * m.sin(angle)
-        # yp = xx * m.sin(angle) + yy * m.cos(angle)  # do not need this
+        angle = e.radians(angle)
+        xp = xx * e.cos(angle) - yy * e.sin(angle)
+        # yp = xx * e.sin(angle) + yy * e.cos(angle)  # do not need this
         mask = xp > 0  # single edge
         if crossed:
             mask = xp > 0  # set of 4 edges
-            upperright = mask & m.rot90(mask)
-            lowerleft = m.rot90(upperright, 2)
+            upperright = mask & e.rot90(mask)
+            lowerleft = e.rot90(upperright, 2)
             mask = upperright | lowerleft
 
         arr[mask] = diff
