@@ -11,7 +11,7 @@ New Features
 
 * :meth:`prysm.objects.TiltedSquare.__init__` now takes :code:`radius` and :code:`contrast` arguments.
 
-* :func:`prysm.io.read_sigfit_zernike` function to read Zernike coefficients from `SigFit <http://sigmadyne.com/sigfit-software/>`_ :code:`OUTCOF3` files.
+* :func:`prysm.io.read_sigfit_zernikes` function to read Zernike coefficients from `SigFit <http://sigmadyne.com/sigfit-software/>`_ :code:`OUTCOF3` files.
 
 * :func:`prysm.io.read_sigfit_rigidbody` function to read rigid body motion and radius error coefficients from SigFit :code:`SUM2` files.
 
@@ -49,6 +49,6 @@ Under-the-hood Changes
 
 * the :mod:`prysm.mathops` module has been reworked, and its use throughout the library adjusted in concert with this change.
 
-* :func:`prysm.propagation.prop_pupil_to_psf_plane` performance has been improved when Q=1.
+* :func:`prysm.propagation.prop_pupil_plane_to_psf_plane` performance has been improved when Q=1.
 
 * some functions have had their conformance with :attr:`prysm.config.precision` improved.
