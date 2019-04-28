@@ -17,6 +17,8 @@ New Features
 
 * :meth:`prysm.interferogram.Interferogram.pad` function to pad interferograms; useful for dealing with group delay from spatial filtering.
 
+* :func:`~p.thinlens.object_to_image_dist` to calculate an object distance given a focal length and image distance.
+
 * Convolutions reworked - The code that manages convolutions in prysm has been rewritten.
 
 * * New :class:`~prysm.convolution.ConvolutionEngine` which allows users to control the execution flow of a convolution, adjust the data in k-space before returning to the spatial domain, and other advanced features.  For more information see the updated User's Guide.
@@ -44,6 +46,8 @@ Under-the-hood Changes
 ======================
 
 * :attr:`prysm.pupil.Pupil.strehl` now uses a more accurate formula.
+
+* the :mod:`prysm.mathops` module has been reworked, and its use throughout the library adjusted in concert with this change.
 
 * :func:`prysm.propagation.prop_pupil_to_psf_plane` performance has been improved when Q=1.
 
