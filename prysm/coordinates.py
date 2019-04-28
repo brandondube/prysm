@@ -115,7 +115,7 @@ def resample_2d(array, sample_pts, query_pts):
     return interpf.ev(yq, xq)
 
 
-def resample_2d_complex(array, sample_pts, query_pts):
+def resample_2d_complex(array, sample_pts, query_pts, bounds_error=True, fill_value=0):
     '''Resamples a 2D complex array.
 
     Works by interpolating the magnitude and phase independently and merging the results into a complex value.
@@ -129,6 +129,10 @@ def resample_2d_complex(array, sample_pts, query_pts):
         each array should be 1D
     query_pts : `tuple`
         points to interpolate onto, also 1D for each array
+    bounds_error : `bool`, optional
+        if True, raise if query point outside of domain of sample points
+    fill_value : `float`
+        value to fill with in the case of out-of-bound values
 
     Returns
     -------
@@ -137,16 +141,8 @@ def resample_2d_complex(array, sample_pts, query_pts):
 
     '''
     xq, yq = m.meshgrid(*query_pts)
-    mag = abs(array)
-    phase = m.angle(array)
-
-    magfunc = interpolate.RegularGridInterpolator(sample_pts, mag)
-    phasefunc = interpolate.RegularGridInterpolator(sample_pts, phase)
-
-    interp_mag = magfunc((yq, xq))
-    interp_phase = phasefunc((yq, xq))
-
-    return interp_mag * m.exp(1j * interp_phase)
+    interpf = interpolate.RegularGridInterpolator(sample_pts, array, bounds_error=bounds_error, fill_value=fill_value)
+    return interpf((yq, xq))
 
 
 def make_xy_grid(samples_x, samples_y=None, radius=1):

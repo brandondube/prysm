@@ -28,7 +28,7 @@ class Convolvable(BasicData):
             analytical fourier tansform
 
         """
-        self.x, self.y, self.data = x, y, data
+        super().__init__(x=x, y=y, data=data)
         self.has_analytic_ft = has_analytic_ft
 
     def __str__(self):
@@ -91,7 +91,7 @@ class Convolvable(BasicData):
         ax.legend(title='Slice', loc='upper right')
         return fig, ax
 
-    def conv(self, other, postprocess=(abs,), dryrun=False):
+    def conv(self, other):
         """Convolves this convolvable with another.
 
         Parameters
@@ -159,7 +159,8 @@ class Convolvable(BasicData):
                 correct.
 
         """
-        return _conv(self, other, postprocess=postprocess, dryrun=dryrun)
+        e = ConvolutionEngine(self, other)
+        return e.fire()
 
     def deconv(self, other, balance=1000, reg=None, is_real=True, clip=False, postnormalize=True):
         """Perform the deconvolution of this convolvable object by another.
@@ -335,7 +336,7 @@ class Convolvable(BasicData):
         """
         from imageio import imwrite
         if nbits == 8:
-            typ = m.unit8
+            typ = m.uint8
         elif nbits == 16:
             typ = m.uint16
         else:
@@ -368,280 +369,15 @@ class Convolvable(BasicData):
         return Convolvable(data=m.flip(imgarr, axis=0).astype(config.precision),
                            x=ux, y=uy, has_analytic_ft=False)
 
-
-def _conv(convolvable1, convolvable2, postprocess=(abs,), dryrun=False):
-    if convolvable1.has_analytic_ft and convolvable2.has_analytic_ft:
-        if dryrun:
-            return """Double analytical convolution:
-                      Result is a new Convolvable with .analytic_ft that calls
-                      both of the "parent" convolvables' .analytic_ft methods."""
-        else:
-            return double_analytical_ft_convolution(convolvable1, convolvable2, postprocess)
-    elif convolvable1.has_analytic_ft and not convolvable2.has_analytic_ft:
-        if dryrun:
-            header = 'Single analytical convolution, result computed using:'
-            line1 = f'numerical data from {convolvable2}'
-            line2 = f'and analyical equation from {convolvable1}.'
-            return '\n'.join([header, line1, line2])
-        else:
-            return single_analytical_ft_convolution(convolvable2, convolvable1, postprocess)
-    elif not convolvable1.has_analytic_ft and convolvable2.has_analytic_ft:
-        if dryrun:  # could refactor the duplicate of header/line1/line2
-            header = 'Single analytical convolution, result computed using:'
-            line1 = f'numerical data from {convolvable1}'
-            line2 = f'and analyical equation from {convolvable2}.'
-            return '\n'.join([header, line1, line2])
-        else:
-            return single_analytical_ft_convolution(convolvable1, convolvable2, postprocess)
-    else:
-        if dryrun:
-            header = 'numerical convolution:'
-            line1 = f'{convolvable1}'
-            line2 = f'{convolvable2}'
-            outputwindow = max(convolvable1.support, convolvable2.support)
-            output_spacing = min(convolvable1.sample_spacing, convolvable2.sample_spacing)
-            nsamples = int(outputwindow // output_spacing) + 1
-            line3 = 'output window will have:'
-            line4 = f'\t{nsamples} samples'
-            line5 = f'\t{outputwindow:.3f} μm support'
-            line6 = f'\t{output_spacing:.3f} μm sample spacing'
-            return '\n'.join([header, line1, line2, line3, line4, line5, line6])
-        else:
-            return pure_numerical_ft_convolution(convolvable1, convolvable2, postprocess)
-
-
-def _conv_result_core(data1, data2, postprocess):
-    core = m.fftshift(m.ifft2(data1 * data2))
-    if postprocess is not None:
-        if hasattr(postprocess, '__iter__'):
-            for func in postprocess:
-                core = func(core)
-        else:
-            core = func(core)
-
-    return core
-
-
-def double_analytical_ft_convolution(convolvable1, convolvable2, postprocess):
-    """Convolves two convolvable objects utilizing their analytic fourier transforms.
-
-    Parameters
-    ----------
-    convolvable1 : `Convolvable`
-        A Convolvable object
-    convolvable2 : `Convolvable`
-        A Convolvable object
-    postprocess: `iterable` or callable or None, optional
-            function or sequence of functions to call to post-process the result.
-            None if no work should be done.  Functions should accept a single
-            argument, the spatial representation of the result, centered on the origin
-
-    Returns
-    -------
-    `Convolvable`
-        Another convolvable
-
-    """
-    spatial_x, spatial_y = _compute_output_grid(convolvable1, convolvable2)
-    fourier_x = forward_ft_unit(spatial_x[1] - spatial_x[0], spatial_x.shape[0], shift=False)
-    fourier_y = forward_ft_unit(spatial_y[1] - spatial_y[0], spatial_y.shape[0], shift=False)
-    c1_part = convolvable1.analytic_ft(fourier_x, fourier_y)
-    c2_part = convolvable2.analytic_ft(fourier_x, fourier_y)
-    out_data = _conv_result_core(c1_part, c2_part, postprocess)
-    return Convolvable(out_data, spatial_x, spatial_y, has_analytic_ft=False)
-
-
-def single_analytical_ft_convolution(without_analytic, with_analytic, postprocess):
-    """Convolves two convolvable objects utilizing their analytic fourier transforms.
-
-    Parameters
-    ----------
-    without_analytic : `Convolvable`
-        A Convolvable object which lacks an analytic fourier transform
-    with_analytic : `Convolvable`
-        A Convolvable object which has an analytic fourier transform
-    postprocess: `iterable` or callable or None, optional
-            function or sequence of functions to call to post-process the result.
-            None if no work should be done.  Functions should accept a single
-            argument, the spatial representation of the result, centered on the origin
-
-    Returns
-    -------
-    `ConvolutionResult`
-        A convolution result
-
-    Notes
-    -----
-    "Q=2" padding is used to facilitate a linear convolution instead of
-    a circular one.
-
-    """
-    padded_data = pad2d(without_analytic.data, 2, mode='reflect')
-    fourier_data = m.fft2(padded_data)
-    sy, sx = padded_data.shape
-    fourier_x = forward_ft_unit(without_analytic.sample_spacing, sx, shift=False)
-    fourier_y = forward_ft_unit(without_analytic.sample_spacing, sy, shift=False)
-    a_ft = with_analytic.analytic_ft(fourier_x, fourier_y)
-
-    result = _crop_output(without_analytic.data, _conv_result_core(fourier_data, a_ft))
-    return Convolvable(result, without_analytic.x, without_analytic.y, False)
-
-
-def pure_numerical_ft_convolution(convolvable1, convolvable2, postprocess):
-    """Convolves two convolvable objects utilizing their analytic fourier transforms.
-
-    Parameters
-    ----------
-    convolvable1 : `Convolvable`
-        A Convolvable object which lacks an analytic fourier transform
-    convolvable2 : `Convolvable`
-        A Convolvable object which lacks an analytic fourier transform
-    postprocess: `iterable` or callable or None, optional
-            function or sequence of functions to call to post-process the result.
-            None if no work should be done.  Functions should accept a single
-            argument, the spatial representation of the result, centered on the origin
-
-    Returns
-    -------
-    `ConvolutionResult`
-        A convolution result
-
-    """
-    # logic tree of convolvable cases with specific implementations
-    if (convolvable1.sample_spacing - convolvable2.sample_spacing) < 1e-4:
-        s1, s2 = convolvable1.shape, convolvable2.shape
-        if s1[0] > s2[0]:
-            return _numerical_ft_convolution_core_equalspacing_unequalsamplecount(convolvable1, convolvable2, postprocess)
-        elif s1[0] < s2[0]:
-            return _numerical_ft_convolution_core_equalspacing_unequalsamplecount(convolvable2, convolvable1, postprocess)
-        else:
-            return _numerical_ft_convolution_core_equalspacing(convolvable1, convolvable2, postprocess)
-    else:
-        if convolvable1.sample_spacing < convolvable2.sample_spacing:
-            return _numerical_ft_convolution_core_unequalspacing(convolvable1, convolvable2, postprocess)
-        else:
-            return _numerical_ft_convolution_core_unequalspacing(convolvable2, convolvable1, postprocess)
-
-
-def _numerical_ft_convolution_core_equalspacing(convolvable1, convolvable2, postprocess):
-    # two are identically sampled; just FFT convolve them without modification
-    ft1 = m.fft2(m.ifftshift(pad2d(convolvable1.data, 2, mode='linear_ramp')))
-    ft2 = m.fft2(m.ifftshift(pad2d(convolvable2.data, 2, mode='linear_ramp')))
-    data = _crop_output(convolvable1.data, _conv_result_core(ft1, ft2, postprocess))
-    return Convolvable(data, convolvable1.x, convolvable1.y, False)
-
-
-def _numerical_ft_convolution_core_equalspacing_unequalsamplecount(more_samples, less_samples, postprocess):
-    # compute the ordinate axes of the input and output
-    in_x = forward_ft_unit(less_samples.sample_spacing, less_samples.shape[0], shift=False)
-    in_y = forward_ft_unit(less_samples.sample_spacing, less_samples.shape[1], shift=False)
-    output_x = forward_ft_unit(more_samples.sample_spacing, more_samples.shape[0], shift=False)
-    output_y = forward_ft_unit(more_samples.sample_spacing, more_samples.shape[1], shift=False)
-
-    # FFT the less sampled one and map it onto the denser grid
-    less_fourier = m.fft2(less_samples.data)
-    resampled_less = resample_2d_complex(less_fourier, (in_x, in_y), (output_x, output_y))
-
-    # FFT convolve the two convolvables
-    more_fourier = m.fft2(more_samples.data)
-    data = _crop_output(more_fourier, _conv_result_core(resampled_less, more_fourier, postprocess))
-    return Convolvable(data, more_samples.x, more_samples.y, False)
-
-
-def _numerical_ft_convolution_core_unequalspacing(finer_sampled, coarser_sampled, postprocess):
-    # compute the ordinate axes of the input of each
-    in_x_more = forward_ft_unit(finer_sampled.sample_spacing, finer_sampled.shape[1], shift=True)
-    in_y_more = forward_ft_unit(finer_sampled.sample_spacing, finer_sampled.shape[0], shift=True)
-
-    in_x_less = forward_ft_unit(coarser_sampled.sample_spacing, coarser_sampled.shape[1], shift=True)
-    in_y_less = forward_ft_unit(coarser_sampled.sample_spacing, coarser_sampled.shape[0], shift=True)
-
-    # fourier-space interpolate the larger bandwidth signal onto the grid defined by the lower
-    # bandwidth signal.  This assumes the lower bandwidth signal is Nyquist sampled, which is
-    # not necessarily the case.  The accuracy of this method depends on the quality of the input.
-
-    more_fourier = m.fft2(finer_sampled.data)
-    resampled_more = resample_2d_complex(more_fourier,
-                                         (in_x_more, in_y_more),
-                                         (in_x_less, in_y_less))
-
-    # FFT the less well sampled input and perform the Fourier based convolution.
-    less_fourier = m.fft2(coarser_sampled.data)
-
-    data = _conv_result_core(resampled_more, less_fourier, postprocess)
-    return Convolvable(data, in_x_less, in_y_less, False)
-
-
-def _crop_output(original, padded):
-    """Crop the output of a padded convolution."""
-    ry, rx = original.shape
-    sy, sx = padded.shape
-    dy, dx = (sy - ry) / 2, (sx - rx) / 2
-    t, b = int(m.floor(dy)), -int(m.ceil(dy))  # top, bottom
-    l, r = int(m.floor(dx)), -int(m.ceil(dx))  # left, right
-    # crop out the wanted bit
-    return padded[t:b, l:r]
-
-
-def _compute_output_grid(convolvable1, convolvable2):
-    """Calculate the output grid to be used when two convolvables are on different grids."""
-    # determine output spacing
-    errorstr = 'when convolving two analytic objects, one must have a grid.'
-    if m.isnan(convolvable1.sample_spacing):
-        if m.isnan(convolvable2.sample_spacing):
-            raise ValueError(errorstr)
-        else:
-            output_spacing = convolvable2.sample_spacing
-    elif m.isnan(convolvable2.sample_spacing):
-        if m.isnan(convolvable1.sample_spacing):
-            raise ValueError(errorstr)
-        else:
-            output_spacing = convolvable1.sample_spacing
-    else:
-        output_spacing = min(convolvable1.sample_spacing, convolvable2.sample_spacing)
-
-    # determine region of output
-    if convolvable1.x is None:
-        c1ux, c1uy = (0, 0), (0, 0)
-    else:
-        c1ux, c1uy = convolvable1.x, convolvable1.y
-
-    if convolvable2.x is None:  # this isn't totally DRY
-        c2ux, c2uy = (0, 0), (0, 0)
-    else:
-        c2ux, c2uy = convolvable2.x, convolvable2.y
-
-    output_x_left = min(c1ux[0], c2ux[0])
-    output_x_right = max(c1ux[-1], c2ux[-1])
-    output_y_left = min(c1uy[0], c2uy[0])
-    output_y_right = max(c1uy[-1], c2uy[-1])
-
-    # if region is not an integer multiple of sample spacings, enlarge to make this true
-    x_rem = (output_x_right - output_x_left) % output_spacing
-    y_rem = (output_y_right - output_y_left) % output_spacing
-    if x_rem > 1e-3:
-        adj = x_rem / 2
-        output_x_left -= adj
-        output_x_right += adj
-    if y_rem > 1e-3:
-        adj = y_rem / 2
-        output_y_left -= adj
-        output_y_right += adj
-
-    # finally, compute the output window
-    samples_x = int((output_x_right - output_x_left) // output_spacing)
-    samples_y = int((output_y_right - output_y_left) // output_spacing)
-    unit_out_x = m.linspace(output_x_left, output_x_right, samples_x)
-    unit_out_y = m.linspace(output_y_left, output_y_right, samples_y)
-    return unit_out_x, unit_out_y
-
-
 class ConvolutionEngine:
     """An engine to facilitate fine-grained control over convolutions."""
-    def __init__(self, c1, c2=None, spatial_finalization=(abs,)):
+    def __init__(self, c1, c2=None, spatial_finalization=(abs,), Q=2, pad_method='linear_ramp'):
         self.c1 = c1
         self.c2 = c2
         self.spatial_finalization = spatial_finalization
+        self.Q = Q
+        self.pad_method = pad_method
+
         self.spatial_x = None
         self.spatial_y = None
         self.spatial_data = None
@@ -649,36 +385,112 @@ class ConvolutionEngine:
         self.kspace_y = None
         self.kspace_data = None
 
+        self.nsamples_x = None
+        self.nsamples_y = None
+        self.sample_spacing = None
+
     def fire(self):
         """Convolve self.c1 and self.c2 with no fuss."""
         try:
             return self.merge_analytics()
         except ValueError:
             self.compute_kspace_units()
-            self.compute_kspace_representations()
+            self.compute_kspace_data()
+            self.compute_spatial_units()
             self.ifft()
             self.crop_output()
+            self.postprocess_spatial()
             return Convolvable(*self.spatial, has_analytic_ft=False)
 
-    def compute_kspace_representation(self):
+    def compute_kspace_data(self):
         """Compute the k-space representation of the convolution of c1 and c2."""
-        pass
+        if self.c1.has_analytic_ft:
+            # units came directly from c2, pad and FT c1
+            c2_pad = pad2d(self.c2.data, self.Q, mode=self.pad_method)
+            c2_ft = m.fftshift(m.fft2(m.ifftshift(c2_pad)))
+            c1_ft = self.c1.analytic_ft(self.kspace_x, self.kspace_y)
+        elif self.c2.has_analytic_ft:
+            # units came directly from c1, pad and FT c2
+            c1_pad = pad2d(self.c1.data, self.Q, mode=self.pad_method)
+            c1_ft = m.fftshift(m.fft2(m.ifftshift(c1_pad)))
+            c2_ft = self.c2.analytic_ft(self.kspace_x, self.kspace_y)
+        else:
+            need_to_interp_c1 = False
+            need_to_interp_c2 = False
+            # units came from both, need to do some interpolation
+            cutoff_c1 = 1 / (2 * self.c1.sample_spacing)
+            cutoff_c2 = 1 / (2 * self.c2.sample_spacing)
+            cutoff = max(cutoff_c1, cutoff_c2)
+            support = max(self.c1.support, self.c2.support)
+            if not (self.c1.support == support and cutoff_c1 == cutoff):
+                need_to_interp_c1 = True
+            if not (self.c2.support == support and cutoff_c2 == cutoff):
+                need_to_interp_c2 = True
+
+            def resample_data(self, data, sample_spacing):
+                c_freq_x = forward_ft_unit(sample_spacing, data.shape[1])
+                c_freq_y = forward_ft_unit(sample_spacing, data.shape[0])
+                return resample_2d_complex(data, (c_freq_x, c_freq_y), (self.kspace_x, self.kspace_y), bounds_error=False)
+
+            c1_pad = pad2d(self.c1.data, self.Q, mode=self.pad_method)
+            c1_ft = m.fftshift(m.fft2(m.ifftshift(c1_pad)))
+
+            c2_pad = pad2d(self.c2.data, self.Q, mode=self.pad_method)
+            c2_ft = m.fftshift(m.fft2(m.ifftshift(c2_pad)))
+
+            if need_to_interp_c1:
+                c1_ft = resample_data(self, c1_ft, self.c1.sample_spacing)
+            if need_to_interp_c2:
+                c2_ft = resample_data(self, c2_ft, self.c2.sample_spacing)
+
+        self.kspace_data = c1_ft * c2_ft
+        return self
 
     def compute_kspace_units(self):
         """Compute the k-space domain of the convolution of c1 and c2."""
-        pass
+        if self.c1.has_analytic_ft:
+            support_x, support_y = self.c2.support_x, self.c2.support_y
+            sample_spacing = self.c2.sample_spacing
+        elif self.c2.has_analytic_ft:
+            support_x, support_y = self.c1.support_x, self.c1.support_y
+            sample_spacing = self.c1.sample_spacing
+        else:
+            support_x = max(self.c1.support_x, self.c2.support_x)
+            support_y = max(self.c1.support_y, self.c2.support_y)
+            sample_spacing = min(self.c1.sample_spacing, self.c2.sample_spacing)
+
+        self.sample_spacing = sample_spacing
+        self.nsamples_x = int(m.ceil(((support_x / sample_spacing) + 1) * self.Q))
+        self.nsamples_y = int(m.ceil(((support_y / sample_spacing) + 1) * self.Q))
+        self.kspace_x = forward_ft_unit(sample_spacing, self.nsamples_x, True)
+        self.kspace_y = forward_ft_unit(sample_spacing, self.nsamples_y, True)
+        return self
 
     def compute_spatial_units(self):
         """Compute the spatial domain units of the convolution of c1 and c2."""
-        pass
+        dx = -1 / (2 * self.kspace_x[0])  # [0] is -fs/2, [-1] is slightly below fs/2 for even-length arrays
+        dy = -1 / (2 * self.kspace_y[0])
+        ny, nx = self.kspace_data.shape
+        support_x, support_y = dx * nx, dy * ny
+        self.spatial_x = m.linspace(-support_x/2, support_x/2, nx)
+        self.spatial_y = m.linspace(-support_y/2, support_y/2, ny)
+        return self
 
     def ifft(self):
         """Take the iFT to compute the spatial representation of the convolution of c1 and c2."""
-        pass
+        self.spatial_data = m.fftshift(m.ifft2(m.ifftshift(self.kspace_data)))
+        return self
 
     def crop_output(self):
         """Crop the output in the spatial domain to remove the padded area."""
-        _ = _crop_output(self.spatial_data, self.kspace_data)
+        s = self.kspace_data.shape
+        npx_x, npx_y = s[1] / self.Q / 2, s[0] / self.Q / 2
+        cx_left, cx_right = int(m.ceil(npx_x)), int(m.floor(npx_x))
+        cy_top, cy_bottom = int(m.ceil(npx_y)), int(m.floor(npx_y))
+        self.spatial_data = self.spatial_data[cy_top:-cy_bottom, cx_left:-cx_right]
+        self.spatial_x = self.spatial_x[cx_left:-cx_right]
+        self.spatial_y = self.spatial_y[cy_top:-cy_bottom]
+        return self
 
     def postprocess_spatial(self):
         """Post-process the spatial domain."""

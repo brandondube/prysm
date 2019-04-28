@@ -3,7 +3,7 @@ from pkg_resources import get_distribution
 
 
 from prysm.conf import config
-from prysm.convolution import Convolvable
+from prysm.convolution import Convolvable, ConvolutionEngine
 from prysm.detector import Detector, OLPF, PixelAperture
 from prysm.pupil import Pupil
 from prysm.psf import PSF, AiryDisk
@@ -35,6 +35,7 @@ from prysm.objects import (
 )
 from prysm.zernike import FringeZernike, NollZernike, zernikefit
 from prysm.sample_data import sample_files
+from prysm.propagation import Wavefront
 
 __all__ = [
     'config',
@@ -62,14 +63,16 @@ __all__ = [
     'hendecagon',
     'dodecagon',
     'trisdecagon',
+    'circle',
+    'truecircle',
     'Slit',
     'Pinhole',
     'SiemensStar',
     'TiltedSquare',
     'SlantedEdge',
     'Convolvable',
-    'circle',
-    'truecircle',
+    'ConvolutionEngine',
+    'Wavefront',
     'sample_files',
 ]
 

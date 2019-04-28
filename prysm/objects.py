@@ -59,7 +59,7 @@ class Slit(Convolvable):
             self.orientation = 'Crossed'
             self.width_x, self.width_y = width, width
 
-        super().__init__(arr, x, y, has_analytic_ft=True)
+        super().__init__(data=arr, x=x, y=y, has_analytic_ft=True)
 
     def analytic_ft(self, x, y):
         """Analytic fourier transform of a slit.
@@ -81,7 +81,7 @@ class Slit(Convolvable):
         if self.width_x > 0 and self.width_y > 0:
             return (m.sinc(xq * self.width_x) +
                     m.sinc(yq * self.width_y)).astype(config.precision)
-        elif self.width_x > 0 and self.width_y is 0:
+        elif self.width_x > 0 and self.width_y == 0:
             return m.sinc(xq * self.width_x).astype(config.precision)
         else:
             return m.sinc(yq * self.width_y).astype(config.precision)
@@ -268,7 +268,6 @@ class SlantedEdge(Convolvable):
         ext = samples / 2 * sample_spacing
         x = y = m.arange(-ext, ext, sample_spacing)
         xx, yy = m.meshgrid(x, y)
-        sf = samples * sample_spacing
 
         angle = m.radians(angle)
         xp = xx * m.cos(angle) - yy * m.sin(angle)
@@ -284,4 +283,4 @@ class SlantedEdge(Convolvable):
         self.contrast = contrast
         self.black = diff
         self.white = 1 - diff
-        super().__init__(data=arr, x=x * sf, y=y * sf, has_analytic_ft=False)
+        super().__init__(data=arr, x=x, y=y, has_analytic_ft=False)

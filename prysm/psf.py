@@ -45,7 +45,7 @@ class PSF(Convolvable):
         y Cartesian axis locations of samples, 1D ndarray
 
     """
-    def __init__(self, data, x, y):
+    def __init__(self, x, y, data):
         """Create a PSF object.
 
         Parameters
@@ -60,7 +60,7 @@ class PSF(Convolvable):
             center-to-center spacing of samples, expressed in microns
 
         """
-        super().__init__(data, x, y, has_analytic_ft=False)
+        super().__init__(x=x, y=y, data=data, has_analytic_ft=False)
         self._ee = {}
         self._mtf = None
         self._nu_p = None
@@ -362,7 +362,7 @@ class PSF(Convolvable):
             else:
                 raise ValueError('unknown norm')
         ux, uy = prop_pupil_plane_to_psf_plane_units(fcn, ss, efl, wvl, Q)
-        psf = PSF(data, ux, uy)
+        psf = PSF(x=ux, y=uy, data=data)
 
         psf.fno = efl / pupil.diameter
         psf.wavelength = wvl

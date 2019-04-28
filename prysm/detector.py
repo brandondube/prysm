@@ -2,7 +2,9 @@
 from collections import deque
 
 from .conf import config
-from .convolution import Convolvable
+from .coordinates import resample_2d_complex
+from .convolution import Convolvable, ConvolutionEngine
+from .fttools import forward_ft_unit
 from .util import is_odd
 from prysm import mathops as m
 
@@ -25,22 +27,21 @@ class Detector(object):
             number of frames of data to store
 
         """
-        pixel = pixel.lower()
-        if pixel == 'rectangle' and pitch_x is None and pitch_y is None:
-            raise ValueError('must provide at least x pitch for rectangular pixels.')
+        if isinstance(pixel, str):
+            pixel = pixel.lower()
+            if pixel == 'rectangle' and pitch_x is None and pitch_y is None:
+                raise ValueError('must provide at least x pitch for rectangular pixels.')
 
-        if pixel == 'rectangle':
-            pixel = PixelAperture(pitch_x, pitch_y)
+            if pixel == 'rectangle':
+                pixel = PixelAperture(pitch_x, pitch_y)
+                self.rectangular_100pct_fillfactor_pix = True
+        else:
+            self.rectangular_100pct_fillfactor_pix = False
 
         self.pixel = pixel
 
-        if pitch_x is None:
-            pitch_x = getattr(pixel, 'pitch_x', pixel.width_x)
         if pitch_y is None:
-            if pixel == 'rectangle':
-                pitch_y = pitch_x
-            else:
-                pitch_y = getattr(pixel, 'pitch_y', pixel.width_y)
+            pitch_y = pitch_x
 
         if not hasattr(resolution, '__iter__'):
             resolution = (resolution, resolution)
@@ -71,14 +72,44 @@ class Detector(object):
             this would lead to an inaccurate result and is not supported
 
         """
-        if self.pixel == 'rectangle':
+        pitch_x_err = abs(convolvable.sample_spacing % self.pitch_x)
+        pitch_y_err = abs(convolvable.sample_spacing % self.pitch_y)
+        ptol = 0.001  # 1 nm
+        if (self.rectangular_100pct_fillfactor_pix
+           and (pitch_x_err < ptol)
+           and (pitch_y_err < ptol)):
             ux, uy, data = bindown_with_units(self.pitch_x,
                                               self.pitch_y,
                                               convolvable.sample_spacing,
                                               convolvable.data)
             c_out = Convolvable(data=data, x=ux, y=uy, has_analytic_ft=False)
         else:
-            c_out = convolvable.conv(self.pixel)
+            def mutate_sample_latice(self, engine):
+                pitch_x = -1 / (2 * engine.kspace_x[0])
+                pitch_y = -1 / (2 * engine.kspace_y[0])
+                sy, sx = engine.kspace_data.shape
+                support_x = pitch_x * sx
+                support_y = pitch_y * sy
+                sx_new = int(m.ceil(support_x / self.pitch_x))
+                sy_new = int(m.ceil(support_y / self.pitch_y))
+
+                new_x = forward_ft_unit(self.pitch_x, sx_new)
+                new_y = forward_ft_unit(self.pitch_y, sy_new)
+                engine.kspace_data = resample_2d_complex(engine.kspace_data,
+                                                         (engine.kspace_x, engine.kspace_y),
+                                                         (new_x, new_y))
+                engine.kspace_x = new_x
+                engine.kspace_y = new_y
+
+            e = ConvolutionEngine(self.pixel, convolvable)
+            e.compute_kspace_units()
+            e.compute_kspace_data()
+            mutate_sample_latice(self, e)
+            e.compute_spatial_units()
+            e.ifft()
+            e.crop_output()
+            e.postprocess_spatial()
+            c_out = Convolvable(*e.spatial)
 
         self.captures.append(c_out)
         return c_out

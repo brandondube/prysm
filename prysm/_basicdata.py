@@ -7,14 +7,14 @@ class BasicData:
     """Abstract base class holding some data properties."""
     _data_attr = 'data'
 
-    def __init__(self, unit_x, unit_y, data):
+    def __init__(self, x, y, data):
         """Initialize a new BasicData instance.
 
         Parameters
         ----------
-        unit_x : `numpy.ndarray`
+        x : `numpy.ndarray`
             x unit axis
-        unit_y : `numpy.ndarray`
+        y : `numpy.ndarray`
             y unit axis
         data : `numpy.ndarray`
             data
@@ -25,8 +25,7 @@ class BasicData:
             the BasicData instance
 
         """
-        self.unit_x = unit_x
-        self.unit_y = unit_y
+        self.x, self.y = x, y
         setattr(self, self._data_attr, data)
 
     @property
