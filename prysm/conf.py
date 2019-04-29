@@ -6,7 +6,7 @@ class Config(object):
     """Global configuration of prysm."""
     def __init__(self,
                  precision=64,
-                 backend='np',
+                 backend=np,
                  zernike_base=1,
                  Q=2,
                  phase_colormap='inferno',

@@ -463,7 +463,6 @@ def change_backend(to):
 
 
 config.chbackend_observers.append(change_backend)
-config.backend = config.backend  # trigger import of math functions
 
 
 fringemap = {
