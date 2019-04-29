@@ -386,8 +386,8 @@ quinternary_astigmatism_45.name = 'Quinternary Astigmatism 45°'
 quinternary_coma_y.name = 'Quinternary Coma Y'
 quinternary_coma_x.name = 'Quinternary Coma X'
 quinternary_spherical.name = 'Quinternary Spherical'
-primary_septafoil_y.name = 'Primary Septafoil X'
-primary_septafoil_x.name = 'Primary Septafoil Y'
+primary_septafoil_y.name = 'Primary Septafoil Y'
+primary_septafoil_x.name = 'Primary Septafoil X'
 
 zernikes = [
     piston,
@@ -765,7 +765,7 @@ class BaseZernike(Pupil):
         idxs = m.asarray(range(len(self.coefs))) + self.base
         return [self.__class__._namer(i, base=self.base) for i in idxs]  # NOQA
 
-    def barplot(self, orientation='h', buffer=1, zorder=3, fig=None, ax=None):
+    def barplot(self, orientation='h', buffer=1, zorder=3, number=True, offset=0, width=0.8, fig=None, ax=None):
         """Create a barplot of coefficients and their names.
 
         Parameters
@@ -776,6 +776,12 @@ class BaseZernike(Pupil):
             buffer to use around the left and right (or top and bottom) bars
         zorder : `int`, optional
             zorder of the bars.  Use zorder > 3 to put bars in front of gridlines
+        number : `bool`, optional
+            if True, plot numbers along the y=0 line showing indices
+        offset : `float`, optional
+            offset to apply to bars, useful for before/after Zernike breakdowns
+        width : `float`, optional
+            width of bars, useful for before/after Zernike breakdowns
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
@@ -800,22 +806,24 @@ class BaseZernike(Pupil):
         if orientation.lower() in ('h', 'horizontal'):
             vmin, vmax = coefs.min(), coefs.max()
             drange = vmax - vmin
-            offset = drange * 0.01
+            offsetY = drange * 0.01
 
-            ax.bar(idxs, self.coefs, zorder=zorder)
+            ax.bar(idxs + offset, self.coefs, zorder=zorder, width=width)
             plt.xticks(idxs, names, rotation=90)
-            for i in idxs:
-                ax.text(i, offset, str(i), ha='center')
+            if number:
+                for i in idxs:
+                    ax.text(i, offsetY, str(i), ha='center')
             ax.set(ylabel=lab, xlim=lims)
         else:
-            ax.barh(idxs, self.coefs, zorder=zorder)
+            ax.barh(idxs + offset, self.coefs, zorder=zorder)
             plt.yticks(idxs, names)
-            for i in idxs:
-                ax.text(0, i, str(i), ha='center')
+            if number:
+                for i in idxs:
+                    ax.text(0, i, str(i), ha='center')
             ax.set(xlabel=lab, ylim=lims)
         return fig, ax
 
-    def barplot_magnitudes(self, orientation='h', sort=False, buffer=1, zorder=3, fig=None, ax=None):
+    def barplot_magnitudes(self, orientation='h', sort=False, buffer=1, zorder=3, offset=0, width=0.8, fig=None, ax=None):
         """Create a barplot of magnitudes of coefficient pairs and their names.
 
         E.g., astigmatism will get one bar.
@@ -830,6 +838,10 @@ class BaseZernike(Pupil):
             buffer to use around the left and right (or top and bottom) bars
         zorder : `int`, optional
             zorder of the bars.  Use zorder > 3 to put bars in front of gridlines
+        offset : `float`, optional
+            offset to apply to bars, useful for before/after Zernike breakdowns
+        width : `float`, optional
+            width of bars, useful for before/after Zernike breakdowns
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
@@ -848,7 +860,7 @@ class BaseZernike(Pupil):
         magang = self.magnitudes
         mags = [m[0] for m in magang.values()]
         names = magang.keys()
-        idxs = list(range(len(names)))
+        idxs = m.asarray(list(range(len(names))))
 
         if sort:
             mags, names = sort_xy(mags, names)
@@ -858,11 +870,11 @@ class BaseZernike(Pupil):
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         fig, ax = share_fig_ax(fig, ax)
         if orientation.lower() in ('h', 'horizontal'):
-            ax.bar(idxs, mags, zorder=zorder)
+            ax.bar(idxs + offset, mags, zorder=zorder, width=width)
             plt.xticks(idxs, names, rotation=90)
             ax.set(ylabel=lab, xlim=lims)
         else:
-            ax.barh(idxs, mags, zorder=zorder)
+            ax.barh(idxs + offset, mags, zorder=zorder, width=width)
             plt.yticks(idxs, names)
             ax.set(xlabel=lab, ylim=lims)
         return fig, ax
