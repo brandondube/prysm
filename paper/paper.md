@@ -24,7 +24,7 @@ bibliography: paper.bib
 
 ``prysm`` is an open-source library for physical and first-order modeling of optical systems and analysis of related data.
 
-The library supports the modeling, evaluation, and visualization of an optical system at any level, in the pupil plane, image plane, or k-space (MTF).  This can also be done at the optical, or opto-electronic system level by including detector elements.  Optical propgations are handled using the paraxial approximation of the Fresnel Transform via an FFT implementation.
+The library supports the modeling, evaluation, and visualization of an optical system at any level, in the pupil plane, image plane, or k-space (MTF).  This can also be done at the optical, or opto-electronic system level by including detector elements.  Optical propagations are handled using the paraxial approximation of the Fresnel Transform via an FFT implementation.
 
 `prysm` also features an `io` submodule for loading data from commercial and open source instrumentation and software into simple python structures (dicts, etc) or static methods on its classes for loading directly into `prysm`'s object system.  Notably, this support includes the most popular interferometers and MTF benches in the commercial marketplace.  Combined, these capabilities serve as the backbone of user programs supporting imaging system analysis by performing tasks such as image simulation, wavefront sensing, or robust analysis of metrology data utilizing cutting-edge methods from the literature.
 
