@@ -16,7 +16,7 @@ def tpsf():
     xx, yy = np.meshgrid(x, y)
     rho, phi = cart_to_polar(xx, yy)
     dat = psf.airydisk(rho, 10, 0.55)
-    return psf.PSF(dat, x, y)
+    return psf.PSF(data=dat, x=x, y=y)
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def tpsf_mutate():
     xx, yy = np.meshgrid(x, y)
     rho, phi = cart_to_polar(xx, yy)
     dat = psf.airydisk(rho, 10, 0.55)
-    _psf = psf.PSF(dat, x, y)
+    _psf = psf.PSF(data=dat, x=x, y=y)
     _psf.fno = 10
     _psf.wavelength = 0.55
     return _psf

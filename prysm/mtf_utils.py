@@ -3,10 +3,9 @@ import operator
 
 from scipy.interpolate import griddata, RegularGridInterpolator as RGI
 
+from .mathops import engine as e
 from .util import share_fig_ax
 from .io import read_trioptics_mtf_vs_field, read_trioptics_mtfvfvf
-
-from prysm import mathops as m
 
 
 class MTFvFvF(object):
@@ -77,11 +76,11 @@ class MTFvFvF(object):
         """
         ext_x = [self.field[0], self.field[-1]]
         ext_y = [self.focus[0], self.focus[-1]]
-        freq_idx = m.searchsorted(self.freq, freq)
+        freq_idx = e.searchsorted(self.freq, freq)
 
         # if the plot is symmetric, mirror the data
         if symmetric is True:
-            dat = m.concatenate((self.data[:, ::-1, freq_idx], self.data[:, :, freq_idx]), axis=1)
+            dat = e.concatenate((self.data[:, ::-1, freq_idx], self.data[:, :, freq_idx]), axis=1)
             ext_x[0] = ext_x[1] * -1
         else:
             dat = self.data[:, :, freq_idx]
@@ -131,9 +130,9 @@ class MTFvFvF(object):
             axis containing the plot
 
         """
-        field_idx = m.searchsorted(self.field, field)
-        freq_idxs = [m.searchsorted(self.freq, f) for f in freqs]
-        range_idxs = [m.searchsorted(self.focus, r) for r in (-_range, _range)]
+        field_idx = e.searchsorted(self.field, field)
+        freq_idxs = [e.searchsorted(self.freq, f) for f in freqs]
+        range_idxs = [e.searchsorted(self.focus, r) for r in (-_range, _range)]
         xaxis_pts = self.focus[range_idxs[0]:range_idxs[1]]
 
         mtf_arrays = []
@@ -199,9 +198,9 @@ class MTFvFvF(object):
         """
         if algorithm == '0.5':
             # locate the frequency index on axis
-            idx_axis = m.searchsorted(self.field, 0)
+            idx_axis = e.searchsorted(self.field, 0)
             idx_freq = abs(self.data[:, idx_axis, :].max(axis=0) - 0.5).argmin(axis=0)
-            focus_idx = self.data[:, m.arange(self.data.shape[1]), idx_freq].argmax(axis=0)
+            focus_idx = self.data[:, e.arange(self.data.shape[1]), idx_freq].argmax(axis=0)
             return self.field, self.focus[focus_idx],
         elif algorithm.lower() in ('avg', 'average'):
             if self.freq[0] == 0:
@@ -213,7 +212,7 @@ class MTFvFvF(object):
             # account for fractional indexes
             focus_out = avg_idxs.copy()
             for i, idx in enumerate(avg_idxs):
-                li, ri = int(m.floor(idx)), int(m.ceil(idx))
+                li, ri = int(e.floor(idx)), int(e.ceil(idx))
                 lf, rf = self.focus[li], self.focus[ri]
                 diff = rf - lf
                 part = idx % 1
@@ -227,9 +226,9 @@ class MTFvFvF(object):
         """Core checking and return logic for arithmatic operations."""
         if type(other) == type(self):
             # both MTFvFvFs, check alignment of data
-            same_x = m.allclose(self.field, other.field)
-            same_y = m.allclose(self.focus, other.focus)
-            same_freq = m.allclose(self.freq, other.freq)
+            same_x = e.allclose(self.field, other.field)
+            same_y = e.allclose(self.focus, other.focus)
+            same_freq = e.allclose(self.freq, other.freq)
             if not same_x and same_y and same_freq:
                 raise ValueError('x or y coordinates or frequencies mismatch between MTFvFvFs')
             else:
@@ -299,9 +298,9 @@ class MTFvFvF(object):
         sorted_df = df.sort_values(by=['Focus', 'Field', 'Freq'])
         T = sorted_df[sorted_df.Azimuth == 'Tan']
         S = sorted_df[sorted_df.Azimuth == 'Sag']
-        focus = m.unique(df.Focus.values)
-        fields = m.unique(df.Fields.values)
-        freqs = m.unique(df.Freq.values)
+        focus = e.unique(df.Focus.values)
+        fields = e.unique(df.Fields.values)
+        freqs = e.unique(df.Freq.values)
         d1, d2, d3 = len(focus), len(fields), len(freqs)
         t_mat = T.MTF.values.reshape((d1, d2, d3))
         s_mat = S.MTF.values.reshape((d1, d2, d3))
@@ -443,7 +442,7 @@ class MTFFFD(object):
             axis containing the plot
 
         """
-        idx = m.searchsorted(self.freq, freq)
+        idx = e.searchsorted(self.freq, freq)
         extx = (self.field_x[0], self.field_x[-1])
         exty = (self.field_y[0], self.field_y[-1])
         ext = [*extx, *exty]
@@ -457,7 +456,7 @@ class MTFFFD(object):
 
         if show_contours is True:
             if clim[0] < 0:
-                contours = list(m.arange(clim[0], clim[1] + 0.1, 0.1))
+                contours = list(e.arange(clim[0], clim[1] + 0.1, 0.1))
             else:
                 contours = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
             cs = ax.contour(self.data[:, :, idx], contours, colors='0.15', linewidths=0.75, extent=ext)
@@ -472,9 +471,9 @@ class MTFFFD(object):
         """Centralized checking logic for arithmatic operations."""
         if type(other) == type(self):
             # both MTFvFvFs, check alignment of data
-            same_x = m.allclose(self.field_x, other.field_x)
-            same_y = m.allclose(self.field_y, other.field_y)
-            same_freq = m.allclose(self.freq, other.freq)
+            same_x = e.allclose(self.field_x, other.field_x)
+            same_y = e.allclose(self.field_y, other.field_y)
+            same_freq = e.allclose(self.freq, other.freq)
             if not same_x and same_y and same_freq:
                 raise ValueError('x or y coordinates or frequencies mismatch between MTFFFDs')
             else:
@@ -544,7 +543,7 @@ class MTFFFD(object):
             return option is not available
 
         """
-        azimuths = m.radians(m.asarray(azimuths, dtype=m.float64))
+        azimuths = e.radians(e.asarray(azimuths, dtype=e.float64))
         freqs, ts, ss = [], [], []
         for path, angle in zip(paths, azimuths):
             d = read_trioptics_mtf_vs_field(path)
@@ -595,8 +594,8 @@ def radial_mtf_to_mtfffd_data(tan, sag, imagehts, azimuths, upsample):
         sagittal data
 
     """
-    azimuths = m.asarray(azimuths)
-    imagehts = m.asarray(imagehts)
+    azimuths = e.asarray(azimuths)
+    imagehts = e.asarray(imagehts)
 
     if imagehts[0] > imagehts[-1]:
         # distortion profiled, values "reversed"
@@ -604,13 +603,13 @@ def radial_mtf_to_mtfffd_data(tan, sag, imagehts, azimuths, upsample):
         imagehts = imagehts[::-1]
     amin, amax = min(azimuths), max(azimuths)
     imin, imax = min(imagehts), max(imagehts)
-    aq = m.linspace(amin, amax, int(len(azimuths) * upsample))
-    iq = m.linspace(imin, imax, int(len(imagehts) * 4))  # hard-code 4x linear upsample, change later
-    aa, ii = m.meshgrid(aq, iq, indexing='ij')
+    aq = e.linspace(amin, amax, int(len(azimuths) * upsample))
+    iq = e.linspace(imin, imax, int(len(imagehts) * 4))  # hard-code 4x linear upsample, change later
+    aa, ii = e.meshgrid(aq, iq, indexing='ij')
 
     # for each frequency, build an interpolating function and upsample
-    up_t = m.empty((len(aq), tan.shape[1], len(iq)))
-    up_s = m.empty((len(aq), sag.shape[1], len(iq)))
+    up_t = e.empty((len(aq), tan.shape[1], len(iq)))
+    up_s = e.empty((len(aq), sag.shape[1], len(iq)))
     for idx in range(tan.shape[1]):
         t, s = tan[:, idx, :], sag[:, idx, :]
         interpft = RGI((azimuths, imagehts), t, method='linear')
@@ -619,18 +618,18 @@ def radial_mtf_to_mtfffd_data(tan, sag, imagehts, azimuths, upsample):
         up_s[:, idx, :] = interpfs((aa, ii))
 
     # compute the locations of the samples on a cartesian grid
-    xd, yd = m.outer(m.cos(m.radians(aq)), iq), m.outer(m.sin(m.radians(aq)), iq)
-    samples = m.stack([xd.ravel(), yd.ravel()], axis=1)
+    xd, yd = e.outer(e.cos(e.radians(aq)), iq), e.outer(e.sin(e.radians(aq)), iq)
+    samples = e.stack([xd.ravel(), yd.ravel()], axis=1)
 
     # for the output cartesian grid, figure out the x-y coverage and build a regular grid
     absamin = min(abs(azimuths))
-    closest_to_90 = azimuths[m.argmin(azimuths-90)]
-    xfctr = m.cos(m.radians(absamin))
-    yfctr = m.cos(m.radians(closest_to_90))
+    closest_to_90 = azimuths[e.argmin(azimuths-90)]
+    xfctr = e.cos(e.radians(absamin))
+    yfctr = e.cos(e.radians(closest_to_90))
     xmin, xmax = imin * xfctr, imax * xfctr
     ymin, ymax = imin * yfctr, imax * yfctr
-    xq, yq = m.linspace(xmin, xmax, len(iq)), m.linspace(ymin, ymax, len(iq))
-    xx, yy = m.meshgrid(xq, yq)
+    xq, yq = e.linspace(xmin, xmax, len(iq)), e.linspace(ymin, ymax, len(iq))
+    xx, yy = e.meshgrid(xq, yq)
 
     outt, outs = [], []
     # for each frequency, interpolate onto the cartesian grid
@@ -640,7 +639,7 @@ def radial_mtf_to_mtfffd_data(tan, sag, imagehts, azimuths, upsample):
         outt.append(datt.reshape(xx.shape))
         outs.append(dats.reshape(xx.shape))
 
-    outt, outs = m.rollaxis(m.asarray(outt), 0, 3), m.rollaxis(m.asarray(outs), 0, 3)
+    outt, outs = e.rollaxis(e.asarray(outt), 0, 3), e.rollaxis(e.asarray(outs), 0, 3)
     return xq, yq, outt, outs
 
 

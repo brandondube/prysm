@@ -1,6 +1,7 @@
 """Basic class holding data, used to recycle code."""
 import copy
-from prysm import mathops as m
+
+from .mathops import engine as e
 
 
 class BasicData:
@@ -60,7 +61,7 @@ class BasicData:
         try:
             return self.x[1] - self.x[0]
         except TypeError:
-            return m.nan
+            return e.nan
 
     @property
     def center_x(self):

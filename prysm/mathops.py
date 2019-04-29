@@ -67,190 +67,28 @@ except ImportError:
 
             return wrapper
 
-allfuncs = set((
-    'sort',
-    'sqrt',
-    'sin',
-    'cos',
-    'tan',
-    'arctan',
-    'arctan2',
-    'arccos',
-    'arcsin',
-    'sinc',
-    'radians',
-    'exp',
-    'log',
-    'log10',
-    'linspace',
-    'meshgrid',
-    'angle',
-    'zeros',
-    'ones',
-    'empty',
-    'sign',
-    'isfinite',
-    'asarray',
-    'arange',
-    'stack',
-    'mean',
-    'unique',
-    'flip',
-    'swapaxes',
-    'rollaxis',
-    'concatenate',
-    'cumsum',
-    'any',
-    'all',
-    'isfinite',
-    'isnan',
-    'ceil',
-    'floor',
-    'outer',
-    'inner',
-    'argmin',
-    'argmax',
-    'allclose',
-    'frombuffer',
-    'count_nonzero',
-    'trapz',
-    'hanning',
-    'full',
-    'pad',
-    'minimum',
-    'maximum',
-    'fromstring',
-    'rot90',
-    'flipud',
-    'fliplr',
-    'ascontiguousarray',
-    'argpartition',
-    'argsort',
-    'degrees',
-    'array_str',
-    'savetxt',
-))
-
-allfuncs_cupy_missing = frozenset((
-    'searchsorted',
-    'gradient',
-    ))
-
-fftfuncs = frozenset((
-    'fft2',
-    'ifft2',
-    'fftshift',
-    'ifftshift',
-    'fftfreq',
-))
-
-randomfuncs = frozenset((
-    'rand',
-))
-
-linalgfuncs = frozenset((
-    'lstsq',
-))
-
-constants = frozenset((
-    'ndarray',
-    'uint8',
-    'uint16',
-    'uint32',
-    'int32',
-    'int64',
-    'float32',
-    'float64',
-    'complex64',
-    'complex128',
-    'newaxis',
-    'pi',
-    'nan',
-    'inf',
-))
-
-
-def jinc(r):
-    """Jinc.
-
-    Parameters
-    ----------
-    r : `number`
-        radial distance
-
-    Returns
-    -------
-    `float`
-        the value of j1(x)/x for x != 0, 0.5 at 0
-
-    """
-    if r < 1e-8 and r > -1e-8:  # value of jinc for x < 1/2 machine precision  is 0.5
-        return 0.5
-    else:
-        return j1(r) / r
-
-
-if numba_installed is True:
-    # one day split numba jit and numpy jit
-    jinc = np.vectorize(jinc)
-else:
-    jinc = np.vectorize(jinc)
-
-
-def change_backend(to):
-    if to == 'cu':
-        if not cuda_compatible:
-            raise ValueError('installation lacks cuda support.')
-        else:
-            target_base = 'cupy'
-            target_fft = 'cupy.fft'
-            target_linalg = 'cupy.linalg'
-            target_rand = 'cupy.random'
-            # target_scipy = 'cupyx.scipy'
-
-    elif to == 'np':
-        target_base = 'numpy'
-        target_fft = 'numpy.fft'
-        target_linalg = 'numpy.linalg'
-        target_rand = 'numpy.random'
-        # target_scipy = 'scipy'
-
-        # two sets of functionality unavailable via cupy
-        for func in allfuncs_cupy_missing:
-            exec(f'from {target_base} import {func}')
-            globals()[func] = eval(func)
-
-        for func in linalgfuncs:
-            exec(f'from {target_linalg} import {func}')
-            globals()[func] = eval(func)
-
-    for func in allfuncs:
-        exec(f'from {target_base} import {func}')
-        globals()[func] = eval(func)
-
-    for const in constants:
-        exec(f'from {target_base} import {const}')
-        globals()[const] = eval(const)
-
-    for func in fftfuncs:
-        exec(f'from {target_fft} import {func}')
-        globals()[func] = eval(func)
-
-    for func in randomfuncs:
-        exec(f'from {target_rand} import {func}')
-        globals()[func] = eval(func)
-
-
-config.chbackend_observers.append(change_backend)
-config.backend = config.backend  # trigger import of math functions
-
-
 
 class MathEngine:
+    """An engine allowing an interchangeable backend for mathematical functions."""
     def __init__(self, source=np):
-        self.source = np
+        """Create a new math engine.
+
+        Parameters
+        ----------
+        source : `module`
+            a python module.
+
+        """
+        self.source = source
 
     def __getattr__(self, key):
+        """Get attribute.
+
+        Parameters
+        ----------
+        key : `str` attribute name
+
+        """
         try:
             return getattr(self.source, key)
         except AttributeError:
@@ -261,6 +99,7 @@ class MathEngine:
             return getattr(self.source, key)  # this can raise, but we don't *need* to catch
 
     def change_backend(self, backend):
+        """Function to run when changing the backend."""
         if isinstance(backend, str):
             exec(f'import {backend}')
             self.source = eval(backend)
@@ -268,4 +107,6 @@ class MathEngine:
             # backend is a module
             self.source = backend
 
+
 engine = MathEngine()
+config.chbackend_observers.append(engine.change_backend)

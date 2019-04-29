@@ -1,10 +1,9 @@
 """phase basics."""
 
 from .conf import config
+from .mathops import engine as e
 from ._basicdata import BasicData
 from .util import share_fig_ax, pv, rms, Sa, std
-
-from prysm import mathops as m
 
 
 class OpticalPhase(BasicData):
@@ -240,8 +239,8 @@ class OpticalPhase(BasicData):
             new_uy = self.y / fctr
         else:
             sy, sx = self.shape
-            new_ux = m.arange(sx, dtype=config.precision)
-            new_uy = m.arange(sy, dtype=config.precision)
+            new_ux = e.arange(sx, dtype=config.precision)
+            new_uy = e.arange(sy, dtype=config.precision)
         if inplace:
             self.x = new_ux
             self.y = new_uy
@@ -362,7 +361,7 @@ class OpticalPhase(BasicData):
         phase = self.change_phase_unit(to='waves', inplace=False)
 
         fig, ax = share_fig_ax(fig, ax)
-        plotdata = (visibility * m.sin(2 * m.pi * passes * phase))
+        plotdata = (visibility * e.sin(2 * e.pi * passes * phase))
         im = ax.imshow(plotdata,
                        extent=[-epd / 2, epd / 2, -epd / 2, epd / 2],
                        cmap='Greys_r',

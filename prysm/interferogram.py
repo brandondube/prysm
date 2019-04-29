@@ -4,6 +4,7 @@ import warnings
 from scipy import signal
 
 from .conf import config
+from .mathops import engine as e
 from ._phase import OpticalPhase
 from .zernike import defocus, zernikefit, FringeZernike
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
@@ -11,9 +12,6 @@ from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar, uniform_cart_to_polar
 from .util import share_fig_ax, mean, rms  # NOQA
 from .geometry import mcache
-
-
-from prysm import mathops as m
 
 
 def fit_plane(x, y, z):
@@ -34,16 +32,16 @@ def fit_plane(x, y, z):
         array representation of plane
 
     """
-    pts = m.isfinite(z)
+    pts = e.isfinite(z)
     if len(z.shape) > 1:
-        x, y = m.meshgrid(x, y)
+        x, y = e.meshgrid(x, y)
         xx, yy = x[pts].flatten(), y[pts].flatten()
     else:
         xx, yy = x, y
 
-    flat = m.ones(xx.shape)
+    flat = e.ones(xx.shape)
 
-    coefs = m.lstsq(m.stack([xx, yy, flat]).T, z[pts].flatten(), rcond=None)[0]
+    coefs = e.linalg.lstsq(e.stack([xx, yy, flat]).T, z[pts].flatten(), rcond=None)[0]
     plane_fit = coefs[0] * x + coefs[1] * y + coefs[2]
     return plane_fit
 
@@ -62,14 +60,14 @@ def fit_sphere(z):
         sphere data
 
     """
-    x, y = m.linspace(-1, 1, z.shape[1]), m.linspace(-1, 1, z.shape[0])
-    xx, yy = m.meshgrid(x, y)
-    pts = m.isfinite(z)
+    x, y = e.linspace(-1, 1, z.shape[1]), e.linspace(-1, 1, z.shape[0])
+    xx, yy = e.meshgrid(x, y)
+    pts = e.isfinite(z)
     xx_, yy_ = xx[pts].flatten(), yy[pts].flatten()
     rho, phi = cart_to_polar(xx_, yy_)
     focus = defocus(rho, phi)
 
-    coefs = m.lstsq(m.stack([focus, m.ones(focus.shape)]).T, z[pts].flatten(), rcond=None)[0]
+    coefs = e.linalg.lstsq(e.stack([focus, e.ones(focus.shape)]).T, z[pts].flatten(), rcond=None)[0]
     rho, phi = cart_to_polar(xx, yy)
     sphere = defocus(rho, phi) * coefs[0]
     return sphere
@@ -113,26 +111,26 @@ def make_window(signal, sample_spacing, which='welch'):
         if corner1.all() and corner2.all() and corner3.all() and corner4.all():
             # four corners all "black" -- circular data, Welch window is best
             # looks wrong but 2D welch takes x, y while indices are y, x
-            y = m.arange(s[1]) * sample_spacing
-            x = m.arange(s[0]) * sample_spacing
+            y = e.arange(s[1]) * sample_spacing
+            x = e.arange(s[0]) * sample_spacing
             return window_2d_welch(y, x)
         else:
             # if not circular, square data; use Hanning window
-            y = m.hanning(s[0])
-            x = m.hanning(s[1])
-            return m.outer(y, x)
+            y = e.hanning(s[0])
+            x = e.hanning(s[1])
+            return e.outer(y, x)
     else:
         if type(which) is str:
             # known window type
             wl = which.lower()
             if wl == 'welch':
-                y = m.arange(s[1]) * sample_spacing
-                x = m.arange(s[0]) * sample_spacing
+                y = e.arange(s[1]) * sample_spacing
+                x = e.arange(s[0]) * sample_spacing
                 return window_2d_welch(y, x)
             elif wl in ('hann', 'hanning'):
-                y = m.hanning(s[0])
-                x = m.hanning(s[1])
-                return m.outer(y, x)
+                y = e.hanning(s[0])
+                x = e.hanning(s[1])
+                return e.outer(y, x)
             else:
                 raise ValueError('unknown window type')
         else:
@@ -166,7 +164,7 @@ def psd(height, sample_spacing, window=None):
 
     """
     window = make_window(height, sample_spacing, window)
-    fft = m.ifftshift(m.fft2(m.fftshift(height * window)))
+    fft = e.fft.ifftshift(e.fft.fft2(e.fft.fftshift(height * window)))
     psd = abs(fft)**2  # mag squared first as per GH_FFT
 
     fs = 1 / sample_spacing
@@ -225,7 +223,7 @@ def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None)
     else:
         raise ValueError('must specify either period (wavelength) or frequency')
 
-    ux2, uy2 = m.meshgrid(ux, uy)
+    ux2, uy2 = e.meshgrid(ux, uy)
     r, p = cart_to_polar(ux2, uy2)
 
     if flow is None:
@@ -239,9 +237,9 @@ def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None)
     work = psd.copy()
     work[r < flow] = 0
     work[r > fhigh] = 0
-    first = m.trapz(work, uy, axis=0)
-    second = m.trapz(first, ux, axis=0)
-    return m.sqrt(second)
+    first = e.trapz(work, uy, axis=0)
+    second = e.trapz(first, ux, axis=0)
+    return e.sqrt(second)
 
 
 def window_2d_welch(x, y, alpha=8):
@@ -262,9 +260,9 @@ def window_2d_welch(x, y, alpha=8):
         window
 
     """
-    xx, yy = m.meshgrid(x, y)
+    xx, yy = e.meshgrid(x, y)
     r, _ = cart_to_polar(xx, yy)
-    rmax = m.sqrt(x.max()**2 + y.max()**2)
+    rmax = e.sqrt(x.max()**2 + y.max()**2)
     window = 1 - abs(r/rmax)**alpha
     return window
 
@@ -327,9 +325,9 @@ def synthesize_surface_from_psd(psd, nu_x, nu_y):
 
     """
     # generate a random phase to be matched to the PSD
-    randnums = m.rand(*psd.shape)
-    randfft = m.fft2(randnums)
-    phase = m.angle(randfft)
+    randnums = e.random.rand(*psd.shape)
+    randfft = e.fft.fft2(randnums)
+    phase = e.angle(randfft)
 
     # calculate the output window
     # the 0th element of nu_y has the greatest frequency in magnitude because of
@@ -337,16 +335,16 @@ def synthesize_surface_from_psd(psd, nu_x, nu_y):
     fs = -2 * nu_y[0]
     dx = dy = 1 / fs
     ny, nx = psd.shape
-    x, y = m.arange(nx) * dx, m.arange(ny) * dy
+    x, y = e.arange(nx) * dx, e.arange(ny) * dy
 
     # calculate the area of the output window, "S2" in GH_FFT notation
     A = x[-1] * y[-1]
 
     # use ifft to compute the PSD
-    signal = m.exp(1j * phase) * m.sqrt(A * psd)
+    signal = e.exp(1j * phase) * e.sqrt(A * psd)
 
     coef = 1 / dx / dy
-    out = m.ifftshift(m.ifft2(m.fftshift(signal))) * coef
+    out = e.fft.ifftshift(e.fft.ifft2(e.fft.fftshift(signal))) * coef
     out = out.real
     return x, y, out
 
@@ -389,7 +387,7 @@ def render_synthetic_surface(size, samples, rms=None, mask='circle', psd_fcn=abc
     center = samples // 2  # some bullshit here to gloss over zeros for ab_psd
     nu_x[center] = nu_x[center+1] / 10
     nu_y[center] = nu_y[center+1] / 10
-    nu_xx, nu_yy = m.meshgrid(nu_x, nu_y)
+    nu_xx, nu_yy = e.meshgrid(nu_x, nu_y)
 
     nu_r, _ = cart_to_polar(nu_xx, nu_yy)
     psd = psd_fcn(nu_r, **psd_fcn_kwargs)
@@ -399,7 +397,7 @@ def render_synthetic_surface(size, samples, rms=None, mask='circle', psd_fcn=abc
 
     # mask
     mask = mcache(mask, samples)
-    z[mask == 0] = m.nan
+    z[mask == 0] = e.nan
 
     # possibly scale RMS
     if rms is not None:
@@ -434,8 +432,8 @@ class Interferogram(OpticalPhase):
 
         """
         if x is None:  # assume x, y given together
-            x = m.arange(phase.shape[1], dtype=config.precision)
-            y = m.arange(phase.shape[0], dtype=config.precision)
+            x = e.arange(phase.shape[1], dtype=config.precision)
+            y = e.arange(phase.shape[0], dtype=config.precision)
             scale = 'px'
             self.lateral_res = 1
 
@@ -465,7 +463,7 @@ class Interferogram(OpticalPhase):
     @property
     def dropout_percentage(self):
         """Percentage of pixels in the data that are invalid (NaN)."""
-        return m.count_nonzero(m.isnan(self.phase)) / self.phase.size * 100
+        return e.count_nonzero(e.isnan(self.phase)) / self.phase.size * 100
 
     @property
     def pvr(self):
@@ -523,15 +521,15 @@ class Interferogram(OpticalPhase):
             self
 
         """
-        nans = m.isnan(self.phase)
+        nans = e.isnan(self.phase)
         self.phase[nans] = _with
         return self
 
     def crop(self):
         """Crop data to rectangle bounding non-NaN region."""
-        nans = m.isfinite(self.phase)
-        nancols = m.any(nans, axis=0)
-        nanrows = m.any(nans, axis=1)
+        nans = e.isfinite(self.phase)
+        nancols = e.any(nans, axis=0)
+        nanrows = e.any(nans, axis=1)
 
         left, right = nanrows.argmax(), nanrows[::-1].argmax()
         top, bottom = nancols.argmax(), nancols[::-1].argmax()
@@ -612,7 +610,7 @@ class Interferogram(OpticalPhase):
         Parameters
         ----------
         shape_or_mask : `str` or `numpy.ndarray`
-            valid shape from prysm.geometry
+            valid shape from prysm.geometry or array containing mask
         diameter : `float`
             diameter of the mask, in self.spatial_units
         mask : `numpy.ndarray`
@@ -628,9 +626,9 @@ class Interferogram(OpticalPhase):
             if diameter is None:
                 diameter = self.diameter
             mask = mcache(shape_or_mask, min(self.shape), radius=diameter / min(self.diameter_x, self.diameter_y))
-            base = m.zeros(self.shape, dtype=config.precision)
+            base = e.zeros(self.shape, dtype=config.precision)
             difference = abs(self.shape[0] - self.shape[1])
-            l, u = int(m.floor(difference / 2)), int(m.ceil(difference / 2))
+            l, u = int(e.floor(difference / 2)), int(e.ceil(difference / 2))
             if u == 0:  # guard against nocrop scenario
                 _slice = slice(None)
             else:
@@ -645,10 +643,11 @@ class Interferogram(OpticalPhase):
             mask = shape_or_mask
 
         hitpts = mask == 0
-        self.phase[hitpts] = m.nan
+        self.phase[hitpts] = e.nan
         return self
 
-    def filter(self, critical_frequency=None, critical_period=None, kind='bessel', type_=None, order=1, filtkwargs=dict()):
+    def filter(self, critical_frequency=None, critical_period=None,
+               kind='bessel', type_=None, order=1, filtkwargs=dict()):
         """Apply a frequency-domain filter to the phase data.
 
         Parameters
@@ -762,21 +761,21 @@ class Interferogram(OpticalPhase):
         if unit in ('px', 'pixel', 'pixels'):
             npx = value
         else:
-            npx = int(m.ceil(value / self.sample_spacing))
+            npx = int(e.ceil(value / self.sample_spacing))
 
-        if m.isnan(self.phase[0, 0]):
-            fill_val = m.nan
+        if e.isnan(self.phase[0, 0]):
+            fill_val = e.nan
         else:
             fill_val = 0
 
         s = self.shape
-        out = m.empty((s[0] + 2 * npx, s[1] + 2 * npx), dtype=self.phase.dtype)
+        out = e.empty((s[0] + 2 * npx, s[1] + 2 * npx), dtype=self.phase.dtype)
         out[:, :] = fill_val
         out[npx:-npx, npx:-npx] = self.phase
         self.phase = out
 
-        x = m.arange(out.shape[1], dtype=config.precision) * self.sample_spacing
-        y = m.arange(out.shape[0], dtype=config.precision) * self.sample_spacing
+        x = e.arange(out.shape[1], dtype=config.precision) * self.sample_spacing
+        y = e.arange(out.shape[0], dtype=config.precision) * self.sample_spacing
         self.x = x
         self.y = y
         return self
@@ -796,7 +795,7 @@ class Interferogram(OpticalPhase):
 
         """
         pts_over_nsigma = abs(self.phase) > nsigma * self.std
-        self.phase[pts_over_nsigma] = m.nan
+        self.phase[pts_over_nsigma] = e.nan
         return self
 
     def psd(self):
@@ -893,9 +892,9 @@ class Interferogram(OpticalPhase):
             raise ValueError('Use microns for spatial unit when evaluating TIS.')
 
         upper_limit = 1 / wavelength
-        kernel = 4 * m.pi * m.cos(m.radians(incident_angle))
+        kernel = 4 * e.pi * e.cos(e.radians(incident_angle))
         kernel *= self.bandlimited_rms(upper_limit, None) / wavelength
-        return 1 - m.exp(-kernel**2)
+        return 1 - e.exp(-kernel**2)
 
     def plot_psd2d(self, axlim=None, clim=(1e-9, 1e2), cmap=config.image_colormap, interp_method='lanczos', fig=None, ax=None):
         """Plot the two dimensional PSD.
@@ -1099,7 +1098,7 @@ class Interferogram(OpticalPhase):
             _scale = 'px'
 
         i = Interferogram(phase=phase, intensity=zydat['intensity'],
-                          x=m.arange(phase.shape[1]) * res, y=m.arange(phase.shape[0]) * res,
+                          x=e.arange(phase.shape[1]) * res, y=e.arange(phase.shape[0]) * res,
                           scale=_scale, meta=zydat['meta'])
         return i.change_spatial_unit(to=scale.lower(), inplace=True)
 

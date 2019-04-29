@@ -1,6 +1,6 @@
 """Defines behavior of convolvable items and a base class to encapsulate that behavior."""
 
-from prysm import mathops as m
+from .mathops import engine as e
 from ._basicdata import BasicData
 from .coordinates import resample_2d_complex
 from .conf import config
@@ -304,7 +304,7 @@ class Convolvable(BasicData):
 
             data = self.analytic_ft(freq_x, freq_y)
         else:
-            data = abs(m.fftshift(m.fft2(pad2d(self.data, 2))))
+            data = abs(e.fft.fftshift(e.fft.fft2(pad2d(self.data, 2))))
             data /= data.max()
             freq_x = forward_ft_unit(self.sample_spacing, self.samples_x)
             freq_y = forward_ft_unit(self.sample_spacing, self.samples_y)
@@ -336,9 +336,9 @@ class Convolvable(BasicData):
         """
         from imageio import imwrite
         if nbits == 8:
-            typ = m.unit8
+            typ = e.uint8
         elif nbits == 16:
-            typ = m.uint16
+            typ = e.uint16
         else:
             raise ValueError('must use either 8 or 16 bpp.')
         dat = (self.data * 2**nbits - 1).astype(typ)
@@ -365,9 +365,10 @@ class Convolvable(BasicData):
         imgarr = imread(path)
         s = imgarr.shape
         extx, exty = (s[1] * scale) / 2, (s[0] * scale) / 2
-        ux, uy = m.arange(-extx, extx, scale), m.arange(-exty, exty, scale)
-        return Convolvable(data=m.flip(imgarr, axis=0).astype(config.precision),
+        ux, uy = e.arange(-extx, extx, scale), e.arange(-exty, exty, scale)
+        return Convolvable(data=e.flip(imgarr, axis=0).astype(config.precision),
                            x=ux, y=uy, has_analytic_ft=False)
+
 
 class ConvolutionEngine:
     """An engine to facilitate fine-grained control over convolutions."""
@@ -407,12 +408,12 @@ class ConvolutionEngine:
         if self.c1.has_analytic_ft:
             # units came directly from c2, pad and FT c1
             c2_pad = pad2d(self.c2.data, self.Q, mode=self.pad_method)
-            c2_ft = m.fftshift(m.fft2(m.ifftshift(c2_pad)))
+            c2_ft = e.fft.fftshift(e.fft.fft2(e.fft.ifftshift(c2_pad)))
             c1_ft = self.c1.analytic_ft(self.kspace_x, self.kspace_y)
         elif self.c2.has_analytic_ft:
             # units came directly from c1, pad and FT c2
             c1_pad = pad2d(self.c1.data, self.Q, mode=self.pad_method)
-            c1_ft = m.fftshift(m.fft2(m.ifftshift(c1_pad)))
+            c1_ft = e.fft.fftshift(e.fft.fft2(e.fft.ifftshift(c1_pad)))
             c2_ft = self.c2.analytic_ft(self.kspace_x, self.kspace_y)
         else:
             need_to_interp_c1 = False
@@ -430,13 +431,16 @@ class ConvolutionEngine:
             def resample_data(self, data, sample_spacing):
                 c_freq_x = forward_ft_unit(sample_spacing, data.shape[1])
                 c_freq_y = forward_ft_unit(sample_spacing, data.shape[0])
-                return resample_2d_complex(data, (c_freq_x, c_freq_y), (self.kspace_x, self.kspace_y), bounds_error=False)
+                return resample_2d_complex(data,
+                                           (c_freq_x, c_freq_y),
+                                           (self.kspace_x, self.kspace_y),
+                                           bounds_error=False)
 
             c1_pad = pad2d(self.c1.data, self.Q, mode=self.pad_method)
-            c1_ft = m.fftshift(m.fft2(m.ifftshift(c1_pad)))
+            c1_ft = e.fft.fftshift(e.fft.fft2(e.fft.ifftshift(c1_pad)))
 
             c2_pad = pad2d(self.c2.data, self.Q, mode=self.pad_method)
-            c2_ft = m.fftshift(m.fft2(m.ifftshift(c2_pad)))
+            c2_ft = e.fft.fftshift(e.fft.fft2(e.fft.ifftshift(c2_pad)))
 
             if need_to_interp_c1:
                 c1_ft = resample_data(self, c1_ft, self.c1.sample_spacing)
@@ -460,8 +464,8 @@ class ConvolutionEngine:
             sample_spacing = min(self.c1.sample_spacing, self.c2.sample_spacing)
 
         self.sample_spacing = sample_spacing
-        self.nsamples_x = int(m.ceil(((support_x / sample_spacing) + 1) * self.Q))
-        self.nsamples_y = int(m.ceil(((support_y / sample_spacing) + 1) * self.Q))
+        self.nsamples_x = int(e.ceil(((support_x / sample_spacing) + 1) * self.Q))
+        self.nsamples_y = int(e.ceil(((support_y / sample_spacing) + 1) * self.Q))
         self.kspace_x = forward_ft_unit(sample_spacing, self.nsamples_x, True)
         self.kspace_y = forward_ft_unit(sample_spacing, self.nsamples_y, True)
         return self
@@ -472,21 +476,21 @@ class ConvolutionEngine:
         dy = -1 / (2 * self.kspace_y[0])
         ny, nx = self.kspace_data.shape
         support_x, support_y = dx * nx, dy * ny
-        self.spatial_x = m.linspace(-support_x/2, support_x/2, nx)
-        self.spatial_y = m.linspace(-support_y/2, support_y/2, ny)
+        self.spatial_x = e.linspace(-support_x/2, support_x/2, nx)
+        self.spatial_y = e.linspace(-support_y/2, support_y/2, ny)
         return self
 
     def ifft(self):
         """Take the iFT to compute the spatial representation of the convolution of c1 and c2."""
-        self.spatial_data = m.fftshift(m.ifft2(m.ifftshift(self.kspace_data)))
+        self.spatial_data = e.fft.fftshift(e.fft.ifft2(e.fft.ifftshift(self.kspace_data)))
         return self
 
     def crop_output(self):
         """Crop the output in the spatial domain to remove the padded area."""
         s = self.kspace_data.shape
         npx_x, npx_y = s[1] / self.Q / 2, s[0] / self.Q / 2
-        cx_left, cx_right = int(m.ceil(npx_x)), int(m.floor(npx_x))
-        cy_top, cy_bottom = int(m.ceil(npx_y)), int(m.floor(npx_y))
+        cx_left, cx_right = int(e.ceil(npx_x)), int(e.floor(npx_x))
+        cy_top, cy_bottom = int(e.ceil(npx_y)), int(e.floor(npx_y))
         self.spatial_data = self.spatial_data[cy_top:-cy_bottom, cx_left:-cx_right]
         self.spatial_x = self.spatial_x[cx_left:-cx_right]
         self.spatial_y = self.spatial_y[cy_top:-cy_bottom]

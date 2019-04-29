@@ -1,9 +1,8 @@
 """A collection of thin lens equations for system modeling."""
 
+from .mathops import engine as e
 from .util import guarantee_array
 from .zernike import defocus as _defocus
-
-from prysm import mathops as m
 
 
 def object_to_image_dist(efl, object_distance):
@@ -34,6 +33,28 @@ def object_to_image_dist(efl, object_distance):
     return 1 / ret
 
 
+def image_to_object_dist(efl, image_distance):
+    """Compute the object distance from the image distance.
+
+    Parameters
+    ----------
+    efl : `float`
+        focal length of the lens
+    object_distance : `float` or `numpy.ndarray`
+        distance from the object to the front principal plane of the lens,
+        positive for an object in front of a lens of positive focal length.
+
+    Notes
+    -----
+    efl and image distance should be in the same units.  Return value will
+    be in the same units as the input.
+
+    """
+    image_distance = guarantee_array(image_distance)
+    ret = 1 / efl - 1 / image_distance
+    return 1 / ret
+
+
 def image_dist_epd_to_na(image_distance, epd):
     """Compute the NA from an image distance and entrance pupil diameter.
 
@@ -53,7 +74,7 @@ def image_dist_epd_to_na(image_distance, epd):
     image_distance = guarantee_array(image_distance)
 
     rho = epd / 2
-    marginal_ray_angle = abs(m.arctan2(rho, image_distance))
+    marginal_ray_angle = abs(e.arctan2(rho, image_distance))
     return marginal_ray_angle
 
 
@@ -108,7 +129,7 @@ def na_to_fno(na):
         fno.  The f/# of the system.
 
     """
-    return 1 / (2 * m.sin(na))
+    return 1 / (2 * e.sin(na))
 
 
 def object_dist_to_mag(efl, object_dist):
