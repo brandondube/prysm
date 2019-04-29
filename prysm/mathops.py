@@ -68,6 +68,30 @@ except ImportError:
             return wrapper
 
 
+def jinc(r):
+    """Jinc.
+    Parameters
+    ----------
+    r : `number`
+        radial distance
+    Returns
+    -------
+    `float`
+        the value of j1(x)/x for x != 0, 0.5 at 0
+    """
+    if r < 1e-8 and r > -1e-8:  # value of jinc for x < 1/2 machine precision  is 0.5
+        return 0.5
+    else:
+        return j1(r) / r
+
+
+if numba_installed is True:
+    # one day split numba jit and numpy jit
+    jinc = np.vectorize(jinc)
+else:
+    jinc = np.vectorize(jinc)
+
+
 class MathEngine:
     """An engine allowing an interchangeable backend for mathematical functions."""
     def __init__(self, source=np):
