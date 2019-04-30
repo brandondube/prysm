@@ -1,5 +1,7 @@
 """Objects for image simulation with."""
 
+from scipy.signal import chirp
+
 from .conf import config
 from .mathops import engine as e, jinc
 from .convolution import Convolvable
@@ -283,3 +285,22 @@ class SlantedEdge(Convolvable):
         self.black = diff
         self.white = 1 - diff
         super().__init__(data=arr, x=x, y=y, has_analytic_ft=False)
+
+
+class Chirp(Convolvable):
+    """A frequency chirp."""
+    def __init__(self, p0, p1, method='linear', binary=True, sample_spacing=2, samples=256):
+        p0 *= 2
+        p1 *= 2
+        ext = samples / 2 * sample_spacing
+        x = e.arange(-ext, ext, sample_spacing)
+        y = e.arange(-ext, ext, sample_spacing)
+        xx, yy = e.meshgrid(x, y)
+        sig = chirp(xx, 1 / p1, ext, 1 / p0, method=method)
+        if binary:
+            sig[sig < 0] = 0
+            sig[sig > 0] = 1
+        else:
+            sig = (sig + 1) / 2
+
+        super().__init__(x=x, y=y, data=sig, has_analytic_ft=False)

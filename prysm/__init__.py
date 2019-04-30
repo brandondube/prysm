@@ -32,6 +32,7 @@ from prysm.objects import (
     SiemensStar,
     TiltedSquare,
     SlantedEdge,
+    Chirp,
 )
 from prysm.degredations import Smear
 from prysm.zernike import FringeZernike, NollZernike, zernikefit
@@ -71,6 +72,7 @@ __all__ = [
     'SiemensStar',
     'TiltedSquare',
     'SlantedEdge',
+    'Chirp',
     'Smear',
     'Convolvable',
     'ConvolutionEngine',
