@@ -670,7 +670,7 @@ class BaseZernike(Pupil):
     def __init__(self, *args, **kwargs):
         """Initialize a new Zernike instance."""
         if args is not None:
-            if len(args) is 0:
+            if len(args) == 0:
                 self.coefs = e.zeros(len(self._map), dtype=config.precision)
             else:
                 self.coefs = e.asarray([*args[0]], dtype=config.precision)

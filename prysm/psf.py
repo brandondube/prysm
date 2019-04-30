@@ -211,7 +211,7 @@ class PSF(Convolvable):
             'interpolation': interp_method,
         }
         cb_opts = {}
-        if power is not 1:
+        if power != 1:
             plt_opts['norm'] = colors.PowerNorm(1/power)
             plt_opts['clim'] = (0, 1)
         elif clim[1] is not None:
