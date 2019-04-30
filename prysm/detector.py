@@ -73,9 +73,11 @@ class Detector(object):
             this would lead to an inaccurate result and is not supported
 
         """
-        pitch_x_err = abs(convolvable.sample_spacing % self.pitch_x)
-        pitch_y_err = abs(convolvable.sample_spacing % self.pitch_y)
-        ptol = 0.001  # 1 nm
+        ss = convolvable.sample_spacing
+        pitch_x_err = abs(abs(self.pitch_x % ss / ss) - 1)
+        pitch_y_err = abs(abs(self.pitch_y % ss / ss) - 1)
+
+        ptol = 0.01  # 1%
         if (self.rectangular_100pct_fillfactor_pix
            and (pitch_x_err < ptol)
            and (pitch_y_err < ptol)):
