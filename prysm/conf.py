@@ -123,12 +123,15 @@ class Config(object):
             invalid backend
 
         """
-        if backend.lower() in ('np', 'numpy'):
-            self._backend = 'np'
-        elif backend.lower() in ('cp', 'cu', 'cuda'):
-            self._backend = 'cu'
+        if isinstance(backend, str):
+            if backend.lower() in ('np', 'numpy'):
+                self._backend = 'numpy'
+            elif backend.lower() in ('cp', 'cu', 'cuda'):
+                self._backend = 'cupy'
+            else:
+                self._backend = backend
         else:
-            raise ValueError('backend must be numpy or cuda.')
+            self._backend = backend
 
         if self.initialized:
             for obs in self.chbackend_observers:
