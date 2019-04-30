@@ -5,7 +5,7 @@ from scipy.signal import chirp
 from .conf import config
 from .mathops import engine as e, jinc
 from .convolution import Convolvable
-from .coordinates import cart_to_polar
+from .coordinates import cart_to_polar, polar_to_cart
 
 
 class Slit(Convolvable):
@@ -289,13 +289,39 @@ class SlantedEdge(Convolvable):
 
 class Chirp(Convolvable):
     """A frequency chirp."""
-    def __init__(self, p0, p1, method='linear', binary=True, sample_spacing=2, samples=256):
+    def __init__(self, p0, p1, angle=0, method='linear', binary=True, sample_spacing=2, samples=256):
+        """Create a new Chirp instance.
+
+        Parameters
+        ----------
+        p0 : `float`
+            first period, units of microns
+        p1 : `float`
+            second period, units of microns
+        angle : `float`
+            clockwise angle between the X axis and the chirp, units of degrees
+        method : `str`, optional, {'linear', 'quadratic', 'logarithmic', 'hyperbolic'}
+            type of chirp, passed directly to scipy.signal.chirp
+        binary : `bool`, optional
+            if True, the chirp is a square bar target, not a sinusoidal target.
+        sample_spacing : `float`, optional
+            center-to-center spacing of samples in the array
+        samples : `float`, optional
+            number of samples
+
+        """
         p0 *= 2
         p1 *= 2
         ext = samples / 2 * sample_spacing
         x = e.arange(-ext, ext, sample_spacing)
         y = e.arange(-ext, ext, sample_spacing)
         xx, yy = e.meshgrid(x, y)
+
+        if angle != 0:
+            rho, phi = cart_to_polar(xx, yy)
+            phi += e.radians(angle)
+            xx, yy = polar_to_cart(rho, phi)
+
         sig = chirp(xx, 1 / p1, ext, 1 / p0, method=method)
         if binary:
             sig[sig < 0] = 0

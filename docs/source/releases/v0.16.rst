@@ -27,6 +27,10 @@ New Features
 
 * * Several bugs have been squashed in the process.
 
+* :mod:`prysm.degredations` for modeling degredations in the image chain.  :class:`~prysm.degredations.Smear` is its first member.
+
+* :class:`~prysm.objects.Chirp` to synthesize chirped frequency targets.
+
 Bugfixes
 ========
 
