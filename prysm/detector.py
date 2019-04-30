@@ -344,7 +344,8 @@ class PixelAperture(Convolvable):
 
         """
         xq, yq = e.meshgrid(x, y)
-        return abs(pixelaperture_analytic_otf(self.width_x, self.width_y, xq, yq))
+        coef = 1 / (self.width_x * self.width_y)
+        return coef * pixelaperture_analytic_otf(self.width_x, self.width_y, xq, yq)
 
 
 def pixelaperture_analytic_otf(width_x, width_y, freq_x, freq_y):
