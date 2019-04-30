@@ -28,13 +28,14 @@ def test_rejects_bad_precision():
 
 
 # must make certain the backend is set to numpy last to avoid cuda errors for rest of test suite
+@pytest.mark.parametrize('backend', ['np'])
 def test_set_backend(backend):
     config.backend = backend
     assert config.backend == np
 
 
 def test_rejects_bad_backend():
-    with pytest.raises(ValueError):
+    with pytest.raises(ModuleNotFoundError):
         config.backend = 'foo'
 
 

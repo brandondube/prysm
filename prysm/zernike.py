@@ -859,7 +859,7 @@ class BaseZernike(Pupil):
         magang = self.magnitudes
         mags = [m[0] for m in magang.values()]
         names = magang.keys()
-        idxs = m.asarray(list(range(len(names))))
+        idxs = e.asarray(list(range(len(names))))
 
         if sort:
             mags, names = sort_xy(mags, names)

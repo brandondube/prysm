@@ -36,10 +36,10 @@ def test_mathops_handles_own_jit_and_vectorize_definitions():
 
 # below here, tests purely for function not accuracy
 def test_fft2(sample_data_2d):
-    result = mathops.fft2(sample_data_2d)
+    result = mathops.fft.fft2(sample_data_2d)
     assert type(result) is np.ndarray
 
 
 def test_ifft2(sample_data_2d):
-    result = mathops.ifft2(sample_data_2d)
+    result = mathops.fft.ifft2(sample_data_2d)
     assert type(result) is np.ndarray
