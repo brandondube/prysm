@@ -822,7 +822,9 @@ class BaseZernike(Pupil):
             ax.set(xlabel=lab, ylim=lims)
         return fig, ax
 
-    def barplot_magnitudes(self, orientation='h', sort=False, buffer=1, zorder=3, offset=0, width=0.8, fig=None, ax=None):
+    def barplot_magnitudes(self, orientation='h', sort=False,
+                           buffer=1, zorder=3, offset=0, width=0.8,
+                           fig=None, ax=None):
         """Create a barplot of magnitudes of coefficient pairs and their names.
 
         E.g., astigmatism will get one bar.
@@ -1021,7 +1023,10 @@ class NollZernike(BaseZernike):
     _name = 'Noll'
 
 
-def zernikefit(data, x=None, y=None, rho=None, phi=None, terms=16, norm=False, residual=False, round_at=6, map_='fringe'):
+def zernikefit(data, x=None, y=None,
+               rho=None, phi=None, terms=16,
+               norm=False, residual=False,
+               round_at=6, map_='fringe'):
     """Fits a number of Zernike coefficients to provided data.
 
     Works by minimizing the mean square error  between each coefficient and the
