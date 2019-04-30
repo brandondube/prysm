@@ -125,11 +125,12 @@ class Config(object):
         """
         if isinstance(backend, str):
             if backend.lower() in ('np', 'numpy'):
-                self._backend = 'numpy'
+                backend = 'numpy'
             elif backend.lower() in ('cp', 'cu', 'cuda'):
-                self._backend = 'cupy'
-            else:
-                self._backend = backend
+                backend = 'cupy'
+
+            exec(f'import {backend}')
+            self._backend = eval(backend)
         else:
             self._backend = backend
 

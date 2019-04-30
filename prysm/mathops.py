@@ -124,12 +124,7 @@ class MathEngine:
 
     def change_backend(self, backend):
         """Function to run when changing the backend."""
-        if isinstance(backend, str):
-            exec(f'import {backend}')
-            self.source = eval(backend)
-        else:
-            # backend is a module
-            self.source = backend
+        self.source = backend
 
 
 engine = MathEngine()
