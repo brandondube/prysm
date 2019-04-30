@@ -814,7 +814,7 @@ class BaseZernike(Pupil):
                     ax.text(i, offsetY, str(i), ha='center')
             ax.set(ylabel=lab, xlim=lims)
         else:
-            ax.barh(idxs + offset, self.coefs, zorder=zorder)
+            ax.barh(idxs + offset, self.coefs, zorder=zorder, height=width)
             plt.yticks(idxs, names)
             if number:
                 for i in idxs:
@@ -875,7 +875,7 @@ class BaseZernike(Pupil):
             plt.xticks(idxs, names, rotation=90)
             ax.set(ylabel=lab, xlim=lims)
         else:
-            ax.barh(idxs + offset, mags, zorder=zorder, width=width)
+            ax.barh(idxs + offset, mags, zorder=zorder, height=width)
             plt.yticks(idxs, names)
             ax.set(xlabel=lab, ylim=lims)
         return fig, ax
