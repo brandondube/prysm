@@ -33,6 +33,7 @@ from prysm.objects import (
     TiltedSquare,
     SlantedEdge,
 )
+from prysm.degredations import Smear
 from prysm.zernike import FringeZernike, NollZernike, zernikefit
 from prysm.sample_data import sample_files
 from prysm.propagation import Wavefront
@@ -70,6 +71,7 @@ __all__ = [
     'SiemensStar',
     'TiltedSquare',
     'SlantedEdge',
+    'Smear',
     'Convolvable',
     'ConvolutionEngine',
     'Wavefront',
