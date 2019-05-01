@@ -116,3 +116,11 @@ def test_filter_functions(sample_i_mutate, freq, period):
     sample_i_mutate.fill()
     sample_i_mutate.filter(freq, period)
     assert sample_i_mutate
+
+
+def test_pad_functions(sample_i_mutate):
+    assert sample_i_mutate.pad(5)
+
+
+def test_recenter_functions(sample_i_mutate):
+    assert sample_i_mutate.recenter()
