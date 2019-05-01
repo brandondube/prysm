@@ -2,10 +2,10 @@
 prysm v0.16
 ***********
 
+This release has been largely focused on updating the internals of prysm and brings relatively new features.  The bulk of the work in this release has been spent on reworking the :mod:`~prysm.mathops` module for a cleaner and more extensible design and on rewriting the guts of the convolutional code.  The result is a slimmer library with cleaner code, faster execution, and higher accuracy results.  Users are encouraged to upgrade, particularly for the enhancements made to image simulations done based on the convolution engine.
+
 New Features
 ============
-
-* :meth:`~prysm.convolution.Convolvable.conv` now has a :code:`dryrun` argument which will return a string describing the result and codepath that would be followed.
 
 * :func:`prysm.coordinates.make_xy_grid` and :func:`~prysm.coordinates.make_rho_phi_grid` now take a :code:`radius` argument.
 
@@ -17,19 +17,18 @@ New Features
 
 * :meth:`prysm.interferogram.Interferogram.pad` function to pad interferograms; useful for dealing with group delay from spatial filtering.
 
-* :func:`~p.thinlens.object_to_image_dist` to calculate an object distance given a focal length and image distance.
+* :func:`~prysm.thinlens.object_to_image_dist` to calculate an object distance given a focal length and image distance.
 
-* Convolutions reworked - The code that manages convolutions in prysm has been rewritten.
-
-* * New :class:`~prysm.convolution.ConvolutionEngine` which allows users to control the execution flow of a convolution, adjust the data in k-space before returning to the spatial domain, and other advanced features.  For more information see the updated User's Guide.
-
-* * prysm has slimmed by 300 SLOC.
-
-* * Several bugs have been squashed in the process.
+* New :class:`~prysm.convolution.ConvolutionEngine` which allows users to control the execution flow of a convolution, adjust the data in k-space before returning to the spatial domain, and other advanced features.  For more information see the updated User's Guide.  Several bugs have been squashed in the process of making these upgrades.
 
 * :mod:`prysm.degredations` for modeling degredations in the image chain.  :class:`~prysm.degredations.Smear` is its first member.
 
 * :class:`~prysm.objects.Chirp` to synthesize chirped frequency targets.
+
+Breaking changes
+================
+
+* the :attr:`unit_x` and :attr:`unit_y` attributes on the BasicData class have been renamed to :attr:`x` and :attr:`y`.  :attr:`unit_x` and :attr:`unit_y` are provided as properties with warnings until v0.17.
 
 Bugfixes
 ========
