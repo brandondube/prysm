@@ -3,9 +3,7 @@ from collections import deque
 
 from .conf import config
 from .mathops import engine as e
-from .coordinates import resample_2d_complex
-from .convolution import Convolvable, ConvolutionEngine
-from .fttools import forward_ft_unit
+from .convolution import Convolvable
 from .util import is_odd
 
 
