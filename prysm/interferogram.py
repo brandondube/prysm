@@ -1,7 +1,8 @@
 """tools to analyze interferometric data."""
 import warnings
+import inspect
 
-from scipy import signal
+from scipy import signal, optimize
 
 from .conf import config
 from .mathops import engine as e
@@ -349,7 +350,7 @@ def synthesize_surface_from_psd(psd, nu_x, nu_y):
     return x, y, out
 
 
-def render_synthetic_surface(size, samples, rms=None, mask='circle', psd_fcn=abc_psd, **psd_fcn_kwargs):
+def render_synthetic_surface(size, samples, rms=None, mask='circle', psd_fcn=abc_psd, **psd_fcn_kwargs):  # NOQA
     """Render a synthetic surface with a given RMS value given a PSD function.
 
     Parameters
@@ -406,6 +407,60 @@ def render_synthetic_surface(size, samples, rms=None, mask='circle', psd_fcn=abc
         z *= scale_factor
 
     return x, y, z
+
+
+def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
+    """Fit parameters to a PSD curve.
+
+    Parameters
+    ----------
+    f : `numpy.ndarray`
+        spatial frequency, cy/length
+    psd : `numpy.ndarray`
+        1D PSD, units of height^2 / (cy/length)^2
+    callable : callable, optional
+        a callable object that takes parameters of (frequency, *); all other parameters will be fit
+    return_ : `str`, optional, {'coefficients', 'optres'}
+        what to return; either return the coefficients (optres.x) or the optimization result (optres)
+
+    Returns
+    -------
+    optres
+        `scipy.optimization.OptimizationResult`
+    coefficients
+        `numpy.ndarray` of coefficients
+
+    """
+    sig = inspect.signature(callable)
+    nparams = len(sig.parameters) - 1  # -1; offset for frequency parameter
+
+    if nparams < 3:  # ab-type PSD
+        # arbitrarily drop the lowest frequency bins; due to removal of piston/tiptilt/power
+        # the PSD will roll off in this region, we want to just fit the flat part
+        f = f[5:]
+        psd = psd[5:]
+
+    if guess is None:
+        initial_args = [1] * nparams
+        initial_args[0] = 100
+    else:
+        initial_args = guess
+
+    D = e.log10(psd)
+    N = D.shape[0]
+
+    def optfcn(x):
+        M = callable(f, *x)
+        M = e.log10(M)
+        cost_vec = (D - M) ** 2
+        cost = cost_vec.sum() / N
+        return cost
+
+    optres = optimize.basinhopping(optfcn, initial_args, minimizer_kwargs=dict(method='L-BFGS-B'))
+    if return_.lower() != 'coefficients':
+        return optres
+    else:
+        return optres.x
 
 
 class Interferogram(OpticalPhase):
@@ -896,7 +951,8 @@ class Interferogram(OpticalPhase):
         kernel *= self.bandlimited_rms(upper_limit, None) / wavelength
         return 1 - e.exp(-kernel**2)
 
-    def plot_psd2d(self, axlim=None, clim=(1e-9, 1e2), cmap=config.image_colormap, interp_method='lanczos', fig=None, ax=None):
+    def plot_psd2d(self, axlim=None, clim=(1e-9, 1e2), cmap=config.image_colormap,
+                   interp_method='lanczos', fig=None, ax=None):
         """Plot the two dimensional PSD.
 
         Parameters
@@ -1102,8 +1158,9 @@ class Interferogram(OpticalPhase):
                           scale=_scale, meta=zydat['meta'])
         return i.change_spatial_unit(to=scale.lower(), inplace=True)
 
-    @staticmethod
-    def render_from_psd(size, samples, rms=None, mask='circle', phase_unit='nm', psd_fcn=abc_psd, **psd_fcn_kwargs):
+    @staticmethod  # NOQA
+    def render_from_psd(size, samples, rms=None,
+                        mask='circle', phase_unit='nm', psd_fcn=abc_psd, **psd_fcn_kwargs):
         """Render a synthetic surface with a given RMS value given a PSD function.
 
         Parameters
@@ -1131,5 +1188,6 @@ class Interferogram(OpticalPhase):
             new interferogram instance
 
         """
-        x, y, z = render_synthetic_surface(size=size, samples=samples, rms=rms, mask=mask, psd_fcn=psd_fcn, **psd_fcn_kwargs)
+        x, y, z = render_synthetic_surface(size=size, samples=samples, rms=rms,
+                                           mask=mask, psd_fcn=psd_fcn, **psd_fcn_kwargs)
         return Interferogram(phase=z, x=x, y=y, scale='mm', phase_unit=phase_unit)

@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 
 from prysm import sample_files
-from prysm.interferogram import Interferogram, make_window
+from prysm.interferogram import Interferogram, make_window, fit_psd
 
 import matplotlib
 matplotlib.use('TkAgg')
@@ -124,3 +124,11 @@ def test_pad_functions(sample_i_mutate):
 
 def test_recenter_functions(sample_i_mutate):
     assert sample_i_mutate.recenter()
+
+
+def test_fit_psd(sample_i_mutate):
+    psddata = sample_i_mutate.psd_slices()
+    a, b, c = fit_psd(*psddata['azavg'])
+    assert a
+    assert b
+    assert c
