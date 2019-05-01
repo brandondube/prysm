@@ -5,6 +5,9 @@ import numpy as np
 
 from prysm import detector, psf, Convolvable
 
+import matplotlib as mpl
+mpl.use('TkAgg')
+
 
 @pytest.fixture
 def sample_psf():
@@ -43,7 +46,7 @@ def test_detector_bindown_doesnt_fail(sample_detector):
     z = np.ones((samples, samples))
     c = Convolvable(x=x, y=y, data=z)
     sample_detector.capture(c)
-    assert sample_detector.last.sample_spacing == sample_detector.pitch / 2
+    assert sample_detector.last.sample_spacing == sample_detector.pitch
 
 
 def test_olpf_render_doesnt_crash():
