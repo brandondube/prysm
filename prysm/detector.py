@@ -197,6 +197,11 @@ class Detector(object):
         """Nyquist frequency in cy/mm."""
         return self.fs / 2
 
+    @property
+    def last(self):
+        """Last frame captured."""
+        return self.captures[-1]
+
 
 class OLPF(Convolvable):
     """Optical Low Pass Filter."""

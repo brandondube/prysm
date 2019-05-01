@@ -1,6 +1,8 @@
 """Tests for detector modeling capabilities."""
 import pytest
 
+import numpy as np
+
 from prysm import detector, psf, Convolvable
 
 
@@ -34,6 +36,16 @@ def test_detector_can_show(sample_detector, sample_psf):
     assert ax
 
 
+def test_detector_bindown_doesnt_fail(sample_detector):
+    samples = 8
+    x = np.arange(samples) * sample_detector.pitch / 2
+    y = np.arange(samples) * sample_detector.pitch / 2
+    z = np.ones((samples, samples))
+    c = Convolvable(x=x, y=y, data=z)
+    sample_detector.capture(c)
+    assert sample_detector.last.sample_spacing == sample_detector.pitch / 2
+
+
 def test_olpf_render_doesnt_crash():
     olpf = detector.OLPF(5, samples_x=32, sample_spacing=0.5)
     assert olpf
@@ -50,3 +62,9 @@ def test_detector_properties(sample_detector):
     assert sd.fill_factor == 1
     assert pytest.approx(sd.fs, 1 / sd.pitch * 1e3)
     assert pytest.approx(sd.nyquist, sd.fs / 2)
+
+
+def test_detector_pitch_change_correctness():
+    d = detector.Detector(5)
+    d.pitch = 10
+    assert d.pitch == 10
