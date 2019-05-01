@@ -410,6 +410,7 @@ class ConvolutionEngine:
             c2_pad = pad2d(self.c2.data, self.Q, mode=self.pad_method)
             c2_ft = e.fft.fftshift(e.fft.fft2(e.fft.ifftshift(c2_pad)))
             c1_ft = self.c1.analytic_ft(self.kspace_x, self.kspace_y)
+
         elif self.c2.has_analytic_ft:
             # units came directly from c1, pad and FT c2
             c1_pad = pad2d(self.c1.data, self.Q, mode=self.pad_method)
@@ -464,8 +465,8 @@ class ConvolutionEngine:
             sample_spacing = min(self.c1.sample_spacing, self.c2.sample_spacing)
 
         self.sample_spacing = sample_spacing
-        self.nsamples_x = int(e.ceil(((support_x / sample_spacing) + 1) * self.Q))
-        self.nsamples_y = int(e.ceil(((support_y / sample_spacing) + 1) * self.Q))
+        self.nsamples_x = int(e.floor(((support_x / sample_spacing) + 1) * self.Q))
+        self.nsamples_y = int(e.floor(((support_y / sample_spacing) + 1) * self.Q))
         self.kspace_x = forward_ft_unit(sample_spacing, self.nsamples_x, True)
         self.kspace_y = forward_ft_unit(sample_spacing, self.nsamples_y, True)
         return self
