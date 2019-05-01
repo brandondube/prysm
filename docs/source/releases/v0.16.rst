@@ -25,6 +25,8 @@ New Features
 
 * :class:`~prysm.objects.Chirp` to synthesize chirped frequency targets.
 
+* :func:`~prysm.interferogram.fit_psd` to fit analytic curves to PSD data.  Note that this function works best when given a reasonable guess; curve fitting extremely high dynamic range signals (such as PSDs) is not very stable.
+
 Breaking changes
 ================
 
