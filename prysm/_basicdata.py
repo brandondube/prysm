@@ -101,7 +101,7 @@ class BasicData:
         return self.y, getattr(self, self._data_attr)[:, self.center_x]
 
     def copy(self):
-        """Return a (deep) copy of this instance)."""
+        """Return a (deep) copy of this instance."""
         return copy.deepcopy(self)
 
     @property
