@@ -1,5 +1,6 @@
 """Basic class holding data, used to recycle code."""
 import copy
+import warnings
 
 from .mathops import engine as e
 
@@ -102,3 +103,13 @@ class BasicData:
     def copy(self):
         """Return a (deep) copy of this instance)."""
         return copy.deepcopy(self)
+
+    @property
+    def unit_x(self):
+        warnings.warn('.unit_x is deprecated and will be removed in prysm v0.17 - use .x instead')
+        return self.x
+
+    @property
+    def unit_y(self):
+        warnings.warn('.unit_y is deprecated and will be removed in prysm v0.17 - use .y instead')
+        return self.y
