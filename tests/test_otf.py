@@ -70,3 +70,9 @@ def test_doesnt_recalculate_when_psf_caches_mtf():
     ps._mtf = mt
     mt2 = otf.MTF.from_psf(ps)
     assert id(mt) == id(mt2)
+
+
+def test_azavg_plot_functions(mtf):
+    fig, ax = mtf.plot_azimuthal_average()
+    assert fig
+    assert ax
