@@ -87,32 +87,18 @@ class Detector(object):
                                               convolvable.data)
             c_out = Convolvable(data=data, x=ux, y=uy, has_analytic_ft=False)
         else:
-            def mutate_sample_latice(self, engine):
-                pitch_x = -1 / (2 * engine.kspace_x[0])
-                pitch_y = -1 / (2 * engine.kspace_y[0])
-                sy, sx = engine.kspace_data.shape
-                support_x = pitch_x * sx
-                support_y = pitch_y * sy
-                sx_new = int(e.ceil(support_x / self.pitch_x))  # NOQA pyright "e may be unbound"
-                sy_new = int(e.ceil(support_y / self.pitch_y))  # NOQA e comes from import at top of file
+            from skimage.transform import resize
+            c_out = self.pixel.conv(convolvable)
+            ss = c_out.sample_spacing
+            py, px = c_out.shape
+            oy = int(e.floor(py * (ss / self.pitch_y)))
+            ox = int(e.floor(px * (ss / self.pitch_x)))
 
-                new_x = forward_ft_unit(self.pitch_x, sx_new)
-                new_y = forward_ft_unit(self.pitch_y, sy_new)
-                engine.kspace_data = resample_2d_complex(engine.kspace_data,
-                                                         (engine.kspace_x, engine.kspace_y),
-                                                         (new_x, new_y))
-                engine.kspace_x = new_x
-                engine.kspace_y = new_y
-
-            eng = ConvolutionEngine(self.pixel, convolvable)
-            eng.compute_kspace_units()
-            eng.compute_kspace_data()
-            mutate_sample_latice(self, eng)
-            eng.compute_spatial_units()
-            eng.ifft()
-            eng.crop_output()
-            eng.postprocess_spatial()
-            c_out = Convolvable(*eng.spatial)
+            # resize combines decimation and interpolation and is an effective resampler
+            out_data = resize(c_out.data, (oy, ox), mode='reflect', anti_aliasing=False, clip=False, order=3)
+            out_x = e.arange(ox)
+            out_y = e.arange(oy)
+            c_out = Convolvable(data=out_data, x=out_x, y=out_y)
 
         self.captures.append(c_out)
         return c_out
