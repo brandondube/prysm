@@ -83,3 +83,11 @@ def test_pupil_plot_slice_xy_functions(p):
     fig, ax = p.plot_slice_xy()
     assert fig
     assert ax
+
+
+def test_pupil_add_functions(p):
+    assert p + p
+
+
+def test_pupil_sub_functions(p):
+    assert p - p
