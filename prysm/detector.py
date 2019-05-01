@@ -72,8 +72,8 @@ class Detector(object):
 
         """
         ss = convolvable.sample_spacing
-        pitch_x_err = abs(abs(self.pitch_x % ss / ss) - 1)
-        pitch_y_err = abs(abs(self.pitch_y % ss / ss) - 1)
+        pitch_x_err = abs(self.pitch_x % ss) / ss
+        pitch_y_err = abs(self.pitch_y % ss) / ss
 
         ptol = 0.01  # 1%
         if (self.rectangular_100pct_fillfactor_pix
@@ -94,8 +94,11 @@ class Detector(object):
 
             # resize combines decimation and interpolation and is an effective resampler
             out_data = resize(c_out.data, (oy, ox), mode='reflect', anti_aliasing=False, clip=False, order=3)
-            out_x = e.arange(ox)
-            out_y = e.arange(oy)
+
+            oext_x = (ox - 1) * self.pitch_x / 2
+            oext_y = (oy - 1) * self.pitch_y / 2
+            out_x = e.arange(ox) * self.pitch_x - oext_x
+            out_y = e.arange(oy) * self.pitch_y - oext_y
             c_out = Convolvable(data=out_data, x=out_x, y=out_y)
 
         self.captures.append(c_out)
