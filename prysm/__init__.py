@@ -34,7 +34,7 @@ from prysm.objects import (
     SlantedEdge,
     Chirp,
 )
-from prysm.degredations import Smear
+from prysm.degredations import Smear, Jitter
 from prysm.zernike import FringeZernike, NollZernike, zernikefit
 from prysm.sample_data import sample_files
 from prysm.propagation import Wavefront
@@ -74,6 +74,7 @@ __all__ = [
     'SlantedEdge',
     'Chirp',
     'Smear',
+    'Jitter',
     'Convolvable',
     'ConvolutionEngine',
     'Wavefront',

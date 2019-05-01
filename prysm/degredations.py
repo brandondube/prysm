@@ -45,3 +45,56 @@ class Smear(Convolvable):
             xq, yq = polar_to_cart(rho, phi)
 
         return e.sinc(xq * self.width)
+
+
+class Jitter(Convolvable):
+    """Jitter (high frequency motion)."""
+    def __init__(self, scale, sample_spacing=None, samples=None):
+        """Create a new Jitter instance.
+
+        Parameters
+        ----------
+        scale : `float`
+            scale of the jitter, units of microns
+        sample_spacing : `float`, optional
+            center-to-center sample spacing, units of microns
+        samples : `int`, optional
+            number of samples in X and Y
+
+        """
+        self.scale = scale
+        if samples is not None:
+            ext = (samples - 1) * sample_spacing / 2
+            x = e.arange(-ext, ext, sample_spacing)
+            y = e.arange(-ext, ext, sample_spacing)
+
+            coef = 1 / (scale * e.sqrt(2 * e.pi))
+            xx, yy = e.meshgrid(x, y)
+            rho, _ = cart_to_polar(xx, yy)
+            kernel = rho ** 2 / (2 * scale ** 2)
+            z = coef * e.exp(-kernel)
+        else:
+            x, y, z = None, None, None
+
+        super().__init__(data=z, x=x, y=y, has_analytic_ft=True)
+
+    def analytic_ft(self, x, y):
+        """Analytic FT of jitter.
+
+        Parameters
+        ----------
+        x : `numpy.ndarray`
+            x Cartesian spatial frequency, units of cy/um
+        y : `numpy.ndarray`
+            y Cartesian spatial frequency, units of cy/um
+
+        Returns
+        -------
+        `numpy.ndarray`
+            value of analytic FT
+
+        """
+        xq, yq = e.meshgrid(x, y)
+        rho, _ = cart_to_polar(xq, yq)
+        kernel = e.pi * self.scale * rho
+        return e.exp(-2 * kernel**2)

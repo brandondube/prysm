@@ -21,7 +21,7 @@ New Features
 
 * New :class:`~prysm.convolution.ConvolutionEngine` which allows users to control the execution flow of a convolution, adjust the data in k-space before returning to the spatial domain, and other advanced features.  For more information see the updated User's Guide.  Several bugs have been squashed in the process of making these upgrades.
 
-* :mod:`prysm.degredations` for modeling degredations in the image chain.  :class:`~prysm.degredations.Smear` is its first member.
+* :mod:`prysm.degredations` for modeling degredations in the image chain.  :class:`Smear` and :class:`Jitter` are its first members.  They are also exported at the top level of the library.
 
 * :class:`~prysm.objects.Chirp` to synthesize chirped frequency targets.
 
