@@ -98,12 +98,6 @@ class Convolvable(BasicData):
         ----------
         other : `Convolvable`
             A convolvable object
-        postprocess: `iterable` or callable or None, optional
-            function or sequence of functions to call to post-process the result.
-            None if no work should be done.  Functions should accept a single
-            argument, the spatial representation of the result, centered on the origin
-        dryrun : `bool`, optional
-            if True, return a string describing the process of convolution for this case
 
         Returns
         -------
@@ -112,51 +106,19 @@ class Convolvable(BasicData):
 
         Notes
         -----
-        The algoithm works according to the following cases:
-            1.  Both self and other have analytical fourier transforms:
-                - The analytic forms will be used to compute the output directly.
-                - The output sample spacing will be the finer of the two inputs.
-                - The output window will cover the same extent as the "wider"
-                  input.  If this window is not an integer number of samples
-                  wide, it will be enlarged symmetrically such that it is.  This
-                  may mean the output array is not of the same size as either
-                  input.
-                - An input which contains a sample at (0,0) may not produce an
-                  output with a sample at (0,0) if the input samplings are not
-                  favorable.  To ensure this does not happen confirm that the
-                  inputs are computed over identical grids containing 0 to
-                  begin with.
-            2.  One of self and other have analytical fourier transforms:
-                - The input which does NOT have an analytical fourier transform
-                  will define the output grid.
-                - The available analytic FT will be used to do the convolution
-                  in Fourier space.
-            3.  Neither input has an analytic fourier transform:
-                3.1, the two convolvables have the same sample spacing to within
-                     a numerical precision of 0.1 nm:
-                    - the fourier transform of both will be taken.  If one has
-                      fewer samples, it will be upsampled in Fourier space
-                3.2, the two convolvables have different sample spacing:
-                    - The fourier transform of both inputs will be taken.  It is
-                      assumed that the more coarsely sampled signal is Nyquist
-                      sampled or better, and thus acts as a low-pass filter; the
-                      more finaly sampled input will be interpolated onto the
-                      same grid as the more coarsely sampled input.  The higher
-                      frequency energy would be eliminated by multiplication with
-                      the Fourier spectrum of the more coarsely sampled input
-                      anyway.
+        If self and other both have analytic Fourier transforms, no math will be done and the aFTs
+        are merged directly.
 
-        The subroutines have the following properties with regard to accuracy:
-            1.  Computes a perfect numerical representation of the continuous
-                output, provided the output grid is capable of Nyquist sampling
-                the result.
-            2.  If the input that does not have an analytic FT is unaliased,
-                computes a perfect numerical representation of the continuous
-                output.  If it does not, the input aliasing limits the output.
-            3.  Accuracy of computation is dependent on how much energy is
-                present at nyquist in the worse-sampled input; if this input
-                is worse than Nyquist sampled, then the result will not be
-                correct.
+        If only one of self or other has an analytic Fourier transform, the output grid will be
+        defined by the object which does not have an analytic Fourier transform.
+
+        If neither has an analytic transform, the output grid will:
+        - span max(self.support, other.support)
+        - have sample spacing min(self.sample_spacing, other.sample_spacing)
+
+        This ensures the signal remains Nyquist sampled and (probably) doesn't expand beyond
+        the extent of the output window.  The latter condition will be violated when two large
+        convolvables are convolved.
 
         """
         e = ConvolutionEngine(self, other)
