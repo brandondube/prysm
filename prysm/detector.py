@@ -157,7 +157,7 @@ class Detector(object):
         return min(self.pitch_x, self.pitch_y)
 
     @pitch.setter
-    def set_pitch(self, pitch_x, pitch_y=None):
+    def pitch(self, pitch_x, pitch_y=None):
         """Set the pixel pitch.
 
         Parameters
