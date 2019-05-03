@@ -44,3 +44,13 @@ def test_tiltedsquare_renders():
 def test_slantededge_renders():
     se = objects.SlantedEdge()
     assert se
+
+
+def test_grating_renders():
+    g = objects.Grating(1)
+    assert g
+
+
+def test_grating_array_renders():
+    ga = objects.GratingArray([1, 2], [1, 2])
+    assert ga

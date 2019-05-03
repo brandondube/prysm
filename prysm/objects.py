@@ -267,7 +267,8 @@ class SlantedEdge(Convolvable):
         diff = (1 - contrast) / 2
         arr = e.full((samples, samples), 1 - diff)
         ext = samples / 2 * sample_spacing
-        x = y = e.arange(-ext, ext, sample_spacing)
+        x = e.arange(-ext, ext, sample_spacing)
+        y = e.arange(-ext, ext, sample_spacing)
         xx, yy = e.meshgrid(x, y)
 
         angle = e.radians(angle)
@@ -285,6 +286,113 @@ class SlantedEdge(Convolvable):
         self.black = diff
         self.white = 1 - diff
         super().__init__(data=arr, x=x, y=y, has_analytic_ft=False)
+
+
+class Grating(Convolvable):
+    """A grating with a given ruling."""
+    def __init__(self, period, angle=0, sinusoidal=False, sample_spacing=2, samples=256):
+        """Create a new Grating object
+
+        Parameters
+        ----------
+        period : `float`
+            period of the grating in microns
+        angle : `float`, optional
+            clockwise angle of the grating w.r.t. the X axis, degrees
+        sinusoidal : `bool`, optional
+            if True, the grating is a sinusoid, else it has square edges
+        sample_spacing : `float`, optional
+            center-to-center sample spacing in microns
+        samples : `int`, optional
+            number of samples across the diameter of the array
+
+        """
+        self.period = period
+        self.sinusoidal = sinusoidal
+
+        ext = samples / 2 * sample_spacing
+        x = e.arange(-ext, ext, sample_spacing)
+        y = e.arange(-ext, ext, sample_spacing)
+        xx, yy = e.meshgrid(x, y)
+        if angle != 0:
+            rho, phi = cart_to_polar(xx, yy)
+            phi += e.radians(angle)
+            xx, yy = polar_to_cart(rho, phi)
+
+        data = e.cos(2 * e.pi / period * xx)
+        if sinusoidal:
+            data += 1
+            data /= 2
+        else:
+            data[data > 0] = 1
+            data[data < 0] = 0
+
+        super().__init__(data=data, x=x, y=y, has_analytic_ft=False)
+
+
+class GratingArray(Convolvable):
+    """An array of gratings with given rulings."""
+    def __init__(self, periods, angles=None, sinusoidal=False, sample_spacing=2, samples=256):
+        # if angles not provided, angles are 0
+        if angles is None:
+            angles = [0] * len(periods)
+
+        self.periods = periods
+        self.angles = angles
+        self.sinusoidal = sinusoidal
+
+        # calculate the basic grid things are defined on
+        ext = samples / 2 * sample_spacing
+        x = e.arange(-ext, ext, sample_spacing)
+        y = e.arange(-ext, ext, sample_spacing)
+        xx, yy = e.meshgrid(x, y)
+        xxx, yyy = xx, yy
+
+        # compute the grid parameters; number of columns, number of samples per column
+        squareness = e.sqrt(len(periods))
+        ncols = int(e.ceil(squareness))
+        samples_per_patch = int(e.floor(samples / ncols))
+        low_idx_x = 0
+        high_idx_x = samples_per_patch
+        low_idx_y = 0
+        high_idx_y = samples_per_patch
+
+        out = e.zeros(xx.shape)
+        for idx, (period, angle) in enumerate(zip(periods, angles)):
+            # if we're off at an off angle, adjust the coordinates
+            if angle != 0:
+                rho, phi = cart_to_polar(xxx, yyy)
+                phi += e.radians(angle)
+                xxx, yyy = polar_to_cart(rho, phi)
+
+            # compute the sinusoid
+            data = e.cos(2 * e.pi / period * xxx)
+
+            # compute the indices to embed it into the final array;
+            # every time the current column advances, advance the X coordinates
+            sy = slice(low_idx_y, high_idx_y)
+            sx = slice(low_idx_x, high_idx_x)
+            out[sy, sx] += data[sy, sx]
+
+            # advance the indices are needed
+            if (idx > 0) & ((idx - 1 % ncols) == 0):
+                low_idx_x = 0
+                high_idx_x = samples_per_patch
+                low_idx_y += samples_per_patch
+                high_idx_y += samples_per_patch
+            else:
+                low_idx_x += samples_per_patch
+                high_idx_x += samples_per_patch
+
+            xxx = xx
+
+        if sinusoidal:
+            out += 1
+            out /= 2
+        else:
+            out[out > 0] = 1
+            out[out < 0] = 0
+        super().__init__(data=out, x=x, y=y, has_analytic_ft=False)
 
 
 class Chirp(Convolvable):

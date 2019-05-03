@@ -32,6 +32,8 @@ from prysm.objects import (
     SiemensStar,
     TiltedSquare,
     SlantedEdge,
+    Grating,
+    GratingArray,
     Chirp,
 )
 from prysm.degredations import Smear, Jitter
@@ -72,6 +74,8 @@ __all__ = [
     'SiemensStar',
     'TiltedSquare',
     'SlantedEdge',
+    'Grating',
+    'GratingArray',
     'Chirp',
     'Smear',
     'Jitter',
