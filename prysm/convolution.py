@@ -1,4 +1,5 @@
 """Defines behavior of convolvable items and a base class to encapsulate that behavior."""
+import types
 
 from .mathops import engine as e
 from ._basicdata import BasicData
@@ -486,7 +487,7 @@ class ConvolutionEngine:
                 part2 = self.s2.analytic_ft(x, y)
                 return part1 * part2
 
-            c_out.analytic_ft = aft
+            c_out.analytic_ft = types.MethodType(aft, c_out)
             return c_out
 
     @property
