@@ -356,6 +356,7 @@ class GratingArray(Convolvable):
         high_idx_x = samples_per_patch
         low_idx_y = 0
         high_idx_y = samples_per_patch
+        curr_row = 0
 
         out = e.zeros(xx.shape)
         for idx, (period, angle) in enumerate(zip(periods, angles)):
@@ -375,11 +376,13 @@ class GratingArray(Convolvable):
             out[sy, sx] += data[sy, sx]
 
             # advance the indices are needed
-            if (idx > 0) & ((idx - 1 % ncols) == 0):
+            if (idx > 0) & ((idx + 1) % ncols == 0):
+                offset = samples_per_patch * curr_row
                 low_idx_x = 0
                 high_idx_x = samples_per_patch
-                low_idx_y += samples_per_patch
-                high_idx_y += samples_per_patch
+                low_idx_y = samples_per_patch + offset
+                high_idx_y = samples_per_patch * 2 + offset
+                curr_row += 1
             else:
                 low_idx_x += samples_per_patch
                 high_idx_x += samples_per_patch
