@@ -22,9 +22,9 @@ prysm is on pypi:
 
 >>> pip install prysm
 
-prysm requires only [numpy](http://www.numpy.org/) and [scipy](https://www.scipy.org/).
+prysm requires only `numpy <http://www.numpy.org/>`_ and `scipy <https://www.scipy.org/>`_.
 
-If your environment has [numba](http://numba.pydata.org/) installed, it will automatically accelerate many of prysm's compuations.  To use an nVidia GPU, you must have [cupy](https://cupy.chainer.org/) installed.  Plotting uses [matplotlib](https://matplotlib.org/).  Images are read and written with [imageio](https://imageio.github.io/).  Some MTF utilities utilize [pandas](https://pandas.pydata.org/).  Reading of Zygo datx files requires [h5py](https://www.h5py.org/).
+If your environment has `numba <http://numba.pydata.org/>`_ installed, it will automatically accelerate many of prysm's compuations.  To use an nVidia GPU, you must have `cupy <https://cupy.chainer.org/>`_ installed.  Plotting uses `matplotlib <https://matplotlib.org/>`_.  Images are read and written with `imageio <https://imageio.github.io/>`_.  Some MTF utilities utilize `pandas <https://pandas.pydata.org/>`_.  Reading of Zygo datx files requires `h5py <https://www.h5py.org/>`_.
 
 pip can be directed to install these,
 

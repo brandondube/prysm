@@ -53,8 +53,8 @@ New Features
 
 * :func:`~prysm.interferogram.ab_psd` function in :mod:`prysm.interferogram` for inverse power law PSD curves.
 
-Breaking API Changes
-===========
+Breaking Changes
+================
 
 * :code:`rms_norm` in functions related to Zernikes has been renamed to :code:`norm`.  This affects the :func:`~prysm.fringezernike.fit` function from :mod:`prysm.fringezernike` as well as the :class:`FringeZernike` class.
 

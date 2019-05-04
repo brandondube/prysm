@@ -9,11 +9,13 @@ API Reference
    conf
    convolution
    coordinates
+   degredations
    detector
    fttools
    geometry
    interferogram
    io
+   mathops
    mtf_utils
    objects
    otf
