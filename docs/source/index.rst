@@ -77,14 +77,22 @@ Physical Optics
 * * Siemens stars
 * * tilted squares
 * * slanted edges
+* * gratings
+* * arrays of gratings
+* * chirps
 * read, write, and display of images
 
 * Detector models for e.g. STOP analysis or image synthesis
 
+* image-chain degredation models:
+* * smear
+* * jitter
+* * atmospheric seeing
+
 * Interferometric analysis
 * * cropping
 * * masking
-* * lowpass/highpass/bandpass/band-reject filtering
+* * spatial filtering
 * * least-squares fitting and subtraction of Zernike modes, planes, and spheres
 * * evaluation of PV, RMS, stdev, Sa, band-limited RMS, total integrated scatter
 * * computation of PSD
@@ -96,7 +104,7 @@ Physical Optics
 
 First-Order Optics
 ~~~~~~~~~~~~~~~~~~
-* object-image distance relation
+* object-image distance relations
 * F/#, NA
 * lateral and longitudinal magnification
 * defocus-deltaZ relation
@@ -105,7 +113,7 @@ First-Order Optics
 Parsing Data from Commercial & Open Source Instruments
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 * Trioptics ImageMaster MTF benches
-* Zygo Fizeau and white light interferometers
+* Zygo interferometers
 * SigFit
 * MTF Mapper
 
@@ -132,6 +140,13 @@ API Reference
 .. toctree::
 
     api/index.rst
+
+Contributing
+------------
+
+.. toctree::
+
+    contributing.rst
 
 Release History
 ---------------
