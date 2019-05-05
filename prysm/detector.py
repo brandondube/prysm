@@ -272,9 +272,8 @@ class OLPF(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        xq, yq = e.meshgrid(x, y)
-        return (e.cos(2 * xq * self.width_x) *
-                e.cos(2 * yq * self.width_y)).astype(config.precision)
+        return (e.cos(2 * self.width_x * x) *
+                e.cos(2 * self.width_y * y)).astype(config.precision)
 
 
 class PixelAperture(Convolvable):
@@ -337,9 +336,8 @@ class PixelAperture(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        xq, yq = e.meshgrid(x, y)
         coef = 1 / (self.width_x * self.width_y)
-        return coef * pixelaperture_analytic_otf(self.width_x, self.width_y, xq, yq)
+        return coef * pixelaperture_analytic_otf(self.width_x, self.width_y, x, y)
 
 
 def pixelaperture_analytic_otf(width_x, width_y, freq_x, freq_y):

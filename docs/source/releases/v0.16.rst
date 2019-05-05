@@ -21,7 +21,7 @@ New Features
 
 * New :class:`~prysm.convolution.ConvolutionEngine` which allows users to control the execution flow of a convolution, adjust the data in k-space before returning to the spatial domain, and other advanced features.  For more information see the updated User's Guide.  Several bugs have been squashed in the process of making these upgrades.
 
-* :mod:`prysm.degredations` for modeling degredations in the image chain.  :class:`Smear` and :class:`Jitter` are its first members.  They are also exported at the top level of the library.
+* :mod:`prysm.degredations` for modeling degredations in the image chain.  :class:`~orysm.degredations.Smear` and :class:`~prysm.degredations.Jitter` are its first members.  They are also exported at the top level of the library.
 
 * :class:`~prysm.objects.Chirp` to synthesize chirped frequency targets.
 
@@ -35,6 +35,8 @@ Breaking changes
 ================
 
 * the :attr:`unit_x` and :attr:`unit_y` attributes on the BasicData class have been renamed to :attr:`x` and :attr:`y`.  :attr:`unit_x` and :attr:`unit_y` are provided as properties with warnings until v0.17.
+
+* :code:`analytic_ft` functions no longer calculate the meshgrid of x and y inputs internally.  This makes output shapes and types consistent with input (i.e., calling :code:`.analytic_ft(0,0)` will return a float instead of a :code:`(1,1)` shape ndarray).  Performance is also improved by removing redundant gridding operations.
 
 Bugfixes
 ========
@@ -61,3 +63,5 @@ Under-the-hood Changes
 * :func:`prysm.propagation.prop_pupil_plane_to_psf_plane` performance has been improved when Q=1.
 
 * some functions have had their conformance with :attr:`prysm.config.precision` improved.
+
+* the performance of :meth:`prysm.detector.OLPF.analytic_ft` has been improved.

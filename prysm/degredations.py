@@ -38,13 +38,12 @@ class Smear(Convolvable):
             analytical FT of the smear.
 
         """
-        xq, yq = e.meshgrid(x, y)
         if self.angle != 0:
-            rho, phi = cart_to_polar(xq, yq)
+            rho, phi = cart_to_polar(x, y)
             phi += e.radians(self.angle)
-            xq, yq = polar_to_cart(rho, phi)
+            x, y = polar_to_cart(rho, phi)
 
-        return e.sinc(xq * self.width)
+        return e.sinc(x * self.width)
 
 
 class Jitter(Convolvable):
@@ -94,7 +93,6 @@ class Jitter(Convolvable):
             value of analytic FT
 
         """
-        xq, yq = e.meshgrid(x, y)
-        rho, _ = cart_to_polar(xq, yq)
+        rho, _ = cart_to_polar(x, y)
         kernel = e.pi * self.scale * rho
         return e.exp(-2 * kernel**2)

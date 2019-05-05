@@ -333,29 +333,9 @@ class Grating(Convolvable):
 class GratingArray(Convolvable):
     """An array of gratings with given rulings."""
     def __init__(self, periods, angles=None, sinusoidal=False, sample_spacing=2, samples=256):
-        """Create a new GratingArray object
-
-        Parameters
-        ----------
-        periods : iterable
-            periods of the gratings in microns
-        angles : `float` or iterable, optional
-            clockwise angles of the gratings w.r.t. the X axis, degrees.
-            If None, all angles 0.
-            If single value, all angles are the same
-        sinusoidal : `bool`, optional
-            if True, the grating is a sinusoid, else it has square edges
-        sample_spacing : `float`, optional
-            center-to-center sample spacing in microns
-        samples : `int`, optional
-            number of samples across the diameter of the array
-
-        """
         # if angles not provided, angles are 0
         if angles is None:
             angles = [0] * len(periods)
-        elif not hasattr(angles, '__iter__'):
-            angles = [angles] * len(periods)
 
         self.periods = periods
         self.angles = angles

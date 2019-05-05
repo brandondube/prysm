@@ -67,7 +67,7 @@ def test_polychromatic_functions():
 
 def test_airydisk_aft_origin():
     ad = psf.AiryDisk(0.5, 0.5)
-    assert ad.analytic_ft(0, 0)[0, 0] == 1
+    assert ad.analytic_ft(0, 0) == 1
 
 
 def test_encircled_energy_radius_functions(tpsf_mutate):

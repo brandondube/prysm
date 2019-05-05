@@ -103,7 +103,7 @@ class Convolvable(BasicData):
         Returns
         -------
         `Convolvable`
-            a convolvable that lacks an analytical fourier transform
+            a convolvable object
 
         Notes
         -----
@@ -265,7 +265,8 @@ class Convolvable(BasicData):
                 lx, ly, ss = len(self.x), len(self.y), self.sample_spacing
                 freq_x, freq_y = forward_ft_unit(ss, lx), forward_ft_unit(ss, ly)
 
-            data = self.analytic_ft(freq_x, freq_y)
+            fx, fy = e.meshgrid(freq_x, freq_y)
+            data = self.analytic_ft(fx, fy)
         else:
             data = abs(e.fft.fftshift(e.fft.fft2(pad2d(self.data, 2))))
             data /= data.max()
@@ -372,13 +373,14 @@ class ConvolutionEngine:
             # units came directly from c2, pad and FT c1
             c2_pad = pad2d(self.c2.data, self.Q, mode=self.pad_method)
             c2_ft = e.fft.fftshift(e.fft.fft2(e.fft.ifftshift(c2_pad)))
-            c1_ft = self.c1.analytic_ft(self.kspace_x, self.kspace_y)
-
+            xx, yy = e.meshgrid(self.kspace_x, self.kspace_y)
+            c1_ft = self.c1.analytic_ft(xx, yy)
         elif self.c2.has_analytic_ft:
             # units came directly from c1, pad and FT c2
             c1_pad = pad2d(self.c1.data, self.Q, mode=self.pad_method)
             c1_ft = e.fft.fftshift(e.fft.fft2(e.fft.ifftshift(c1_pad)))
-            c2_ft = self.c2.analytic_ft(self.kspace_x, self.kspace_y)
+            xx, yy = e.meshgrid(self.kspace_x, self.kspace_y)
+            c2_ft = self.c2.analytic_ft(xx, yy)
         else:
             need_to_interp_c1 = False
             need_to_interp_c2 = False

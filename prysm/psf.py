@@ -458,7 +458,7 @@ class AiryDisk(Convolvable):
 
         """
         from .otf import diffraction_limited_mtf
-        r, p = cart_to_polar(*e.meshgrid(x, y))
+        r, p = cart_to_polar(x, y)
         return diffraction_limited_mtf(self.fno, self.wavelength, r*1e3)  # um to mm
 
 
