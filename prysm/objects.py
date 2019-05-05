@@ -35,7 +35,8 @@ class Slit(Convolvable):
 
         if samples > 0:
             ext = samples / 2 * sample_spacing
-            x, y = e.arange(-ext, ext, sample_spacing), e.arange(-ext, ext, sample_spacing)
+            x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
+            y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
             arr = e.zeros((samples, samples))
         else:
             arr, x, y = None, None, None
@@ -78,14 +79,13 @@ class Slit(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        xq, yq = e.meshgrid(x, y)
         if self.width_x > 0 and self.width_y > 0:
-            return (e.sinc(xq * self.width_x) +
-                    e.sinc(yq * self.width_y)).astype(config.precision)
+            return (e.sinc(x * self.width_x) +
+                    e.sinc(y * self.width_y)).astype(config.precision)
         elif self.width_x > 0 and self.width_y == 0:
-            return e.sinc(xq * self.width_x).astype(config.precision)
+            return e.sinc(x * self.width_x).astype(config.precision)
         else:
-            return e.sinc(yq * self.width_y).astype(config.precision)
+            return e.sinc(y * self.width_y).astype(config.precision)
 
 
 class Pinhole(Convolvable):
@@ -113,7 +113,8 @@ class Pinhole(Convolvable):
         # produce coordinate arrays
         if samples > 0:
             ext = samples / 2 * sample_spacing
-            x, y = e.arange(-ext, ext, sample_spacing), e.arange(-ext, ext, sample_spacing)
+            x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
+            y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
             xv, yv = e.meshgrid(x, y)
             w = width / 2
             # paint a circle on a black background
@@ -176,12 +177,13 @@ class SiemensStar(Convolvable):
         self.spokes = spokes
 
         # generate a coordinate grid
-        x = e.linspace(-1, 1, samples)
-        y = e.linspace(-1, 1, samples)
+        x = e.linspace(-1, 1, samples, dtype=config.precision)
+        y = e.linspace(-1, 1, samples, dtype=config.precision)
         xx, yy = e.meshgrid(x, y)
         rv, pv = cart_to_polar(xx, yy)
         ext = sample_spacing * (samples / 2)
-        ux, uy = e.arange(-ext, ext, sample_spacing), e.arange(-ext, ext, sample_spacing)
+        ux = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        uy = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
 
         # generate the siemen's star as a (rho,phi) polynomial
         arr = e.cos(spokes / 2 * pv)
@@ -224,15 +226,16 @@ class TiltedSquare(Convolvable):
 
         """
         if background.lower() == 'white':
-            arr = e.ones((samples, samples))
+            arr = e.ones((samples, samples), dtype=config.precision)
             fill_with = 1 - contrast
         else:
-            arr = e.zeros((samples, samples))
+            arr = e.zeros((samples, samples), dtype=config.precision)
             fill_with = 1
 
         ext = samples / 2 * sample_spacing
         radius = radius * ext * 2
-        x = y = e.arange(-ext, ext, sample_spacing)
+        x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
         xx, yy = e.meshgrid(x, y)
 
         # TODO: convert inline operation to use of rotation matrix
@@ -267,8 +270,8 @@ class SlantedEdge(Convolvable):
         diff = (1 - contrast) / 2
         arr = e.full((samples, samples), 1 - diff)
         ext = samples / 2 * sample_spacing
-        x = e.arange(-ext, ext, sample_spacing)
-        y = e.arange(-ext, ext, sample_spacing)
+        x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
         xx, yy = e.meshgrid(x, y)
 
         angle = e.radians(angle)
@@ -311,8 +314,8 @@ class Grating(Convolvable):
         self.sinusoidal = sinusoidal
 
         ext = samples / 2 * sample_spacing
-        x = e.arange(-ext, ext, sample_spacing)
-        y = e.arange(-ext, ext, sample_spacing)
+        x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
         xx, yy = e.meshgrid(x, y)
         if angle != 0:
             rho, phi = cart_to_polar(xx, yy)
@@ -343,8 +346,8 @@ class GratingArray(Convolvable):
 
         # calculate the basic grid things are defined on
         ext = samples / 2 * sample_spacing
-        x = e.arange(-ext, ext, sample_spacing)
-        y = e.arange(-ext, ext, sample_spacing)
+        x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
         xx, yy = e.meshgrid(x, y)
         xxx, yyy = xx, yy
 
@@ -424,8 +427,8 @@ class Chirp(Convolvable):
         p0 *= 2
         p1 *= 2
         ext = samples / 2 * sample_spacing
-        x = e.arange(-ext, ext, sample_spacing)
-        y = e.arange(-ext, ext, sample_spacing)
+        x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
         xx, yy = e.meshgrid(x, y)
 
         if angle != 0:

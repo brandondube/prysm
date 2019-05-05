@@ -1,5 +1,6 @@
 """Degredations in the image chain."""
 
+from .conf import config
 from .mathops import engine as e
 from .coordinates import cart_to_polar, polar_to_cart
 from .convolution import Convolvable
@@ -64,8 +65,8 @@ class Jitter(Convolvable):
         self.scale = scale
         if samples is not None:
             ext = (samples - 1) * sample_spacing / 2
-            x = e.arange(-ext, ext, sample_spacing)
-            y = e.arange(-ext, ext, sample_spacing)
+            x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
+            y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
 
             coef = 1 / (scale * e.sqrt(2 * e.pi))
             xx, yy = e.meshgrid(x, y)
