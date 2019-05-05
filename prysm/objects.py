@@ -151,7 +151,7 @@ class Pinhole(Convolvable):
 
 class SiemensStar(Convolvable):
     """Representation of a Siemen's star object."""
-    def __init__(self, spokes, sinusoidal=True, background='black', sample_spacing=2, samples=256):
+    def __init__(self, spokes, sinusoidal=True, radius=0.9, background='black', sample_spacing=2, samples=256):
         """Produce a Siemen's Star.
 
         Parameters
@@ -160,6 +160,8 @@ class SiemensStar(Convolvable):
             number of spokes in the star.
         sinusoidal : `bool`
             if True, generates a sinusoidal Siemen' star, else, generates a bar/block siemen's star
+        radius : `float`,
+            radius of the star, relative to the array width (default 90%)
         background : 'string', {'black', 'white'}
             background color
         sample_spacing : `float`
@@ -173,8 +175,8 @@ class SiemensStar(Convolvable):
             background other than black or white
 
         """
-        relative_width = 0.9
         self.spokes = spokes
+        self.radius = radius
 
         # generate a coordinate grid
         x = e.linspace(-1, 1, samples, dtype=config.precision)
@@ -195,9 +197,9 @@ class SiemensStar(Convolvable):
         # scale to (0,1) and clip into a disk
         arr = (arr + 1) / 2
         if background.lower() in ('b', 'black'):
-            arr[rv > relative_width] = 0
+            arr[rv > radius] = 0
         elif background.lower() in ('w', 'white'):
-            arr[rv > relative_width] = 1
+            arr[rv > radius] = 1
         else:
             raise ValueError('invalid background color')
 
