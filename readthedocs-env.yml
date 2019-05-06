@@ -9,6 +9,7 @@ dependencies:
   - nbsphinx
   - numpy
   - scipy
+  - scikit-image
   - matplotlib
   - pandas
   - imageio
