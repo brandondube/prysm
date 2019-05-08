@@ -74,7 +74,7 @@ def fit_sphere(z):
     return sphere
 
 
-def make_window(signal, sample_spacing, which='welch'):
+def make_window(signal, sample_spacing, which=None, alpha=4):
     """Generate a window function to be used in PSD analysis.
 
     Parameters
@@ -83,9 +83,11 @@ def make_window(signal, sample_spacing, which='welch'):
         signal or phase data
     sample_spacing : `float`
         spacing of samples in the input data
-    which : `str,` {'welch', 'hann', 'auto'}, optional
+    which : `str,` {'welch', 'hann', None}, optional
         which window to produce.  If auto, attempts to guess the appropriate
         window based on the input signal
+    alpha : `float`, optional
+        alpha value for welch window
 
     Notes
     -----
@@ -112,30 +114,26 @@ def make_window(signal, sample_spacing, which='welch'):
         if corner1.all() and corner2.all() and corner3.all() and corner4.all():
             # four corners all "black" -- circular data, Welch window is best
             # looks wrong but 2D welch takes x, y while indices are y, x
-            y = e.arange(s[1]) * sample_spacing
-            x = e.arange(s[0]) * sample_spacing
-            return window_2d_welch(y, x)
+            y, x = (e.arange(N) - (N / 2) for N in s)
+            which = window_2d_welch(x, y)
         else:
             # if not circular, square data; use Hanning window
-            y = e.hanning(s[0])
-            x = e.hanning(s[1])
-            return e.outer(y, x)
+            y, x = (e.hanning(N) for N in s)
+            which = e.outer(x, y)
     else:
         if type(which) is str:
             # known window type
             wl = which.lower()
             if wl == 'welch':
-                y = e.arange(s[1]) * sample_spacing
-                x = e.arange(s[0]) * sample_spacing
-                return window_2d_welch(y, x)
+                y, x = (e.arange(N) - (N / 2) for N in s)
+                which = window_2d_welch(x, y, alpha=alpha)
             elif wl in ('hann', 'hanning'):
-                y = e.hanning(s[0])
-                x = e.hanning(s[1])
-                return e.outer(y, x)
+                y, x = (e.hanning(N) for N in s)
+                which = e.outer(y, x)
             else:
                 raise ValueError('unknown window type')
-        else:
-            return which  # window provided as ndarray
+
+    return which  # window provided as ndarray
 
 
 def psd(height, sample_spacing, window=None):
@@ -263,7 +261,8 @@ def window_2d_welch(x, y, alpha=8):
     """
     xx, yy = e.meshgrid(x, y)
     r, _ = cart_to_polar(xx, yy)
-    rmax = e.sqrt(x.max()**2 + y.max()**2)
+
+    rmax = max(x.max(), y.max())
     window = 1 - abs(r/rmax)**alpha
     return window
 
