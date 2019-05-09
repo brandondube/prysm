@@ -1,0 +1,6 @@
+pandoc
+nbconvert
+ipykernel
+nbsphinx
+scikit-image
+imageio
