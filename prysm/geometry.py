@@ -112,8 +112,7 @@ def rotated_ellipse(width_major, width_minor, major_axis_angle=0, samples=128):
     Returns
     -------
     `numpy.ndarray`
-        An ndarray of shape (samples,samples) of value 0 outside the ellipse,
-        and value 1 inside the ellipse
+        An ndarray of shape (samples,samples) of value 0 outside the ellipse and value 1 inside the ellipse
 
     Notes
     -----
@@ -121,10 +120,12 @@ def rotated_ellipse(width_major, width_minor, major_axis_angle=0, samples=128):
          ((x-h)cos(A)+(y-k)sin(A))^2      ((x-h)sin(A)+(y-k)cos(A))^2
         ______________________________ + ______________________________ 1
                      a^2                               b^2
+
     where x and y are the x and y dimensions, A is the rotation angle of the
     major axis, h and k are the centers of the the ellipse, and a and b are
     the major and minor axis widths.  In this implementation, h=k=0 and the
     formula simplifies to:
+
             (x*cos(A)+y*sin(A))^2             (x*sin(A)+y*cos(A))^2
         ______________________________ + ______________________________ 1
                      a^2                               b^2
@@ -135,7 +136,7 @@ def rotated_ellipse(width_major, width_minor, major_axis_angle=0, samples=128):
     Raises
     ------
     ValueError
-        Description
+        if minor axis width is larger than major axis width
 
     """
     if width_minor > width_major:

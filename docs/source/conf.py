@@ -156,3 +156,7 @@ autodoc_default_options = {
     'show-inheritance': True,
     'inherited-members': True,
 }
+
+
+# nbsphinx conf
+nbsphinx_timeout = 600  # 10 minutes

@@ -80,6 +80,7 @@ Examples/testing.ipynb
 
 # docs trash
 docs/source/user_guide/foo.png
+docs/source/_static/defocus-contrast-inversion.mp4
 
 # sublime files
 *.sublime-project
