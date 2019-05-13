@@ -331,7 +331,7 @@ class PSF(Convolvable):
     # helpers ------------------------------------------------------------------
 
     @staticmethod
-    def from_pupil(pupil, efl, Q=config.Q, norm='max'):
+    def from_pupil(pupil, efl, Q=config.Q, norm='max', radpower=1, incoherent=True):
         """Use scalar diffraction propogation to generate a PSF from a pupil.
 
         Parameters
@@ -339,9 +339,21 @@ class PSF(Convolvable):
         pupil : `Pupil`
             Pupil, with OPD data and wavefunction
         efl : `int` or `float`
-            effective focal length of the optical system
+            effective focal length of the optical system, mm
         Q : `int` or `float`
             ratio of pupil sample count to PSF sample count; Q > 2 satisfies nyquist
+        norm : `str`, {'max', 'radiometric'}, optional
+            how to normalize the result, if radiometric will follow Born & Wolf with:
+            I0 = P * A / (L^2 R^2) with
+            P = radpower,
+            A = integral over aperture,
+            L = wavelength
+            R = efl
+        radpower : `float`
+            total power of the incident beam over the clear aperture, W
+            only used when norm='radiometric'
+        incoherent: `bool`, optional
+            if True, propagate the incoherent PSF, else propagate the coherent one
 
         Returns
         -------
@@ -351,15 +363,22 @@ class PSF(Convolvable):
         """
         # propagate PSF data
         fcn, ss, wvl = pupil.fcn, pupil.sample_spacing, pupil.wavelength
+        data = prop_pupil_plane_to_psf_plane(fcn, Q)
         norm = norm.lower()
-        if norm == 'radiometric':
-            data = prop_pupil_plane_to_psf_plane(fcn, Q, norm='ortho')
+        if norm == 'max':
+            coef = 1 / data.max()
+        elif norm == 'radiometric':
+            # C = P D / (L^2 R^2) from Principles of Optics.
+            P = radpower
+            S2 = (pupil._mask ** 2).sum()
+            coef = 1 / S2 ** 2  # normalize by "S2" in GH_FFT language
+            D = pupil._mask.sum() * (ss ** 2)
+            coef_BornWolf = P * D / ((wvl * 1e-3) ** 2 * efl ** 2)  # wvl 1e-3 um => mm
+            coef = coef * coef_BornWolf
         else:
-            data = prop_pupil_plane_to_psf_plane(fcn, Q)
-            if norm == 'max':
-                data /= data.max()
-            else:
-                raise ValueError('unknown norm')
+            raise ValueError('unknown norm')
+
+        data = data * coef
         ux, uy = prop_pupil_plane_to_psf_plane_units(fcn, ss, efl, wvl, Q)
         psf = PSF(x=ux, y=uy, data=data)
 
