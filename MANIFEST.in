@@ -1,6 +1,5 @@
 prune *
-exclude readthedocs-env.yml
 exclude readthedocs.yml
+exclude .DS_Store
 graft prysm
 prune prysm/__pycache__
-prune prysm/sampledata
