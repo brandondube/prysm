@@ -1069,6 +1069,41 @@ def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None, high_
             shutil.copyfileobj(s, fd)
     else:
         shutil.copyfileobj(s, fd)
+        
+def _is_odd(num):
+    """ Return 1 if number is odd
+    """
+   return num % 2 !=0
+
+def _is_even(num):
+    """ Return 1 if number is even
+    """
+   return num % 2 == 0
+        
+def write_meadowlark_ascii(file, phase, x, y):
+    """Write a Meadowlark ASCII phase file to control SLM devices from Meadowlark Optics.
+
+    Parameters
+    ----------
+    file : `str`
+        filename
+    phase : `numpy.ndarray`
+        array of phase values
+    x : `numpy.ndarray`
+        (1-d) x coordinates, mm
+    y: `numpy.ndarray`
+        (1-d) y coordinates, mm
+    """
+    f = open(file + '.txt', 'w')
+    f.write('Hex 2.00 3.06 1 128 01/01/2000 00:00:00\n') # Create header
+    f.write('x' + '\t' + 'y'  + '\t' +	'100.000000\n')
+    for ux in range(x.size):
+        for uy in range(y.size):
+            if _is_odd(x[ux]) and _is_odd(y[uy]) and np.abs(x[ux])+np.abs(y[uy])<=12:
+                f.write('% 0.6f' % x[ux] + '\t' + '% 0.6f' % y[uy] + '\t' + '% 0.6f' % phase[uy,ux] + '\n')
+            if _is_even(x[ux]) and _is_even(y[uy]) and np.abs(x[ux])+np.abs(y[uy])<=12:
+                f.write('% 0.6f' % x[ux] + '\t' + '% 0.6f' % y[uy] + '\t' + '% 0.6f' % phase[uy,ux] + '\n')
+    f.close()
 
 
 def read_sigfit_zernikes(file):
