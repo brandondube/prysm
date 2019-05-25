@@ -119,7 +119,7 @@ def make_window(signal, sample_spacing, which=None, alpha=4):
         else:
             # if not circular, square data; use Hanning window
             y, x = (e.hanning(N) for N in s)
-            which = e.outer(x, y)
+            which = e.outer(y, x)
     else:
         if type(which) is str:
             # known window type
