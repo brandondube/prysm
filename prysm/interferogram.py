@@ -1114,6 +1114,16 @@ class Interferogram(OpticalPhase):
                          intensity=None, wavelength=self.wavelength,
                          high_phase_res=high_phase_res)
 
+    def __str__(self):
+        if self.spatial_unit != 'px':
+            size_part_2 = f', ({self.shape[1]}x{self.shape[0]}) px'
+        else:
+            size_part_2 = ''
+        return inspect.cleandoc(f"""Interferogram with:
+                Units: {self.spatial_unit} spatial, {self.phase_unit} phase
+                Size: ({self.diameter_x}x{self.diameter_y}) {self.spatial_unit}{size_part_2}
+                {self.zaxis_label.capitalize()}: {self.pv:.3f} PV, {self.rms:.3f} RMS {self.phase_unit}""")
+
     @staticmethod
     def from_zygo_dat(path, multi_intensity_action='first', scale='mm'):
         """Create a new interferogram from a zygo dat file.
