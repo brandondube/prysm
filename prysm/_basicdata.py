@@ -1,8 +1,8 @@
 """Basic class holding data, used to recycle code."""
 import copy
-import warnings
 
 from .mathops import engine as e
+from .coordinates import uniform_cart_to_polar
 
 
 class BasicData:
@@ -104,12 +104,150 @@ class BasicData:
         """Return a (deep) copy of this instance."""
         return copy.deepcopy(self)
 
-    @property
-    def unit_x(self):
-        warnings.warn('.unit_x is deprecated and will be removed in prysm v0.17 - use .x instead')
-        return self.x
+    def slices(self, twosided=True):
+        return Slices(getattr(self, self._data_attr), x=self.x, y=self.y, twosided=twosided)
+
+
+class Slices:
+    """Slices of data."""
+    def __init__(self, data, x, y, twosided=True):
+        self._source = data
+        self._source_polar = None
+        self._r = None
+        self._p = None
+        self._x = x
+        self._y = y
+        self.center_y, self.center_x = (int(e.ceil(s / 2)) for s in data.shape)
+        self.twosided = twosided
+
+    def check_polar_calculated(self):
+        """Ensure that the polar representation of the source data has been calculated."""
+        if not self._source_polar:
+            xx, yy = e.meshgrid(self._x, self._y)
+            rho, phi, polar = uniform_cart_to_polar(xx, yy, self._source)
+            self._r, self._p = rho, phi
+            self._source_polar = polar
 
     @property
-    def unit_y(self):
-        warnings.warn('.unit_y is deprecated and will be removed in prysm v0.17 - use .y instead')
-        return self.y
+    def x(self):
+        """Slice through the Y=0 axis of the data, i.e. along the X axis.
+
+        Returns
+        -------
+        x : `numpy.ndarray`
+            coordinates
+        slice : `numpy.ndarray`
+            values of the data array at these coordinates
+
+        """
+        if self.twosided:
+            return self._x, self._source[self.center_y, :]
+        else:
+            return self._x[self.center_x:], self._source[self.center_y, self.center_x:]
+
+    @property
+    def y(self):
+        """Slice through the X=0 axis of the data, i.e., along the Y axis.
+
+        Returns
+        -------
+        y : `numpy.ndarray`
+            coordinates
+        slice : `numpy.ndarray`
+            values of the data array at these coordinates
+
+        """
+        if self.twosided:
+            return self._y, self._source[:, self.center_x]
+        else:
+            return self._y[self.center_y:], self._source[self.center_y:, self.center_x]
+
+    @property
+    def azavg(self):
+        """Azimuthal average of the data.
+
+        Returns
+        -------
+        rho : `numpy.ndarray`
+            coordinates
+        slice : `numpy.ndarray`
+            values of the data array at these coordinates
+
+        """
+        self.check_polar_calculated()
+        return self._r, e.nanmean(self._source_polar, axis=0)
+
+    @property
+    def azmedian(self):
+        """Azimuthal median of the data.
+
+        Returns
+        -------
+        rho : `numpy.ndarray`
+            coordinates
+        slice : `numpy.ndarray`
+            values of the data array at these coordinates
+
+        """
+        self.check_polar_calculated()
+        return self._r, e.nanmedian(self._source_polar, axis=0)
+
+    @property
+    def azmin(self):
+        """Azimuthal minimum of the data.
+
+        Returns
+        -------
+        rho : `numpy.ndarray`
+            coordinates
+        slice : `numpy.ndarray`
+            values of the data array at these coordinates
+
+        """
+        self.check_polar_calculated()
+        return self._r, e.nanmin(self._source_polar, axis=0)
+
+    @property
+    def azmax(self):
+        """Azimuthal maximum of the data.
+
+        Returns
+        -------
+        rho : `numpy.ndarray`
+            coordinates
+        slice : `numpy.ndarray`
+            values of the data array at these coordinates
+
+        """
+        self.check_polar_calculated()
+        return self._r, e.nanmax(self._source_polar, axis=0)
+
+    @property
+    def azvar(self):
+        """Azimuthal variance of the data.
+
+        Returns
+        -------
+        rho : `numpy.ndarray`
+            coordinates
+        slice : `numpy.ndarray`
+            values of the data array at these coordinates
+
+        """
+        self.check_polar_calculated()
+        return self._r, e.nanvar(self._source_polar, axis=0)
+
+    @property
+    def azstd(self):
+        """Azimuthal standard deviation of the data.
+
+        Returns
+        -------
+        rho : `numpy.ndarray`
+            coordinates
+        slice : `numpy.ndarray`
+            values of the data array at these coordinates
+
+        """
+        self.check_polar_calculated()
+        return self._r, e.nanstd(self._source_polar, axis=0)
