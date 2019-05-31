@@ -43,12 +43,12 @@ def primary_astigmatism_45(rho, phi):
 
 def primary_coma_y(rho, phi):
     """Zernike primary coma Y."""
-    return (-2 * rho + 3 * rho**3) * e.cos(phi)
+    return (3 * rho**3 - 2 * rho) * e.cos(phi)
 
 
 def primary_coma_x(rho, phi):
     """Zernike primary coma X."""
-    return (-2 * rho + 3 * rho**3) * e.sin(phi)
+    return (3 * rho**3 - 2 * rho) * e.sin(phi)
 
 
 def primary_spherical(rho, phi):
@@ -68,22 +68,22 @@ def primary_trefoil_x(rho, phi):
 
 def secondary_astigmatism_00(rho, phi):
     """Zernike secondary astigmatism 0°."""
-    return (-3 * rho**2 + 4 * rho**4) * e.cos(2 * phi)
+    return (4 * rho**4 - 3 * rho**2) * e.cos(2 * phi)
 
 
 def secondary_astigmatism_45(rho, phi):
     """Zernike secondary astigmatism 45°."""
-    return (-3 * rho**2 + 4 * rho**4) * e.sin(2 * phi)
+    return (4 * rho**4 - 3 * rho**2) * e.sin(2 * phi)
 
 
 def secondary_coma_y(rho, phi):
     """Zernike secondary coma Y."""
-    return (3 * rho - 12 * rho**3 + 10 * rho**5) * e.cos(phi)
+    return (10 * rho**5 - 12 * rho**3 + 3 * rho) * e.cos(phi)
 
 
 def secondary_coma_x(rho, phi):
     """Zernike secondary coma X."""
-    return (3 * rho - 12 * rho**3 + 10 * rho**5) * e.sin(phi)
+    return (10 * rho**5 - 12 * rho**3 + 3 * rho) * e.sin(phi)
 
 
 def secondary_spherical(rho, phi):
@@ -113,22 +113,22 @@ def secondary_trefoil_x(rho, phi):
 
 def tertiary_astigmatism_00(rho, phi):
     """Zernike tertiary astigmatism 0°."""
-    return (6 * rho**2 - 20 * rho**4 + 15 * rho**6) * e.cos(2 * phi)
+    return (15 * rho**6 - 20 * rho**4 + 6 * rho**2) * e.cos(2 * phi)
 
 
 def tertiary_astigmatism_45(rho, phi):
     """Zernike tertiary astigmatism 45°."""
-    return (6 * rho**2 - 20 * rho**4 + 15 * rho**6) * e.sin(2 * phi)
+    return (15 * rho**6 - 20 * rho**4 + 6 * rho**2) * e.sin(2 * phi)
 
 
 def tertiary_coma_y(rho, phi):
     """Zernike tertiary coma Y."""
-    return (-4 * rho + 30 * rho**3 - 60 * rho**5 + 35 * rho**7) * e.cos(phi)
+    return (35 * rho**7 - 60 * rho**5 + 30 * rho**3 -4 * rho) * e.cos(phi)
 
 
 def tertiary_coma_x(rho, phi):
     """Zernike tertiary coma X."""
-    return (-4 * rho + 30 * rho**3 - 60 * rho**5 + 35 * rho**7) * e.sin(phi)
+    return (35 * rho**7 - 60 * rho**5 + 30 * rho**3 -4 * rho) * e.sin(phi)
 
 
 def tertiary_spherical(rho, phi):
@@ -158,33 +158,33 @@ def secondary_tetrafoil_x(rho, phi):
 
 def tertiary_trefoil_y(rho, phi):
     """Zernike tertiary trefoil Y."""
-    return (10 * rho**3 - 30 * rho**5 + 21 * rho**7) * e.cos(3 * phi)
+    return (21 * rho**7 - 30 * rho**5 + 10 * rho**3) * e.cos(3 * phi)
 
 
 def tertiary_trefoil_x(rho, phi):
     """Zernike tertiary trefoil X."""
-    return (10 * rho**3 - 30 * rho**5 + 21 * rho**7) * e.cos(3 * phi)
+    return (21 * rho**7 - 30 * rho**5 + 10 * rho**3) * e.cos(3 * phi)
 
 
 def quaternary_astigmatism_00(rho, phi):
     """Zernike quaternary astigmatism 0°."""
-    return (10 * rho**2 - 30 * rho**4 + 21 * rho**6) * e.cos(2 * phi)
+    return (21 * rho**6 - 30 * rho**4 + 10 * rho**2) * e.cos(2 * phi)
 
 
 def quaternary_astigmatism_45(rho, phi):
     """Zernike quaternary astigmatism 45°."""
-    return (10 * rho**2 - 30 * rho**4 + 21 * rho**6) * e.sin(2 * phi)
+    return (21 * rho**6 - 30 * rho**4 + 10 * rho**2) * e.sin(2 * phi)
 
 
 def quaternary_coma_y(rho, phi):
     """Zernike quaternary coma Y."""
-    return (5 * rho - 60 * rho**3 + 210 * rho**5 - 280 * rho**7 + 126 * rho**9)\
+    return (126 * rho**9 - 280 * rho**7 + 210 * rho**5 - 60 * rho**3 + 5 * rho)\
         * e.cos(phi)
 
 
 def quaternary_coma_x(rho, phi):
     """Zernike quaternary coma X."""
-    return (5 * rho - 60 * rho**3 + 210 * rho**5 - 280 * rho**7 + 126 * rho**9)\
+    return (126 * rho**9 - 280 * rho**7 + 210 * rho**5 - 60 * rho**3 + 5 * rho)\
         * e.sin(phi)
 
 
