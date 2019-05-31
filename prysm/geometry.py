@@ -5,7 +5,7 @@ from scipy.spatial import Delaunay
 
 from .conf import config
 from .mathops import engine as e
-from .coordinates import make_rho_phi_grid
+from .coordinates import make_rho_phi_grid, cart_to_polar, polar_to_cart
 
 
 class MaskCache(object):
@@ -531,6 +531,63 @@ def generate_vertices(sides, radius=1):
         pts.append((int(x), int(y)))
 
     return e.asarray(pts)
+
+
+def generate_spider(vanes, width, rot_offset=0, samples=128):
+    """Generate the mask for a spider
+
+    Parameters
+    ----------
+    vanes : `int`
+        number of spider vanes
+    width : `float`
+        width of the vanes in pixels
+    rot_offset : `float`, optional
+        rotational offset of the vanes, clockwise
+    samples : `int`, optional
+        number of samples in the square output array
+
+    Returns
+    -------
+    `numpy.ndarray`
+        array, 0 inside the spider and 1 outside
+
+    """
+    # generate the basic grid
+    x = y = e.linspace(-1, 1, samples)
+    xx, yy = e.meshgrid(x, y)
+    r, p = cart_to_polar(xx, yy)
+
+    if rot_offset != 0:
+        rot_offset = e.radians(rot_offset)
+        p = p - rot_offset
+    pp = p.copy()
+
+    # compute some constants
+    rotation = e.radians(360/vanes)
+    plate_scale = 2 / samples
+    width = width * plate_scale
+
+    # initialize a blank mask
+    mask = e.zeros((samples, samples))
+    for multiple in range(vanes):
+        # iterate through the vanes and generate a mask for each
+        # adding it to the initialized mask
+        offset = rotation * multiple
+        if offset != 0:
+            pp = p + offset
+        else:
+            pp = p
+
+        xxx, yyy = polar_to_cart(r, pp)
+        mask_ = (xxx > 0) & (abs(yyy) < width)
+        mask += mask_
+
+    # clamp the values to zero or unity
+    # and invert the max
+    mask[mask > 1] = 1
+    mask = 1 - mask
+    return mask
 
 
 shapes = {
