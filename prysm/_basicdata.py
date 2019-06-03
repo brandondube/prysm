@@ -1,8 +1,25 @@
 """Basic class holding data, used to recycle code."""
 import copy
 
+from scipy import interpolate
+
 from .mathops import engine as e
-from .coordinates import uniform_cart_to_polar
+from .coordinates import uniform_cart_to_polar, polar_to_cart
+
+
+def fix_interp_pair(x, y):
+    if y is None:
+        y = 0
+
+    if x is None:
+        x = 0
+
+    if hasattr(x, '__iter__') and not hasattr(y, '__iter__'):
+        y = [y] * len(x)
+    elif hasattr(y, '__iter__') and not hasattr(x, '__iter__'):
+        x = [x] * len(y)
+
+    return x, y
 
 
 class BasicData:
@@ -29,6 +46,7 @@ class BasicData:
         """
         self.x, self.y = x, y
         setattr(self, self._data_attr, data)
+        self.interpf_x, self.interpf_y, self.interpf_2d = None, None, None
 
     @property
     def shape(self):
@@ -106,6 +124,117 @@ class BasicData:
 
     def slices(self, twosided=True):
         return Slices(getattr(self, self._data_attr), x=self.x, y=self.y, twosided=twosided)
+
+    def _make_interp_function_2d(self):
+        """Generate a 2D interpolation function for this instance, used in sampling with exact_xy.
+
+        Returns
+        -------
+        `scipy.interpolate.RegularGridInterpolator`
+            interpolator instance.
+
+        """
+        if self.interpf_2d is None:
+            self.interpf_2d = interpolate.RegularGridInterpolator((self.x, self.y), self.data)
+
+        return self.interpf_2d
+
+    def _make_interp_function_xy1d(self):
+        """Generate two interpolation functions for the xy slices.
+
+        Returns
+        -------
+        self.interpf_x : `scipy.interpolate.interp1d`
+            x interpolator
+        self.interpf_y : `scipy.interpolate.interp1d`
+            y interpolator
+
+        """
+        if self.interpf_x is None or self.interpf_y is None:
+            ux, x = self.slices().x
+            uy, y = self.slices().y
+
+            self.interpf_x = interpolate.interp1d(ux, x)
+            self.interpf_y = interpolate.interp1d(uy, y)
+
+        return self.interpf_x, self.interpf_y
+
+    def exact_polar(self, rho, phi=None):
+        """Retrieve data at the specified radial coordinates pairs.
+
+        Parameters
+        ----------
+        r : iterable
+            radial coordinate(s) to sample
+        phi : iterable
+            azimuthal coordinate(s) to sample
+
+        Returns
+        -------
+        `numpy.ndarray`
+            data at the given points
+
+        """
+        self._make_interp_function_2d()
+
+        rho, phi = fix_interp_pair(rho, phi)
+        x, y = polar_to_cart(rho, phi)
+        return self.interpf_2d((x, y), method='linear')
+
+    def exact_xy(self, x, y=None):
+        """Retrieve data at the specified X-Y frequency pairs.
+
+        Parameters
+        ----------
+        x : iterable
+            X coordinate(s) to retrieve
+        y : iterable
+            Y coordinate(s) to retrieve
+
+        Returns
+        -------
+        `numpy.ndarray`
+            data at the given points
+
+        """
+        self._make_interp_function_2d()
+
+        x, y = fix_interp_pair(x, y)
+        return self.interpf_2d((x, y), method='linear')
+
+    def exact_x(self, x):
+        """Return data at an exact x coordinate along the y=0 axis.
+
+        Parameters
+        ----------
+        x : `number` or `numpy.ndarray`
+            x coordinate(s) to return
+
+        Returns
+        -------
+        `numpy.ndarray`
+            ndarray of values
+
+        """
+        self._make_interp_function_xy1d()
+        return self.interpf_x(x)
+
+    def exact_y(self, y):
+        """Return data at an exact y coordinate along the x=0 axis.
+
+        Parameters
+        ----------
+        y : `number` or `numpy.ndarray`
+            y coordinate(s) to return
+
+        Returns
+        -------
+        `numpy.ndarray`
+            ndarray of values
+
+        """
+        self._make_interp_function_xy1d()
+        return self.interpf_x(y)
 
 
 class Slices:

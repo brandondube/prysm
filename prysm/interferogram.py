@@ -10,7 +10,7 @@ from ._phase import OpticalPhase
 from .zernike import defocus, zernikefit, FringeZernike
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
-from .coordinates import cart_to_polar, uniform_cart_to_polar
+from .coordinates import cart_to_polar
 from .util import share_fig_ax, mean, rms  # NOQA
 from .geometry import mcache
 
@@ -866,39 +866,6 @@ class Interferogram(OpticalPhase):
 
         """
         return psd(self.phase, self.sample_spacing)
-
-    def psd_slices(self, x=True, y=True, azavg=True, azmin=False, azmax=False):
-        """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
-
-        Returns
-        -------
-        `dict`
-            with keys x, y, avg.  Each containing a tuple of (unit, psd)
-
-        """
-        xx, yy, _psd = self.psd()
-        lx, ly = len(xx)//2, len(yy)//2
-
-        out = {}
-        if x:
-            out['x'] = (xx[lx:], _psd[ly, lx:])
-
-        if y:
-            out['y'] = (yy[ly:], _psd[ly:, lx])
-
-        if azavg or azmin or azmax:
-            rho, phi, _psdrp = uniform_cart_to_polar(xx, yy, _psd)
-
-        if azavg:
-            out['azavg'] = (rho, _psdrp.mean(axis=0))
-
-        if azmin:
-            out['azmin'] = (rho, _psdrp.min(axis=0))
-
-        if azmax:
-            out['azmax'] = (rho, _psdrp.max(axis=0))
-
-        return out
 
     def bandlimited_rms(self, wllow=None, wlhigh=None, flow=None, fhigh=None):
         """Calculate the bandlimited RMS of a signal from its PSD.
