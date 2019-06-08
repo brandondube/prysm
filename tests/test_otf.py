@@ -27,12 +27,6 @@ def test_mtf_plot2d_functions(mtf):
     assert ax
 
 
-def test_mtf_plot_tan_sag_functions(mtf):
-    fig, ax = mtf.plot_tan_sag()
-    assert fig
-    assert ax
-
-
 @pytest.mark.parametrize('azimuth', [None, 0, [0, 90, 90, 90]])
 def test_mtf_exact_polar_functions(mtf, azimuth):
     freqs = [0, 1, 2, 3]
@@ -47,29 +41,11 @@ def test_mtf_exact_xy_functions(mtf, y):
     assert type(mtf_) is np.ndarray
 
 
-def test_mtf_exact_tan_functions(mtf):
-    assert type(mtf.exact_tan(0)) is np.ndarray
-
-
-def test_mtf_exact_sag_functions(mtf):
-    assert type(mtf.exact_sag(0)) is np.ndarray
-
-
 def test_frompupil_functions():
     from prysm import Pupil
     pu = Pupil()
     mt = otf.MTF.from_pupil(pu, 2)
     assert mt
-
-
-def test_doesnt_recalculate_when_psf_caches_mtf():
-    from prysm import Pupil, PSF
-    pu = Pupil()
-    ps = PSF.from_pupil(pu, 2)
-    mt = otf.MTF.from_psf(ps)
-    ps._mtf = mt
-    mt2 = otf.MTF.from_psf(ps)
-    assert id(mt) == id(mt2)
 
 
 def test_azavg_plot_functions(mtf):
