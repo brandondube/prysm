@@ -5,8 +5,9 @@ import inspect
 from scipy import signal, optimize
 
 from .conf import config
-from .mathops import engine as e
 from ._phase import OpticalPhase
+from ._basicdata import BasicData
+from .mathops import engine as e
 from .zernike import defocus, zernikefit, FringeZernike
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
@@ -176,14 +177,14 @@ def psd(height, sample_spacing, window=None):
     return ux, uy, psd
 
 
-def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
+def bandlimited_rms(x, y, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
     """Calculate the bandlimited RMS of a signal from its PSD.
 
     Parameters
     ----------
-    ux : `numpy.ndarray`
+    x : `numpy.ndarray`
         x spatial frequencies
-    uy : `numpy.ndarray`
+    y : `numpy.ndarray`
         y spatial frequencies
     psd : `numpy.ndarray`
         power spectral density
@@ -210,7 +211,7 @@ def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None)
             fhigh = 1 / wllow
 
         if wlhigh is None:
-            fhigh = max(ux[-1], uy[-1])
+            fhigh = max(x[-1], y[-1])
         else:
             flow = 1 / wlhigh
     elif flow is not None or fhigh is not None:
@@ -218,12 +219,12 @@ def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None)
         if flow is None:
             flow = 0
         if fhigh is None:
-            fhigh = max(ux[-1], uy[-1])
+            fhigh = max(x[-1], y[-1])
     else:
         raise ValueError('must specify either period (wavelength) or frequency')
 
-    ux2, uy2 = e.meshgrid(ux, uy)
-    r, p = cart_to_polar(ux2, uy2)
+    x2, y2 = e.meshgrid(x, y)
+    r, p = cart_to_polar(x2, y2)
 
     if flow is None:
         warnings.warn('no lower limit given, using 0 for low frequency')
@@ -236,8 +237,8 @@ def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None)
     work = psd.copy()
     work[r < flow] = 0
     work[r > fhigh] = 0
-    first = e.trapz(work, uy, axis=0)
-    second = e.trapz(first, ux, axis=0)
+    first = e.trapz(work, y, axis=0)
+    second = e.trapz(first, x, axis=0)
     return e.sqrt(second)
 
 
@@ -857,15 +858,12 @@ class Interferogram(OpticalPhase):
 
         Returns
         -------
-        x : `numpy.ndarray`
-            ordinate x frequency axis
-        y : `numpy.ndarray`
-            ordinate y frequency axis
-        psd : `numpy.ndarray`
-            power spectral density
+        `BasicData`
+            BasicData class instance with x, y, data attributes
 
         """
-        return psd(self.phase, self.sample_spacing)
+        ux, uy, psd_ = psd(self.phase, self.sample_spacing)
+        return BasicData(x=ux, y=uy, data=psd_)
 
     def bandlimited_rms(self, wllow=None, wlhigh=None, flow=None, fhigh=None):
         """Calculate the bandlimited RMS of a signal from its PSD.
@@ -887,7 +885,8 @@ class Interferogram(OpticalPhase):
             band-limited RMS value.
 
         """
-        return bandlimited_rms(*self.psd(),
+        psd = self.psd()
+        return bandlimited_rms(x=psd.x, y=psd.y, psd=psd.data,
                                wllow=wllow,
                                wlhigh=wlhigh,
                                flow=flow,
@@ -971,23 +970,15 @@ class Interferogram(OpticalPhase):
 
         return fig, ax
 
-    def plot_psd_slices(self, x=True, y=True, azavg=True, azmin=False, azmax=False,
+    def plot_psd_slices(self, slices=['x', 'y', 'azavg'],
                         a=None, b=None, c=None, mode='freq', alpha=1, legend=True,
                         lw=config.lw, zorder=config.zorder, xlim=None, ylim=None, fig=None, ax=None):
         """Plot the x, y, and average PSD on a linear x axis.
 
         Parameters
         ----------
-        x : `bool`, optional
-            whether to plot the "x" PSD
-        y : `bool`, optional
-            whether to plot the "y" PSD
-        azavg: `bool`, optional
-            whether to plot the azimuthally averaged PSD
-        azmin : `bool`, optional
-            whether to plot the azimuthal minimum PSD
-        azmax : `bool`, optional
-            whether to plot the azimuthal maximum PSD
+        slices : iterable
+            sequence of slices - valid properties on a `Slices` object
         a : `float`, optional
             a coefficient of Lorentzian PSD model plotted alongside data
         b : `float`, optional
@@ -1026,13 +1017,6 @@ class Interferogram(OpticalPhase):
         If a, b, c are given the Lorentzian model will be used.
 
         """
-        data = self.psd_slices(x=x, y=y, azavg=azavg, azmin=azmin, azmax=azmax)
-        keys = list(data.keys())
-        # keys 0 => first item
-        # second 0 => first item in tuple of (unit, value)
-        # 1: => skip the 0 frequency bin
-        r = data[keys[0]][0][1:]
-
         if mode != 'freq':
             label = 'Period'
             unit = self.spatial_unit
@@ -1041,22 +1025,27 @@ class Interferogram(OpticalPhase):
             unit = f'cy/{self.spatial_unit}'
 
         fig, ax = share_fig_ax(fig, ax)
-        for dat in data:
-            ax.loglog(*data[dat], lw=lw, label=dat, alpha=alpha)
+        psd = self.psd().slices()
+        for slice_ in slices:
+            data = getattr(psd, slice_)
+            # if in the period mode, flip freq to period and
+            # tweak the DC frequency bin to avoid division by zero
+            # print(data[0])
+            if mode != 'freq':
+                data = list(data)
+                data[0][0] = data[0][1] / 4
+                data[0] = 1 / data[0]
+            ax.loglog(*data, lw=lw, label=slice_, alpha=alpha)
 
         if a is not None:
             if c is not None:
-                requirement = abc_psd(a=a, b=b, c=c, nu=r)
+                requirement = abc_psd(a=a, b=b, c=c, nu=data[0])
             else:
-                requirement = ab_psd(a=a, b=b, nu=r)
-            ax.loglog(r, requirement, c='k', lw=lw*2)
+                requirement = ab_psd(a=a, b=b, nu=data[0])
+            ax.loglog(data[0], requirement, c='k', lw=lw*2)
 
         if mode != 'freq':
-            from matplotlib import pyplot as plt
-            locs, labs = plt.xticks()
-            labs = [str(1/loc) if loc != 0 else str(loc) for loc in locs]
-            plt.xticks(locs, labs)
-            xlim = [1/x if x != 0 else x for x in xlim]
+            ax.invert_xaxis()
 
         if legend:
             ax.legend(title='Slice')
