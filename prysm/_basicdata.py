@@ -252,8 +252,7 @@ class Slices:
     def check_polar_calculated(self):
         """Ensure that the polar representation of the source data has been calculated."""
         if not self._source_polar:
-            xx, yy = e.meshgrid(self._x, self._y)
-            rho, phi, polar = uniform_cart_to_polar(xx, yy, self._source)
+            rho, phi, polar = uniform_cart_to_polar(self._x, self._y, self._source)
             self._r, self._p = rho, phi
             self._source_polar = polar
 
