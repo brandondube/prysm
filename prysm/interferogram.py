@@ -944,7 +944,8 @@ class Interferogram(OpticalPhase):
 
         """
         from matplotlib import colors
-        x, y, psd = self.psd()
+        psd = self.psd()
+        x, y, psd = psd.x, psd.y, psd.data
 
         if axlim is None:
             lims = (None, None)
