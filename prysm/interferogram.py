@@ -1039,10 +1039,12 @@ class Interferogram(OpticalPhase):
             ax.loglog(*data, lw=lw, label=slice_, alpha=alpha)
 
         if a is not None:
+            if mode != 'freq':
+                nu = 1 / data[0]
             if c is not None:
-                requirement = abc_psd(a=a, b=b, c=c, nu=data[0])
+                requirement = abc_psd(a=a, b=b, c=c, nu=nu)
             else:
-                requirement = ab_psd(a=a, b=b, nu=data[0])
+                requirement = ab_psd(a=a, b=b, nu=nu)
             ax.loglog(data[0], requirement, c='k', lw=lw*2)
 
         if mode != 'freq':
