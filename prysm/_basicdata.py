@@ -351,6 +351,22 @@ class Slices:
         return self._r, e.nanmax(self._source_polar, axis=0)
 
     @property
+    def azpv(self):
+        """Azimuthal PV of the data.
+
+        Returns
+        -------
+        rho : `numpy.ndarray`
+            coordinates
+        slice : `numpy.ndarray`
+            values of the data array at these coordinates
+
+        """
+        r, mx = self.azmax()
+        r, mn = self.azmin()
+        return r, mx - mn
+
+    @property
     def azvar(self):
         """Azimuthal variance of the data.
 
