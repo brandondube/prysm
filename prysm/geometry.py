@@ -533,7 +533,7 @@ def generate_vertices(sides, radius=1):
     return e.asarray(pts)
 
 
-def generate_spider(vanes, width, rot_offset=0, samples=128):
+def generate_spider(vanes, width, rot_offset=0, arydiam=1, samples=128):
     """Generate the mask for a spider
 
     Parameters
@@ -541,9 +541,12 @@ def generate_spider(vanes, width, rot_offset=0, samples=128):
     vanes : `int`
         number of spider vanes
     width : `float`
-        width of the vanes in pixels
+        width of the vanes in array units, i.e. a width=1/128 spider with
+        arydiam=1 and samples=128 will be 1 pixel wide
     rot_offset : `float`, optional
         rotational offset of the vanes, clockwise
+    arydiam : `float`, optional
+        array diameter
     samples : `int`, optional
         number of samples in the square output array
 
@@ -554,7 +557,9 @@ def generate_spider(vanes, width, rot_offset=0, samples=128):
 
     """
     # generate the basic grid
-    x = y = e.linspace(-1, 1, samples)
+    width /= 2
+    x = y = e.linspace(-arydiam / 2, arydiam / 2, samples)
+    # print(x.min(), x.max())
     xx, yy = e.meshgrid(x, y)
     r, p = cart_to_polar(xx, yy)
 
@@ -564,9 +569,7 @@ def generate_spider(vanes, width, rot_offset=0, samples=128):
     pp = p.copy()
 
     # compute some constants
-    rotation = e.radians(360/vanes)
-    plate_scale = 2 / samples
-    width = width * plate_scale
+    rotation = e.radians(360 / vanes)
 
     # initialize a blank mask
     mask = e.zeros((samples, samples))
