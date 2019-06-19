@@ -592,17 +592,17 @@ class Interferogram(OpticalPhase):
         if left == right == top == bottom == 0:
             return self
 
-        if left == 0 and bottom == 0:
-            lr = slice(None)
-        if left == 0:
+        if (left == 0) and (right == 0):
+            lr = slice(0, self.phase.shape[0])
+        elif left == 0:
             lr = slice(-right)
         elif right == 0:
             lr = slice(left, self.phase.shape[0])
         else:
             lr = slice(left, -right)
 
-        if top == 0 and bottom == 0:
-            tb = slice(None)
+        if (top == 0) and (bottom == 0):
+            tb = slice(0, self.phase.shape[1])
         elif top == 0:
             tb = slice(-bottom)
         elif bottom == 0:
