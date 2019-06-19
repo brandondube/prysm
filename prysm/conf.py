@@ -9,10 +9,11 @@ class Config(object):
                  backend=np,
                  zernike_base=1,
                  Q=2,
-                 phase_colormap='inferno',
-                 image_colormap='Greys_r',
+                 phase_cmap='inferno',
+                 image_cmap='Greys_r',
                  lw=3,
-                 zorder=3):
+                 zorder=3,
+                 interpolation='lanczos'):
         """Create a new `Config` object.
 
         Parameters
@@ -25,14 +26,16 @@ class Config(object):
             base for zernikes; start at 0 or 1
         Q : `float`
             oversampling parameter for numerical propagations
-        phase_colormap : `str`
+        phase_cmap : `str`
             colormap used for plotting optical phases
-        image_colormap: `str`
+        image_cmap: `str`
             colormap used for plotting greyscale images
         lw : `float`
             linewidth
         `zorder` : int
             z order used for line plots
+        interpolation : `str`
+            interpolation type for 2D plots
 
         """
         self.initialized = False
@@ -41,10 +44,11 @@ class Config(object):
         self.zernike_base = zernike_base
         self.chbackend_observers = []
         self.Q = Q
-        self.phase_colormap = phase_colormap
-        self.image_colormap = image_colormap
+        self.phase_cmap = phase_cmap
+        self.image_cmap = image_cmap
         self.lw = lw
         self.zorder = zorder
+        self.interpolation = interpolation
         self.initialized = True
 
     @property

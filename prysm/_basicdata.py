@@ -1,5 +1,6 @@
 """Basic class holding data, used to recycle code."""
 import copy
+from collections.abc import Iterable
 
 from scipy import interpolate
 
@@ -27,6 +28,7 @@ def fix_interp_pair(x, y):
 class BasicData:
     """Abstract base class holding some data properties."""
     _data_attr = 'data'
+    _default_cmap = config.phase_cmap
 
     def __init__(self, x, y, data, xlabel=None, ylabel=None, zlabel=None, xyunit=None, zunit=None):
         """Initialize a new BasicData instance.
@@ -250,6 +252,87 @@ class BasicData:
         """
         self._make_interp_function_xy1d()
         return self.interpf_x(y)
+
+    def plot2d(self, xlim=None, ylim=None, clim=None, cmap=None,
+               log=False, power=1, interpolation=config.interpolation,
+               show_colorbar=True, show_axlabels=True,
+               fig=None, ax=None):
+        """Plot the data in 2D.
+
+        Parameters
+        ----------
+        xlim : `float` or iterable, optional
+            x axis limits.  If not iterable, symmetric version of the single value
+        ylim : `float` or iterable, optional
+            y axis limits.  If None and xlim is not None, copied from xlim.
+            If not iterable, symmetric version of the single value.
+        clim : iterable, optional
+            clim passed directly to matplotlib.
+            If None, looked up on self._default_clim.
+        cmap : `str`, optional
+            colormap to use, passed directly to matplotlib if not None.
+            If None, looks up the default cmap for self._data_type on config
+        log : `bool`, optional
+            if True, plot on a log color scale
+        power : `float`, optional
+            if not 1, plot on a power stretched color scale
+        interpolation : `str`, optional
+            interpolation method to use, passed directly to matplotlib
+        show_colorbar : `bool`, optional
+            if True, draws the colorbar
+        show_axlabels : `bool`, optional
+            if True, draws the axis labels
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        """
+        from matplotlib.colors import PowerNorm, LogNorm
+        fig, ax = share_fig_ax(fig, ax)
+
+        # sanitize some inputs
+        if cmap is None:
+            cmap = getattr(config, f'{self._data_type}_cmap')
+
+        if xlim is not None and not isinstance(xlim, Iterable):
+            xlim = (-xlim, xlim)
+
+        if ylim is None and xlim is not None:
+            ylim = xlim
+        elif not isinstance(ylim, Iterable):
+            ylim = (-ylim, ylim)
+
+        norm = None
+        if log:
+            norm = LogNorm()
+        elif power != 1:
+            norm = PowerNorm(power)
+
+        im = ax.imshow(getattr(self, self._data_attr),
+                       extent=[self.x[0], self.x[-1], self.y[0], self.y[-1]],
+                       cmap=cmap,
+                       clim=clim,
+                       norm=norm,
+                       origin='lower',
+                       interpolation=interpolation)
+
+        if show_colorbar:
+            fig.colorbar(im, label=f'{self.zaxis_label} [{self.phase_unit}]', ax=ax, fraction=0.046)
+
+        xlab, ylab = None, None
+        if show_axlabels:
+            xlab = f'{self.xlabel} [{self.xyunit}]'
+            ylab = f'{self.ylabel} [{self.xyunit}]'
+
+        ax.set(xlabel=xlab, xlim=xlim, ylabel=ylab, ylim=ylim)
 
 
 class Slices:
