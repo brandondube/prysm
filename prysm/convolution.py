@@ -6,7 +6,7 @@ from ._basicdata import BasicData
 from .coordinates import resample_2d_complex
 from .conf import config
 from .fttools import forward_ft_unit, pad2d
-from .util import share_fig_ax
+from .plotting import share_fig_ax
 
 
 class Convolvable(BasicData):

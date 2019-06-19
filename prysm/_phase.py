@@ -3,7 +3,8 @@
 from .conf import config
 from .mathops import engine as e
 from ._basicdata import BasicData
-from .util import share_fig_ax, pv, rms, Sa, std
+from .plotting import share_fig_ax
+from .util import pv, rms, Sa, std
 
 
 class OpticalPhase(BasicData):
@@ -82,7 +83,9 @@ class OpticalPhase(BasicData):
         'px_λ': lambda x: 1,
     }
 
-    def __init__(self, x, y, phase, phase_unit, spatial_unit, wavelength=None):
+    def __init__(self, x, y, phase,
+                 xlabel='x', ylabel='y', zlabel='z',
+                 spatial_unit='mm', phase_unit='nm', wavelength=None):
         """Create a new instance of an OpticalPhase.
 
         Note that this class is not intended to be used directly, and is meant
@@ -91,29 +94,30 @@ class OpticalPhase(BasicData):
 
         Parameters
         ----------
-        x : `np.ndarray`
-            x spatial units
-        y : `np.ndarray`
-            y spatial units
-        phase : `np.ndarray`
-            phase/height/opd data
-        phase_unit : `str`
-            unit used to describe the phase, see `OpticalPhase`.units
-        spatial_unit : `str`
-            unit used to describe x and y, see `OpticalPhase`.units
+        x : `numpy.ndarray`
+            x unit axis
+        y : `numpy.ndarray`
+            y unit axis
+        phase : `numpy.ndarray`
+            phase data
+        xlabel : `str`, optional
+            x label used on plots
+        ylabel : `str`, optional
+            y label used on plots
+        zlabel : `str`, optional
+            z label used on plots
+        xyunit : `str`, optional
+            unit used for the XY axes
+        zunit : `str`, optional
+            unit used for the Z (data) axis
         wavelength : `float`, optional
             wavelength of light, in microns
 
         """
-        self.x = x
-        self.y = y
-        self.phase = phase
+        super().__init__(x=x, y=y, data=phase,
+                         xlabel=xlabel, ylabel=ylabel, zlabel=zlabel,
+                         xyunit=spatial_unit, zunit=phase_unit)
         self.wavelength = wavelength
-        self.phase_unit = phase_unit
-        self.spatial_unit = spatial_unit
-        self.xaxis_label = 'x'  # these should be overriden by subclasses or instances
-        self.yaxis_label = 'y'
-        self.zaxis_label = 'z'
 
     @property
     def phase_unit(self):

@@ -4,7 +4,8 @@ from scipy import optimize, interpolate, special
 from .conf import config
 from .mathops import engine as e, jinc
 from .coordinates import cart_to_polar
-from .util import share_fig_ax, sort_xy
+from .plotting import share_fig_ax
+from .util import sort_xy
 from .convolution import Convolvable
 from .propagation import (
     prop_pupil_plane_to_psf_plane,

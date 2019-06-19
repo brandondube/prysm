@@ -3,8 +3,10 @@ import copy
 
 from scipy import interpolate
 
+from .conf import config
 from .mathops import engine as e
 from .coordinates import uniform_cart_to_polar, polar_to_cart
+from .plotting import share_fig_ax
 
 
 def fix_interp_pair(x, y):
@@ -26,7 +28,7 @@ class BasicData:
     """Abstract base class holding some data properties."""
     _data_attr = 'data'
 
-    def __init__(self, x, y, data):
+    def __init__(self, x, y, data, xlabel=None, ylabel=None, zlabel=None, xyunit=None, zunit=None):
         """Initialize a new BasicData instance.
 
         Parameters
@@ -37,6 +39,16 @@ class BasicData:
             y unit axis
         data : `numpy.ndarray`
             data
+        xlabel : `str`, optional
+            x label used on plots
+        ylabel : `str`, optional
+            y label used on plots
+        zlabel : `str`, optional
+            z label used on plots
+        xyunit : `str`, optional
+            unit used for the XY axes
+        zunit : `str`, optional
+            unit used for the Z (data) axis
 
         Returns
         -------
@@ -47,6 +59,8 @@ class BasicData:
         self.x, self.y = x, y
         setattr(self, self._data_attr, data)
         self.interpf_x, self.interpf_y, self.interpf_2d = None, None, None
+        self.xlabel, self.ylabel, self.zlabel = xlabel, ylabel, zlabel
+        self.xyunit, self.zunit = xyunit, zunit
 
     @property
     def shape(self):
@@ -123,7 +137,8 @@ class BasicData:
         return copy.deepcopy(self)
 
     def slices(self, twosided=True):
-        return Slices(getattr(self, self._data_attr), x=self.x, y=self.y, twosided=twosided)
+        return Slices(getattr(self, self._data_attr), x=self.x, y=self.y,
+                      twosided=twosided, xlabel=self.xlabel, ylabel=self.ylabel, zlabel=self.zlabel)
 
     def _make_interp_function_2d(self):
         """Generate a 2D interpolation function for this instance, used in sampling with exact_xy.
@@ -239,7 +254,7 @@ class BasicData:
 
 class Slices:
     """Slices of data."""
-    def __init__(self, data, x, y, twosided=True):
+    def __init__(self, data, x, y, twosided=True, xlabel=None, ylabel=None):
         self._source = data
         self._source_polar = None
         self._r = None
@@ -395,3 +410,16 @@ class Slices:
         """
         self.check_polar_calculated()
         return self._r, e.nanstd(self._source_polar, axis=0)
+
+    def plot(self, slices, lw=config.lw,
+             xlim=(None, None), xscale='linear',
+             ylim=(None, None), yscale='log',
+             fig=None, ax=None):
+        fig, ax = share_fig_ax(fig, ax)
+
+        for slice_ in slices:
+            ax.plot(*getattr(self, slice_), label=slice_)
+
+        ax.legend(title='Slice')
+        ax.set(xscale=xscale, xlim=xlim, xlabel=self.xlabel,
+               yscale=yscale, ylim=ylim, ylabel=self.ylabel)

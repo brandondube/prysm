@@ -64,10 +64,8 @@ class Pupil(OpticalPhase):
             # data already known
             need_to_build = False
         super().__init__(x=ux, y=uy, phase=phase,
-                         wavelength=wavelength, phase_unit=opd_unit, spatial_unit='mm')
-        self.xaxis_label = 'Pupil ξ'
-        self.yaxis_label = 'Pupil η'
-        self.zaxis_label = 'OPD'
+                         wavelength=wavelength, phase_unit=opd_unit, spatial_unit='mm',
+                         xlabel='Pupil ξ', ylabel='Pupil η', zlabel='OPD')
         self.rho = self.phi = None
 
         if need_to_build:

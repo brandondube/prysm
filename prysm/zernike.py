@@ -6,7 +6,8 @@ from .conf import config
 from .mathops import engine as e, jit, vectorize, fuse
 from .pupil import Pupil
 from .coordinates import make_rho_phi_grid, cart_to_polar
-from .util import rms, share_fig_ax, sort_xy
+from .util import rms, sort_xy
+from .plotting import share_fig_ax
 
 # See JCW - http://wp.optics.arizona.edu/jcwyant/wp-content/uploads/sites/13/2016/08/ZernikePolynomialsForTheWeb.pdf
 

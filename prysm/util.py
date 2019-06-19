@@ -82,40 +82,6 @@ def fold_array(array, axis=1):
     return folded_array.mean(axis=2)
 
 
-def share_fig_ax(fig=None, ax=None, numax=1, sharex=False, sharey=False):
-    """Reurns the given figure and/or axis if given one.  If they are None, creates a new fig/ax.
-
-    Parameters
-    ----------
-    fig : `matplotlib.figure.Figure`, optional
-        figure
-    ax : `matplotlib.axes.Axis`
-        axis or array of axes
-    numax : `int`
-        number of axes in the desired figure, 1 for most plots, 3 for plot_fourier_chain
-    sharex : `bool`, optional
-        whether to share the x axis
-    sharey : `bool`, optional
-        whether to share the y axis
-
-    Returns
-    -------
-    `matplotlib.figure.Figure`
-        A figure object
-    `matplotlib.axes.Axis`
-        An axis object
-
-    """
-    from matplotlib import pyplot as plt
-
-    if fig is None and ax is None:
-        fig, ax = plt.subplots(nrows=1, ncols=numax, sharex=sharex, sharey=sharey)
-    elif ax is None:
-        ax = fig.gca()
-
-    return fig, ax
-
-
 def mean(array):
     """Return the mean value of the valid elements of an array.
 
@@ -132,6 +98,7 @@ def mean(array):
     """
     non_nan = e.isfinite(array)
     return array[non_nan].mean()
+
 
 def pv(array):
     """Return the PV value of the valid elements of an array.
@@ -204,6 +171,7 @@ def std(array):
     non_nan = e.isfinite(array)
     ary = array[non_nan]
     return ary.std()
+
 
 def guarantee_array(variable):
     """Guarantee that a varaible is a numpy ndarray and supports -, *, +, and other operators.

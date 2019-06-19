@@ -4,7 +4,7 @@ import operator
 from scipy.interpolate import griddata, RegularGridInterpolator as RGI
 
 from .mathops import engine as e
-from .util import share_fig_ax
+from .plotting import share_fig_ax
 from .io import read_trioptics_mtf_vs_field, read_trioptics_mtfvfvf
 
 

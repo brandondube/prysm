@@ -66,24 +66,6 @@ def test_sort_xy():
     assert yy == tuple(reversed(y))
 
 
-def test_share_fig_ax_figure_number_remains_unchanged():
-    fig, ax = plt.subplots()
-    fig2, ax2 = util.share_fig_ax(fig, ax)
-    assert fig.number == fig2.number
-
-
-def test_share_fig_ax_produces_figure_and_axis():
-    fig, ax = util.share_fig_ax()
-    assert fig
-    assert ax
-
-
-def test_share_fig_ax_produces_an_axis():
-    fig = plt.figure()
-    fig, ax = util.share_fig_ax(fig)
-    assert ax is not None
-
-
 def test_Sa_gives_correct_value():
     ary = np.array([1, 2, 3, 4, 5])
     assert util.Sa(ary) == 1.2
