@@ -12,6 +12,7 @@ from .plotting import share_fig_ax
 class Convolvable(BasicData):
     """A base class for convolvable objects to inherit from."""
     _data_attr = 'data'
+    _data_type = 'image'
 
     def __init__(self, x, y, data, has_analytic_ft=False):
         """Create a new Convolvable object.

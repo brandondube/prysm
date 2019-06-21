@@ -127,8 +127,7 @@ def test_recenter_functions(sample_i_mutate):
 
 
 def test_fit_psd(sample_i_mutate):
-    psddata = sample_i_mutate.psd_slices()
-    a, b, c = fit_psd(*psddata['azavg'])
+    a, b, c = fit_psd(*sample_i_mutate.psd().slices.azavg)
     assert a
     assert b
     assert c

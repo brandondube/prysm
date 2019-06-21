@@ -17,9 +17,9 @@ def fix_interp_pair(x, y):
     if x is None:
         x = 0
 
-    if hasattr(x, '__iter__') and not hasattr(y, '__iter__'):
+    if isinstance(x, Iterable) and not isinstance(y, Iterable):
         y = [y] * len(x)
-    elif hasattr(y, '__iter__') and not hasattr(x, '__iter__'):
+    elif isinstance(y, Iterable) and not isinstance(x, Iterable):
         x = [x] * len(y)
 
     return x, y
@@ -28,7 +28,7 @@ def fix_interp_pair(x, y):
 class BasicData:
     """Abstract base class holding some data properties."""
     _data_attr = 'data'
-    _default_cmap = config.phase_cmap
+    _data_type = 'image'
 
     def __init__(self, x, y, data, xlabel=None, ylabel=None, zlabel=None, xyunit=None, zunit=None):
         """Initialize a new BasicData instance.
@@ -140,7 +140,7 @@ class BasicData:
 
     def slices(self, twosided=True):
         return Slices(getattr(self, self._data_attr), x=self.x, y=self.y,
-                      twosided=twosided, xlabel=self.xlabel, ylabel=self.ylabel, zlabel=self.zlabel)
+                      twosided=twosided, xlabel=self.xlabel, ylabel=self.zlabel)
 
     def _make_interp_function_2d(self):
         """Generate a 2D interpolation function for this instance, used in sampling with exact_xy.
@@ -307,7 +307,7 @@ class BasicData:
 
         if ylim is None and xlim is not None:
             ylim = xlim
-        elif not isinstance(ylim, Iterable):
+        elif ylim is not None and not isinstance(ylim, Iterable):
             ylim = (-ylim, ylim)
 
         norm = None
@@ -325,7 +325,7 @@ class BasicData:
                        interpolation=interpolation)
 
         if show_colorbar:
-            fig.colorbar(im, label=f'{self.zaxis_label} [{self.phase_unit}]', ax=ax, fraction=0.046)
+            fig.colorbar(im, label=f'{self.zlabel} [{self.zunit}]', ax=ax, fraction=0.046)
 
         xlab, ylab = None, None
         if show_axlabels:
@@ -333,6 +333,8 @@ class BasicData:
             ylab = f'{self.ylabel} [{self.xyunit}]'
 
         ax.set(xlabel=xlab, xlim=xlim, ylabel=ylab, ylim=ylim)
+
+        return fig, ax
 
 
 class Slices:

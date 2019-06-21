@@ -1,5 +1,4 @@
 """Unit tests for the physics of prysm."""
-import os
 from itertools import product
 
 import numpy as np
@@ -37,13 +36,13 @@ def test_diffprop_matches_analyticmtf(efl, epd, wvl):
     p = Pupil(wavelength=wvl, dia=epd)
     psf = PSF.from_pupil(p, efl)
     mtf = MTF.from_psf(psf)
-    u, t = mtf.tan
-    uu, s = mtf.sag
+    u, x = mtf.slices().x
+    uu, y = mtf.slices().y
 
     analytic_1 = diffraction_limited_mtf(fno, wvl, frequencies=u)
     analytic_2 = diffraction_limited_mtf(fno, wvl, frequencies=uu)
-    assert np.allclose(analytic_1, t, atol=PRECISION)
-    assert np.allclose(analytic_2, s, atol=PRECISION)
+    assert np.allclose(analytic_1, x, atol=PRECISION)
+    assert np.allclose(analytic_2, y, atol=PRECISION)
 
 
 def test_array_orientation_consistency_tilt():

@@ -124,12 +124,12 @@ def tertiary_astigmatism_45(rho, phi):
 
 def tertiary_coma_y(rho, phi):
     """Zernike tertiary coma Y."""
-    return (35 * rho**7 - 60 * rho**5 + 30 * rho**3 -4 * rho) * e.cos(phi)
+    return (35 * rho**7 - 60 * rho**5 + 30 * rho**3 - 4 * rho) * e.cos(phi)
 
 
 def tertiary_coma_x(rho, phi):
     """Zernike tertiary coma X."""
-    return (35 * rho**7 - 60 * rho**5 + 30 * rho**3 -4 * rho) * e.sin(phi)
+    return (35 * rho**7 - 60 * rho**5 + 30 * rho**3 - 4 * rho) * e.sin(phi)
 
 
 def tertiary_spherical(rho, phi):
@@ -801,7 +801,7 @@ class BaseZernike(Pupil):
         coefs = e.asarray(self.coefs)
         idxs = e.asarray(range(len(coefs))) + self.base
         names = self.names
-        lab = f'{self.zaxis_label} [{self.phase_unit}]'
+        lab = f'{self.zlabel} [{self.zunit}]'
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         if orientation.lower() in ('h', 'horizontal'):
             vmin, vmax = coefs.min(), coefs.max()
@@ -868,7 +868,7 @@ class BaseZernike(Pupil):
             mags, names = sort_xy(mags, names)
             mags = list(reversed(mags))
             names = list(reversed(names))
-        lab = f'{self.zaxis_label} [{self.phase_unit}]'
+        lab = f'{self.zlabel} [{self.zunit}]'
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         fig, ax = share_fig_ax(fig, ax)
         if orientation.lower() in ('h', 'horizontal'):
@@ -916,7 +916,7 @@ class BaseZernike(Pupil):
 
         fig, ax = share_fig_ax(fig, ax)
 
-        lab = f'{self.zaxis_label} [{self.phase_unit}]'
+        lab = f'{self.zlabel} [{self.zunit}]'
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         if orientation.lower() in ('h', 'horizontal'):
             ax.bar(idxs, magnitudes, zorder=zorder)

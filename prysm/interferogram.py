@@ -12,7 +12,6 @@ from .zernike import defocus, zernikefit, FringeZernike
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar
-from .plotting import share_fig_ax
 from .util import mean, rms  # NOQA
 from .geometry import mcache
 

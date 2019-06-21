@@ -10,6 +10,7 @@ from .util import pv, rms, Sa, std
 class OpticalPhase(BasicData):
     """Phase of an optical field."""
     _data_attr = 'phase'
+    _data_type = 'phase'
     units = {
         'm': 'm',
         'meter': 'm',
@@ -122,7 +123,7 @@ class OpticalPhase(BasicData):
     @property
     def phase_unit(self):
         """Unit used to describe the optical phase."""
-        return self._phase_unit
+        return self.xyunit
 
     @phase_unit.setter
     def phase_unit(self, unit):
@@ -137,7 +138,7 @@ class OpticalPhase(BasicData):
     @property
     def spatial_unit(self):
         """Unit used to describe the spatial phase."""
-        return self._spatial_unit
+        return self.zunit
 
     @spatial_unit.setter
     def spatial_unit(self, unit):
