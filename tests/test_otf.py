@@ -27,12 +27,6 @@ def test_mtf_plot2d_functions(mtf):
     assert ax
 
 
-def test_mtf_plot_tan_sag_functions(mtf):
-    fig, ax = mtf.plot_tan_sag()
-    assert fig
-    assert ax
-
-
 @pytest.mark.parametrize('azimuth', [None, 0, [0, 90, 90, 90]])
 def test_mtf_exact_polar_functions(mtf, azimuth):
     freqs = [0, 1, 2, 3]
@@ -45,14 +39,6 @@ def test_mtf_exact_xy_functions(mtf, y):
     x = [0, 1, 2, 3]
     mtf_ = mtf.exact_xy(x, y)
     assert type(mtf_) is np.ndarray
-
-
-def test_mtf_exact_tan_functions(mtf):
-    assert type(mtf.exact_tan(0)) is np.ndarray
-
-
-def test_mtf_exact_sag_functions(mtf):
-    assert type(mtf.exact_sag(0)) is np.ndarray
 
 
 def test_frompupil_functions():
