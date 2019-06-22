@@ -29,8 +29,86 @@ class BasicData:
     """Abstract base class holding some data properties."""
     _data_attr = 'data'
     _data_type = 'image'
+    _default_twosided = True
+    axis_mode = 'period'
 
-    def __init__(self, x, y, data, xlabel=None, ylabel=None, zlabel=None, xyunit=None, zunit=None):
+    units = {
+        'm': 'm',
+        'meter': 'm',
+        'mm': 'mm',
+        'millimeter': 'mm',
+        'μm': 'μm',
+        'um': 'μm',
+        'micron': 'μm',
+        'micrometer': 'μm',
+        'nm': 'nm',
+        'nanometer': 'nm',
+        'Å': 'Å',
+        'aa': 'Å',
+        'angstrom': 'Å',
+        'λ': 'λ',
+        'waves': 'λ',
+        'lambda': 'λ',
+        'px': 'px',
+        'pixel': 'px',
+        'au': 'a.u.',
+        'arb': 'a.u.',
+        'arbitrary': 'a.u.',
+    }
+    unit_scales = {
+        'm': 1,
+        'mm': 1e-3,
+        'μm': 1e-6,
+        'nm': 1e-9,
+        'Å': 1e-10,
+    }
+    unit_changes = {
+        'm_m': lambda x: 1,
+        'm_mm': lambda x: 1e-3,
+        'm_μm': lambda x: 1e-6,
+        'm_nm': lambda x: 1e-9,
+        'm_Å': lambda x: 1e-10,
+        'm_λ': lambda x: 1e-6 * x,
+        'mm_mm': lambda x: 1,
+        'mm_m': lambda x: 1e3,
+        'mm_μm': lambda x: 1e-3,
+        'mm_nm': lambda x: 1e-6,
+        'mm_Å': lambda x: 1e-7,
+        'mm_λ': lambda x: 1e-3 * x,
+        'μm_μm': lambda x: 1,
+        'μm_m': lambda x: 1e6,
+        'μm_mm': lambda x: 1e3,
+        'μm_nm': lambda x: 1e-3,
+        'μm_Å': lambda x: 1e-4,
+        'μm_λ': lambda x: 1 * x,
+        'nm_nm': lambda x: 1,
+        'nm_m': lambda x: 1e9,
+        'nm_mm': lambda x: 1e6,
+        'nm_μm': lambda x: 1e3,
+        'nm_Å': lambda x: 1e-1,
+        'nm_λ': lambda x: 1e3 * x,
+        'Å_Å': lambda x: 1,
+        'Å_m': lambda x: 1e10,
+        'Å_mm': lambda x: 1e7,
+        'Å_μm': lambda x: 1e4,
+        'Å_nm': lambda x: 10,
+        'Å_λ': lambda x: 1e4 * x,
+        'λ_λ': lambda x: 1,
+        'λ_m': lambda x: 1e6 / x,
+        'λ_mm': lambda x: 1e3 / x,
+        'λ_μm': lambda x: x,
+        'λ_nm': lambda x: 1e-3 / x,
+        'λ_Å': lambda x: 1e-4 / x,
+        'px_px': lambda x: 1,  # beware changing pixels to other units
+        'px_m': lambda x: 1,
+        'px_mm': lambda x: 1,
+        'px_μm': lambda x: 1,
+        'px_nm': lambda x: 1,
+        'px_Å': lambda x: 1,
+        'px_λ': lambda x: 1,
+    }
+
+    def __init__(self, x, y, data, xyunit=None, zunit=None, xlabel=None, ylabel=None, zlabel=None):
         """Initialize a new BasicData instance.
 
         Parameters
@@ -41,16 +119,16 @@ class BasicData:
             y unit axis
         data : `numpy.ndarray`
             data
+        xyunit : `str`, optional
+            unit used for the XY axes
+        zunit : `str`, optional
+            unit used for the Z (data) axis
         xlabel : `str`, optional
             x label used on plots
         ylabel : `str`, optional
             y label used on plots
         zlabel : `str`, optional
             z label used on plots
-        xyunit : `str`, optional
-            unit used for the XY axes
-        zunit : `str`, optional
-            unit used for the Z (data) axis
 
         Returns
         -------
@@ -109,36 +187,133 @@ class BasicData:
         return self.samples_y // 2
 
     @property
-    def slice_x(self):
-        """Retrieve a slice through the X axis of the phase.
+    def zunit(self):
+        """Unit used to describe the optical phase."""
+        return self._zunit
 
-        Returns
-        -------
-        self.unit : `numpy.ndarray`
-            ordinate axis
-        slice of self.phase or self.data : `numpy.ndarray`
-
-        """
-        return self.x, getattr(self, self._data_attr)[self.center_y, :]
+    @zunit.setter
+    def zunit(self, unit):
+        unit = unit.lower()
+        if unit == 'å':
+            self._zunit = unit.upper()
+        else:
+            if unit not in self.units:
+                raise ValueError(f'{unit} not a valid unit, must be in {set(self.units.keys())}')
+            self._zunit = self.units[unit]
 
     @property
-    def slice_y(self):
-        """Retrieve a slice through the Y axis of the phase.
+    def xyunit(self):
+        """Unit used to describe the spatial phase."""
+        return self._xyunit
+
+    @xyunit.setter
+    def xyunit(self, unit):
+        unit = unit.lower()
+        if unit not in self.units:
+            raise ValueError(f'{unit} not a valid unit, must be in {set(self.units.keys())}')
+
+        self._xyunit = self.units[unit]
+
+    def change_zunit(self, to, inplace=True):
+        """Change the units used to describe the z axis.
+
+        Parameters
+        ----------
+        to : `str`
+            new unit, a member of `BasicData`.units.keys()
+        inplace : `bool`, optional
+            whether to change (scale) the data, if False, returns updated data, if True, returns self.
 
         Returns
         -------
-        self.unit : `numpy.ndarray`
-            ordinate axis
-        slice of self.phase or self.data : `numpy.ndarray`
+        `new_data` : `np.ndarray`
+            new data
+        OR
+        `self` : `BasicData`
+            self
 
         """
-        return self.y, getattr(self, self._data_attr)[:, self.center_x]
+        if to not in self.units.keys():
+            raise ValueError('unsupported unit')
+        if self.zunit == 'a.u.':
+            raise ValueError('cannot change arbitrary units to others.')
+
+        wavelength = getattr(self, 'wavelenght', None)
+
+        fctr = self.unit_changes['_'.join([self.zunit, self.units[to]])](wavelength)
+        new_data = getattr(self, self._data_attr) / fctr
+        if inplace:
+            setattr(self, self._data_attr, new_data)
+            self.zunit = to
+            return self
+        else:
+            return new_data
+
+    def change_xyunit(self, to, inplace=True):
+        """Change the x/y used to describe the spatial dimensions.
+
+        Parameters
+        ----------
+        to : `str`
+            new unit, a member of `BasicData`.units.keys()
+        inplace : `bool`, optional
+            whether to change self.x and self.y.
+            If False, returns updated phase, if True, returns self
+
+        Returns
+        -------
+        `new_x` : `np.ndarray`
+            new ordinate x axis
+        `new_y` : `np.ndarray`
+            new ordinate y axis
+        OR
+        `self` : `BasicData`
+            self
+
+        """
+        if to not in self.units.keys():
+            raise ValueError('unsupported unit')
+        if self.xyunit == 'a.u.':
+            raise ValueError('cannot change arbitrary units to others.')
+
+        wavelength = getattr(self, 'wavelength', None)
+
+        if to.lower() != 'px':
+            fctr = self.unit_changes['_'.join([self.xyunit, self.units[to]])](wavelength)
+            new_ux = self.x / fctr
+            new_uy = self.y / fctr
+        else:
+            sy, sx = self.shape
+            new_ux = e.arange(sx, dtype=config.precision)
+            new_uy = e.arange(sy, dtype=config.precision)
+        if inplace:
+            self.x = new_ux
+            self.y = new_uy
+            self.xyunit = to
+            return self
+        else:
+            return new_ux, new_uy
 
     def copy(self):
         """Return a (deep) copy of this instance."""
         return copy.deepcopy(self)
 
-    def slices(self, twosided=True):
+    def slices(self, twosided=None):
+        """Create a `Slices` instance from this instance.
+
+        Parameters
+        ----------
+        twosided : `bool`, optional
+            if None, copied from self._default_twosided
+
+        Returns
+        -------
+        `Slices`
+            a Slices object
+
+        """
+        if twosided is None:
+            twosided = self._default_twosided
         return Slices(getattr(self, self._data_attr), x=self.x, y=self.y,
                       twosided=twosided, xlabel=self.xlabel, ylabel=self.zlabel)
 

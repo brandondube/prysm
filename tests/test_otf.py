@@ -46,9 +46,3 @@ def test_frompupil_functions():
     pu = Pupil()
     mt = otf.MTF.from_pupil(pu, 2)
     assert mt
-
-
-def test_azavg_plot_functions(mtf):
-    fig, ax = mtf.plot_azimuthal_average()
-    assert fig
-    assert ax

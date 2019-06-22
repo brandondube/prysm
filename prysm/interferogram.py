@@ -513,7 +513,7 @@ class Interferogram(OpticalPhase):
         self.meta = meta
 
         if scale != 'px':
-            self.change_spatial_unit(to=scale, inplace=True)
+            self.change_xyunit(to=scale, inplace=True)
 
     @property
     def dropout_percentage(self):

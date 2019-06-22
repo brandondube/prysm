@@ -13,7 +13,7 @@ def p():
 
 @pytest.fixture
 def p_tlt():
-    return FringeZernike(Z2=1, base=1, samples=65)
+    return FringeZernike(Z2=1, base=1, samples=64)
 
 
 def test_create_pupil():
@@ -44,7 +44,7 @@ def test_pupil_passes_valid_params():
     assert p.samples == parameters['samples']
     assert p.dia == parameters['dia']
     assert p.wavelength == parameters['wavelength']
-    assert p.phase_unit == 'nm'
+    assert p.zunit == 'nm'
 
 
 def test_pupil_rejects_bad_opd_unit():
@@ -61,10 +61,9 @@ def test_pupil_has_zero_rms(p):
 
 
 def test_tilt_pupil_axis_is_not_x(p_tlt):
-    u, x = p_tlt.slice_x
-    idxs = np.isfinite(x)
+    u, x = p_tlt.slices().x
     zeros = np.zeros(x.shape)
-    assert np.allclose(x[idxs], zeros[idxs])
+    assert np.allclose(x, zeros, atol=1e-1)
 
 
 def test_pupil_plot2d_functions(p):
@@ -75,12 +74,6 @@ def test_pupil_plot2d_functions(p):
 
 def test_pupil_interferogram_functions(p):
     fig, ax = p.interferogram()
-    assert fig
-    assert ax
-
-
-def test_pupil_plot_slice_xy_functions(p):
-    fig, ax = p.plot_slice_xy()
     assert fig
     assert ax
 

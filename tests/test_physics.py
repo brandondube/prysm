@@ -23,8 +23,9 @@ def test_diffprop_matches_airydisk(efl, epd, wvl):
 
     p = Pupil(wavelength=wvl, dia=epd)
     psf = PSF.from_pupil(p, efl, Q=3)  # use Q=3 not Q=4 for improved accuracy
-    u, sx = psf.slice_x
-    u, sy = psf.slice_y
+    s = psf.slices()
+    u, sx = s.x
+    u, sy = s.y
     analytic = airydisk(u, fno, wvl)
     assert np.allclose(sx, analytic, atol=PRECISION)
     assert np.allclose(sy, analytic, atol=PRECISION)
@@ -36,8 +37,9 @@ def test_diffprop_matches_analyticmtf(efl, epd, wvl):
     p = Pupil(wavelength=wvl, dia=epd)
     psf = PSF.from_pupil(p, efl)
     mtf = MTF.from_psf(psf)
-    u, x = mtf.slices().x
-    uu, y = mtf.slices().y
+    s = mtf.slices()
+    u, x = s.x
+    uu, y = s.y
 
     analytic_1 = diffraction_limited_mtf(fno, wvl, frequencies=u)
     analytic_2 = diffraction_limited_mtf(fno, wvl, frequencies=uu)

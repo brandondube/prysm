@@ -30,7 +30,7 @@ class Convolvable(BasicData):
             analytical fourier tansform
 
         """
-        super().__init__(x=x, y=y, data=data)
+        super().__init__(x=x, y=y, data=data, xyunit='um', zunit='au')
         self.has_analytic_ft = has_analytic_ft
 
     def __str__(self):

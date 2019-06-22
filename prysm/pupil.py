@@ -64,7 +64,7 @@ class Pupil(OpticalPhase):
             # data already known
             need_to_build = False
         super().__init__(x=ux, y=uy, phase=phase,
-                         wavelength=wavelength, phase_unit=opd_unit, spatial_unit='mm',
+                         wavelength=wavelength, xyunit='mm', zunit=opd_unit,
                          xlabel='Pupil ξ', ylabel='Pupil η', zlabel='OPD')
         self.rho = self.phi = None
 
@@ -86,13 +86,13 @@ class Pupil(OpticalPhase):
     @property
     def strehl(self):
         """Strehl ratio of the pupil."""
-        phase = self.change_phase_unit(to='um', inplace=False)
+        phase = self.change_zunit(to='um', inplace=False)
         return e.exp(-4 * e.pi / self.wavelength / self.wavelength * std(phase) ** 2)
 
     @property
     def fcn(self):
         """Complex wavefunction associated with the pupil."""
-        phase = self.change_phase_unit(to='waves', inplace=False)
+        phase = self.change_zunit(to='waves', inplace=False)
 
         fcn = e.exp(1j * 2 * e.pi * phase)  # phase implicitly in units of waves, no 2pi/l
         # guard against nans in phase

@@ -15,7 +15,6 @@ def transform_psf(psf, sample_spacing):
 
 class OTF:
     """Optical Transfer Function."""
-    _data_attr = 'data'
 
     def __init__(self, mtf, ptf):
         """Create a new OTF Instance.
@@ -64,6 +63,9 @@ class OTF:
 
 class MTF(BasicData):
     """Modulation Transfer Function."""
+    _data_attr = 'data'
+    _data_type = 'image'
+    _default_twosided = False
 
     @staticmethod
     def from_psf(psf):
