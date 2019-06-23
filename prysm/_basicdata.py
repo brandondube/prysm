@@ -238,7 +238,9 @@ class BasicData:
         if self.zunit == 'a.u.':
             raise ValueError('cannot change arbitrary units to others.')
 
-        wavelength = getattr(self, 'wavelenght', None)
+        wavelength = getattr(self, 'wavelength', None)
+        if not wavelength and to.lower() in {'waves', 'lambda', 'λ'}:
+            raise ValueError('must have self.wavelength when converting to waves')
 
         fctr = self.unit_changes['_'.join([self.zunit, self.units[to]])](wavelength)
         new_data = getattr(self, self._data_attr) / fctr

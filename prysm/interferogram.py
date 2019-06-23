@@ -503,12 +503,9 @@ class Interferogram(OpticalPhase):
             wvl = 1
 
         super().__init__(x=x, y=y, phase=phase,
-                         wavelength=wvl, phase_unit=phase_unit,
-                         spatial_unit=scale)
+                         wavelength=wvl, zunit=phase_unit,
+                         xyunit=scale, xlabel='X', ylabel='Y', zlabel='Height')
 
-        self.xaxis_label = 'X'
-        self.yaxis_label = 'Y'
-        self.zaxis_label = 'Height'
         self.intensity = intensity
         self.meta = meta
 
@@ -790,7 +787,7 @@ class Interferogram(OpticalPhase):
             modified `Interferogram` instance.
 
         """
-        self.change_spatial_unit(to=unit, inplace=True)  # will be 0..n spatial units
+        self.change_xyunit(to=unit, inplace=True)  # will be 0..n spatial units
         # sloppy to do this here...
         self.x *= plate_scale
         self.y *= plate_scale
@@ -863,7 +860,7 @@ class Interferogram(OpticalPhase):
 
         """
         ux, uy, psd_ = psd(self.phase, self.sample_spacing)
-        return BasicData(x=ux, y=uy, data=psd_)
+        return BasicData(x=ux, y=uy, data=psd_, xyunit=self.xyunit, zunit=self.zunit)
 
     def bandlimited_rms(self, wllow=None, wlhigh=None, flow=None, fhigh=None):
         """Calculate the bandlimited RMS of a signal from its PSD.
@@ -898,9 +895,9 @@ class Interferogram(OpticalPhase):
         Parameters
         ----------
         wavelength : `float`
-            wavelength of light in microns.
+            wavelength of light in microns
         incident_angle : `float` or `numpy.ndarray`
-            incident angle(s) of light.
+            incident angle(s) of light
 
         Returns
         -------
@@ -922,10 +919,10 @@ class Interferogram(OpticalPhase):
         Parameters
         ----------
         file : Path_like, `str`, or File_like
-            where to save to.
+            where to save to
 
         """
-        phase = self.change_phase_unit(to='waves', inplace=False)
+        phase = self.change_zunit(to='waves', inplace=False)
         write_zygo_ascii(file, phase=phase,
                          x=self.x, y=self.y,
                          intensity=None, wavelength=self.wavelength,
@@ -982,7 +979,7 @@ class Interferogram(OpticalPhase):
         i = Interferogram(phase=phase, intensity=zydat['intensity'],
                           x=e.arange(phase.shape[1]) * res, y=e.arange(phase.shape[0]) * res,
                           scale=_scale, meta=zydat['meta'])
-        return i.change_spatial_unit(to=scale.lower(), inplace=True)
+        return i.change_xyunit(to=scale.lower(), inplace=True)
 
     @staticmethod  # NOQA
     def render_from_psd(size, samples, rms=None,

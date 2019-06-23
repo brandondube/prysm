@@ -67,6 +67,20 @@ class MTF(BasicData):
     _data_type = 'image'
     _default_twosided = False
 
+    def __init__(self, data, x, y):
+        """Create a new `MTF` instance.
+
+        Parameters
+        ----------
+        data : `numpy.ndarray`
+            2D array of MTF data
+        x : `numpy.ndarray`
+            1D array of x spatial frequencies
+        y : `numpy.ndarray`
+            1D array of y spatial frequencies
+        """
+        super().__init__(x=x, y=y, data=data, xyunit='mm', zunit='au')
+
     @staticmethod
     def from_psf(psf):
         """Generate an MTF from a PSF.
@@ -140,6 +154,20 @@ class MTF(BasicData):
 
 class PTF(BasicData):
     """Phase Transfer Function"""
+
+    def __init__(self, data, x, y):
+        """Create a new `PTF` instance.
+
+        Parameters
+        ----------
+        data : `numpy.ndarray`
+            2D array of MTF data
+        x : `numpy.ndarray`
+            1D array of x spatial frequencies
+        y : `numpy.ndarray`
+            1D array of y spatial frequencies
+        """
+        super().__init__(x=x, y=y, data=data, xyunit='mm', zunit='au')
 
     @staticmethod
     def from_psf(psf, unwrap=True):
