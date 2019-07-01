@@ -79,7 +79,9 @@ class MTF(BasicData):
         y : `numpy.ndarray`
             1D array of y spatial frequencies
         """
-        super().__init__(x=x, y=y, data=data, xyunit='mm', zunit='au')
+        super().__init__(x=x, y=y, data=data, xyunit='mm', zunit='au',
+                         xlabel='X Spatial Frequency', ylabel='Y Spatial Frequency',
+                         zlabel='MTF')
 
     @staticmethod
     def from_psf(psf):
@@ -167,7 +169,9 @@ class PTF(BasicData):
         y : `numpy.ndarray`
             1D array of y spatial frequencies
         """
-        super().__init__(x=x, y=y, data=data, xyunit='mm', zunit='au')
+        super().__init__(x=x, y=y, data=data, xyunit='mm', zunit='au',
+                         xlabel='X Spatial Frequency', ylabel='Y Spatial Frequency',
+                         zlabel='PTF')
 
     @staticmethod
     def from_psf(psf, unwrap=True):

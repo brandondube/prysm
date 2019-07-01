@@ -22,8 +22,8 @@ def test_create_pupil():
     assert hasattr(p, 'diameter')
     assert hasattr(p, 'sample_spacing')
     assert hasattr(p, 'samples')
-    assert hasattr(p, 'phase_unit')
-    assert hasattr(p, 'spatial_unit')
+    assert hasattr(p, 'zunit')
+    assert hasattr(p, 'xyunit')
     assert hasattr(p, 'phase')
     assert hasattr(p, 'fcn')
     assert hasattr(p, 'x')
@@ -60,8 +60,9 @@ def test_pupil_has_zero_rms(p):
     assert p.rms == pytest.approx(0)
 
 
-def test_tilt_pupil_axis_is_not_x(p_tlt):
+def test_tilt_pupil_axis_is_x(p_tlt):
     u, x = p_tlt.slices().x
+    x = x[1:-1]
     zeros = np.zeros(x.shape)
     assert np.allclose(x, zeros, atol=1e-1)
 

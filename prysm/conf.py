@@ -13,7 +13,13 @@ class Config(object):
                  image_cmap='Greys_r',
                  lw=3,
                  zorder=3,
-                 interpolation='lanczos'):
+                 interpolation='lanczos',
+                 unit_formatter='unicode',
+                 xylabel_joiner=' ',
+                 unit_prefix='[',
+                 unit_suffix=']',
+                 unit_joiner=', ',
+                 show_units=True):
         """Create a new `Config` object.
 
         Parameters
@@ -28,14 +34,26 @@ class Config(object):
             oversampling parameter for numerical propagations
         phase_cmap : `str`
             colormap used for plotting optical phases
-        image_cmap: `str`
+        image_cmap : `str`
             colormap used for plotting greyscale images
         lw : `float`
             linewidth
-        `zorder` : int
-            z order used for line plots
+        zorder : `int`, optional
+            zorder used for graphics made with matplotlib
         interpolation : `str`
             interpolation type for 2D plots
+        unit_formatter : `str`, optional
+            string passed to astropy.units.(unit).to_string
+        xylabel_joiner : `str`, optional
+            text used to glue together X/Y units and their basic string
+        unit_prefix : `str`, optional
+            text preceeding the unit's representation, after the joiner
+        unit_suffix : `str`, optional
+            text following the unit's representation
+        unit_joiner : `str`, optional
+            text used to glue basic labels and the units together
+        show_units : `bool`, optional
+            if True, shows units on graphics
 
         """
         self.initialized = False
@@ -49,6 +67,12 @@ class Config(object):
         self.lw = lw
         self.zorder = zorder
         self.interpolation = interpolation
+        self.unit_formatter = unit_formatter
+        self.xylabel_joiner = xylabel_joiner
+        self.unit_prefix = unit_prefix
+        self.unit_suffix = unit_suffix
+        self.unit_joiner = unit_joiner
+        self.show_units = show_units
         self.initialized = True
 
     @property

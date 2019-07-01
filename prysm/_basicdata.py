@@ -317,7 +317,8 @@ class BasicData:
         if twosided is None:
             twosided = self._default_twosided
         return Slices(getattr(self, self._data_attr), x=self.x, y=self.y,
-                      twosided=twosided, xlabel=self.xlabel, ylabel=self.zlabel)
+                      twosided=twosided,
+                      xlabel=f'{self.xlabel} [{self.xyunit}]', ylabel=f'{self.zlabel} [{self.zunit}]')
 
     def _make_interp_function_2d(self):
         """Generate a 2D interpolation function for this instance, used in sampling with exact_xy.
@@ -525,6 +526,7 @@ class Slices:
         self._y = y
         self.center_y, self.center_x = (int(e.ceil(s / 2)) for s in data.shape)
         self.twosided = twosided
+        self.xlabel, self.ylabel = xlabel, ylabel
 
     def check_polar_calculated(self):
         """Ensure that the polar representation of the source data has been calculated."""
@@ -685,3 +687,120 @@ class Slices:
         ax.legend(title='Slice')
         ax.set(xscale=xscale, xlim=xlim, xlabel=self.xlabel,
                yscale=yscale, ylim=ylim, ylabel=self.ylabel)
+
+
+class Units:
+    """Units holder for data instances."""
+    def __init__(self, x, z, y=None, wavelength=None):
+        """Create a new Units instance
+
+        Parameters
+        ----------
+        x : `astropy.units` subclass or `str`
+            unit associated with the x coordinates
+        z : `astropy.units` subclass or `str`
+            unit associated with the z data
+        y : `astropy.units` subclass or `str`, optional
+            the same as x, copied from x if not given.
+        wavelength : `astropy.units` subclass or `str`, optional
+            unit the wavelength is expressed in
+
+        """
+        if not y:
+            y = x
+        self.x, self.y, self.z = x, y, z
+        self.wavelength = wavelength
+
+
+class Labels:
+    """Labels holder for data instances."""
+    def __init__(self, xybase, z, units, unit_formatter=config.unit_formatter,
+                 xy_additions=['X', 'Y'], xy_addition_side='left',
+                 addition_joiner=config.xylabel_joiner,
+                 unit_prefix=config.unit_prefix,
+                 unit_suffix=config.unit_suffix,
+                 unit_joiner=config.unit_joiner,
+                 show_units=config.show_units):
+        """Create a new Labels instance
+
+        Parameters
+        ----------
+        xybase : `str`
+            basic string used to build the X and Y labels
+        z : `str`
+            z label
+        units : `Units`
+            units instance
+        unit_formatter : `str`, optional
+            formatter used by astropy.units.(unit).to_string
+        xy_additions : iterable, optional
+            text to add to the (x, y) labels
+        xy_addition_side : {'left', 'right'. 'l', 'r'}, optional
+            side to add the x and y additional text to, left or right
+        addition_joiner : `str`, optional
+            text used to join the x or y addition
+        unit_prefix : `str`, optional
+            prefix used to surround the unit text
+        unit_suffix : `str`, optional
+            suffix used to surround the unit text
+        unit_joiner : `str`, optional
+            text used to combine the base label and the unit
+        show_units : `bool`, optional
+            whether to print units
+        """
+        self.xybase, self.z = xybase, z
+        self.units, self.unit_formatter = units, unit_formatter
+        self.xy_additions, self.xy_addition_side = xy_additions, xy_addition_side
+        self.addition_joiner = addition_joiner
+        self.unit_prefix, self.unit_suffix = unit_prefix, unit_suffix
+        self.unit_joiner, self.show_units = unit_joiner, show_units
+
+    def _label_factory(self, label):
+        """Factory method to produce complex labels.
+
+        Parameters
+        ----------
+        label : `str`, {'x', 'y', 'z'}
+            label to produce
+
+        Returns
+        -------
+        `str`
+            completed label
+
+        """
+        if label in ('x', 'y'):
+            if label == 'x':
+                xy_pos = 0
+            else:
+                xy_pos = 1
+            label_basics = [self.xy_base]
+            if self.xy_addition_side.lower() in ('left', 'l'):
+                label_basics.insert(0, self.xy_additions[xy_pos])
+            else:
+                label_basics.append(self.xy_additions[xy_pos])
+
+            label = self.addition_joiner.join(label_basics)
+        else:
+            label = self.z
+
+        unit_text = ''.join([self.unit_prefix,
+                             getattr(self.units, label).to_string(self.unit_formatter),
+                             self.unit_suffix])
+        label = self.unit_joiner.join([label, unit_text])
+        return label
+
+    @property
+    def x(self):
+        """X label."""
+        return self._label_factory('x')
+
+    @property
+    def y(self):
+        """Y label."""
+        return self._label_factory('y')
+
+    @property
+    def z(self):
+        """Z label."""
+        return self._label_factory('z')

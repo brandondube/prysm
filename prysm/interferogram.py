@@ -860,7 +860,11 @@ class Interferogram(OpticalPhase):
 
         """
         ux, uy, psd_ = psd(self.phase, self.sample_spacing)
-        return BasicData(x=ux, y=uy, data=psd_, xyunit=self.xyunit, zunit=self.zunit)
+        bd = BasicData(x=ux, y=uy, data=psd_, xyunit=self.xyunit, zunit=self.zunit,
+                       xlabel='X Spatial Frequency', ylabel='Y Spatial Frequency',
+                       zlabel='PSD')
+        bd._zunit = f'{self.zunit}²/(cy/{self.xyunit})²'
+        return bd
 
     def bandlimited_rms(self, wllow=None, wlhigh=None, flow=None, fhigh=None):
         """Calculate the bandlimited RMS of a signal from its PSD.
@@ -905,7 +909,7 @@ class Interferogram(OpticalPhase):
             TIS value.
 
         """
-        if self.spatial_unit != 'μm':
+        if self.xyunit != 'μm':
             raise ValueError('Use microns for spatial unit when evaluating TIS.')
 
         upper_limit = 1 / wavelength
