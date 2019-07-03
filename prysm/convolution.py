@@ -2,14 +2,14 @@
 import types
 
 from .mathops import engine as e
-from ._basicdata import BasicData
+from ._basicdata import RichData
 from .coordinates import resample_2d_complex
 from .conf import config
 from .fttools import forward_ft_unit, pad2d
 from .plotting import share_fig_ax
 
 
-class Convolvable(BasicData):
+class Convolvable(RichData):
     """A base class for convolvable objects to inherit from."""
     _data_attr = 'data'
     _data_type = 'image'

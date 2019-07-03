@@ -6,7 +6,7 @@ from scipy import signal, optimize
 
 from .conf import config
 from ._phase import OpticalPhase
-from ._basicdata import BasicData
+from ._basicdata import RichData
 from .mathops import engine as e
 from .zernike import defocus, zernikefit, FringeZernike
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
@@ -855,12 +855,12 @@ class Interferogram(OpticalPhase):
 
         Returns
         -------
-        `BasicData`
-            BasicData class instance with x, y, data attributes
+        `RichData`
+            RichData class instance with x, y, data attributes
 
         """
         ux, uy, psd_ = psd(self.phase, self.sample_spacing)
-        bd = BasicData(x=ux, y=uy, data=psd_, xyunit=self.xyunit, zunit=self.zunit,
+        bd = RichData(x=ux, y=uy, data=psd_, xyunit=self.xyunit, zunit=self.zunit,
                        xlabel='X Spatial Frequency', ylabel='Y Spatial Frequency',
                        zlabel='PSD')
         bd._zunit = f'{self.zunit}²/(cy/{self.xyunit})²'

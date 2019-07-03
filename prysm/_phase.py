@@ -1,12 +1,12 @@
 """phase basics."""
 
 from .mathops import engine as e
-from ._basicdata import BasicData
+from ._basicdata import RichData
 from .plotting import share_fig_ax
 from .util import pv, rms, Sa, std
 
 
-class OpticalPhase(BasicData):
+class OpticalPhase(RichData):
     """Phase of an optical field."""
     _data_attr = 'phase'
     _data_type = 'phase'

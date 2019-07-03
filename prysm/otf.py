@@ -2,7 +2,7 @@
 
 from .conf import config
 from .mathops import engine as e
-from ._basicdata import BasicData
+from ._basicdata import RichData
 from .psf import PSF
 from .fttools import forward_ft_unit
 
@@ -61,7 +61,7 @@ class OTF:
         return OTF.from_psf(psf, unwrap=unwrap)
 
 
-class MTF(BasicData):
+class MTF(RichData):
     """Modulation Transfer Function."""
     _data_attr = 'data'
     _data_type = 'image'
@@ -154,7 +154,7 @@ class MTF(BasicData):
         return MTF(data=dat, x=x, y=y)
 
 
-class PTF(BasicData):
+class PTF(RichData):
     """Phase Transfer Function"""
 
     def __init__(self, data, x, y):

@@ -25,7 +25,7 @@ def fix_interp_pair(x, y):
     return x, y
 
 
-class BasicData:
+class RichData:
     """Abstract base class holding some data properties."""
     _data_attr = 'data'
     _data_type = 'image'
