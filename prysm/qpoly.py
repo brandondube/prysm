@@ -82,6 +82,7 @@ class QBFSCache(object):
         """Create a new QBFSCache instance."""
         self.Qs = defaultdict(dict)
         self.Ps = defaultdict(dict)
+        self.grids = dict()
         self.Pm = None
         self.Pnm2, self.Pnm1 = None, None
         self.Qnm2, self.Qnm1 = None, None
@@ -91,7 +92,7 @@ class QBFSCache(object):
         try:
             Qm = self.Qs[m][samples]
         except KeyError:
-            rho, _ = make_rho_phi_grid(samples, aligned='y')
+            rho = self.get_grid(samples)
             self.Pm = self.get_PBFS(m, samples)
             if m > 2:
                 self.Pnm2 = self.get_PBFS(m - 2, samples)
@@ -110,7 +111,7 @@ class QBFSCache(object):
         try:
             Pm = self.Ps[m][samples]
         except KeyError:
-            rho, _ = make_rho_phi_grid(samples, aligned='y')
+            rho = self.get_grid(samples)
             if m > 2:
                 self.Pnm2 = self.get_PBFS(m - 2, samples)
                 self.Pnm1 = self.get_PBFS(m - 1, samples)
@@ -120,6 +121,16 @@ class QBFSCache(object):
 
         return Pm
 
+    def get_grid(self, samples):
+        """Get a grid of rho coordinates for a given number of samples."""
+        try:
+            rho = self.grids[samples]
+        except KeyError:
+            rho = make_rho_phi_grid(samples, aligned='y')
+            self.grids[samples] = rho
+
+        return rho
+
     def __call__(self, number, samples):
         """Get an array of sag values for a given index, norm, and number of samples."""
         return self.get_QBFS(number, samples)
@@ -127,6 +138,8 @@ class QBFSCache(object):
     def clear(self, *args):
         """Empty the cache."""
         self.Qs = defaultdict(dict)
+        self.Ps = defaultdict(dict)
+        self.grids = dict()
 
 
 QBFScache = QBFSCache()
