@@ -8,24 +8,38 @@ from .mathops import engine as e
 from .coordinates import make_rho_phi_grid
 
 
-def qbfs_recurrence_P(n, x):
+def qbfs_recurrence_P(n, x, Pnm1=None, Pnm2=None):
     if n == 0:
         return 2
     elif n == 1:
         return 6 - 8 * x
     else:
-        return (2 - 4 * x) * qbfs_recurrence_P(n - 1, x) - qbfs_recurrence_P(n - 2, x)
+        if Pnm1 is None:
+            Pnm1 = qbfs_recurrence_P(n - 1, x)
+        if Pnm2 is None:
+            Pnm2 = qbfs_recurrence_P(n - 2, x)
+        return (2 - 4 * x) * Pnm1 - Pnm2
 
 
-def qbfs_recurrence_Q(n, x):
+def qbfs_recurrence_Q(n, x, Pn=None, Pnm1=None, Pnm2=None, Qnm1=None, Qnm2=None):
     if n == 0:
         return e.ones_like(x, dtype=config.precision)
     elif n == 1:
         return 1 / e.sqrt(19) * (13 - 16 * x)
     else:
-        term1 = qbfs_recurrence_P(n, x)
-        term2 = g(n - 1) * qbfs_recurrence_Q(n - 1, x)
-        term3 = h(n - 2) * qbfs_recurrence_Q(n - 2, x)
+        if Pn is None:
+            if Pnm1 is None:
+                Pnm1 = qbfs_recurrence_P(n - 1, x)
+            if Pnm2 is None:
+                Pnm2 = qbfs_recurrence_P(n - 2, x)
+            Pn = qbfs_recurrence_P(n, x, Pnm1=Pnm1, Pnm2=Pnm2)
+        if Qnm1 is None:
+            Qnm1 = qbfs_recurrence_Q(n - 1, x)
+        if Qnm2 is None:
+            Qnm2 = qbfs_recurrence_Q(n - 2, x)
+        term1 = Pn
+        term2 = g(n - 1) * Qnm1
+        term3 = h(n - 2) * Qnm2
         numerator = term1 - term2 - term3
         denominator = f(n)
         return numerator / denominator
@@ -67,17 +81,44 @@ class QBFSCache(object):
     def __init__(self):
         """Create a new QBFSCache instance."""
         self.Qs = defaultdict(dict)
+        self.Ps = defaultdict(dict)
+        self.Pm = None
+        self.Pnm2, self.Pnm1 = None, None
+        self.Qnm2, self.Qnm1 = None, None
 
     def get_QBFS(self, m, samples):
-        """Get an array of phase values for a given index, norm, and number of samples."""
+        """Get an array of phase values for a given index, and number of samples."""
         try:
             Qm = self.Qs[m][samples]
         except KeyError:
             rho, _ = make_rho_phi_grid(samples, aligned='y')
-            Qm = qbfs_recurrence_Q(m, rho)
-            self.Qs[m][samples] = Qm.copy()
+            self.Pm = self.get_PBFS(m, samples)
+            if m > 2:
+                self.Pnm2 = self.get_PBFS(m - 2, samples)
+                self.Pnm1 = self.get_PBFS(m - 1, samples)
+                self.Qnm2 = self.get_QBFS(m - 2, samples)
+                self.Qnm1 = self.get_QBFS(m - 1, samples)
+
+            Qm = qbfs_recurrence_Q(m, rho, Pn=self.Pm, Pnm1=self.Pnm1, Pnm2=self.Pnm2,
+                                   Qnm1=self.Qnm1, Qnm2=self.Qnm2)
+            self.Qs[m][samples] = Qm
 
         return Qm
+
+    def get_PBFS(self, m, samples):
+        """Get an array of P values for a given index."""
+        try:
+            Pm = self.Ps[m][samples]
+        except KeyError:
+            rho, _ = make_rho_phi_grid(samples, aligned='y')
+            if m > 2:
+                self.Pnm2 = self.get_PBFS(m - 2, samples)
+                self.Pnm1 = self.get_PBFS(m - 1, samples)
+
+            Pm = qbfs_recurrence_P(m, rho, Pnm1=self.Pnm1, Pnm2=self.Pnm2)
+            self.Ps[m][samples] = Pm
+
+        return Pm
 
     def __call__(self, number, samples):
         """Get an array of sag values for a given index, norm, and number of samples."""
