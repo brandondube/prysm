@@ -622,7 +622,7 @@ zernikefuncs.update({
 class ZCache(object):
     """Cache of Zernike terms evaluated over the unit circle."""
     def __init__(self):
-        """Create a new FZCache instance."""
+        """Create a new ZCache instance."""
         self.normed = defaultdict(dict)
         self.regular = defaultdict(dict)
 
@@ -710,10 +710,8 @@ class BaseZernike(Pupil):
 
         Returns
         -------
-        self.phase : `numpy.ndarray`
-            arrays containing the phase associated with the pupil
-        self.fcn : `numpy.ndarray`
-            array containing the wavefunction of the pupil plane
+        self : `BaseZernike`
+            this Zernike instance
 
         """
         # build a coordinate system over which to evaluate this function

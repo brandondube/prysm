@@ -126,7 +126,7 @@ class QBFSCache(object):
         try:
             rho = self.grids[samples]
         except KeyError:
-            rho = make_rho_phi_grid(samples, aligned='y')
+            rho, _ = make_rho_phi_grid(samples, aligned='y')
             self.grids[samples] = rho
 
         return rho
