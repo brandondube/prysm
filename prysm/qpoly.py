@@ -8,6 +8,7 @@ from .coordinates import make_rho_phi_grid
 
 
 def qbfs_recurrence_P(n, x, Pnm1=None, Pnm2=None, recursion_coef=None):
+    """P(m+1) from oe-18-19-19700 eq. (2.6)."""
     if n == 0:
         return 2
     elif n == 1:
@@ -24,6 +25,7 @@ def qbfs_recurrence_P(n, x, Pnm1=None, Pnm2=None, recursion_coef=None):
 
 
 def qbfs_recurrence_Q(n, x, Pn=None, Pnm1=None, Pnm2=None, Qnm1=None, Qnm2=None, recursion_coef=None):
+    """Q(m+1) from oe-18-19-19700 eq. (2.7)."""
     if n == 0:
         return e.ones_like(x)
     elif n == 1:
@@ -43,32 +45,32 @@ def qbfs_recurrence_Q(n, x, Pn=None, Pnm1=None, Pnm2=None, Qnm1=None, Qnm2=None,
 
         # now calculate the three-term recursion
         term1 = Pn
-        term2 = g(n - 1) * Qnm1
-        term3 = h(n - 2) * Qnm2
+        term2 = g_qbfs(n - 1) * Qnm1
+        term3 = h_qbfs(n - 2) * Qnm2
         numerator = term1 - term2 - term3
-        denominator = f(n)
+        denominator = f_qbfs(n)
         return numerator / denominator
 
 
 @lru_cache()
-def g(n_minus_1):
+def g_qbfs(n_minus_1):
     """g(m-1) from oe-18-19-19700 eq. (A.15)"""
     if n_minus_1 == 0:
         return - 1 / 2
     else:
         n_minus_2 = n_minus_1 - 1
-        return - (1 + g(n_minus_2) * h(n_minus_2)) / f(n_minus_1)
+        return - (1 + g_qbfs(n_minus_2) * h_qbfs(n_minus_2)) / f_qbfs(n_minus_1)
 
 
 @lru_cache()
-def h(n_minus_2):
+def h_qbfs(n_minus_2):
     """h(m-2) from oe-18-19-19700 eq. (A.14)"""
     n = n_minus_2 + 2
-    return -n * (n - 1) / (2 * f(n_minus_2))
+    return -n * (n - 1) / (2 * f_qbfs(n_minus_2))
 
 
 @lru_cache()
-def f(n):
+def f_qbfs(n):
     """f(m) from oe-18-19-19700 eq. (A.16)"""
     if n == 0:
         return 2
@@ -76,21 +78,20 @@ def f(n):
         return e.sqrt(19) / 2
     else:
         term1 = n * (n + 1) + 3
-        term2 = g(n - 1) ** 2
-        term3 = h(n - 2) ** 2
+        term2 = g_qbfs(n - 1) ** 2
+        term3 = h_qbfs(n - 2) ** 2
         return e.sqrt(term1 - term2 - term3)
 
 
 class QBFSCache(object):
-    """Cache of Qbfs terms evaluated over the unit circle."""
+    """Cache of Qbfs terms evaluated over the unit circle.
+
+    Note that the .grids attribute stores only radial coordinates, and they are stored in squared form."""
     def __init__(self):
         """Create a new QBFSCache instance."""
         self.Qs = {}
         self.Ps = {}
         self.grids = {}
-        self.Pm = None
-        self.Pnm2, self.Pnm1 = None, None
-        self.Qnm2, self.Qnm1 = None, None
 
     def get_QBFS(self, m, samples, rho_max=1):
         """Get an array of phase values for a given index, and number of samples."""
@@ -99,15 +100,17 @@ class QBFSCache(object):
             Qm = self.Qs[key]
         except KeyError:
             rho = self.get_grid(samples, rho_max=rho_max)
-            self.Pm = self.get_PBFS(m=m, samples=samples, rho_max=rho_max)
+            Pm = self.get_PBFS(m=m, samples=samples, rho_max=rho_max)
             if m > 2:
-                self.Pnm2 = self.get_PBFS(m=m - 2, samples=samples, rho_max=rho_max)
-                self.Pnm1 = self.get_PBFS(m=m - 1, samples=samples, rho_max=rho_max)
-                self.Qnm2 = self.get_QBFS(m=m - 2, samples=samples, rho_max=rho_max)
-                self.Qnm1 = self.get_QBFS(m=m - 1, samples=samples, rho_max=rho_max)
+                Pnm2 = self.get_PBFS(m=m - 2, samples=samples, rho_max=rho_max)
+                Pnm1 = self.get_PBFS(m=m - 1, samples=samples, rho_max=rho_max)
+                Qnm2 = self.get_QBFS(m=m - 2, samples=samples, rho_max=rho_max)
+                Qnm1 = self.get_QBFS(m=m - 1, samples=samples, rho_max=rho_max)
+            else:
+                Pnm1, Pnm2, Qnm1, Qnm2 = None, None, None, None
 
-            Qm = qbfs_recurrence_Q(m, rho, Pn=self.Pm, Pnm1=self.Pnm1, Pnm2=self.Pnm2,
-                                   Qnm1=self.Qnm1, Qnm2=self.Qnm2)
+            Qm = qbfs_recurrence_Q(m, rho, Pn=Pm, Pnm1=Pnm1, Pnm2=Pnm2,
+                                   Qnm1=Qnm1, Qnm2=Qnm2)
             self.Qs[key] = Qm
 
         return Qm
@@ -117,13 +120,16 @@ class QBFSCache(object):
         key = self.make_key(m=m, samples=samples, rho_max=rho_max)
         try:
             Pm = self.Ps[key]
+
         except KeyError:
             rho = self.get_grid(samples, rho_max=rho_max)
             if m > 2:
-                self.Pnm2 = self.get_PBFS(m - 2, samples=samples, rho_max=rho_max)
-                self.Pnm1 = self.get_PBFS(m - 1, samples=samples, rho_max=rho_max)
+                Pnm2 = self.get_PBFS(m - 2, samples=samples, rho_max=rho_max)
+                Pnm1 = self.get_PBFS(m - 1, samples=samples, rho_max=rho_max)
+            else:
+                Pnm1, Pnm2 = None, None
 
-            Pm = qbfs_recurrence_P(m, rho, Pnm1=self.Pnm1, Pnm2=self.Pnm2)
+            Pm = qbfs_recurrence_P(m, rho, Pnm1=Pnm1, Pnm2=Pnm2)
             self.Ps[key] = Pm
 
         return Pm
@@ -135,6 +141,7 @@ class QBFSCache(object):
             rho = self.grids[key]
         except KeyError:
             rho, _ = make_rho_phi_grid(samples, aligned='y', radius=rho_max)
+            rho = rho ** 2
             self.grids[key] = rho
 
         return rho
@@ -151,6 +158,16 @@ class QBFSCache(object):
         self.Qs = {}
         self.Ps = {}
         self.grids = {}
+
+    @property
+    def nbytes(self):
+        n = 0
+        for key in self.Qs:
+            n += self.Qs[key].nbytes
+            n += self.Ps[key].nbytes
+            n += self.grids[key[1:]].nbytes
+
+        return n
 
 
 QBFScache = QBFSCache()
@@ -193,3 +210,52 @@ class QBFSSag(Pupil):
                 continue
             else:
                 self.phase += self._cache(term, self.samples)
+
+        r2 = self._cache.get_grid(self.samples)
+        coef = r2 * (1 - r2)
+        self.phase *= coef
+
+
+def a_qcon(n):
+    """a(n) from oe-18-13-13851 eq. (5.2a)."""
+    numerator = (2 * n + 5) * (n ** 2 + 5 * n + 10)
+    denominator = (n + 1) * (n + 5) * (n + 5)
+    return numerator / denominator
+
+
+def b_qcon(n):
+    """b(n) from oe-18-13-13851 eq. (5.2b)."""
+    numerator = 2 * (n + 3) * (2 * n + 5)
+    denominator = (n + 1) * (n + 5)
+    return numerator / denominator
+
+
+def c_qcon(n):
+    """c(n) from oe-18-13-13851 eq. (5.2c)."""
+    numerator = (n + 3) * (n + 4) * n
+    denominator = (n + 1) * (n + 2) * (n + 5)
+    return numerator / denominator
+
+
+def a_zernike(m, n):
+    """a(n) from oe-18-13-13861 eq. (4.1a)."""
+    s = m + 2 * n
+    numerator = (s + 1) * ((s - n) ** 2 + n ** 2 + s)
+    denominator = (n + 1) * (s - n + 1) * s
+    return numerator / denominator
+
+
+def b_zernike(m, n):
+    """b(n) from oe-18-13-13861 eq. (4.1b)."""
+    s = m + 2 * n
+    numerator = (s + 2) * (s + 1)
+    denominator = (n + 1) * (s + n - 1)
+    return numerator / denominator
+
+
+def c_zernike(m, n):
+    """c(n) from oe-18-13-13861 eq. (4.1c)."""
+    s = m + 2 * n
+    numerator = (s + 2) * (s - n) * n
+    denominator = (n + 1) * (s - n + 1) * s
+    return numerator / denominator
