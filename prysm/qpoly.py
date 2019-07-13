@@ -209,7 +209,7 @@ class QBFSSag(Pupil):
             if coef == 0:
                 continue
             else:
-                self.phase += self._cache(term, self.samples)
+                self.phase += coef * self._cache(term, self.samples)
 
         r2 = self._cache.get_grid(self.samples)
         coef = r2 * (1 - r2)
