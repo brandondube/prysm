@@ -35,6 +35,29 @@ def c(n, alpha, beta, x):
 
 
 def jacobi(n, alpha, beta, x, Pnm1=None, Pnm2=None):
+    """Jacobi polynomial of order n with weight parameters alpha and beta.
+
+    Parameters
+    ----------
+    n : `int`
+        polynomial order
+    alpha : `float`
+        first weight parameter
+    beta : `float`
+        second weight parameter
+    x : `numpy.ndarray`
+        x coordinates to evaluate at
+    Pnm1 : `numpy.ndarray`, optional
+        The n-1th order jacobi polynomial, evaluated at the given points
+    Pnm2 : `numpy.ndarray`, optional
+        The n-2th order jacobi polynomial, evaluated at the given points
+
+    Returns
+    -------
+    `numpy.ndarray`
+        jacobi polynomial evaluated at the given points
+
+    """
     if n == 0:
         return e.ones_like(x)
     elif n == 1:
@@ -55,3 +78,33 @@ def jacobi(n, alpha, beta, x, Pnm1=None, Pnm2=None):
         term2 = c_ * Pnm2
         tmp = term1 - term2
         return tmp / a_
+
+
+def jacobi_sequence(n_max, alpha, beta, x):
+    """Jacobi polynomials of order 0..n_max with weight parameters alpha and beta.
+
+    Parameters
+    ----------
+    n_max : `int`
+        maximum polynomial order
+    alpha : `float`
+        first weight parameter
+    beta : `float`
+        second weight parameter
+    x : `numpy.ndarray`
+        x coordinates to evaluate at
+
+    Returns
+    -------
+    `numpy.ndarray`
+        array of shape (n_max, len(x))
+    """
+    out = e.empty((n_max, len(x)))
+    out[0, :] = jacobi(0, alpha, beta)
+    out[1, :] = jacobi(1, alpha, beta)
+    for i in e.arange(2, n_max):
+        Pnm1 = out[i-1, :]
+        Pnm2 = out[i-2, :]
+        out[i, :] = jacobi(i, alpha, beta, Pnm1=Pnm1, Pnm2=Pnm2)
+
+    return out
