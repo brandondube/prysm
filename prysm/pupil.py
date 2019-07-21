@@ -4,15 +4,14 @@ from .conf import config
 from .mathops import engine as e
 from ._phase import OpticalPhase
 from .coordinates import make_rho_phi_grid
-from .geometry import mcache
+from .geometry import mask_cleaner
 from .util import std
 
 
 class Pupil(OpticalPhase):
     """Pupil of an optical system."""
-    def __init__(self, samples=128, dia=1.0, wavelength=0.55,
-                 units=None, labels=None,
-                 mask='circle', mask_target='both', ux=None, uy=None, phase=None):
+    def __init__(self, samples=128, dia=1, units=None, labels=None,
+                 phase_mask='circle', transmission='circle', ux=None, uy=None, phase=None):
         """Create a new `Pupil` instance.
 
         Parameters
@@ -20,23 +19,21 @@ class Pupil(OpticalPhase):
         samples : `int`, optional
             number of samples across the pupil interior
         dia : `float`, optional
-            diameter of the pupil, mm
-        wavelength : `float`, optional
-            wavelength of light, um
+            diameter of the pupil, units.x
         units : `Units`
             units for the data
         labels : `Labels`
             labels used for plots
-        mask : `str` or `numpy.ndarray`
-            mask used to define the amplitude and boundary of the pupil; any
-            regular polygon from `prysm.geometry` as a string, e.g. 'circle' is
-            valid.  A user-provided ndarray can also be used.
-        mask_target : `str`, {'phase', 'fcn', 'both', None}
-            which array to mask during pupil creation; only masking fcn is
-            faster for numerical propagations but will make plot2d() and the
-            phase array not be truncated properly.  Note that if the mask is not
-            binary and `phase` or `both` is used, phase plots will also not be
-            correct, as they will be attenuated by the mask.
+        phase_mask : `numpy.ndarray` or `str` or `tuple`
+            Mask used to modify phase.
+            If array, used directly.
+            If str, assumed to be known mask type for geometry submodule.
+            If tuple, assumed to be known mask type, with optional radius.
+        transmission : `numpy.ndarray` or `str` or `tuple`
+            Mask used to modify `self.fcn`.
+            If array, used directly.
+            If str, assumed to be known mask type for geometry submodule.
+            If tuple, assumed to be known mask type, with optional radius.
         ux : `np.ndarray`
             x axis units
         uy : `np.ndarray`
@@ -49,11 +46,6 @@ class Pupil(OpticalPhase):
         If ux give, assume uy and phase also given; skip much of the pupil building process
         and simply copy values.
 
-        Raises
-        ------
-        ValueError
-            if the OPD unit given is invalid
-
         """
         if ux is None:
             # must build a pupil
@@ -65,34 +57,39 @@ class Pupil(OpticalPhase):
         else:
             # data already known
             need_to_build = False
+
+        if units is None:
+            units = config.phase_units
+
+        if labels is None:
+            labels = config.pupil_labels
+
         super().__init__(x=ux, y=uy, phase=phase, units=units, labels=labels)
-        self.rho = self.phi = None
 
         if need_to_build:
-            if type(mask) is not e.ndarray:
-                mask = mcache(mask, self.samples)
+            phase_mask = mask_cleaner(phase_mask, samples)
+            if phase_mask is not None:
+                self.phase = self.phase * phase_mask
 
-            self._mask = mask
-            self.mask_target = mask_target
+            transmission = mask_cleaner(transmission, samples)
+            self.transmission = transmission
             self.build()
-            self.mask(self._mask, self.mask_target)
         else:
-            protomask = e.isnan(phase)
-            mask = e.ones(protomask.shape)
-            mask[protomask] = 0
-            self._mask = mask
-            self.mask_target = 'fcn'
+            holes = e.isnan(phase)
+            transmission = e.ones(holes.shape)
+            transmission[holes] = 0
+            self.transmission = transmission
 
     @property
     def strehl(self):
         """Strehl ratio of the pupil."""
-        phase = self.change_zunit(to='um', inplace=False)
+        phase = self.change_z_unit(to='um', inplace=False)
         return e.exp(-4 * e.pi / self.wavelength / self.wavelength * std(phase) ** 2)
 
     @property
     def fcn(self):
         """Complex wavefunction associated with the pupil."""
-        phase = self.change_zunit(to='waves', inplace=False)
+        phase = self.change_z_unit(to='waves', inplace=False)
 
         fcn = e.exp(1j * 2 * e.pi * phase)  # phase implicitly in units of waves, no 2pi/l
         # guard against nans in phase

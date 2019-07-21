@@ -4,6 +4,8 @@ from collections.abc import Iterable
 
 from scipy import interpolate
 
+from astropy import units as u
+
 from .conf import config
 from .mathops import engine as e
 from .coordinates import uniform_cart_to_polar, polar_to_cart
@@ -43,21 +45,15 @@ class RichData:
             y unit axis
         data : `numpy.ndarray`
             data
-        xyunit : `str`, optional
-            unit used for the XY axes
-        zunit : `str`, optional
-            unit used for the Z (data) axis
-        xlabel : `str`, optional
-            x label used on plots
-        ylabel : `str`, optional
-            y label used on plots
-        zlabel : `str`, optional
-            z label used on plots
+        units : `Units`
+            units instance, can be shared
+        labels : `Labels`
+            labels instance, can be shared
 
         Returns
         -------
-        BasicData
-            the BasicData instance
+        RichData
+            the instance
 
         """
         self.x, self.y = x, y
@@ -109,119 +105,77 @@ class RichData:
         """Center "pixel" in y."""
         return self.samples_y // 2
 
-    @property
-    def zunit(self):
-        """Unit used to describe the optical phase."""
-        return self.units.z
-
-    @zunit.setter
-    def zunit(self, unit):
-        unit = unit.lower()
-        if unit == 'å':
-            self._zunit = unit.upper()
-        else:
-            if unit not in self.units:
-                raise ValueError(f'{unit} not a valid unit, must be in {set(self.units.keys())}')
-            self._zunit = self.units[unit]
-
-    @property
-    def xyunit(self):
-        """Unit used to describe the spatial phase."""
-        return self._xyunit
-
-    @xyunit.setter
-    def xyunit(self, unit):
-        unit = unit.lower()
-        if unit not in self.units:
-            raise ValueError(f'{unit} not a valid unit, must be in {set(self.units.keys())}')
-
-        self._xyunit = self.units[unit]
-
-    def change_zunit(self, to, inplace=True):
-        """Change the units used to describe the z axis.
-
-        Parameters
-        ----------
-        to : `str`
-            new unit, a member of `BasicData`.units.keys()
-        inplace : `bool`, optional
-            whether to change (scale) the data, if False, returns updated data, if True, returns self.
-
-        Returns
-        -------
-        `new_data` : `np.ndarray`
-            new data
-        OR
-        `self` : `BasicData`
-            self
-
-        """
-        if to not in self.units.keys():
-            raise ValueError('unsupported unit')
-        if self.zunit == 'a.u.':
-            raise ValueError('cannot change arbitrary units to others.')
-
-        wavelength = getattr(self, 'wavelength', None)
-        if not wavelength and to.lower() in {'waves', 'lambda', 'λ'}:
-            raise ValueError('must have self.wavelength when converting to waves')
-
-        fctr = self.unit_changes['_'.join([self.zunit, self.units[to]])](wavelength)
-        new_data = getattr(self, self._data_attr) / fctr
-        if inplace:
-            setattr(self, self._data_attr, new_data)
-            self.zunit = to
-            return self
-        else:
-            return new_data
-
-    def change_xyunit(self, to, inplace=True):
-        """Change the x/y used to describe the spatial dimensions.
-
-        Parameters
-        ----------
-        to : `str`
-            new unit, a member of `BasicData`.units.keys()
-        inplace : `bool`, optional
-            whether to change self.x and self.y.
-            If False, returns updated phase, if True, returns self
-
-        Returns
-        -------
-        `new_x` : `np.ndarray`
-            new ordinate x axis
-        `new_y` : `np.ndarray`
-            new ordinate y axis
-        OR
-        `self` : `BasicData`
-            self
-
-        """
-        if to not in self.units.keys():
-            raise ValueError('unsupported unit')
-        if self.xyunit == 'a.u.':
-            raise ValueError('cannot change arbitrary units to others.')
-
-        wavelength = getattr(self, 'wavelength', None)
-
-        if to.lower() != 'px':
-            fctr = self.unit_changes['_'.join([self.xyunit, self.units[to]])](wavelength)
-            new_ux = self.x / fctr
-            new_uy = self.y / fctr
-        else:
-            sy, sx = self.shape
-            new_ux = e.arange(sx, dtype=config.precision)
-            new_uy = e.arange(sy, dtype=config.precision)
-        if inplace:
-            self.x = new_ux
-            self.y = new_uy
-            self.xyunit = to
-            return self
-        else:
-            return new_ux, new_uy
-
     def copy(self):
         """Return a (deep) copy of this instance."""
         return copy.deepcopy(self)
+
+    def change_xy_unit(self, to, inplace=True):
+        """Change the x/y unit to a new one, scaling the data in the process.
+
+        Parameters
+        ----------
+        to : `astropy.unit` or `str`
+            if not an astropy unit, a string that is a valid attribute of astropy.units.
+        inplace : `bool`, optional
+            if True, returns self.  Otherwise returns the modified data.
+
+        Returns
+        -------
+        `RichData`
+            self, if inplace=True
+        `numpy.ndarray`, `numpy.ndarray`
+            x, y from self, if inplace=False
+
+        """
+        if not isinstance(to, u.Unit):
+            unit = getattr(u, to)
+        else:
+            unit = to
+
+        uu = self.units.copy()
+        uu.x, uu.y = unit, unit
+        coef = self.units.x.to(unit)
+        x, y = self.x * coef, self.y * coef
+        if not inplace:
+            return x, y
+        else:
+            self.x, self.y = x, y
+            self.units = uu
+            return self
+
+    def change_z_unit(self, to, inplace=True):
+        """Change the z unit to a new one, scaling the data in the process.
+
+        Parameters
+        ----------
+        to : `astropy.unit` or `str`
+            if not an astropy unit, a string that is a valid attribute of astropy.units.
+        inplace : `bool`, optional
+            if True, returns self.  Otherwise returns the modified data.
+
+        Returns
+        -------
+        `RichData`
+            self, if inplace=True
+        `numpy.ndarray`
+            data from self, if inplace=False
+
+        """
+        if not isinstance(to, u.Unit):
+            unit = getattr(u, to)
+        else:
+            unit = to
+
+        uu = self.units.copy()
+        uu.z = unit
+        coef = self.units.z.to(uu)
+        modified_data = getattr(self, self._data_attr) * coef
+        if not inplace:
+            return modified_data
+        else:
+            setattr(self, self._data_attr, modified_data)
+            self.units = uu
+            return self
 
     def slices(self, twosided=None):
         """Create a `Slices` instance from this instance.
@@ -426,13 +380,12 @@ class RichData:
                        interpolation=interpolation)
 
         if show_colorbar:
-            fig.colorbar(im, label=f'{self.zlabel} [{self.zunit}]', ax=ax, fraction=0.046)
+            fig.colorbar(im, label=self.labels.z(self.units), ax=ax, fraction=0.046)
 
         xlab, ylab = None, None
         if show_axlabels:
-            xlab = f'{self.xlabel} [{self.xyunit}]'
-            ylab = f'{self.ylabel} [{self.xyunit}]'
-
+            xlab = self.labels.x(self.units)
+            ylab = self.labels.y(self.units)
         ax.set(xlabel=xlab, xlim=xlim, ylabel=ylab, ylim=ylim)
 
         return fig, ax

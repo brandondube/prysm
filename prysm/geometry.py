@@ -8,6 +8,22 @@ from .mathops import engine as e
 from .coordinates import make_rho_phi_grid, cart_to_polar, polar_to_cart
 
 
+def mask_cleaner(mask_or_str_or_tuple, samples):
+    if mask_or_str_or_tuple is None:
+        return None
+    if (
+            not isinstance(mask_or_str_or_tuple, str) and
+            not isinstance(mask_or_str_or_tuple, (tuple, list))):
+        # array, just return it
+        return mask_or_str_or_tuple
+    elif isinstance(mask_cleaner, str):
+        # name with radius=1
+        return mcache(mask_or_str_or_tuple, samples)
+    elif isinstance(mask_or_str_or_tuple, (tuple, list)):
+        type_, radius = mask_or_str_or_tuple
+        return mcache(type_, samples, radius)
+
+
 class MaskCache(object):
     """Cache for geometric masks."""
     def __init__(self):
@@ -559,7 +575,6 @@ def generate_spider(vanes, width, rot_offset=0, arydiam=1, samples=128):
     # generate the basic grid
     width /= 2
     x = y = e.linspace(-arydiam / 2, arydiam / 2, samples)
-    # print(x.min(), x.max())
     xx, yy = e.meshgrid(x, y)
     r, p = cart_to_polar(xx, yy)
 

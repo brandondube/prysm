@@ -14,7 +14,7 @@ class Convolvable(RichData):
     _data_attr = 'data'
     _data_type = 'image'
 
-    def __init__(self, x, y, data, has_analytic_ft=False):
+    def __init__(self, x, y, data, has_analytic_ft=False, units=None, labels=None):
         """Create a new Convolvable object.
 
         Parameters
@@ -28,12 +28,15 @@ class Convolvable(RichData):
         has_analytic_ft : `bool`, optional
             Whether this convolvable overrides self.analytic_ft, and has a known
             analytical fourier tansform
+        units : `Units`
+            units to use.  If None, will use config.convolvable_units
+        labels : `Labels`
+            labels to use.  If None, will use config.convolvable_labels
 
         """
         super().__init__(x=x, y=y, data=data,
-                         xyunit='um', zunit='au',
-                         xlabel='Image Plane X', ylabel='Image Plane Y',
-                         zlabel='Normalized Irradiance')
+                         units=units or config.convolvable_units,
+                         labels=labels or config.convolvable_labels)
         self.has_analytic_ft = has_analytic_ft
 
     def __str__(self):

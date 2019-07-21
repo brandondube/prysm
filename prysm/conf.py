@@ -1,4 +1,6 @@
 """Configuration for this instance of prysm."""
+import copy
+
 import numpy as np
 
 from astropy import units as u
@@ -51,24 +53,27 @@ class Units:
         self.wavelength = wavelength
         self.formatter = formatter
 
+    def copy(self):
+        return copy.deepcopy(self)
+
 
 class Labels:
     """Labels holder for data instances."""
-    def __init__(self, xybase, z,
-                 xy_additions, xy_addition_side,
-                 addition_joiner,
-                 unit_prefix,
-                 unit_suffix,
-                 unit_joiner,
-                 show_units):
+    def __init__(self, xy_base, z,
+                 xy_additions, xy_addition_side='right',
+                 addition_joiner=' ',
+                 unit_prefix='[',
+                 unit_suffix=']',
+                 unit_joiner=' ',
+                 show_units=True):
         """Create a new Labels instance
 
         Parameters
         ----------
-        xybase : `str`
+        xy_base : `str`
             basic string used to build the X and Y labels
         z : `str`
-            z label
+            z label, stored as self._z to avoid clash with self.z()
         xy_additions : iterable, optional
             text to add to the (x, y) labels
         xy_addition_side : {'left', 'right'. 'l', 'r'}, optional
@@ -84,7 +89,7 @@ class Labels:
         show_units : `bool`, optional
             whether to print units
         """
-        self.xybase, self.z = xybase, z
+        self.xy_base, self._z = xy_base, z
         self.xy_additions, self.xy_addition_side = xy_additions, xy_addition_side
         self.addition_joiner = addition_joiner
         self.unit_prefix, self.unit_suffix = unit_prefix, unit_suffix
@@ -115,15 +120,15 @@ class Labels:
             else:
                 label_basics.append(self.xy_additions[xy_pos])
 
-            label = self.addition_joiner.join(label_basics)
+            label_ = self.addition_joiner.join(label_basics)
         else:
-            label = self.z
+            label_ = self._z
 
         unit_text = ''.join([self.unit_prefix,
                              getattr(units, label).to_string(units.formatter),
                              self.unit_suffix])
-        label = self.unit_joiner.join([label, unit_text])
-        return label
+        label_ = self.unit_joiner.join([label_, unit_text])
+        return label_
 
     def x(self, units):
         """X label."""
@@ -137,18 +142,18 @@ class Labels:
         """Z label."""
         return self._label_factory('z', units)
 
+    def copy(self):
+        return copy.deepcopy(self)
+
 
 default_phase_units = Units(x=u.mm, y=u.mm, z=u.nm, wavelength=HeNe)
 default_image_units = Units(x=u.um, y=u.um, z=u.adu)
 
-default_phase_units = None
-default_image_units = None
-
-default_pupil_labels = None
-default_interferogram_labels = None
-default_convolvable_labels = None
-default_mtf_labels = None
-default_ptf_labels = None
+default_pupil_labels = Labels(xy_base='Pupil', z='OPD', xy_additions=['ξ', 'η'])
+default_interferogram_labels = Labels(xy_base='', z='Height', xy_additions=['X', 'Y'])
+default_convolvable_labels = Labels(xy_base='Image Plane', z='Irradiance', xy_additions=['X', 'Y'])
+default_mtf_labels = Labels(xy_base='Spatial Frequency', z='MTF', xy_additions=['X', 'Y'])
+default_ptf_labels = Labels(xy_base='Spatial Frequency', z='PTF', xy_additions=['ξ', 'η'])
 
 
 class Config(object):
