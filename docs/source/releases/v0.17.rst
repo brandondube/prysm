@@ -9,9 +9,17 @@ New Features
 
 Note that this list is in logical order of dependence, not in order of importance.
 
-* :func:`~prysm.mathops.gamma`, :func:`~prysm.mathops.kronecker`, and :func:`~prysm.mathops.sign` in :mod:`~prysm.mathops`.
+* New :mod:`~prysm.mathops`functions: :func:`~prysm.mathops.gamma`, :func:`~prysm.mathops.kronecker`, and :func:`~prysm.mathops.sign`.
 * :mod:`~prysm.jacobi` submodule for recursive jacobi polynomial computation, key functions are :func:`~prysm.jacobi.jacobi` and :func:`~prysm.jacobi.jacobi_sequence`.
-* Recursively generated Zernike polynomials
+* New :mod:`~prysm.zernike` functions:
+* * :func:`~prysm.zernike.zernike_norm` to calculate the norm of a Zernike term given its (n, m) radial and azimuthal orders.
+* * :func:`~prysm.zernike.n_m_to_fringe` to convert (n, m) radial and azimuthal orders to fringe indices.
+* * :func:`~prysm.zernike.n_m_to_ansi_j` to convert (n, m) radial and azimuthal orders to ANSI single-term indices.
+* * :func:`~prysm.zernike.ansi_j_to_n_m` to perform the reverse of :code:`n_m_to_ansi_j`.
+* * :func:`~prysm.zernike.zero_separation` to calculate the zero separation, in fractions of 1, for example :code:`1 / zero_separation(4)` returns 16, indicating 16 samples per radius are needed to Nyquist sample the 4th radial order Zernike polynomial (Primary Spherical).
+* Recursively generated Zernike polynomials:
+* * :class:`ANSI2TermZernike` for ANSI Zernikes with (n, m) indices.  See The 2D-Q note below for how these coefficients are entered.
+* * :class:`ANSI1TermZernike` for ANSI Zernikes with j (single-term) indices.
 * :mod:`~prysm.qpoly` submodule for work with Qbfs, Qcon, and 2D-Q polynomials.  The raw functions allow caching to achieve O(N) performance instead of O(n^2).  The cache instances behave like the Zernike cache and allow constant time performance after the initial polynomial generation and storage.  Key user-facing classes:
 * * Qbfs:
 * * * :code:`~prysm.qpoly.QBFSSag`
@@ -22,6 +30,7 @@ Note that this list is in logical order of dependence, not in order of importanc
 * * 2D-Q:
 * * * :code:`~prysm.qpoly.Q2DSag`
 * * * :code:`~prysm.qpoly.Q2DCache`
+* 1D polynomials (Qbfs and Qcon) take keyword arguments A0..An with no limit.  2D polynomials (2D-Q) take arguments of Am_n
 * Check the :mod:`~prysm.qpoly` docs for the "raw" functions.
 * :code:`__str__` dunder method for :class:`~prysm.interferogram.Interferogram` objects.
 * :class:`prysm.otf.OTF` and :class:`~prysm.otf.PTF` Phase Transfer Function and Optical Transfer Function analysis.
