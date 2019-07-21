@@ -11,17 +11,19 @@ from .coordinates import make_rho_phi_grid, cart_to_polar, polar_to_cart
 def mask_cleaner(mask_or_str_or_tuple, samples):
     if mask_or_str_or_tuple is None:
         return None
-    if (
+    elif (
             not isinstance(mask_or_str_or_tuple, str) and
             not isinstance(mask_or_str_or_tuple, (tuple, list))):
         # array, just return it
         return mask_or_str_or_tuple
-    elif isinstance(mask_cleaner, str):
+    elif isinstance(mask_or_str_or_tuple, str):
         # name with radius=1
         return mcache(mask_or_str_or_tuple, samples)
     elif isinstance(mask_or_str_or_tuple, (tuple, list)):
         type_, radius = mask_or_str_or_tuple
         return mcache(type_, samples, radius)
+    else:
+        raise ValueError('badly formatted mask, string, or tuple')
 
 
 class MaskCache(object):

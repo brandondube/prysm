@@ -128,7 +128,10 @@ class RichData:
 
         """
         if not isinstance(to, u.Unit):
-            unit = getattr(u, to)
+            if to.lower() in ('waves', 'wave', 'λ'):
+                unit = self.units.wavelength
+            else:
+                unit = getattr(u, to)
         else:
             unit = to
 
@@ -162,13 +165,16 @@ class RichData:
 
         """
         if not isinstance(to, u.Unit):
-            unit = getattr(u, to)
+            if to.lower() in ('waves', 'wave', 'λ'):
+                unit = self.units.wavelength
+            else:
+                unit = getattr(u, to)
         else:
             unit = to
 
         uu = self.units.copy()
         uu.z = unit
-        coef = self.units.z.to(uu)
+        coef = self.units.z.to(unit)
         modified_data = getattr(self, self._data_attr) * coef
         if not inplace:
             return modified_data
