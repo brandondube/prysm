@@ -37,6 +37,11 @@ def c(n, alpha, beta, x):
 def jacobi(n, alpha, beta, x, Pnm1=None, Pnm2=None):
     """Jacobi polynomial of order n with weight parameters alpha and beta.
 
+    Notes
+    -----
+    This function is faster than scipy.special.jacobi when Pnm1 and Pnm2 are
+    supplied and is stable to high order.  Performance benefit ranges from 2-5x.
+
     Parameters
     ----------
     n : `int`
@@ -97,14 +102,17 @@ def jacobi_sequence(n_max, alpha, beta, x):
     Returns
     -------
     `numpy.ndarray`
-        array of shape (n_max, len(x))
+        array of shape (n_max+1, len(x))
     """
-    out = e.empty((n_max, len(x)))
-    out[0, :] = jacobi(0, alpha, beta)
-    out[1, :] = jacobi(1, alpha, beta)
-    for i in e.arange(2, n_max):
-        Pnm1 = out[i-1, :]
-        Pnm2 = out[i-2, :]
-        out[i, :] = jacobi(i, alpha, beta, Pnm1=Pnm1, Pnm2=Pnm2)
+    out = e.empty((n_max + 1, len(x)))
+    out[0, :] = jacobi(0, alpha, beta, x)
+    if n_max > 0:
+        out[1, :] = jacobi(1, alpha, beta, x)
+
+    if n_max > 1:
+        for i in range(2, n_max + 1):
+            Pnm1 = out[i - 1, :]
+            Pnm2 = out[i - 2, :]
+            out[i, :] = jacobi(i, alpha, beta, x, Pnm1=Pnm1, Pnm2=Pnm2)
 
     return out
