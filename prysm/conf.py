@@ -29,7 +29,7 @@ HeNe = mkwvl(632.8, u.nm)
 
 class Units:
     """Units holder for data instances."""
-    def __init__(self, x, z, y=None, wavelength=None):
+    def __init__(self, x, z, y=None, wavelength=None, formatter='unicode'):
         """Create a new Units instance
 
         Parameters
@@ -40,19 +40,21 @@ class Units:
             unit associated with the z data
         y : `astropy.units` subclass or `str`, optional
             the same as x, copied from x if not given.
-        wavelength : `astropy.units` subclass or `str`, optional
+        wavelength : `astropy.units` subclass, optional
             unit the wavelength is expressed in
-
+        formatter : `str`, e.g. 'unicode' or 'latex'
+            formatter used to convert astropy unit to text, see astropy.units docs
         """
         if not y:
             y = x
         self.x, self.y, self.z = x, y, z
         self.wavelength = wavelength
+        self.formatter = formatter
 
 
 class Labels:
     """Labels holder for data instances."""
-    def __init__(self, xybase, z, units, unit_formatter,
+    def __init__(self, xybase, z,
                  xy_additions, xy_addition_side,
                  addition_joiner,
                  unit_prefix,
@@ -67,10 +69,6 @@ class Labels:
             basic string used to build the X and Y labels
         z : `str`
             z label
-        units : `Units`
-            units instance
-        unit_formatter : `str`, optional
-            formatter used by astropy.units.(unit).to_string
         xy_additions : iterable, optional
             text to add to the (x, y) labels
         xy_addition_side : {'left', 'right'. 'l', 'r'}, optional
@@ -87,13 +85,12 @@ class Labels:
             whether to print units
         """
         self.xybase, self.z = xybase, z
-        self.units, self.unit_formatter = units, unit_formatter
         self.xy_additions, self.xy_addition_side = xy_additions, xy_addition_side
         self.addition_joiner = addition_joiner
         self.unit_prefix, self.unit_suffix = unit_prefix, unit_suffix
         self.unit_joiner, self.show_units = unit_joiner, show_units
 
-    def _label_factory(self, label):
+    def _label_factory(self, label, units):
         """Factory method to produce complex labels.
 
         Parameters
@@ -123,25 +120,22 @@ class Labels:
             label = self.z
 
         unit_text = ''.join([self.unit_prefix,
-                             getattr(self.units, label).to_string(self.unit_formatter),
+                             getattr(units, label).to_string(units.formatter),
                              self.unit_suffix])
         label = self.unit_joiner.join([label, unit_text])
         return label
 
-    @property
-    def x(self):
+    def x(self, units):
         """X label."""
-        return self._label_factory('x')
+        return self._label_factory('x', units)
 
-    @property
-    def y(self):
+    def y(self, units):
         """Y label."""
-        return self._label_factory('y')
+        return self._label_factory('y', units)
 
-    @property
-    def z(self):
+    def z(self, units):
         """Z label."""
-        return self._label_factory('z')
+        return self._label_factory('z', units)
 
 
 default_phase_units = Units(x=u.mm, y=u.mm, z=u.nm, wavelength=HeNe)
