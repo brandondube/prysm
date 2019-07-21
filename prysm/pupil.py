@@ -67,13 +67,15 @@ class Pupil(OpticalPhase):
         super().__init__(x=ux, y=uy, phase=phase, units=units, labels=labels)
 
         if need_to_build:
+            self.build()
             phase_mask = mask_cleaner(phase_mask, samples)
             if phase_mask is not None:
                 self.phase = self.phase * phase_mask
+                self.phase[phase_mask == 0] = e.nan
 
             transmission = mask_cleaner(transmission, samples)
             self.transmission = transmission
-            self.build()
+            self.phase_mask = phase_mask
         else:
             holes = e.isnan(phase)
             transmission = e.ones(holes.shape)
@@ -93,10 +95,11 @@ class Pupil(OpticalPhase):
 
         fcn = e.exp(1j * 2 * e.pi * phase)  # phase implicitly in units of waves, no 2pi/l
         # guard against nans in phase
-        fcn[e.isnan(phase)] = 0
+        if self.phase_mask is not None:
+            fcn[e.isnan(phase)] = 0
 
-        if self.mask_target in ('fcn', 'both'):
-            fcn *= self._mask
+        if self.transmission is not None:
+            fcn *= self.transmission
 
         return fcn
 
