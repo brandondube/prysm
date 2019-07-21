@@ -2,8 +2,8 @@
 from pkg_resources import get_distribution
 
 
-from prysm.conf import config
-from prysm._basicdata import RichData, Labels, Units
+from prysm.conf import config, Units, Labels
+from prysm._richdata import RichData
 from prysm.convolution import Convolvable, ConvolutionEngine
 from prysm.detector import Detector, OLPF, PixelAperture
 from prysm.pupil import Pupil

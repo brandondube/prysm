@@ -1,6 +1,6 @@
 """Numerical optical propagation."""
 from .mathops import engine as e
-from ._basicdata import RichData
+from ._richdata import RichData
 from .fttools import pad2d
 
 

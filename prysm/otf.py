@@ -2,7 +2,7 @@
 
 from .conf import config
 from .mathops import engine as e
-from ._basicdata import RichData
+from ._richdata import RichData
 from .psf import PSF
 from .fttools import forward_ft_unit
 

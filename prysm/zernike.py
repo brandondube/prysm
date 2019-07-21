@@ -3,7 +3,7 @@ from collections import defaultdict
 from functools import partial
 
 from .conf import config
-from .mathops import engine as e, jit, vectorize, fuse
+from .mathops import engine as e, jit, vectorize, fuse, kronecker, sign
 from .pupil import Pupil
 from .coordinates import make_rho_phi_grid, cart_to_polar
 from .util import rms, sort_xy
@@ -617,6 +617,36 @@ zernikefuncs.update({
         'noll': partial(zernikes_to_magnitude_angle, namer=zernikefuncs['name']['noll']),
     }
 })
+
+
+def zernike_norm(n, m):
+    """Norm of a Zernike polynomial with n, m indexing."""
+    return e.sqrt((2 * (n + 1)) / (1 + kronecker(m, 0)))
+
+
+def n_m_to_fringe(n, m):
+    """Convert (n,m) two term index to Fringe index."""
+    term1 = (1 + (n + abs(m))/2)**2
+    term2 = 2 * abs(m)
+    term3 = (1 + sign(m)) / 2
+    return int(term1 - term2 + term3)
+
+
+def n_m_to_ansi_j(n, m):
+    """Convert (n,m) two term index to Noll index."""
+    return int((n * (n + 2) + m) / 2)
+
+
+def ansi_j_to_n_m(idx):
+    """Convert Noll to (n,m) two-term index."""
+    n = int(e.ceil((-3 + e.sqrt(9 + 8*idx))/2))
+    m = 2 * idx - n * (n + 2)
+    return n, m
+
+
+def zero_separation(n):
+    """Zero separation in normalized r based on radial order n."""
+    return 1 / n ** 2
 
 
 class ZCache(object):

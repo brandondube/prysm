@@ -10,7 +10,8 @@ from .util import std
 
 class Pupil(OpticalPhase):
     """Pupil of an optical system."""
-    def __init__(self, samples=128, dia=1.0, wavelength=0.55, opd_unit='waves',
+    def __init__(self, samples=128, dia=1.0, wavelength=0.55,
+                 units=None, labels=None,
                  mask='circle', mask_target='both', ux=None, uy=None, phase=None):
         """Create a new `Pupil` instance.
 
@@ -22,9 +23,10 @@ class Pupil(OpticalPhase):
             diameter of the pupil, mm
         wavelength : `float`, optional
             wavelength of light, um
-        opd_unit : `str`, optional, {'waves', 'um', 'nm'}
-            unit used to m.express the OPD.  Equivalent strings may be used to the
-            valid options, e.g. 'microns', or 'nanometers'
+        units : `Units`
+            units for the data
+        labels : `Labels`
+            labels used for plots
         mask : `str` or `numpy.ndarray`
             mask used to define the amplitude and boundary of the pupil; any
             regular polygon from `prysm.geometry` as a string, e.g. 'circle' is
@@ -63,9 +65,7 @@ class Pupil(OpticalPhase):
         else:
             # data already known
             need_to_build = False
-        super().__init__(x=ux, y=uy, phase=phase,
-                         wavelength=wavelength, xyunit='mm', zunit=opd_unit,
-                         xlabel='Pupil ξ', ylabel='Pupil η', zlabel='OPD')
+        super().__init__(x=ux, y=uy, phase=phase, units=units, labels=labels)
         self.rho = self.phi = None
 
         if need_to_build:

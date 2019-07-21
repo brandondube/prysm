@@ -1,7 +1,8 @@
 """phase basics."""
+import warnings
 
 from .mathops import engine as e
-from ._basicdata import RichData
+from ._richdata import RichData
 from .plotting import share_fig_ax
 from .util import pv, rms, Sa, std
 
@@ -11,9 +12,7 @@ class OpticalPhase(RichData):
     _data_attr = 'phase'
     _data_type = 'phase'
 
-    def __init__(self, x, y, phase,
-                 xlabel='x', ylabel='y', zlabel='z',
-                 xyunit='mm', zunit='nm', wavelength=None):
+    def __init__(self, x, y, phase, units, labels):
         """Create a new instance of an OpticalPhase.
 
         Note that this class is not intended to be used directly, and is meant
@@ -42,15 +41,12 @@ class OpticalPhase(RichData):
             wavelength of light, in microns
 
         """
-        super().__init__(x=x, y=y, data=phase,
-                         xlabel=xlabel, ylabel=ylabel, zlabel=zlabel,
-                         xyunit=xyunit, zunit=zunit)
-        self.wavelength = wavelength
+        super().__init__(x=x, y=y, data=phase, units=units, labels=labels)
 
     @property
     def phase_unit(self):
         """Unit used to describe the optical phase."""
-        raise DeprecationWarning('phase_unit has been folded into zunit and will be removed in prysm v0.18')
+        warnings.warn('phase_unit has been folded into zunit and will be removed in prysm v0.18')
         return self.zunit
 
     @phase_unit.setter
@@ -66,7 +62,7 @@ class OpticalPhase(RichData):
     @property
     def spatial_unit(self):
         """Unit used to describe the spatial phase."""
-        raise DeprecationWarning('spatial_unit has been folded into xyunit and will be removed in prysm v0.18')
+        warnings.warn('spatial_unit has been folded into xyunit and will be removed in prysm v0.18')
         return self.xyunit
 
     @spatial_unit.setter

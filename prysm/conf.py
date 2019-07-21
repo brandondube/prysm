@@ -1,6 +1,161 @@
 """Configuration for this instance of prysm."""
 import numpy as np
 
+from astropy import units as u
+
+
+def mkwvl(quantity, base=u.um):
+    """Generate a new Wavelength unit.
+
+    Parameters
+    ----------
+    quantity : `float`
+        number of (base) for the wavelength, e.g. quantity=632.8 with base=u.nm for HeNe.
+    base : `astropy.units.Unit`
+        base unit, e.g. um or nm
+
+    Returns
+    -------
+    `astropy.units.Unit`
+        new Unit for appropriate wavelength
+
+    """
+    return u.def_unit(['wave', 'wavelength'], quantity * base,
+                      format={'latex': r'\lambda', 'unicode': 'λ'})
+
+
+HeNe = mkwvl(632.8, u.nm)
+
+
+class Units:
+    """Units holder for data instances."""
+    def __init__(self, x, z, y=None, wavelength=None):
+        """Create a new Units instance
+
+        Parameters
+        ----------
+        x : `astropy.units` subclass or `str`
+            unit associated with the x coordinates
+        z : `astropy.units` subclass or `str`
+            unit associated with the z data
+        y : `astropy.units` subclass or `str`, optional
+            the same as x, copied from x if not given.
+        wavelength : `astropy.units` subclass or `str`, optional
+            unit the wavelength is expressed in
+
+        """
+        if not y:
+            y = x
+        self.x, self.y, self.z = x, y, z
+        self.wavelength = wavelength
+
+
+class Labels:
+    """Labels holder for data instances."""
+    def __init__(self, xybase, z, units, unit_formatter,
+                 xy_additions, xy_addition_side,
+                 addition_joiner,
+                 unit_prefix,
+                 unit_suffix,
+                 unit_joiner,
+                 show_units):
+        """Create a new Labels instance
+
+        Parameters
+        ----------
+        xybase : `str`
+            basic string used to build the X and Y labels
+        z : `str`
+            z label
+        units : `Units`
+            units instance
+        unit_formatter : `str`, optional
+            formatter used by astropy.units.(unit).to_string
+        xy_additions : iterable, optional
+            text to add to the (x, y) labels
+        xy_addition_side : {'left', 'right'. 'l', 'r'}, optional
+            side to add the x and y additional text to, left or right
+        addition_joiner : `str`, optional
+            text used to join the x or y addition
+        unit_prefix : `str`, optional
+            prefix used to surround the unit text
+        unit_suffix : `str`, optional
+            suffix used to surround the unit text
+        unit_joiner : `str`, optional
+            text used to combine the base label and the unit
+        show_units : `bool`, optional
+            whether to print units
+        """
+        self.xybase, self.z = xybase, z
+        self.units, self.unit_formatter = units, unit_formatter
+        self.xy_additions, self.xy_addition_side = xy_additions, xy_addition_side
+        self.addition_joiner = addition_joiner
+        self.unit_prefix, self.unit_suffix = unit_prefix, unit_suffix
+        self.unit_joiner, self.show_units = unit_joiner, show_units
+
+    def _label_factory(self, label):
+        """Factory method to produce complex labels.
+
+        Parameters
+        ----------
+        label : `str`, {'x', 'y', 'z'}
+            label to produce
+
+        Returns
+        -------
+        `str`
+            completed label
+
+        """
+        if label in ('x', 'y'):
+            if label == 'x':
+                xy_pos = 0
+            else:
+                xy_pos = 1
+            label_basics = [self.xy_base]
+            if self.xy_addition_side.lower() in ('left', 'l'):
+                label_basics.insert(0, self.xy_additions[xy_pos])
+            else:
+                label_basics.append(self.xy_additions[xy_pos])
+
+            label = self.addition_joiner.join(label_basics)
+        else:
+            label = self.z
+
+        unit_text = ''.join([self.unit_prefix,
+                             getattr(self.units, label).to_string(self.unit_formatter),
+                             self.unit_suffix])
+        label = self.unit_joiner.join([label, unit_text])
+        return label
+
+    @property
+    def x(self):
+        """X label."""
+        return self._label_factory('x')
+
+    @property
+    def y(self):
+        """Y label."""
+        return self._label_factory('y')
+
+    @property
+    def z(self):
+        """Z label."""
+        return self._label_factory('z')
+
+
+default_phase_units = Units(x=u.mm, y=u.mm, z=u.nm, wavelength=HeNe)
+default_image_units = Units(x=u.um, y=u.um, z=u.adu)
+
+default_phase_units = None
+default_image_units = None
+
+default_pupil_labels = None
+default_interferogram_labels = None
+default_convolvable_labels = None
+default_mtf_labels = None
+default_ptf_labels = None
+
 
 class Config(object):
     """Global configuration of prysm."""
@@ -19,7 +174,14 @@ class Config(object):
                  unit_prefix='[',
                  unit_suffix=']',
                  unit_joiner=', ',
-                 show_units=True):
+                 show_units=True,
+                 phase_units=default_phase_units,
+                 image_units=default_image_units,
+                 pupil_labels=default_pupil_labels,
+                 interferogram_labels=default_interferogram_labels,
+                 convolvable_labels=default_convolvable_labels,
+                 mtf_labels=default_mtf_labels,
+                 ptf_labels=default_ptf_labels):
         """Create a new `Config` object.
 
         Parameters
@@ -54,6 +216,10 @@ class Config(object):
             text used to glue basic labels and the units together
         show_units : `bool`, optional
             if True, shows units on graphics
+        phase_units : `Units`
+            default units used for phase-like types
+        image_units : `Units`
+            default units used for image-like types
 
         """
         self.initialized = False
@@ -73,6 +239,12 @@ class Config(object):
         self.unit_suffix = unit_suffix
         self.unit_joiner = unit_joiner
         self.show_units = show_units
+        self.phase_units, self.image_units = phase_units, image_units
+        self.pupil_labels = pupil_labels
+        self.interferogram_labels = interferogram_labels
+        self.convolvable_labels = convolvable_labels
+        self.mtf_labels = mtf_labels
+        self.ptf_labels = ptf_labels
         self.initialized = True
 
     @property

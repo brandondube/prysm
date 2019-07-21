@@ -32,83 +32,7 @@ class RichData:
     _default_twosided = True
     axis_mode = 'period'
 
-    units = {
-        'm': 'm',
-        'meter': 'm',
-        'mm': 'mm',
-        'millimeter': 'mm',
-        'μm': 'μm',
-        'um': 'μm',
-        'micron': 'μm',
-        'micrometer': 'μm',
-        'nm': 'nm',
-        'nanometer': 'nm',
-        'Å': 'Å',
-        'aa': 'Å',
-        'angstrom': 'Å',
-        'λ': 'λ',
-        'waves': 'λ',
-        'lambda': 'λ',
-        'px': 'px',
-        'pixel': 'px',
-        'au': 'a.u.',
-        'arb': 'a.u.',
-        'arbitrary': 'a.u.',
-    }
-    unit_scales = {
-        'm': 1,
-        'mm': 1e-3,
-        'μm': 1e-6,
-        'nm': 1e-9,
-        'Å': 1e-10,
-    }
-    unit_changes = {
-        'm_m': lambda x: 1,
-        'm_mm': lambda x: 1e-3,
-        'm_μm': lambda x: 1e-6,
-        'm_nm': lambda x: 1e-9,
-        'm_Å': lambda x: 1e-10,
-        'm_λ': lambda x: 1e-6 * x,
-        'mm_mm': lambda x: 1,
-        'mm_m': lambda x: 1e3,
-        'mm_μm': lambda x: 1e-3,
-        'mm_nm': lambda x: 1e-6,
-        'mm_Å': lambda x: 1e-7,
-        'mm_λ': lambda x: 1e-3 * x,
-        'μm_μm': lambda x: 1,
-        'μm_m': lambda x: 1e6,
-        'μm_mm': lambda x: 1e3,
-        'μm_nm': lambda x: 1e-3,
-        'μm_Å': lambda x: 1e-4,
-        'μm_λ': lambda x: 1 * x,
-        'nm_nm': lambda x: 1,
-        'nm_m': lambda x: 1e9,
-        'nm_mm': lambda x: 1e6,
-        'nm_μm': lambda x: 1e3,
-        'nm_Å': lambda x: 1e-1,
-        'nm_λ': lambda x: 1e3 * x,
-        'Å_Å': lambda x: 1,
-        'Å_m': lambda x: 1e10,
-        'Å_mm': lambda x: 1e7,
-        'Å_μm': lambda x: 1e4,
-        'Å_nm': lambda x: 10,
-        'Å_λ': lambda x: 1e4 * x,
-        'λ_λ': lambda x: 1,
-        'λ_m': lambda x: 1e6 / x,
-        'λ_mm': lambda x: 1e3 / x,
-        'λ_μm': lambda x: x,
-        'λ_nm': lambda x: 1e-3 / x,
-        'λ_Å': lambda x: 1e-4 / x,
-        'px_px': lambda x: 1,  # beware changing pixels to other units
-        'px_m': lambda x: 1,
-        'px_mm': lambda x: 1,
-        'px_μm': lambda x: 1,
-        'px_nm': lambda x: 1,
-        'px_Å': lambda x: 1,
-        'px_λ': lambda x: 1,
-    }
-
-    def __init__(self, x, y, data, xyunit=None, zunit=None, xlabel=None, ylabel=None, zlabel=None):
+    def __init__(self, x, y, data, units, labels):
         """Initialize a new BasicData instance.
 
         Parameters
@@ -138,9 +62,8 @@ class RichData:
         """
         self.x, self.y = x, y
         setattr(self, self._data_attr, data)
+        self.units, self.labels = units, labels
         self.interpf_x, self.interpf_y, self.interpf_2d = None, None, None
-        self.xlabel, self.ylabel, self.zlabel = xlabel, ylabel, zlabel
-        self.xyunit, self.zunit = xyunit, zunit
 
     @property
     def shape(self):
@@ -189,7 +112,7 @@ class RichData:
     @property
     def zunit(self):
         """Unit used to describe the optical phase."""
-        return self._zunit
+        return self.units.z
 
     @zunit.setter
     def zunit(self, unit):
@@ -318,7 +241,7 @@ class RichData:
             twosided = self._default_twosided
         return Slices(getattr(self, self._data_attr), x=self.x, y=self.y,
                       twosided=twosided,
-                      xlabel=f'{self.xlabel} [{self.xyunit}]', ylabel=f'{self.zlabel} [{self.zunit}]')
+                      units=None, labels=None)
 
     def _make_interp_function_2d(self):
         """Generate a 2D interpolation function for this instance, used in sampling with exact_xy.
@@ -517,7 +440,7 @@ class RichData:
 
 class Slices:
     """Slices of data."""
-    def __init__(self, data, x, y, twosided=True, xlabel=None, ylabel=None):
+    def __init__(self, data, x, y, units, labels, twosided=True):
         self._source = data
         self._source_polar = None
         self._r = None
@@ -526,7 +449,6 @@ class Slices:
         self._y = y
         self.center_y, self.center_x = (int(e.ceil(s / 2)) for s in data.shape)
         self.twosided = twosided
-        self.xlabel, self.ylabel = xlabel, ylabel
 
     def check_polar_calculated(self):
         """Ensure that the polar representation of the source data has been calculated."""
@@ -687,120 +609,3 @@ class Slices:
         ax.legend(title='Slice')
         ax.set(xscale=xscale, xlim=xlim, xlabel=self.xlabel,
                yscale=yscale, ylim=ylim, ylabel=self.ylabel)
-
-
-class Units:
-    """Units holder for data instances."""
-    def __init__(self, x, z, y=None, wavelength=None):
-        """Create a new Units instance
-
-        Parameters
-        ----------
-        x : `astropy.units` subclass or `str`
-            unit associated with the x coordinates
-        z : `astropy.units` subclass or `str`
-            unit associated with the z data
-        y : `astropy.units` subclass or `str`, optional
-            the same as x, copied from x if not given.
-        wavelength : `astropy.units` subclass or `str`, optional
-            unit the wavelength is expressed in
-
-        """
-        if not y:
-            y = x
-        self.x, self.y, self.z = x, y, z
-        self.wavelength = wavelength
-
-
-class Labels:
-    """Labels holder for data instances."""
-    def __init__(self, xybase, z, units, unit_formatter=config.unit_formatter,
-                 xy_additions=['X', 'Y'], xy_addition_side='left',
-                 addition_joiner=config.xylabel_joiner,
-                 unit_prefix=config.unit_prefix,
-                 unit_suffix=config.unit_suffix,
-                 unit_joiner=config.unit_joiner,
-                 show_units=config.show_units):
-        """Create a new Labels instance
-
-        Parameters
-        ----------
-        xybase : `str`
-            basic string used to build the X and Y labels
-        z : `str`
-            z label
-        units : `Units`
-            units instance
-        unit_formatter : `str`, optional
-            formatter used by astropy.units.(unit).to_string
-        xy_additions : iterable, optional
-            text to add to the (x, y) labels
-        xy_addition_side : {'left', 'right'. 'l', 'r'}, optional
-            side to add the x and y additional text to, left or right
-        addition_joiner : `str`, optional
-            text used to join the x or y addition
-        unit_prefix : `str`, optional
-            prefix used to surround the unit text
-        unit_suffix : `str`, optional
-            suffix used to surround the unit text
-        unit_joiner : `str`, optional
-            text used to combine the base label and the unit
-        show_units : `bool`, optional
-            whether to print units
-        """
-        self.xybase, self.z = xybase, z
-        self.units, self.unit_formatter = units, unit_formatter
-        self.xy_additions, self.xy_addition_side = xy_additions, xy_addition_side
-        self.addition_joiner = addition_joiner
-        self.unit_prefix, self.unit_suffix = unit_prefix, unit_suffix
-        self.unit_joiner, self.show_units = unit_joiner, show_units
-
-    def _label_factory(self, label):
-        """Factory method to produce complex labels.
-
-        Parameters
-        ----------
-        label : `str`, {'x', 'y', 'z'}
-            label to produce
-
-        Returns
-        -------
-        `str`
-            completed label
-
-        """
-        if label in ('x', 'y'):
-            if label == 'x':
-                xy_pos = 0
-            else:
-                xy_pos = 1
-            label_basics = [self.xy_base]
-            if self.xy_addition_side.lower() in ('left', 'l'):
-                label_basics.insert(0, self.xy_additions[xy_pos])
-            else:
-                label_basics.append(self.xy_additions[xy_pos])
-
-            label = self.addition_joiner.join(label_basics)
-        else:
-            label = self.z
-
-        unit_text = ''.join([self.unit_prefix,
-                             getattr(self.units, label).to_string(self.unit_formatter),
-                             self.unit_suffix])
-        label = self.unit_joiner.join([label, unit_text])
-        return label
-
-    @property
-    def x(self):
-        """X label."""
-        return self._label_factory('x')
-
-    @property
-    def y(self):
-        """Y label."""
-        return self._label_factory('y')
-
-    @property
-    def z(self):
-        """Z label."""
-        return self._label_factory('z')

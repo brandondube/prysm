@@ -151,6 +151,7 @@ class QBFSCache(object):
         return self.get_QBFS(m=m, samples=samples, rho_max=rho_max)
 
     def make_key(self, m, samples, rho_max):
+        """Generate a key into the cache dictionaries."""
         return (m, samples, rho_max)
 
     def clear(self, *args):
@@ -174,10 +175,9 @@ QBFScache = QBFSCache()
 config.chbackend_observers.append(QBFScache.clear)
 
 
-class QBFSSag(Pupil):
-    _name = 'Qbfs'
-    _cache = QBFScache
-    """Qbfs aspheric surface sag, excluding base sphere."""
+# Note that this class doesn't implement _name and other RichData requirements
+class QPolySag1D(Pupil):
+    """Base class with 1D Q polynomial logic."""
 
     def __init__(self, *args, **kwargs):
         """Initialize a new QBFS instance."""
@@ -198,8 +198,8 @@ class QBFSSag(Pupil):
 
         Returns
         -------
-        self : `QBFSSag`
-            this QBFSSag instance`
+        self : `QPolySag1D`
+            this QPolySag1D instance`
 
         """
         self.phase = e.zeros([self.samples, self.samples], dtype=config.precision)
@@ -211,6 +211,22 @@ class QBFSSag(Pupil):
             else:
                 self.phase += coef * self._cache(term, self.samples)
 
+
+class QBFSSag(QPolySag1D):
+    _name = 'Qbfs'
+    _cache = QBFScache
+    """Qbfs aspheric surface sag, excluding base sphere."""
+
+    def build(self):
+        """Use the aspheric coefficients stored in this class instance to build a sag model.
+
+        Returns
+        -------
+        self : `QBFSSag`
+            this QBFSSag instance`
+
+        """
+        super().build()
         r2 = self._cache.get_grid(self.samples)
         coef = r2 * (1 - r2)
         self.phase *= coef
@@ -259,3 +275,134 @@ def c_zernike(m, n):
     numerator = (s + 2) * (s - n) * n
     denominator = (n + 1) * (s - n + 1) * s
     return numerator / denominator
+
+
+def qcon_recurrence(n, x, qnm1=None, qnm2=None):
+    from scipy.special import jacobi
+    jacpoly = jacobi(n, 0, 4)
+    return jacpoly(x)
+
+
+class QCONCache(object):
+    """Cache of Qcon terms evaluated over the unit circle.
+
+    Note that the .grids attribute stores only radial coordinates, and they are stored as:
+    x => x^2
+      => 2x - 1.
+
+    This means that all of the appropriate coordinate transformations are applied only once, instead
+    of once in the generation of each term."""
+    def __init__(self):
+        """Create a new QCONCache instance."""
+        self.Qs = {}
+        self.Ps = {}
+        self.grids = {}
+
+    def get_QCON(self, m, samples, rho_max=1):
+        """Get an array of phase values for a given index, and number of samples."""
+        # TODO: update
+        key = self.make_key(m=m, samples=samples, rho_max=rho_max)
+        try:
+            Qm = self.Qs[key]
+        except KeyError:
+            rho = self.get_grid(samples, rho_max=rho_max)
+            Pm = self.get_PBFS(m=m, samples=samples, rho_max=rho_max)
+            if m > 2:
+                Pnm2 = self.get_PBFS(m=m - 2, samples=samples, rho_max=rho_max)
+                Pnm1 = self.get_PBFS(m=m - 1, samples=samples, rho_max=rho_max)
+                Qnm2 = self.get_QBFS(m=m - 2, samples=samples, rho_max=rho_max)
+                Qnm1 = self.get_QBFS(m=m - 1, samples=samples, rho_max=rho_max)
+            else:
+                Pnm1, Pnm2, Qnm1, Qnm2 = None, None, None, None
+
+            Qm = qbfs_recurrence_Q(m, rho, Pn=Pm, Pnm1=Pnm1, Pnm2=Pnm2,
+                                   Qnm1=Qnm1, Qnm2=Qnm2)
+            self.Qs[key] = Qm
+
+        return Qm
+
+    def get_PBFS(self, m, samples, rho_max=1):
+        """Get an array of P values for a given index."""
+        # TODO: update
+        key = self.make_key(m=m, samples=samples, rho_max=rho_max)
+        try:
+            Pm = self.Ps[key]
+
+        except KeyError:
+            rho = self.get_grid(samples, rho_max=rho_max)
+            if m > 2:
+                Pnm2 = self.get_PBFS(m - 2, samples=samples, rho_max=rho_max)
+                Pnm1 = self.get_PBFS(m - 1, samples=samples, rho_max=rho_max)
+            else:
+                Pnm1, Pnm2 = None, None
+
+            Pm = qbfs_recurrence_P(m, rho, Pnm1=Pnm1, Pnm2=Pnm2)
+            self.Ps[key] = Pm
+
+        return Pm
+
+    def get_grid(self, samples, rho_max=1):
+        """Get a grid of rho coordinates for a given number of samples."""
+        key = self.make_key(None, samples=samples, rho_max=rho_max)[1:]
+        try:
+            rho = self.grids[key]
+        except KeyError:
+            rho, _ = make_rho_phi_grid(samples, aligned='y', radius=rho_max)
+            rho = rho ** 2
+            rho = 2 * rho - 1
+            self.grids[key] = rho
+
+        return rho
+
+    def __call__(self, m, samples, rho_max=1):
+        """Get an array of sag values for a given index, norm, and number of samples."""
+        return self.get_QCON(m=m, samples=samples, rho_max=rho_max)
+
+    def make_key(self, m, samples, rho_max):
+        """Generate a key into the cache dictionaries."""
+        return (m, samples, rho_max)
+
+    def clear(self, *args):
+        """Empty the cache."""
+        self.Qs = {}
+        self.Ps = {}
+        self.grids = {}
+
+    @property
+    def nbytes(self):
+        n = 0
+        for key in self.Qs:
+            n += self.Qs[key].nbytes
+            n += self.Ps[key].nbytes
+            n += self.grids[key[1:]].nbytes
+
+        return n
+
+
+QCONcache = QCONCache()
+config.chbackend_observers.append(QCONcache.clear)
+
+
+class QCONSag(QPolySag1D):
+    _name = 'Qcon'
+    _cache = QCONcache
+    """Qcon aspheric surface sag, excluding base sphere."""
+
+    def build(self):
+        """Use the aspheric coefficients stored in this class instance to build a sag model.
+
+        Returns
+        -------
+        self : `QCONSag`
+            this QCONSag instance`
+
+        """
+        super().build()
+        # todo, update this.  Want r^4, but cache grid is stored as a more complicated
+        # transformation.  Maybe store grid twice, once as r or r^2, and another as the
+        # full transformation?
+
+        # the code below is r^2, regardless.
+        r2 = self._cache.get_grid(self.samples)
+        coef = r2 * (1 - r2)
+        self.phase *= coef
