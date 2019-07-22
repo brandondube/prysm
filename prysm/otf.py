@@ -67,7 +67,7 @@ class MTF(RichData):
     _data_type = 'image'
     _default_twosided = False
 
-    def __init__(self, data, x, y):
+    def __init__(self, data, x, y, units=None, labels=None):
         """Create a new `MTF` instance.
 
         Parameters
@@ -78,10 +78,15 @@ class MTF(RichData):
             1D array of x spatial frequencies
         y : `numpy.ndarray`
             1D array of y spatial frequencies
+        units : `Units`
+            units instance, can be shared
+        labels : `Labels`
+            labels instance, can be shared
+
         """
-        super().__init__(x=x, y=y, data=data, xyunit='mm', zunit='au',
-                         xlabel='X Spatial Frequency', ylabel='Y Spatial Frequency',
-                         zlabel='MTF')
+        super().__init__(x=x, y=y, data=data,
+                         units=units or config.mtf_units,
+                         labels=labels or config.mtf_labels)
 
     @staticmethod
     def from_psf(psf):
@@ -157,7 +162,7 @@ class MTF(RichData):
 class PTF(RichData):
     """Phase Transfer Function"""
 
-    def __init__(self, data, x, y):
+    def __init__(self, data, x, y, units=None, labels=None):
         """Create a new `PTF` instance.
 
         Parameters
@@ -168,10 +173,15 @@ class PTF(RichData):
             1D array of x spatial frequencies
         y : `numpy.ndarray`
             1D array of y spatial frequencies
+        units : `Units`
+            units instance, can be shared
+        labels : `Labels`
+            labels instance, can be shared
+
         """
-        super().__init__(x=x, y=y, data=data, xyunit='mm', zunit='au',
-                         xlabel='X Spatial Frequency', ylabel='Y Spatial Frequency',
-                         zlabel='PTF')
+        super().__init__(x=x, y=y, data=data,
+                         units=units or config.mtf_units,
+                         labels=labels or config.mtf_labels)
 
     @staticmethod
     def from_psf(psf, unwrap=True):

@@ -31,6 +31,8 @@ class RichData:
     _data_type = 'image'
     _default_twosided = True
     axis_mode = 'period'
+    _slice_xscale = 'linear'
+    _slice_yscale = 'linear'
 
     def __init__(self, x, y, data, units, labels):
         """Initialize a new BasicData instance.
@@ -187,7 +189,10 @@ class RichData:
             twosided = self._default_twosided
         return Slices(getattr(self, self._data_attr), x=self.x, y=self.y,
                       twosided=twosided,
-                      units=None, labels=None)
+                      xlabel=self.labels.generic(self.units),
+                      ylabel=self.labels.z(self.units),
+                      xscale=self._slice_xscale,
+                      yscale=self._slice_yscale)
 
     def _make_interp_function_2d(self):
         """Generate a 2D interpolation function for this instance, used in sampling with exact_xy.
@@ -385,13 +390,15 @@ class RichData:
 
 class Slices:
     """Slices of data."""
-    def __init__(self, data, x, y, units, labels, twosided=True):
+    def __init__(self, data, x, y, xlabel, ylabel, xscale, yscale, twosided=True):
         self._source = data
         self._source_polar = None
         self._r = None
         self._p = None
         self._x = x
         self._y = y
+        self.xlabel, self.ylabel = xlabel, ylabel
+        self.xscale, self.yscale = xscale, yscale
         self.center_y, self.center_x = (int(e.ceil(s / 2)) for s in data.shape)
         self.twosided = twosided
 
@@ -543,14 +550,17 @@ class Slices:
         return self._r, e.nanstd(self._source_polar, axis=0)
 
     def plot(self, slices, lw=config.lw,
-             xlim=(None, None), xscale='linear',
-             ylim=(None, None), yscale='log',
+             xlim=(None, None), xscale=None,
+             ylim=(None, None), yscale=None,
              fig=None, ax=None):
         fig, ax = share_fig_ax(fig, ax)
+
+        if isinstance(slices, str):
+            slices = [slices]
 
         for slice_ in slices:
             ax.plot(*getattr(self, slice_), label=slice_)
 
         ax.legend(title='Slice')
-        ax.set(xscale=xscale, xlim=xlim, xlabel=self.xlabel,
-               yscale=yscale, ylim=ylim, ylabel=self.ylabel)
+        ax.set(xscale=xscale or self.xscale, xlim=xlim, xlabel=self.xlabel,
+               yscale=yscale or self.yscale, ylim=ylim, ylabel=self.ylabel)

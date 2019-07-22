@@ -26,9 +26,6 @@ def mkwvl(quantity, base=u.um):
                       format={'latex': r'\lambda', 'unicode': 'λ'})
 
 
-HeNe = mkwvl(632.8, u.nm)
-
-
 def sanitize_unit(unit, existing_units):
     """Sanitize a unit token, either an astropy unit or a string.
 
@@ -56,9 +53,33 @@ def sanitize_unit(unit, existing_units):
     return unit
 
 
+def format_unit(unit_or_quantity, fmt):
+    """(string) format a unit or quantity
+
+    Parameters
+    ----------
+    unit_or_quantity : `astropy.units.Unit` or `astropy.units.Quantity`
+        a unit or quantity
+    fmt : `str`, {'latex', 'unicode'}
+        a string format
+
+    Returns
+    -------
+    `str`
+        string
+
+    """
+    if isinstance(unit_or_quantity, (u.Unit, u.core.IrreducibleUnit, u.core.CompositeUnit)):
+        return unit_or_quantity.to_string(fmt)
+    elif isinstance(unit_or_quantity, u.quantity.Quantity):
+        return unit_or_quantity.unit.to_string(fmt)
+    else:
+        raise ValueError('must be a Unit or Quantity instance.')
+
+
 class Units:
     """Units holder for data instances."""
-    def __init__(self, x, z, y=None, wavelength=None, formatter='unicode'):
+    def __init__(self, x, z, y=None, wavelength=None):
         """Create a new Units instance
 
         Parameters
@@ -71,14 +92,11 @@ class Units:
             the same as x, copied from x if not given.
         wavelength : `astropy.units` subclass, optional
             unit the wavelength is expressed in
-        formatter : `str`, e.g. 'unicode' or 'latex'
-            formatter used to convert astropy unit to text, see astropy.units docs
         """
-        if not y:
+        if y is None:
             y = x
         self.x, self.y, self.z = x, y, z
         self.wavelength = wavelength
-        self.formatter = formatter
 
     def copy(self):
         return copy.deepcopy(self)
@@ -152,7 +170,7 @@ class Labels:
             label_ = self._z
 
         unit_text = ''.join([self.unit_prefix,
-                             getattr(units, label).to_string(units.formatter),
+                             format_unit(getattr(units, label), config.unit_format),
                              self.unit_suffix])
         label_ = self.unit_joiner.join([label_, unit_text])
         return label_
@@ -169,19 +187,36 @@ class Labels:
         """Z label."""
         return self._label_factory('z', units)
 
+    def generic(self, units):
+        """Generic label without extra X/Y annotation."""
+        base = self.xy_base
+        join = self.unit_joiner
+        unit = format_unit(units.x, config.unit_format)
+        prefix = self.unit_prefix
+        suffix = self.unit_suffix
+        return f'{base}{join}{prefix}{unit}{suffix}'
+
     def copy(self):
         return copy.deepcopy(self)
 
 
+rel = u.def_unit(['rel'], format={'latex': 'Rel 1.0', 'unicode': 'Rel 1.0'})
+
+HeNe = mkwvl(632.8, u.nm)
+
 default_phase_units = Units(x=u.mm, y=u.mm, z=u.nm, wavelength=HeNe)
 default_interferorgam_units = Units(x=u.pixel, y=u.pixel, z=u.nm, wavelength=HeNe)
 default_image_units = Units(x=u.um, y=u.um, z=u.adu)
+default_mtf_units = Units(x=u.mm ** -1, z=rel)
+default_ptf_units = Units(x=u.mm ** -1, z=u.deg)
 
-default_pupil_labels = Labels(xy_base='Pupil', z='OPD', xy_additions=['ξ', 'η'])
-default_interferogram_labels = Labels(xy_base='', z='Height', xy_additions=['X', 'Y'])
-default_convolvable_labels = Labels(xy_base='Image Plane', z='Irradiance', xy_additions=['X', 'Y'])
-default_mtf_labels = Labels(xy_base='Spatial Frequency', z='MTF', xy_additions=['X', 'Y'])
-default_ptf_labels = Labels(xy_base='Spatial Frequency', z='PTF', xy_additions=['ξ', 'η'])
+xi_eta = ['ξ', 'η']
+x_y = ['X', 'Y']
+default_pupil_labels = Labels(xy_base='Pupil', z='OPD', xy_additions=xi_eta)
+default_interferogram_labels = Labels(xy_base='', z='Height', xy_additions=x_y)
+default_convolvable_labels = Labels(xy_base='Image Plane', z='Irradiance', xy_additions=x_y)
+default_mtf_labels = Labels(xy_base='Spatial Frequency', z='MTF', xy_additions=x_y)
+default_ptf_labels = Labels(xy_base='Spatial Frequency', z='PTF', xy_additions=xi_eta)
 
 
 class Config(object):
@@ -196,14 +231,12 @@ class Config(object):
                  lw=3,
                  zorder=3,
                  interpolation='lanczos',
-                 unit_formatter='unicode',
-                 xylabel_joiner=' ',
-                 unit_prefix='[',
-                 unit_suffix=']',
-                 unit_joiner=', ',
+                 unit_format='latex_inline',
                  show_units=True,
                  phase_units=default_phase_units,
                  image_units=default_image_units,
+                 mtf_units=default_mtf_units,
+                 ptf_units=default_ptf_units,
                  pupil_labels=default_pupil_labels,
                  interferogram_labels=default_interferogram_labels,
                  convolvable_labels=default_convolvable_labels,
@@ -260,13 +293,10 @@ class Config(object):
         self.lw = lw
         self.zorder = zorder
         self.interpolation = interpolation
-        self.unit_formatter = unit_formatter
-        self.xylabel_joiner = xylabel_joiner
-        self.unit_prefix = unit_prefix
-        self.unit_suffix = unit_suffix
-        self.unit_joiner = unit_joiner
+        self.unit_format = unit_format
         self.show_units = show_units
         self.phase_units, self.image_units = phase_units, image_units
+        self.mtf_units, self.ptf_units = mtf_units, ptf_units
         self.pupil_labels = pupil_labels
         self.interferogram_labels = interferogram_labels
         self.convolvable_labels = convolvable_labels

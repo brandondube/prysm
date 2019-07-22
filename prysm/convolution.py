@@ -35,7 +35,7 @@ class Convolvable(RichData):
 
         """
         super().__init__(x=x, y=y, data=data,
-                         units=units or config.convolvable_units,
+                         units=units or config.image_units,
                          labels=labels or config.convolvable_labels)
         self.has_analytic_ft = has_analytic_ft
 

@@ -1,6 +1,8 @@
 """A base point spread function interface."""
 from scipy import optimize, interpolate, special
 
+from astropy import units as u
+
 from .conf import config
 from .mathops import engine as e, jinc
 from .coordinates import cart_to_polar
@@ -255,7 +257,7 @@ class PSF(Convolvable):
 
         """
         # propagate PSF data
-        fcn, ss, wvl = pupil.fcn, pupil.sample_spacing, pupil.wavelength
+        fcn, ss, wvl = pupil.fcn, pupil.sample_spacing, pupil.units.wavelength.to(u.um)
         data = prop_pupil_plane_to_psf_plane(fcn, Q)
         norm = norm.lower()
         if norm == 'max':
