@@ -466,6 +466,11 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
         return optres.x
 
 
+class PSD(RichData):
+    _slice_xscale = 'log'
+    _slice_yscale = 'log'
+
+
 class Interferogram(OpticalPhase):
     """Class containing logic and data for working with interferometric data."""
 

@@ -564,3 +564,5 @@ class Slices:
         ax.legend(title='Slice')
         ax.set(xscale=xscale or self.xscale, xlim=xlim, xlabel=self.xlabel,
                yscale=yscale or self.yscale, ylim=ylim, ylabel=self.ylabel)
+
+        return fig, ax
