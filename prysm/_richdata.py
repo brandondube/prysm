@@ -4,9 +4,7 @@ from collections.abc import Iterable
 
 from scipy import interpolate
 
-from astropy import units as u
-
-from .conf import config
+from .conf import config, sanitize_unit
 from .mathops import engine as e
 from .coordinates import uniform_cart_to_polar, polar_to_cart
 from .plotting import share_fig_ax
@@ -127,13 +125,7 @@ class RichData:
             x, y from self, if inplace=False
 
         """
-        if not isinstance(to, u.Unit):
-            if to.lower() in ('waves', 'wave', 'λ'):
-                unit = self.units.wavelength
-            else:
-                unit = getattr(u, to)
-        else:
-            unit = to
+        unit = sanitize_unit(to, self.units)
 
         uu = self.units.copy()
         uu.x, uu.y = unit, unit
@@ -164,13 +156,7 @@ class RichData:
             data from self, if inplace=False
 
         """
-        if not isinstance(to, u.Unit):
-            if to.lower() in ('waves', 'wave', 'λ'):
-                unit = self.units.wavelength
-            else:
-                unit = getattr(u, to)
-        else:
-            unit = to
+        unit = sanitize_unit(to, self.units)
 
         uu = self.units.copy()
         uu.z = unit

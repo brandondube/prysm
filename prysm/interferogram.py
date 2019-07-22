@@ -4,7 +4,9 @@ import inspect
 
 from scipy import signal, optimize
 
-from .conf import config
+from astropy import units as u
+
+from .conf import config, sanitize_unit
 from ._phase import OpticalPhase
 from ._richdata import RichData
 from .mathops import engine as e
@@ -14,6 +16,7 @@ from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar
 from .util import mean, rms  # NOQA
 from .geometry import mcache
+from .wavelengths import mkwvl
 
 
 def fit_plane(x, y, z):
@@ -466,31 +469,28 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
 class Interferogram(OpticalPhase):
     """Class containing logic and data for working with interferometric data."""
 
-    def __init__(self, phase, intensity=None, x=None, y=None, scale='px', phase_unit='nm', meta=None):
+    def __init__(self, phase, x, y, intensity=None, units=None, labels=None, meta=None):
         """Create a new Interferogram instance.
 
         Parameters
         ----------
         phase : `numpy.ndarray`
-            phase values, units of phase_unit
-        intensity : `numpy.ndarray`, optional
-            intensity array from interferometer camera
+            phase values, units of units.z
         x : `numpy.ndarray`, optional
             x (axis 1) values, units of scale
         y : `numpy.ndarray`, optional
             y (axis 0) values, units of scale
-        phase_unit : `str`, optional
-            unit to use to represent phase
+        intensity : `numpy.ndarray`, optional
+            intensity array from interferometer camera
+        units : `Units`
+            units instance, can be shared
+        labels : `Labels`
+            labels instance, can be shared
         meta : `dict`
             dictionary of any metadata.  if a wavelength or Wavelength key is
             present, this will also be stored in self.wavelength
 
         """
-        if x is None:  # assume x, y given together
-            x = e.arange(phase.shape[1], dtype=config.precision)
-            y = e.arange(phase.shape[0], dtype=config.precision)
-            scale = 'px'
-            self.lateral_res = 1
 
         if meta:
             wvl = meta.get('wavelength', None)
@@ -502,15 +502,18 @@ class Interferogram(OpticalPhase):
         else:
             wvl = 1
 
+        if units is None:
+            units = config.phase_units
+
+        if (wvl - units.wavelength.to(u.um)) > 1e-9:  # floating point insensitive comparison
+            units = units.copy()
+            units.wavelength = mkwvl(wvl)
+
         super().__init__(x=x, y=y, phase=phase,
-                         wavelength=wvl, zunit=phase_unit,
-                         xyunit=scale, xlabel='X', ylabel='Y', zlabel='Height')
+                         units=units, labels=config.interferogram_labels)
 
         self.intensity = intensity
         self.meta = meta
-
-        if scale != 'px':
-            self.change_xyunit(to=scale, inplace=True)
 
     @property
     def dropout_percentage(self):
@@ -787,7 +790,9 @@ class Interferogram(OpticalPhase):
             modified `Interferogram` instance.
 
         """
-        self.change_xyunit(to=unit, inplace=True)  # will be 0..n spatial units
+        unit = sanitize_unit(unit, self.units)
+        self.units = self.units.copy()
+        self.units.x, self.units.y = unit, unit
         # sloppy to do this here...
         self.x *= plate_scale
         self.y *= plate_scale
@@ -943,7 +948,7 @@ class Interferogram(OpticalPhase):
                 {self.zaxis_label.capitalize()}: {self.pv:.3f} PV, {self.rms:.3f} RMS {self.phase_unit}""")
 
     @staticmethod
-    def from_zygo_dat(path, multi_intensity_action='first', scale='mm'):
+    def from_zygo_dat(path, multi_intensity_action='first'):
         """Create a new interferogram from a zygo dat file.
 
         Parameters
@@ -971,19 +976,16 @@ class Interferogram(OpticalPhase):
             res = zydat['meta']['lateral_resolution']  # meters
 
         phase = zydat['phase']
-        if res == 0.0:
-            res = 1
-            scale = 'px'
 
-        if scale != 'px':
-            _scale = 'm'
-        else:
-            _scale = 'px'
-
+        x = e.arange(phase.shape[1], dtype=config.precision)
+        y = e.arange(phase.shape[0], dtype=config.precision)
         i = Interferogram(phase=phase, intensity=zydat['intensity'],
-                          x=e.arange(phase.shape[1]) * res, y=e.arange(phase.shape[0]) * res,
-                          scale=_scale, meta=zydat['meta'])
-        return i.change_xyunit(to=scale.lower(), inplace=True)
+                          x=x, y=y, meta=zydat['meta'])
+
+        if res != 0:
+            i.latcal(1e3 * res, u.mm)
+
+        return i
 
     @staticmethod  # NOQA
     def render_from_psd(size, samples, rms=None,

@@ -33,7 +33,7 @@ Note that this list is in logical order of dependence, not in order of importanc
 * 1D polynomials (Qbfs and Qcon) take keyword arguments A0..An with no limit.  2D polynomials (2D-Q) take arguments of Am_n
 * Check the :mod:`~prysm.qpoly` docs for the "raw" functions.
 * :code:`__str__` dunder method for :class:`~prysm.interferogram.Interferogram` objects.
-* :class:`prysm.otf.OTF` and :class:`~prysm.otf.PTF` Phase Transfer Function and Optical Transfer Function analysis.
+* :class:`prysm.otf.OTF` and :class:`~prysm.otf.PTF` for Optical Transfer Function and Phase Transfer Function analysis.
 * :func:`~prysm.geometry.generate_spider` to generate masks for n-vaned spiders.
 * Slicing rewrite and refactor:
 * * Custom slicing logic has been removed from all classes and is now implemented on the :class:`~prysm._richdata.RichData` class from which nearly every class inherits.  This reduces the amount of prysm-specific vocabulary users must know and improving the cohesion of the class system.

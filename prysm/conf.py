@@ -29,6 +29,33 @@ def mkwvl(quantity, base=u.um):
 HeNe = mkwvl(632.8, u.nm)
 
 
+def sanitize_unit(unit, existing_units):
+    """Sanitize a unit token, either an astropy unit or a string.
+
+    Parameters
+    ----------
+    unit : `astropy.Unit` or `str`
+        unit or string version of unit
+    existing_units : `Units`
+        an existing unit, which stores a wavelength instance
+
+    Returns
+    -------
+    `astropy.Unit`
+        an astropy unit
+
+    """
+    if not isinstance(unit, u.Unit):
+        if unit.lower() in ('waves', 'wave', 'λ'):
+            unit = existing_units.wavelength
+        else:
+            unit = getattr(u, unit)
+    else:
+        unit = unit
+
+    return unit
+
+
 class Units:
     """Units holder for data instances."""
     def __init__(self, x, z, y=None, wavelength=None, formatter='unicode'):
@@ -147,6 +174,7 @@ class Labels:
 
 
 default_phase_units = Units(x=u.mm, y=u.mm, z=u.nm, wavelength=HeNe)
+default_interferorgam_units = Units(x=u.pixel, y=u.pixel, z=u.nm, wavelength=HeNe)
 default_image_units = Units(x=u.um, y=u.um, z=u.adu)
 
 default_pupil_labels = Labels(xy_base='Pupil', z='OPD', xy_additions=['ξ', 'η'])
