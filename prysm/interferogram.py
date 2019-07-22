@@ -630,6 +630,14 @@ class Interferogram(OpticalPhase):
         self.y -= cy
         return self
 
+    def strip_latcal(self):
+        """Strip the lateral calibration and revert to pixels."""
+        self.units = self.units.copy()
+        self.units.x, self.units.y = u.pix, u.pix
+        y, x = (e.arange(s, dtype=config.precision) for s in self.shape)
+        self.x, self.y = x, y
+        return self
+
     def remove_piston(self):
         """Remove piston from the data by subtracting the mean value."""
         self.phase -= mean(self.phase)
