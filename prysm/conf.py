@@ -5,6 +5,7 @@ import numpy as np
 
 from astropy import units as u
 
+all_ap_unit_Types = (u.Unit, u.core.IrreducibleUnit, u.core.CompositeUnit)
 
 def mkwvl(quantity, base=u.um):
     """Generate a new Wavelength unit.
@@ -42,7 +43,7 @@ def sanitize_unit(unit, existing_units):
         an astropy unit
 
     """
-    if not isinstance(unit, u.Unit):
+    if not isinstance(unit, all_ap_unit_Types):
         if unit.lower() in ('waves', 'wave', 'λ'):
             unit = existing_units.wavelength
         else:
@@ -69,7 +70,7 @@ def format_unit(unit_or_quantity, fmt):
         string
 
     """
-    if isinstance(unit_or_quantity, (u.Unit, u.core.IrreducibleUnit, u.core.CompositeUnit)):
+    if isinstance(unit_or_quantity, all_ap_unit_Types):
         return unit_or_quantity.to_string(fmt)
     elif isinstance(unit_or_quantity, u.quantity.Quantity):
         return unit_or_quantity.unit.to_string(fmt)
