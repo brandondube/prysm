@@ -576,19 +576,19 @@ class Slices:
 
         if invert_x:
             units = self.units.copy()
-            units.x = 1 / self.units.x
-            units.y = 1 / self.units.y
+            units.x = 1 / units.x
+            units.y = 1 / units.y
 
-            xlabel = self.labels.generic(self.units)
+            xlabel = self.labels.generic(units)
             # ax.invert_xaxis()
             if 'Period' in xlabel:
                 xlabel = xlabel.replace('Period', 'Frequency')
             elif 'Frequency' in xlabel:
                 xlabel = xlabel.replace('Frequency', 'Period')
         else:
-            # slightly unclean code duplication here
-            xlabel = self.labels.generic(self.units)
             units = self.units
+            # slightly unclean code duplication here
+            xlabel = self.labels.generic(units)
 
         # z looks wrong here, but z from 2D is y in 1D.
         ax.set(xscale=xscale or self.xscale, xlim=xlim, xlabel=xlabel,
