@@ -217,6 +217,7 @@ default_interferogram_labels = Labels(xy_base='', z='Height', xy_additions=x_y)
 default_convolvable_labels = Labels(xy_base='Image Plane', z='Irradiance', xy_additions=x_y)
 default_mtf_labels = Labels(xy_base='Spatial Frequency', z='MTF', xy_additions=x_y)
 default_ptf_labels = Labels(xy_base='Spatial Frequency', z='PTF', xy_additions=xi_eta)
+default_psd_labels = Labels(xy_base='Spatial Frequency', z='PSD', xy_additions=x_y)
 
 
 class Config(object):
@@ -241,7 +242,8 @@ class Config(object):
                  interferogram_labels=default_interferogram_labels,
                  convolvable_labels=default_convolvable_labels,
                  mtf_labels=default_mtf_labels,
-                 ptf_labels=default_ptf_labels):
+                 ptf_labels=default_ptf_labels,
+                 psd_labels=default_psd_labels):
         """Create a new `Config` object.
 
         Parameters
@@ -302,6 +304,7 @@ class Config(object):
         self.convolvable_labels = convolvable_labels
         self.mtf_labels = mtf_labels
         self.ptf_labels = ptf_labels
+        self.psd_labels = psd_labels
         self.initialized = True
 
     @property

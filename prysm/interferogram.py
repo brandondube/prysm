@@ -6,7 +6,7 @@ from scipy import signal, optimize
 
 from astropy import units as u
 
-from .conf import config, sanitize_unit
+from .conf import config, sanitize_unit, Units
 from ._phase import OpticalPhase
 from ._richdata import RichData
 from .mathops import engine as e
@@ -467,8 +467,38 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
 
 
 class PSD(RichData):
+    _default_twosided = False
+    _data_attr = 'data'
+    _data_type = 'image'
     _slice_xscale = 'log'
     _slice_yscale = 'log'
+
+    def __init__(self, x, y, data, units=None, labels=None):
+        """Initialize a new BasicData instance.
+
+        Parameters
+        ----------
+        x : `numpy.ndarray`
+            x unit axis
+        y : `numpy.ndarray`
+            y unit axis
+        data : `numpy.ndarray`
+            data
+        units : `Units`
+            units instance, can be shared
+        labels : `Labels`
+            labels instance, can be shared
+
+        Returns
+        -------
+        RichData
+            the instance
+
+        """
+        if labels is None:
+            labels = config.psd_labels
+
+        super().__init__(x=x, y=y, data=data, units=units, labels=labels)
 
 
 class Interferogram(OpticalPhase):
@@ -860,7 +890,7 @@ class Interferogram(OpticalPhase):
         self.phase[pts_over_nsigma] = e.nan
         return self
 
-    def psd(self):
+    def psd(self, labels=None):
         """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
 
         Returns
@@ -870,11 +900,10 @@ class Interferogram(OpticalPhase):
 
         """
         ux, uy, psd_ = psd(self.phase, self.sample_spacing)
-        bd = RichData(x=ux, y=uy, data=psd_, xyunit=self.xyunit, zunit=self.zunit,
-                      xlabel='X Spatial Frequency', ylabel='Y Spatial Frequency',
-                      zlabel='PSD')
-        bd._zunit = f'{self.zunit}²/(cy/{self.xyunit})²'
-        return bd
+        z_unit = self.units.z ** 2 / (self.units.x ** 2)
+        units = Units(x=1/self.units.x, z=z_unit, wavelength=self.units.wavelength)
+
+        return PSD(x=ux, y=uy, data=psd_, labels=labels, units=units)
 
     def bandlimited_rms(self, wllow=None, wlhigh=None, flow=None, fhigh=None):
         """Calculate the bandlimited RMS of a signal from its PSD.

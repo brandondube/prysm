@@ -30,7 +30,6 @@ class RichData:
     _data_attr = 'data'
     _data_type = 'image'
     _default_twosided = True
-    axis_mode = 'period'
     _slice_xscale = 'linear'
     _slice_yscale = 'linear'
 
@@ -188,11 +187,8 @@ class RichData:
         if twosided is None:
             twosided = self._default_twosided
         return Slices(getattr(self, self._data_attr), x=self.x, y=self.y,
-                      twosided=twosided,
-                      xlabel=self.labels.generic(self.units),
-                      ylabel=self.labels.z(self.units),
-                      xscale=self._slice_xscale,
-                      yscale=self._slice_yscale)
+                      twosided=twosided, units=self.units, labels=self.labels,
+                      xscale=self._slice_xscale, yscale=self._slice_yscale)
 
     def _make_interp_function_2d(self):
         """Generate a 2D interpolation function for this instance, used in sampling with exact_xy.
@@ -390,14 +386,14 @@ class RichData:
 
 class Slices:
     """Slices of data."""
-    def __init__(self, data, x, y, xlabel, ylabel, xscale, yscale, twosided=True):
+    def __init__(self, data, x, y, units, labels, xscale, yscale, twosided=True):
         self._source = data
         self._source_polar = None
         self._r = None
         self._p = None
         self._x = x
         self._y = y
-        self.xlabel, self.ylabel = xlabel, ylabel
+        self.units, self.labels = units, labels
         self.xscale, self.yscale = xscale, yscale
         self.center_y, self.center_x = (int(e.ceil(s / 2)) for s in data.shape)
         self.twosided = twosided
@@ -549,20 +545,56 @@ class Slices:
         self.check_polar_calculated()
         return self._r, e.nanstd(self._source_polar, axis=0)
 
-    def plot(self, slices, lw=config.lw,
+    def plot(self, slices, lw=config.lw, invert_x=False,
              xlim=(None, None), xscale=None,
              ylim=(None, None), yscale=None,
              fig=None, ax=None):
+
+        def safely_invert_x(x, v):
+            # these values are unsafe for fp32.  Maybe a bit pressimistic, but that's life
+            zeros = abs(x) < 1e-9
+            x[zeros] = e.nan
+            v[zeros] = e.nan
+            x = 1 / x
+            return x, v
+
         fig, ax = share_fig_ax(fig, ax)
 
         if isinstance(slices, str):
             slices = [slices]
 
         for slice_ in slices:
-            ax.plot(*getattr(self, slice_), label=slice_)
+            u, v = getattr(self, slice_)
+            if invert_x:
+                u, v = safely_invert_x(u, v)
+
+            ax.plot(u, v, label=slice_)
 
         ax.legend(title='Slice')
-        ax.set(xscale=xscale or self.xscale, xlim=xlim, xlabel=self.xlabel,
-               yscale=yscale or self.yscale, ylim=ylim, ylabel=self.ylabel)
+
+        # the x label has some special text manipulation
+
+        if invert_x:
+            units = self.units.copy()
+            units.x = 1 / self.units.x
+            units.y = 1 / self.units.y
+
+            xlabel = self.labels.generic(self.units)
+            # ax.invert_xaxis()
+            if 'Period' in xlabel:
+                xlabel = xlabel.replace('Period', 'Frequency')
+            elif 'Frequency' in xlabel:
+                xlabel = xlabel.replace('Frequency', 'Period')
+        else:
+            # slightly unclean code duplication here
+            xlabel = self.labels.generic(self.units)
+            units = self.units
+
+        # z looks wrong here, but z from 2D is y in 1D.
+        ax.set(xscale=xscale or self.xscale, xlim=xlim, xlabel=xlabel,
+               yscale=yscale or self.yscale, ylim=ylim, ylabel=self.labels.z(units))
+
+        if invert_x:
+            ax.invert_xaxis()
 
         return fig, ax
