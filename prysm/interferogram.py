@@ -1026,6 +1026,8 @@ class Interferogram(OpticalPhase):
 
         if res != 0:
             i.latcal(1e3 * res, u.mm)
+        else:
+            i.strip_latcal()
 
         return i
 
