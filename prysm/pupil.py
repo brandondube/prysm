@@ -3,7 +3,6 @@
 from .conf import config
 from .mathops import engine as e
 from ._phase import OpticalPhase
-from .coordinates import make_rho_phi_grid
 from .geometry import mask_cleaner
 from .util import std
 
@@ -49,7 +48,6 @@ class Pupil(OpticalPhase):
         """
         if ux is None:
             # must build a pupil
-            self.dia = dia
             ux = e.linspace(-dia / 2, dia / 2, samples)
             uy = e.linspace(-dia / 2, dia / 2, samples)
             self.samples = samples
@@ -66,9 +64,10 @@ class Pupil(OpticalPhase):
 
         super().__init__(x=ux, y=uy, phase=phase, units=units, labels=labels)
 
+        phase_mask = mask_cleaner(phase_mask, samples)
+
         if need_to_build:
             self.build()
-            phase_mask = mask_cleaner(phase_mask, samples)
             if phase_mask is not None:
                 self.phase = self.phase * phase_mask
                 self.phase[phase_mask == 0] = e.nan
@@ -81,6 +80,7 @@ class Pupil(OpticalPhase):
             transmission = e.ones(holes.shape)
             transmission[holes] = 0
             self.transmission = transmission
+            self.phase_mask = phase_mask
 
     @property
     def strehl(self):
@@ -122,55 +122,6 @@ class Pupil(OpticalPhase):
         self.phase = e.zeros((self.samples, self.samples), dtype=config.precision)
 
         return self
-
-    def mask(self, mask, target, nanify=True):
-        """Apply a mask to the pupil.
-
-        Used to implement vignetting, chief ray angles, etc.
-
-        Parameters
-        ----------
-        mask : `str` or `numpy.ndarray`
-            if a string, uses geometry.mcache for high speed access to a mask with a given shape,
-            e.g. mask='circle' or mask='hexagon'.  If an ndarray, directly use the mask.
-        target : `str`, {'phase', 'fcn', 'both'}
-            which array to mask
-        nanify: `bool`, optional
-            if True, make (target) equal to NaN where the mask is zero.
-
-        Returns
-        -------
-        `Pupil`
-            self, the pupil instance
-
-        """
-        if target in ('phase', 'both'):
-            self.phase *= mask
-            if nanify:
-                nans = mask == 0
-                self.phase[nans] = e.nan
-
-        self._mask = mask
-        return self
-
-    def _gengrid(self):
-        """Generate a uniform (x,y) grid and maps it to (rho,phi) coordinates for radial polynomials.
-
-        Note
-        ----
-        angle is done via cart_to_polar(yv, xv) which yields angles w.r.t.
-        the y axis.  This is the convention of optics and not a typo.
-
-        Returns
-        -------
-        self.rho : `numpy.ndarray`
-            the radial coordinate of the pupil coordinate grid
-        self.phi : `numpy.ndarray`
-            the azimuthal coordinate of the pupil coordinate grid
-
-        """
-        self.rho, self.phi = make_rho_phi_grid(self.samples, aligned='y')
-        return self.rho, self.phi
 
     def __add__(self, other):
         """Sum the phase of two pupils.

@@ -973,21 +973,21 @@ class Interferogram(OpticalPhase):
             where to save to
 
         """
-        phase = self.change_zunit(to='waves', inplace=False)
+        phase = self.change_z_unit(to='waves', inplace=False)
         write_zygo_ascii(file, phase=phase,
                          x=self.x, y=self.y,
-                         intensity=None, wavelength=self.wavelength,
+                         intensity=None, wavelength=self.units.wavelength.to(u.um),
                          high_phase_res=high_phase_res)
 
     def __str__(self):
-        if self.spatial_unit != 'px':
+        if self.units.x != u.pix:
             size_part_2 = f', ({self.shape[1]}x{self.shape[0]}) px'
         else:
             size_part_2 = ''
         return inspect.cleandoc(f"""Interferogram with:
-                Units: {self.spatial_unit} spatial, {self.phase_unit} phase
-                Size: ({self.diameter_x}x{self.diameter_y}) {self.spatial_unit}{size_part_2}
-                {self.zaxis_label.capitalize()}: {self.pv:.3f} PV, {self.rms:.3f} RMS {self.phase_unit}""")
+                Units: {self.units}
+                Size: ({self.diameter_x:.3f}x{self.diameter_y:.3f}) {self.spatial_unit}{size_part_2}
+                {self.labels._z}: {self.pv:.3f} PV, {self.rms:.3f} RMS [{self.units.z}]""")
 
     @staticmethod
     def from_zygo_dat(path, multi_intensity_action='first'):
@@ -1063,4 +1063,4 @@ class Interferogram(OpticalPhase):
         """
         x, y, z = render_synthetic_surface(size=size, samples=samples, rms=rms,
                                            mask=mask, psd_fcn=psd_fcn, **psd_fcn_kwargs)
-        return Interferogram(phase=z, x=x, y=y, scale='mm', phase_unit=phase_unit)
+        return Interferogram(phase=z, x=x, y=y, units=Units(x=u.mm, z=getattr(u, phase_unit)))

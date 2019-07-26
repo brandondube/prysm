@@ -18,7 +18,6 @@ def p_tlt():
 
 def test_create_pupil():
     p = Pupil()
-    assert hasattr(p, 'wavelength')
     assert hasattr(p, 'diameter')
     assert hasattr(p, 'sample_spacing')
     assert hasattr(p, 'samples')
@@ -37,19 +36,11 @@ def test_create_pupil():
 def test_pupil_passes_valid_params():
     parameters = {
         'samples': 16,
-        'dia': 128.2,
-        'wavelength': 0.6328,
-        'opd_unit': 'nm'}
+        'dia': 128.2
+    }
     p = Pupil(**parameters)
     assert p.samples == parameters['samples']
-    assert p.dia == parameters['dia']
-    assert p.wavelength == parameters['wavelength']
-    assert p.zunit == 'nm'
-
-
-def test_pupil_rejects_bad_opd_unit():
-    with pytest.raises(ValueError):
-        Pupil(opd_unit='foo')
+    assert p.diameter == parameters['dia']
 
 
 def test_pupil_has_zero_pv(p):

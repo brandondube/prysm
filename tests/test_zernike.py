@@ -77,7 +77,7 @@ def test_fringezernike_takes_all_named_args():
 def test_fringezernike_will_pass_pupil_args():
     params = {
         'samples': 32,
-        'wavelength': 0.5,
+        'diameter': 50,
     }
     p = zernike.FringeZernike(**params)
     assert p

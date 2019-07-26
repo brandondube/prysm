@@ -46,24 +46,14 @@ class OpticalPhase(RichData):
     @property
     def phase_unit(self):
         """Unit used to describe the optical phase."""
-        warnings.warn('phase_unit has been folded into zunit and will be removed in prysm v0.18')
-        return self.zunit
-
-    @phase_unit.setter
-    def phase_unit(self, unit):
-        unit = unit.lower()
-        if unit == 'å':
-            self._phase_unit = unit.upper()
-        else:
-            if unit not in self.units:
-                raise ValueError(f'{unit} not a valid unit, must be in {set(self.units.keys())}')
-            self._phase_unit = self.units[unit]
+        warnings.warn('phase_unit has been folded into self.units.z and will be removed in prysm v0.18')
+        return str(self.units.z)
 
     @property
     def spatial_unit(self):
         """Unit used to describe the spatial phase."""
-        warnings.warn('spatial_unit has been folded into xyunit and will be removed in prysm v0.18')
-        return self.xyunit
+        warnings.warn('spatial_unit has been folded into self.units.<x/y> and will be removed in prysm v0.18')
+        return str(self.units.x)
 
     @spatial_unit.setter
     def spatial_unit(self, unit):
@@ -138,7 +128,7 @@ class OpticalPhase(RichData):
 
         """
         epd = self.diameter
-        phase = self.change_zunit(to='waves', inplace=False)
+        phase = self.change_z_unit(to='waves', inplace=False)
 
         fig, ax = share_fig_ax(fig, ax)
         plotdata = visibility * e.sin(2 * e.pi * passes * phase)

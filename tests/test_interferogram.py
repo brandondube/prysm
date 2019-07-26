@@ -71,7 +71,7 @@ def test_doublecrop_has_no_effect(sample_i_mutate):
 
 def test_descale_latcal_ok(sample_i_mutate):
     plate_scale = sample_i_mutate.sample_spacing
-    sample_i_mutate.change_xyunit(to='px')
+    sample_i_mutate.strip_latcal()
     assert pytest.approx(sample_i_mutate.sample_spacing, 1, abs=1e-8)
     sample_i_mutate.latcal(plate_scale, 'mm')
     assert pytest.approx(plate_scale, sample_i_mutate.sample_spacing, abs=1e-8)

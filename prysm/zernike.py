@@ -975,7 +975,6 @@ class BaseZernike(Pupil):
         else:
             self.coefs = self.coefs[:n]
             self.build()
-            self.mask(self._mask, self.mask_target)
             return self
 
     def truncate_topn(self, n):
@@ -1000,7 +999,6 @@ class BaseZernike(Pupil):
 
         self.coefs = new_coefs
         self.build()
-        self.mask(self._mask, self.mask_target)
         return self
 
     def __str__(self):
