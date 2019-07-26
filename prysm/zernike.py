@@ -829,7 +829,7 @@ class BaseZernike(Pupil):
         coefs = e.asarray(self.coefs)
         idxs = e.asarray(range(len(coefs))) + self.base
         names = self.names
-        lab = f'{self.zlabel} [{self.zunit}]'
+        lab = self.labels.z(self.units)
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         if orientation.lower() in ('h', 'horizontal'):
             vmin, vmax = coefs.min(), coefs.max()
@@ -896,7 +896,7 @@ class BaseZernike(Pupil):
             mags, names = sort_xy(mags, names)
             mags = list(reversed(mags))
             names = list(reversed(names))
-        lab = f'{self.zlabel} [{self.zunit}]'
+        lab = self.labels.z(self.units)
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         fig, ax = share_fig_ax(fig, ax)
         if orientation.lower() in ('h', 'horizontal'):
@@ -944,7 +944,7 @@ class BaseZernike(Pupil):
 
         fig, ax = share_fig_ax(fig, ax)
 
-        lab = f'{self.zlabel} [{self.zunit}]'
+        lab = self.labels.z(self.units)
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         if orientation.lower() in ('h', 'horizontal'):
             ax.bar(idxs, magnitudes, zorder=zorder)
@@ -1029,8 +1029,8 @@ class BaseZernike(Pupil):
 
             strs.append(' '.join([_, name]))
         body = '\n\t'.join(strs)
-
-        footer = f'\n\t{self.pv:.3f} PV, {self.rms:.3f} RMS [{self.phase_unit}]'
+        unit_str = f'{self.labels.unit_prefix}{self.units.z}{self.labels.unit_suffix}'
+        footer = f'\n\t{self.pv:.3f} PV, {self.rms:.3f} RMS {unit_str}'
         return f'{header}{body}{footer}'
 
 
