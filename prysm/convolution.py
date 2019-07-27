@@ -396,8 +396,8 @@ class ConvolutionEngine:
             sample_spacing = min(self.c1.sample_spacing, self.c2.sample_spacing)
 
         self.sample_spacing = sample_spacing
-        self.nsamples_x = int(e.floor(((support_x / sample_spacing) + 1) * self.Q))
-        self.nsamples_y = int(e.floor(((support_y / sample_spacing) + 1) * self.Q))
+        self.nsamples_x = int(e.floor(round(((support_x / sample_spacing) + 1) * self.Q, 6)))
+        self.nsamples_y = int(e.floor(round(((support_y / sample_spacing) + 1) * self.Q, 6)))
         self.kspace_x = forward_ft_unit(sample_spacing, self.nsamples_x, True)
         self.kspace_y = forward_ft_unit(sample_spacing, self.nsamples_y, True)
         return self
