@@ -3,6 +3,8 @@ import pytest
 
 import numpy as np
 
+from astropy import units as u
+
 from prysm import psf
 from prysm.coordinates import cart_to_polar
 
@@ -49,12 +51,12 @@ def test_renorm_functions(tpsf_mutate):
 
 
 def test_polychromatic_functions():
-    from prysm import Pupil
-    p1 = Pupil(wavelength=0.55)
-    p2 = Pupil(wavelength=0.5)
-    p3 = Pupil(wavelength=0.6)
+    from prysm import Pupil, Units
+    from prysm.wavelengths import HeNe, Cu, XeF
+    units = [Units(u.mm, u.nm, wavelength=wvl) for wvl in (HeNe, Cu, XeF)]
+    pupils = [Pupil(units=u_) for u_ in units]
 
-    psfs = [psf.PSF.from_pupil(p, 1) for p in [p1, p2, p3]]
+    psfs = [psf.PSF.from_pupil(p, 1) for p in pupils]
     poly = psf.PSF.polychromatic(psfs)
     assert isinstance(poly, psf.PSF)
 

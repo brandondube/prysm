@@ -115,9 +115,6 @@ class Pupil(OpticalPhase):
             this pupil instance
 
         """
-        # build up the pupil
-        self._gengrid()
-
         # fill in the phase of the pupil
         self.phase = e.zeros((self.samples, self.samples), dtype=config.precision)
 
@@ -147,8 +144,7 @@ class Pupil(OpticalPhase):
 
         result = self.copy()
         result.phase = self.phase + other.phase
-        result._mask = self._mask * other._mask
-        result.mask(result._mask, result.mask_target)
+        result.transmission = self.transmission * other.transmission
         return result
 
     def __sub__(self, other):
@@ -175,8 +171,7 @@ class Pupil(OpticalPhase):
 
         result = self.copy()
         result.phase = self.phase - other.phase
-        result._mask = self._mask * other._mask
-        result.mask(result._mask, result.mask_target)
+        result.transmission = self.transmission * other.transmission
         return result
 
     @staticmethod

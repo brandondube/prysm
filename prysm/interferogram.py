@@ -16,7 +16,7 @@ from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar
 from .util import mean, rms  # NOQA
 from .geometry import mcache
-from .wavelengths import mkwvl
+from .wavelengths import mkwvl, HeNe
 
 
 def fit_plane(x, y, z):
@@ -956,7 +956,7 @@ class Interferogram(OpticalPhase):
             TIS value.
 
         """
-        if self.xyunit != 'μm':
+        if self.units.x != u.um:
             raise ValueError('Use microns for spatial unit when evaluating TIS.')
 
         upper_limit = 1 / wavelength
@@ -1063,4 +1063,4 @@ class Interferogram(OpticalPhase):
         """
         x, y, z = render_synthetic_surface(size=size, samples=samples, rms=rms,
                                            mask=mask, psd_fcn=psd_fcn, **psd_fcn_kwargs)
-        return Interferogram(phase=z, x=x, y=y, units=Units(x=u.mm, z=getattr(u, phase_unit)))
+        return Interferogram(phase=z, x=x, y=y, units=Units(x=u.mm, z=getattr(u, phase_unit), wavelength=HeNe))

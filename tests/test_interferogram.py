@@ -52,7 +52,7 @@ def test_spike_clip_functions(sample_i_mutate):
 
 
 def test_tis_functions(sample_i_mutate):
-    sample_i_mutate.change_xyunit('um')
+    sample_i_mutate.change_xy_unit('um')
     sample_i_mutate.fill()
     assert sample_i_mutate.total_integrated_scatter(0.4, 0)
 
