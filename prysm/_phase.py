@@ -1,6 +1,7 @@
 """phase basics."""
 import warnings
 
+from .conf import config
 from .mathops import engine as e
 from ._richdata import RichData
 from .plotting import share_fig_ax
@@ -103,7 +104,7 @@ class OpticalPhase(RichData):
         """Half of self.diameter."""
         return self.diameter / 2
 
-    def interferogram(self, visibility=1, passes=2, interp_method='lanczos', fig=None, ax=None):
+    def interferogram(self, visibility=1, passes=2, interpolation=config.interpolation, fig=None, ax=None):
         """Create an interferogram of the `Pupil`.
 
         Parameters
@@ -131,14 +132,14 @@ class OpticalPhase(RichData):
         phase = self.change_z_unit(to='waves', inplace=False)
 
         fig, ax = share_fig_ax(fig, ax)
-        plotdata = visibility * e.sin(2 * e.pi * passes * phase)
+        plotdata = visibility * e.cos(2 * e.pi * passes * phase)
         im = ax.imshow(plotdata,
                        extent=[-epd / 2, epd / 2, -epd / 2, epd / 2],
                        cmap='Greys_r',
-                       interpolation=interp_method,
+                       interpolation=interpolation,
                        clim=(-1, 1),
                        origin='lower')
         fig.colorbar(im, label=r'Wrapped Phase [$\lambda$]', ax=ax, fraction=0.046)
-        ax.set(xlabel=r'Pupil $\xi$ [mm]',
-               ylabel=r'Pupil $\eta$ [mm]')
+        ax.set(xlabel=self.labels.x(self.units),
+               ylabel=self.labels.y(self.units))
         return fig, ax
