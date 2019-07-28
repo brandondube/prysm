@@ -81,12 +81,15 @@ Breaking changes
 * * * :meth:`prysm.interferogram.Interferogram.psd` now returns a :class:`~prysm.interferogram.PSD` object, which is just a :class:`~prysm._richdata.RichData` instance like any other prysm class.
 * :meth:`prysm.psf.PSF.from_pupil` normalization with :code:`norm=radiometric` has changed to match Born & Wolf.  Results using this kwarg generated with prysm >= 0.17 will not match those for prysm < 0.17 in terms of scaling.  The contents will be otherwise the same.
 * :class:`~prysm.pupil.Pupil` and subclasses no longer take arguments of :code:`mask` and :code:`mask_target`, instead taking :code:`phase_mask` and :code:`transmission`.  This should improve clarity.  Arguments may take a few forms - :code:`<ndarray>`, :code:`<str>`, or :code:`[<str>, <float>]`.  In the ndarray case, the argument is used directly.  Strings are passed to the mask cache with implicit :code:`radius=1`, while in the last case the argument is a tuple or list of the mask shape and radius.
+* The default OPD unit for pupils is now nm instead of waves.
+* :code:`interp_method` parameters on plotting functions have been renamed to :code:`interpolation`.  This mimics matplotlib exactly, as prysm is simply wrapping matplotlib for these methods.
 
 Bugfixes
 ========
 
 * Automatic hanning window generation when calculating PSDs has been fixed, and no longer results in an error for nonsquare arrays.
 * An issue where Welch windows may be generated off-center has been fixed.
+* An error/bug when calling :meth:`~prysm.interferogram.Interferogram.crop` requiring 0 pixels of removal on a side has been fixed.
 
 
 Under-the-hood Changes
