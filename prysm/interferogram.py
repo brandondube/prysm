@@ -986,7 +986,7 @@ class Interferogram(OpticalPhase):
             size_part_2 = ''
         return inspect.cleandoc(f"""Interferogram with:
                 Units: {self.units}
-                Size: ({self.diameter_x:.3f}x{self.diameter_y:.3f}) {self.spatial_unit}{size_part_2}
+                Size: ({self.diameter_x:.3f}x{self.diameter_y:.3f}), {size_part_2}
                 {self.labels._z}: {self.pv:.3f} PV, {self.rms:.3f} RMS [{self.units.z}]""")
 
     @staticmethod

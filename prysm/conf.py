@@ -233,6 +233,7 @@ class Config(object):
                  image_cmap='Greys_r',
                  lw=3,
                  zorder=3,
+                 alpha=1,
                  interpolation='lanczos',
                  unit_format='latex_inline',
                  show_units=True,
@@ -296,6 +297,7 @@ class Config(object):
         self.image_cmap = image_cmap
         self.lw = lw
         self.zorder = zorder
+        self.alpha = alpha
         self.interpolation = interpolation
         self.unit_format = unit_format
         self.show_units = show_units

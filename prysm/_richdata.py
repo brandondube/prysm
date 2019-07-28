@@ -1,6 +1,7 @@
 """Basic class holding data, used to recycle code."""
 import copy
 from collections.abc import Iterable
+from numbers import Number
 
 from scipy import interpolate
 
@@ -299,10 +300,10 @@ class RichData:
 
         """
         self._make_interp_function_xy1d()
-        return self.interpf_x(y)
+        return self.interpf_y(y)
 
     def plot2d(self, xlim=None, ylim=None, clim=None, cmap=None,
-               log=False, power=1, interpolation=config.interpolation,
+               log=False, power=1, interpolation=None,
                show_colorbar=True, show_axlabels=True,
                fig=None, ax=None):
         """Plot the data in 2D.
@@ -349,6 +350,9 @@ class RichData:
         # sanitize some inputs
         if cmap is None:
             cmap = getattr(config, f'{self._data_type}_cmap')
+
+        if interpolation is None:
+            interpolation = config.interpolation
 
         if xlim is not None and not isinstance(xlim, Iterable):
             xlim = (-xlim, xlim)
@@ -400,7 +404,7 @@ class Slices:
 
     def check_polar_calculated(self):
         """Ensure that the polar representation of the source data has been calculated."""
-        if not self._source_polar:
+        if self._source_polar is None:
             rho, phi, polar = uniform_cart_to_polar(self._x, self._y, self._source)
             self._r, self._p = rho, phi
             self._source_polar = polar
@@ -511,8 +515,8 @@ class Slices:
             values of the data array at these coordinates
 
         """
-        r, mx = self.azmax()
-        r, mn = self.azmin()
+        r, mx = self.azmax
+        r, mn = self.azmin
         return r, mx - mn
 
     @property
@@ -545,32 +549,99 @@ class Slices:
         self.check_polar_calculated()
         return self._r, e.nanstd(self._source_polar, axis=0)
 
-    def plot(self, slices, lw=config.lw, invert_x=False,
+    def plot(self, slices, lw=None, alpha=None, zorder=None, invert_x=False,
              xlim=(None, None), xscale=None,
              ylim=(None, None), yscale=None,
+             show_legend=True, show_axlabels=True,
              fig=None, ax=None):
+        """Plot slice(s)
 
+        Parameters
+        ----------
+        slices : `str` or `Iterable`
+            if a string, plots a single slice.  Else, plots several slices.
+        lw : `float` or `Iterable`, optional
+            line width to use for the slice(s).
+            If a single value, used for all slice(s).
+            If iterable, used pairwise with the slices
+        alpha : `float` or `Iterable`, optional
+            alpha (transparency) to use for the slice(s).
+            If a single value, used for all slice(s).
+            If iterable, used pairwise with the slices
+        zorder : `int` or `Iterable`, optional
+            zorder (stack height) to use for the slice(s).
+            If a single value, used for all slice(s).
+            If iterable, used pairwise with the slices
+        invert_x : `bool`, optional
+            if True, flip x (i.e., Freq => Period or vice-versa)
+        xlim : `tuple`, optional
+            x axis limits
+        xscale : `str`, {'linear', 'log'}, optional
+            scale used for the x axis
+        ylim : `tuple`, optional
+            y axis limits
+        yscale : `str`, {'linear', 'log'}, optional
+            scale used for the y axis
+        show_legend : `bool`, optional
+            if True, show the legend
+        show_axlabels : `bool`, optional
+            if True, show the axis labels
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`
+            Axis containing the plot
+
+        """
         def safely_invert_x(x, v):
             # these values are unsafe for fp32.  Maybe a bit pressimistic, but that's life
             zeros = abs(x) < 1e-9
+            x, v = x.copy(), v.copy()
             x[zeros] = e.nan
             v[zeros] = e.nan
             x = 1 / x
             return x, v
 
-        fig, ax = share_fig_ax(fig, ax)
+        # error check everything
+        if alpha is None:
+            alpha = config.alpha
+
+        if lw is None:
+            lw = config.lw
+
+        if zorder is None:
+            zorder = config.zorder
 
         if isinstance(slices, str):
             slices = [slices]
 
-        for slice_ in slices:
+        if isinstance(alpha, Number):
+            alpha = [alpha] * len(slices)
+
+        if isinstance(lw, Number):
+            lw = [lw] * len(slices)
+
+        if isinstance(zorder, int):
+            zorder = [zorder] * len(slices)
+
+        fig, ax = share_fig_ax(fig, ax)
+
+        for slice_, alpha, lw, zorder in zip(slices, alpha, lw, zorder):
+            print(slice_)
             u, v = getattr(self, slice_)
             if invert_x:
                 u, v = safely_invert_x(u, v)
 
-            ax.plot(u, v, label=slice_)
+            ax.plot(u, v, label=slice_, lw=lw, alpha=alpha, zorder=zorder)
 
-        ax.legend(title='Slice')
+        if show_legend:
+            ax.legend(title='Slice')
 
         # the x label has some special text manipulation
 
@@ -590,10 +661,14 @@ class Slices:
             # slightly unclean code duplication here
             xlabel = self.labels.generic(units)
 
+        ylabel = self.labels.z(units)
+
+        if not show_axlabels:
+            xlabel, ylabel = '', ''
+
         # z looks wrong here, but z from 2D is y in 1D.
         ax.set(xscale=xscale or self.xscale, xlim=xlim, xlabel=xlabel,
-               yscale=yscale or self.yscale, ylim=ylim, ylabel=self.labels.z(units))
-
+               yscale=yscale or self.yscale, ylim=ylim, ylabel=ylabel)
         if invert_x:
             ax.invert_xaxis()
 
