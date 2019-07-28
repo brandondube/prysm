@@ -52,21 +52,9 @@ def test_spike_clip_functions(sample_i_mutate):
 
 
 def test_tis_functions(sample_i_mutate):
-    sample_i_mutate.change_spatial_unit('um')
+    sample_i_mutate.change_xy_unit('um')
     sample_i_mutate.fill()
     assert sample_i_mutate.total_integrated_scatter(0.4, 0)
-
-
-def test_plot_psd_slices_functions(sample_i_mutate):
-    fig, ax = sample_i_mutate.plot_psd_slices(x=True, y=True, azavg=True, azmin=True, azmax=True)
-    assert fig
-    assert ax
-
-
-def test_plot_psd_2d_functions(sample_i_mutate):
-    fig, ax = sample_i_mutate.plot_psd2d()
-    assert fig
-    assert ax
 
 
 def test_save_ascii_functions(sample_i, tmpdir):
@@ -83,7 +71,7 @@ def test_doublecrop_has_no_effect(sample_i_mutate):
 
 def test_descale_latcal_ok(sample_i_mutate):
     plate_scale = sample_i_mutate.sample_spacing
-    sample_i_mutate.change_spatial_unit(to='px')
+    sample_i_mutate.strip_latcal()
     assert pytest.approx(sample_i_mutate.sample_spacing, 1, abs=1e-8)
     sample_i_mutate.latcal(plate_scale, 'mm')
     assert pytest.approx(plate_scale, sample_i_mutate.sample_spacing, abs=1e-8)
@@ -127,8 +115,7 @@ def test_recenter_functions(sample_i_mutate):
 
 
 def test_fit_psd(sample_i_mutate):
-    psddata = sample_i_mutate.psd_slices()
-    a, b, c = fit_psd(*psddata['azavg'])
+    a, b, c = fit_psd(*sample_i_mutate.psd().slices().azavg)
     assert a
     assert b
     assert c

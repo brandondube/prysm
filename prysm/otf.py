@@ -1,374 +1,92 @@
 """A base optical transfer function interface."""
-from scipy import interpolate
 
 from .conf import config
 from .mathops import engine as e
-from ._basicdata import BasicData
+from ._richdata import RichData
 from .psf import PSF
 from .fttools import forward_ft_unit
-from .util import share_fig_ax
-from .coordinates import polar_to_cart, uniform_cart_to_polar
 
 
-class MTF(BasicData):
-    """Modulation Transfer Function."""
-    _data_attr = 'data'
+def transform_psf(psf, sample_spacing):
+    data = e.fft.fftshift(e.fft.fft2(e.fft.ifftshift(psf.data)))  # no need to ifftshift first - phase is unimportant
+    y, x = [forward_ft_unit(sample_spacing / 1e3, s) for s in psf.shape]  # 1e3 for microns => mm
+    return x, y, data
 
-    def __init__(self, data, x, y=None):
-        """Create an MTF object.
+
+class OTF:
+    """Optical Transfer Function."""
+
+    def __init__(self, mtf, ptf):
+        """Create a new OTF Instance.
+
+        Will have .mtf and .ptf attributes holding the MTF and PTF.
 
         Parameters
         ----------
         data : `numpy.ndarray`
-            MTF values on 2D grid
+            complex ndarray, 2D
         x : `numpy.ndarray`
-            array of x units, 1D
+            x Cartesian spatial frequencies
         y : `numpy.ndarray`
-            array of y units, 1D
-
+            y Cartesian spatial frequencies
         """
-        if y is None:
-            y = x
-        self.data = data
-        self.x = x
-        self.y = y
+        self.mtf = mtf
+        self.ptf = ptf
 
-        self.interpf_2d = None
-        self.interpf_tan = None
-        self.interpf_sag = None
-
-    # quick-access slices ------------------------------------------------------
-
-    @property
-    def tan(self):
-        """Retrieve the tangential MTF.
-
-        Notes
-        -----
-        Assumes the object is extended in y.  If the object is extended
-        along a different azimuth, this will not return the tangential MTF.
-
-        Returns
-        -------
-        self.x : `numpy.ndarray`
-            ordinate
-        self.data : `numpy.ndarray`
-            coordiante
-
-        """
-        u, s = self.slice_x
-        return u[self.center_x:], s[self.center_x:]
-
-    @property
-    def sag(self):
-        """Retrieve the sagittal MTF.
-
-        Notes
-        -----
-        Assumes the object is extended in y.  If the object is extended along a different
-        azimuth, this will not return the sagittal MTF.
-
-        Returns
-        -------
-        self.x : `numpy.ndarray`
-            ordinate
-        self.data : `numpy.ndarray`
-            coordiante
-
-        """
-        u, s = self.slice_y
-        return u[self.center_y:], s[self.center_y:]
-
-    def exact_polar(self, freqs, azimuths=None):
-        """Retrieve the MTF at the specified frequency-azimuth pairs.
+    @staticmethod
+    def from_psf(psf, unwrap=True):
+        """Create an OTF instance from a PSF.
 
         Parameters
         ----------
-        freqs : iterable
-            radial frequencies to retrieve MTF for
-        azimuths : iterable
-            corresponding azimuths to retrieve MTF for
+        psf : `PSF`
+            Point Spread Function
+        unwrap : `bool`, optional
+            if True, unwrap phase
 
         Returns
         -------
-        `list`
-            MTF at the given points
+        `OTF`
+            new OTF instance with mtf and PSF attributes holding MTF and PSF instances
 
         """
-        self._make_interp_function_2d()
+        x, y, ft = transform_psf(psf, psf.sample_spacing)
+        mtf = MTF.from_ftdata(ft=ft, x=x, y=y)
+        ptf = PTF.from_ftdata(ft=ft, x=x, y=y, unwrap=unwrap)
+        return OTF(mtf=mtf, ptf=ptf)
 
-        # handle user-unspecified azimuth
-        if azimuths is None:
-            if type(freqs) in (int, float):
-                # single azimuth
-                azimuths = 0
-            else:
-                azimuths = [0] * len(freqs)
-        # handle single azimuth, multiple freqs
-        elif type(azimuths) in (int, float):
-            azimuths = [azimuths] * len(freqs)
+    @staticmethod
+    def from_pupil(pupil, efl, Q=config.Q, unwrap=True):
+        psf = PSF.from_pupil(pupil, efl=efl, Q=Q)
+        return OTF.from_psf(psf, unwrap=unwrap)
 
-        azimuths = e.radians(azimuths)
-        # handle single value case
-        if type(freqs) in (int, float):
-            x, y = polar_to_cart(freqs, azimuths)
-            return float(self.interpf_2d((x, y), method='linear'))
 
-        outs = []
-        for freq, az in zip(freqs, azimuths):
-            x, y = polar_to_cart(freq, az)
-            outs.append(float(self.interpf_2d((x, y), method='linear')))
-        return e.asarray(outs)
+class MTF(RichData):
+    """Modulation Transfer Function."""
+    _data_attr = 'data'
+    _data_type = 'image'
+    _default_twosided = False
 
-    def exact_xy(self, x, y=None):
-        """Retrieve the MTF at the specified X-Y frequency pairs.
+    def __init__(self, data, x, y, units=None, labels=None):
+        """Create a new `MTF` instance.
 
         Parameters
         ----------
-        x : iterable
-            X frequencies to retrieve the MTF at
-        y : iterable
-            Y frequencies to retrieve the MTF at
-
-        Returns
-        -------
-        `list`
-            MTF at the given points
-
-        """
-        self._make_interp_function_2d()
-
-        # handle data along just x
-        if y is None:
-            if type(x) in (int, float):
-                # single azimuth
-                y = 0
-            else:
-                y = [0] * len(x)
-
-        elif type(y) in (int, float):
-            y = [y] * len(x)
-
-        # handle data just along y
-        if type(x) in (int, float):
-            x = [x] * len(y)
-
-        x, y = e.asarray(x), e.asarray(y)
-        outs = []
-        for x, y in zip(x, y):
-            outs.append(float(self.interpf_2d((x, y), method='linear')))
-        return e.asarray(outs)
-
-    def exact_tan(self, freq):
-        """Return data at an exact x coordinate along the y=0 axis.
-
-        Parameters
-        ----------
-        freq : `number` or `numpy.ndarray`
-            frequency or frequencies to return
-
-        Returns
-        -------
-        `numpy.ndarray`
-            ndarray of MTF values
+        data : `numpy.ndarray`
+            2D array of MTF data
+        x : `numpy.ndarray`
+            1D array of x spatial frequencies
+        y : `numpy.ndarray`
+            1D array of y spatial frequencies
+        units : `Units`
+            units instance, can be shared
+        labels : `Labels`
+            labels instance, can be shared
 
         """
-        self._make_interp_function_tansag()
-        return self.interpf_tan(freq)
-
-    def exact_sag(self, freq):
-        """Return data at an exact y coordinate along the x=0 axis.
-
-        Parameters
-        ----------
-        freq : `number` or `numpy.ndarray`
-            frequency or frequencies to return
-
-        Returns
-        -------
-        `numpy.ndarray`
-            ndarray of MTF values
-
-        """
-        self._make_interp_function_tansag()
-        return self.interpf_sag(freq)
-
-    def azimuthal_average(self):
-        """Return the azimuthally averaged MTF.
-
-        Returns
-        -------
-        nu : `numpy.ndarray`
-            spatial frequencies
-        mtf : `numpy.ndarray`
-            mtf values
-
-        """
-        nu, theta, mtf = uniform_cart_to_polar(self.x, self.y, self.data)
-        l = len(nu) // 2
-        return nu[:l], mtf.mean(axis=0)[:l]
-
-    # quick-access slices ------------------------------------------------------
-
-    # plotting -----------------------------------------------------------------
-
-    def plot2d(self, max_freq=200, power=1, cmap=config.image_colormap, fig=None, ax=None):
-        """Create a 2D plot of the MTF.
-
-        Parameters
-        ----------
-        max_freq : `float`
-            Maximum frequency to plot to.  Axis limits will be ((-max_freq, max_freq), (-max_freq, max_freq)).
-        power : `float`
-            inverse of power to stretch the MTF to/by, e.g. power=2 will plot MTF^(1/2)
-        fig : `matplotlib.figure.Figure`, optional:
-            Figure to draw plot in
-        ax : `matplotlib.axes.Axis`, optional:
-            Axis to draw plot in
-
-        Returns
-        -------
-        fig : `matplotlib.figure.Figure`
-            Figure to draw plot in
-        ax : `matplotlib.axes.Axis`
-            Axis to draw plot in
-
-        """
-        from matplotlib import colors
-
-        left, right = self.x[0], self.x[-1]
-        bottom, top = self.y[0], self.y[-1]
-
-        fig, ax = share_fig_ax(fig, ax)
-
-        im = ax.imshow(self.data,
-                       extent=[left, right, bottom, top],
-                       origin='lower',
-                       cmap='Greys_r',
-                       clim=(0, 1),
-                       norm=colors.PowerNorm(1/power),
-                       interpolation='lanczos')
-        cb = fig.colorbar(im, label='MTF [Rel 1.0]', ax=ax, fraction=0.046)
-        cb.outline.set_edgecolor('k')
-        cb.outline.set_linewidth(0.5)
-        ax.set(xlabel=r'$\nu_x$ [cy/mm]',
-               ylabel=r'$\nu_y$ [cy/mm]',
-               xlim=(-max_freq, max_freq),
-               ylim=(-max_freq, max_freq))
-        return fig, ax
-
-    def plot_tan_sag(self, max_freq=200, lw=config.lw, zorder=config.zorder, fig=None, ax=None, labels=('Tangential', 'Sagittal')):
-        """Create a plot of the tangential and sagittal MTF.
-
-        Parameters
-        ----------
-        max_freq : `float`
-            Maximum frequency to plot to.  Axis limits will be ((-max_freq, max_freq), (-max_freq, max_freq))
-        lw : `float`, optional
-            line width
-        zorder : `int`
-            zorder
-        fig : `matplotlib.figure.Figure`, optional:
-            Figure to draw plot in
-        ax : `matplotlib.axes.Axis`, optional:
-            Axis to draw plot in
-        labels : `iterable`
-            set of labels for the two lines that will be plotted
-
-        Returns
-        -------
-        fig : `matplotlib.figure.Figure`
-            Figure to draw plot in
-        ax : `matplotlib.axes.Axis`
-            Axis to draw plot in
-
-        """
-        ut, tan = self.tan
-        us, sag = self.sag
-
-        fig, ax = share_fig_ax(fig, ax)
-        ax.plot(ut, tan, label=labels[0], linestyle='-', lw=lw, zorder=zorder)
-        ax.plot(us, sag, label=labels[1], linestyle='--', lw=lw, zorder=zorder)
-        ax.set(xlabel='Spatial Frequency [cy/mm]',
-               ylabel='MTF [Rel 1.0]',
-               xlim=(0, max_freq),
-               ylim=(0, 1))
-        ax.legend(loc='lower left')
-        return fig, ax
-
-    def plot_azimuthal_average(self, max_freq=200, lw=config.lw, zorder=config.zorder, fig=None, ax=None):
-        """Create a plot of the azimuthally averaged MTF.
-
-        Parameters
-        ----------
-        max_freq : `float`
-            Maximum frequency to plot to.  Axis limits will be ((-max_freq, max_freq), (-max_freq, max_freq))
-        lw : `float`, optional
-            line width
-        zorder : `int`, optional
-        fig : `matplotlib.figure.Figure`, optional:
-            Figure to draw plot in
-        ax : `matplotlib.axes.Axis`, optional:
-            Axis to draw plot in
-        labels : `iterable`
-            set of labels for the two lines that will be plotted
-
-        Returns
-        -------
-        fig : `matplotlib.figure.Figure`
-            Figure to draw plot in
-        ax : `matplotlib.axes.Axis`
-            Axis to draw plot in
-
-        """
-
-        u, azavg = self.azimuthal_average()
-
-        fig, ax = share_fig_ax(fig, ax)
-        ax.plot(u, azavg, lw=lw, zorder=zorder)
-        ax.set(xlabel='Spatial Frequency [cy/mm]',
-               ylabel='MTF [Rel 1.0]',
-               xlim=(0, max_freq),
-               ylim=(0, 1))
-
-        return fig, ax
-
-    # plotting -----------------------------------------------------------------
-
-    # helpers ------------------------------------------------------------------
-
-    def _make_interp_function_2d(self):
-        """Generate a 2D interpolation function for this instance of MTF, used to procure MTF at exact frequencies.
-
-        Returns
-        -------
-        `scipy.interpolate.RegularGridInterpolator`, this instance of an MTF object.
-
-        """
-        if self.interpf_2d is None:
-            self.interpf_2d = interpolate.RegularGridInterpolator((self.x, self.y), self.data)
-
-        return self.interpf_2d
-
-    def _make_interp_function_tansag(self):
-        """Generate two interpolation functions for tangential and sagittal MTF.
-
-        Returns
-        -------
-        self.interpf_tan : `scipy.interpolate.interp1d`
-            tangential interpolator
-        self.interpf_sag : `scipy.interpolate.interp1d`
-            sagittal interpolator
-
-        """
-        if self.interpf_tan is None or self.interpf_sag is None:
-            ut, tan = self.tan
-            us, sag = self.sag
-
-            self.interpf_tan = interpolate.interp1d(ut, tan)
-            self.interpf_sag = interpolate.interp1d(us, sag)
-
-        return self.interpf_tan, self.interpf_sag
+        super().__init__(x=x, y=y, data=data,
+                         units=units or config.mtf_units,
+                         labels=labels or config.mtf_labels)
 
     @staticmethod
     def from_psf(psf):
@@ -385,13 +103,14 @@ class MTF(BasicData):
             A new MTF instance
 
         """
-        if getattr(psf, '_mtf', None) is not None:
-            return psf._mtf
-        else:
-            dat = abs(e.fft.fftshift(e.fft.fft2(psf.data)))  # no need to ifftshift first - phase is unimportant
-            x = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_x)  # 1e3 for microns => mm
-            y = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_y)
-            return MTF(dat / dat[psf.center_y, psf.center_x], x, y)
+        # some code duplication here:
+        # MTF is a hot code path, and the drop of a shift operation
+        # improves performance in exchange for sharing some code with
+        # the OTF class definition
+        dat = e.fft.fftshift(e.fft.fft2(psf.data))  # no need to ifftshift first - phase is unimportant
+        x = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_x)  # 1e3 for microns => mm
+        y = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_y)
+        return MTF.from_ftdata(ft=dat, x=x, y=y)
 
     @staticmethod
     def from_pupil(pupil, efl, Q=2):
@@ -403,7 +122,7 @@ class MTF(BasicData):
             A pupil to propagate to a PSF, and convert to an MTF
         efl : `float`
             Effective focal length or propagation distance of the wavefunction
-        Q : `number`
+        Q : `float`
             ratio of pupil sample count to PSF sample count.  Q > 2 satisfies nyquist
 
         Returns
@@ -414,6 +133,139 @@ class MTF(BasicData):
         """
         psf = PSF.from_pupil(pupil, efl=efl, Q=Q)
         return MTF.from_psf(psf)
+
+    @staticmethod
+    def from_ftdata(ft, x, y):
+        """Generate an MTF from the Fourier transform of a PSF.
+
+        Parameters
+        ----------
+        ft : `numpy.ndarray`
+            2D ndarray of Fourier transform data
+        x : `numpy.ndarray`
+            1D ndarray of x (axis 1) coordinates
+        y : `numpy.ndarray`
+            1D ndarray of y (axis 0) coordinates
+
+        Returns
+        -------
+        `MTF`
+            a new MTF instance
+
+        """
+        cy, cx = (int(e.ceil(s / 2)) for s in ft.shape)
+        dat = abs(ft)
+        dat /= dat[cy, cx]
+        return MTF(data=dat, x=x, y=y)
+
+
+class PTF(RichData):
+    """Phase Transfer Function"""
+
+    def __init__(self, data, x, y, units=None, labels=None):
+        """Create a new `PTF` instance.
+
+        Parameters
+        ----------
+        data : `numpy.ndarray`
+            2D array of MTF data
+        x : `numpy.ndarray`
+            1D array of x spatial frequencies
+        y : `numpy.ndarray`
+            1D array of y spatial frequencies
+        units : `Units`
+            units instance, can be shared
+        labels : `Labels`
+            labels instance, can be shared
+
+        """
+        super().__init__(x=x, y=y, data=data,
+                         units=units or config.mtf_units,
+                         labels=labels or config.mtf_labels)
+
+    @staticmethod
+    def from_psf(psf, unwrap=True):
+        """Generate a PTF from a PSF.
+
+        Parameters
+        ----------
+        psf : `PSF`
+            PSF to compute an MTF from
+        unwrap : `bool,` optional
+            whether to unwrap the phase
+
+        Returns
+        -------
+        `PTF`
+            A new PTF instance
+
+        """
+        # some code duplication here:
+        # MTF is a hot code path, and the drop of a shift operation
+        # improves performance in exchange for sharing some code with
+        # the OTF class definition
+
+        # repeat this duplication in PTF for symmetry more than performance
+        dat = e.fft.fftshift(e.fft.fft2(e.fft.ifftshift(psf.data)))
+        x = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_x)  # 1e3 for microns => mm
+        y = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_y)
+        return PTF.from_ftdata(ft=dat, x=x, y=y)
+
+    @staticmethod
+    def from_pupil(pupil, efl, Q=2, unwrap=True):
+        """Generate a PTF from a pupil, given a focal length (propagation distance).
+
+        Parameters
+        ----------
+        pupil : `Pupil`
+            A pupil to propagate to a PSF, and convert to an MTF
+        efl : `float`
+            Effective focal length or propagation distance of the wavefunction
+        Q : `float`, optional
+            ratio of pupil sample count to PSF sample count.  Q > 2 satisfies nyquist
+        unwrap : `bool,` optional
+            whether to unwrap the phase
+
+        Returns
+        -------
+        `PTF`
+            A new PTF instance
+
+        """
+        psf = PSF.from_pupil(pupil, efl=efl, Q=Q)
+        return PTF.from_psf(psf, unwrap=unwrap)
+
+    @staticmethod
+    def from_ftdata(ft, x, y, unwrap=True):
+        """Generate a PTF from the Fourier transform of a PSF.
+
+        Parameters
+        ----------
+        ft : `numpy.ndarray`
+            2D ndarray of Fourier transform data
+        x : `numpy.ndarray`
+            1D ndarray of x (axis 1) coordinates
+        y : `numpy.ndarray`
+            1D ndarray of y (axis 0) coordinates
+        unwrap : `bool`, optional
+            if True, unwrap phase
+
+        Returns
+        -------
+        `PTF`
+            a new PTF instance
+
+        """
+        ft = e.angle(ft)
+        cy, cx = (int(e.ceil(s / 2)) for s in ft.shape)
+        offset = ft[cy, cx]
+        if offset != 0:
+            ft /= offset
+
+        if unwrap:
+            from skimage import restoration
+            ft = restoration.unwrap_phase(ft)
+        return PTF(ft, x, y)
 
 
 def diffraction_limited_mtf(fno, wavelength, frequencies=None, samples=128):

@@ -4,15 +4,19 @@ import inspect
 
 from scipy import signal, optimize
 
-from .conf import config
-from .mathops import engine as e
+from astropy import units as u
+
+from .conf import config, sanitize_unit, Units
 from ._phase import OpticalPhase
+from ._richdata import RichData
+from .mathops import engine as e
 from .zernike import defocus, zernikefit, FringeZernike
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
-from .coordinates import cart_to_polar, uniform_cart_to_polar
-from .util import share_fig_ax, mean, rms  # NOQA
+from .coordinates import cart_to_polar
+from .util import mean, rms  # NOQA
 from .geometry import mcache
+from .wavelengths import mkwvl, HeNe
 
 
 def fit_plane(x, y, z):
@@ -119,7 +123,7 @@ def make_window(signal, sample_spacing, which=None, alpha=4):
         else:
             # if not circular, square data; use Hanning window
             y, x = (e.hanning(N) for N in s)
-            which = e.outer(x, y)
+            which = e.outer(y, x)
     else:
         if type(which) is str:
             # known window type
@@ -176,14 +180,14 @@ def psd(height, sample_spacing, window=None):
     return ux, uy, psd
 
 
-def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
+def bandlimited_rms(x, y, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
     """Calculate the bandlimited RMS of a signal from its PSD.
 
     Parameters
     ----------
-    ux : `numpy.ndarray`
+    x : `numpy.ndarray`
         x spatial frequencies
-    uy : `numpy.ndarray`
+    y : `numpy.ndarray`
         y spatial frequencies
     psd : `numpy.ndarray`
         power spectral density
@@ -210,7 +214,7 @@ def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None)
             fhigh = 1 / wllow
 
         if wlhigh is None:
-            fhigh = max(ux[-1], uy[-1])
+            fhigh = max(x[-1], y[-1])
         else:
             flow = 1 / wlhigh
     elif flow is not None or fhigh is not None:
@@ -218,12 +222,12 @@ def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None)
         if flow is None:
             flow = 0
         if fhigh is None:
-            fhigh = max(ux[-1], uy[-1])
+            fhigh = max(x[-1], y[-1])
     else:
         raise ValueError('must specify either period (wavelength) or frequency')
 
-    ux2, uy2 = e.meshgrid(ux, uy)
-    r, p = cart_to_polar(ux2, uy2)
+    x2, y2 = e.meshgrid(x, y)
+    r, p = cart_to_polar(x2, y2)
 
     if flow is None:
         warnings.warn('no lower limit given, using 0 for low frequency')
@@ -236,8 +240,8 @@ def bandlimited_rms(ux, uy, psd, wllow=None, wlhigh=None, flow=None, fhigh=None)
     work = psd.copy()
     work[r < flow] = 0
     work[r > fhigh] = 0
-    first = e.trapz(work, uy, axis=0)
-    second = e.trapz(first, ux, axis=0)
+    first = e.trapz(work, y, axis=0)
+    second = e.trapz(first, x, axis=0)
     return e.sqrt(second)
 
 
@@ -462,34 +466,66 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
         return optres.x
 
 
+class PSD(RichData):
+    _default_twosided = False
+    _data_attr = 'data'
+    _data_type = 'image'
+    _slice_xscale = 'log'
+    _slice_yscale = 'log'
+
+    def __init__(self, x, y, data, units=None, labels=None):
+        """Initialize a new BasicData instance.
+
+        Parameters
+        ----------
+        x : `numpy.ndarray`
+            x unit axis
+        y : `numpy.ndarray`
+            y unit axis
+        data : `numpy.ndarray`
+            data
+        units : `Units`
+            units instance, can be shared
+        labels : `Labels`
+            labels instance, can be shared
+
+        Returns
+        -------
+        RichData
+            the instance
+
+        """
+        if labels is None:
+            labels = config.psd_labels
+
+        super().__init__(x=x, y=y, data=data, units=units, labels=labels)
+
+
 class Interferogram(OpticalPhase):
     """Class containing logic and data for working with interferometric data."""
 
-    def __init__(self, phase, intensity=None, x=None, y=None, scale='px', phase_unit='nm', meta=None):
+    def __init__(self, phase, x, y, intensity=None, units=None, labels=None, meta=None):
         """Create a new Interferogram instance.
 
         Parameters
         ----------
         phase : `numpy.ndarray`
-            phase values, units of phase_unit
-        intensity : `numpy.ndarray`, optional
-            intensity array from interferometer camera
+            phase values, units of units.z
         x : `numpy.ndarray`, optional
             x (axis 1) values, units of scale
         y : `numpy.ndarray`, optional
             y (axis 0) values, units of scale
-        phase_unit : `str`, optional
-            unit to use to represent phase
+        intensity : `numpy.ndarray`, optional
+            intensity array from interferometer camera
+        units : `Units`
+            units instance, can be shared
+        labels : `Labels`
+            labels instance, can be shared
         meta : `dict`
             dictionary of any metadata.  if a wavelength or Wavelength key is
             present, this will also be stored in self.wavelength
 
         """
-        if x is None:  # assume x, y given together
-            x = e.arange(phase.shape[1], dtype=config.precision)
-            y = e.arange(phase.shape[0], dtype=config.precision)
-            scale = 'px'
-            self.lateral_res = 1
 
         if meta:
             wvl = meta.get('wavelength', None)
@@ -501,18 +537,18 @@ class Interferogram(OpticalPhase):
         else:
             wvl = 1
 
-        super().__init__(x=x, y=y, phase=phase,
-                         wavelength=wvl, phase_unit=phase_unit,
-                         spatial_unit=scale)
+        if units is None:
+            units = config.phase_units
 
-        self.xaxis_label = 'X'
-        self.yaxis_label = 'Y'
-        self.zaxis_label = 'Height'
+        if (wvl - units.wavelength.to(u.um)) > 1e-9:  # floating point insensitive comparison
+            units = units.copy()
+            units.wavelength = mkwvl(wvl)
+
+        super().__init__(x=x, y=y, phase=phase,
+                         units=units, labels=config.interferogram_labels)
+
         self.intensity = intensity
         self.meta = meta
-
-        if scale != 'px':
-            self.change_spatial_unit(to=scale, inplace=True)
 
     @property
     def dropout_percentage(self):
@@ -622,6 +658,14 @@ class Interferogram(OpticalPhase):
         cy = (mxy + mny) / 2
         self.x -= cx
         self.y -= cy
+        return self
+
+    def strip_latcal(self):
+        """Strip the lateral calibration and revert to pixels."""
+        self.units = self.units.copy()
+        self.units.x, self.units.y = u.pix, u.pix
+        y, x = (e.arange(s, dtype=config.precision) for s in self.shape)
+        self.x, self.y = x, y
         return self
 
     def remove_piston(self):
@@ -789,7 +833,9 @@ class Interferogram(OpticalPhase):
             modified `Interferogram` instance.
 
         """
-        self.change_spatial_unit(to=unit, inplace=True)  # will be 0..n spatial units
+        unit = sanitize_unit(unit, self.units)
+        self.units = self.units.copy()
+        self.units.x, self.units.y = unit, unit
         # sloppy to do this here...
         self.x *= plate_scale
         self.y *= plate_scale
@@ -852,53 +898,20 @@ class Interferogram(OpticalPhase):
         self.phase[pts_over_nsigma] = e.nan
         return self
 
-    def psd(self):
+    def psd(self, labels=None):
         """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
 
         Returns
         -------
-        x : `numpy.ndarray`
-            ordinate x frequency axis
-        y : `numpy.ndarray`
-            ordinate y frequency axis
-        psd : `numpy.ndarray`
-            power spectral density
+        `RichData`
+            RichData class instance with x, y, data attributes
 
         """
-        return psd(self.phase, self.sample_spacing)
+        ux, uy, psd_ = psd(self.phase, self.sample_spacing)
+        z_unit = self.units.z ** 2 / (self.units.x ** 2)
+        units = Units(x=1/self.units.x, z=z_unit, wavelength=self.units.wavelength)
 
-    def psd_slices(self, x=True, y=True, azavg=True, azmin=False, azmax=False):
-        """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
-
-        Returns
-        -------
-        `dict`
-            with keys x, y, avg.  Each containing a tuple of (unit, psd)
-
-        """
-        xx, yy, _psd = self.psd()
-        lx, ly = len(xx)//2, len(yy)//2
-
-        out = {}
-        if x:
-            out['x'] = (xx[lx:], _psd[ly, lx:])
-
-        if y:
-            out['y'] = (yy[ly:], _psd[ly:, lx])
-
-        if azavg or azmin or azmax:
-            rho, phi, _psdrp = uniform_cart_to_polar(xx, yy, _psd)
-
-        if azavg:
-            out['azavg'] = (rho, _psdrp.mean(axis=0))
-
-        if azmin:
-            out['azmin'] = (rho, _psdrp.min(axis=0))
-
-        if azmax:
-            out['azmax'] = (rho, _psdrp.max(axis=0))
-
-        return out
+        return PSD(x=ux, y=uy, data=psd_, labels=labels, units=units)
 
     def bandlimited_rms(self, wllow=None, wlhigh=None, flow=None, fhigh=None):
         """Calculate the bandlimited RMS of a signal from its PSD.
@@ -920,7 +933,8 @@ class Interferogram(OpticalPhase):
             band-limited RMS value.
 
         """
-        return bandlimited_rms(*self.psd(),
+        psd = self.psd()
+        return bandlimited_rms(x=psd.x, y=psd.y, psd=psd.data,
                                wllow=wllow,
                                wlhigh=wlhigh,
                                flow=flow,
@@ -932,9 +946,9 @@ class Interferogram(OpticalPhase):
         Parameters
         ----------
         wavelength : `float`
-            wavelength of light in microns.
+            wavelength of light in microns
         incident_angle : `float` or `numpy.ndarray`
-            incident angle(s) of light.
+            incident angle(s) of light
 
         Returns
         -------
@@ -942,7 +956,7 @@ class Interferogram(OpticalPhase):
             TIS value.
 
         """
-        if self.spatial_unit != 'μm':
+        if self.units.x != u.um:
             raise ValueError('Use microns for spatial unit when evaluating TIS.')
 
         upper_limit = 1 / wavelength
@@ -950,172 +964,33 @@ class Interferogram(OpticalPhase):
         kernel *= self.bandlimited_rms(upper_limit, None) / wavelength
         return 1 - e.exp(-kernel**2)
 
-    def plot_psd2d(self, axlim=None, clim=(1e-9, 1e2), cmap=config.image_colormap,
-                   interp_method='lanczos', fig=None, ax=None):
-        """Plot the two dimensional PSD.
-
-        Parameters
-        ----------
-        axlim : `float`, optional
-            symmetrical axis limit
-        clim : `tuple`, optional
-            lower, upper limits on color scale
-        cmap : `str`, optional
-            colormap
-        interp_method : `str`, optional
-            method used to interpolate the image, passed directly to matplotlib imshow
-        fig : `matplotlib.figure.Figure`
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`
-            Axis containing the plot
-
-        Returns
-        -------
-        fig : `matplotlib.figure.Figure`
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`
-            Axis containing the plot
-
-        """
-        from matplotlib import colors
-        x, y, psd = self.psd()
-
-        if axlim is None:
-            lims = (None, None)
-        else:
-            lims = (-axlim, axlim)
-
-        fig, ax = share_fig_ax(fig, ax)
-        im = ax.imshow(psd,
-                       extent=[x[0], x[-1], y[0], y[-1]],
-                       origin='lower',
-                       cmap=cmap,
-                       norm=colors.LogNorm(*clim),
-                       interpolation=interp_method)
-
-        ax.set(xlim=lims, xlabel=r'$\nu_x$' + f' [cy/{self.spatial_unit}]',
-               ylim=lims, ylabel=r'$\nu_y$' + f' [cy/{self.spatial_unit}]')
-
-        cb = fig.colorbar(im,
-                          label='PSD [' + self.phase_unit + '²' + f'/(cy/{self.spatial_unit})' + '²]',
-                          ax=ax, fraction=0.046, extend='both')
-        cb.outline.set_edgecolor('k')
-        cb.outline.set_linewidth(0.5)
-
-        return fig, ax
-
-    def plot_psd_slices(self, x=True, y=True, azavg=True, azmin=False, azmax=False,
-                        a=None, b=None, c=None, mode='freq', alpha=1, legend=True,
-                        lw=config.lw, zorder=config.zorder, xlim=None, ylim=None, fig=None, ax=None):
-        """Plot the x, y, and average PSD on a linear x axis.
-
-        Parameters
-        ----------
-        x : `bool`, optional
-            whether to plot the "x" PSD
-        y : `bool`, optional
-            whether to plot the "y" PSD
-        azavg: `bool`, optional
-            whether to plot the azimuthally averaged PSD
-        azmin : `bool`, optional
-            whether to plot the azimuthal minimum PSD
-        azmax : `bool`, optional
-            whether to plot the azimuthal maximum PSD
-        a : `float`, optional
-            a coefficient of Lorentzian PSD model plotted alongside data
-        b : `float`, optional
-            b coefficient of Lorentzian PSD model plotted alongside data
-        c : `float`, optional
-            c coefficient of Lorentzian PSD model plotted alongside data
-        mode : `str`, {'freq', 'period'}
-            x-axis mode, either frequency or period
-        alpha : `float`, optional
-            alpha value for the line(s), passed directly to matplotlib
-        legend : `bool`, optional
-            if True, display the legend
-        lw : `float`, optional
-            linewidth provided directly to matplotlib
-        zorder : `int`, optional
-            zorder provided directly to matplotlib
-        xlim : `tuple`, optional
-            len 2 tuple of low, high x axis limits
-        ylim : `tuple`, optional
-            len 2 tuple of low, high y axis limits
-        fig : `matplotlib.figure.Figure`
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`
-            Axis containing the plot
-
-        Returns
-        -------
-        fig : `matplotlib.figure.Figure`
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`
-            Axis containing the plot
-
-        Notes
-        -----
-        if a, b given but not c, an AB / inverse power model will be used for the PSD.
-        If a, b, c are given the Lorentzian model will be used.
-
-        """
-        data = self.psd_slices(x=x, y=y, azavg=azavg, azmin=azmin, azmax=azmax)
-        keys = list(data.keys())
-        # keys 0 => first item
-        # second 0 => first item in tuple of (unit, value)
-        # 1: => skip the 0 frequency bin
-        r = data[keys[0]][0][1:]
-
-        if mode != 'freq':
-            label = 'Period'
-            unit = self.spatial_unit
-        else:
-            label = 'Frequency'
-            unit = f'cy/{self.spatial_unit}'
-
-        fig, ax = share_fig_ax(fig, ax)
-        for dat in data:
-            ax.loglog(*data[dat], lw=lw, label=dat, alpha=alpha)
-
-        if a is not None:
-            if c is not None:
-                requirement = abc_psd(a=a, b=b, c=c, nu=r)
-            else:
-                requirement = ab_psd(a=a, b=b, nu=r)
-            ax.loglog(r, requirement, c='k', lw=lw*2)
-
-        if mode != 'freq':
-            from matplotlib import pyplot as plt
-            locs, labs = plt.xticks()
-            labs = [str(1/loc) if loc != 0 else str(loc) for loc in locs]
-            plt.xticks(locs, labs)
-            xlim = [1/x if x != 0 else x for x in xlim]
-
-        if legend:
-            ax.legend(title='Slice')
-
-        ax.set(xlim=xlim, xlabel=f'Spatial {label} [{unit}]',
-               ylim=ylim, ylabel=r'PSD [' + f'{self.phase_unit}²/(cy/{self.spatial_unit})²]')
-
-        return fig, ax
-
     def save_zygo_ascii(self, file, high_phase_res=True):
         """Save the interferogram to a Zygo ASCII file.
 
         Parameters
         ----------
         file : Path_like, `str`, or File_like
-            where to save to.
+            where to save to
 
         """
-        phase = self.change_phase_unit(to='waves', inplace=False)
+        phase = self.change_z_unit(to='waves', inplace=False)
         write_zygo_ascii(file, phase=phase,
                          x=self.x, y=self.y,
-                         intensity=None, wavelength=self.wavelength,
+                         intensity=None, wavelength=self.units.wavelength.to(u.um),
                          high_phase_res=high_phase_res)
 
+    def __str__(self):
+        if self.units.x != u.pix:
+            size_part_2 = f', ({self.shape[1]}x{self.shape[0]}) px'
+        else:
+            size_part_2 = ''
+        return inspect.cleandoc(f"""Interferogram with:
+                Units: {self.units}
+                Size: ({self.diameter_x:.3f}x{self.diameter_y:.3f}) {self.spatial_unit}{size_part_2}
+                {self.labels._z}: {self.pv:.3f} PV, {self.rms:.3f} RMS [{self.units.z}]""")
+
     @staticmethod
-    def from_zygo_dat(path, multi_intensity_action='first', scale='mm'):
+    def from_zygo_dat(path, multi_intensity_action='first'):
         """Create a new interferogram from a zygo dat file.
 
         Parameters
@@ -1143,19 +1018,18 @@ class Interferogram(OpticalPhase):
             res = zydat['meta']['lateral_resolution']  # meters
 
         phase = zydat['phase']
-        if res == 0.0:
-            res = 1
-            scale = 'px'
 
-        if scale != 'px':
-            _scale = 'm'
-        else:
-            _scale = 'px'
-
+        x = e.arange(phase.shape[1], dtype=config.precision)
+        y = e.arange(phase.shape[0], dtype=config.precision)
         i = Interferogram(phase=phase, intensity=zydat['intensity'],
-                          x=e.arange(phase.shape[1]) * res, y=e.arange(phase.shape[0]) * res,
-                          scale=_scale, meta=zydat['meta'])
-        return i.change_spatial_unit(to=scale.lower(), inplace=True)
+                          x=x, y=y, meta=zydat['meta'])
+
+        if res != 0:
+            i.latcal(1e3 * res, u.mm)
+        else:
+            i.strip_latcal()
+
+        return i
 
     @staticmethod  # NOQA
     def render_from_psd(size, samples, rms=None,
@@ -1189,4 +1063,4 @@ class Interferogram(OpticalPhase):
         """
         x, y, z = render_synthetic_surface(size=size, samples=samples, rms=rms,
                                            mask=mask, psd_fcn=psd_fcn, **psd_fcn_kwargs)
-        return Interferogram(phase=z, x=x, y=y, scale='mm', phase_unit=phase_unit)
+        return Interferogram(phase=z, x=x, y=y, units=Units(x=u.mm, z=getattr(u, phase_unit), wavelength=HeNe))

@@ -92,6 +92,32 @@ else:
     jinc = np.vectorize(jinc)
 
 
+def sign(x):
+    """Sign of a number.  Note only works for single values, not arrays."""
+    return -1 if x < 0 else 1
+
+
+def kronecker(i, j):
+    """Kronecker delta function, 1 if i = j, otherwise 0."""
+    return 1 if i == j else 0
+
+
+def gamma(n, m):
+    """Gamma function."""
+    if n == 1 and m == 2:
+        return 3 / 8
+    elif n == 1 and m > 2:
+        numerator = 2 * m + 1
+        denominator = 2 * (m - 1)
+        coef = numerator / denominator
+        return coef * gamma(1, m)
+    else:
+        num = (n + 1) * (2 * m + 2 * n - 1)
+        den = (m + n - 2) * (2 * n + 1)
+        coef = num / den
+        return coef * gamma(n - 1, m)
+
+
 class MathEngine:
     """An engine allowing an interchangeable backend for mathematical functions."""
     def __init__(self, source=np):

@@ -14,7 +14,7 @@ prysm is on pypi:
 pip install prysm
 ```
 
-prysm requires only [numpy](http://www.numpy.org/) and [scipy](https://www.scipy.org/).
+prysm requires only [numpy](http://www.numpy.org/), [scipy](https://www.scipy.org/), and [astropy](https://www.astropy.org/).
 
 ### Optional Dependencies
 

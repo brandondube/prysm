@@ -2,18 +2,19 @@
 import types
 
 from .mathops import engine as e
-from ._basicdata import BasicData
+from ._richdata import RichData
 from .coordinates import resample_2d_complex
 from .conf import config
 from .fttools import forward_ft_unit, pad2d
-from .util import share_fig_ax
+from .plotting import share_fig_ax
 
 
-class Convolvable(BasicData):
+class Convolvable(RichData):
     """A base class for convolvable objects to inherit from."""
     _data_attr = 'data'
+    _data_type = 'image'
 
-    def __init__(self, x, y, data, has_analytic_ft=False):
+    def __init__(self, x, y, data, has_analytic_ft=False, units=None, labels=None):
         """Create a new Convolvable object.
 
         Parameters
@@ -27,9 +28,15 @@ class Convolvable(BasicData):
         has_analytic_ft : `bool`, optional
             Whether this convolvable overrides self.analytic_ft, and has a known
             analytical fourier tansform
+        units : `Units`
+            units to use.  If None, will use config.convolvable_units
+        labels : `Labels`
+            labels to use.  If None, will use config.convolvable_labels
 
         """
-        super().__init__(x=x, y=y, data=data)
+        super().__init__(x=x, y=y, data=data,
+                         units=units or config.image_units,
+                         labels=labels or config.convolvable_labels)
         self.has_analytic_ft = has_analytic_ft
 
     def __str__(self):
@@ -50,47 +57,6 @@ class Convolvable(BasicData):
     def support(self):
         """Width of the domain."""
         return max((self.support_x, self.support_y))
-
-    def plot_slice_xy(self, axlim=20, lw=config.lw, zorder=config.zorder, fig=None, ax=None):
-        """Create a plot of slices through the X and Y axes of the `PSF`.
-
-        Parameters
-        ----------
-        axlim : `float` or `int`, optional
-            axis limits, in microns
-        lw : `float`, optional
-            line width
-        zorder : `int`, optional
-            zorder
-        fig : `matplotlib.figure.Figure`, optional
-            Figure to draw plot in
-        ax : `matplotlib.axes.Axis`
-            Axis to draw plot in
-
-        Returns
-        -------
-        fig : `matplotlib.figure.Figure`, optional
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`, optional
-            Axis containing the plot
-
-        """
-        ux, x = self.slice_x
-        uy, y = self.slice_y
-
-        label_str = 'Normalized Intensity [a.u.]'
-        lims = (0, 1)
-
-        fig, ax = share_fig_ax(fig, ax)
-
-        ax.plot(ux, x, label='X', lw=lw, zorder=zorder)
-        ax.plot(uy, y, label='Y', lw=lw, zorder=zorder)
-        ax.set(xlabel=f'Image Plane [μm]',
-               ylabel=label_str,
-               xlim=(-axlim, axlim),
-               ylim=lims)
-        ax.legend(title='Slice', loc='upper right')
-        return fig, ax
 
     def conv(self, other):
         """Convolves this convolvable with another.
@@ -430,8 +396,8 @@ class ConvolutionEngine:
             sample_spacing = min(self.c1.sample_spacing, self.c2.sample_spacing)
 
         self.sample_spacing = sample_spacing
-        self.nsamples_x = int(e.floor(((support_x / sample_spacing) + 1) * self.Q))
-        self.nsamples_y = int(e.floor(((support_y / sample_spacing) + 1) * self.Q))
+        self.nsamples_x = int(e.floor(round(((support_x / sample_spacing) + 1) * self.Q, 6)))
+        self.nsamples_y = int(e.floor(round(((support_y / sample_spacing) + 1) * self.Q, 6)))
         self.kspace_x = forward_ft_unit(sample_spacing, self.nsamples_x, True)
         self.kspace_y = forward_ft_unit(sample_spacing, self.nsamples_y, True)
         return self

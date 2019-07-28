@@ -1,6 +1,6 @@
 """Numerical optical propagation."""
 from .mathops import engine as e
-from ._basicdata import BasicData
+from ._richdata import RichData
 from .fttools import pad2d
 
 
@@ -122,7 +122,7 @@ def psf_sample_to_pupil_sample(psf_sample, samples, wavelength, efl):
     return (wavelength * efl * 1e3) / (psf_sample * samples)
 
 
-class Wavefront(BasicData):
+class Wavefront(RichData):
     """(Complex) representation of a wavefront."""
     _data_attr = 'fcn'
 

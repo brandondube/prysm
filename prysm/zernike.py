@@ -3,10 +3,11 @@ from collections import defaultdict
 from functools import partial
 
 from .conf import config
-from .mathops import engine as e, jit, vectorize, fuse
+from .mathops import engine as e, jit, vectorize, fuse, kronecker, sign
 from .pupil import Pupil
 from .coordinates import make_rho_phi_grid, cart_to_polar
-from .util import rms, share_fig_ax, sort_xy
+from .util import rms, sort_xy
+from .plotting import share_fig_ax
 
 # See JCW - http://wp.optics.arizona.edu/jcwyant/wp-content/uploads/sites/13/2016/08/ZernikePolynomialsForTheWeb.pdf
 
@@ -43,12 +44,12 @@ def primary_astigmatism_45(rho, phi):
 
 def primary_coma_y(rho, phi):
     """Zernike primary coma Y."""
-    return (-2 * rho + 3 * rho**3) * e.cos(phi)
+    return (3 * rho**3 - 2 * rho) * e.cos(phi)
 
 
 def primary_coma_x(rho, phi):
     """Zernike primary coma X."""
-    return (-2 * rho + 3 * rho**3) * e.sin(phi)
+    return (3 * rho**3 - 2 * rho) * e.sin(phi)
 
 
 def primary_spherical(rho, phi):
@@ -68,22 +69,22 @@ def primary_trefoil_x(rho, phi):
 
 def secondary_astigmatism_00(rho, phi):
     """Zernike secondary astigmatism 0°."""
-    return (-3 * rho**2 + 4 * rho**4) * e.cos(2 * phi)
+    return (4 * rho**4 - 3 * rho**2) * e.cos(2 * phi)
 
 
 def secondary_astigmatism_45(rho, phi):
     """Zernike secondary astigmatism 45°."""
-    return (-3 * rho**2 + 4 * rho**4) * e.sin(2 * phi)
+    return (4 * rho**4 - 3 * rho**2) * e.sin(2 * phi)
 
 
 def secondary_coma_y(rho, phi):
     """Zernike secondary coma Y."""
-    return (3 * rho - 12 * rho**3 + 10 * rho**5) * e.cos(phi)
+    return (10 * rho**5 - 12 * rho**3 + 3 * rho) * e.cos(phi)
 
 
 def secondary_coma_x(rho, phi):
     """Zernike secondary coma X."""
-    return (3 * rho - 12 * rho**3 + 10 * rho**5) * e.sin(phi)
+    return (10 * rho**5 - 12 * rho**3 + 3 * rho) * e.sin(phi)
 
 
 def secondary_spherical(rho, phi):
@@ -113,22 +114,22 @@ def secondary_trefoil_x(rho, phi):
 
 def tertiary_astigmatism_00(rho, phi):
     """Zernike tertiary astigmatism 0°."""
-    return (6 * rho**2 - 20 * rho**4 + 15 * rho**6) * e.cos(2 * phi)
+    return (15 * rho**6 - 20 * rho**4 + 6 * rho**2) * e.cos(2 * phi)
 
 
 def tertiary_astigmatism_45(rho, phi):
     """Zernike tertiary astigmatism 45°."""
-    return (6 * rho**2 - 20 * rho**4 + 15 * rho**6) * e.sin(2 * phi)
+    return (15 * rho**6 - 20 * rho**4 + 6 * rho**2) * e.sin(2 * phi)
 
 
 def tertiary_coma_y(rho, phi):
     """Zernike tertiary coma Y."""
-    return (-4 * rho + 30 * rho**3 - 60 * rho**5 + 35 * rho**7) * e.cos(phi)
+    return (35 * rho**7 - 60 * rho**5 + 30 * rho**3 - 4 * rho) * e.cos(phi)
 
 
 def tertiary_coma_x(rho, phi):
     """Zernike tertiary coma X."""
-    return (-4 * rho + 30 * rho**3 - 60 * rho**5 + 35 * rho**7) * e.sin(phi)
+    return (35 * rho**7 - 60 * rho**5 + 30 * rho**3 - 4 * rho) * e.sin(phi)
 
 
 def tertiary_spherical(rho, phi):
@@ -158,33 +159,33 @@ def secondary_tetrafoil_x(rho, phi):
 
 def tertiary_trefoil_y(rho, phi):
     """Zernike tertiary trefoil Y."""
-    return (10 * rho**3 - 30 * rho**5 + 21 * rho**7) * e.cos(3 * phi)
+    return (21 * rho**7 - 30 * rho**5 + 10 * rho**3) * e.cos(3 * phi)
 
 
 def tertiary_trefoil_x(rho, phi):
     """Zernike tertiary trefoil X."""
-    return (10 * rho**3 - 30 * rho**5 + 21 * rho**7) * e.cos(3 * phi)
+    return (21 * rho**7 - 30 * rho**5 + 10 * rho**3) * e.cos(3 * phi)
 
 
 def quaternary_astigmatism_00(rho, phi):
     """Zernike quaternary astigmatism 0°."""
-    return (10 * rho**2 - 30 * rho**4 + 21 * rho**6) * e.cos(2 * phi)
+    return (21 * rho**6 - 30 * rho**4 + 10 * rho**2) * e.cos(2 * phi)
 
 
 def quaternary_astigmatism_45(rho, phi):
     """Zernike quaternary astigmatism 45°."""
-    return (10 * rho**2 - 30 * rho**4 + 21 * rho**6) * e.sin(2 * phi)
+    return (21 * rho**6 - 30 * rho**4 + 10 * rho**2) * e.sin(2 * phi)
 
 
 def quaternary_coma_y(rho, phi):
     """Zernike quaternary coma Y."""
-    return (5 * rho - 60 * rho**3 + 210 * rho**5 - 280 * rho**7 + 126 * rho**9)\
+    return (126 * rho**9 - 280 * rho**7 + 210 * rho**5 - 60 * rho**3 + 5 * rho)\
         * e.cos(phi)
 
 
 def quaternary_coma_x(rho, phi):
     """Zernike quaternary coma X."""
-    return (5 * rho - 60 * rho**3 + 210 * rho**5 - 280 * rho**7 + 126 * rho**9)\
+    return (126 * rho**9 - 280 * rho**7 + 210 * rho**5 - 60 * rho**3 + 5 * rho)\
         * e.sin(phi)
 
 
@@ -618,10 +619,40 @@ zernikefuncs.update({
 })
 
 
+def zernike_norm(n, m):
+    """Norm of a Zernike polynomial with n, m indexing."""
+    return e.sqrt((2 * (n + 1)) / (1 + kronecker(m, 0)))
+
+
+def n_m_to_fringe(n, m):
+    """Convert (n,m) two term index to Fringe index."""
+    term1 = (1 + (n + abs(m))/2)**2
+    term2 = 2 * abs(m)
+    term3 = (1 + sign(m)) / 2
+    return int(term1 - term2 + term3)
+
+
+def n_m_to_ansi_j(n, m):
+    """Convert (n,m) two term index to Noll index."""
+    return int((n * (n + 2) + m) / 2)
+
+
+def ansi_j_to_n_m(idx):
+    """Convert Noll to (n,m) two-term index."""
+    n = int(e.ceil((-3 + e.sqrt(9 + 8*idx))/2))
+    m = 2 * idx - n * (n + 2)
+    return n, m
+
+
+def zero_separation(n):
+    """Zero separation in normalized r based on radial order n."""
+    return 1 / n ** 2
+
+
 class ZCache(object):
     """Cache of Zernike terms evaluated over the unit circle."""
     def __init__(self):
-        """Create a new FZCache instance."""
+        """Create a new ZCache instance."""
         self.normed = defaultdict(dict)
         self.regular = defaultdict(dict)
 
@@ -709,10 +740,8 @@ class BaseZernike(Pupil):
 
         Returns
         -------
-        self.phase : `numpy.ndarray`
-            arrays containing the phase associated with the pupil
-        self.fcn : `numpy.ndarray`
-            array containing the wavefunction of the pupil plane
+        self : `BaseZernike`
+            this Zernike instance
 
         """
         # build a coordinate system over which to evaluate this function
@@ -800,7 +829,7 @@ class BaseZernike(Pupil):
         coefs = e.asarray(self.coefs)
         idxs = e.asarray(range(len(coefs))) + self.base
         names = self.names
-        lab = f'{self.zaxis_label} [{self.phase_unit}]'
+        lab = self.labels.z(self.units)
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         if orientation.lower() in ('h', 'horizontal'):
             vmin, vmax = coefs.min(), coefs.max()
@@ -867,7 +896,7 @@ class BaseZernike(Pupil):
             mags, names = sort_xy(mags, names)
             mags = list(reversed(mags))
             names = list(reversed(names))
-        lab = f'{self.zaxis_label} [{self.phase_unit}]'
+        lab = self.labels.z(self.units)
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         fig, ax = share_fig_ax(fig, ax)
         if orientation.lower() in ('h', 'horizontal'):
@@ -915,7 +944,7 @@ class BaseZernike(Pupil):
 
         fig, ax = share_fig_ax(fig, ax)
 
-        lab = f'{self.zaxis_label} [{self.phase_unit}]'
+        lab = self.labels.z(self.units)
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         if orientation.lower() in ('h', 'horizontal'):
             ax.bar(idxs, magnitudes, zorder=zorder)
@@ -946,7 +975,6 @@ class BaseZernike(Pupil):
         else:
             self.coefs = self.coefs[:n]
             self.build()
-            self.mask(self._mask, self.mask_target)
             return self
 
     def truncate_topn(self, n):
@@ -971,7 +999,6 @@ class BaseZernike(Pupil):
 
         self.coefs = new_coefs
         self.build()
-        self.mask(self._mask, self.mask_target)
         return self
 
     def __str__(self):
@@ -1000,8 +1027,8 @@ class BaseZernike(Pupil):
 
             strs.append(' '.join([_, name]))
         body = '\n\t'.join(strs)
-
-        footer = f'\n\t{self.pv:.3f} PV, {self.rms:.3f} RMS [{self.phase_unit}]'
+        unit_str = f'{self.labels.unit_prefix}{self.units.z}{self.labels.unit_suffix}'
+        footer = f'\n\t{self.pv:.3f} PV, {self.rms:.3f} RMS {unit_str}'
         return f'{header}{body}{footer}'
 
 

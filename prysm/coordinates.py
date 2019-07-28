@@ -74,8 +74,8 @@ def uniform_cart_to_polar(x, y, data):
 
     """
     # create a set of polar coordinates to interpolate onto
-    xmin, xmax = min(x), max(x)
-    ymin, ymax = min(y), max(y)
+    xmin, xmax = x.min(), x.max()
+    ymin, ymax = y.min(), y.max()
 
     _max = max(abs(e.asarray([xmin, xmax, ymin, ymax])))
 

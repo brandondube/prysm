@@ -1,6 +1,5 @@
 """File readers for various commercial instruments."""
 from io import StringIO, IOBase
-import os
 import re
 import struct
 import codecs

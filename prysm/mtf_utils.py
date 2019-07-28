@@ -4,7 +4,7 @@ import operator
 from scipy.interpolate import griddata, RegularGridInterpolator as RGI
 
 from .mathops import engine as e
-from .util import share_fig_ax
+from .plotting import share_fig_ax
 from .io import read_trioptics_mtf_vs_field, read_trioptics_mtfvfvf
 
 
@@ -293,8 +293,8 @@ class MTFvFvF(object):
         """
         # copy the dataframe for manipulation
         df = df.copy()
-        df.Fields = df.Field.round(4)
-        df.Focus = df.Focus.round(6)
+        df['Fields'] = df.Field.round(4)
+        df['Focus'] = df.Focus.round(6)
         sorted_df = df.sort_values(by=['Focus', 'Field', 'Freq'])
         T = sorted_df[sorted_df.Azimuth == 'Tan']
         S = sorted_df[sorted_df.Azimuth == 'Sag']

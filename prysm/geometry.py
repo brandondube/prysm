@@ -5,7 +5,25 @@ from scipy.spatial import Delaunay
 
 from .conf import config
 from .mathops import engine as e
-from .coordinates import make_rho_phi_grid
+from .coordinates import make_rho_phi_grid, cart_to_polar, polar_to_cart
+
+
+def mask_cleaner(mask_or_str_or_tuple, samples):
+    if mask_or_str_or_tuple is None:
+        return None
+    elif (
+            not isinstance(mask_or_str_or_tuple, str) and
+            not isinstance(mask_or_str_or_tuple, (tuple, list))):
+        # array, just return it
+        return mask_or_str_or_tuple
+    elif isinstance(mask_or_str_or_tuple, str):
+        # name with radius=1
+        return mcache(mask_or_str_or_tuple, samples)
+    elif isinstance(mask_or_str_or_tuple, (tuple, list)):
+        type_, radius = mask_or_str_or_tuple
+        return mcache(type_, samples, radius)
+    else:
+        raise ValueError('badly formatted mask, string, or tuple')
 
 
 class MaskCache(object):
@@ -531,6 +549,65 @@ def generate_vertices(sides, radius=1):
         pts.append((int(x), int(y)))
 
     return e.asarray(pts)
+
+
+def generate_spider(vanes, width, rot_offset=0, arydiam=1, samples=128):
+    """Generate the mask for a spider
+
+    Parameters
+    ----------
+    vanes : `int`
+        number of spider vanes
+    width : `float`
+        width of the vanes in array units, i.e. a width=1/128 spider with
+        arydiam=1 and samples=128 will be 1 pixel wide
+    rot_offset : `float`, optional
+        rotational offset of the vanes, clockwise
+    arydiam : `float`, optional
+        array diameter
+    samples : `int`, optional
+        number of samples in the square output array
+
+    Returns
+    -------
+    `numpy.ndarray`
+        array, 0 inside the spider and 1 outside
+
+    """
+    # generate the basic grid
+    width /= 2
+    x = y = e.linspace(-arydiam / 2, arydiam / 2, samples)
+    xx, yy = e.meshgrid(x, y)
+    r, p = cart_to_polar(xx, yy)
+
+    if rot_offset != 0:
+        rot_offset = e.radians(rot_offset)
+        p = p - rot_offset
+    pp = p.copy()
+
+    # compute some constants
+    rotation = e.radians(360 / vanes)
+
+    # initialize a blank mask
+    mask = e.zeros((samples, samples))
+    for multiple in range(vanes):
+        # iterate through the vanes and generate a mask for each
+        # adding it to the initialized mask
+        offset = rotation * multiple
+        if offset != 0:
+            pp = p + offset
+        else:
+            pp = p
+
+        xxx, yyy = polar_to_cart(r, pp)
+        mask_ = (xxx > 0) & (abs(yyy) < width)
+        mask += mask_
+
+    # clamp the values to zero or unity
+    # and invert the max
+    mask[mask > 1] = 1
+    mask = 1 - mask
+    return mask
 
 
 shapes = {

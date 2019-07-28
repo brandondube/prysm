@@ -1,12 +1,14 @@
 """Unit tests for the physics of prysm."""
-import os
 from itertools import product
 
 import numpy as np
 
+from astropy import units as u
+
 import pytest
 
-from prysm import Pupil, PSF, MTF, FringeZernike
+from prysm.wavelengths import mkwvl
+from prysm import Pupil, PSF, MTF, FringeZernike, Units
 from prysm.psf import airydisk
 from prysm.otf import diffraction_limited_mtf
 
@@ -22,11 +24,12 @@ TEST_PARAMETERS = [
 def test_diffprop_matches_airydisk(efl, epd, wvl):
     fno = efl / epd
 
-    p = Pupil(wavelength=wvl, dia=epd)
+    p = Pupil(dia=epd, units=Units(u.mm, u.nm, wavelength=mkwvl(wvl, u.um)))
     psf = PSF.from_pupil(p, efl, Q=3)  # use Q=3 not Q=4 for improved accuracy
-    u, sx = psf.slice_x
-    u, sy = psf.slice_y
-    analytic = airydisk(u, fno, wvl)
+    s = psf.slices()
+    u_, sx = s.x
+    u_, sy = s.y
+    analytic = airydisk(u_, fno, wvl)
     assert np.allclose(sx, analytic, atol=PRECISION)
     assert np.allclose(sy, analytic, atol=PRECISION)
 
@@ -34,16 +37,17 @@ def test_diffprop_matches_airydisk(efl, epd, wvl):
 @pytest.mark.parametrize('efl, epd, wvl', TEST_PARAMETERS)
 def test_diffprop_matches_analyticmtf(efl, epd, wvl):
     fno = efl / epd
-    p = Pupil(wavelength=wvl, dia=epd)
+    p = Pupil(dia=epd, units=Units(u.mm, u.nm, wavelength=mkwvl(wvl, u.um)))
     psf = PSF.from_pupil(p, efl)
     mtf = MTF.from_psf(psf)
-    u, t = mtf.tan
-    uu, s = mtf.sag
+    s = mtf.slices()
+    u_, x = s.x
+    u__, y = s.y
 
-    analytic_1 = diffraction_limited_mtf(fno, wvl, frequencies=u)
-    analytic_2 = diffraction_limited_mtf(fno, wvl, frequencies=uu)
-    assert np.allclose(analytic_1, t, atol=PRECISION)
-    assert np.allclose(analytic_2, s, atol=PRECISION)
+    analytic_1 = diffraction_limited_mtf(fno, wvl, frequencies=u_)
+    analytic_2 = diffraction_limited_mtf(fno, wvl, frequencies=u__)
+    assert np.allclose(analytic_1, x, atol=PRECISION)
+    assert np.allclose(analytic_2, y, atol=PRECISION)
 
 
 def test_array_orientation_consistency_tilt():
@@ -54,7 +58,7 @@ def test_array_orientation_consistency_tilt():
         a shift in the +y direction.
     """
     samples = 128
-    p = FringeZernike(Z2=1, base=1, samples=samples)
+    p = FringeZernike(Z2=1000, base=1, samples=samples)
     ps = PSF.from_pupil(p, 1)
     idx_y, idx_x = np.unravel_index(ps.data.argmax(), ps.data.shape)  # row-major y, x
     assert idx_x == ps.center_x
