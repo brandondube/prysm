@@ -201,7 +201,7 @@ class RichData:
 
         """
         if self.interpf_2d is None:
-            self.interpf_2d = interpolate.RegularGridInterpolator((self.x, self.y), self.data)
+            self.interpf_2d = interpolate.RegularGridInterpolator((self.y, self.x), getattr(self, self._data_attr))
 
         return self.interpf_2d
 
@@ -266,7 +266,7 @@ class RichData:
         self._make_interp_function_2d()
 
         x, y = fix_interp_pair(x, y)
-        return self.interpf_2d((x, y), method='linear')
+        return self.interpf_2d((y, x), method='linear')
 
     def exact_x(self, x):
         """Return data at an exact x coordinate along the y=0 axis.
