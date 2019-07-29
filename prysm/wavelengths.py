@@ -20,3 +20,19 @@ XeCl = mkwvl(308, u.nm)
 KrF = mkwvl(248, u.nm)
 KrCl = mkwvl(222, u.nm)
 ArF = mkwvl(193, u.nm)
+
+__all__ = [
+    'CO2',
+    'NdYAP',
+    'NdYAG',
+    'InGaAs',
+    'Ruby',
+    'HeNe',
+    'Cu',
+    'XeF',
+    'XeCl',
+    'KrF',
+    'KrCl',
+    'ArF',
+    'mkwvl',
+]

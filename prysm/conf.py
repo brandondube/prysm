@@ -103,16 +103,19 @@ class Units:
     def copy(self):
         return copy.deepcopy(self)
 
+    def __str__(self):
+        wvl_str = ', λ = ' + str(self.wavelength.represents) if self.wavelength is not None else ''
+        return f'Units: x = {self.x}, y = {self.y}, z = {self.z}{wvl_str}'
+
 
 class Labels:
     """Labels holder for data instances."""
     def __init__(self, xy_base, z,
-                 xy_additions, xy_addition_side='right',
+                 xy_additions=['X', 'Y'], xy_addition_side='right',
                  addition_joiner=' ',
                  unit_prefix='[',
                  unit_suffix=']',
-                 unit_joiner=' ',
-                 show_units=True):
+                 unit_joiner=' '):
         """Create a new Labels instance
 
         Parameters
@@ -133,14 +136,12 @@ class Labels:
             suffix used to surround the unit text
         unit_joiner : `str`, optional
             text used to combine the base label and the unit
-        show_units : `bool`, optional
-            whether to print units
         """
         self.xy_base, self._z = xy_base, z
         self.xy_additions, self.xy_addition_side = xy_additions, xy_addition_side
         self.addition_joiner = addition_joiner
         self.unit_prefix, self.unit_suffix = unit_prefix, unit_suffix
-        self.unit_joiner, self.show_units = unit_joiner, show_units
+        self.unit_joiner = unit_joiner
 
     def _label_factory(self, label, units):
         """Factory method to produce complex labels.
@@ -171,9 +172,11 @@ class Labels:
         else:
             label_ = self._z
 
-        unit_text = ''.join([self.unit_prefix,
-                             format_unit(getattr(units, label), config.unit_format),
-                             self.unit_suffix])
+        unit_text = ''
+        if config.show_units:
+            unit_text = unit_text.join([self.unit_prefix,
+                                       format_unit(getattr(units, label), config.unit_format),
+                                       self.unit_suffix])
         label_ = self.unit_joiner.join([label_, unit_text])
         return label_
 
