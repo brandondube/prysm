@@ -633,7 +633,6 @@ class Slices:
         fig, ax = share_fig_ax(fig, ax)
 
         for slice_, alpha, lw, zorder in zip(slices, alpha, lw, zorder):
-            print(slice_)
             u, v = getattr(self, slice_)
             if invert_x:
                 u, v = safely_invert_x(u, v)
