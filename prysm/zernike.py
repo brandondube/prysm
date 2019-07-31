@@ -6,7 +6,7 @@ from .conf import config
 from .mathops import engine as e, jit, vectorize, fuse, kronecker, sign
 from .pupil import Pupil
 from .coordinates import make_rho_phi_grid, cart_to_polar
-from .util import rms, sort_xy
+from .util import rms, sort_xy, is_odd
 from .plotting import share_fig_ax
 
 # See JCW - http://wp.optics.arizona.edu/jcwyant/wp-content/uploads/sites/13/2016/08/ZernikePolynomialsForTheWeb.pdf
@@ -633,14 +633,46 @@ def n_m_to_fringe(n, m):
 
 
 def n_m_to_ansi_j(n, m):
-    """Convert (n,m) two term index to Noll index."""
+    """Convert (n,m) two term index to ANSI single term index."""
     return int((n * (n + 2) + m) / 2)
 
 
 def ansi_j_to_n_m(idx):
-    """Convert Noll to (n,m) two-term index."""
+    """Convert ANSI single term to (n,m) two-term index."""
     n = int(e.ceil((-3 + e.sqrt(9 + 8*idx))/2))
     m = 2 * idx - n * (n + 2)
+    return n, m
+
+
+def noll_to_n_m(idx):
+    """Convert Noll Z to (n, m) two-term index."""
+    # I don't really understand this code, the math is inspired by POPPY
+    # azimuthal order
+    n = int(e.ceil((-1 + e.sqrt(1 + 8 * idx)) / 2) - 1)
+    if n == 0:
+        m = 0
+    else:
+        # this is sort of a rising factorial to use that term incorrectly
+        nseries = (n + 1) * (n + 2) / 2
+
+        res = idx - nseries - 1
+
+        if is_odd(idx):
+            sign = -1
+        else:
+            sign = 1
+
+        if is_odd(n):
+            ms = [1, 1]
+        else:
+            ms = [0]
+
+        for i in range(n // 2):
+            ms.append(ms[-1] + 2)
+            ms.append(ms[-1])
+
+        m = ms[res] * sign
+
     return n, m
 
 
