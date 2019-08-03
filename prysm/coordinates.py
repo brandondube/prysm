@@ -1,6 +1,8 @@
 """Coordinate conversions."""
 from scipy import interpolate
 
+from retry import retry
+
 from .conf import config
 from .mathops import engine as e
 
@@ -199,3 +201,108 @@ def make_rho_phi_grid(samples_x, samples_y=None, aligned='x', radius=1):
     else:
         rho, phi = cart_to_polar(yy, xx)
     return rho, phi
+
+
+def v_to_2v_sqaured_minus_one(v):
+    return 2 * v ** 2 - 1
+
+
+def v_to_v_squared(v):
+    return v ** 2
+
+
+def v_to_v_fouth(v):
+    return v ** 4
+
+
+def convert_transformation_to_v(transformation):
+    s = transformation
+    for letter in ('x', 'y', 'r', 't'):
+        s = s.replace(letter, 'v')
+
+    return s
+
+
+class GridCache:
+    def __init__(self):
+        self.grids = {}
+        self.transformation_functions = {
+            'v -> 2v^2 - 1': v_to_2v_sqaured_minus_one,
+            'v -> v^2': v_to_v_squared,
+            'v -> v^4': v_to_v_fouth,
+        }
+
+    def make_basic_grids(self, samples, radius):
+        x, y = make_xy_grid(samples, radius=radius)
+        r, t = cart_to_polar(x, y)
+        self.grids[(samples, radius)] = {
+            'original': {
+                'x': x,
+                'y': y,
+                'r': r,
+                't': t,
+            },
+            'transformed': {}
+        }
+
+    def make_transformation(self, samples, radius, transformation):
+        print('making transformation')
+        # transformation looks like "r -> 2r^2 - 1"
+        # first letter is the variable
+        var = transformation[0]
+        trans2 = convert_transformation_to_v(transformation)
+
+        # the string is a key into a registry of functions
+        func = self.transformation_functions[trans2]
+
+        # there is a cache of this shape and radius,
+        # get the original variable and make/store the transformation
+        original = self.get_original_variable(samples, radius, var)
+        transformed = func(original)
+        self.grids[(samples, radius)]['transformed'][transformation] = transformed
+
+    @retry(tries=2)
+    def get_original_variable(self, samples, radius, variable):
+        try:
+            # if we have already calculated the grid, return it
+            var = self.grids[(samples, radius)]['original'][variable]
+            return var
+        except KeyError as e:
+            # otherwise, raise.  The function will retry which leads to
+            # the above (returning) codepath running
+            self.make_basic_grids(samples, radius)
+            raise e
+
+    @retry(tries=2)
+    def get_transformed_variable(self, samples, radius, transformation):
+        try:
+            # if we have already calculated the grid, return it
+            var = self.grids[(samples, radius)]['transformed'][transformation]
+            return var
+        except KeyError as e:
+            # otherwise, raise.  The function will retry which leads to
+            # the above (returning) codepath running
+            self.make_transformation(samples, radius, transformation)
+            raise e
+
+    def get_variable_transformed_or_not(self, samples, radius, variable_or_transformation):
+        if variable_or_transformation is None:
+            return None
+        elif len(variable_or_transformation) > 1:
+            return self.get_transformed_variable(samples, radius, variable_or_transformation)
+        else:
+            return self.get_original_variable(samples, radius, variable_or_transformation)
+
+    def __call__(self, samples, radius, x=None, y=None, r=None, t=None):
+        return {
+            'x': self.get_variable_transformed_or_not(samples, radius, x),
+            'y': self.get_variable_transformed_or_not(samples, radius, y),
+            'r': self.get_variable_transformed_or_not(samples, radius, r),
+            't': self.get_variable_transformed_or_not(samples, radius, t),
+        }
+
+    def clear(self):
+        self.grids = {}
+
+
+gridcache = GridCache()
