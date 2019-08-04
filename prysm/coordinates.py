@@ -93,7 +93,7 @@ def uniform_cart_to_polar(x, y, data):
     return rho, phi, f((yv, xv), method='linear')
 
 
-def resample_2d(array, sample_pts, query_pts):
+def resample_2d(array, sample_pts, query_pts, kind='linear'):
     """Resample 2D array to be sampled along queried points.
 
     Parameters
@@ -105,6 +105,8 @@ def resample_2d(array, sample_pts, query_pts):
         each array should be 1D
     query_pts : `tuple`
         points to interpolate onto, also 1D for each array
+    kind : `str`, {'linear', 'cubic', 'quintic'}
+        kind / order of spline to use
 
     Returns
     -------
@@ -112,39 +114,16 @@ def resample_2d(array, sample_pts, query_pts):
         array resampled onto query_pts via bivariate spline
 
     """
-    xq, yq = e.meshgrid(*query_pts)
-    interpf = interpolate.RectBivariateSpline(*sample_pts, array)
-    return interpf.ev(yq, xq)
+    interpf = interpolate.interp2d(*sample_pts, array, kind=kind)
+    return interpf(*query_pts)
 
 
-def resample_2d_complex(array, sample_pts, query_pts, bounds_error=True, fill_value=0):
-    '''Resamples a 2D complex array.
-
-    Works by interpolating the magnitude and phase independently and merging the results into a complex value.
-
-    Parameters
-    ----------
-    array : `numpy.ndarray`
-        complex 2D array
-    sample_pts : `tuple`
-        pair of `numpy.ndarray` objects that contain the x and y sample locations,
-        each array should be 1D
-    query_pts : `tuple`
-        points to interpolate onto, also 1D for each array
-    bounds_error : `bool`, optional
-        if True, raise if query point outside of domain of sample points
-    fill_value : `float`
-        value to fill with in the case of out-of-bound values
-
-    Returns
-    -------
-    `numpy.ndarray`
-        array resampled onto query_pts via bivariate spline
-
-    '''
-    xq, yq = e.meshgrid(*query_pts)
-    interpf = interpolate.RegularGridInterpolator(sample_pts, array, bounds_error=bounds_error, fill_value=fill_value)
-    return interpf((yq, xq))
+def resample_2d_complex(array, sample_pts, query_pts, kind='linear'):
+    r, c = [resample_2d(a,
+                        sample_pts=sample_pts,
+                        query_pts=query_pts,
+                        kind=kind) for a in (array.real, array.imag)]
+    return r + 1j * c
 
 
 def make_xy_grid(samples_x, samples_y=None, radius=1):
@@ -246,7 +225,6 @@ class GridCache:
         }
 
     def make_transformation(self, samples, radius, transformation):
-        print('making transformation')
         # transformation looks like "r -> 2r^2 - 1"
         # first letter is the variable
         var = transformation[0]

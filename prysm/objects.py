@@ -405,7 +405,7 @@ class GratingArray(Convolvable):
 
 class Chirp(Convolvable):
     """A frequency chirp."""
-    def __init__(self, p0, p1, angle=0, method='linear', binary=True, sample_spacing=2, samples=256):
+    def __init__(self, p0, p1, angle=0, method='linear', binary=True, sample_spacing=2, samples=256, aspect=4):
         """Create a new Chirp instance.
 
         Parameters
@@ -424,13 +424,15 @@ class Chirp(Convolvable):
             center-to-center spacing of samples in the array
         samples : `float`, optional
             number of samples
+        aspect : `int`, optional
+            aspect ratio, y will have (aspect) times fewer samples than x
 
         """
         p0 *= 2
         p1 *= 2
         ext = samples / 2 * sample_spacing
-        x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-        y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        x = e.arange(0, 2 * ext, sample_spacing, dtype=config.precision)
+        y = e.arange(0, 2 * ext / aspect, sample_spacing, dtype=config.precision)  # 8:1 aspect ratio
         xx, yy = e.meshgrid(x, y)
 
         if angle != 0:
@@ -438,7 +440,7 @@ class Chirp(Convolvable):
             phi += e.radians(angle)
             xx, yy = polar_to_cart(rho, phi)
 
-        sig = chirp(xx, 1 / p1, ext, 1 / p0, method=method)
+        sig = chirp(xx, f0=1 / p0, f1=1 / p1, t1=x[-1], method=method)
         if binary:
             sig[sig < 0] = 0
             sig[sig > 0] = 1

@@ -365,8 +365,7 @@ class ConvolutionEngine:
                 c_freq_y = forward_ft_unit(sample_spacing, data.shape[0])
                 return resample_2d_complex(data,
                                            (c_freq_x, c_freq_y),
-                                           (self.kspace_x, self.kspace_y),
-                                           bounds_error=False)
+                                           (self.kspace_x, self.kspace_y))
 
             c1_pad = pad2d(self.c1.data, self.Q, mode=self.pad_method)
             c1_ft = e.fft.fftshift(e.fft.fft2(e.fft.ifftshift(c1_pad)))
