@@ -362,6 +362,9 @@ class RichData:
         elif ylim is not None and not isinstance(ylim, Iterable):
             ylim = (-ylim, ylim)
 
+        if clim is not None and not isinstance(clim, Iterable):
+            clim = (-clim, clim)
+
         norm = None
         if log:
             norm = LogNorm()
