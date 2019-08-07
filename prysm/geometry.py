@@ -551,7 +551,7 @@ def generate_vertices(sides, radius=1):
     return e.asarray(pts)
 
 
-def generate_spider(vanes, width, rot_offset=0, arydiam=1, samples=128):
+def generate_spider(vanes, width, rotation=0, arydiam=1, samples=128):
     """Generate the mask for a spider
 
     Parameters
@@ -561,7 +561,7 @@ def generate_spider(vanes, width, rot_offset=0, arydiam=1, samples=128):
     width : `float`
         width of the vanes in array units, i.e. a width=1/128 spider with
         arydiam=1 and samples=128 will be 1 pixel wide
-    rot_offset : `float`, optional
+    rotation : `float`, optional
         rotational offset of the vanes, clockwise
     arydiam : `float`, optional
         array diameter
@@ -580,9 +580,9 @@ def generate_spider(vanes, width, rot_offset=0, arydiam=1, samples=128):
     xx, yy = e.meshgrid(x, y)
     r, p = cart_to_polar(xx, yy)
 
-    if rot_offset != 0:
-        rot_offset = e.radians(rot_offset)
-        p = p - rot_offset
+    if rotation != 0:
+        rotation = e.radians(rotation)
+        p = p - rotation
     pp = p.copy()
 
     # compute some constants
