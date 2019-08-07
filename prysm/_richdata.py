@@ -7,6 +7,7 @@ from scipy import interpolate
 
 from .conf import config, sanitize_unit
 from .mathops import engine as e
+from .wavelengths import mkwvl
 from .coordinates import uniform_cart_to_polar, polar_to_cart
 from .plotting import share_fig_ax
 
@@ -34,7 +35,7 @@ class RichData:
     _slice_xscale = 'linear'
     _slice_yscale = 'linear'
 
-    def __init__(self, x, y, data, units, labels):
+    def __init__(self, x, y, data, labels, xyunit=None, zunit=None, wavelength=None):
         """Initialize a new BasicData instance.
 
         Parameters
@@ -45,10 +46,14 @@ class RichData:
             y unit axis
         data : `numpy.ndarray`
             data
-        units : `Units`
-            units instance, can be shared
         labels : `Labels`
             labels instance, can be shared
+        xyunit : `astropy.unit` or `str`, optional
+            astropy unit or string which satisfies hasattr(astropy.units, xyunit)
+        zunit : `astropy.unit` or `str`, optional
+             astropy unit or string which satisfies hasattr(astropy.units, xyunit)
+        wavelength : `astropy.unit` or `float`
+            astropy unit or quantity or float with implicit units of microns
 
         Returns
         -------
@@ -58,7 +63,10 @@ class RichData:
         """
         self.x, self.y = x, y
         setattr(self, self._data_attr, data)
-        self.units, self.labels = units, labels
+        self.labels = labels
+        self.wavelength = mkwvl(self.wavelength)
+        self.xyunit = sanitize_unit(xyunit, self.wavelength)
+        self.zunit = sanitize_unit(zunit, self.wavelength)
         self.interpf_x, self.interpf_y, self.interpf_2d = None, None, None
 
     @property
