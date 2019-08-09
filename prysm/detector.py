@@ -336,8 +336,7 @@ class PixelAperture(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        coef = 1 / (self.width_x * self.width_y)
-        return coef * pixelaperture_analytic_otf(self.width_x, self.width_y, x, y)
+        return pixelaperture_analytic_otf(self.width_x, self.width_y, x, y)
 
 
 def pixelaperture_analytic_otf(width_x, width_y, freq_x, freq_y):
