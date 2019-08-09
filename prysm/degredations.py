@@ -95,5 +95,5 @@ class Jitter(Convolvable):
 
         """
         rho, _ = cart_to_polar(x, y)
-        kernel = e.pi * self.scale * rho
+        kernel = e.pi * self.scale / 2 * rho
         return e.exp(-2 * kernel**2)
