@@ -449,7 +449,7 @@ def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
     if is_odd(px_y):
         trim_y = 1
 
-    return output_data[:px_y - trim_y, :px_x - trim_x]
+    return output_data[:px_x - trim_x, :px_y - trim_y]
 
 
 def bindown_with_units(px_x, px_y, source_spacing, source_data):
