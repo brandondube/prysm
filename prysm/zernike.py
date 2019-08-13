@@ -861,7 +861,7 @@ class BaseZernike(Pupil):
         coefs = e.asarray(self.coefs)
         idxs = e.asarray(range(len(coefs))) + self.base
         names = self.names
-        lab = self.labels.z(self.units)
+        lab = self.labels.z(self.xy_unit, self.z_unit)
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         if orientation.lower() in ('h', 'horizontal'):
             vmin, vmax = coefs.min(), coefs.max()
@@ -928,7 +928,7 @@ class BaseZernike(Pupil):
             mags, names = sort_xy(mags, names)
             mags = list(reversed(mags))
             names = list(reversed(names))
-        lab = self.labels.z(self.units)
+        lab = self.labels.z(self.xy_unit, self.z_unit)
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         fig, ax = share_fig_ax(fig, ax)
         if orientation.lower() in ('h', 'horizontal'):
@@ -976,7 +976,7 @@ class BaseZernike(Pupil):
 
         fig, ax = share_fig_ax(fig, ax)
 
-        lab = self.labels.z(self.units)
+        lab = self.labels.z(self.xy_unit, self.z_unit)
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
         if orientation.lower() in ('h', 'horizontal'):
             ax.bar(idxs, magnitudes, zorder=zorder)

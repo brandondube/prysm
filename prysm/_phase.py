@@ -13,7 +13,7 @@ class OpticalPhase(RichData):
     _data_attr = 'phase'
     _data_type = 'phase'
 
-    def __init__(self, x, y, phase, units, labels):
+    def __init__(self, x, y, phase, labels, xy_unit=None, z_unit=None, wavelength=None):
         """Create a new instance of an OpticalPhase.
 
         Note that this class is not intended to be used directly, and is meant
@@ -42,7 +42,10 @@ class OpticalPhase(RichData):
             wavelength of light, in microns
 
         """
-        super().__init__(x=x, y=y, data=phase, units=units, labels=labels)
+        super().__init__(x=x, y=y, data=phase, labels=labels,
+                         xy_unit=xy_unit or config.phase_xy_unit,
+                         z_unit=z_unit or config.phase_z_unit,
+                         wavelength=wavelength)
 
     @property
     def phase_unit(self):
@@ -140,6 +143,6 @@ class OpticalPhase(RichData):
                        clim=(-1, 1),
                        origin='lower')
         fig.colorbar(im, label=r'Wrapped Phase [$\lambda$]', ax=ax, fraction=0.046)
-        ax.set(xlabel=self.labels.x(self.units),
-               ylabel=self.labels.y(self.units))
+        ax.set(xlabel=self.labels.x(self.xy_unit, self.z_unit),
+               ylabel=self.labels.y(self.xy_unit, self.z_unit))
         return fig, ax

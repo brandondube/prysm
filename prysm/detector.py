@@ -149,9 +149,9 @@ class Detector(object):
 
         """
         if which.lower() == 'last':
-            fig, ax = self.captures[-1].show(fig=fig, ax=ax)
-        elif type(which) is int:
-            fig, ax = self.captures[which].show(fig=fig, ax=ax)
+            which = -1
+
+        fig, ax = self.captures[which].plot2d(fig=fig, ax=ax)
         return fig, ax
 
     @property

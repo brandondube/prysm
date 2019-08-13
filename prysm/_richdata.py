@@ -35,7 +35,7 @@ class RichData:
     _slice_xscale = 'linear'
     _slice_yscale = 'linear'
 
-    def __init__(self, x, y, data, labels, xyunit=None, zunit=None, wavelength=None):
+    def __init__(self, x, y, data, labels, xy_unit=None, z_unit=None, wavelength=None):
         """Initialize a new BasicData instance.
 
         Parameters
@@ -61,12 +61,15 @@ class RichData:
             the instance
 
         """
+        if wavelength is None:
+            wavelength = config.wavelength
+
         self.x, self.y = x, y
         setattr(self, self._data_attr, data)
         self.labels = labels
-        self.wavelength = mkwvl(self.wavelength)
-        self.xyunit = sanitize_unit(xyunit, self.wavelength)
-        self.zunit = sanitize_unit(zunit, self.wavelength)
+        self.wavelength = mkwvl(wavelength)
+        self.xy_unit = sanitize_unit(xy_unit, self.wavelength)
+        self.z_unit = sanitize_unit(z_unit, self.wavelength)
         self.interpf_x, self.interpf_y, self.interpf_2d = None, None, None
 
     @property
@@ -135,17 +138,14 @@ class RichData:
             x, y from self, if inplace=False
 
         """
-        unit = sanitize_unit(to, self.units)
-
-        uu = self.units.copy()
-        uu.x, uu.y = unit, unit
-        coef = self.units.x.to(unit)
+        unit = sanitize_unit(to, self.wavelength)
+        coef = self.xy_unit.to(unit)
         x, y = self.x * coef, self.y * coef
         if not inplace:
             return x, y
         else:
             self.x, self.y = x, y
-            self.units = uu
+            self.xy_unit = unit
             return self
 
     def change_z_unit(self, to, inplace=True):
@@ -166,17 +166,14 @@ class RichData:
             data from self, if inplace=False
 
         """
-        unit = sanitize_unit(to, self.units)
-
-        uu = self.units.copy()
-        uu.z = unit
-        coef = self.units.z.to(unit)
+        unit = sanitize_unit(to, self.wavelength)
+        coef = self.z_unit.to(unit)
         modified_data = getattr(self, self._data_attr) * coef
         if not inplace:
             return modified_data
         else:
             setattr(self, self._data_attr, modified_data)
-            self.units = uu
+            self.units = unit
             return self
 
     def slices(self, twosided=None):
@@ -196,7 +193,7 @@ class RichData:
         if twosided is None:
             twosided = self._default_twosided
         return Slices(getattr(self, self._data_attr), x=self.x, y=self.y,
-                      twosided=twosided, units=self.units, labels=self.labels,
+                      twosided=twosided, x_unit=self.xy_unit, z_unit=self.z_unit, labels=self.labels,
                       xscale=self._slice_xscale, yscale=self._slice_yscale)
 
     def _make_interp_function_2d(self):
@@ -388,12 +385,12 @@ class RichData:
                        interpolation=interpolation)
 
         if show_colorbar:
-            fig.colorbar(im, label=self.labels.z(self.units), ax=ax, fraction=0.046)
+            fig.colorbar(im, label=self.labels.z(self.xy_unit, self.z_unit), ax=ax, fraction=0.046)
 
         xlab, ylab = None, None
         if show_axlabels:
-            xlab = self.labels.x(self.units)
-            ylab = self.labels.y(self.units)
+            xlab = self.labels.x(self.xy_unit, self.z_unit)
+            ylab = self.labels.y(self.xy_unit, self.z_unit)
         ax.set(xlabel=xlab, xlim=xlim, ylabel=ylab, ylim=ylim)
 
         return fig, ax
@@ -401,14 +398,15 @@ class RichData:
 
 class Slices:
     """Slices of data."""
-    def __init__(self, data, x, y, units, labels, xscale, yscale, twosided=True):
+    def __init__(self, data, x, y, x_unit, z_unit, labels, xscale, yscale, twosided=True):
         self._source = data
         self._source_polar = None
         self._r = None
         self._p = None
         self._x = x
         self._y = y
-        self.units, self.labels = units, labels
+        self.x_unit, self.z_unit = x_unit, z_unit
+        self.labels = labels
         self.xscale, self.yscale = xscale, yscale
         self.center_y, self.center_x = (int(e.ceil(s / 2)) for s in data.shape)
         self.twosided = twosided
@@ -660,18 +658,17 @@ class Slices:
             units.x = 1 / units.x
             units.y = 1 / units.y
 
-            xlabel = self.labels.generic(units)
+            xlabel = self.labels.generic(self.x_unit, self.z_unit)
             # ax.invert_xaxis()
             if 'Period' in xlabel:
                 xlabel = xlabel.replace('Period', 'Frequency')
             elif 'Frequency' in xlabel:
                 xlabel = xlabel.replace('Frequency', 'Period')
         else:
-            units = self.units
             # slightly unclean code duplication here
-            xlabel = self.labels.generic(units)
+            xlabel = self.labels.generic(self.x_unit, self.z_unit)
 
-        ylabel = self.labels.z(units)
+        ylabel = self.labels.z(self.x_unit, self.z_unit)
 
         if not show_axlabels:
             xlabel, ylabel = '', ''

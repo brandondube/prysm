@@ -8,7 +8,7 @@ from astropy import units as u
 import pytest
 
 from prysm.wavelengths import mkwvl
-from prysm import Pupil, PSF, MTF, FringeZernike, Units
+from prysm import Pupil, PSF, MTF, FringeZernike
 from prysm.psf import airydisk
 from prysm.otf import diffraction_limited_mtf
 
@@ -24,7 +24,7 @@ TEST_PARAMETERS = [
 def test_diffprop_matches_airydisk(efl, epd, wvl):
     fno = efl / epd
 
-    p = Pupil(dia=epd, units=Units(u.mm, u.nm, wavelength=mkwvl(wvl, u.um)))
+    p = Pupil(dia=epd, xy_unit=u.mm, z_unit=u.nm, wavelength=mkwvl(wvl, u.um))
     psf = PSF.from_pupil(p, efl, Q=3)  # use Q=3 not Q=4 for improved accuracy
     s = psf.slices()
     u_, sx = s.x
@@ -37,7 +37,7 @@ def test_diffprop_matches_airydisk(efl, epd, wvl):
 @pytest.mark.parametrize('efl, epd, wvl', TEST_PARAMETERS)
 def test_diffprop_matches_analyticmtf(efl, epd, wvl):
     fno = efl / epd
-    p = Pupil(dia=epd, units=Units(u.mm, u.nm, wavelength=mkwvl(wvl, u.um)))
+    p = Pupil(dia=epd, xy_unit=u.mm, z_unit=u.nm, wavelength=mkwvl(wvl, u.um))
     psf = PSF.from_pupil(p, efl)
     mtf = MTF.from_psf(psf)
     s = mtf.slices()

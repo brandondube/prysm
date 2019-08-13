@@ -2,7 +2,7 @@
 from pkg_resources import get_distribution
 
 
-from prysm.conf import config, Units, Labels
+from prysm.conf import config, Labels
 from prysm._richdata import RichData
 from prysm.convolution import Convolvable, ConvolutionEngine
 from prysm.detector import Detector, OLPF, PixelAperture
@@ -86,7 +86,6 @@ __all__ = [
     'sample_files',
     'RichData',
     'Labels',
-    'Units',
 ]
 
 __version__ = get_distribution('prysm').version

@@ -6,7 +6,6 @@ from ._richdata import RichData
 from .coordinates import resample_2d_complex
 from .conf import config
 from .fttools import forward_ft_unit, pad2d
-from .plotting import share_fig_ax
 
 
 class Convolvable(RichData):
@@ -14,7 +13,7 @@ class Convolvable(RichData):
     _data_attr = 'data'
     _data_type = 'image'
 
-    def __init__(self, x, y, data, has_analytic_ft=False, units=None, labels=None):
+    def __init__(self, x, y, data, has_analytic_ft=False, labels=None, xy_unit=None, z_unit=None):
         """Create a new Convolvable object.
 
         Parameters
@@ -28,14 +27,15 @@ class Convolvable(RichData):
         has_analytic_ft : `bool`, optional
             Whether this convolvable overrides self.analytic_ft, and has a known
             analytical fourier tansform
-        units : `Units`
-            units to use.  If None, will use config.convolvable_units
         labels : `Labels`
             labels to use.  If None, will use config.convolvable_labels
 
         """
+        xy_unit = 'um'
+        z_unit = 'adu'
         super().__init__(x=x, y=y, data=data,
-                         units=units or config.image_units,
+                         xy_unit=xy_unit or config.image_xy_unit,
+                         z_unit=z_unit or config.image_z_unit,
                          labels=labels or config.convolvable_labels)
         self.has_analytic_ft = has_analytic_ft
 
@@ -134,124 +134,30 @@ class Convolvable(RichData):
         self.data /= self.data.max()
         return self
 
-    def show(self, xlim=None, ylim=None, interp_method=None, power=1, show_colorbar=True, fig=None, ax=None):
-        """Display the image.
+    def msaa(self, factor=2):
+        """Multi-Sample anti-aliasing
+
+        Perform anti-aliasing by averaging blocks of (factor, factor) pixels
+        into a simple value.
 
         Parameters
         ----------
-        xlim : iterable, optional
-            x axis limits
-        ylim : iterable,
-            y axis limits
-        interp_method : `string`
-            interpolation technique used in display
-        power : `float`
-            inverse of power to stretch image by.  E.g. power=2 will plot img ** (1/2)
-        show_colorbar : `bool`
-            whether to show the colorbar or not.
-        fig : `matplotlib.figure.Figure`, optional:
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`, optional:
-            Axis containing the plot
+        factor : `int`, optional
+            factor by which to decimate the data
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`, optional:
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`, optional:
-            Axis containing the plot
+        `Convolvable`
+            self
 
         """
-        from matplotlib import colors
-
-        if self.x is not None:
-            extx = [self.x[0], self.x[-1]]
-            exty = [self.y[0], self.y[-1]]
-            ext = [*extx, *exty]
-        else:
-            ext = None
-
-        if xlim is not None and ylim is None:
-            ylim = xlim
-
-        if xlim and not hasattr(xlim, '__iter__'):
-            xlim = (-xlim, xlim)
-
-        if ylim and not hasattr(ylim, '__iter__'):
-            ylim = (-ylim, ylim)
-
-        fig, ax = share_fig_ax(fig, ax)
-        im = ax.imshow(self.data,
-                       extent=ext,
-                       origin='lower',
-                       aspect='equal',
-                       norm=colors.PowerNorm(1/power),
-                       clim=(0, 1),
-                       cmap='Greys_r',
-                       interpolation=interp_method)
-        ax.set(xlim=xlim, xlabel=r'$x$ [$\mu m$]',
-               ylim=ylim, ylabel=r'$y$ [$\mu m$]')
-        if show_colorbar:
-            fig.colorbar(im, label=r'Normalized Intensity [a.u.]', ax=ax)
-        return fig, ax
-
-    def show_fourier(self, freq_x=None, freq_y=None, interp_method='lanczos', fig=None, ax=None):
-        """Display the fourier transform of the image.
-
-        Parameters
-        ----------
-        interp_method : `string`
-            method used to interpolate the data for display.
-        freq_x : iterable
-            x frequencies to use for convolvable with analytical FT and no data
-        freq_y : iterable
-            y frequencies to use for convolvable with analytic FT and no data
-        fig : `matplotlib.figure.Figure`
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`
-            Axis containing the plot
-
-        Returns
-        -------
-        fig : `matplotlib.figure.Figure`
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`
-            Axis containing the plot
-
-        Notes
-        -----
-        freq_x and freq_y are unused when the convolvable has a .data field.
-
-        """
-        if self.has_analytic_ft:
-            if self.data is None:
-                if freq_x is None or freq_y is None:
-                    raise ValueError('Convolvable has analytic FT and no data, must provide x and y coordinates')
-            else:
-                lx, ly, ss = len(self.x), len(self.y), self.sample_spacing
-                freq_x, freq_y = forward_ft_unit(ss, lx), forward_ft_unit(ss, ly)
-
-            fx, fy = e.meshgrid(freq_x, freq_y)
-            data = self.analytic_ft(fx, fy)
-        else:
-            data = abs(e.fft.fftshift(e.fft.fft2(pad2d(self.data, 2))))
-            data /= data.max()
-            freq_x = forward_ft_unit(self.sample_spacing, self.samples_x)
-            freq_y = forward_ft_unit(self.sample_spacing, self.samples_y)
-
-        xmin, xmax = freq_x[0], freq_x[-1]
-        ymin, ymax = freq_y[0], freq_y[-1]
-
-        fig, ax = share_fig_ax(fig, ax)
-        im = ax.imshow(data,
-                       extent=[xmin, xmax, ymin, ymax],
-                       cmap='Greys_r',
-                       interpolation=interp_method,
-                       origin='lower')
-        fig.colorbar(im, ax=ax, label='Normalized Spectral Intensity [a.u.]')
-        ax.set(xlim=(xmin, xmax), xlabel=r' $\nu_x$ [cy/mm]',
-               ylim=(ymin, ymax), ylabel=r' $\nu_y$ [cy/mm]')
-        return fig, ax
+        from .detector import bindown
+        x, y, data = self.x, self.y, self.data
+        data = bindown(data, factor, factor, 'avg')
+        self.data = data
+        self.x = x[::factor]
+        self.y = y[::factor]
+        return self
 
     def save(self, path, nbits=8):
         """Write the image to a png, jpg, tiff, etc.

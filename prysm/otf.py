@@ -67,7 +67,7 @@ class MTF(RichData):
     _data_type = 'image'
     _default_twosided = False
 
-    def __init__(self, data, x, y, units=None, labels=None):
+    def __init__(self, data, x, y, xy_unit=None, z_unit=None, labels=None):
         """Create a new `MTF` instance.
 
         Parameters
@@ -85,7 +85,8 @@ class MTF(RichData):
 
         """
         super().__init__(x=x, y=y, data=data,
-                         units=units or config.mtf_units,
+                         xy_unit=xy_unit or config.mtf_xy_unit,
+                         z_unit=z_unit or config.mtf_z_unit,
                          labels=labels or config.mtf_labels)
 
     @staticmethod
@@ -162,7 +163,7 @@ class MTF(RichData):
 class PTF(RichData):
     """Phase Transfer Function"""
 
-    def __init__(self, data, x, y, units=None, labels=None):
+    def __init__(self, data, x, y, xy_unit=None, z_unit=None, labels=None):
         """Create a new `PTF` instance.
 
         Parameters
@@ -180,7 +181,8 @@ class PTF(RichData):
 
         """
         super().__init__(x=x, y=y, data=data,
-                         units=units or config.mtf_units,
+                         xy_unit=xy_unit or config.ptf_xy_unit,
+                         z_unit=z_unit or config.ptf_z_unit,
                          labels=labels or config.mtf_labels)
 
     @staticmethod

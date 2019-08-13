@@ -16,21 +16,6 @@ def p_tlt():
     return FringeZernike(Z2=1, base=1, samples=64)
 
 
-def test_create_pupil():
-    p = Pupil()
-    assert hasattr(p, 'diameter')
-    assert hasattr(p, 'sample_spacing')
-    assert hasattr(p, 'samples')
-    assert hasattr(p, 'units')
-    assert hasattr(p, 'labels')
-    assert hasattr(p, 'phase')
-    assert hasattr(p, 'fcn')
-    assert hasattr(p, 'x')
-    assert hasattr(p, 'y')
-    assert hasattr(p, 'center_x')
-    assert hasattr(p, 'center_y')
-
-
 def test_pupil_passes_valid_params():
     parameters = {
         'samples': 16,

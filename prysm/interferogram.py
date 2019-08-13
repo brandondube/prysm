@@ -6,7 +6,7 @@ from scipy import signal, optimize
 
 from astropy import units as u
 
-from .conf import config, sanitize_unit, Units
+from .conf import config, sanitize_unit
 from ._phase import OpticalPhase
 from ._richdata import RichData
 from .mathops import engine as e
@@ -16,7 +16,7 @@ from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar
 from .util import mean, rms  # NOQA
 from .geometry import mcache
-from .wavelengths import mkwvl, HeNe
+from .wavelengths import HeNe
 
 
 def fit_plane(x, y, z):
@@ -473,7 +473,7 @@ class PSD(RichData):
     _slice_xscale = 'log'
     _slice_yscale = 'log'
 
-    def __init__(self, x, y, data, units=None, labels=None):
+    def __init__(self, x, y, data, xy_unit, z_unit, labels=None):
         """Initialize a new BasicData instance.
 
         Parameters
@@ -498,13 +498,13 @@ class PSD(RichData):
         if labels is None:
             labels = config.psd_labels
 
-        super().__init__(x=x, y=y, data=data, units=units, labels=labels)
+        super().__init__(x=x, y=y, data=data, xy_unit=xy_unit, z_unit=z_unit, labels=labels)
 
 
 class Interferogram(OpticalPhase):
     """Class containing logic and data for working with interferometric data."""
 
-    def __init__(self, phase, x, y, intensity=None, units=None, labels=None, meta=None):
+    def __init__(self, phase, x, y, intensity=None, labels=None, xy_unit=None, z_unit=None, wavelength=HeNe, meta=None):
         """Create a new Interferogram instance.
 
         Parameters
@@ -517,35 +517,38 @@ class Interferogram(OpticalPhase):
             y (axis 0) values, units of scale
         intensity : `numpy.ndarray`, optional
             intensity array from interferometer camera
-        units : `Units`
-            units instance, can be shared
         labels : `Labels`
             labels instance, can be shared
+        xyunit : `astropy.unit` or `str`, optional
+            astropy unit or string which satisfies hasattr(astropy.units, xyunit)
+        zunit : `astropy.unit` or `str`, optional
+             astropy unit or string which satisfies hasattr(astropy.units, xyunit)
         meta : `dict`
             dictionary of any metadata.  if a wavelength or Wavelength key is
             present, this will also be stored in self.wavelength
 
         """
 
-        if meta:
-            wvl = meta.get('wavelength', None)
-            if wvl is None:
-                wvl = meta.get('Wavelength')
+        if not wavelength:
+            if meta:
+                wavelength = meta.get('wavelength', None)
+                if wavelength is None:
+                    wavelength = meta.get('Wavelength')
 
-            if wvl is not None:
-                wvl *= 1e6  # m to um
-        else:
-            wvl = 1
+                if wavelength is not None:
+                    wavelength *= 1e6  # m to um
+            else:
+                wavelength = 1
 
-        if units is None:
-            units = config.phase_units
+        if xy_unit is None:
+            xy_unit = config.phase_xy_unit
 
-        if (wvl - units.wavelength.to(u.um)) > 1e-9:  # floating point insensitive comparison
-            units = units.copy()
-            units.wavelength = mkwvl(wvl)
+        if z_unit is None:
+            z_unit = config.phase_z_unit
 
         super().__init__(x=x, y=y, phase=phase,
-                         units=units, labels=config.interferogram_labels)
+                         labels=config.interferogram_labels,
+                         xy_unit=xy_unit, z_unit=z_unit, wavelength=wavelength)
 
         self.intensity = intensity
         self.meta = meta
@@ -662,8 +665,7 @@ class Interferogram(OpticalPhase):
 
     def strip_latcal(self):
         """Strip the lateral calibration and revert to pixels."""
-        self.units = self.units.copy()
-        self.units.x, self.units.y = u.pix, u.pix
+        self.xy_unit = u.pix
         y, x = (e.arange(s, dtype=config.precision) for s in self.shape)
         self.x, self.y = x, y
         return self
@@ -833,9 +835,9 @@ class Interferogram(OpticalPhase):
             modified `Interferogram` instance.
 
         """
-        unit = sanitize_unit(unit, self.units)
-        self.units = self.units.copy()
-        self.units.x, self.units.y = unit, unit
+        self.strip_latcal()
+        unit = sanitize_unit(unit, self.wavelength)
+        self.xy_unit = unit
         # sloppy to do this here...
         self.x *= plate_scale
         self.y *= plate_scale
@@ -908,10 +910,10 @@ class Interferogram(OpticalPhase):
 
         """
         ux, uy, psd_ = psd(self.phase, self.sample_spacing)
-        z_unit = self.units.z ** 2 / (self.units.x ** 2)
-        units = Units(x=1/self.units.x, z=z_unit, wavelength=self.units.wavelength)
+        z_unit = self.z_unit ** 2 / (self.xy_unit ** 2)
 
-        return PSD(x=ux, y=uy, data=psd_, labels=labels, units=units)
+        return PSD(x=ux, y=uy, data=psd_,
+                   labels=labels, xy_unit=self.xy_unit ** -1, z_unit=z_unit)
 
     def bandlimited_rms(self, wllow=None, wlhigh=None, flow=None, fhigh=None):
         """Calculate the bandlimited RMS of a signal from its PSD.
@@ -956,7 +958,7 @@ class Interferogram(OpticalPhase):
             TIS value.
 
         """
-        if self.units.x != u.um:
+        if self.xy_unit != u.um:
             raise ValueError('Use microns for spatial unit when evaluating TIS.')
 
         upper_limit = 1 / wavelength
@@ -976,7 +978,7 @@ class Interferogram(OpticalPhase):
         phase = self.change_z_unit(to='waves', inplace=False)
         write_zygo_ascii(file, phase=phase,
                          x=self.x, y=self.y,
-                         intensity=None, wavelength=self.units.wavelength.to(u.um),
+                         intensity=None, wavelength=self.wavelength.to(u.um),
                          high_phase_res=high_phase_res)
 
     def __str__(self):
@@ -1033,7 +1035,7 @@ class Interferogram(OpticalPhase):
 
     @staticmethod  # NOQA
     def render_from_psd(size, samples, rms=None,
-                        mask='circle', phase_unit='nm', psd_fcn=abc_psd, **psd_fcn_kwargs):
+                        mask='circle', xyunit='mm', zunit='nm', psd_fcn=abc_psd, **psd_fcn_kwargs):
         """Render a synthetic surface with a given RMS value given a PSD function.
 
         Parameters
@@ -1046,6 +1048,10 @@ class Interferogram(OpticalPhase):
             desired RMS value of the output, if rms=None, no normalization is done
         mask : `str`, optional
             mask defining the clear aperture
+        xyunit : `astropy.unit` or `str`, optional
+            astropy unit or string which satisfies hasattr(astropy.units, xyunit)
+        zunit : `astropy.unit` or `str`, optional
+             astropy unit or string which satisfies hasattr(astropy.units, xyunit)
         psd_fcn : `callable`
             function used to generate the PSD
         **psd_fcn_kwargs:
@@ -1063,4 +1069,4 @@ class Interferogram(OpticalPhase):
         """
         x, y, z = render_synthetic_surface(size=size, samples=samples, rms=rms,
                                            mask=mask, psd_fcn=psd_fcn, **psd_fcn_kwargs)
-        return Interferogram(phase=z, x=x, y=y, units=Units(x=u.mm, z=getattr(u, phase_unit), wavelength=HeNe))
+        return Interferogram(phase=z, x=x, y=y, xy_unit=xyunit, z_unit=zunit, wavelength=HeNe)

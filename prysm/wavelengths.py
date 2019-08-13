@@ -20,7 +20,9 @@ def mkwvl(quantity, base=u.um):
         new Unit for appropriate wavelength
 
     """
-    if not isinstance(quantity, u.Unit):
+    if quantity is None:
+        return quantity
+    elif not isinstance(quantity, u.Unit):
         return u.def_unit(['wave', 'wavelength'], quantity * base,
                           format={'latex': r'\lambda', 'unicode': 'λ'})
     else:

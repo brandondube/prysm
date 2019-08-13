@@ -5,6 +5,8 @@ import numpy as np
 
 from astropy import units as u
 
+from .wavelengths import HeNe
+
 all_ap_unit_types = (u.Unit, u.core.IrreducibleUnit, u.core.CompositeUnit)
 
 
@@ -94,7 +96,7 @@ class Labels:
         self.unit_prefix, self.unit_suffix = unit_prefix, unit_suffix
         self.unit_joiner = unit_joiner
 
-    def _label_factory(self, label, units):
+    def _label_factory(self, label, xy_unit, z_unit):
         """Factory method to produce complex labels.
 
         Parameters
@@ -120,34 +122,37 @@ class Labels:
                 label_basics.append(self.xy_additions[xy_pos])
 
             label_ = self.addition_joiner.join(label_basics)
+            unit_str = format_unit(xy_unit, config.unit_format)
         else:
             label_ = self._z
+            unit_str = format_unit(z_unit, config.unit_format)
 
         unit_text = ''
         if config.show_units:
+
             unit_text = unit_text.join([self.unit_prefix,
-                                       format_unit(units[label], config.unit_format),
+                                       unit_str,
                                        self.unit_suffix])
         label_ = self.unit_joiner.join([label_, unit_text])
         return label_
 
-    def x(self, units):
+    def x(self, xy_unit, z_unit):
         """X label."""
-        return self._label_factory('x', units)
+        return self._label_factory('x', xy_unit, z_unit)
 
-    def y(self, units):
+    def y(self, xy_unit, z_unit):
         """Y label."""
-        return self._label_factory('y', units)
+        return self._label_factory('y', xy_unit, z_unit)
 
-    def z(self, units):
+    def z(self, xy_unit, z_unit):
         """Z label."""
-        return self._label_factory('z', units)
+        return self._label_factory('z', xy_unit, z_unit)
 
-    def generic(self, units):
+    def generic(self, xy_unit, z_unit):
         """Generic label without extra X/Y annotation."""
         base = self.xy_base
         join = self.unit_joiner
-        unit = format_unit(units.x, config.unit_format)
+        unit = format_unit(xy_unit, config.unit_format)
         prefix = self.unit_prefix
         suffix = self.unit_suffix
         return f'{base}{join}{prefix}{unit}{suffix}'
@@ -181,6 +186,7 @@ class Config(object):
                  backend=np,
                  zernike_base=1,
                  Q=2,
+                 wavelength=HeNe,
                  phase_cmap='inferno',
                  image_cmap='Greys_r',
                  lw=3,
@@ -189,10 +195,14 @@ class Config(object):
                  interpolation='lanczos',
                  unit_format='latex_inline',
                  show_units=True,
-                 phase_units=default_phase_units,
-                 image_units=default_image_units,
-                 mtf_units=default_mtf_units,
-                 ptf_units=default_ptf_units,
+                 phase_xy_unit=u.mm,
+                 phase_z_unit=u.nm,
+                 image_xy_unit=u.um,
+                 image_z_unit=u.adu,
+                 mtf_xy_unit=u.mm ** -1,
+                 mtf_z_unit=rel,
+                 ptf_xy_unit=u.mm ** -1,
+                 ptf_z_unit=u.deg,
                  pupil_labels=default_pupil_labels,
                  interferogram_labels=default_interferogram_labels,
                  convolvable_labels=default_convolvable_labels,
@@ -245,6 +255,7 @@ class Config(object):
         self.zernike_base = zernike_base
         self.chbackend_observers = []
         self.Q = Q
+        self.wavelength = wavelength
         self.phase_cmap = phase_cmap
         self.image_cmap = image_cmap
         self.lw = lw
@@ -253,8 +264,14 @@ class Config(object):
         self.interpolation = interpolation
         self.unit_format = unit_format
         self.show_units = show_units
-        self.phase_units, self.image_units = phase_units, image_units
-        self.mtf_units, self.ptf_units = mtf_units, ptf_units
+        self.phase_xy_unit = phase_xy_unit
+        self.phase_z_unit = phase_z_unit
+        self.image_xy_unit = image_xy_unit
+        self.image_z_unit = image_z_unit
+        self.mtf_xy_unit = mtf_xy_unit
+        self.mtf_z_unit = mtf_z_unit
+        self.ptf_xy_unit = ptf_xy_unit
+        self.ptf_z_unit = ptf_z_unit
         self.pupil_labels = pupil_labels
         self.interferogram_labels = interferogram_labels
         self.convolvable_labels = convolvable_labels

@@ -257,7 +257,7 @@ class PSF(Convolvable):
 
         """
         # propagate PSF data
-        fcn, ss, wvl = pupil.fcn, pupil.sample_spacing, pupil.units.wavelength.to(u.um)
+        fcn, ss, wvl = pupil.fcn, pupil.sample_spacing, pupil.wavelength.to(u.um)
         data = prop_pupil_plane_to_psf_plane(fcn, Q)
         norm = norm.lower()
         if norm == 'max':
@@ -350,9 +350,10 @@ class AiryDisk(Convolvable):
             data = airydisk(rho, fno, wavelength)
         else:
             x, y, data = None, None, None
+
+        super().__init__(data=data, x=x, y=y)
         self.fno = fno
         self.wavelength = wavelength
-        super().__init__(data=data, x=x, y=y)
         self.has_analytic_ft = True
 
     def analytic_ft(self, x, y):
