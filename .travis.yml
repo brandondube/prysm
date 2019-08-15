@@ -11,6 +11,7 @@ install:
       conda install --yes
       numpy>=1.15
       scipy>=1.2
+      astropy>=3.2.1
       matplotlib>=3.0
       scikit-image
       imageio
