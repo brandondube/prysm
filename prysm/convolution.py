@@ -130,7 +130,8 @@ class Convolvable(RichData):
         return Convolvable(result, self.x, self.y, False)
 
     def renorm(self):
-        """Renormalize so that the peak is at a value of unity."""
+        """Renormalize so that the peak is at a value of unity and the minimum value is zero"""
+        self.data -= self.data.min()
         self.data /= self.data.max()
         return self
 
