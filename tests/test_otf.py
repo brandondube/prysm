@@ -41,8 +41,15 @@ def test_mtf_exact_xy_functions(mtf, y):
     assert type(mtf_) is np.ndarray
 
 
-def test_frompupil_functions():
+def test_from_pupil_functions():
     from prysm import Pupil
     pu = Pupil()
     mt = otf.MTF.from_pupil(pu, 2)
     assert mt
+
+
+def test_OTF_from_pupil_functions():
+    from prysm import Pupil
+    pu = Pupil()
+    ot = otf.OTF.from_pupil(pu, 2)
+    assert ot
