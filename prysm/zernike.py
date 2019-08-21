@@ -1059,7 +1059,7 @@ class BaseZernike(Pupil):
 
             strs.append(' '.join([_, name]))
         body = '\n\t'.join(strs)
-        unit_str = f'{self.labels.unit_prefix}{self.units.z}{self.labels.unit_suffix}'
+        unit_str = f'{self.labels.unit_prefix}{self.z_unit}{self.labels.unit_suffix}'
         footer = f'\n\t{self.pv:.3f} PV, {self.rms:.3f} RMS {unit_str}'
         return f'{header}{body}{footer}'
 
