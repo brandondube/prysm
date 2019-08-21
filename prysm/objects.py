@@ -141,11 +141,9 @@ class Pinhole(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        xq, yq = e.meshgrid(x, y)
-
         # factor of pi corrects for jinc being modulo pi
         # factor of 2 converts radius to diameter
-        rho = e.sqrt(xq**2 + yq**2) * self.width * 2 * e.pi
+        rho = e.sqrt(x**2 + y**2) * self.width * 2 * e.pi
         return jinc(rho).astype(config.precision)
 
 
