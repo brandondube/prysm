@@ -172,26 +172,6 @@ def rotated_ellipse(width_major, width_minor, major_axis_angle=0, samples=128):
     return arr
 
 
-def triangle(samples=128, radius=1):
-    """Create a square mask.
-
-    Parameters
-    ----------
-    samples : `int`, optional
-        number of samples in the square output array
-    radius : `float`, optional
-        radius of the shape in the square output array.  radius=1 will fill the
-        x
-
-    Returns
-    -------
-    `numpy.ndarray`
-        binary ndarray representation of the mask
-
-    """
-    return regular_polygon(3, samples=samples, radius=radius)
-
-
 def square(samples=128, radius=1):
     """Create a square mask.
 
@@ -614,7 +594,6 @@ shapes = {
     'invertedcircle': inverted_circle,
     'truecircle': truecircle,
     'circle': circle,
-    'triangle': triangle,
     'square': square,
     'pentagon': pentagon,
     'hexagon': hexagon,

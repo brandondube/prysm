@@ -61,3 +61,24 @@ def test_allcircles_zeros():
     funcs = ['circle', 'truecircle', 'inverted_circle']
     for func in funcs:
         assert (getattr(geometry, func)(32, 0) == 0).all()
+
+
+def test_mask_cleaner_with_tuple():
+    type_radius = ('circle', 1)
+    assert type(geometry.mask_cleaner(type_radius, 64)) is np.ndarray
+
+
+def test_truecircle_doesnt_error():
+    circ = geometry.truecircle()
+    assert type(circ) is np.ndarray
+
+
+def test_inverted_circle_doesnt_error():
+    icirc = geometry.inverted_circle()
+    assert type(icirc) is np.ndarray
+
+
+@pytest.mark.parametrize('vanes', [2, 3, 5, 6, 10])
+def test_generate_spider_doesnt_error(vanes):
+    mask = geometry.generate_spider(vanes, 1, 0, 25, 128)
+    assert type(mask) is np.ndarray

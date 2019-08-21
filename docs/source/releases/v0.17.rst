@@ -84,6 +84,7 @@ Breaking changes
 * :class:`~prysm.pupil.Pupil` and subclasses no longer take arguments of :code:`mask` and :code:`mask_target`, instead taking :code:`phase_mask` and :code:`transmission`.  This should improve clarity.  Arguments may take a few forms - :code:`<ndarray>`, :code:`<str>`, or :code:`[<str>, <float>]`.  In the ndarray case, the argument is used directly.  Strings are passed to the mask cache with implicit :code:`radius=1`, while in the last case the argument is a tuple or list of the mask shape and radius.
 * The default OPD unit for pupils is now nm instead of waves.
 * :code:`interp_method` parameters on plotting functions have been renamed to :code:`interpolation`.  This mimics matplotlib exactly, as prysm is simply wrapping matplotlib for these methods.
+* :func:`prysm.geometry.triangle` was removed as it throws a Qhull error and cannot be made to work with the underlying implementation of N sided polygons.
 
 Bugfixes
 ========
@@ -91,6 +92,7 @@ Bugfixes
 * Automatic hanning window generation when calculating PSDs has been fixed, and no longer results in an error for nonsquare arrays.
 * An issue where Welch windows may be generated off-center has been fixed.
 * An error/bug when calling :meth:`~prysm.interferogram.Interferogram.crop` requiring 0 pixels of removal on a side has been fixed.
+* :meth:`~prysm.objects.pinhole.analytic_ft` no longer includes an errant call to meshgrid that causes out of memory exceptions and incorrect results.
 
 
 Under-the-hood Changes
