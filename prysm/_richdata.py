@@ -639,6 +639,9 @@ class Slices:
         if isinstance(zorder, int):
             zorder = [zorder] * len(slices)
 
+        if not hasattr(xlim, '__iter__') and self.twosided:
+            xlim = (-xlim, xlim)
+
         fig, ax = share_fig_ax(fig, ax)
 
         for slice_, alpha, lw, zorder in zip(slices, alpha, lw, zorder):
