@@ -177,7 +177,7 @@ class Pupil(OpticalPhase):
         return result
 
     @staticmethod
-    def from_interferogram(interferogram, wvl=None):
+    def from_interferogram(interferogram, wvl=None, mask_phase=True):
         """Create a new Pupil instance from an interferogram.
 
         Parameters
@@ -201,7 +201,14 @@ class Pupil(OpticalPhase):
         if wvl is None:  # not user specified
             wvl = interferogram.wavelength
 
+        transmission = e.isfinite(interferogram.phase)
+        if mask_phase:
+            phase_mask = transmission
+        else:
+            phase_mask = None
+
         return Pupil(wavelength=wvl, phase=interferogram.phase,
-                     opd_unit=interferogram.phase_unit,
-                     ux=interferogram.x, uy=interferogram.y,
-                     mask=~(interferogram.phase == e.nan))
+                     z_unit=interferogram.z_unit,
+                     x=interferogram.x, y=interferogram.y,
+                     phase_mask=phase_mask,
+                     transmission=transmission)
