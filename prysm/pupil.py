@@ -51,7 +51,7 @@ class Pupil(OpticalPhase):
             # must build a pupil
             xy = gridcache(samples, dia / 2, x='x', y='y')
             x = xy['x'][0, :]
-            y = xy['y'][0, :]
+            y = xy['y'][:, 0]
             need_to_build = True
         else:
             # data already known
