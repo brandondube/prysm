@@ -48,6 +48,7 @@ Note that this list is in logical order of dependence, not in order of importanc
 * * * * :code:`.azmax`
 * * * * :code:`.azvar`
 * * * * :code:`.azstd`
+* * * * :code:`.azpv`
 * * * :code:`(obj).exact_x` and :code:`.exact_y` for 1D sampling along the Cartesian axes
 * * * :code:`(obj).exact_xy` for 2D sampling on (x, y)
 * * * :code:`(obj).exact_polar` for 2D sampling on (r, p)
