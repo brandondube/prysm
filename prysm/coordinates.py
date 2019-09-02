@@ -123,6 +123,7 @@ def resample_2d_complex(array, sample_pts, query_pts, kind='linear'):
                         sample_pts=sample_pts,
                         query_pts=query_pts,
                         kind=kind) for a in (array.real, array.imag)]
+
     return r + 1j * c
 
 
