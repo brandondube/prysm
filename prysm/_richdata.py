@@ -173,7 +173,7 @@ class RichData:
             return modified_data
         else:
             setattr(self, self._data_attr, modified_data)
-            self.units = unit
+            self.z_unit = unit
             return self
 
     def slices(self, twosided=None):
