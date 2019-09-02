@@ -1,5 +1,7 @@
 """A base pupil interface for different aberration models."""
 
+from astropy import units as u
+
 from .conf import config
 from .mathops import engine as e
 from ._phase import OpticalPhase
@@ -88,7 +90,8 @@ class Pupil(OpticalPhase):
     def strehl(self):
         """Strehl ratio of the pupil."""
         phase = self.change_z_unit(to='um', inplace=False)
-        return e.exp(-4 * e.pi / self.wavelength / self.wavelength * std(phase) ** 2)
+        wav = self.wavelength.to(u.um)
+        return e.exp(-4 * e.pi / wav * std(phase) ** 2)
 
     @property
     def fcn(self):
