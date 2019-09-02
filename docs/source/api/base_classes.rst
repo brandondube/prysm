@@ -2,7 +2,10 @@
 Base Classes
 ************
 
-.. autoclass :: prysm._basicdata.BasicData
+.. autoclass :: prysm._richdata.RichData
+    :members:
+
+.. autoclass :: prysm._richdata.Slices
     :members:
 
 .. autoclass :: prysm._phase.OpticalPhase

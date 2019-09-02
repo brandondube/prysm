@@ -9,7 +9,7 @@ New Features
 
 Note that this list is in logical order of dependence, not in order of importance.
 
-* New :mod:`~prysm.mathops`functions: :func:`~prysm.mathops.gamma`, :func:`~prysm.mathops.kronecker`, and :func:`~prysm.mathops.sign`.
+* New :mod:`~prysm.mathops` functions: :func:`~prysm.mathops.gamma`, :func:`~prysm.mathops.kronecker`, and :func:`~prysm.mathops.sign`.
 * :mod:`~prysm.jacobi` submodule for recursive jacobi polynomial computation, key functions are :func:`~prysm.jacobi.jacobi` and :func:`~prysm.jacobi.jacobi_sequence`.
 * New :mod:`~prysm.zernike` functions:
 * * :func:`~prysm.zernike.zernike_norm` to calculate the norm of a Zernike term given its (n, m) radial and azimuthal orders.
@@ -53,14 +53,7 @@ Note that this list is in logical order of dependence, not in order of importanc
 * * * :code:`(obj).exact_xy` for 2D sampling on (x, y)
 * * * :code:`(obj).exact_polar` for 2D sampling on (r, p)
 * Units rewrite:
-* * prysm now utilizes / understands `astropy.units <https://docs.astropy.org/en/stable/units/>`_  for all calculations using the object-oriented API.  :class:`BasicData` has become :class:`RichData` with a new :code:`units=` kwarg.  If this is :code:`None`, the instance will adopt :code:(class).default_units`.  These default units mimic the behavior of prysm < 0.17, so users not adjusting units will feel no change.  To use custom units, the :code:`wavelength`, :code:`spatial_unit`, and :code:`phase_unit` arguments are no more, and should be generated loosely as follows:
-
->>> from prysm import Units, Pupil, mkwvl
->>> from astropy import units as u
->>> unit_pack = Units(x = u.mm, z = u.nm, wavelength=mkwvl(632.8, u.nm))
->>> pu = Pupil(..., units=unit_pack)
-
-* * Note that the Pupil class is used only for example, and the units kwarg is nearly universal.  For more information, see the `units documentation <../user_guide/units-and-labels.html>_.
+* * prysm now utilizes / understands `astropy.units <https://docs.astropy.org/en/stable/units/>`_  for all calculations using the object-oriented API.  :class:`BasicData` has become :class:`RichData` with a new :code:`xy_unit` and :code:`z_unit` kwarg.  If this is :code:`None`, the instance will adopt :code:config.<class>.default_<xy or z>_units`.  These default units mimic the behavior of prysm < 0.17, so users not adjusting units will feel no change.  To use custom units, the :code:`spatial_unit`, and :code:`phase_unit` arguments are no more, and should be generated loosely as follows:  For more information, see the `units documentation <../user_guide/units-and-labels.html>_.
 * Labels rewrite:
 * * prysm now has a labels system that mimics the units system.  The constructor works loosely as follows:
 
@@ -80,7 +73,7 @@ Breaking changes
 * * :class:`BasicData`, has become :class:`~prysm._richdata.RichData`.
 * * Universal plotting breaks much code that any of :code:`plot2d`, :code:`plot_slice_xy`, :code:`plot_azimuthal_average`, :code:`plot_psd_slices`, :code:`plot_psd_2d` or other plotting functions, or accesses :code:`.slice_x` and :code:`.slice_y` attribute variables.  For plots, see :code:`.plot2d()` and :code:`.slices().plot()`.  For slices, see :code:`.slices.<x,y,z,... as enumerated above>`.  To replicate the power law limits in plot_psd_slices, use :func:`prysm.plotting.add_psd_model`.
 * * :attr:`tan` and :attr:`sag` properties removed from :class:`~prysm.otf.MTF` instances as well as :meth:`exact_tan` and :meth:`exact_sag`.  These are now accessed via :code:`mtf.slices().x` and :code:`mtf.slices().y` and :meth:`~prysm.otf.MTF.exact_x` and :meth:`~prysm.otf.MTF.exact_y`.  Likewise, for :meth:`mtf.azimuthal_average`, use :code:`mtf.slices().azavg`.  The changes to tan and sag are made because it is not guaranteed that the x and y slices of the MTF correspond to tan and sag without more information given about field angles.  This is not something prysm has any knowledge of at this time.
-* * * :meth:`prysm.interferogram.Interferogram.psd` now returns a :class:`~prysm.interferogram.PSD` object, which is just a fancy :class:`~prysm._richdata.RichData` instance like any other prysm class.
+* * :meth:`prysm.interferogram.Interferogram.psd` now returns a :class:`~prysm.interferogram.PSD` object, which is just a fancy :class:`~prysm._richdata.RichData` instance like any other prysm class.
 * :meth:`prysm.psf.PSF.from_pupil` normalization with :code:`norm=radiometric` has changed to match Born & Wolf.  Results using this kwarg generated with prysm >= 0.17 will not match those for prysm < 0.17 in terms of scaling.  The contents will be otherwise the same.
 * :class:`~prysm.pupil.Pupil` and subclasses no longer take arguments of :code:`mask` and :code:`mask_target`, instead taking :code:`phase_mask` and :code:`transmission`.  This should improve clarity.  Arguments may take a few forms - :code:`<ndarray>`, :code:`<str>`, or :code:`[<str>, <float>]`.  In the ndarray case, the argument is used directly.  Strings are passed to the mask cache with implicit :code:`radius=1`, while in the last case the argument is a tuple or list of the mask shape and radius.
 * The default OPD unit for pupils is now nm instead of waves.
@@ -93,7 +86,7 @@ Bugfixes
 * Automatic hanning window generation when calculating PSDs has been fixed, and no longer results in an error for nonsquare arrays.
 * An issue where Welch windows may be generated off-center has been fixed.
 * An error/bug when calling :meth:`~prysm.interferogram.Interferogram.crop` requiring 0 pixels of removal on a side has been fixed.
-* :meth:`~prysm.objects.pinhole.analytic_ft` no longer includes an errant call to meshgrid that causes out of memory exceptions and incorrect results.
+* :meth:`prysm.objects.pinhole.analytic_ft` no longer includes an errant call to meshgrid that causes out of memory exceptions and incorrect results.
 
 
 Under-the-hood Changes

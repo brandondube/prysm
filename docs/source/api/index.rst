@@ -15,14 +15,18 @@ API Reference
    geometry
    interferogram
    io
+   jacobi
    mathops
    mtf_utils
    objects
    otf
+   plotting
    propagation
    psf
    pupil
+   qpoly
    sample_data
    thinlens
    util
+   wavelengths
    zernike
