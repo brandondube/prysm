@@ -119,3 +119,14 @@ def test_fit_psd(sample_i_mutate):
     assert a
     assert b
     assert c
+
+
+def test_print_does_not_throw(sample_i):
+    import contextlib
+    import io
+
+    s = io.StringIO()
+    with contextlib.redirect_stdout(s):
+        print(sample_i)
+
+    assert sample_i
