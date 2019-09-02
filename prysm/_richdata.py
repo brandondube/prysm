@@ -657,11 +657,7 @@ class Slices:
         # the x label has some special text manipulation
 
         if invert_x:
-            units = self.units.copy()
-            units.x = 1 / units.x
-            units.y = 1 / units.y
-
-            xlabel = self.labels.generic(self.x_unit, self.z_unit)
+            xlabel = self.labels.generic(self.x_unit ** -1, self.z_unit)
             # ax.invert_xaxis()
             if 'Period' in xlabel:
                 xlabel = xlabel.replace('Period', 'Frequency')
