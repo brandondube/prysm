@@ -23,14 +23,14 @@ Note that this list is in logical order of dependence, not in order of importanc
 * * :class:`ANSI1TermZernike` for ANSI Zernikes with j (single-term) indices.
 * :mod:`~prysm.qpoly` submodule for work with Qbfs, Qcon, and 2D-Q polynomials.  The raw functions allow caching to achieve O(N) performance instead of O(n^2).  The cache instances behave like the Zernike cache and allow constant time performance after the initial polynomial generation and storage.  Key user-facing classes:
 * * Qbfs:
-* * * :code:`~prysm.qpoly.QBFSSag`
-* * * :code:`~prysm.qpoly.QBFSCache`
+* * * :class:`~prysm.qpoly.QBFSSag`
+* * * :class:`~prysm.qpoly.QBFSCache`
 * * QCon:
-* * * :code:`~prysm.qpoly.QCONSag`
-* * * :code:`~prysm.qpoly.QCONCache`
+* * * :class:`~prysm.qpoly.QCONSag`
+* * * :class:`~prysm.qpoly.QCONCache`
 * * 2D-Q:
-* * * :code:`~prysm.qpoly.Q2DSag`
-* * * :code:`~prysm.qpoly.Q2DCache`
+* * * :class:`~prysm.qpoly.Q2DSag`
+* * * :class:`~prysm.qpoly.Q2DCache`
 * 1D polynomials (Qbfs and Qcon) take keyword arguments A0..An with no limit.  2D polynomials (2D-Q) take arguments of Am_n
 * Check the :mod:`~prysm.qpoly` docs for the "raw" functions.
 * :code:`__str__` dunder method for :class:`~prysm.interferogram.Interferogram` objects.
@@ -53,7 +53,7 @@ Note that this list is in logical order of dependence, not in order of importanc
 * * * :code:`(obj).exact_xy` for 2D sampling on (x, y)
 * * * :code:`(obj).exact_polar` for 2D sampling on (r, p)
 * Units rewrite:
-* * prysm now utilizes / understands `astropy.units <https://docs.astropy.org/en/stable/units/>`_  for all calculations using the object-oriented API.  :class:`BasicData` has become :class:`RichData` with a new :code:`xy_unit` and :code:`z_unit` kwarg.  If this is :code:`None`, the instance will adopt :code:config.<class>.default_<xy or z>_units`.  These default units mimic the behavior of prysm < 0.17, so users not adjusting units will feel no change.  To use custom units, the :code:`spatial_unit`, and :code:`phase_unit` arguments are no more, and should be generated loosely as follows:  For more information, see the `units documentation <../user_guide/units-and-labels.html>_.
+* * prysm now utilizes / understands `astropy.units <https://docs.astropy.org/en/stable/units/>`_  for all calculations using the object-oriented API.  :class:`BasicData` has become :class:`RichData` with new :code:`xy_unit` and :code:`z_unit` kwargs.  If this is :code:`None`, the instance will adopt :code:`config.<class>.default_<xy or z>_units`.  These default units mimic the behavior of prysm < 0.17, so users not adjusting units will feel no change.  To use custom units, the :code:`spatial_unit`, and :code:`phase_unit` arguments are no more, and should be generated loosely as follows:  For more information, see the `units documentation <../user_guide/units-and-labels.html>_.
 * Labels rewrite:
 * * prysm now has a labels system that mimics the units system.  The constructor works loosely as follows:
 
@@ -61,7 +61,7 @@ Note that this list is in logical order of dependence, not in order of importanc
 >>> lab = Labels(xybase='Pupil', z='OPD', xy_additions=['X', 'Y'])
 >>> pu = Pupil(labels=lab)
 
-* * Note that the Pupil class is used only for example, and the labels kwarg is nearly universal.  For more information, see the `labels documentation <../user_guide/units-and-labels.html>_.
+* * Note that the Pupil class is used only for example, and the labels kwarg is nearly universal.  For more information, see the `labels documentation <../user_guide/units-and-labels.html>`_.
 * Plotting rewrite:
 * * Over time, plotting in prysm has grown fragmented, with minor variations on the same theme throughout the classes.  To reduce the cognitive overhead for users, plotting has been made universal with a single :code:`plot2d` and :code:`(obj).slices().plot` implementaiton.  This means that nearly all prysm classes can be plotted with exactly the same grammar.
 
@@ -70,7 +70,7 @@ Breaking changes
 ================
 
 * Slicing and plotting refactoring breaks compatibilty with the prysm <= v0.16 API.
-* * :class:`BasicData`, has become :class:`~prysm._richdata.RichData`.
+* * :class:`BasicData` has become :class:`~prysm._richdata.RichData`.
 * * Universal plotting breaks much code that any of :code:`plot2d`, :code:`plot_slice_xy`, :code:`plot_azimuthal_average`, :code:`plot_psd_slices`, :code:`plot_psd_2d` or other plotting functions, or accesses :code:`.slice_x` and :code:`.slice_y` attribute variables.  For plots, see :code:`.plot2d()` and :code:`.slices().plot()`.  For slices, see :code:`.slices.<x,y,z,... as enumerated above>`.  To replicate the power law limits in plot_psd_slices, use :func:`prysm.plotting.add_psd_model`.
 * * :attr:`tan` and :attr:`sag` properties removed from :class:`~prysm.otf.MTF` instances as well as :meth:`exact_tan` and :meth:`exact_sag`.  These are now accessed via :code:`mtf.slices().x` and :code:`mtf.slices().y` and :meth:`~prysm.otf.MTF.exact_x` and :meth:`~prysm.otf.MTF.exact_y`.  Likewise, for :meth:`mtf.azimuthal_average`, use :code:`mtf.slices().azavg`.  The changes to tan and sag are made because it is not guaranteed that the x and y slices of the MTF correspond to tan and sag without more information given about field angles.  This is not something prysm has any knowledge of at this time.
 * * :meth:`prysm.interferogram.Interferogram.psd` now returns a :class:`~prysm.interferogram.PSD` object, which is just a fancy :class:`~prysm._richdata.RichData` instance like any other prysm class.
