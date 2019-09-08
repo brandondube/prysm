@@ -8,7 +8,27 @@ from .jacobi import jacobi
 
 
 def qbfs_recurrence_P(n, x, Pnm1=None, Pnm2=None, recursion_coef=None):
-    """P(m+1) from oe-18-19-19700 eq. (2.6)."""
+    """P(m+1) from oe-18-19-19700 eq. (2.6).
+
+    Parameters
+    ----------
+    n : `int`
+        polynomial order
+    x : `numpy.ndarray`
+        x values, notionally in / orthogonal over [0, 1], to evaluate at
+    Pnm1 : `numpy.ndarray`, optional
+        the value of this function for argument n - 1
+    Pnm2 : `numpy.ndarray`, optional
+        the value of this function for argument n - 2
+    recursion_coef : `numpy.ndarray`, optional
+        the coefficient to apply, if recursion_coef = C: evaluates C * Pnm1 - Pnm2
+
+    Returns
+    -------
+    `numpy.ndarray`
+        the value of the auxiliary P polynomial for given order n and point(s) x
+
+    """
     if n == 0:
         return 2
     elif n == 1:
@@ -25,7 +45,31 @@ def qbfs_recurrence_P(n, x, Pnm1=None, Pnm2=None, recursion_coef=None):
 
 
 def qbfs_recurrence_Q(n, x, Pn=None, Pnm1=None, Pnm2=None, Qnm1=None, Qnm2=None, recursion_coef=None):
-    """Q(m+1) from oe-18-19-19700 eq. (2.7)."""
+    """Q(m+1) from oe-18-19-19700 eq. (2.7).
+
+    Parameters
+    ----------
+    n : `int`
+        polynomial order
+    x : `numpy.ndarray`
+        x values, notionally in / orthogonal over [0, 1], to evaluate at
+    Pnm1 : `numpy.ndarray`, optional
+        the value of qbfs_recurrence_P for argument n - 1
+    Pnm2 : `numpy.ndarray`, optional
+        the value of qbfs_recurrence_P for argument n - 2
+    Pnm1 : `numpy.ndarray`, optional
+        the value of this function for argument n - 1
+    Pnm2 : `numpy.ndarray`, optional
+        the value of this function for argument n - 2
+    recursion_coef : `numpy.ndarray`, optional
+        the coefficient to apply, if recursion_coef = C: evaluates C * Pnm1 - Pnm2
+
+    Returns
+    -------
+    `numpy.ndarray`
+        the value of the the Qbfs polynomial for given order n and point(s) x
+
+    """
     if n == 0:
         return e.ones_like(x)
     elif n == 1:
@@ -323,27 +367,3 @@ class QCONSag(QPolySag1D):
         super().build()
         coef = self._cache.gridcache(samples=self.samples, radius=1, r='r -> r^4')['r']
         self.phase *= coef
-
-
-def a_zernike(m, n):
-    """a(n) from oe-18-13-13861 eq. (4.1a)."""
-    s = m + 2 * n
-    numerator = (s + 1) * ((s - n) ** 2 + n ** 2 + s)
-    denominator = (n + 1) * (s - n + 1) * s
-    return numerator / denominator
-
-
-def b_zernike(m, n):
-    """b(n) from oe-18-13-13861 eq. (4.1b)."""
-    s = m + 2 * n
-    numerator = (s + 2) * (s + 1)
-    denominator = (n + 1) * (s + n - 1)
-    return numerator / denominator
-
-
-def c_zernike(m, n):
-    """c(n) from oe-18-13-13861 eq. (4.1c)."""
-    s = m + 2 * n
-    numerator = (s + 2) * (s - n) * n
-    denominator = (n + 1) * (s - n + 1) * s
-    return numerator / denominator
