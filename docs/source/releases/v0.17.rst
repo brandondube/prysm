@@ -79,6 +79,7 @@ Breaking changes
 * The default OPD unit for pupils is now nm instead of waves.
 * :code:`interp_method` parameters on plotting functions have been renamed to :code:`interpolation`.  This mimics matplotlib exactly, as prysm is simply wrapping matplotlib for these methods.
 * :func:`prysm.geometry.triangle` was removed as it throws a Qhull error and cannot be made to work with the underlying implementation of N sided polygons.
+* The optional dependency directives have been installed; triggering pip installs of these dependencies has a deleterious effect on user's conda environments, and the cupy dependency was not always resolved properly (users need cupy-cuda91, for example).
 
 Bugfixes
 ========
@@ -93,3 +94,5 @@ Under-the-hood Changes
 ======================
 
 * The use of astropy.units has changed the display of PSD units.  While before they would appear as, for example, nm^2 / (cy/mm)^2, they are now reduced by astropy to, for example, nm^2 mm^2.  The two are equivalent and there is no change to the meaning of results.
+
+* prysm no longer optionally depends on numba.  The reimplementation of the Zernike code based on Jacobi polynomials has led to a faster implementation than the previous functions when JIT compiled.
