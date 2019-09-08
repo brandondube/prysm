@@ -81,9 +81,7 @@ def f_qbfs(n):
 
 
 class QBFSCache(object):
-    """Cache of Qbfs terms evaluated over the unit circle.
-
-    Note that the .grids attribute stores only radial coordinates, and they are stored in squared form."""
+    """Cache of Qbfs terms evaluated over the unit circle."""
     def __init__(self, gridcache=gridcache):
         """Create a new QBFSCache instance."""
         self.Qs = {}
@@ -304,7 +302,7 @@ class QBFSSag(QPolySag1D):
 
         """
         super().build()
-        coef = self._cache.gridcache(samples=self.samples, radius=1, r='r -> 2r^2 - 1')['r']
+        coef = self._cache.gridcache(samples=self.samples, radius=1, r='r -> r^2 (1-r^2)')['r']
         self.phase *= coef
 
 
