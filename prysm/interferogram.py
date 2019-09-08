@@ -982,14 +982,14 @@ class Interferogram(OpticalPhase):
                          high_phase_res=high_phase_res)
 
     def __str__(self):
-        if self.units.x != u.pix:
+        if self.xy_unit != u.pix:
             size_part_2 = f', ({self.shape[1]}x{self.shape[0]}) px'
         else:
             size_part_2 = ''
         return inspect.cleandoc(f"""Interferogram with:
-                Units: {self.units}
-                Size: ({self.diameter_x:.3f}x{self.diameter_y:.3f}), {size_part_2}
-                {self.labels._z}: {self.pv:.3f} PV, {self.rms:.3f} RMS [{self.units.z}]""")
+                Units: xy:: {self.xy_unit}, z:: {self.z_unit}
+                Size: ({self.diameter_x:.3f}x{self.diameter_y:.3f}){size_part_2}
+                {self.labels._z}: {self.pv:.3f} PV, {self.rms:.3f} RMS [{self.z_unit}]""")
 
     @staticmethod
     def from_zygo_dat(path, multi_intensity_action='first'):

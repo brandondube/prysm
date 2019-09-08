@@ -1,8 +1,11 @@
 """A base pupil interface for different aberration models."""
 
+from astropy import units as u
+
 from .conf import config
 from .mathops import engine as e
 from ._phase import OpticalPhase
+from .coordinates import gridcache
 from .geometry import mask_cleaner
 from .util import std
 
@@ -10,7 +13,7 @@ from .util import std
 class Pupil(OpticalPhase):
     """Pupil of an optical system."""
     def __init__(self, samples=128, dia=1, labels=None, xy_unit=None, z_unit=None, wavelength=None,
-                 phase_mask='circle', transmission='circle', ux=None, uy=None, phase=None):
+                 phase_mask='circle', transmission='circle', x=None, y=None, phase=None):
         """Create a new `Pupil` instance.
 
         Parameters
@@ -33,9 +36,9 @@ class Pupil(OpticalPhase):
             If array, used directly.
             If str, assumed to be known mask type for geometry submodule.
             If tuple, assumed to be known mask type, with optional radius.
-        ux : `np.ndarray`
+        x : `np.ndarray`
             x axis units
-        uy : `np.ndarray`
+        y : `np.ndarray`
             y axis units
         phase : `np.ndarray`
             phase data
@@ -46,11 +49,11 @@ class Pupil(OpticalPhase):
         and simply copy values.
 
         """
-        if ux is None:
+        if x is None:
             # must build a pupil
-            ux = e.linspace(-dia / 2, dia / 2, samples)
-            uy = e.linspace(-dia / 2, dia / 2, samples)
-            self.samples = samples
+            xy = gridcache(samples, dia / 2, x='x', y='y')
+            x = xy['x'][0, :]
+            y = xy['y'][:, 0]
             need_to_build = True
         else:
             # data already known
@@ -59,7 +62,7 @@ class Pupil(OpticalPhase):
         if labels is None:
             labels = config.pupil_labels
 
-        super().__init__(x=ux, y=uy, phase=phase, labels=labels,
+        super().__init__(x=x, y=y, phase=phase, labels=labels,
                          xy_unit=xy_unit or config.phase_xy_unit,
                          z_unit=z_unit or config.phase_z_unit,
                          wavelength=wavelength)
@@ -67,6 +70,7 @@ class Pupil(OpticalPhase):
         phase_mask = mask_cleaner(phase_mask, samples)
 
         if need_to_build:
+            self.samples = samples
             self.build()
             if phase_mask is not None:
                 self.phase = self.phase * phase_mask
@@ -86,7 +90,8 @@ class Pupil(OpticalPhase):
     def strehl(self):
         """Strehl ratio of the pupil."""
         phase = self.change_z_unit(to='um', inplace=False)
-        return e.exp(-4 * e.pi / self.wavelength / self.wavelength * std(phase) ** 2)
+        wav = self.wavelength.to(u.um)
+        return e.exp(-4 * e.pi / wav * std(phase) ** 2)
 
     @property
     def fcn(self):
@@ -175,7 +180,7 @@ class Pupil(OpticalPhase):
         return result
 
     @staticmethod
-    def from_interferogram(interferogram, wvl=None):
+    def from_interferogram(interferogram, wvl=None, mask_phase=True):
         """Create a new Pupil instance from an interferogram.
 
         Parameters
@@ -199,7 +204,14 @@ class Pupil(OpticalPhase):
         if wvl is None:  # not user specified
             wvl = interferogram.wavelength
 
+        transmission = e.isfinite(interferogram.phase)
+        if mask_phase:
+            phase_mask = transmission
+        else:
+            phase_mask = None
+
         return Pupil(wavelength=wvl, phase=interferogram.phase,
-                     opd_unit=interferogram.phase_unit,
-                     ux=interferogram.x, uy=interferogram.y,
-                     mask=~(interferogram.phase == e.nan))
+                     z_unit=interferogram.z_unit,
+                     x=interferogram.x, y=interferogram.y,
+                     phase_mask=phase_mask,
+                     transmission=transmission)

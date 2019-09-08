@@ -755,7 +755,7 @@ class BaseZernike(Pupil):
 
         if kwargs is not None:
             for key, value in kwargs.items():
-                if key[0].lower() == 'z':
+                if key[0].lower() == 'z' and key[1].isnumeric():
                     idx = int(key[1:])  # strip 'Z' from index
                     self.coefs[idx - self.base] = value
                 elif key.lower() == 'norm':

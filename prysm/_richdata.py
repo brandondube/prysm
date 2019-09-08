@@ -173,7 +173,7 @@ class RichData:
             return modified_data
         else:
             setattr(self, self._data_attr, modified_data)
-            self.units = unit
+            self.z_unit = unit
             return self
 
     def slices(self, twosided=None):
@@ -639,6 +639,9 @@ class Slices:
         if isinstance(zorder, int):
             zorder = [zorder] * len(slices)
 
+        if not hasattr(xlim, '__iter__') and self.twosided:
+            xlim = (-xlim, xlim)
+
         fig, ax = share_fig_ax(fig, ax)
 
         for slice_, alpha, lw, zorder in zip(slices, alpha, lw, zorder):
@@ -654,11 +657,7 @@ class Slices:
         # the x label has some special text manipulation
 
         if invert_x:
-            units = self.units.copy()
-            units.x = 1 / units.x
-            units.y = 1 / units.y
-
-            xlabel = self.labels.generic(self.x_unit, self.z_unit)
+            xlabel = self.labels.generic(self.x_unit ** -1, self.z_unit)
             # ax.invert_xaxis()
             if 'Period' in xlabel:
                 xlabel = xlabel.replace('Period', 'Frequency')

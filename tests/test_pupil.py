@@ -59,3 +59,7 @@ def test_pupil_add_functions(p):
 
 def test_pupil_sub_functions(p):
     assert p - p
+
+
+def test_pupil_strehl_does_not_throw(p):
+    assert p.strehl
