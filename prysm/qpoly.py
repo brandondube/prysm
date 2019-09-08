@@ -220,7 +220,7 @@ class QCONCache(object):
 
     def get_grid(self, samples, rho_max=1):
         """Get a grid of rho coordinates for a given number of samples."""
-        return self.gridcache(samples=samples, radius=rho_max, r='r -> r^2')['r']
+        return self.gridcache(samples=samples, radius=rho_max, r='r -> 2r^2 - 1')['r']
 
     def __call__(self, m, samples, rho_max=1):
         """Get an array of sag values for a given index, norm, and number of samples."""

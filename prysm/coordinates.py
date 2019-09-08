@@ -187,6 +187,10 @@ def v_to_2v_minus_one(v):
     return 2 * v - 1
 
 
+def v_to_2v2_minus_one(v):
+    return 2 * v ** 2 - 1
+
+
 def v_to_v_squared(v):
     return v ** 2
 
@@ -219,6 +223,7 @@ class GridCache:
         self.transformation_functions = {
             'v -> 4v^2 - 4v + 1': v_to_4v2_minus_4v_plus1,
             'v -> v^2 (1-v^2)': v_to_v2_times_1_minus_v2,
+            'v -> 2v^2 - 1': v_to_2v2_minus_one,
             'v -> 2v - 1': v_to_2v_minus_one,
             'v -> v^2': v_to_v_squared,
             'v -> v^4': v_to_v_fouth,
