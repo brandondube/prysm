@@ -2,12 +2,15 @@
 from collections import defaultdict
 from functools import partial
 
+from retry import retry
+
 from .conf import config
 from .mathops import engine as e, jit, vectorize, fuse, kronecker, sign
 from .pupil import Pupil
-from .coordinates import make_rho_phi_grid, cart_to_polar
+from .coordinates import make_rho_phi_grid, cart_to_polar, gridcache
 from .util import rms, sort_xy, is_odd
 from .plotting import share_fig_ax
+from .jacobi import jacobi
 
 # See JCW - http://wp.optics.arizona.edu/jcwyant/wp-content/uploads/sites/13/2016/08/ZernikePolynomialsForTheWeb.pdf
 
@@ -720,6 +723,107 @@ class ZCache(object):
 
 zcache = ZCache()
 config.chbackend_observers.append(zcache.clear)
+
+
+class ZCacheMN:
+    """Cache of Zernike terms evaluated over the unit circle, based on (n, m) indices."""
+    def __init__(self, gridcache=gridcache):
+        """Create a new ZCache instance."""
+        self.normed = {}
+        self.regular = {}
+        self.jac = {}
+        self.cos = {}
+        self.sin = {}
+        self.gridcache = gridcache
+
+    @retry(tries=2)
+    def get_zernike(self, n, m, samples, norm):
+        """Get an array of phase values for a given radial order n, azimuthal order m, number of samples, and orthonormalization."""  # NOQA
+        key = (n, m, samples)
+        if norm:
+            d_ = self.normed
+        else:
+            d_ = self.regular
+
+        try:
+            return d_[key]
+        except KeyError as e:
+            zern = self.get_term(n=n, m=m, samples=samples)
+            if norm:
+                zern = zern * zernike_norm(n=n, m=m)
+
+            d_[key] = zern
+            raise e
+
+    def get_term(self, n, m, samples):
+        r, p = self.get_grid(samples=samples, modified=False)
+        Rterm = self.get_jacobi(n=n, m=m, samples=samples)
+
+        if m != 0:
+            azterm = self.get_azterm(m=m, samples=samples)
+            rterm = r ** m
+            Rterm = Rterm * azterm * rterm
+
+        return Rterm
+
+    def __call__(self, n, m, samples, norm):
+        return self.get_zernike(n=n, m=m, samples=samples, norm=norm)
+
+    @retry(tries=2)
+    def get_azterm(self, m, samples):
+        if sign(m) == -1:
+            d_ = self.sin
+            func = e.sin
+        else:
+            d_ = self.cos
+            func = e.cos
+
+        try:
+            return d_[m]
+        except KeyError as err:
+            _, p = self.get_grid(samples=samples, modified=False)
+            d_[m] = func(m * p)
+            raise err
+
+    @retry(tries=10)
+    def get_jacobi(self, n, m, samples):
+        nj = (n - m) / 2
+        key = (n, m, samples)
+        print(nj)
+        try:
+            return self.jac[key]
+        except KeyError as e:
+            r, _ = self.get_grid(samples=samples)
+            if n > 2:
+                jnm1 = self.get_jacobi(n=nj - 1, m=m, samples=samples)
+                jnm2 = self.get_jacobi(n=nj - 2, m=m, samples=samples)
+            else:
+                jnm1, jnm2 = None, None
+            jac = jacobi(nj, alpha=0, beta=m - n, Pnm1=jnm1, Pnm2=jnm2, x=r)
+            self.jac[key] = jac
+            raise e
+
+    def get_grid(self, samples, modified=True):
+        if modified:
+            res = self.gridcache(samples=samples, radius=1, r='r -> 2r^2 - 1', t='t')
+        else:
+            res = self.gridcache(samples=samples, radius=1, r='r', t='t')
+
+        return res['r'], res['t']
+
+    def clear(self, *args):
+        """Empty the cache."""
+        self.normed = {}
+        self.regular = {}
+
+    def nbytes(self):
+        """total size in memory of the cache in bytes."""
+        total = 0
+        for dict_ in (self.normed, self.regular, self.jac):
+            for key in dict_:
+                total += dict_[key].nbytes
+
+        return total
 
 
 class BaseZernike(Pupil):
