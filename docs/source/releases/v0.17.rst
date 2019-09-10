@@ -11,17 +11,27 @@ Note that this list is in logical order of dependence, not in order of importanc
 
 * New :mod:`~prysm.mathops` functions: :func:`~prysm.mathops.gamma`, :func:`~prysm.mathops.kronecker`, and :func:`~prysm.mathops.sign`.
 * :mod:`~prysm.jacobi` submodule for recursive jacobi polynomial computation, key functions are :func:`~prysm.jacobi.jacobi` and :func:`~prysm.jacobi.jacobi_sequence`.
-* New :mod:`~prysm.zernike` functions:
-* * :func:`~prysm.zernike.zernike_norm` to calculate the norm of a Zernike term given its (n, m) radial and azimuthal orders.
-* * :func:`~prysm.zernike.n_m_to_fringe` to convert (n, m) radial and azimuthal orders to fringe indices.
-* * :func:`~prysm.zernike.n_m_to_ansi_j` to convert (n, m) radial and azimuthal orders to ANSI single-term indices.
-* * :func:`~prysm.zernike.ansi_j_to_n_m` to perform the reverse of :code:`n_m_to_ansi_j`.
-* * :func:`~prysm.zernike.noll_to_n_m` to perform Noll to (n, m) radial and azimuthal indices.
-* * :func:`~prysm.zernike.zero_separation` to calculate the zero separation, in fractions of 1, for example :code:`1 / zero_separation(4)` returns 16, indicating 16 samples per radius are needed to Nyquist sample the 4th radial order Zernike polynomial (Primary Spherical).
-* Recursively generated Zernike polynomials:
-* * :class:`ANSI2TermZernike` for ANSI Zernikes with (n, m) indices.  See The 2D-Q note below for how these coefficients are entered.
-* * :class:`ANSI1TermZernike` for ANSI Zernikes with j (single-term) indices.
-* :mod:`~prysm.qpoly` submodule for work with Qbfs, Qcon, and 2D-Q polynomials.  The raw functions allow caching to achieve O(N) performance instead of O(n^2).  The cache instances behave like the Zernike cache and allow constant time performance after the initial polynomial generation and storage.  Key user-facing classes:
+* Changes to :mod:`~prysm.zernike`:
+* * Zernike terms are now generated using recursive Jacobi polynomials instead of explicit expressions:
+* * * performance is on average ~ 2-3x higher than prysm v0.16 when numba is installed
+* * * numba will no longer be used when the explicit functions are removed in v0.18
+* * * there is a new cache :class:`~prysm.zernike.ZCacheMN` which will replace :class:`~prysm.zernike.ZCache` in prysm v0.18, use of :code:`Zcache` is deprecated.  At that time, :code:`ZCacheMN` will be renamed to :code:`ZCache`.
+* * * Likewise, functions for higher order Zernike polynomials (>trefoil; greater than Fringe index 11) will be removed in v0.18; these are currently deprecated.
+* * * explicit Zernike functions no longer bear :code:`norm` or :code:`name` attributes; use the functions enumerated below to acquire these values based on an index.
+* * New functions:
+* * * :func:`~prysm.zernike.zernike_norm` to calculate the norm of a Zernike term given its (n, m) radial and azimuthal orders.
+* * * :func:`~prysm.zernike.n_m_to_fringe` to convert (n, m) radial and azimuthal orders to fringe indices.
+* * * :func:`~prysm.zernike.n_m_to_ansi_j` to convert (n, m) radial and azimuthal orders to ANSI single-term indices.
+* * * :func:`~prysm.zernike.ansi_j_to_n_m` to perform the reverse of :code:`n_m_to_ansi_j`.
+* * * :func:`~prysm.zernike.noll_to_n_m` to perform Noll to (n, m) radial and azimuthal indices.
+* * * :func:`~prysm.zernike.zero_separation` to calculate the zero separation, in fractions of 1, for example :code:`1 / zero_separation(4)` returns 16, indicating 16 samples per radius are needed to Nyquist sample the 4th radial order Zernike polynomial (Primary Spherical).
+* * New classes:
+* * * :class:`~prysm.zernike.ANSI2TermZernike` for ANSI Zernikes with (n, m) indices.  See The 2D-Q note below for how these coefficients are entered.
+* * * :class:`~prysm.zernike.ANSI1TermZernike` for ANSI Zernikes with j (single-term) indices.
+* New submodule :mod:`~prysm.qpoly` for work with Qbfs, Qcon, and 2D-Q polynomials.  The raw functions allow caching to achieve O(N) performance instead of O(n^2).  The cache instances behave like the Zernike cache and allow constant time performance after the initial polynomial generation and storage.  Key user-facing classes:
+* * Updated classes:
+* * * :class:`~prysm.zernike.NollZernike` can now be expanded up to arbitrary order / index.  I.e., the Z36 limit is removed.
+* * * :class:`~prysm.zernike.FringeZernike` can now be expanded up to arbitrary order / index.  I.e., the Z48 limit is removed.
 * * Qbfs:
 * * * :code:`~prysm.qpoly.QBFSSag`
 * * * :code:`~prysm.qpoly.QBFSCache`
@@ -63,7 +73,8 @@ Note that this list is in logical order of dependence, not in order of importanc
 
 * * Note that the Pupil class is used only for example, and the labels kwarg is nearly universal.  For more information, see the `labels documentation <../user_guide/units-and-labels.html>_.
 * Plotting rewrite:
-* * Over time, plotting in prysm has grown fragmented, with minor variations on the same theme throughout the classes.  To reduce the cognitive overhead for users, plotting has been made universal with a single :code:`plot2d` and :code:`(obj).slices().plot` implementaiton.  This means that nearly all prysm classes can be plotted with exactly the same grammar.
+* * Over time, plotting in prysm has grown fragmented, with minor variations on the same theme throughout the classes.  To reduce the cognitive overhead for users, plotting has been made universal with a single :code:`plot2d` and :code:`(obj).slices().plot` implementaiton.  This means that nearly all prysm classes can be plotted with exactly the same grammar.  This brings many breaking changes, listed in the section below.
+* new functions :meth:`prysm.psf.fwhm`, :meth:`~prysm.psf.one_over_e`, :meth:`~prysm.psf.one_over_e2` for calculating the FWHM, 1/e, and 1/e^2 radii of PSFs.  :meth:`~prysm.psf.estimate_radius` for size estimation at an arbitrary irradiance value.
 
 
 Breaking changes
@@ -71,12 +82,16 @@ Breaking changes
 
 * Slicing and plotting refactoring breaks compatibilty with the prysm <= v0.16 API.
 * * :class:`BasicData`, has become :class:`~prysm._richdata.RichData`.
-* * Universal plotting breaks much code that any of :code:`plot2d`, :code:`plot_slice_xy`, :code:`plot_azimuthal_average`, :code:`plot_psd_slices`, :code:`plot_psd_2d` or other plotting functions, or accesses :code:`.slice_x` and :code:`.slice_y` attribute variables.  For plots, see :code:`.plot2d()` and :code:`.slices().plot()`.  For slices, see :code:`.slices.<x,y,z,... as enumerated above>`.  To replicate the power law limits in plot_psd_slices, use :func:`prysm.plotting.add_psd_model`.
-* * :attr:`tan` and :attr:`sag` properties removed from :class:`~prysm.otf.MTF` instances as well as :meth:`exact_tan` and :meth:`exact_sag`.  These are now accessed via :code:`mtf.slices().x` and :code:`mtf.slices().y` and :meth:`~prysm.otf.MTF.exact_x` and :meth:`~prysm.otf.MTF.exact_y`.  Likewise, for :meth:`mtf.azimuthal_average`, use :code:`mtf.slices().azavg`.  The changes to tan and sag are made because it is not guaranteed that the x and y slices of the MTF correspond to tan and sag without more information given about field angles.  This is not something prysm has any knowledge of at this time.
+* * Universal plotting elimiates or changes the signature of many methods:
+* * * :meth:`prysm.psf.PSF.plot2d` - use the same method name, note that arguments are different.  For the :code:`circle_ee` functionality, use :func:`prysm.plotting.annotate_psf`.
+* * *  :meth:`prysm.psf.PSF.plot_slice_xy`, :meth:`prysm.otf.MTF.plot_slice_xy`, :meth:`prysm.otf.MTF.plot_tan_sag`, :meth:`prysm.otf.MTF.plot_azimuthal_average` - use :meth:`prysm.RichData.Slices.plot` accessed as :code:`<obj>.slices().plot()`.
+* * * :meth:`prysm.interferogram.Interferogram.plot_psd_slices` - use :code:`Interferogram.psd().slices().plot()`.  To replicate the power law limits, use :func:`prysm.plotting.add_psd_model`.
+* * * :meth:`prysm.interferogram.Interferogram.plot_psd_2d` - use :code:`Interferogram.psd().plot2d()`.
+* * :code:`.slice_x` and :code:`.slice_y` on :class:`~prysm._phase.OpticalPhase`, :class:`~prysm.psf.PSF` and :class:`~prysm.otf.MTF` - use :code:`<obj>.slices().x or <obj>.slices().y`
+* * :attr:`tan` and :attr:`sag` properties deprecated on :class:`~prysm.otf.MTF` instances as well as :meth:`exact_tan` and :meth:`exact_sag`.  Please access via :code:`mtf.slices().x` and :code:`mtf.slices().y` and :meth:`~prysm.otf.MTF.exact_x` and :meth:`~prysm.otf.MTF.exact_y`.  Likewise, for :meth:`mtf.azimuthal_average`, use :code:`mtf.slices().azavg`.  These properties and functions will be removed in prysm v0.18.  The changes to tan and sag are made because it is not guaranteed that the x and y slices of the MTF correspond to tan and sag without more information given about field angles.  This is not something prysm has any knowledge of at this time.
 * * :meth:`prysm.interferogram.Interferogram.psd` now returns a :class:`~prysm.interferogram.PSD` object, which is just a fancy :class:`~prysm._richdata.RichData` instance like any other prysm class.
 * :meth:`prysm.psf.PSF.from_pupil` normalization with :code:`norm=radiometric` has changed to match Born & Wolf.  Results using this kwarg generated with prysm >= 0.17 will not match those for prysm < 0.17 in terms of scaling.  The contents will be otherwise the same.
 * :class:`~prysm.pupil.Pupil` and subclasses no longer take arguments of :code:`mask` and :code:`mask_target`, instead taking :code:`phase_mask` and :code:`transmission`.  This should improve clarity.  Arguments may take a few forms - :code:`<ndarray>`, :code:`<str>`, or :code:`[<str>, <float>]`.  In the ndarray case, the argument is used directly.  Strings are passed to the mask cache with implicit :code:`radius=1`, while in the last case the argument is a tuple or list of the mask shape and radius.
-* The default OPD unit for pupils is now nm instead of waves.
 * :code:`interp_method` parameters on plotting functions have been renamed to :code:`interpolation`.  This mimics matplotlib exactly, as prysm is simply wrapping matplotlib for these methods.
 * :func:`prysm.geometry.triangle` was removed as it throws a Qhull error and cannot be made to work with the underlying implementation of N sided polygons.
 * The optional dependency directives have been installed; triggering pip installs of these dependencies has a deleterious effect on user's conda environments, and the cupy dependency was not always resolved properly (users need cupy-cuda91, for example).
