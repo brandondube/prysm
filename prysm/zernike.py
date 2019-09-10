@@ -739,6 +739,8 @@ class ZCacheMN:
     @retry(tries=2)
     def get_zernike(self, n, m, samples, norm):
         """Get an array of phase values for a given radial order n, azimuthal order m, number of samples, and orthonormalization."""  # NOQA
+        if is_odd(n - m):
+            raise ValueError('Zernike polynomials are only defined for n-m even.')
         key = (n, m, samples)
         if norm:
             d_ = self.normed
@@ -786,20 +788,20 @@ class ZCacheMN:
             raise err
 
     @retry(tries=10)
-    def get_jacobi(self, n, m, samples):
-        nj = (n - m) / 2
-        key = (n, m, samples)
-        print(nj)
+    def get_jacobi(self, n, m, samples, nj=None):
+        if nj is None:
+            nj = (n - m) // 2
+        key = (nj, m, samples)
         try:
             return self.jac[key]
         except KeyError as e:
             r, _ = self.get_grid(samples=samples)
-            if n > 2:
-                jnm1 = self.get_jacobi(n=nj - 1, m=m, samples=samples)
-                jnm2 = self.get_jacobi(n=nj - 2, m=m, samples=samples)
+            if nj > 2:
+                jnm1 = self.get_jacobi(n=None, nj=nj - 1, m=m, samples=samples)
+                jnm2 = self.get_jacobi(n=None, nj=nj - 2, m=m, samples=samples)
             else:
                 jnm1, jnm2 = None, None
-            jac = jacobi(nj, alpha=0, beta=m - n, Pnm1=jnm1, Pnm2=jnm2, x=r)
+            jac = jacobi(nj, alpha=0, beta=m, Pnm1=jnm1, Pnm2=jnm2, x=r)
             self.jac[key] = jac
             raise e
 
