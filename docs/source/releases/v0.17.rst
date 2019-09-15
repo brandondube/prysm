@@ -16,8 +16,8 @@ Note that this list is in logical order of dependence, not in order of importanc
 * * * performance is on average ~ 2-3x higher than prysm v0.16 when numba is installed
 * * * numba will no longer be used when the explicit functions are removed in v0.18
 * * * there is a new cache :class:`~prysm.zernike.ZCacheMN` which will replace :class:`~prysm.zernike.ZCache` in prysm v0.18, use of :code:`Zcache` is deprecated.  At that time, :code:`ZCacheMN` will be renamed to :code:`ZCache`.
-* * * Likewise, functions for higher order Zernike polynomials (>trefoil; greater than Fringe index 11) will be removed in v0.18; these are currently deprecated.
-* * * explicit Zernike functions no longer bear :code:`norm` or :code:`name` attributes; use the functions enumerated below to acquire these values based on an index.
+* * * * Likewise, functions for higher order Zernike polynomials (>trefoil; greater than Fringe index 11) will be removed in v0.18; these are currently deprecated.
+* * * * explicit Zernike functions will no longer bear :code:`norm` or :code:`name` attributes; use the functions enumerated below to acquire these values based on an index.
 * * New functions:
 * * * :func:`~prysm.zernike.zernike_norm` to calculate the norm of a Zernike term given its (n, m) radial and azimuthal orders.
 * * * :func:`~prysm.zernike.n_m_to_fringe` to convert (n, m) radial and azimuthal orders to fringe indices.
