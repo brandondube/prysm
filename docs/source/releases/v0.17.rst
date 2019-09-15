@@ -77,6 +77,14 @@ Note that this list is in logical order of dependence, not in order of importanc
 * new functions :meth:`prysm.psf.fwhm`, :meth:`~prysm.psf.one_over_e`, :meth:`~prysm.psf.one_over_e2` for calculating the FWHM, 1/e, and 1/e^2 radii of PSFs.  :meth:`~prysm.psf.estimate_radius` for size estimation at an arbitrary irradiance value.
 
 
+New Dependencies
+================
+
+Prysm now depends on two new libraries.  The former is more or less part of the core scientific stack, and the latter is a small pure-python library with no dependencies.  Astropy is used for units, retry is used to make cleaner cache code.  Pip should install these for you if they are not already installed.
+
+* astropy (install from conda or pypi)
+* retry (install from pypi)
+
 Breaking changes
 ================
 
@@ -87,6 +95,7 @@ Breaking changes
 * * *  :meth:`prysm.psf.PSF.plot_slice_xy`, :meth:`prysm.otf.MTF.plot_slice_xy`, :meth:`prysm.otf.MTF.plot_tan_sag`, :meth:`prysm.otf.MTF.plot_azimuthal_average` - use :meth:`prysm.RichData.Slices.plot` accessed as :code:`<obj>.slices().plot()`.
 * * * :meth:`prysm.interferogram.Interferogram.plot_psd_slices` - use :code:`Interferogram.psd().slices().plot()`.  To replicate the power law limits, use :func:`prysm.plotting.add_psd_model`.
 * * * :meth:`prysm.interferogram.Interferogram.plot_psd_2d` - use :code:`Interferogram.psd().plot2d()`.
+* * * default axis limits for PSFs and MTFs are no longer 20 and 200, but are the entire support of the object.
 * * :code:`.slice_x` and :code:`.slice_y` on :class:`~prysm._phase.OpticalPhase`, :class:`~prysm.psf.PSF` and :class:`~prysm.otf.MTF` - use :code:`<obj>.slices().x or <obj>.slices().y`
 * * :attr:`tan` and :attr:`sag` properties deprecated on :class:`~prysm.otf.MTF` instances as well as :meth:`exact_tan` and :meth:`exact_sag`.  Please access via :code:`mtf.slices().x` and :code:`mtf.slices().y` and :meth:`~prysm.otf.MTF.exact_x` and :meth:`~prysm.otf.MTF.exact_y`.  Likewise, for :meth:`mtf.azimuthal_average`, use :code:`mtf.slices().azavg`.  These properties and functions will be removed in prysm v0.18.  The changes to tan and sag are made because it is not guaranteed that the x and y slices of the MTF correspond to tan and sag without more information given about field angles.  This is not something prysm has any knowledge of at this time.
 * * :meth:`prysm.interferogram.Interferogram.psd` now returns a :class:`~prysm.interferogram.PSD` object, which is just a fancy :class:`~prysm._richdata.RichData` instance like any other prysm class.
