@@ -1,11 +1,13 @@
 """A base point spread function interface."""
+import numbers
+
 from scipy import optimize, interpolate, special
 
 from astropy import units as u
 
 from .conf import config
 from .mathops import engine as e, jinc
-from .coordinates import cart_to_polar
+from .coordinates import cart_to_polar, uniform_cart_to_polar
 from .plotting import share_fig_ax
 from .util import sort_xy
 from .convolution import Convolvable
@@ -28,25 +30,139 @@ AIRYDATA = {
 }
 
 
-class PSF(Convolvable):
-    """A Point Spread Function.
+def sizeof(x, y, data, metric, criteria='last'):
+    """Calculate the "size" of the function in data based on a metric.
 
-    Attributes
+    Parameters
     ----------
-    center_x : `int`
-        center sample along x
-    center_y : `int`
-        center sample along y
-    data : `numpy.ndarray`
-        PSF normalized intensity data
-    sample_spacing : `float`
-        center to center spacing of samples
     x : `numpy.ndarray`
-        x Cartesian axis locations of samples, 1D ndarray
-    y `numpy.ndarray`
-        y Cartesian axis locations of samples, 1D ndarray
+        x coordinates, 1D
+    y : `numpy.ndarray`
+        y coordinates, 1D
+    data : `numpy.ndarray`
+        f(x,y), 2D
+    metric : `str` or `float`, {'fwhm', '1/e', '1/e^2', float()}
+        what metric to apply
+    criteria : `str`, optional, {'first', 'last'}
+        whether to use the first or last occurence of <metric>
+
+    Returns
+    -------
+    `float`
+        the radial coordinate at which on average the function reaches <metric>
+
+    Raises
+    ------
+    ValueError
+        metric not in ('fwhm', '1/e', '1/e^2', numbers.Number())
 
     """
+    criteria = criteria.lower()
+    metric = metric.lower()
+
+    r, p, polar = uniform_cart_to_polar(x, y, data)
+    max_ = polar.max()
+    if metric == 'fwhm':
+        hm = max_ / 2
+    elif metric == '1/e':
+        hm = 1 / e.e * max_
+    elif metric == '1/e^2':
+        hm = 1 / (e.e ** 2) * max_
+    elif isinstance(metric, numbers.Number):
+        hm = metric
+    else:
+        raise ValueError('unknown metric, use fwhm, 1/e, or 1/e^2')
+
+    mask = polar > hm
+
+    if criteria == 'first':
+        meanidx = e.argmax(mask, axis=1).mean()
+        lowidx, remainder = divmod(meanidx, 1)
+    elif criteria == 'last':
+        meanidx = e.argmax(mask[:, ::-1], axis=1).mean()
+        meanidx = mask.shape[1] - meanidx
+        lowidx, remainder = divmod(meanidx, 1)
+        remainder *= -1  # remainder goes the other way in this case
+    else:
+        raise ValueError('unknown criteria, use first or last')
+
+    lowidx = int(lowidx)
+    return r[lowidx] + remainder * r[1]  # subpixel calculation of r
+
+
+def fwhm(x, y, data, criteria='last'):
+    """Calculate the FWHM of (data).
+
+    Parameters
+    ----------
+    x : `numpy.ndarray`
+        x coordinates, 1D
+    y : `numpy.ndarray`
+        y coordinates, 1D
+    data : `numpy.ndarray`
+        f(x,y), 2D
+    criteria : `str`, optional, {'first', 'last'}
+        whether to use the first or last occurence of <metric>
+
+    Returns
+    -------
+    `float`
+        the FWHM
+
+    """
+    # native calculation is a radius, "HWHM", *2 is FWHM
+    return sizeof(x=x, y=y, data=data, metric='fwhm', criteria=criteria) * 2
+
+
+def one_over_e(x, y, data, criteria='last'):
+    """Calculate the 1/e radius of (data).
+
+    Parameters
+    ----------
+    x : `numpy.ndarray`
+        x coordinates, 1D
+    y : `numpy.ndarray`
+        y coordinates, 1D
+    data : `numpy.ndarray`
+        f(x,y), 2D
+    criteria : `str`, optional, {'first', 'last'}
+        whether to use the first or last occurence of <metric>
+
+    Returns
+    -------
+    `float`
+        the 1/e radius
+
+    """
+    return sizeof(x=x, y=y, data=data, metric='1/e', criteria=criteria)
+
+
+def one_over_e2(x, y, data, criteria='last'):
+    """Calculate the 1/e^2 radius of (data).
+
+    Parameters
+    ----------
+    x : `numpy.ndarray`
+        x coordinates, 1D
+    y : `numpy.ndarray`
+        y coordinates, 1D
+    data : `numpy.ndarray`
+        f(x,y), 2D
+    criteria : `str`, optional, {'first', 'last'}
+        whether to use the first or last occurence of <metric>
+
+    Returns
+    -------
+    `float`
+        the 1/e^2 radius
+
+    """
+    return sizeof(x=x, y=y, data=data, metric='1/e2', criteria=criteria)
+
+
+class PSF(Convolvable):
+    """A Point Spread Function."""
+
     def __init__(self, x, y, data):
         """Create a PSF object.
 
@@ -68,6 +184,78 @@ class PSF(Convolvable):
         self._nu_p = None
         self._dnx = None
         self._dny = None
+
+    def sizeof(self, metric, criteria='last'):
+        """Calculate the size of self.
+
+        Parameters
+        ----------
+        metric : `str` or `float`, {'fwhm', '1/e', '1/e^2', float()}
+            what metric to apply
+        criteria : `str`, optional, {'first', 'last'}
+            whether to use the first or last occurence of <metric>
+
+        Returns
+        -------
+        `float`
+            estimate for the radius of self calculated via (metric)
+
+        """
+        return sizeof(self.x, self.y, self.data, metric=metric, criteria=criteria)
+
+    def fwhm(self, criteria='last'):
+        """Calculate the FWHM of self.
+
+        Parameters
+        ----------
+        metric : `str` or `float`, {'fwhm', '1/e', '1/e^2', float()}
+            what metric to apply
+        criteria : `str`, optional, {'first', 'last'}
+            whether to use the first or last occurence of <metric>
+
+        Returns
+        -------
+        `float`
+            the FWHM radius of self
+
+        """
+        return fwhm(self.x, self.y, self.data, criteria=criteria)
+
+    def one_over_e(self, criteria='last'):
+        """Calculate the 1/e radius of self.
+
+        Parameters
+        ----------
+        metric : `str` or `float`, {'fwhm', '1/e', '1/e^2', float()}
+            what metric to apply
+        criteria : `str`, optional, {'first', 'last'}
+            whether to use the first or last occurence of <metric>
+
+        Returns
+        -------
+        `float`
+            the FWHM radius of self
+
+        """
+        return one_over_e(self.x, self.y, self.data, criteria=criteria)
+
+    def one_over_e2(self, criteria='last'):
+        """Calculate the 1/e^2 of self.
+
+        Parameters
+        ----------
+        metric : `str` or `float`, {'fwhm', '1/e', '1/e^2', float()}
+            what metric to apply
+        criteria : `str`, optional, {'first', 'last'}
+            whether to use the first or last occurence of <metric>
+
+        Returns
+        -------
+        `float`
+            the FWHM radius of self
+
+        """
+        return one_over_e2(self.x, self.y, self.data, criteria=criteria)
 
     def encircled_energy(self, radius):
         """Compute the encircled energy of the PSF.
@@ -150,8 +338,6 @@ class PSF(Convolvable):
         diff_rad = _inverse_analytic_encircled_energy(self.fno, self.wavelength, energy)
         return self_rad / diff_rad
 
-    # plotting -----------------------------------------------------------------
-
     def plot_encircled_energy(self, axlim=None, npts=50, lw=config.lw, zorder=config.zorder, fig=None, ax=None):
         """Make a 1D plot of the encircled energy at the given azimuth.
 
@@ -198,10 +384,6 @@ class PSF(Convolvable):
                xlim=(0, axlim))
         return fig, ax
 
-    # plotting -----------------------------------------------------------------
-
-    # helpers ------------------------------------------------------------------
-
     def _renorm(self, to='peak'):
         """Renormalize the PSF to unit peak intensity.
 
@@ -222,8 +404,6 @@ class PSF(Convolvable):
             ttl = self.data.sum()
             self.data /= ttl
         return self
-
-    # helpers ------------------------------------------------------------------
 
     @staticmethod
     def from_pupil(pupil, efl, Q=config.Q, norm='max', radpower=1, incoherent=True):
