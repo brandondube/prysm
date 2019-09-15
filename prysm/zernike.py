@@ -758,15 +758,16 @@ class ZCacheMN:
             raise e
 
     def get_term(self, n, m, samples):
+        am = abs(m)
         r, p = self.get_grid(samples=samples, modified=False)
-        Rterm = self.get_jacobi(n=n, m=m, samples=samples)
+        term = self.get_jacobi(n=n, m=am, samples=samples)
 
         if m != 0:
             azterm = self.get_azterm(m=m, samples=samples)
-            rterm = r ** m
-            Rterm = Rterm * azterm * rterm
+            rterm = r ** am
+            term = term * azterm * rterm
 
-        return Rterm
+        return term
 
     def __call__(self, n, m, samples, norm):
         return self.get_zernike(n=n, m=m, samples=samples, norm=norm)
@@ -787,7 +788,7 @@ class ZCacheMN:
             d_[m] = func(m * p)
             raise err
 
-    @retry(tries=10)
+    @retry(tries=3)
     def get_jacobi(self, n, m, samples, nj=None):
         if nj is None:
             nj = (n - m) // 2
@@ -817,15 +818,22 @@ class ZCacheMN:
         """Empty the cache."""
         self.normed = {}
         self.regular = {}
+        self.jac = {}
+        self.sin = {}
+        self.cos = {}
 
     def nbytes(self):
         """total size in memory of the cache in bytes."""
         total = 0
-        for dict_ in (self.normed, self.regular, self.jac):
+        for dict_ in (self.normed, self.regular, self.jac, self.sin, self.cos):
             for key in dict_:
                 total += dict_[key].nbytes
 
         return total
+
+
+zcachemn = ZCacheMN()
+config.chbackend_observers.append(zcachemn.clear)
 
 
 class BaseZernike(Pupil):
@@ -1180,12 +1188,119 @@ class FringeZernike(BaseZernike):
 
 
 class NollZernike(BaseZernike):
-    """Noll Zernike deswcription of an optical pupil."""
+    """Noll Zernike description of an optical pupil."""
     _map = nollmap
     _cache = zcache
     _magnituder = zernikefuncs['magnitude_angle']['noll']
     _namer = zernikefuncs['name']['noll']
     _name = 'Noll'
+
+
+class ANSI2TermZernike(Pupil):
+    """2-term ANSI Zernike description of an optical pupil."""
+    _cache = zcachemn
+
+    def __init__(self, *args, **kwargs):
+        """Initialize a new Zernike instance."""
+        self.normalize = True
+        pass_args = {}
+
+        self.terms = []
+        if kwargs is not None:
+            for key, value in kwargs.items():
+                k0l = key[0].lower()
+                if k0l in ('a', 'b'):
+                    # the only kwarg to contain a _ is a Zernike term
+                    # the kwarg looks like A<n>_<m>=<coef>
+
+                    # if the term is "A", it is a cosine and m is positive
+                    if k0l == 'a':
+                        msign = 1
+                    elif k0l == 'b':
+                        msign = -1
+
+                    if '_' in key:
+                        front, back = key.split('_')
+                        n = int(front[1:])
+                        m = int(back) * msign
+                    else:
+                        n = int(key[1:])
+                        m = 0
+
+                    self.terms.append((n, m, value))  # coef = value
+
+                elif key.lower() == 'norm':
+                    self.normalize = value
+                else:
+                    pass_args[key] = value
+
+        super().__init__(**pass_args)
+
+    def build(self):
+        """Use the wavefront coefficients stored in this class instance to build a wavefront model.
+
+        Returns
+        -------
+        self : `BaseZernike`
+            this Zernike instance
+
+        """
+        # build a coordinate system over which to evaluate this function
+        self.phase = e.zeros((self.samples, self.samples), dtype=config.precision)
+        for (n, m, coef) in self.terms:
+            # short circuit for speed
+            if coef == 0:
+                continue
+            else:
+                zernike = self._cache(n=n, m=m, samples=self.samples, norm=self.normalize) * coef
+                self.phase += zernike
+
+        return self
+
+
+class ANSI1TermZernike(Pupil):
+    """1-term ANSI Zernike description of an optical pupil."""
+    _cache = zcachemn
+
+    def __init__(self, *args, **kwargs):
+        """Initialize a new Zernike instance."""
+        self.normalize = True
+        pass_args = {}
+
+        self.terms = {}
+        if kwargs is not None:
+            for key, value in kwargs.items():
+                if key[0].lower() == 'z':
+                    self.terms[int(key[1:])] = value
+
+                elif key.lower() == 'norm':
+                    self.normalize = value
+                else:
+                    pass_args[key] = value
+
+        super().__init__(**pass_args)
+
+    def build(self):
+        """Use the wavefront coefficients stored in this class instance to build a wavefront model.
+
+        Returns
+        -------
+        self : `BaseZernike`
+            this Zernike instance
+
+        """
+        # build a coordinate system over which to evaluate this function
+        self.phase = e.zeros((self.samples, self.samples), dtype=config.precision)
+        for idx, coef in self.terms.items():
+            # short circuit for speed
+            if coef == 0:
+                continue
+            else:
+                n, m = ansi_j_to_n_m(idx)
+                zernike = self._cache(n=n, m=m, samples=self.samples, norm=self.normalize) * coef
+                self.phase += zernike
+
+        return self
 
 
 def zernikefit(data, x=None, y=None,

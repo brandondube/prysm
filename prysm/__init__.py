@@ -38,7 +38,8 @@ from prysm.objects import (
     Chirp,
 )
 from prysm.degredations import Smear, Jitter
-from prysm.zernike import FringeZernike, NollZernike, zernikefit
+from prysm.zernike import FringeZernike, NollZernike, zernikefit, ANSI1TermZernike, ANSI2TermZernike
+from prysm.qpoly import QBFSSag, QCONSag
 from prysm.sample_data import sample_files
 from prysm.propagation import Wavefront
 
@@ -86,6 +87,10 @@ __all__ = [
     'sample_files',
     'RichData',
     'Labels',
+    'ANSI1TermZernike',
+    'ANSI2TermZernike',
+    'QBFSSag',
+    'QCONSag',
 ]
 
 __version__ = get_distribution('prysm').version
