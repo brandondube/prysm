@@ -774,6 +774,7 @@ class ZCacheMN:
 
     @retry(tries=2)
     def get_azterm(self, m, samples):
+        key = (m, samples)
         if sign(m) == -1:
             d_ = self.sin
             func = e.sin
@@ -782,10 +783,10 @@ class ZCacheMN:
             func = e.cos
 
         try:
-            return d_[m]
+            return d_[key]
         except KeyError as err:
             _, p = self.get_grid(samples=samples, modified=False)
-            d_[m] = func(m * p)
+            d_[key] = func(m * p)
             raise err
 
     @retry(tries=3)

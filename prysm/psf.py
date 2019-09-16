@@ -30,7 +30,7 @@ AIRYDATA = {
 }
 
 
-def sizeof(x, y, data, metric, criteria='last'):
+def estimate_size(x, y, data, metric, criteria='last'):
     """Calculate the "size" of the function in data based on a metric.
 
     Parameters
@@ -111,7 +111,7 @@ def fwhm(x, y, data, criteria='last'):
 
     """
     # native calculation is a radius, "HWHM", *2 is FWHM
-    return sizeof(x=x, y=y, data=data, metric='fwhm', criteria=criteria) * 2
+    return estimate_size(x=x, y=y, data=data, metric='fwhm', criteria=criteria) * 2
 
 
 def one_over_e(x, y, data, criteria='last'):
@@ -134,7 +134,7 @@ def one_over_e(x, y, data, criteria='last'):
         the 1/e radius
 
     """
-    return sizeof(x=x, y=y, data=data, metric='1/e', criteria=criteria)
+    return estimate_size(x=x, y=y, data=data, metric='1/e', criteria=criteria)
 
 
 def one_over_e2(x, y, data, criteria='last'):
@@ -157,7 +157,7 @@ def one_over_e2(x, y, data, criteria='last'):
         the 1/e^2 radius
 
     """
-    return sizeof(x=x, y=y, data=data, metric='1/e2', criteria=criteria)
+    return estimate_size(x=x, y=y, data=data, metric='1/e^2', criteria=criteria)
 
 
 class PSF(Convolvable):
@@ -185,7 +185,7 @@ class PSF(Convolvable):
         self._dnx = None
         self._dny = None
 
-    def sizeof(self, metric, criteria='last'):
+    def estimate_size(self, metric, criteria='last'):
         """Calculate the size of self.
 
         Parameters
@@ -201,7 +201,7 @@ class PSF(Convolvable):
             estimate for the radius of self calculated via (metric)
 
         """
-        return sizeof(self.x, self.y, self.data, metric=metric, criteria=criteria)
+        return estimate_size(self.x, self.y, self.data, metric=metric, criteria=criteria)
 
     def fwhm(self, criteria='last'):
         """Calculate the FWHM of self.
