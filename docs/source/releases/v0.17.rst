@@ -74,7 +74,7 @@ Note that this list is in logical order of dependence, not in order of importanc
 * * Note that the Pupil class is used only for example, and the labels kwarg is nearly universal.  For more information, see the `labels documentation <../user_guide/units-and-labels.html>_.
 * Plotting rewrite:
 * * Over time, plotting in prysm has grown fragmented, with minor variations on the same theme throughout the classes.  To reduce the cognitive overhead for users, plotting has been made universal with a single :code:`plot2d` and :code:`(obj).slices().plot` implementaiton.  This means that nearly all prysm classes can be plotted with exactly the same grammar.  This brings many breaking changes, listed in the section below.
-* new functions :meth:`prysm.psf.fwhm`, :meth:`~prysm.psf.one_over_e`, :meth:`~prysm.psf.one_over_e2` for calculating the FWHM, 1/e, and 1/e^2 radii of PSFs.  :meth:`~prysm.psf.estimate_radius` for size estimation at an arbitrary irradiance value.
+* new functions :meth:`prysm.psf.fwhm`, :meth:`~prysm.psf.one_over_e`, :meth:`~prysm.psf.one_over_e2` for calculating the FWHM, 1/e, and 1/e^2 radii of PSFs.  :meth:`~prysm.psf.estimate_size` for size estimation at an arbitrary irradiance value.
 
 
 New Dependencies
