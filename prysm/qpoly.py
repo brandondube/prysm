@@ -34,10 +34,11 @@ def qbfs_recurrence_P(n, x, Pnm1=None, Pnm2=None, recursion_coef=None):
     elif n == 1:
         return 6 - 8 * x
     else:
-        if Pnm1 is None:
-            Pnm1 = qbfs_recurrence_P(n - 1, x)
         if Pnm2 is None:
             Pnm2 = qbfs_recurrence_P(n - 2, x)
+        if Pnm1 is None:
+            Pnm1 = qbfs_recurrence_P(n - 1, x, Pnm1=Pnm1)
+
         if recursion_coef is None:
             recursion_coef = 2 - 4 * x
 
@@ -79,7 +80,7 @@ def qbfs_recurrence_Q(n, x, Pn=None, Pnm1=None, Pnm2=None, Qnm1=None, Qnm2=None,
         if Pnm2 is None:
             Pnm2 = qbfs_recurrence_P(n - 2, x, recursion_coef=recursion_coef)
         if Pnm1 is None:
-            Pnm1 = qbfs_recurrence_P(n - 1, x, Pnm2=Pnm2, recursion_coef=recursion_coef)
+            Pnm1 = qbfs_recurrence_P(n - 1, x, Pnm1=Pnm2, recursion_coef=recursion_coef)
         if Pn is None:
             Pn = qbfs_recurrence_P(n, x, Pnm1=Pnm1, Pnm2=Pnm2, recursion_coef=recursion_coef)
         if Qnm2 is None:
