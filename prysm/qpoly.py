@@ -1,10 +1,13 @@
 """Tools for working with Q (Forbes) polynomials."""
+from functools import lru_cache
 
 from .conf import config
 from .pupil import Pupil
 from .mathops import engine as e
 from .coordinates import gridcache
 from .jacobi import jacobi
+
+MAX_ELEMENTS_IN_CACHE = 1024  # surely no one wants > 1000 Qbfs terms...
 
 
 def qbfs_recurrence_P(n, x, Pnm1=None, Pnm2=None, recursion_coef=None):
@@ -34,10 +37,11 @@ def qbfs_recurrence_P(n, x, Pnm1=None, Pnm2=None, recursion_coef=None):
     elif n == 1:
         return 6 - 8 * x
     else:
-        if Pnm1 is None:
-            Pnm1 = qbfs_recurrence_P(n - 1, x)
         if Pnm2 is None:
             Pnm2 = qbfs_recurrence_P(n - 2, x)
+        if Pnm1 is None:
+            Pnm1 = qbfs_recurrence_P(n - 1, x, Pnm1=Pnm2)
+
         if recursion_coef is None:
             recursion_coef = 2 - 4 * x
 
@@ -57,9 +61,9 @@ def qbfs_recurrence_Q(n, x, Pn=None, Pnm1=None, Pnm2=None, Qnm1=None, Qnm2=None,
         the value of qbfs_recurrence_P for argument n - 1
     Pnm2 : `numpy.ndarray`, optional
         the value of qbfs_recurrence_P for argument n - 2
-    Pnm1 : `numpy.ndarray`, optional
+    Qnm1 : `numpy.ndarray`, optional
         the value of this function for argument n - 1
-    Pnm2 : `numpy.ndarray`, optional
+    Qnm2 : `numpy.ndarray`, optional
         the value of this function for argument n - 2
     recursion_coef : `numpy.ndarray`, optional
         the coefficient to apply, if recursion_coef = C: evaluates C * Pnm1 - Pnm2
@@ -96,6 +100,7 @@ def qbfs_recurrence_Q(n, x, Pn=None, Pnm1=None, Pnm2=None, Qnm1=None, Qnm2=None,
         return numerator / denominator
 
 
+@lru_cache(MAX_ELEMENTS_IN_CACHE)
 def g_qbfs(n_minus_1):
     """g(m-1) from oe-18-19-19700 eq. (A.15)"""
     if n_minus_1 == 0:
@@ -105,12 +110,14 @@ def g_qbfs(n_minus_1):
         return - (1 + g_qbfs(n_minus_2) * h_qbfs(n_minus_2)) / f_qbfs(n_minus_1)
 
 
+@lru_cache(MAX_ELEMENTS_IN_CACHE)
 def h_qbfs(n_minus_2):
     """h(m-2) from oe-18-19-19700 eq. (A.14)"""
     n = n_minus_2 + 2
     return -n * (n - 1) / (2 * f_qbfs(n_minus_2))
 
 
+@lru_cache(MAX_ELEMENTS_IN_CACHE)
 def f_qbfs(n):
     """f(m) from oe-18-19-19700 eq. (A.16)"""
     if n == 0:
@@ -148,8 +155,9 @@ class QBFSCache(object):
             else:
                 Pnm1, Pnm2, Qnm1, Qnm2 = None, None, None, None
 
+            coef = self.get_PBFS_recursion_coef(samples=samples, rho_max=rho_max)
             Qm = qbfs_recurrence_Q(m, rho, Pn=Pm, Pnm1=Pnm1, Pnm2=Pnm2,
-                                   Qnm1=Qnm1, Qnm2=Qnm2)
+                                   Qnm1=Qnm1, Qnm2=Qnm2, recursion_coef=coef)
             self.Qs[key] = Qm
 
         return Qm
@@ -161,17 +169,29 @@ class QBFSCache(object):
             Pm = self.Ps[key]
 
         except KeyError:
-            rho = self.get_grid(samples, rho_max=rho_max)
+            rho = self.get_grid(samples=samples, rho_max=rho_max)
             if m > 2:
                 Pnm2 = self.get_PBFS(m - 2, samples=samples, rho_max=rho_max)
                 Pnm1 = self.get_PBFS(m - 1, samples=samples, rho_max=rho_max)
             else:
                 Pnm1, Pnm2 = None, None
 
-            Pm = qbfs_recurrence_P(m, rho, Pnm1=Pnm1, Pnm2=Pnm2)
+            coef = self.get_PBFS_recursion_coef(samples=samples, rho_max=rho_max)
+            Pm = qbfs_recurrence_P(m, rho, Pnm1=Pnm1, Pnm2=Pnm2, recursion_coef=coef)
             self.Ps[key] = Pm
 
         return Pm
+
+    def get_PBFS_recursion_coef(self, samples, rho_max=1):
+        key = ('recursion', samples, rho_max)
+        try:
+            coef = self.Ps[key]
+        except KeyError:
+            rho = self.get_grid(samples=samples, rho_max=rho_max)
+            coef = 2 - 4 * rho
+            self.Ps[key] = coef
+
+        return coef
 
     def get_grid(self, samples, rho_max=1):
         """Get a grid of rho coordinates for a given number of samples."""
@@ -194,10 +214,10 @@ class QBFSCache(object):
     @property
     def nbytes(self):
         n = 0
-        for key in self.Qs:
-            n += self.Qs[key].nbytes
-            n += self.Ps[key].nbytes
-            n += self.grids[key[1:]].nbytes
+        stores = (self.Qs, self.Ps)
+        for store in stores:
+            for key in store:
+                n += store[key].nbytes
 
         return n
 
