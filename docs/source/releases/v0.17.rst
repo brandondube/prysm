@@ -12,7 +12,7 @@ Note that this list is in logical order of dependence, not in order of importanc
 * New :mod:`~prysm.mathops` functions: :func:`~prysm.mathops.gamma`, :func:`~prysm.mathops.kronecker`, and :func:`~prysm.mathops.sign`.
 * :mod:`~prysm.jacobi` submodule for recursive jacobi polynomial computation, key functions are :func:`~prysm.jacobi.jacobi` and :func:`~prysm.jacobi.jacobi_sequence`.
 * Changes to :mod:`~prysm.zernike`:
-* * Zernike terms are now generated using recursive Jacobi polynomials instead of explicit expressions:
+* * Zernike terms can now be generated using recursive Jacobi polynomials instead of explicit expressions:
 * * * performance is on average ~ 2-3x higher than prysm v0.16 when numba is installed
 * * * numba will no longer be used when the explicit functions are removed in v0.18
 * * * there is a new cache :class:`~prysm.zernike.ZCacheMN` which will replace :class:`~prysm.zernike.ZCache` in prysm v0.18, use of :code:`Zcache` is deprecated.  At that time, :code:`ZCacheMN` will be renamed to :code:`ZCache`.
@@ -29,19 +29,13 @@ Note that this list is in logical order of dependence, not in order of importanc
 * * * :class:`~prysm.zernike.ANSI2TermZernike` for ANSI Zernikes with (n, m) indices.  See The 2D-Q note below for how these coefficients are entered.
 * * * :class:`~prysm.zernike.ANSI1TermZernike` for ANSI Zernikes with j (single-term) indices.
 * New submodule :mod:`~prysm.qpoly` for work with Qbfs, Qcon, and 2D-Q polynomials.  The raw functions allow caching to achieve O(N) performance instead of O(n^2).  The cache instances behave like the Zernike cache and allow constant time performance after the initial polynomial generation and storage.  Key user-facing classes:
-* * Updated classes:
-* * * :class:`~prysm.zernike.NollZernike` can now be expanded up to arbitrary order / index.  I.e., the Z36 limit is removed.
-* * * :class:`~prysm.zernike.FringeZernike` can now be expanded up to arbitrary order / index.  I.e., the Z48 limit is removed.
 * * Qbfs:
 * * * :code:`~prysm.qpoly.QBFSSag`
 * * * :code:`~prysm.qpoly.QBFSCache`
 * * QCon:
 * * * :code:`~prysm.qpoly.QCONSag`
 * * * :code:`~prysm.qpoly.QCONCache`
-* * 2D-Q:
-* * * :code:`~prysm.qpoly.Q2DSag`
-* * * :code:`~prysm.qpoly.Q2DCache`
-* 1D polynomials (Qbfs and Qcon) take keyword arguments A0..An with no limit.  2D polynomials (2D-Q) take arguments of Am_n
+* 1D polynomials (Qbfs and Qcon) take keyword arguments A0..An with no limit.
 * Check the :mod:`~prysm.qpoly` docs for the "raw" functions.
 * :code:`__str__` dunder method for :class:`~prysm.interferogram.Interferogram` objects.
 * :class:`prysm.otf.OTF` and :class:`~prysm.otf.PTF` for Optical Transfer Function and Phase Transfer Function analysis.
@@ -63,7 +57,7 @@ Note that this list is in logical order of dependence, not in order of importanc
 * * * :code:`(obj).exact_xy` for 2D sampling on (x, y)
 * * * :code:`(obj).exact_polar` for 2D sampling on (r, p)
 * Units rewrite:
-* * prysm now utilizes / understands `astropy.units <https://docs.astropy.org/en/stable/units/>`_  for all calculations using the object-oriented API.  :class:`BasicData` has become :class:`RichData` with a new :code:`xy_unit` and :code:`z_unit` kwarg.  If this is :code:`None`, the instance will adopt :code:config.<class>.default_<xy or z>_units`.  These default units mimic the behavior of prysm < 0.17, so users not adjusting units will feel no change.  To use custom units, the :code:`spatial_unit`, and :code:`phase_unit` arguments are no more, and should be generated loosely as follows:  For more information, see the `units documentation <../user_guide/units-and-labels.html>_.
+* * prysm now utilizes / understands `astropy.units <https://docs.astropy.org/en/stable/units/>`_  for all calculations using the object-oriented API.  :class:`BasicData` has become :class:`RichData` with a new :code:`xy_unit` and :code:`z_unit` kwarg.  If this is :code:`None`, the instance will adopt :code:`config.<class>.default_<xy or z>_units`.  These default units mimic the behavior of prysm < 0.17, so users not adjusting units will feel no change.  To use custom units, the :code:`spatial_unit`, and :code:`phase_unit` arguments are no more, and should be generated loosely as follows:  For more information, see the `units documentation <../user_guide/units-and-labels.html>`_.
 * Labels rewrite:
 * * prysm now has a labels system that mimics the units system.  The constructor works loosely as follows:
 
@@ -71,7 +65,7 @@ Note that this list is in logical order of dependence, not in order of importanc
 >>> lab = Labels(xybase='Pupil', z='OPD', xy_additions=['X', 'Y'])
 >>> pu = Pupil(labels=lab)
 
-* * Note that the Pupil class is used only for example, and the labels kwarg is nearly universal.  For more information, see the `labels documentation <../user_guide/units-and-labels.html>_.
+* * Note that the Pupil class is used only for example, and the labels kwarg is nearly universal.  For more information, see the `labels documentation <../user_guide/units-and-labels.html>`_.
 * Plotting rewrite:
 * * Over time, plotting in prysm has grown fragmented, with minor variations on the same theme throughout the classes.  To reduce the cognitive overhead for users, plotting has been made universal with a single :code:`plot2d` and :code:`(obj).slices().plot` implementaiton.  This means that nearly all prysm classes can be plotted with exactly the same grammar.  This brings many breaking changes, listed in the section below.
 * new functions :meth:`prysm.psf.fwhm`, :meth:`~prysm.psf.one_over_e`, :meth:`~prysm.psf.one_over_e2` for calculating the FWHM, 1/e, and 1/e^2 radii of PSFs.  :meth:`~prysm.psf.estimate_size` for size estimation at an arbitrary irradiance value.
@@ -92,7 +86,7 @@ Breaking changes
 * * :class:`BasicData`, has become :class:`~prysm._richdata.RichData`.
 * * Universal plotting elimiates or changes the signature of many methods:
 * * * :meth:`prysm.psf.PSF.plot2d` - use the same method name, note that arguments are different.  For the :code:`circle_ee` functionality, use :func:`prysm.plotting.annotate_psf`.
-* * *  :meth:`prysm.psf.PSF.plot_slice_xy`, :meth:`prysm.otf.MTF.plot_slice_xy`, :meth:`prysm.otf.MTF.plot_tan_sag`, :meth:`prysm.otf.MTF.plot_azimuthal_average` - use :meth:`prysm.RichData.Slices.plot` accessed as :code:`<obj>.slices().plot()`.
+* * *  :meth:`prysm.psf.PSF.plot_slice_xy`, :meth:`prysm.otf.MTF.plot_slice_xy`, :meth:`prysm.otf.MTF.plot_tan_sag`, :meth:`prysm.otf.MTF.plot_azimuthal_average` - use :meth:`prysm.Slices.plot` accessed as :code:`<obj>.slices().plot()`.
 * * * :meth:`prysm.interferogram.Interferogram.plot_psd_slices` - use :code:`Interferogram.psd().slices().plot()`.  To replicate the power law limits, use :func:`prysm.plotting.add_psd_model`.
 * * * :meth:`prysm.interferogram.Interferogram.plot_psd_2d` - use :code:`Interferogram.psd().plot2d()`.
 * * * default axis limits for PSFs and MTFs are no longer 20 and 200, but are the entire support of the object.

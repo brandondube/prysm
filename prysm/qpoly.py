@@ -3,11 +3,13 @@ from functools import lru_cache
 
 from .conf import config
 from .pupil import Pupil
-from .mathops import engine as e
+from .mathops import engine as e, kronecker, gamma
 from .coordinates import gridcache
 from .jacobi import jacobi
 
-MAX_ELEMENTS_IN_CACHE = 1024  # surely no one wants > 1000 Qbfs terms...
+from scipy.special import factorial, factorial2
+
+MAX_ELEMENTS_IN_CACHE = 1024  # surely no one wants > 1000 terms...
 
 
 def qbfs_recurrence_P(n, x, Pnm1=None, Pnm2=None, recursion_coef=None):
@@ -387,3 +389,141 @@ class QCONSag(QPolySag1D):
         super().build()
         coef = self._cache.gridcache(samples=self.samples, radius=1, r='r -> r^4')['r']
         self.phase *= coef
+
+
+def abc_q2d(n, m):
+    # D is used everywhere
+    D = (4 * n ** 2 - 1) * (m + n - 2) * (m + 2 * n - 3)
+
+    # A
+    term1 = (2 * n - 1) * (m + 2 * n - 2)
+    term2 = (4 * n * (m + n - 2) + (m - 3) * (2 * m - 1))
+    A = (term1 * term2) / D
+
+    # B
+    num = -2 * (2 * n - 1) * (m + 2 * n - 3) * (m + 2 * n - 2) * (m + 2 * n - 1)
+    B = num / D
+
+    # C
+    num = n * (2 * n - 3) * (m + 2 * n - 1) * (2 * m + 2 * n - 3)
+    C = num / D
+
+    return A, B, C
+
+
+def G_q2d(n, m):
+    if n == 0:
+        num = factorial2(2 * m - 1)
+        den = 2 ** (m + 1) * factorial(m - 1)
+        return num / den
+    elif n > 0 and m == 1:
+        t1num = (2 * n ** 2 - 1) * (n ** 2 - 1)
+        t1den = 8 * (4 * n ** 2 - 1)
+        term1 = -t1num / t1den
+        term2 = 1 / 24 * kronecker(n, 1)
+        return term1 + term2  # this is minus in the paper
+    else:
+        # nt1 = numerator term 1, d = denominator...
+        nt1 = 2 * n * (m + n - 1) - m
+        nt2 = (n + 1) * (2 * m + 2 * n - 1)
+        num = nt1 * nt2
+        dt1 = (m + 2 * n - 2) * (m + 2 * n - 1)
+        dt2 = (m + 2 * n) * (2 * n + 1)
+        den = dt1 * dt2
+
+        term1 = num / den  # there is a leading negative in the paper
+        return term1 * gamma(n, m)
+
+
+def F_q2d(n, m):
+    if n == 0:
+        num = m ** 2 * factorial2(2 * m - 3)
+        den = 2 ** (m + 1) * factorial(m - 1)
+        return num / den
+    elif n > 0 and m == 1:
+        t1num = 4 * (n - 1) ** 2 * n ** 2 + 1
+        t1den = 8 * (2 * n - 1) ** 2
+        term1 = t1num / t1den
+        term2 = 11 / 32 * kronecker(n, 1)
+        return term1 + term2
+    else:
+        Chi = m + n - 2
+        nt1 = 2 * n * Chi * (3 - 5 * m + 4 * n * Chi)
+        nt2 = m ** 2 * (3 - m + 4 * n * Chi)
+        num = nt1 + nt2
+
+        dt1 = (m + 2 * n - 3) * (m + 2 * n - 2)
+        dt2 = (m + 2 * n - 1) * (2 * n - 1)
+        den = dt1 * dt2
+
+        term1 = num / den
+        return term1 * gamma(n, m)
+
+
+def g_q2d(nm1, m):
+    return G_q2d(nm1, m) / f_q2d(nm1, m)
+
+
+def f_q2d(n, m):
+    if n == 0:
+        return e.sqrt(F_q2d(n=0, m=m))
+    else:
+        return e.sqrt(F_q2d(n, m) - g_q2d(n-1, m) ** 2)
+
+
+def q2d_recurrence_P(n, m, x, Pnm1=None, Pnm2=None):
+    if m == 0:
+        return qbfs_recurrence_P(n=n, x=x, Pnm1=Pnm1, Pnm2=Pnm2)
+    elif n == 0:
+        return 1 / 2
+    elif n == 1:
+        if m == 1:
+            return 1 - x / 2
+        elif m < 1:
+            raise ValueError('2D-Q auxiliary polynomial is undefined for n=1, m < 1')
+        else:
+            return m - (1 / 2) - (m - 1) * x
+    elif m == 1 and (n == 2 or n == 3):
+        if n == 2:
+            num = 3 - x * (12 - 8 * x)
+            den = 6
+            return num / den
+        if n == 3:
+            numt1 = 5 - x
+            numt2 = 60 - x * (120 - 64 * x)
+            num = numt1 * numt2
+            den = 10
+            return num / den
+    else:
+        if Pnm2 is None:
+            Pnm2 = q2d_recurrence_P(n=n-2, m=m, x=x)
+        if Pnm1 is None:
+            Pnm1 = q2d_recurrence_P(n=n-1, m=m, x=x, Pnm1=Pnm2)
+
+        Anm, Bnm, Cnm = abc_q2d(n, m)
+        term1 = Anm + Bnm * x
+        term2 = Pnm1
+        term3 = Cnm * Pnm2
+        return term1 * term2 - term3
+
+
+def q2d_recurrence_Q(n, m, x, Pnm=None, Qnm1=None, Pnm1=None, Pnm2=None):
+    if n == 0:
+        return 1 / (2 * f_q2d(0, m))
+    elif m == 0:
+        return qbfs_recurrence_Q(n=n, x=x, Pn=Pnm, Pnm1=Pnm1, Pnm2=Pnm2, Qnm1=Qnm1)
+
+    if Pnm2 is None:
+        Pnm2 = q2d_recurrence_P(n=n-2, m=m, x=x)
+    if Pnm1 is None:
+        Pnm1 = q2d_recurrence_P(n=n-1, m=m, x=x, Pnm1=Pnm2)
+    if Pnm is None:
+        if n == 0:
+            Pnm = f_q2d(0, m) * q2d_recurrence_Q(n=0, m=m, x=x)
+        else:
+            Pnm = q2d_recurrence_P(n=n, m=m, x=x, Pnm1=Pnm1, Pnm2=Pnm2)
+
+    if Qnm1 is None:
+        Qnm1 = q2d_recurrence_Q(n=n-1, m=m, x=x, Pnm=Pnm1, Pnm1=Pnm2)
+
+    return (Pnm - g_q2d(n-1, m) * Qnm1) / f_q2d(n, m)
