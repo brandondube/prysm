@@ -2,7 +2,7 @@
 prysm v0.17
 ***********
 
-As is becoming tradition, this release is not backwards compatible and will break your code base if you do anything with non-default units or MTF data.  The authors apologize for this, and note that we make these changes to improve the maintainability and cleanliness of the library's codebase as it expands.  This release brings a large number of new features in addition to these breaking changes.
+As is becoming tradition, this release is not backwards compatible and will break your code base if you do anything with non-default units or MTF data.  The authors apologize for this, and note that we make these changes to improve the maintainability and cleanliness of the library's codebase as it expands.  This release brings a large number of new features in addition to these breaking changes.  A guide for transitioning and a tour of the new features has been prepared: :doc:`Upgrading and a Tour of v0.17`.
 
 New Features
 ============
@@ -28,7 +28,7 @@ Note that this list is in logical order of dependence, not in order of importanc
 * * New classes:
 * * * :class:`~prysm.zernike.ANSI2TermZernike` for ANSI Zernikes with (n, m) indices.  See The 2D-Q note below for how these coefficients are entered.
 * * * :class:`~prysm.zernike.ANSI1TermZernike` for ANSI Zernikes with j (single-term) indices.
-* New submodule :mod:`~prysm.qpoly` for work with Qbfs, Qcon, and 2D-Q polynomials.  The raw functions allow caching to achieve O(N) performance instead of O(n^2).  The cache instances behave like the Zernike cache and allow constant time performance after the initial polynomial generation and storage.  Key user-facing classes:
+* New submodule :mod:`~prysm.qpoly` for work with Qbfs, Qcon, and 2D-Q polynomials.  The raw functions allow caching to achieve O(N) performance instead of O(n^2).  The cache instances behave like the Zernike cache and allow constant time performance after the initial polynomial generation and storage.  2D-Q terms did not make it into this release, but code with some bugs in it for generating the terms can be found in the qpoly module.  Please help get this code working if this is an area you have knowledge in.  Key user-facing classes:
 * * Qbfs:
 * * * :code:`~prysm.qpoly.QBFSSag`
 * * * :code:`~prysm.qpoly.QBFSCache`
