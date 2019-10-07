@@ -1,23 +1,49 @@
 """Tools for working with Q (Forbes) polynomials."""
+from functools import lru_cache
 
 from .conf import config
 from .pupil import Pupil
-from .mathops import engine as e
+from .mathops import engine as e, kronecker, gamma
 from .coordinates import gridcache
 from .jacobi import jacobi
 
+from scipy.special import factorial, factorial2
+
+MAX_ELEMENTS_IN_CACHE = 1024  # surely no one wants > 1000 terms...
+
 
 def qbfs_recurrence_P(n, x, Pnm1=None, Pnm2=None, recursion_coef=None):
-    """P(m+1) from oe-18-19-19700 eq. (2.6)."""
+    """P(m+1) from oe-18-19-19700 eq. (2.6).
+
+    Parameters
+    ----------
+    n : `int`
+        polynomial order
+    x : `numpy.ndarray`
+        x values, notionally in / orthogonal over [0, 1], to evaluate at
+    Pnm1 : `numpy.ndarray`, optional
+        the value of this function for argument n - 1
+    Pnm2 : `numpy.ndarray`, optional
+        the value of this function for argument n - 2
+    recursion_coef : `numpy.ndarray`, optional
+        the coefficient to apply, if recursion_coef = C: evaluates C * Pnm1 - Pnm2
+
+    Returns
+    -------
+    `numpy.ndarray`
+        the value of the auxiliary P polynomial for given order n and point(s) x
+
+    """
     if n == 0:
         return 2
     elif n == 1:
         return 6 - 8 * x
     else:
-        if Pnm1 is None:
-            Pnm1 = qbfs_recurrence_P(n - 1, x)
         if Pnm2 is None:
             Pnm2 = qbfs_recurrence_P(n - 2, x)
+        if Pnm1 is None:
+            Pnm1 = qbfs_recurrence_P(n - 1, x, Pnm1=Pnm2)
+
         if recursion_coef is None:
             recursion_coef = 2 - 4 * x
 
@@ -25,7 +51,31 @@ def qbfs_recurrence_P(n, x, Pnm1=None, Pnm2=None, recursion_coef=None):
 
 
 def qbfs_recurrence_Q(n, x, Pn=None, Pnm1=None, Pnm2=None, Qnm1=None, Qnm2=None, recursion_coef=None):
-    """Q(m+1) from oe-18-19-19700 eq. (2.7)."""
+    """Q(m+1) from oe-18-19-19700 eq. (2.7).
+
+    Parameters
+    ----------
+    n : `int`
+        polynomial order
+    x : `numpy.ndarray`
+        x values, notionally in / orthogonal over [0, 1], to evaluate at
+    Pnm1 : `numpy.ndarray`, optional
+        the value of qbfs_recurrence_P for argument n - 1
+    Pnm2 : `numpy.ndarray`, optional
+        the value of qbfs_recurrence_P for argument n - 2
+    Qnm1 : `numpy.ndarray`, optional
+        the value of this function for argument n - 1
+    Qnm2 : `numpy.ndarray`, optional
+        the value of this function for argument n - 2
+    recursion_coef : `numpy.ndarray`, optional
+        the coefficient to apply, if recursion_coef = C: evaluates C * Pnm1 - Pnm2
+
+    Returns
+    -------
+    `numpy.ndarray`
+        the value of the the Qbfs polynomial for given order n and point(s) x
+
+    """
     if n == 0:
         return e.ones_like(x)
     elif n == 1:
@@ -35,7 +85,7 @@ def qbfs_recurrence_Q(n, x, Pn=None, Pnm1=None, Pnm2=None, Qnm1=None, Qnm2=None,
         if Pnm2 is None:
             Pnm2 = qbfs_recurrence_P(n - 2, x, recursion_coef=recursion_coef)
         if Pnm1 is None:
-            Pnm1 = qbfs_recurrence_P(n - 1, x, Pnm2=Pnm2, recursion_coef=recursion_coef)
+            Pnm1 = qbfs_recurrence_P(n - 1, x, Pnm1=Pnm2, recursion_coef=recursion_coef)
         if Pn is None:
             Pn = qbfs_recurrence_P(n, x, Pnm1=Pnm1, Pnm2=Pnm2, recursion_coef=recursion_coef)
         if Qnm2 is None:
@@ -52,6 +102,7 @@ def qbfs_recurrence_Q(n, x, Pn=None, Pnm1=None, Pnm2=None, Qnm1=None, Qnm2=None,
         return numerator / denominator
 
 
+@lru_cache(MAX_ELEMENTS_IN_CACHE)
 def g_qbfs(n_minus_1):
     """g(m-1) from oe-18-19-19700 eq. (A.15)"""
     if n_minus_1 == 0:
@@ -61,12 +112,14 @@ def g_qbfs(n_minus_1):
         return - (1 + g_qbfs(n_minus_2) * h_qbfs(n_minus_2)) / f_qbfs(n_minus_1)
 
 
+@lru_cache(MAX_ELEMENTS_IN_CACHE)
 def h_qbfs(n_minus_2):
     """h(m-2) from oe-18-19-19700 eq. (A.14)"""
     n = n_minus_2 + 2
     return -n * (n - 1) / (2 * f_qbfs(n_minus_2))
 
 
+@lru_cache(MAX_ELEMENTS_IN_CACHE)
 def f_qbfs(n):
     """f(m) from oe-18-19-19700 eq. (A.16)"""
     if n == 0:
@@ -81,9 +134,7 @@ def f_qbfs(n):
 
 
 class QBFSCache(object):
-    """Cache of Qbfs terms evaluated over the unit circle.
-
-    Note that the .grids attribute stores only radial coordinates, and they are stored in squared form."""
+    """Cache of Qbfs terms evaluated over the unit circle."""
     def __init__(self, gridcache=gridcache):
         """Create a new QBFSCache instance."""
         self.Qs = {}
@@ -106,8 +157,9 @@ class QBFSCache(object):
             else:
                 Pnm1, Pnm2, Qnm1, Qnm2 = None, None, None, None
 
+            coef = self.get_PBFS_recursion_coef(samples=samples, rho_max=rho_max)
             Qm = qbfs_recurrence_Q(m, rho, Pn=Pm, Pnm1=Pnm1, Pnm2=Pnm2,
-                                   Qnm1=Qnm1, Qnm2=Qnm2)
+                                   Qnm1=Qnm1, Qnm2=Qnm2, recursion_coef=coef)
             self.Qs[key] = Qm
 
         return Qm
@@ -119,17 +171,29 @@ class QBFSCache(object):
             Pm = self.Ps[key]
 
         except KeyError:
-            rho = self.get_grid(samples, rho_max=rho_max)
+            rho = self.get_grid(samples=samples, rho_max=rho_max)
             if m > 2:
                 Pnm2 = self.get_PBFS(m - 2, samples=samples, rho_max=rho_max)
                 Pnm1 = self.get_PBFS(m - 1, samples=samples, rho_max=rho_max)
             else:
                 Pnm1, Pnm2 = None, None
 
-            Pm = qbfs_recurrence_P(m, rho, Pnm1=Pnm1, Pnm2=Pnm2)
+            coef = self.get_PBFS_recursion_coef(samples=samples, rho_max=rho_max)
+            Pm = qbfs_recurrence_P(m, rho, Pnm1=Pnm1, Pnm2=Pnm2, recursion_coef=coef)
             self.Ps[key] = Pm
 
         return Pm
+
+    def get_PBFS_recursion_coef(self, samples, rho_max=1):
+        key = ('recursion', samples, rho_max)
+        try:
+            coef = self.Ps[key]
+        except KeyError:
+            rho = self.get_grid(samples=samples, rho_max=rho_max)
+            coef = 2 - 4 * rho
+            self.Ps[key] = coef
+
+        return coef
 
     def get_grid(self, samples, rho_max=1):
         """Get a grid of rho coordinates for a given number of samples."""
@@ -152,10 +216,10 @@ class QBFSCache(object):
     @property
     def nbytes(self):
         n = 0
-        for key in self.Qs:
-            n += self.Qs[key].nbytes
-            n += self.Ps[key].nbytes
-            n += self.grids[key[1:]].nbytes
+        stores = (self.Qs, self.Ps)
+        for store in stores:
+            for key in store:
+                n += store[key].nbytes
 
         return n
 
@@ -222,7 +286,7 @@ class QCONCache(object):
 
     def get_grid(self, samples, rho_max=1):
         """Get a grid of rho coordinates for a given number of samples."""
-        return self.gridcache(samples=samples, radius=rho_max, r='r -> r^2')['r']
+        return self.gridcache(samples=samples, radius=rho_max, r='r -> 2r^2 - 1')['r']
 
     def __call__(self, m, samples, rho_max=1):
         """Get an array of sag values for a given index, norm, and number of samples."""
@@ -304,7 +368,7 @@ class QBFSSag(QPolySag1D):
 
         """
         super().build()
-        coef = self._cache.gridcache(samples=self.samples, radius=1, r='r -> 2r^2 - 1')['r']
+        coef = self._cache.gridcache(samples=self.samples, radius=1, r='r -> r^2 (1-r^2)')['r']
         self.phase *= coef
 
 
@@ -327,25 +391,139 @@ class QCONSag(QPolySag1D):
         self.phase *= coef
 
 
-def a_zernike(m, n):
-    """a(n) from oe-18-13-13861 eq. (4.1a)."""
-    s = m + 2 * n
-    numerator = (s + 1) * ((s - n) ** 2 + n ** 2 + s)
-    denominator = (n + 1) * (s - n + 1) * s
-    return numerator / denominator
+def abc_q2d(n, m):
+    # D is used everywhere
+    D = (4 * n ** 2 - 1) * (m + n - 2) * (m + 2 * n - 3)
+
+    # A
+    term1 = (2 * n - 1) * (m + 2 * n - 2)
+    term2 = (4 * n * (m + n - 2) + (m - 3) * (2 * m - 1))
+    A = (term1 * term2) / D
+
+    # B
+    num = -2 * (2 * n - 1) * (m + 2 * n - 3) * (m + 2 * n - 2) * (m + 2 * n - 1)
+    B = num / D
+
+    # C
+    num = n * (2 * n - 3) * (m + 2 * n - 1) * (2 * m + 2 * n - 3)
+    C = num / D
+
+    return A, B, C
 
 
-def b_zernike(m, n):
-    """b(n) from oe-18-13-13861 eq. (4.1b)."""
-    s = m + 2 * n
-    numerator = (s + 2) * (s + 1)
-    denominator = (n + 1) * (s + n - 1)
-    return numerator / denominator
+def G_q2d(n, m):
+    if n == 0:
+        num = factorial2(2 * m - 1)
+        den = 2 ** (m + 1) * factorial(m - 1)
+        return num / den
+    elif n > 0 and m == 1:
+        t1num = (2 * n ** 2 - 1) * (n ** 2 - 1)
+        t1den = 8 * (4 * n ** 2 - 1)
+        term1 = -t1num / t1den
+        term2 = 1 / 24 * kronecker(n, 1)
+        return term1 + term2  # this is minus in the paper
+    else:
+        # nt1 = numerator term 1, d = denominator...
+        nt1 = 2 * n * (m + n - 1) - m
+        nt2 = (n + 1) * (2 * m + 2 * n - 1)
+        num = nt1 * nt2
+        dt1 = (m + 2 * n - 2) * (m + 2 * n - 1)
+        dt2 = (m + 2 * n) * (2 * n + 1)
+        den = dt1 * dt2
+
+        term1 = num / den  # there is a leading negative in the paper
+        return term1 * gamma(n, m)
 
 
-def c_zernike(m, n):
-    """c(n) from oe-18-13-13861 eq. (4.1c)."""
-    s = m + 2 * n
-    numerator = (s + 2) * (s - n) * n
-    denominator = (n + 1) * (s - n + 1) * s
-    return numerator / denominator
+def F_q2d(n, m):
+    if n == 0:
+        num = m ** 2 * factorial2(2 * m - 3)
+        den = 2 ** (m + 1) * factorial(m - 1)
+        return num / den
+    elif n > 0 and m == 1:
+        t1num = 4 * (n - 1) ** 2 * n ** 2 + 1
+        t1den = 8 * (2 * n - 1) ** 2
+        term1 = t1num / t1den
+        term2 = 11 / 32 * kronecker(n, 1)
+        return term1 + term2
+    else:
+        Chi = m + n - 2
+        nt1 = 2 * n * Chi * (3 - 5 * m + 4 * n * Chi)
+        nt2 = m ** 2 * (3 - m + 4 * n * Chi)
+        num = nt1 + nt2
+
+        dt1 = (m + 2 * n - 3) * (m + 2 * n - 2)
+        dt2 = (m + 2 * n - 1) * (2 * n - 1)
+        den = dt1 * dt2
+
+        term1 = num / den
+        return term1 * gamma(n, m)
+
+
+def g_q2d(nm1, m):
+    return G_q2d(nm1, m) / f_q2d(nm1, m)
+
+
+def f_q2d(n, m):
+    if n == 0:
+        return e.sqrt(F_q2d(n=0, m=m))
+    else:
+        return e.sqrt(F_q2d(n, m) - g_q2d(n-1, m) ** 2)
+
+
+def q2d_recurrence_P(n, m, x, Pnm1=None, Pnm2=None):
+    if m == 0:
+        return qbfs_recurrence_P(n=n, x=x, Pnm1=Pnm1, Pnm2=Pnm2)
+    elif n == 0:
+        return 1 / 2
+    elif n == 1:
+        if m == 1:
+            return 1 - x / 2
+        elif m < 1:
+            raise ValueError('2D-Q auxiliary polynomial is undefined for n=1, m < 1')
+        else:
+            return m - (1 / 2) - (m - 1) * x
+    elif m == 1 and (n == 2 or n == 3):
+        if n == 2:
+            num = 3 - x * (12 - 8 * x)
+            den = 6
+            return num / den
+        if n == 3:
+            numt1 = 5 - x
+            numt2 = 60 - x * (120 - 64 * x)
+            num = numt1 * numt2
+            den = 10
+            return num / den
+    else:
+        if Pnm2 is None:
+            Pnm2 = q2d_recurrence_P(n=n-2, m=m, x=x)
+        if Pnm1 is None:
+            Pnm1 = q2d_recurrence_P(n=n-1, m=m, x=x, Pnm1=Pnm2)
+
+        Anm, Bnm, Cnm = abc_q2d(n, m)
+        term1 = Anm + Bnm * x
+        term2 = Pnm1
+        term3 = Cnm * Pnm2
+        return term1 * term2 - term3
+
+
+def q2d_recurrence_Q(n, m, x, Pnm=None, Qnm1=None, Pnm1=None, Pnm2=None):
+    if n == 0:
+        return 1 / (2 * f_q2d(0, m))
+    elif m == 0:
+        return qbfs_recurrence_Q(n=n, x=x, Pn=Pnm, Pnm1=Pnm1, Pnm2=Pnm2, Qnm1=Qnm1)
+
+    if Pnm2 is None:
+        Pnm2 = q2d_recurrence_P(n=n-2, m=m, x=x)
+    if Pnm1 is None:
+        Pnm1 = q2d_recurrence_P(n=n-1, m=m, x=x, Pnm1=Pnm2)
+    if Pnm is None:
+        if n == 0:
+            Pnm = f_q2d(0, m) * q2d_recurrence_Q(n=0, m=m, x=x)
+        else:
+            Pnm = q2d_recurrence_P(n=n, m=m, x=x, Pnm1=Pnm1, Pnm2=Pnm2)
+
+    if Qnm1 is None:
+        Qnm1 = q2d_recurrence_Q(n=n-1, m=m, x=x, Pnm=Pnm1, Pnm1=Pnm2)
+
+    return (Pnm - g_q2d(n-1, m) * Qnm1) / f_q2d(n, m)

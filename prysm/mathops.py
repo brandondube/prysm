@@ -107,15 +107,17 @@ def gamma(n, m):
     if n == 1 and m == 2:
         return 3 / 8
     elif n == 1 and m > 2:
-        numerator = 2 * m + 1
-        denominator = 2 * (m - 1)
+        mm1 = m - 1
+        numerator = 2 * mm1 + 1
+        denominator = 2 * (mm1 - 1)
         coef = numerator / denominator
-        return coef * gamma(1, m)
+        return coef * gamma(1, mm1)
     else:
-        num = (n + 1) * (2 * m + 2 * n - 1)
-        den = (m + n - 2) * (2 * n + 1)
+        nm1 = n - 1
+        num = (nm1 + 1) * (2 * m + 2 * nm1 - 1)
+        den = (m + nm1 - 2) * (2 * nm1 + 1)
         coef = num / den
-        return coef * gamma(n - 1, m)
+        return coef * gamma(nm1, m)
 
 
 class MathEngine:

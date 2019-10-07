@@ -183,7 +183,11 @@ def make_rho_phi_grid(samples_x, samples_y=None, aligned='x', radius=1):
     return rho, phi
 
 
-def v_to_2v_sqaured_minus_one(v):
+def v_to_2v_minus_one(v):
+    return 2 * v - 1
+
+
+def v_to_2v2_minus_one(v):
     return 2 * v ** 2 - 1
 
 
@@ -193,6 +197,16 @@ def v_to_v_squared(v):
 
 def v_to_v_fouth(v):
     return v ** 4
+
+
+def v_to_v2_times_1_minus_v2(v):
+    v2 = v ** 2
+    return v2 * (1 - v2)
+
+
+def v_to_4v2_minus_4v_plus1(v):
+    v4 = 4 * v
+    return v4 * v4 - v4 + 1
 
 
 def convert_transformation_to_v(transformation):
@@ -207,7 +221,10 @@ class GridCache:
     def __init__(self):
         self.grids = {}
         self.transformation_functions = {
-            'v -> 2v^2 - 1': v_to_2v_sqaured_minus_one,
+            'v -> 4v^2 - 4v + 1': v_to_4v2_minus_4v_plus1,
+            'v -> v^2 (1-v^2)': v_to_v2_times_1_minus_v2,
+            'v -> 2v^2 - 1': v_to_2v2_minus_one,
+            'v -> 2v - 1': v_to_2v_minus_one,
             'v -> v^2': v_to_v_squared,
             'v -> v^4': v_to_v_fouth,
         }

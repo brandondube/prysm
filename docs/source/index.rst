@@ -24,18 +24,7 @@ prysm is on pypi:
 
 prysm requires only `numpy <http://www.numpy.org/>`_ and `scipy <https://www.scipy.org/>`_.
 
-If your environment has `numba <http://numba.pydata.org/>`_ installed, it will automatically accelerate many of prysm's compuations.  To use an nVidia GPU, you must have `cupy <https://cupy.chainer.org/>`_ installed.  Plotting uses `matplotlib <https://matplotlib.org/>`_.  Images are read and written with `imageio <https://imageio.github.io/>`_.  Some MTF utilities utilize `pandas <https://pandas.pydata.org/>`_.  Reading of Zygo datx files requires `h5py <https://www.h5py.org/>`_.
-
-pip can be directed to install these,
-
->>> pip install prysm[cpu]     # for numba
->>> pip install prysm[cuda]    # for cupy
->>> pip install prysm[img]     # for imageio
->>> pip install prysm[Mx]      # for h5py
->>> pip install prysm[mtf]     # for pandas
->>> pip install prysm[deluxe]  # I want it all
-
-or they may be installed at any time.
+To use an nVidia GPU, you must have `cupy <https://cupy.chainer.org/>`_ installed.  Plotting uses `matplotlib <https://matplotlib.org/>`_.  Images are read and written with `imageio <https://imageio.github.io/>`_.  Some MTF utilities utilize `pandas <https://pandas.pydata.org/>`_.  Reading of Zygo datx files requires `h5py <https://www.h5py.org/>`_.  Installation of these must be done offline.
 
 Features
 --------

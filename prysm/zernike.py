@@ -2,12 +2,15 @@
 from collections import defaultdict
 from functools import partial
 
+from retry import retry
+
 from .conf import config
 from .mathops import engine as e, jit, vectorize, fuse, kronecker, sign
 from .pupil import Pupil
-from .coordinates import make_rho_phi_grid, cart_to_polar
+from .coordinates import make_rho_phi_grid, cart_to_polar, gridcache
 from .util import rms, sort_xy, is_odd
 from .plotting import share_fig_ax
+from .jacobi import jacobi
 
 # See JCW - http://wp.optics.arizona.edu/jcwyant/wp-content/uploads/sites/13/2016/08/ZernikePolynomialsForTheWeb.pdf
 
@@ -722,6 +725,118 @@ zcache = ZCache()
 config.chbackend_observers.append(zcache.clear)
 
 
+class ZCacheMN:
+    """Cache of Zernike terms evaluated over the unit circle, based on (n, m) indices."""
+    def __init__(self, gridcache=gridcache):
+        """Create a new ZCache instance."""
+        self.normed = {}
+        self.regular = {}
+        self.jac = {}
+        self.cos = {}
+        self.sin = {}
+        self.gridcache = gridcache
+
+    @retry(tries=2)
+    def get_zernike(self, n, m, samples, norm):
+        """Get an array of phase values for a given radial order n, azimuthal order m, number of samples, and orthonormalization."""  # NOQA
+        if is_odd(n - m):
+            raise ValueError('Zernike polynomials are only defined for n-m even.')
+        key = (n, m, samples)
+        if norm:
+            d_ = self.normed
+        else:
+            d_ = self.regular
+
+        try:
+            return d_[key]
+        except KeyError as e:
+            zern = self.get_term(n=n, m=m, samples=samples)
+            if norm:
+                zern = zern * zernike_norm(n=n, m=m)
+
+            d_[key] = zern
+            raise e
+
+    def get_term(self, n, m, samples):
+        am = abs(m)
+        r, p = self.get_grid(samples=samples, modified=False)
+        term = self.get_jacobi(n=n, m=am, samples=samples)
+
+        if m != 0:
+            azterm = self.get_azterm(m=m, samples=samples)
+            rterm = r ** am
+            term = term * azterm * rterm
+
+        return term
+
+    def __call__(self, n, m, samples, norm):
+        return self.get_zernike(n=n, m=m, samples=samples, norm=norm)
+
+    @retry(tries=2)
+    def get_azterm(self, m, samples):
+        key = (m, samples)
+        if sign(m) == -1:
+            d_ = self.sin
+            func = e.sin
+        else:
+            d_ = self.cos
+            func = e.cos
+
+        try:
+            return d_[key]
+        except KeyError as err:
+            _, p = self.get_grid(samples=samples, modified=False)
+            d_[key] = func(m * p)
+            raise err
+
+    @retry(tries=3)
+    def get_jacobi(self, n, m, samples, nj=None):
+        if nj is None:
+            nj = (n - m) // 2
+        key = (nj, m, samples)
+        try:
+            return self.jac[key]
+        except KeyError as e:
+            r, _ = self.get_grid(samples=samples)
+            if nj > 2:
+                jnm1 = self.get_jacobi(n=None, nj=nj - 1, m=m, samples=samples)
+                jnm2 = self.get_jacobi(n=None, nj=nj - 2, m=m, samples=samples)
+            else:
+                jnm1, jnm2 = None, None
+            jac = jacobi(nj, alpha=0, beta=m, Pnm1=jnm1, Pnm2=jnm2, x=r)
+            self.jac[key] = jac
+            raise e
+
+    def get_grid(self, samples, modified=True):
+        if modified:
+            res = self.gridcache(samples=samples, radius=1, r='r -> 2r^2 - 1', t='t')
+        else:
+            res = self.gridcache(samples=samples, radius=1, r='r', t='t')
+
+        return res['r'], res['t']
+
+    def clear(self, *args):
+        """Empty the cache."""
+        self.normed = {}
+        self.regular = {}
+        self.jac = {}
+        self.sin = {}
+        self.cos = {}
+
+    def nbytes(self):
+        """total size in memory of the cache in bytes."""
+        total = 0
+        for dict_ in (self.normed, self.regular, self.jac, self.sin, self.cos):
+            for key in dict_:
+                total += dict_[key].nbytes
+
+        return total
+
+
+zcachemn = ZCacheMN()
+config.chbackend_observers.append(zcachemn.clear)
+
+
 class BaseZernike(Pupil):
     """Basic class implementing Zernike features."""
     _map = None
@@ -1074,12 +1189,119 @@ class FringeZernike(BaseZernike):
 
 
 class NollZernike(BaseZernike):
-    """Noll Zernike deswcription of an optical pupil."""
+    """Noll Zernike description of an optical pupil."""
     _map = nollmap
     _cache = zcache
     _magnituder = zernikefuncs['magnitude_angle']['noll']
     _namer = zernikefuncs['name']['noll']
     _name = 'Noll'
+
+
+class ANSI2TermZernike(Pupil):
+    """2-term ANSI Zernike description of an optical pupil."""
+    _cache = zcachemn
+
+    def __init__(self, *args, **kwargs):
+        """Initialize a new Zernike instance."""
+        self.normalize = True
+        pass_args = {}
+
+        self.terms = []
+        if kwargs is not None:
+            for key, value in kwargs.items():
+                k0l = key[0].lower()
+                if k0l in ('a', 'b'):
+                    # the only kwarg to contain a _ is a Zernike term
+                    # the kwarg looks like A<n>_<m>=<coef>
+
+                    # if the term is "A", it is a cosine and m is positive
+                    if k0l == 'a':
+                        msign = 1
+                    elif k0l == 'b':
+                        msign = -1
+
+                    if '_' in key:
+                        front, back = key.split('_')
+                        n = int(front[1:])
+                        m = int(back) * msign
+                    else:
+                        n = int(key[1:])
+                        m = 0
+
+                    self.terms.append((n, m, value))  # coef = value
+
+                elif key.lower() == 'norm':
+                    self.normalize = value
+                else:
+                    pass_args[key] = value
+
+        super().__init__(**pass_args)
+
+    def build(self):
+        """Use the wavefront coefficients stored in this class instance to build a wavefront model.
+
+        Returns
+        -------
+        self : `BaseZernike`
+            this Zernike instance
+
+        """
+        # build a coordinate system over which to evaluate this function
+        self.phase = e.zeros((self.samples, self.samples), dtype=config.precision)
+        for (n, m, coef) in self.terms:
+            # short circuit for speed
+            if coef == 0:
+                continue
+            else:
+                zernike = self._cache(n=n, m=m, samples=self.samples, norm=self.normalize) * coef
+                self.phase += zernike
+
+        return self
+
+
+class ANSI1TermZernike(Pupil):
+    """1-term ANSI Zernike description of an optical pupil."""
+    _cache = zcachemn
+
+    def __init__(self, *args, **kwargs):
+        """Initialize a new Zernike instance."""
+        self.normalize = True
+        pass_args = {}
+
+        self.terms = {}
+        if kwargs is not None:
+            for key, value in kwargs.items():
+                if key[0].lower() == 'z':
+                    self.terms[int(key[1:])] = value
+
+                elif key.lower() == 'norm':
+                    self.normalize = value
+                else:
+                    pass_args[key] = value
+
+        super().__init__(**pass_args)
+
+    def build(self):
+        """Use the wavefront coefficients stored in this class instance to build a wavefront model.
+
+        Returns
+        -------
+        self : `BaseZernike`
+            this Zernike instance
+
+        """
+        # build a coordinate system over which to evaluate this function
+        self.phase = e.zeros((self.samples, self.samples), dtype=config.precision)
+        for idx, coef in self.terms.items():
+            # short circuit for speed
+            if coef == 0:
+                continue
+            else:
+                n, m = ansi_j_to_n_m(idx)
+                zernike = self._cache(n=n, m=m, samples=self.samples, norm=self.normalize) * coef
+                self.phase += zernike
+
+        return self
 
 
 def zernikefit(data, x=None, y=None,
