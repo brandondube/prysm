@@ -14,7 +14,7 @@ class Smear(Convolvable):
         Parameters
         ----------
         width : `float`
-            width of the blur in microns
+            full width of the blur in microns
         angle : `float`
             clockwise angle of the blur with respect to the x axis in degrees.
 
