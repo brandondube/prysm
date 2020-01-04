@@ -54,14 +54,14 @@ class OpticalPhase(RichData):
     @property
     def phase_unit(self):
         """Unit used to describe the optical phase."""
-        warnings.warn('phase_unit has been folded into self.units.z and will be removed in prysm v0.18')
-        return str(self.units.z)
+        warnings.warn('phase_unit has been folded into self.z_unit and will be removed in prysm v0.18')
+        return str(self.z_unit)
 
     @property
     def spatial_unit(self):
         """Unit used to describe the spatial phase."""
-        warnings.warn('spatial_unit has been folded into self.units.<x/y> and will be removed in prysm v0.18')
-        return str(self.units.x)
+        warnings.warn('spatial_unit has been folded into self.xy_unit and will be removed in prysm v0.18')
+        return str(self.xy_unit)
 
     @spatial_unit.setter
     def spatial_unit(self, unit):
