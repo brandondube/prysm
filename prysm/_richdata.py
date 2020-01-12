@@ -30,7 +30,6 @@ def fix_interp_pair(x, y):
 
 class RichData:
     """Abstract base class holding some data properties."""
-    _data_attr = 'data'
     _data_type = 'image'
     _default_twosided = True
     _slice_xscale = 'linear'
@@ -65,8 +64,7 @@ class RichData:
         if wavelength is None:
             wavelength = config.wavelength
 
-        self.x, self.y = x, y
-        setattr(self, self._data_attr, data)
+        self.x, self.y, self.data = x, y, data
         self.labels = labels
         self.wavelength = mkwvl(wavelength)
         self.xy_unit = sanitize_unit(xy_unit, self.wavelength)
@@ -77,7 +75,7 @@ class RichData:
     def shape(self):
         """Proxy to phase or data shape."""
         try:
-            return getattr(self, self._data_attr).shape
+            return self.data.shape
         except AttributeError:
             return (0, 0)
 
@@ -85,7 +83,7 @@ class RichData:
     def size(self):
         """Proxy to phase or data size."""
         try:
-            return getattr(self, self._data_attr).size
+            return self.data.size
         except AttributeError:
             return 0
 
@@ -169,11 +167,11 @@ class RichData:
         """
         unit = sanitize_unit(to, self.wavelength)
         coef = self.z_unit.to(unit)
-        modified_data = getattr(self, self._data_attr) * coef
+        modified_data = self.data * coef
         if not inplace:
             return modified_data
         else:
-            setattr(self, self._data_attr, modified_data)
+            self.data = modified_data
             self.z_unit = unit
             return self
 
@@ -193,7 +191,7 @@ class RichData:
         """
         if twosided is None:
             twosided = self._default_twosided
-        return Slices(getattr(self, self._data_attr), x=self.x, y=self.y,
+        return Slices(data=self.data, x=self.x, y=self.y,
                       twosided=twosided, x_unit=self.xy_unit, z_unit=self.z_unit, labels=self.labels,
                       xscale=self._slice_xscale, yscale=self._slice_yscale)
 
@@ -207,7 +205,7 @@ class RichData:
 
         """
         if self.interpf_2d is None:
-            self.interpf_2d = interpolate.RegularGridInterpolator((self.y, self.x), getattr(self, self._data_attr))
+            self.interpf_2d = interpolate.RegularGridInterpolator((self.y, self.x), self.data)
 
         return self.interpf_2d
 
@@ -377,7 +375,7 @@ class RichData:
         elif power != 1:
             norm = PowerNorm(power)
 
-        im = ax.imshow(getattr(self, self._data_attr),
+        im = ax.imshow(self.data,
                        extent=[self.x[0], self.x[-1], self.y[0], self.y[-1]],
                        cmap=cmap,
                        clim=clim,

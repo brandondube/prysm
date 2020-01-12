@@ -395,6 +395,23 @@ def longexposure_otf(nu, Cn, z, f, lambdabar, h_z_by_r=2.91):
     return e.exp(const * nupow)
 
 
+def komogorov(r, r0):
+    """Calculate the phase structure function D_phi in the komogorov approximation
+
+    Parameters
+    ----------
+    r : `numpy.ndarray`
+        r, radial frequency parameter (object space)
+    r0 : `float`
+        Fried parameter
+
+    Returns
+    -------
+    `numpy.ndarray`
+
+    """
+    return 6.88 * (r/r0) ** (5/3)
+
 def estimate_Cn(P=1013, T=273.15, Ct=1e-4):
     """Use Weng et al to estimate Cn from meteorological data.
 

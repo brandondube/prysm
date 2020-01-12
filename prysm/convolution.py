@@ -10,7 +10,6 @@ from .fttools import forward_ft_unit, pad2d
 
 class Convolvable(RichData):
     """A base class for convolvable objects to inherit from."""
-    _data_attr = 'data'
     _data_type = 'image'
 
     def __init__(self, x, y, data, has_analytic_ft=False, labels=None, xy_unit=None, z_unit=None):
