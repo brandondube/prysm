@@ -31,7 +31,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'prysm'
-copyright = '2017-2019, Brandon Dube'
+copyright = '2017-2020, Brandon Dube'
 author = 'Brandon Dube'
 
 # The version info for the project you're documenting, acts as replacement for
