@@ -130,3 +130,8 @@ def test_print_does_not_throw(sample_i):
         print(sample_i)
 
     assert sample_i
+
+def test_constructor_accepts_xynone():
+    z = np.random.rand(128,128)
+    i = Interferogram(z)
+    assert i
