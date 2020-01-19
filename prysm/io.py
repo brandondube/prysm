@@ -443,6 +443,9 @@ def read_zygo_datx(file):
 
             if key.startswith("Data Context."):
                 key = key[len("Data Context."):]
+
+            if key.startswith("Data Attributes."):
+                key = key[len("Data Attributes."):]
             if key.endswith('Value'):
                 key = key[:-5]  # strip value from key
             if key.endswith(':'):
