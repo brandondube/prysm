@@ -407,8 +407,30 @@ def read_zygo_datx(file):
             intensity = e.flipud(f['Data']['Intensity'][intens_block][()].astype(e.uint16))
         except KeyError:
             intensity = None
-        phase_block = list(f['Data']['Surface'].keys())[0]
-        phase = e.flipud(f['Data']['Surface'][phase_block][()])
+
+        # load phase
+        # find the phase array's H5 group
+        phase_key = list(f['Data']['Surface'].keys())[0]
+        phase_obj = f['Data']['Surface'][phase_key]
+
+        # get a little metadata
+        no_data = phase_obj.attrs['No Data'][0]
+        wvl = phase_obj.attrs['Wavelength'][0] * 1e9  # Zygo stores wavelength in meters, we want output in nanometers
+        punit = str(phase_obj.attrs['Unit'][0])[2:-1]  # this for some reason is "b'Fringes'", need to slice off b' and '
+        scale_factor = phase_obj.attrs['Interferometric Scale Factor']
+        obliquity = phase_obj.attrs['Obliquity Factor']
+
+        # get the phase and process it as required
+        phase = e.flipud(f['Data']['Surface'][phase_key][()])
+        # step 1, flip (above)
+        # step 2, clip the nans
+        # step 3, convert punit to nm
+        phase[phase >= no_data] = e.nan
+        if punit == 'Fringes':
+            # the usual conversion per malacara
+            phase = phase * obliquity * scale_factor * wvl
+        else:
+            raise ValueError("datx file does not use expected phase unit, contact the prysm author with a sample file to resolve")
 
         # now get attrs
         attrs = f['Attributes']
@@ -418,16 +440,15 @@ def read_zygo_datx(file):
         for key, value in attrs.items():
             if key.endswith('Unit'):
                 continue  # do not need unit keys, units implicitly understood.
-            if '.Data Attributes.' in key:
-                key = key.split('.Data Attributes.')[-1]
+
+            if key.startswith("Data Context."):
+                key = key[len("Data Context."):]
             if key.endswith('Value'):
                 key = key[:-5]  # strip value from key
             if key.endswith(':'):
                 key = key[:-1]
             if key == 'Resolution':
                 key = 'Lateral Resolution'
-            elif key.endswith('Data Context.Lateral Resolution'):
-                continue  # duplicate
             elif key in ['Property Bag List', 'Group Number', 'TextCount']:
                 continue  # h5py particulars
             if value.dtype == 'object':
@@ -440,47 +461,6 @@ def read_zygo_datx(file):
                 continue  # compound items, h5py objects that do not map nicely to primitives
 
             meta[key] = value
-
-        # lastly, obliquity factor.  Because Mx is spaghetti code and it can appear in many places
-        # under different names, or not at all.  Thanks, Zygo.
-        try:
-            # "new style" datx files, Measurement is a branch of the h5 tree
-            # with duplicates of surface and intenisty, but different attrs.
-            # Pluck the obliquity from here, if possible.
-            obliq = f['Measurement']['Surface'].attrs['Obliquity Factor']
-        except KeyError:
-            try:
-                # possibly an "old style" datx file, "obliquity" in the master attrs
-                obliq = (meta['Obliquity'],)
-                del meta['Obliquity']
-            except KeyError:
-                obliq = (1,)
-
-        meta['Obliquity Factor'] = float(obliq[0])
-
-        was_nx2 = False
-
-        # These may be Mx 7.3 and not NX2 problems, I don't know.
-        if 'Interf Scale Factor' not in meta:
-            # NX2-type datx file, look under surface attributes...
-            meta['Interf Scale Factor'] = f['Measurement']['Surface'].attrs['Interferometric Scale Factor'][0]
-            was_nx2 = True
-
-        if 'Lateral Resolution' not in meta:
-            # NX2-type.  magic numbers [0][2][1], h5 is such a great format...
-            meta['Lateral Resolution'] = f['Measurement']['Surface'].attrs['X Converter'][0][2][1]
-            was_nx2 = True
-
-        if 'No Data' not in meta:
-            try:
-                meta['No Data'] = f['Measurement']['Surface'].attrs['No Data'][0]
-            except KeyError:
-                meta['No Data'] = ZYGO_INVALID_PHASE
-
-    phase[phase >= meta['No Data']] = e.nan
-    phase = phase.astype(config.precision)  # cast to big endian
-    if not was_nx2:
-        phase *= (meta['Interf Scale Factor'] * meta['Obliquity Factor'] * meta['Wavelength']) * 1e9
 
     return {
         'phase': phase,
