@@ -504,7 +504,7 @@ class PSD(RichData):
 class Interferogram(OpticalPhase):
     """Class containing logic and data for working with interferometric data."""
 
-    def __init__(self, phase, x, y, intensity=None, labels=None, xy_unit=None, z_unit=None, wavelength=HeNe, meta=None):
+    def __init__(self, phase, x=None, y=None, intensity=None, labels=None, xy_unit=None, z_unit=None, wavelength=HeNe, meta=None):
         """Create a new Interferogram instance.
 
         Parameters
@@ -539,6 +539,11 @@ class Interferogram(OpticalPhase):
                     wavelength *= 1e6  # m to um
             else:
                 wavelength = 1
+
+        if x is None:
+            # assume x, y both none
+            y, x = (e.arange(s) for s in phase.shape)
+            xy_unit = 'pix'
 
         if xy_unit is None:
             xy_unit = config.phase_xy_unit

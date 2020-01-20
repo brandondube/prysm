@@ -1,0 +1,10 @@
+*************
+prysm v0.17.2
+*************
+
+Bugfixes
+========
+
+* (in 0.17.1) - the release notes for v0.17 contained formatting errors.
+* :code:`OpticalPhase.spatial_unit` and :code:`phase_unit` no longer produce errors.  They still produce the expected deprication warnings as these features will be removed in v0.18.  Use :code:`xy_unit` and :code:`z_unit` to replace them.
+* the :class:`~prysm.interferogram.Interferogram` constructor no longer produces an error when x and y are not provided.  This restores the behavior from 0.16, and fixes an undocumented breaking change in 0.17

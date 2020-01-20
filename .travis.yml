@@ -17,8 +17,8 @@ install:
       imageio
       pandas
       h5py
-      pytest=4.2.1
-      pytest-cov=2.6.1
+      pytest=5.1.2
+      pytest-cov=2.8.1
       coveralls=1.5.1
   - pip install .
 services:
