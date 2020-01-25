@@ -70,501 +70,6 @@ def primary_trefoil_x(rho, phi):
     return rho**3 * e.sin(3 * phi)
 
 
-def secondary_astigmatism_00(rho, phi):
-    """Zernike secondary astigmatism 0°."""
-    return (4 * rho**4 - 3 * rho**2) * e.cos(2 * phi)
-
-
-def secondary_astigmatism_45(rho, phi):
-    """Zernike secondary astigmatism 45°."""
-    return (4 * rho**4 - 3 * rho**2) * e.sin(2 * phi)
-
-
-def secondary_coma_y(rho, phi):
-    """Zernike secondary coma Y."""
-    return (10 * rho**5 - 12 * rho**3 + 3 * rho) * e.cos(phi)
-
-
-def secondary_coma_x(rho, phi):
-    """Zernike secondary coma X."""
-    return (10 * rho**5 - 12 * rho**3 + 3 * rho) * e.sin(phi)
-
-
-def secondary_spherical(rho, phi):
-    """Zernike secondary spherical."""
-    return 20 * rho**6 + - 30 * rho**4 + 12 * rho**2 - 1
-
-
-def primary_tetrafoil_y(rho, phi):
-    """Zernike primary tetrafoil Y."""
-    return rho**4 * e.cos(4 * phi)
-
-
-def primary_tetrafoil_x(rho, phi):
-    """Zernike primary tetrafoil X."""
-    return rho**4 * e.sin(4 * phi)
-
-
-def secondary_trefoil_y(rho, phi):
-    """Zernike secondary trefoil Y."""
-    return (5 * rho**5 - 4 * rho**3) * e.cos(3 * phi)
-
-
-def secondary_trefoil_x(rho, phi):
-    """Zernike secondary trefoil X."""
-    return (5 * rho**5 - 4 * rho**3) * e.sin(3 * phi)
-
-
-def tertiary_astigmatism_00(rho, phi):
-    """Zernike tertiary astigmatism 0°."""
-    return (15 * rho**6 - 20 * rho**4 + 6 * rho**2) * e.cos(2 * phi)
-
-
-def tertiary_astigmatism_45(rho, phi):
-    """Zernike tertiary astigmatism 45°."""
-    return (15 * rho**6 - 20 * rho**4 + 6 * rho**2) * e.sin(2 * phi)
-
-
-def tertiary_coma_y(rho, phi):
-    """Zernike tertiary coma Y."""
-    return (35 * rho**7 - 60 * rho**5 + 30 * rho**3 - 4 * rho) * e.cos(phi)
-
-
-def tertiary_coma_x(rho, phi):
-    """Zernike tertiary coma X."""
-    return (35 * rho**7 - 60 * rho**5 + 30 * rho**3 - 4 * rho) * e.sin(phi)
-
-
-def tertiary_spherical(rho, phi):
-    """Zernike tertiary spherical."""
-    return 70 * rho**8 - 140 * rho**6 + 90 * rho**4 - 20 * rho**2 + 1
-
-
-def primary_pentafoil_y(rho, phi):
-    """Zernike primary pentafoil Y."""
-    return rho**5 * e.cos(5 * phi)
-
-
-def primary_pentafoil_x(rho, phi):
-    """Zernike primary pentafoil X."""
-    return rho**5 * e.sin(5 * phi)
-
-
-def secondary_tetrafoil_y(rho, phi):
-    """Zernike secondary tetrafoil Y."""
-    return (6 * rho**6 - 5 * rho**4) * e.cos(4 * phi)
-
-
-def secondary_tetrafoil_x(rho, phi):
-    """Zernike secondary tetrafoil X."""
-    return (6 * rho**6 - 5 * rho**4) * e.sin(4 * phi)
-
-
-def tertiary_trefoil_y(rho, phi):
-    """Zernike tertiary trefoil Y."""
-    return (21 * rho**7 - 30 * rho**5 + 10 * rho**3) * e.cos(3 * phi)
-
-
-def tertiary_trefoil_x(rho, phi):
-    """Zernike tertiary trefoil X."""
-    return (21 * rho**7 - 30 * rho**5 + 10 * rho**3) * e.cos(3 * phi)
-
-
-def quaternary_astigmatism_00(rho, phi):
-    """Zernike quaternary astigmatism 0°."""
-    return (21 * rho**6 - 30 * rho**4 + 10 * rho**2) * e.cos(2 * phi)
-
-
-def quaternary_astigmatism_45(rho, phi):
-    """Zernike quaternary astigmatism 45°."""
-    return (21 * rho**6 - 30 * rho**4 + 10 * rho**2) * e.sin(2 * phi)
-
-
-def quaternary_coma_y(rho, phi):
-    """Zernike quaternary coma Y."""
-    return (126 * rho**9 - 280 * rho**7 + 210 * rho**5 - 60 * rho**3 + 5 * rho)\
-        * e.cos(phi)
-
-
-def quaternary_coma_x(rho, phi):
-    """Zernike quaternary coma X."""
-    return (126 * rho**9 - 280 * rho**7 + 210 * rho**5 - 60 * rho**3 + 5 * rho)\
-        * e.sin(phi)
-
-
-def quaternary_spherical(rho, phi):
-    """Zernike quaternary spherical."""
-    return 252 * rho**10 \
-        - 630 * rho**8 \
-        + 560 * rho**6 \
-        - 210 * rho**4 \
-        + 30 * rho**2 \
-        - 1
-
-
-def primary_hexafoil_y(rho, phi):
-    """Zernike primary hexafoil Y."""
-    return rho**6 * e.cos(6 * phi)
-
-
-def primary_hexafoil_x(rho, phi):
-    """Zernike primary hexafoil X."""
-    return rho**6 * e.sin(6 * phi)
-
-
-def secondary_pentafoil_y(rho, phi):
-    """Zernike secondary pentafoil Y."""
-    return (7 * rho**7 - 6 * rho**5) * e.cos(5 * phi)
-
-
-def secondary_pentafoil_x(rho, phi):
-    """Zernike secondary pentafoil X."""
-    return (7 * rho**7 - 6 * rho**5) * e.sin(5 * phi)
-
-
-def tertiary_tetrafoil_y(rho, phi):
-    """Zernike tertiary tetrafoil Y."""
-    return (28 * rho**8 - 42 * rho**6 + 15 * rho**4) * e.cos(4 * phi)
-
-
-def tertiary_tetrafoil_x(rho, phi):
-    """Zernike tertiary tetrafoil X."""
-    return (28 * rho**8 - 42 * rho**6 + 15 * rho**4) * e.sin(4 * phi)
-
-
-def quaternary_trefoil_y(rho, phi):
-    """Zernike quaternary trefoil Y."""
-    return (84 * rho**9 - 168 * rho**7 + 105 * rho**5 - 20 * rho**3) * e.cos(3 * phi)
-
-
-def quaternary_trefoil_x(rho, phi):
-    """Zernike quaternary trefoil X."""
-    return (84 * rho**9 - 168 * rho**7 + 105 * rho**5 - 20 * rho**3) * e.sin(3 * phi)
-
-
-def quinternary_astigmatism_00(rho, phi):
-    """Zernike quinternary astigmatism 0°."""
-    return (210 * rho**10 - 504 * rho**8 + 420 * rho**6 - 140 * rho**4 + 15 * rho**2) \
-        * e.cos(2 * phi)
-
-
-def quinternary_astigmatism_45(rho, phi):
-    """Zernike quinternary astigmatism 45°."""
-    return (210 * rho**10 - 504 * rho**8 + 420 * rho**6 - 140 * rho**4 + 15 * rho**2) \
-        * e.sin(2 * phi)
-
-
-def quinternary_coma_y(rho, phi):
-    """Zernike quinternary coma Y."""
-    return (462 * rho**11 - 1260 * rho**9 + 1260 * rho**7 - 560 * rho**5 + 105 * rho**3 - 6 * rho) \
-        * e.cos(phi)
-
-
-def quinternary_coma_x(rho, phi):
-    """Zernike quinternary coma X."""
-    return (462 * rho**11 - 1260 * rho**9 + 1260 * rho**7 - 560 * rho**5 + 105 * rho**3 - 6 * rho) \
-        * e.sin(phi)
-
-
-def quinternary_spherical(rho, phi):
-    """Zernike quinternary spherical."""
-    return 924 * rho**12 \
-        - 2772 * rho**10 \
-        + 3150 * rho**8 \
-        - 1680 * rho**6 \
-        + 420 * rho**4 \
-        - 42 * rho**2 \
-        + 1
-
-
-def primary_septafoil_y(rho, phi):
-    """Zernike primary septafoil."""
-    return 4 * rho**7 * e.cos(7 * phi)
-
-
-def primary_septafoil_x(rho, phi):
-    """Zernike primary septafoil."""
-    return 4 * rho**7 * e.sin(7 * phi)
-
-
-# norms
-piston.norm = 1
-tip.norm = 2
-tilt.norm = 2
-defocus.norm = e.sqrt(3)
-primary_astigmatism_00.norm = e.sqrt(6)
-primary_astigmatism_45.norm = e.sqrt(6)
-primary_coma_y.norm = 2 * e.sqrt(2)
-primary_coma_x.norm = 2 * e.sqrt(2)
-primary_spherical.norm = e.sqrt(5)
-primary_trefoil_y.norm = 2 * e.sqrt(2)
-primary_trefoil_x.norm = 2 * e.sqrt(2)
-secondary_astigmatism_00.norm = e.sqrt(10)
-secondary_astigmatism_45.norm = e.sqrt(10)
-secondary_coma_y.norm = 2 * e.sqrt(3)
-secondary_coma_x.norm = 2 * e.sqrt(3)
-secondary_spherical.norm = e.sqrt(7)
-primary_tetrafoil_y.norm = e.sqrt(10)
-primary_tetrafoil_x.norm = e.sqrt(10)
-secondary_trefoil_y.norm = 2 * e.sqrt(3)
-secondary_trefoil_x.norm = 2 * e.sqrt(3)
-tertiary_astigmatism_00.norm = e.sqrt(14)
-tertiary_astigmatism_45.norm = e.sqrt(14)
-tertiary_coma_y.norm = 4
-tertiary_coma_x.norm = 4
-tertiary_spherical.norm = 3
-primary_pentafoil_y.norm = 2 * e.sqrt(3)
-primary_pentafoil_x.norm = 2 * e.sqrt(3)
-secondary_tetrafoil_y.norm = e.sqrt(14)
-secondary_tetrafoil_x.norm = e.sqrt(14)
-tertiary_trefoil_y.norm = 4
-tertiary_trefoil_x.norm = 4
-quaternary_astigmatism_00.norm = 3 * e.sqrt(2)
-quaternary_astigmatism_45.norm = 3 * e.sqrt(2)
-quaternary_coma_y.norm = 2 * e.sqrt(5)
-quaternary_coma_x.norm = 2 * e.sqrt(5)
-quaternary_spherical.norm = e.sqrt(11)
-primary_hexafoil_y.norm = e.sqrt(14)
-primary_hexafoil_x.norm = e.sqrt(14)
-secondary_pentafoil_y.norm = 4
-secondary_pentafoil_x.norm = 4
-tertiary_tetrafoil_y.norm = 3 * e.sqrt(2)
-tertiary_tetrafoil_x.norm = 3 * e.sqrt(2)
-quaternary_trefoil_y.norm = 2 * e.sqrt(5)
-quaternary_trefoil_x.norm = 2 * e.sqrt(5)
-quinternary_astigmatism_00.norm = e.sqrt(22)
-quinternary_astigmatism_45.norm = e.sqrt(22)
-quinternary_coma_y.norm = 2 * e.sqrt(6)
-quinternary_coma_x.norm = 2 * e.sqrt(6)
-quinternary_spherical.norm = e.sqrt(13)
-primary_septafoil_y.norm = e.sqrt(16)
-primary_septafoil_x.norm = e.sqrt(16)
-
-# names
-piston.name = 'Piston'
-tip.name = 'Tilt Y'
-tilt.name = 'Tilt X'
-defocus.name = 'Defocus'
-primary_astigmatism_00.name = 'Primary Astigmatism 0°'
-primary_astigmatism_45.name = 'Primary Astigmatism 45°'
-primary_coma_y.name = 'Primary Coma Y'
-primary_coma_x.name = 'Primary Coma X'
-primary_spherical.name = 'Primary Spherical'
-primary_trefoil_y.name = 'Primary Trefoil Y'
-primary_trefoil_x.name = 'Primary Trefoil X'
-secondary_astigmatism_00.name = 'Secondary Astigmatism 0°'
-secondary_astigmatism_45.name = 'Secondary Astigmatism 45°'
-secondary_coma_y.name = 'Secondary Coma Y'
-secondary_coma_x.name = 'Secondary Coma X'
-secondary_spherical.name = 'Secondary Spherical'
-primary_tetrafoil_y.name = 'Primary Tetrafoil Y'
-primary_tetrafoil_x.name = 'Primary Tetrafoil X'
-secondary_trefoil_y.name = 'Secondary Trefoil Y'
-secondary_trefoil_x.name = 'Secondary Trefoil X'
-tertiary_astigmatism_00.name = 'Tertiary Astigmatism 0°'
-tertiary_astigmatism_45.name = 'Tertiary Astigmatism 45°'
-tertiary_coma_y.name = 'Tertiary Coma Y'
-tertiary_coma_x.name = 'Tertiary Coma X'
-tertiary_spherical.name = 'Tertiary Spherical'
-primary_pentafoil_y.name = 'Primary Pentafoil Y'
-primary_pentafoil_x.name = 'Primary Pentafoil X'
-secondary_tetrafoil_y.name = 'Secondary Tetrafoil Y'
-secondary_tetrafoil_x.name = 'Secondary Tetrafoil X'
-tertiary_trefoil_y.name = 'Tertiary Trefoil Y'
-tertiary_trefoil_x.name = 'Tertiary Trefoil X'
-quaternary_astigmatism_00.name = 'Quaternary Astigmatism 0°'
-quaternary_astigmatism_45.name = 'Quaternary Astigmatism 45°'
-quaternary_coma_y.name = 'Quaternary Coma Y'
-quaternary_coma_x.name = 'Quaternary Coma X'
-quaternary_spherical.name = 'Quaternary Spherical'
-primary_hexafoil_y.name = 'Primary Hexafoil Y'
-primary_hexafoil_x.name = 'Primary Hexafoil X'
-secondary_pentafoil_y.name = 'Secondary Pentafoil Y'
-secondary_pentafoil_x.name = 'Secondary Pentafoil X'
-tertiary_tetrafoil_y.name = 'Tertiary Tetrafoil Y'
-tertiary_tetrafoil_x.name = 'Tertiary Tetrafoil X'
-quaternary_trefoil_y.name = 'Quaternary Trefoil Y'
-quaternary_trefoil_x.name = 'Quaternary Trefoil X'
-quinternary_astigmatism_00.name = 'Quinternary Astigmatism 0°'
-quinternary_astigmatism_45.name = 'Quinternary Astigmatism 45°'
-quinternary_coma_y.name = 'Quinternary Coma Y'
-quinternary_coma_x.name = 'Quinternary Coma X'
-quinternary_spherical.name = 'Quinternary Spherical'
-primary_septafoil_y.name = 'Primary Septafoil Y'
-primary_septafoil_x.name = 'Primary Septafoil X'
-
-zernikes = [
-    piston,
-    tip,
-    tilt,
-    defocus,
-    primary_astigmatism_00,
-    primary_astigmatism_45,
-    primary_coma_y,
-    primary_coma_x,
-    primary_spherical,
-    primary_trefoil_y,
-    primary_trefoil_x,
-    secondary_astigmatism_00,
-    secondary_astigmatism_45,
-    secondary_coma_y,
-    secondary_coma_x,
-    secondary_spherical,
-    primary_tetrafoil_y,
-    primary_tetrafoil_x,
-    secondary_trefoil_y,
-    secondary_trefoil_x,
-    tertiary_astigmatism_00,
-    tertiary_astigmatism_45,
-    tertiary_coma_y,
-    tertiary_coma_x,
-    tertiary_spherical,
-    primary_pentafoil_y,
-    primary_pentafoil_x,
-    secondary_tetrafoil_y,
-    secondary_tetrafoil_x,
-    tertiary_trefoil_y,
-    tertiary_trefoil_x,
-    quaternary_astigmatism_00,
-    quaternary_astigmatism_45,
-    quaternary_coma_y,
-    quaternary_coma_x,
-    quaternary_spherical,
-    primary_hexafoil_y,
-    primary_hexafoil_x,
-    secondary_pentafoil_y,
-    secondary_pentafoil_x,
-    tertiary_tetrafoil_y,
-    tertiary_tetrafoil_x,
-    quaternary_trefoil_y,
-    quaternary_trefoil_x,
-    quinternary_astigmatism_00,
-    quinternary_astigmatism_45,
-    quinternary_coma_y,
-    quinternary_coma_x,
-    quinternary_spherical,
-    primary_septafoil_y,
-    primary_septafoil_x,
-]
-
-zernikes_cpu = [jit(zernikes[0])]
-for func in zernikes[1:]:
-    compfunc = vectorize(func)
-    compfunc.name = func.name
-    compfunc.norm = func.norm
-    zernikes_cpu.append(compfunc)
-
-zernikes_gpu = [fuse(func) for func in zernikes[1:]]  # cupy compiled zernikes
-zernikes_gpu.insert(0, zernikes[0])
-
-
-def change_backend(to):
-    """Change the backend between cuda/cupy and CPU."""
-    if to == 'cu':
-        globals()['zernikes'] = zernikes_gpu
-    elif to == 'np':
-        globals()['zernikes'] = zernikes_cpu
-
-
-config.chbackend_observers.append(change_backend)
-
-
-fringemap = {
-    0: 0,
-    1: 1,
-    2: 2,
-    3: 3,
-    4: 4,
-    5: 5,
-    6: 6,
-    7: 7,
-    8: 8,
-    9: 9,
-    10: 10,
-    11: 11,
-    12: 12,
-    13: 13,
-    14: 14,
-    15: 15,
-    16: 16,
-    17: 17,
-    18: 18,
-    19: 19,
-    20: 20,
-    21: 21,
-    22: 22,
-    23: 23,
-    24: 24,
-    25: 25,
-    26: 26,
-    27: 27,
-    28: 28,
-    29: 29,
-    30: 30,
-    31: 31,
-    32: 32,
-    33: 33,
-    34: 34,
-    35: 35,
-    36: 36,
-    37: 37,
-    38: 38,
-    39: 39,
-    40: 40,
-    41: 41,
-    42: 42,
-    43: 43,
-    44: 44,
-    45: 45,
-    46: 46,
-    47: 47,
-    48: 48,
-}
-nollmap = {
-    0: 0,
-    1: 1,
-    2: 2,
-    3: 3,
-    4: 4,
-    5: 5,
-    6: 6,
-    7: 7,
-    8: 9,
-    9: 10,
-    10: 8,
-    11: 11,
-    12: 12,
-    13: 16,
-    14: 17,
-    15: 13,
-    16: 14,
-    17: 18,
-    18: 19,
-    19: 25,
-    20: 26,
-    21: 15,
-    22: 20,
-    23: 21,
-    24: 27,
-    25: 28,
-    26: 36,
-    27: 37,
-    28: 22,
-    29: 23,
-    30: 29,
-    31: 30,
-    32: 38,
-    33: 39,
-    34: 49,
-    35: 50,
-    36: 24,
-}
-maps = {
-    'fringe': fringemap,
-    'noll': nollmap,
-}
-
-
 def zernikename(idx, base, map_):
     """Return the name of a Fringe Zernike with the given index and base."""
     return zernikes[map_[idx-base]].name
@@ -608,20 +113,6 @@ def zernikes_to_magnitude_angle(coefs, namer):
     return dict(combinations)  # cast to regular dict for return
 
 
-zernikefuncs = {
-    'name': {
-        'fringe': partial(zernikename, map_=fringemap),
-        'noll': partial(zernikename, map_=nollmap),
-    }
-}
-zernikefuncs.update({
-    'magnitude_angle': {
-        'fringe': partial(zernikes_to_magnitude_angle, namer=zernikefuncs['name']['fringe']),
-        'noll': partial(zernikes_to_magnitude_angle, namer=zernikefuncs['name']['noll']),
-    }
-})
-
-
 def zernike_norm(n, m):
     """Norm of a Zernike polynomial with n, m indexing."""
     return e.sqrt((2 * (n + 1)) / (1 + kronecker(m, 0)))
@@ -656,8 +147,7 @@ def noll_to_n_m(idx):
         m = 0
     else:
         # this is sort of a rising factorial to use that term incorrectly
-        nseries = (n + 1) * (n + 2) / 2
-
+        nseries = int((n + 1) * (n + 2) / 2)
         res = idx - nseries - 1
 
         if is_odd(idx):
@@ -679,50 +169,105 @@ def noll_to_n_m(idx):
     return n, m
 
 
+def fringe_to_n_m(idx):
+    """Convert Fringe Z to (n, m) two-term index."""
+    m_n = 2 * (e.ceil(e.sqrt(idx)) - 1) #sum of n+m
+    g_s = (m_n / 2)**2 + 1 #start of each group of equal n+m given as idx index
+    n = m_n / 2 + e.floor((idx - g_s) / 2)
+    m = (m_n - n) * (1 - e.mod(idx-g_s, 2) * 2)
+    return int(n), int(m)
+
+
 def zero_separation(n):
     """Zero separation in normalized r based on radial order n."""
     return 1 / n ** 2
 
 
-class ZCache(object):
-    """Cache of Zernike terms evaluated over the unit circle."""
-    def __init__(self):
-        """Create a new ZCache instance."""
-        self.normed = defaultdict(dict)
-        self.regular = defaultdict(dict)
 
-    def get_zernike(self, number, norm, samples):
-        """Get an array of phase values for a given index, norm, and number of samples."""
-        if norm is True:
-            target = self.normed
+_names = {
+    1: 'Primary',
+    2: 'Secondary',
+    3: 'Tertiary',
+    4: 'Quaternary',
+    5: 'Quinary',
+}
+
+_names_m = {
+    1: 'Coma',
+    2: 'Astigmatism',
+    3: 'Trefoil',
+    4: 'Quadrafoil',
+    5: 'Pentafoil',
+    6: 'Hexafoil',
+    7: 'Septafoil',
+    8: 'Octafoil',
+}
+
+def _name_accessor(n, m):
+    """Convert n, m to "order" n, where Order is 1 primary, 2 secondary, etc.
+
+    "order" is a key to _names
+
+    """
+    if m == 0 and n >= 4:
+        return int((n / 2) + 1)
+    if is_odd(m) and n >= 3:
+        return abs(int((n - 3) / 2 + 1))
+    else:
+        return int(n / abs(m))
+
+def _name_helper(n, m):
+    accessor = _name_accessor(n, m)
+    prefix = _names.get(accessor, f'{accessor}th')
+    name = _names_m.get(abs(m), f'{abs(m)}-foil')
+    if n == 1:
+        name = 'Tilt'
+
+    if is_odd(m):
+        if sign(m) == 1:
+            suffix = 'Y'
         else:
-            target = self.regular
+            suffix = 'X'
+    else:
+        if sign(m) == 1:
+            suffix = '00°'
+        else:
+            suffix = '45°'
 
-        try:
-            zern = target[samples][number]
-        except KeyError:
-            rho, phi = make_rho_phi_grid(samples, aligned='y')
-            func = zernikes[number]
-            zern = func(rho, phi)
-            if norm is True:
-                zern *= func.norm
-
-            target[samples][number] = zern.copy()
-
-        return zern
-
-    def __call__(self, number, norm, samples):
-        """Get an array of phase values for a given index, norm, and number of samples."""
-        return self.get_zernike(number, norm, samples)
-
-    def clear(self, *args):
-        """Empty the cache."""
-        self.normed = defaultdict(dict)
-        self.regular = defaultdict(dict)
+    return f'{prefix} {name} {suffix}'
 
 
-zcache = ZCache()
-config.chbackend_observers.append(zcache.clear)
+def n_m_to_name(n, m):
+    """Convert an (n,m) index into a human readable name.
+
+    Parameters
+    ----------
+    n : `int`
+        radial polynomial order
+    m : `int`
+        azimuthal polynomial order
+
+    Returns
+    -------
+    `str`
+        a name, e.g. Piston or Primary Spherical
+
+    """
+    # piston, tip tilt, az invariant order
+    if n == 0:
+        return 'Piston'
+    if n == 1:
+        if sign(m) == 1:
+            return 'Tilt Y'
+        else:
+            return 'Tilt X'
+    if n == 2 and m == 0:
+        return 'Defocus'
+    if m == 0:
+        accessor = int((n / 2) - 1)
+        prefix = _names.get(accessor, f'{accessor}th')
+        return f'{prefix} Spherical'
+    return _name_helper(n, m)
 
 
 class ZCacheMN:
@@ -824,7 +369,7 @@ class ZCacheMN:
         self.cos = {}
 
     def nbytes(self):
-        """total size in memory of the cache in bytes."""
+        """Total size in memory of the cache in bytes."""
         total = 0
         for dict_ in (self.normed, self.regular, self.jac, self.sin, self.cos):
             for key in dict_:
@@ -836,43 +381,45 @@ class ZCacheMN:
 zcachemn = ZCacheMN()
 config.chbackend_observers.append(zcachemn.clear)
 
+nm_funcs = {
+    'Fringe': fringe_to_n_m,
+    'Noll': noll_to_n_m,
+    'ANSI': ansi_j_to_n_m,
+}
 
 class BaseZernike(Pupil):
     """Basic class implementing Zernike features."""
-    _map = None
-    _namer = None
-    _magnituder = None
-    _cache = None
     _name = None
+    _cache = zcachemn
 
     def __init__(self, *args, **kwargs):
         """Initialize a new Zernike instance."""
-        if args is not None:
-            if len(args) == 0:
-                self.coefs = e.zeros(len(self._map), dtype=config.precision)
-            else:
-                self.coefs = e.asarray([*args[0]], dtype=config.precision)
+        self.coefs = {}
 
         self.normalize = False
         pass_args = {}
 
-        self.base = config.zernike_base
-        try:
-            bb = kwargs['base']
-            if bb > 1:
-                raise ValueError('It violates convention to use a base greater than 1.')
-            elif bb < 0:
-                raise ValueError('It is nonsensical to use a negative base.')
-            self.base = bb
-        except KeyError:
-            # user did not specify base
-            pass
+        bb = kwargs.get('base', config.zernike_base)
+        if bb > 1:
+            raise ValueError('It violates convention to use a base greater than 1.')
+        elif bb < 0:
+            raise ValueError('It is nonsensical to use a negative base.')
+        self.base = bb
+
+        if args is not None:
+            if len(args) == 1:
+                enumerator = args[0]
+            else:
+                enumerator = args
+
+            for idx, coef in enumerate(enumerator):
+                self.coefs[idx] = coef
 
         if kwargs is not None:
             for key, value in kwargs.items():
                 if key[0].lower() == 'z' and key[1].isnumeric():
                     idx = int(key[1:])  # strip 'Z' from index
-                    self.coefs[idx - self.base] = value
+                    self.coefs[idx - (1-self.base)] = value
                 elif key.lower() == 'norm':
                     self.normalize = value
                 elif key.lower() == 'base':
@@ -891,15 +438,23 @@ class BaseZernike(Pupil):
             this Zernike instance
 
         """
+        nm_func = nm_funcs.get(self._name, None)
+        if nm_func is None:
+            raise ValueError("single index notation not understood, modify zernike.nm_funcs")
+
         # build a coordinate system over which to evaluate this function
-        self.phase = e.zeros((self.samples, self.samples), dtype=config.precision)
-        for term, coef in enumerate(self.coefs):
+        self.data = e.zeros((self.samples, self.samples), dtype=config.precision)
+        keys = list(sorted(self.coefs.keys()))
+
+        for term in keys:
+            coef = self.coefs[term]
             # short circuit for speed
             if coef == 0:
                 continue
             else:
-                idx = self._map[term]
-                self.phase += coef * self._cache(idx, self.normalize, self.samples)  # NOQA
+                n, m = nm_func(term)
+                term = self._cache(n, m, self.samples, self.normalize)
+                self.data += coef * term
 
         return self
 
@@ -1156,7 +711,10 @@ class BaseZernike(Pupil):
             header = f'{self._name} Zernike description with:\n\t'
 
         strs = []
-        for number, coef in enumerate(self.coefs):
+        keys = list(sorted(self.coefs.keys()))
+
+        for number in keys:
+            coef = self.coefs[number]
             # skip 0 terms
             if coef == 0:
                 continue
@@ -1169,8 +727,9 @@ class BaseZernike(Pupil):
                 _ = f'{coef:.3f}'
 
             # create the name
-            idx = self._map[number]
-            name = f'Z{number+self.base} - {zernikes[idx].name}'
+            nm = nm_funcs[self._name](number)
+            name = n_m_to_name(*nm)
+            name = f'Z{number-(1-self.base)} - {name}'
 
             strs.append(' '.join([_, name]))
         body = '\n\t'.join(strs)
@@ -1181,20 +740,17 @@ class BaseZernike(Pupil):
 
 class FringeZernike(BaseZernike):
     """Fringe Zernike description of an optical pupil."""
-    _map = fringemap
-    _cache = zcache
-    _magnituder = zernikefuncs['magnitude_angle']['fringe']
-    _namer = zernikefuncs['name']['fringe']
     _name = 'Fringe'
 
 
 class NollZernike(BaseZernike):
     """Noll Zernike description of an optical pupil."""
-    _map = nollmap
-    _cache = zcache
-    _magnituder = zernikefuncs['magnitude_angle']['noll']
-    _namer = zernikefuncs['name']['noll']
     _name = 'Noll'
+
+
+class ANSI1TermZernike(BaseZernike):
+    """1-term ANSI Zernike description of an optical pupil."""
+    _name = 'ANSI'
 
 
 class ANSI2TermZernike(Pupil):
@@ -1253,51 +809,6 @@ class ANSI2TermZernike(Pupil):
             if coef == 0:
                 continue
             else:
-                zernike = self._cache(n=n, m=m, samples=self.samples, norm=self.normalize) * coef
-                self.phase += zernike
-
-        return self
-
-
-class ANSI1TermZernike(Pupil):
-    """1-term ANSI Zernike description of an optical pupil."""
-    _cache = zcachemn
-
-    def __init__(self, *args, **kwargs):
-        """Initialize a new Zernike instance."""
-        self.normalize = True
-        pass_args = {}
-
-        self.terms = {}
-        if kwargs is not None:
-            for key, value in kwargs.items():
-                if key[0].lower() == 'z':
-                    self.terms[int(key[1:])] = value
-
-                elif key.lower() == 'norm':
-                    self.normalize = value
-                else:
-                    pass_args[key] = value
-
-        super().__init__(**pass_args)
-
-    def build(self):
-        """Use the wavefront coefficients stored in this class instance to build a wavefront model.
-
-        Returns
-        -------
-        self : `BaseZernike`
-            this Zernike instance
-
-        """
-        # build a coordinate system over which to evaluate this function
-        self.phase = e.zeros((self.samples, self.samples), dtype=config.precision)
-        for idx, coef in self.terms.items():
-            # short circuit for speed
-            if coef == 0:
-                continue
-            else:
-                n, m = ansi_j_to_n_m(idx)
                 zernike = self._cache(n=n, m=m, samples=self.samples, norm=self.normalize) * coef
                 self.phase += zernike
 
