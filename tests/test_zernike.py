@@ -13,6 +13,19 @@ SAMPLES = 32
 
 X, Y = np.linspace(-1, 1, SAMPLES), np.linspace(-1, 1, SAMPLES)
 
+all_zernikes = [
+    zernike.piston,
+    zernike.tilt,
+    zernike.tip,
+    zernike.defocus,
+    zernike.primary_astigmatism_00,
+    zernike.primary_astigmatism_45,
+    zernike.primary_coma_y,
+    zernike.primary_coma_x,
+    zernike.primary_spherical,
+    zernike.primary_trefoil_y,
+    zernike.primary_trefoil_x,
+]
 
 @pytest.fixture
 def rho():
@@ -38,13 +51,8 @@ def sample():
 
 
 def test_all_zernfcns_run_without_error_or_nans(rho, phi):
-    for i in range(len(zernike.zernikes)):
-        assert zernike.zcache(i, norm=False, samples=SAMPLES).all()
-
-
-def test_all_zernfcns_run_without_errors_or_nans_with_norms(rho, phi):
-    for i in range(len(zernike.zernikes)):
-        assert zernike.zcache(i, norm=True, samples=SAMPLES).all()
+    for func in all_zernikes:
+        assert func(rho, phi).all()
 
 
 def test_can_build_fringezernike_pupil_with_vector_args():
