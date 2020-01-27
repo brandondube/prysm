@@ -111,6 +111,11 @@ class OpticalPhase(RichData):
         """phase is the Z ("height" or "opd") data."""
         return self.data
 
+    @phase.setter
+    def phase(self, ary):
+        """Set the phase."""
+        self.data = ary
+
 
     def interferogram(self, visibility=1, passes=2, interpolation=config.interpolation, fig=None, ax=None):
         """Create an interferogram of the `Pupil`.
