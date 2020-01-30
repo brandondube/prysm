@@ -7,6 +7,8 @@ This release brings several enhancements related to processing interferoemter da
 New Features
 ============
 
+- new function :func:`prysm.geometry.rectangle` for generating rectangular windows
+
 The Zernike module has completed its overhaul.  This brings the following changes:
 
 - both Fringe and Noll zernike classes now allow expansion up to arbitrary order
