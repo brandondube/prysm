@@ -5,7 +5,7 @@ from scipy.spatial import Delaunay
 
 from .conf import config
 from .mathops import engine as e
-from .coordinates import make_rho_phi_grid, cart_to_polar, polar_to_cart
+from .coordinates import make_rho_phi_grid, cart_to_polar, polar_to_cart, make_xy_grid
 
 
 def mask_cleaner(mask_or_str_or_tuple, samples):
@@ -108,6 +108,46 @@ def gaussian(sigma=0.5, samples=128):
     # // is floor division in python
     x0 = y0 = samples // 2
     return e.exp(-4 * e.log(2) * ((x - x0) ** 2 + (y - y0) ** 2) / (s * samples) ** 2)
+
+
+def rectangle(width, height=None, angle=0, samples=128):
+    """Generate a rectangular, with the "width" axis aligned to 'x'.
+
+    Parameters
+    ----------
+    width : `float`
+        diameter of the rectangle, relative to the width of the array.
+        width=1 fills the horizontal extent when angle=0
+    height : `float`
+        diameter of the rectangle, relative to the height of the array.
+        height=1 fills the vertical extent when angle=0.
+        If None, inherited from width to make a square
+    angle : `float`
+        angle
+
+    Returns
+    -------
+    `numpy.ndarray`
+        array with the rectangle painted at 1 and the background at 0
+
+    """
+    x, y = make_xy_grid(samples, samples)
+    if angle != 0:
+        if angle == 90:  # for the 90 degree case, just swap x and y
+            x, y = y, x
+        else:
+            r, p = cart_to_polar(x, y)
+            p_adj = e.radians(angle)
+            p += p_adj
+            x, y = polar_to_cart(r, p)
+
+    if height is None:
+        height = width
+    w_mask = (y <= height) & (y >= -height)
+    h_mask = (x <= width) & (x >= -width)
+    data = e.zeros((samples, samples))
+    data[w_mask & h_mask] = 1
+    return data
 
 
 def rotated_ellipse(width_major, width_minor, major_axis_angle=0, samples=128):

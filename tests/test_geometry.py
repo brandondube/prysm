@@ -82,3 +82,18 @@ def test_inverted_circle_doesnt_error():
 def test_generate_spider_doesnt_error(vanes):
     mask = geometry.generate_spider(vanes, 1, 0, 25, 128)
     assert type(mask) is np.ndarray
+
+
+def test_rectangle_duplicates_y_from_x():
+    mask = geometry.rectangle(1)
+    assert (mask == 1).all()
+
+
+def test_rectangle_doesnt_break_angle_90():
+    mask = geometry.rectangle(1, angle=90)
+    assert mask.any()
+
+
+def test_rectangle_doesnt_break_angle_not_0_or_90():
+    mask = geometry.rectangle(1, angle=45)
+    assert mask.any()
