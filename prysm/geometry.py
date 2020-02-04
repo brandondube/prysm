@@ -9,6 +9,21 @@ from .coordinates import make_rho_phi_grid, cart_to_polar, polar_to_cart, make_x
 
 
 def mask_cleaner(mask_or_str_or_tuple, samples):
+    """Return an array if given one, otherwise generate it from the parameters.
+
+    Parameters
+    ----------
+    mask_or_string_or_tuple : `numpy.ndarray`, `string`, or `iterable`
+        if an array, returned untouched.
+        If a string, return a radius=1 mask of that geometry.
+        If an interable, (string, float) of name and radius, generated as given
+
+    Returns
+    -------
+    `numpy.ndarray`
+        square array; value of one inside the mask, zero otuside
+
+    """
     if mask_or_str_or_tuple is None:
         return None
     elif (
@@ -572,7 +587,7 @@ def generate_vertices(sides, radius=1):
 
 
 def generate_spider(vanes, width, rotation=0, arydiam=1, samples=128):
-    """Generate the mask for a spider
+    """Generate the mask for a spider.
 
     Parameters
     ----------

@@ -1,5 +1,5 @@
 ***********
-prysm v0.17
+prysm v0.18
 ***********
 
 This release brings several enhancements related to processing interferoemter data.  Perhaps as a breath of fresh air, you are likely to experience *zero* breaking changes.  Users are encouraged to upgrade, and remove any error correction logic from their own processing pipelines.
@@ -35,3 +35,9 @@ Under-the-hood
 ==============
 
 For :class:`prysm._phase.OpticalPhase`s, the phase attribute is now a property that points to :code:`.data`.  This makes *all* prysm classes have a common location holding their primary data array, improving cohesion.  If you access the phase attribute directly, there is no change in your code or its behavior.
+
+New Documentation
+=================
+
+- :func:`prysm.geometry.mask_cleaner` now has a docstring.  You probably won't use this function.
+- :class:`prysm.interferogram.PSD` now has a docstring.
