@@ -1,11 +1,10 @@
 """Zernike functions."""
 from collections import defaultdict
-from functools import partial
 
 from retry import retry
 
 from .conf import config
-from .mathops import engine as e, jit, vectorize, fuse, kronecker, sign
+from .mathops import engine as e, kronecker, sign
 from .pupil import Pupil
 from .coordinates import make_rho_phi_grid, cart_to_polar, gridcache
 from .util import rms, sort_xy, is_odd
@@ -171,8 +170,8 @@ def noll_to_n_m(idx):
 
 def fringe_to_n_m(idx):
     """Convert Fringe Z to (n, m) two-term index."""
-    m_n = 2 * (e.ceil(e.sqrt(idx)) - 1) #sum of n+m
-    g_s = (m_n / 2)**2 + 1 #start of each group of equal n+m given as idx index
+    m_n = 2 * (e.ceil(e.sqrt(idx)) - 1)  # sum of n+m
+    g_s = (m_n / 2)**2 + 1  # start of each group of equal n+m given as idx index
     n = m_n / 2 + e.floor((idx - g_s) / 2)
     m = (m_n - n) * (1 - e.mod(idx-g_s, 2) * 2)
     return int(n), int(m)
@@ -181,7 +180,6 @@ def fringe_to_n_m(idx):
 def zero_separation(n):
     """Zero separation in normalized r based on radial order n."""
     return 1 / n ** 2
-
 
 
 _names = {
@@ -203,6 +201,7 @@ _names_m = {
     8: 'Octafoil',
 }
 
+
 def _name_accessor(n, m):
     """Convert n, m to "order" n, where Order is 1 primary, 2 secondary, etc.
 
@@ -215,6 +214,7 @@ def _name_accessor(n, m):
         return abs(int((n - 3) / 2 + 1))
     else:
         return int(n / abs(m))
+
 
 def _name_helper(n, m):
     accessor = _name_accessor(n, m)
@@ -386,6 +386,7 @@ nm_funcs = {
     'Noll': noll_to_n_m,
     'ANSI': ansi_j_to_n_m,
 }
+
 
 class BaseZernike(Pupil):
     """Basic class implementing Zernike features."""
