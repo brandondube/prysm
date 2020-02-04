@@ -367,12 +367,12 @@ class PSF(Convolvable):
 
         """
         if axlim is None:
-            if len(self._ee) is not 0:
+            if len(self._ee) != 0:
                 xx, yy = sort_xy(self._ee.keys(), self._ee.values())
             else:
                 raise ValueError('if no values for encircled energy have been computed, axlim must be provided')
-        elif axlim is 0:
-            raise ValueError('computing from 0 to 0 is stupid')
+        elif axlim != 0:
+            raise ValueError('computing from 0 to 0 is not possible')
         else:
             xx = e.linspace(1e-5, axlim, npts)
             yy = self.encircled_energy(xx)
@@ -403,6 +403,63 @@ class PSF(Convolvable):
         elif to.lower() == 'total':
             ttl = self.data.sum()
             self.data /= ttl
+        return self
+
+    def centroid(self, unit='spatial'):
+        """Calculate the centroid of the PSF.
+
+        Parameters
+        ----------
+        unit : `str`, {'spatial', 'pixels'}
+            unit to return the centroid in.
+            If pixels, corner indexed.  If spatial, center indexed.
+
+        Returns
+        -------
+        `int`, `int`
+            if unit == pixels, indices into the array
+        `float`, `float`
+            if unit == spatial, referenced to the origin
+
+        """
+        from scipy.ndimage import center_of_mass
+        com = center_of_mass(self.data)
+        if unit != 'spatial':
+            return com
+        else:
+            # tuple - cast from generator
+            # sample spacing - indices to units
+            # x-c -- index shifted from center
+            return tuple(self.sample_spacing * (x-c) for x, c in zip(com, (self.center_y, self.center_x)))
+
+    def autowindow(self, width, unit='pixels'):
+        """Crop to a rectangular window around the centroid.
+
+        Parameters
+        ----------
+        width : `float`
+            diameter of the output window
+        unit : `str`, {'pixels', 'spatial'}
+            if pixels, the width is measured in pixels.  Otherwise, in spatial units
+
+        Returns
+        -------
+        `self`
+            modified PSF instance
+
+        """
+        com = self.centroid('pixels')
+        cy, cx = (int(c) for c in com)
+        w = width // 2
+        aoi_y_l = cy - w
+        aoi_y_h = cy + w
+        aoi_x_l = cx - w
+        aoi_x_h = cx + w
+        print(aoi_y_l, aoi_y_h)
+        print(aoi_x_l, aoi_x_h)
+        self.data = self.data[aoi_y_l:aoi_y_h, aoi_x_l:aoi_x_h]
+        self.x = self.x[aoi_x_l:aoi_x_h]
+        self.y = self.y[aoi_y_l:aoi_y_h]
         return self
 
     @staticmethod

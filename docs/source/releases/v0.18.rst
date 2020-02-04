@@ -8,6 +8,8 @@ New Features
 ============
 
 - new function :func:`prysm.geometry.rectangle` for generating rectangular windows
+- new method :meth:`prysm.psf.PSF.centroid` for computing the centroid of a PSF
+- new method :meth:`prysm.psf.PSF.autowindow` for centering the data on the data of a PSF, based on its centroid
 
 The Zernike module has completed its overhaul.  This brings the following changes:
 
