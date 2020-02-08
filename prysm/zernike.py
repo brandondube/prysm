@@ -709,7 +709,13 @@ class BaseZernike(Pupil):
         if n > len(self.coefs):
             return self
         else:
-            self.coefs = self.coefs[:n]
+            coefs = {}
+            for idx, i in enumerate(sorted(self.coefs.keys())):
+                if idx > n:
+                    break
+                coefs[i] = self.coefs[i]
+
+            self.coefs = coefs
             self.build()
             return self
 
@@ -728,10 +734,10 @@ class BaseZernike(Pupil):
 
         """
         topn = self.top_n(n)
-        new_coefs = e.zeros(len(self.coefs), dtype=config.precision)
+        new_coefs = {}
         for coef in topn:
             mag, index, *_ = coef
-            new_coefs[index-self.base] = mag
+            new_coefs[index+(self.base-1)] = mag
 
         self.coefs = new_coefs
         self.build()
