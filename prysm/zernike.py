@@ -127,7 +127,13 @@ def zernikes_to_magnitude_angle(coefs):
     d2 = {}
     for k, v in d.items():
         # (n,m) -> "Primary Coma X" -> ['Primary', 'Coma', 'X'] -> 'Primary Coma'
-        k2 = " ".join(n_m_to_name(*k).split(" ")[:-1])
+        name = n_m_to_name(*k)
+        split = name.split(" ")
+        if len(split) < 3 and 'Tilt' not in name:  # oh, how special the low orders are
+            k2 = name
+        else:
+            k2 = " ".join(split[:-1])
+
         d2[k2] = v
 
     return d2
