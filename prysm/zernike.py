@@ -562,8 +562,8 @@ class BaseZernike(Pupil):
         from matplotlib import pyplot as plt
         fig, ax = share_fig_ax(fig, ax)
 
-        coefs = e.asarray(self.coefs)
-        idxs = e.asarray(range(len(coefs))) + self.base
+        coefs = e.asarray(list(self.coefs.values()))
+        idxs = e.asarray(list(self.coefs.keys()))
         names = self.names
         lab = self.labels.z(self.xy_unit, self.z_unit)
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
