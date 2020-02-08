@@ -92,7 +92,10 @@ class MathEngine:
     def change_backend(self, backend):
         """Run when changing the backend."""
         self.source = backend
+        globals()['jinc'] = self.vectorize(jinc)
 
 
 engine = MathEngine()
 config.chbackend_observers.append(engine.change_backend)
+
+jinc = engine.vectorize(jinc)
