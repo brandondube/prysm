@@ -69,47 +69,68 @@ def primary_trefoil_x(rho, phi):
     return rho**3 * e.sin(3 * phi)
 
 
-def zernikename(idx, base, map_):
-    """Return the name of a Fringe Zernike with the given index and base."""
-    return zernikes[map_[idx-base]].name
+def zernikes_to_magnitude_angle_nmkey(coefs):
+    """Convert Zernike polynomial set to a magnitude and phase representation.
 
+    Parameters
+    ----------
+    coefs : `list` of `tuples`
+        a list looking like[(1,2,3),] where (1,2) are the n, m indices and 3 the coefficient
 
-def zernikes_to_magnitude_angle(coefs, namer):
-    """Convert Fringe Zernike polynomial set to a magnitude and phase representation."""
+    Returns
+    -------
+    `dict`
+        dict keyed by tuples of (n, |m|) with values of (rho, phi) where rho is the magnitudes, and phi the phase
+
+    """
     def mkary():  # default for defaultdict
-        return e.zeros(2)
+        return list()
 
-    # make a list of names to go with the coefficients
-    names = [namer(i, base=0) for i in range(len(coefs))]
     combinations = defaultdict(mkary)
 
     # for each name and coefficient, make a len 2 array.  Put the Y or 0 degree values in the first slot
-    for coef, name in zip(coefs, names):
-        if name.endswith(('X', 'Y', '°')):
-            newname = ' '.join(name.split(' ')[:-1])
-            if name.endswith('Y'):
-                combinations[newname][0] = coef
-            elif name.endswith('X'):
-                combinations[newname][1] = coef
-            elif name[-2] == '5':  # 45 degree case
-                combinations[newname][1] = coef
-            else:
-                combinations[newname][0] = coef
-        else:
-            combinations[name][0] = coef
+    for n, m, coef in coefs:
+        m2 = abs(m)
+        key = (n, m2)
+        combinations[key].append(coef)
 
-    # now go over the combinations and compute the L2 norms and angles
-    for name in combinations:
-        ovals = combinations[name]
-        magnitude = e.sqrt((ovals**2).sum())
-        if 'Spheric' in name or 'focus' in name or 'iston' in name:
-            phase = 0
+    for key, value in combinations.items():
+        if len(value) == 1:
+            magnitude = value[0]
+            angle = 0
         else:
-            phase = e.degrees(e.arctan2(*ovals))
-        values = (magnitude, phase)
-        combinations[name] = values
+            magnitude = e.sqrt(sum([v**2 for v in value]))
+            angle = e.degrees(e.arctan2(*value))
 
-    return dict(combinations)  # cast to regular dict for return
+        combinations[key] = (magnitude, angle)
+
+    return dict(combinations)
+
+
+def zernikes_to_magnitude_angle(coefs):
+    """Convert Zernike polynomial set to a magnitude and phase representation.
+
+    This function is identical to zernikes_to_magnitude_angle_nmkey, except its keys are strings instead of (n, |m|)
+
+    Parameters
+    ----------
+    coefs : `list` of `tuples`
+        a list looking like[(1,2,3),] where (1,2) are the n, m indices and 3 the coefficient
+
+    Returns
+    -------
+    `dict`
+        dict keyed by friendly name strings with values of (rho, phi) where rho is the magnitudes, and phi the phase
+
+    """
+    d = zernikes_to_magnitude_angle_nmkey(coefs)
+    d2 = {}
+    for k, v in d.items():
+        # (n,m) -> "Primary Coma X" -> ['Primary', 'Coma', 'X'] -> 'Primary Coma'
+        k2 = " ".join(n_m_to_name(*k).split(" ")[:-1])
+        d2[k2] = v
+
+    return d2
 
 
 def zernike_norm(n, m):
@@ -414,7 +435,7 @@ class BaseZernike(Pupil):
                 enumerator = args
 
             for idx, coef in enumerate(enumerator):
-                self.coefs[idx] = coef
+                self.coefs[idx+1] = coef
 
         if kwargs is not None:
             for key, value in kwargs.items():
@@ -487,7 +508,13 @@ class BaseZernike(Pupil):
     def magnitudes(self):
         """Return the magnitude and angles of the zernike components in this wavefront."""
         # need to call through class variable to avoid insertion of self as arg
-        return self.__class__._magnituder(self.coefs)  # NOQA
+        nmf = nm_funcs[self._name]
+        inp = []
+        for k, v in self.coefs.items():
+            tup = (*nmf(k), v)
+            inp.append(tup)
+
+        return zernikes_to_magnitude_angle(inp)
 
     @property
     def names(self):
