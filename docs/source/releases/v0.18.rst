@@ -24,6 +24,8 @@ Breaking:
 - the explicit functions such as :func:`~prysm.zernike.primary_spherical` now only include up to primary trefoil.  You must use another method (such as the caches) to access higher order polynomials.
 - all explicit zernike functions no longer have :code:`name` or :code:`norm` attributes.  Use the enumerated new functions above to get the name or norm of a term from its index
 - :code:`prysm.zernike.zcache` no longer exists.  :class:`~prysm.zernike.ZCacheMN` replaces :code:`ZCache`.  In 0.19, :code:`ZCache` will become an alias for :code:`ZCacheMN`.
+- :func:`prysm.zernike.zernikename` is deleted, use :func:`~prysm.zernike.n_m_to_name` and the various xxxx_to_n_m functions in its place.
+-
 
 
 Bug fixes
