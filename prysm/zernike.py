@@ -500,9 +500,9 @@ class BaseZernike(Pupil):
             list of tuples (magnitude, index, term)
 
         """
-        coefs = e.asarray(self.coefs)
+        coefs = e.asarray(list(self.coefs.values()))
         coefs_work = abs(coefs)
-        oidxs = e.arange(len(coefs), dtype=int) + self.base  # "original indexes"
+        oidxs = e.asarray(list(self.coefs.keys()))
         idxs = e.argpartition(coefs_work, -n)[-n:]  # argpartition does some magic to identify the top n (unsorted)
         idxs = idxs[e.argsort(coefs_work[idxs])[::-1]]  # use argsort to sort them in ascending order and reverse
         big_terms = coefs[idxs]  # finally, take the values from the
@@ -526,8 +526,8 @@ class BaseZernike(Pupil):
     def names(self):
         """Names of the terms in self."""
         # need to call through class variable to avoid insertion of self as arg
-        idxs = e.asarray(range(len(self.coefs))) + self.base
-        return [self.__class__._namer(i, base=self.base) for i in idxs]  # NOQA
+        nmf = nm_funcs[self._name]
+        return [n_m_to_name(*nmf(i)) for i in self.coefs.keys()]
 
     def barplot(self, orientation='h', buffer=1, zorder=3, number=True, offset=0, width=0.8, fig=None, ax=None):
         """Create a barplot of coefficients and their names.
