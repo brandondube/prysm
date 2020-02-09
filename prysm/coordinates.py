@@ -210,7 +210,7 @@ def v_to_4v2_minus_4v_plus1(v):
 
 
 def v_to_v_plus90(v):
-    return v + (e.pi/2)
+    return v - (e.pi/2)
     # return v
 
 
