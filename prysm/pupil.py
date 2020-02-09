@@ -73,8 +73,8 @@ class Pupil(OpticalPhase):
             self.samples = samples
             self.build()
             if phase_mask is not None:
-                self.phase = self.phase * phase_mask
-                self.phase[phase_mask == 0] = e.nan
+                self.data = self.data * phase_mask
+                self.data[phase_mask == 0] = e.nan
 
             transmission = mask_cleaner(transmission, samples)
             self.transmission = transmission
@@ -121,7 +121,7 @@ class Pupil(OpticalPhase):
 
         """
         # fill in the phase of the pupil
-        self.phase = e.zeros((self.samples, self.samples), dtype=config.precision)
+        self.data = e.zeros((self.samples, self.samples), dtype=config.precision)
 
         return self
 

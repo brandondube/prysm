@@ -13,6 +13,20 @@ SAMPLES = 32
 
 X, Y = np.linspace(-1, 1, SAMPLES), np.linspace(-1, 1, SAMPLES)
 
+all_zernikes = [
+    zernike.piston,
+    zernike.tilt,
+    zernike.tip,
+    zernike.defocus,
+    zernike.primary_astigmatism_00,
+    zernike.primary_astigmatism_45,
+    zernike.primary_coma_y,
+    zernike.primary_coma_x,
+    zernike.primary_spherical,
+    zernike.primary_trefoil_y,
+    zernike.primary_trefoil_x,
+]
+
 
 @pytest.fixture
 def rho():
@@ -38,13 +52,8 @@ def sample():
 
 
 def test_all_zernfcns_run_without_error_or_nans(rho, phi):
-    for i in range(len(zernike.zernikes)):
-        assert zernike.zcache(i, norm=False, samples=SAMPLES).all()
-
-
-def test_all_zernfcns_run_without_errors_or_nans_with_norms(rho, phi):
-    for i in range(len(zernike.zernikes)):
-        assert zernike.zcache(i, norm=True, samples=SAMPLES).all()
+    for func in all_zernikes:
+        assert func(rho, phi).all()
 
 
 def test_can_build_fringezernike_pupil_with_vector_args():
@@ -85,21 +94,14 @@ def test_fringezernike_will_pass_pupil_args():
 
 def test_fit_agrees_with_truth(fit_data):
     data, real_coefs = fit_data
-    coefs = zernike.zernikefit(data, map_='fringe')
-    real_coefs = np.asarray(real_coefs)
-    assert coefs[8] == pytest.approx(real_coefs[8])
+    coefs = zernike.zernikefit(data, map_='Fringe')
+    assert coefs[8] == pytest.approx(real_coefs[9])  # compare 8 (0-based index 9) to 9 (dict key)
 
 
 def test_fit_does_not_throw_on_normalize(fit_data):
     data, real_coefs = fit_data
-    coefs = zernike.zernikefit(data, norm=True, map_='fringe')
-    assert coefs[8] != 0
-
-
-def test_fit_raises_on_too_many_terms(fit_data):
-    data, real_coefs = fit_data
-    with pytest.raises(ValueError):
-        zernike.zernikefit(data, terms=100)
+    coefs = zernike.zernikefit(data, norm=True, map_='Noll')
+    assert coefs[10] != 0
 
 
 def test_names_functions(sample):

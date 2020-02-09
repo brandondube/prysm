@@ -237,7 +237,7 @@ def defocus_to_image_displacement(defocus, fno, wavelength, zernike=False, norm=
     # if the defocus is a zernike, make it match Seidel notation for equation validity
     if zernike is True:
         if norm is True:
-            defocus = defocus * _defocus.norm  # not using *= on these to avoid side effects with in-place ops
+            defocus = defocus * e.sqrt(3) # not using *= on these to avoid side effects with in-place ops
         defocus = defocus * 2
     return 8 * fno**2 * wavelength * defocus
 
@@ -268,7 +268,7 @@ def image_displacement_to_defocus(image_displacement, fno, wavelength, zernike=F
     defocus = image_displacement / (8 * fno ** 2 * wavelength)
     if zernike is True:
         if norm is True:
-            return defocus / 2 / _defocus.norm
+            return defocus / 2 / e.sqrt(3)
         else:
             return defocus / 2
     else:

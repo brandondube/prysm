@@ -467,6 +467,8 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
 
 
 class PSD(RichData):
+    """Two dimensional PSD."""
+
     _default_twosided = False
     _data_attr = 'data'
     _data_type = 'image'
@@ -504,7 +506,8 @@ class PSD(RichData):
 class Interferogram(OpticalPhase):
     """Class containing logic and data for working with interferometric data."""
 
-    def __init__(self, phase, x=None, y=None, intensity=None, labels=None, xy_unit=None, z_unit=None, wavelength=HeNe, meta=None):
+    def __init__(self, phase, x=None, y=None, intensity=None,
+                 labels=None, xy_unit=None, z_unit=None, wavelength=HeNe, meta=None):
         """Create a new Interferogram instance.
 
         Parameters
@@ -528,7 +531,6 @@ class Interferogram(OpticalPhase):
             present, this will also be stored in self.wavelength
 
         """
-
         if not wavelength:
             if meta:
                 wavelength = meta.get('wavelength', None)
@@ -576,18 +578,18 @@ class Interferogram(OpticalPhase):
         http://www.opticsinfobase.org/abstract.cfm?URI=OFT-2008-OWA4
 
         """
-        coefs, residual = zernikefit(self.phase, terms=36, residual=True, map_='fringe')
+        coefs, residual = zernikefit(self.phase, terms=36, residual=True, map_='Fringe')
         fz = FringeZernike(coefs, samples=self.shape[0])
         return fz.pv + 3 * residual
 
-    def fit_zernikes(self, terms, map_='noll', norm=True, residual=False):
+    def fit_zernikes(self, terms, map_='Noll', norm=True, residual=False):
         """Fit Zernikes to the interferometric data.
 
         Parameters
         ----------
         terms : `int`
             number of terms to fit
-        map_ : `str`, {'noll', 'fringe'}, optional
+        map_ : `str`, {'Noll', 'Fringe', 'ANSI'}, optional
             which set ("map") of Zernikes to fit to
         norm : `bool`, optional
             whether to orthonormalize the terms to unit RMS value
@@ -987,6 +989,7 @@ class Interferogram(OpticalPhase):
                          high_phase_res=high_phase_res)
 
     def __str__(self):
+        """Pretty-print string representation."""
         if self.xy_unit != u.pix:
             size_part_2 = f', ({self.shape[1]}x{self.shape[0]}) px'
         else:
@@ -1039,7 +1042,7 @@ class Interferogram(OpticalPhase):
         return i
 
     @staticmethod  # NOQA
-    def render_from_psd(size, samples, rms=None,
+    def render_from_psd(size, samples, rms=None,  # NOQA
                         mask='circle', xyunit='mm', zunit='nm', psd_fcn=abc_psd, **psd_fcn_kwargs):
         """Render a synthetic surface with a given RMS value given a PSD function.
 

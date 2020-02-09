@@ -10,7 +10,6 @@ from .util import pv, rms, Sa, std
 
 class OpticalPhase(RichData):
     """Phase of an optical field."""
-    _data_attr = 'phase'
     _data_type = 'phase'
 
     def __init__(self, x, y, phase, labels, xy_unit=None, z_unit=None, wavelength=None, opd_unit=None):
@@ -54,22 +53,18 @@ class OpticalPhase(RichData):
     @property
     def phase_unit(self):
         """Unit used to describe the optical phase."""
-        warnings.warn('phase_unit has been folded into self.z_unit and will be removed in prysm v0.18')
+        warnings.warn('phase_unit has been folded into self.units.z and will be removed in prysm v0.18')
         return str(self.z_unit)
 
     @property
     def spatial_unit(self):
         """Unit used to describe the spatial phase."""
-        warnings.warn('spatial_unit has been folded into self.xy_unit and will be removed in prysm v0.18')
+        warnings.warn('spatial_unit has been folded into self.units.<x/y> and will be removed in prysm v0.18')
         return str(self.xy_unit)
 
     @spatial_unit.setter
     def spatial_unit(self, unit):
-        unit = unit.lower()
-        if unit not in self.units:
-            raise ValueError(f'{unit} not a valid unit, must be in {set(self.units.keys())}')
-
-        self._spatial_unit = self.units[unit]
+        self.change_xy_unit(unit)
 
     @property
     def pv(self):
@@ -110,6 +105,16 @@ class OpticalPhase(RichData):
     def semidiameter(self):
         """Half of self.diameter."""
         return self.diameter / 2
+
+    @property
+    def phase(self):
+        """phase is the Z ("height" or "opd") data."""
+        return self.data
+
+    @phase.setter
+    def phase(self, ary):
+        """Set the phase."""
+        self.data = ary
 
     def interferogram(self, visibility=1, passes=2, interpolation=config.interpolation, fig=None, ax=None):
         """Create an interferogram of the `Pupil`.

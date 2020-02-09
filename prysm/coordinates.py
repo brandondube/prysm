@@ -209,6 +209,11 @@ def v_to_4v2_minus_4v_plus1(v):
     return v4 * v4 - v4 + 1
 
 
+def v_to_v_plus90(v):
+    return v - (e.pi/2)
+    # return v
+
+
 def convert_transformation_to_v(transformation):
     s = transformation
     for letter in ('x', 'y', 'r', 't'):
@@ -227,6 +232,7 @@ class GridCache:
             'v -> 2v - 1': v_to_2v_minus_one,
             'v -> v^2': v_to_v_squared,
             'v -> v^4': v_to_v_fouth,
+            'v -> v+90': v_to_v_plus90
         }
 
     def make_basic_grids(self, samples, radius):
