@@ -96,7 +96,7 @@ def test_fit_agrees_with_truth(fit_data):
     data, real_coefs = fit_data
     coefs = zernike.zernikefit(data, map_='Fringe')
     real_coefs = np.asarray(real_coefs)
-    assert coefs[8] == pytest.approx(real_coefs[8])
+    assert coefs[8] == pytest.approx(real_coefs[9])  # compare 8 (0-based index 9) to 9 (dict key)
 
 
 def test_fit_does_not_throw_on_normalize(fit_data):
