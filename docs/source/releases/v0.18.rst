@@ -2,7 +2,7 @@
 prysm v0.18
 ***********
 
-This release brings several enhancements related to processing interferoemter data.  Perhaps as a breath of fresh air, you are likely to experience *zero* breaking changes.  Users are encouraged to upgrade, and remove any error correction logic from their own processing pipelines.
+This release brings several enhancements related to processing interferoemter data, and completes the update of the Zernike module.  Perhaps as a breath of fresh air, you are likely to experience *zero* breaking changes.  Users are encouraged to upgrade, and remove any error correction logic from their own processing pipelines.
 
 New Features
 ============
@@ -19,14 +19,16 @@ The Zernike module has completed its overhaul.  This brings the following change
 - - :func:`~prysm.zernike.fringe_to_n_m` for converting (arbitrary) Fringe index -> (n,m).  One based.
 - - :func:`~prysm.zernike.n_m_to_name` for retrieving the name from (n, m) orders.
 
+- New capability:
+- - :func:`~prysm.zernike.zernikefit` can fit from (n,m) indices, and fit isolated terms without fitting all of the lower order ones
+
 Breaking:
 - the list :code:`prysm.zernike.zernikes` no longer exists
 - the explicit functions such as :func:`~prysm.zernike.primary_spherical` now only include up to primary trefoil.  You must use another method (such as the caches) to access higher order polynomials.
 - all explicit zernike functions no longer have :code:`name` or :code:`norm` attributes.  Use the enumerated new functions above to get the name or norm of a term from its index
 - :code:`prysm.zernike.zcache` no longer exists.  :class:`~prysm.zernike.ZCacheMN` replaces :code:`ZCache`.  In 0.19, :code:`ZCache` will become an alias for :code:`ZCacheMN`.
 - :func:`prysm.zernike.zernikename` is deleted, use :func:`~prysm.zernike.n_m_to_name` and the various xxxx_to_n_m functions in its place.
--
-
+- the "base" kwarg to Zernike classes is deprecated and will be removed in 0.19
 
 Bug fixes
 =========
@@ -36,7 +38,7 @@ The Zygo datx importer was rewritten.  It now never results in improperly scaled
 Under-the-hood
 ==============
 
-For :class:`prysm._phase.OpticalPhase`s, the phase attribute is now a property that points to :code:`.data`.  This makes *all* prysm classes have a common location holding their primary data array, improving cohesion.  If you access the phase attribute directly, there is no change in your code or its behavior.
+For :class:`OpticalPhase`, the phase attribute is now a property that points to :code:`.data`.  This makes *all* prysm classes have a common location holding their primary data array, improving cohesion.  If you access the phase attribute directly, there is no change in your code or its behavior.
 
 New Documentation
 =================
