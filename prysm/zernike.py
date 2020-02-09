@@ -985,7 +985,7 @@ def zernikefit(data, x=None, y=None,
         if True, return a tuple of (coefficients, residual)
     round_at : `int`, optional
         decimal place to round values at.
-    map_ : `str`, optional, {'fringe', 'noll'}
+    map_ : `str`, optional, {'Fringe', 'Noll', 'ANSI'}
         which ordering of Zernikes to use
 
     Returns

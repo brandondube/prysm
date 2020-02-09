@@ -582,14 +582,14 @@ class Interferogram(OpticalPhase):
         fz = FringeZernike(coefs, samples=self.shape[0])
         return fz.pv + 3 * residual
 
-    def fit_zernikes(self, terms, map_='noll', norm=True, residual=False):
+    def fit_zernikes(self, terms, map_='Noll', norm=True, residual=False):
         """Fit Zernikes to the interferometric data.
 
         Parameters
         ----------
         terms : `int`
             number of terms to fit
-        map_ : `str`, {'noll', 'fringe'}, optional
+        map_ : `str`, {'Noll', 'Fringe', 'ANSI'}, optional
             which set ("map") of Zernikes to fit to
         norm : `bool`, optional
             whether to orthonormalize the terms to unit RMS value
