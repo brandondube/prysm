@@ -1,5 +1,4 @@
 """phase basics."""
-import warnings
 
 from .conf import config
 from .mathops import engine as e
@@ -12,7 +11,7 @@ class OpticalPhase(RichData):
     """Phase of an optical field."""
     _data_type = 'phase'
 
-    def __init__(self, x, y, phase, labels, xy_unit=None, z_unit=None, wavelength=None, opd_unit=None):
+    def __init__(self, x, y, phase, labels, xy_unit=None, z_unit=None, wavelength=None):
         """Create a new instance of an OpticalPhase.
 
         Note that this class is not intended to be used directly, and is meant
@@ -41,30 +40,11 @@ class OpticalPhase(RichData):
             wavelength of light, in microns
 
         """
-        if opd_unit is not None:
-            warnings.warn('opd_unit is deprecated, please use z_unit')
-            z_unit = opd_unit
 
         super().__init__(x=x, y=y, data=phase, labels=labels,
                          xy_unit=xy_unit or config.phase_xy_unit,
                          z_unit=z_unit or config.phase_z_unit,
                          wavelength=wavelength)
-
-    @property
-    def phase_unit(self):
-        """Unit used to describe the optical phase."""
-        warnings.warn('phase_unit has been folded into self.units.z and will be removed in prysm v0.18')
-        return str(self.z_unit)
-
-    @property
-    def spatial_unit(self):
-        """Unit used to describe the spatial phase."""
-        warnings.warn('spatial_unit has been folded into self.units.<x/y> and will be removed in prysm v0.18')
-        return str(self.xy_unit)
-
-    @spatial_unit.setter
-    def spatial_unit(self, unit):
-        self.change_xy_unit(unit)
 
     @property
     def pv(self):
