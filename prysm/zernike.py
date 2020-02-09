@@ -670,14 +670,14 @@ class BaseZernike(Pupil):
             drange = vmax - vmin
             offsetY = drange * 0.01
 
-            ax.bar(idxs + offset, self.coefs, zorder=zorder, width=width)
+            ax.bar(idxs + offset, coefs, zorder=zorder, width=width)
             plt.xticks(idxs, names, rotation=90)
             if number:
                 for i in idxs:
                     ax.text(i, offsetY, str(i), ha='center')
             ax.set(ylabel=lab, xlim=lims)
         else:
-            ax.barh(idxs + offset, self.coefs, zorder=zorder, height=width)
+            ax.barh(idxs + offset, coefs, zorder=zorder, height=width)
             plt.yticks(idxs, names)
             if number:
                 for i in idxs:
