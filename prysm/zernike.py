@@ -1,5 +1,5 @@
 """Zernike functions."""
-import numbers
+import warnings
 from collections import defaultdict
 
 from retry import retry
@@ -375,6 +375,7 @@ class ZCacheMN:
         -------
         `numpy.ndarray`
             zernike polynomial n or m at this coordinate.
+
         """
         key_ = self._gb_key(r, p)
         key = (n, m, *key_)
@@ -476,9 +477,9 @@ class ZCacheMN:
 
     def get_grid(self, samples, modified=True, r=None, p=None):
         if modified:
-            res = self.gridcache(samples=samples, radius=1, r='r -> 2r^2 - 1', t='t')
+            res = self.gridcache(samples=samples, radius=1, r='r -> 2r^2 - 1', t='t -> t+90')
         else:
-            res = self.gridcache(samples=samples, radius=1, r='r', t='t')
+            res = self.gridcache(samples=samples, radius=1, r='r', t='t -> t+90')
 
         return res['r'], res['t']
 
@@ -523,6 +524,8 @@ class BaseZernike(Pupil):
         pass_args = {}
 
         bb = kwargs.get('base', config.zernike_base)
+        if bb != 1:
+            warnings.warn("base of zero is deprecated and will be removed in prysm v0.19")
         if bb > 1:
             raise ValueError('It violates convention to use a base greater than 1.')
         elif bb < 0:
