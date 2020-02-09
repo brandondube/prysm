@@ -1,4 +1,5 @@
 """Zernike functions."""
+import numbers
 from collections import defaultdict
 
 from retry import retry
@@ -307,6 +308,10 @@ class ZCacheMN:
         self.cos = {}
         self.sin = {}
         self.gridcache = gridcache
+        self.offgridj = {}  # jacobi polynomials
+        self.offgridr = {}  # regular
+        self.offgridn = {}  # normed
+        self.offgrid_shifted_r = {}
 
     @retry(tries=2)
     def get_zernike(self, n, m, samples, norm):
@@ -344,6 +349,78 @@ class ZCacheMN:
     def __call__(self, n, m, samples, norm):
         return self.get_zernike(n=n, m=m, samples=samples, norm=norm)
 
+    def grid_bypass(self, n, m, norm, r, p):
+        """Bypass the grid computation, providing radial coordinates directly.
+
+        Notes
+        -----
+        To avoid memory leaks, you should use grid_bypass_cleanup after you are
+        finished with this function for a given pair of r, p arrays
+
+        Parameters
+        ----------
+        n : `int`
+            radial order
+        m : `int`
+            azimuthal order
+        norm : `bool`
+            whether to orthonormalize the polynomials
+        r : `numpy.ndarray`
+            radial coordinates.  Unnormalized in the sense of the coordinate perturbation of the jacobi polynomials.
+            Notionally on a regular grid spanning [0,1]
+        p : `numpy.ndarray`
+            azimuthal coordinates matching r
+
+        Returns
+        -------
+        `numpy.ndarray`
+            zernike polynomial n or m at this coordinate.
+        """
+        key_ = self._gb_key(r, p)
+        key = (n, m, *key_)
+        rmod = 2 * r ** 2 - 1
+        self.offgrid_shifted_r[key] = rmod
+
+        term = self.get_jacobi(n=n, m=abs(m), samples=0, r=rmod)  # samples not used, dummy value
+
+        if m != 0:
+            if sign(m) == -1:
+                azterm = e.sin(m * p)
+            else:
+                azterm = e.cos(m * p)
+
+            rterm = r ** abs(m)
+            term = term * azterm * rterm
+
+        return term
+
+    def grid_bypass_cleanup(self, r, p):
+        """Remove data related to r, p from the cache.
+
+        Parameters
+        ----------
+        r : `numpy.ndarray`
+            radial coordinates
+        p : `numpy.ndarray`
+            azimuthal coordinates
+
+        """
+        key_ = self._gb_key(r, p)
+        for key in self.offgridr.keys():
+            if key[2:] == key_:
+                del self.offgridr[key]
+
+        for key in self.offgridn.keys():
+            if key[2:] == key_:
+                del self.offgridn[key]
+
+        for key in self.offgrid_shifted_r.keys():
+            if key == key_:
+                del self.offgrid_shifted_r[key]
+
+    def _gb_key(self, r, p):
+        return (id(r), id(p))
+
     @retry(tries=2)
     def get_azterm(self, m, samples):
         key = (m, samples)
@@ -362,9 +439,27 @@ class ZCacheMN:
             raise err
 
     @retry(tries=3)
-    def get_jacobi(self, n, m, samples, nj=None):
+    def get_jacobi(self, n, m, samples, nj=None, r=None):
         if nj is None:
             nj = (n - m) // 2
+
+        if r is not None:
+            key = (nj, m, id(r))
+            # r provided, grid not wanted
+            # this is just a duplication of below with a separate r and cache dict
+            try:
+                return self.offgridj[key]
+            except KeyError as e:
+                if nj > 2:
+                    jnm2 = self.get_jacobi(n=None, nj=nj - 2, m=m, samples=samples, r=r)
+                    jnm1 = self.get_jacobi(n=None, nj=nj - 1, m=m, samples=samples, r=r)
+                else:
+                    jnm1, jnm2 = None, None
+
+                jac = jacobi(nj, alpha=0, beta=m, Pnm1=jnm1, Pnm2=jnm2, x=r)
+                self.offgridj[key] = jac
+                raise e
+
         key = (nj, m, samples)
         try:
             return self.jac[key]
@@ -379,7 +474,7 @@ class ZCacheMN:
             self.jac[key] = jac
             raise e
 
-    def get_grid(self, samples, modified=True):
+    def get_grid(self, samples, modified=True, r=None, p=None):
         if modified:
             res = self.gridcache(samples=samples, radius=1, r='r -> 2r^2 - 1', t='t')
         else:
@@ -858,7 +953,7 @@ class ANSI2TermZernike(Pupil):
 def zernikefit(data, x=None, y=None,
                rho=None, phi=None, terms=16,
                norm=False, residual=False,
-               round_at=6, map_='fringe'):
+               round_at=6, map_='Fringe'):
     """Fits a number of Zernike coefficients to provided data.
 
     Works by minimizing the mean square error  between each coefficient and the
@@ -876,8 +971,11 @@ def zernikefit(data, x=None, y=None,
         radial coordinates, same shape as data
     phi : `numpy.ndarray`, optional
         azimuthal coordinates, same shape as data
-    terms : `int`, optional
-        number of terms to fit, fits terms 0~terms
+    terms : `int` or iterable, optional
+        if an int, number of terms to fit,
+        otherwise, specific terms to fit.
+        If an iterable of ints, members of the single index set map_,
+        else interpreted as (n,m) terms, in which case both m+ and m- must be given.
     norm : `bool`, optional
         if True, normalize coefficients to unit RMS value
     residual : `bool`, optional
@@ -900,17 +998,13 @@ def zernikefit(data, x=None, y=None,
         too many terms requested.
 
     """
-    map_ = maps[map_]
-    if terms > len(fringemap):
-        raise ValueError(f'number of terms must be less than {len(fringemap)}')
-
     data = data.T  # transpose to mimic transpose of zernikes
 
     # precompute the valid indexes in the original data
     pts = e.isfinite(data)
 
+    # set up an x/y rho/phi grid to evaluate Zernikes on
     if x is None and rho is None:
-        # set up an x/y rho/phi grid to evaluate Zernikes on
         rho, phi = make_rho_phi_grid(*reversed(data.shape))
         rho = rho[pts].flatten()
         phi = phi[pts].flatten()
@@ -918,14 +1012,22 @@ def zernikefit(data, x=None, y=None,
         rho, phi = cart_to_polar(x, y)
         rho, phi = rho[pts].flatten(), phi[pts].flatten()
 
+    # convert indices to (n,m)
+    if isinstance(terms, int):
+        # case 1, number of terms
+        nms = [nm_funcs[map_](i+1) for i in range(terms)]
+    elif isinstance(terms[0], int):
+        nms = [nm_funcs[map_](i) for i in terms]
+    else:
+        nms = terms
+
     # compute each Zernike term
     zerns_raw = []
-    for i in range(terms):
-        func = zernikes[map_[i]]
-        base_zern = func(rho, phi)
-        if norm:
-            base_zern *= func.norm
-        zerns_raw.append(base_zern)
+    for (n, m) in nms:
+        zern = zcachemn.grid_bypass(n, m, norm, rho, phi)
+        zerns_raw.append(zern)
+
+    zcachemn.grid_bypass_cleanup(rho, phi)
     zerns = e.asarray(zerns_raw).T
 
     # use least squares to compute the coefficients
