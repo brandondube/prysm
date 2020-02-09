@@ -105,12 +105,6 @@ def test_fit_does_not_throw_on_normalize(fit_data):
     assert coefs[8] != 0
 
 
-def test_fit_raises_on_too_many_terms(fit_data):
-    data, real_coefs = fit_data
-    with pytest.raises(ValueError):
-        zernike.zernikefit(data, terms=100)
-
-
 def test_names_functions(sample):
     assert any(sample.names)
 
