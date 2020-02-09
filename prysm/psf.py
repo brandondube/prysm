@@ -371,7 +371,7 @@ class PSF(Convolvable):
                 xx, yy = sort_xy(self._ee.keys(), self._ee.values())
             else:
                 raise ValueError('if no values for encircled energy have been computed, axlim must be provided')
-        elif axlim != 0:
+        elif axlim == 0:
             raise ValueError('computing from 0 to 0 is not possible')
         else:
             xx = e.linspace(1e-5, axlim, npts)
