@@ -177,7 +177,7 @@ class Convolvable(RichData):
             typ = e.uint16
         else:
             raise ValueError('must use either 8 or 16 bpp.')
-        dat = (self.data * 2**nbits - 1).astype(typ)
+        dat = e.flipud((self.data * 2**nbits - 1).astype(typ))
         imwrite(path, dat)
 
     @staticmethod
