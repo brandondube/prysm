@@ -12,7 +12,7 @@ from .util import std
 
 class Pupil(OpticalPhase):
     """Pupil of an optical system."""
-    def __init__(self, samples=128, dia=1, labels=None, xy_unit=None, z_unit=None, opd_unit=None, wavelength=None,
+    def __init__(self, samples=128, dia=1, labels=None, xy_unit=None, z_unit=None, wavelength=None,
                  phase_mask='circle', transmission='circle', x=None, y=None, phase=None):
         """Create a new `Pupil` instance.
 
@@ -65,7 +65,7 @@ class Pupil(OpticalPhase):
         super().__init__(x=x, y=y, phase=phase, labels=labels,
                          xy_unit=xy_unit or config.phase_xy_unit,
                          z_unit=z_unit or config.phase_z_unit,
-                         opd_unit=opd_unit, wavelength=wavelength)
+                         wavelength=wavelength)
 
         phase_mask = mask_cleaner(phase_mask, samples)
 
