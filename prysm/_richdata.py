@@ -1,5 +1,6 @@
 """Basic class holding data, used to recycle code."""
 import copy
+import inspect
 import warnings
 from numbers import Number
 from collections.abc import Iterable
@@ -118,6 +119,34 @@ class RichData:
     def copy(self):
         """Return a (deep) copy of this instance."""
         return copy.deepcopy(self)
+
+    def astype(self, other_type):
+        """Change this instance of one type into another.
+
+        Useful to access methods of the other class.
+
+        Parameters
+        ----------
+        other_type : `object`
+            the name of the other type to "cast" to, e.g. Interferogram.  Not a string.
+
+        Returns
+        -------
+        `self`
+            type-converted to the other type.
+
+        """
+        original_type = type(self)
+        sig = inspect.signature(other_type)
+        pass_params = {}
+        for param in sig.parameters:
+            if hasattr(self, param):
+                pass_params[param] = getattr(self, param)
+
+        other = other_type(**pass_params)
+        other._original_type = original_type
+        other._original_vars = vars(self)
+        return other
 
     def change_xy_unit(self, to, inplace=True):
         """Change the x/y unit to a new one, scaling the data in the process.
