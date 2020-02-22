@@ -63,3 +63,11 @@ def test_pupil_sub_functions(p):
 
 def test_pupil_strehl_does_not_throw(p):
     assert p.strehl
+
+
+def test_passed_phase_is_not_ignored():
+    phase = np.random.rand(32, 32)
+    x = y = np.linspace(-1, 1, 128)
+    p = Pupil(x=x, y=y, phase=phase)
+    assert np.all(p.phase == phase)
+    assert p.samples_y == 32

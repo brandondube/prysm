@@ -59,6 +59,9 @@ class Pupil(OpticalPhase):
             # data already known
             need_to_build = False
 
+        if phase is not None:
+            need_to_build = False
+
         if labels is None:
             labels = config.pupil_labels
 
