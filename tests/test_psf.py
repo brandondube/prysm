@@ -3,7 +3,7 @@ import pytest
 
 import numpy as np
 
-from prysm import psf
+from prysm import psf, Pupil
 from prysm.coordinates import cart_to_polar
 
 SAMPLES = 32
@@ -73,3 +73,9 @@ def test_encircled_energy_radius_diffraction_functions(tpsf_mutate):
 
 def test_encircled_energy_radius_ratio_functions(tpsf_mutate):
     assert tpsf_mutate.ee_radius_ratio_to_diffraction(0.9) > 1
+
+
+def test_coherent_propagation_is_used_in_object_oriented_api():
+    p = Pupil()
+    ps = psf.PSF.from_pupil(p, 1, incoherent=False)
+    assert ps.data.dtype == np.complex128

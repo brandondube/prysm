@@ -495,7 +495,8 @@ class PSF(Convolvable):
         """
         # propagate PSF data
         fcn, ss, wvl = pupil.fcn, pupil.sample_spacing, pupil.wavelength.to(u.um)
-        data = prop_pupil_plane_to_psf_plane(fcn, Q)
+        data = prop_pupil_plane_to_psf_plane(fcn, Q=Q, incoherent=incoherent,
+                                             norm=norm if norm not in ('max', 'radiometric') else None)
         norm = norm.lower()
         if norm == 'max':
             coef = 1 / data.max()
