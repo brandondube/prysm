@@ -2,11 +2,22 @@
 prysm v0.19
 ***********
 
+New Features
+============
+
+- :meth:`~prysm._richdata.RichData.astype` function for converting between the various object types.  This can be used to dip into another type momentarily for one of its methods, e.g. chaining :code:`p = Pupil() p.astype(Interferogram).crop(...).astype(Pupil)`.
+
+
+In this release, prysm has gained increased capability for performing propagations outside of the pupil-to-image case.
+- :func:`prysm.propagation.angular_spectrum` for plane-to-plane propagation via the angular spectrum method
+- :func:`prysm.propagation.fresnel_number` for computing the Fresnel number
+- :func:`prysm.propagation.talbot_distance` for computing the Talbot distance
+- :func:`prysm.propagation.modified_shifted_angular_spectrum` for performing off-axis angular spectrum propagations free of aliasing
+
 Bug fixes
 =========
 
 - :meth:`~prysm.convolution.Convolvable.save` now flips the array before writing, rendering images in the expected orientation.
-
 - :meth:`~prysm.psf.PSF.from_pupil` now passes the :code:`incoherent` and :code:`norm` arguments to the propagation engine
-
 - the :class:`~prysm.pupil.Pupil` constructor no longer ignores the phase parameter
+- :class:`~prysm.propagation.Wavefront` no longer errors on construction

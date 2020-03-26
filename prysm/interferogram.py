@@ -466,6 +466,60 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
         return optres.x
 
 
+def make_random_subaperture_mask(ary, ary_diam, mask_diam, shape='circle', seed=None):
+    """Make a mask of a given diameter that is a random subaperture of the given array.
+
+    Parameters
+    ----------
+    ary : `numpy.ndarray`
+        an array, notionally containing phase data.  Only used for its shape.
+    ary_diam : `float`
+        the diameter of the array on its long side, if it is not square
+    mask_diam : `float`
+        the desired mask diameter, in the same units as ary_diam
+    `shape` : `str`
+        a string accepted by prysm.geometry.MCache.__call__, for example 'circle', or 'square' or 'octogon'
+    seed : `int`
+        a random number seed, None will be a random seed, provide one to make the mask deterministic.
+
+    Returns
+    -------
+    `numpy.ndarray`
+        an array that can be used to mask `ary`.  Use as:
+        ary[ret == 0] = np.nan
+
+    """
+    gen = e.random.Generator(e.random.PCG64())
+    s = ary.shape
+    plate_scale = ary_diam / max(s)
+    max_shift_mm = (ary_diam - mask_diam) / 2
+    max_shift_px = int(e.floor(max_shift_mm / plate_scale))
+
+    # get random offsets
+    rng_y = (gen.random() - 0.5) * 2  # shift [0,1] => [-1, 1]
+    rng_x = (gen.random() - 0.5) * 2
+    dy = int(e.floor(rng_y * max_shift_px))
+    dx = int(e.floor(rng_x * max_shift_px))
+
+    # get the current center pixel and then offset by the RNG
+    cy, cx = (v // 2 for v in s)
+    cy += dy
+    cx += dx
+
+    # generate the mask and calculate the insertion point
+    mask_semidiam = mask_diam / plate_scale / 2
+    half_low = int(e.floor(mask_semidiam))
+    half_high = int(e.floor(mask_semidiam))
+
+    # generate the mask in an array of only its size (e.g., 128x128 for a 128x128 mask in a 900x900 phase array)
+    mask = mcache(shape, mask_semidiam*2)
+
+    # make the output array and insert the mask itself
+    out = e.zeros_like(ary)
+    out[cy-half_low:cy+half_high, cx-half_low:cx+half_high] = mask
+    return out
+
+
 class PSD(RichData):
     """Two dimensional PSD."""
 
