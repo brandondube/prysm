@@ -15,3 +15,4 @@ User's Guide
    PSFs.ipynb
    Pupils.ipynb
    Zernikes.ipynb
+   GPU and high speed computing.ipynb
