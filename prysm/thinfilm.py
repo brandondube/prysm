@@ -361,11 +361,3 @@ def ttot(Amat):
 
     """
     return 1 / Amat[0, 0]
-
-
-# where am
-# matrix s typed out, unsure if impl is correct
-# or if this is the best interface
-# matrix p is pasted from s but not converted to p
-# need to reduce to effective r, t coefs but
-# need to carefully sketch out the problem to get directions, etc, correct
