@@ -361,8 +361,6 @@ def ttot(Amat):
 
     """
     return 1 / Amat[0, 0]
-<<<<<<< Updated upstream
-=======
 
 
 def multilayer_stack_rt(polarization, indices, thicknesses, wavelength, aoi=0, assume_vac_ambient=True):
@@ -419,4 +417,3 @@ def multilayer_stack_rt(polarization, indices, thicknesses, wavelength, aoi=0, a
     A = fn2(indices[0], angles[0], Mjs, indices[-1], angles[-1])
 
     return rtot(A), ttot(A)
->>>>>>> Stashed changes
