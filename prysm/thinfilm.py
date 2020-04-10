@@ -43,7 +43,7 @@ def critical_angle(n0, n1):
     return e.degrees(e.arcsin(n1/n0))
 
 
-def snell_aor(n0, n1, theta):
+def snell_aor(n0, n1, theta, degrees=True):
     """Compute the angle of refraction using Snell's law.
 
     Parameters
@@ -51,9 +51,11 @@ def snell_aor(n0, n1, theta):
     n0 : `float`
         index of refraction of the "left" material
     n1 : `float`
-        idnex of refraction of the "right" material
+        index of refraction of the "right" material
     theta : `float`
-        angle of incidence in degrees
+        angle of incidence, in degrees if degrees=True
+    degrees : `bool`, optional
+        if True, theta is interpreted as an angle in degrees
 
     Returns
     -------
@@ -61,7 +63,9 @@ def snell_aor(n0, n1, theta):
         angle of refraction
 
     """
-    return e.arcsin(n0/n1 * e.sin(e.radians(theta)))
+    if degrees:
+        theta = e.radians(theta)
+    return e.lib.scimath.arcsin(n0/n1 * e.sin(theta))
 
 
 def fresnel_rs(n0, n1, theta0, theta1):
@@ -186,7 +190,7 @@ def characteristic_matrix_p(lambda_, d, n, theta):
     n : `float` or `complex`
         refractive index of the layer
     theta : `float`
-        angle of incidence, degrees
+        angle of incidence, radians
 
     Returns
     -------
@@ -194,8 +198,7 @@ def characteristic_matrix_p(lambda_, d, n, theta):
         a 2x2 matrix
 
     """
-    theta = e.radians(theta)
-    k = (2 * e.pi) / lambda_
+    k = (2 * e.pi * n) / lambda_
     cost = e.cos(theta)
     beta = k * d * cost
     sinb, cosb = e.sin(beta), e.cos(beta)
@@ -222,7 +225,7 @@ def characteristic_matrix_s(lambda_, d, n, theta):
     n : `float` or `complex`
         refractive index of the layer
     theta : `float`
-        angle of incidence, degrees
+        angle of incidence, radians
 
     Returns
     -------
@@ -230,7 +233,6 @@ def characteristic_matrix_s(lambda_, d, n, theta):
         a 2x2 matrix
 
     """
-    theta = e.radians(theta)
     k = (2 * e.pi) / lambda_
     cost = e.cos(theta)
     beta = k * d * cost
@@ -244,8 +246,8 @@ def characteristic_matrix_s(lambda_, d, n, theta):
     ])
 
 
-def multilayer_matrix_p(n0, theta0, characteristic_matricies, nnp1, theta_np1):
-    """Reduce a multilayer problem to give the 2x2 matric A^p.
+def multilayer_matrix_p(n0, theta0, characteristic_matrices, nnp1, theta_np1):
+    """Reduce a multilayer problem to give the 2x2 matrix A^p.
 
     Computes (4.58) from BYU optics book.
 
@@ -254,13 +256,13 @@ def multilayer_matrix_p(n0, theta0, characteristic_matricies, nnp1, theta_np1):
     n0 : `float` or `complex`
         refractive index of the first medium
     theta0 : `float`
-        angle of incidence on the first medium, degrees
-    characteristic_matricies : `iterable` of `numpy.ndarray` each of which of shape 2x2
-        the characteristic matricies of each layer
+        angle of incidence on the first medium, radians
+    characteristic_matrices : `iterable` of `numpy.ndarray` each of which of shape 2x2
+        the characteristic matrices of each layer
     nnp1 : `float` or `complex`
         refractive index of the final medium
     theta_np1 : `float`
-        angle of incidence on final medium, degrees
+        angle of incidence on final medium, radians
 
     Returns
     -------
@@ -268,26 +270,27 @@ def multilayer_matrix_p(n0, theta0, characteristic_matricies, nnp1, theta_np1):
         2x2 matrix A^s
 
     """
-    theta0 = e.radians(theta0)
     cost0 = e.cos(theta0)
     term1 = 1 / (2 * n0 * cost0)
-
-    theta_np1 = e.radians(theta_np1)
 
     term2 = e.array([
         [n0, cost0],
         [n0, -cost0]
     ])
-    term3 = reduce(e.multiply, characteristic_matricies)  # reduce does M1 * M2 * M3 [...]
+    if len(characteristic_matrices) > 1:
+        term3 = reduce(e.dot, characteristic_matrices)  # reduce does M1 * M2 * M3 [...]
+    else:
+        term3 = characteristic_matrices[0]
+
     term4 = e.array([
         [e.cos(theta_np1), 0],
         [nnp1, 0]
     ])
-    return term1 * term2 * term3 * term4
+    return reduce(e.dot, ([term1, term2, term3, term4]))
 
 
-def multilayer_matrix_s(n0, theta0, characteristic_matricies, nnp1, theta_np1):
-    """Reduce a multilayer problem to give the 2x2 matric A^s.
+def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
+    """Reduce a multilayer problem to give the 2x2 matrix A^s.
 
     Computes (4.62) from BYU optics book.
 
@@ -296,13 +299,13 @@ def multilayer_matrix_s(n0, theta0, characteristic_matricies, nnp1, theta_np1):
     n0 : `float` or `complex`
         refractive index of the first medium
     theta0 : `float`
-        angle of incidence on the first medium, degrees
-    characteristic_matricies : `iterable` of `numpy.ndarray` each of which of shape 2x2
-        the characteristic matricies of each layer
+        angle of incidence on the first medium, radians
+    characteristic_matrices : `iterable` of `numpy.ndarray` each of which of shape 2x2
+        the characteristic matrices of each layer
     nnp1 : `float` or `complex`
         refractive index of the final medium
     theta_np1 : `float`
-        angle of incidence on final medium, degrees
+        angle of incidence on final medium, radians
 
     Returns
     -------
@@ -310,23 +313,20 @@ def multilayer_matrix_s(n0, theta0, characteristic_matricies, nnp1, theta_np1):
         2x2 matrix A^s
 
     """
-    theta0 = e.radians(theta0)
     cost0 = e.cos(theta0)
     term1 = 1 / (2 * n0 * cost0)
     n0cost0 = n0 * cost0
-
-    theta_np1 = e.radians(theta_np1)
 
     term2 = e.array([
         [n0cost0, 1],
         [n0cost0, -1]
     ])
-    term3 = reduce(e.multiply, characteristic_matricies)  # reduce does M1 * M2 * M3 [...]
+    term3 = reduce(e.dot, characteristic_matrices)  # reduce does M1 * M2 * M3 [...]
     term4 = e.array([
         [1, 0],
         [nnp1 * e.cos(theta_np1), 0]
     ])
-    return term1 * term2 * term3 * term4
+    return reduce(e.dot, (term1, term2, term3, term4))
 
 
 def rtot(Amat):
@@ -361,3 +361,59 @@ def ttot(Amat):
 
     """
     return 1 / Amat[0, 0]
+
+
+def multilayer_stack_rt(polarization, indices, thicknesses, wavelength, aoi=0, assume_vac_ambient=True):
+    """Compute r and t for a given stack of materials.
+
+    An infinitely thick layer of vacuum is assumed if assume_vac_ambient is True
+
+    Parameters
+    ----------
+    polarization : `str`, {'p', 's'}
+        the polarization state
+    indices : `iterable`
+        a sequence of refractive indices
+    thicknesses : `iterable`
+        a sequence of thicknesses
+    wavelength : `float`
+        wavelength of light, microns
+    aoi : `float`, optional
+        angle of incidence, degrees
+    assume_vac_ambient : `bool`, optional
+        if True, prepends an infinitely thick layer of vacuum to the stack
+        if False, prepend the ambient index but *NOT* a thickness
+
+    Returns
+    -------
+    (`float`, `float`)
+        r, t coefficients
+
+    """
+    # digest inputs a little bit
+    polarization = polarization.lower()
+    aoi = e.radians(aoi)
+
+    if assume_vac_ambient:
+        indices = [1, *indices]
+
+    # index-based loops are a little unusual for python, but it is the most
+    # clear in this case I think
+    angles = [aoi]
+    for i in range(1, len(thicknesses)):
+        bent = snell_aor(indices[i-1], indices[i], angles[i-1], degrees=False)
+        angles.append(bent)
+
+    if polarization == 'p':
+        fn1 = characteristic_matrix_p
+        fn2 = multilayer_matrix_p
+    elif polarization == 's':
+        fn1 = characteristic_matrix_s
+        fn2 = multilayer_matrix_s
+    else:
+        raise ValueError("unknown polarization, use p or s")
+
+    Mjs = [fn1(wavelength, d, n, a) for d, n, a in zip(thicknesses, indices[1:], angles[1:])]
+    A = fn2(indices[0], angles[0], Mjs, indices[-1], angles[-1])
+
+    return rtot(A), ttot(A)
