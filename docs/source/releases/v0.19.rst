@@ -5,14 +5,27 @@ prysm v0.19
 New Features
 ============
 
+API Fluency
+***********
+
 - :meth:`~prysm._richdata.RichData.astype` function for converting between the various object types.  This can be used to dip into another type momentarily for one of its methods, e.g. chaining :code:`p = Pupil() p.astype(Interferogram).crop(...).astype(Pupil)`.
 
-
+Propagation
+***********
 In this release, prysm has gained increased capability for performing propagations outside of the pupil-to-image case.
 - :func:`prysm.propagation.angular_spectrum` for plane-to-plane propagation via the angular spectrum method
 - :func:`prysm.propagation.fresnel_number` for computing the Fresnel number
 - :func:`prysm.propagation.talbot_distance` for computing the Talbot distance
 - :func:`prysm.propagation.modified_shifted_angular_spectrum` for performing off-axis angular spectrum propagations free of aliasing
+
+Thin Film Calculation and Refractive Indices
+********************************************
+Prysm can now do basic multi-layer thin film calculations and compute a few related values.
+- :func:`prysm.thinfilm.multilayer_stack_rt` for computing the equivalent Fresnel coefficients for a stack of thin and thick films.
+- :func:`prysm.thinfilm.critical_angle` for computing the minimum angle of incidence for TIR
+- :func:`prysm.thinfilm.brewsters_angle` for computing the angle at which a surface is completely unreflective of p-polarized light
+- :func:`prysm.refractive.cauchy` for computing refractive index based on Cauchy's model
+- :func:`prysm.refractive.sellmeier` for computing refractive index based on the Sellmeier equation
 
 Bug fixes
 =========

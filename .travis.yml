@@ -19,7 +19,7 @@ install:
       h5py
       pytest=5.1.2
       pytest-cov=2.8.1
-      coveralls=1.5.1
+      coveralls==2.0.0
   - pip install .
 services:
   - xvfb
