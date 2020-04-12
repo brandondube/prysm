@@ -39,4 +39,14 @@ def test_accuracy_of_multilayer_reflectivity_on_C7980():
     ]
     r, _ = thinfilm.multilayer_stack_rt('s', indices, thicknesses, wvl)
     R = abs(r)**2
-    assert R == pytest.approx(0.0026, abs=0.0005)  # 99.7% transmission
+    assert R == pytest.approx(0.00024, abs=0.0005)  # 99.7% transmission
+
+
+def test_brewsters_accuracy():
+    ang = thinfilm.brewsters_angle(1, 1.5)
+    assert ang == pytest.approx(56.3, abs=1e-2)
+
+
+def test_critical_accuracy():
+    ang = thinfilm.critical_angle(1, 1.5, deg=True)
+    assert ang == pytest.approx(41.8, abs=0.02)

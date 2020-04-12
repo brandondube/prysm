@@ -19,12 +19,12 @@ def brewsters_angle(n0, n1, deg=True):
     """
     ang = e.arctan2(n1, n0)
     if deg:
-        return e.degres(ang)
+        return e.degrees(ang)
     else:
         return ang
 
 
-def critical_angle(n0, n1):
+def critical_angle(n0, n1, deg=True):
     """Minimum angle for total internal reflection at an interface.
 
     Parameters
@@ -40,7 +40,11 @@ def critical_angle(n0, n1):
         the angle in degrees at which TIR begins to occur
 
     """
-    return e.degrees(e.arcsin(n1/n0))
+    ang = e.arcsin(n0/n1)
+    if deg:
+        return e.degrees(ang)
+
+    return ang
 
 
 def snell_aor(n0, n1, theta, degrees=True):
