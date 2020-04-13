@@ -102,6 +102,12 @@ class MatrixDFTExecutor:
 
     def _key(self, Q, samples, shift):
         """Key to X, Y, U, V dicts."""
+        if not isinstance(samples, Iterable):
+            samples = (samples, samples)
+
+        if not isinstance(shift, Iterable):
+            shift = (shift, shift)
+
         return (Q, samples, shift)
 
     def dft2(self, ary, Q, samples, shift=None, norm=None):
@@ -178,7 +184,7 @@ class MatrixDFTExecutor:
         return out
 
     def _norm(self, ary, Q, samples):
-        """Normalization coefficient associated with a given propagation."""  # NOQA
+        """Coefficient associated with a given propagation."""
         if not isinstance(samples, Iterable):
             samples = (samples, samples)
 
@@ -242,3 +248,6 @@ class MatrixDFTExecutor:
                 total += dict_[key].nbytes
 
         return total
+
+
+mdft = MatrixDFTExecutor()
