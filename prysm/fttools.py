@@ -95,8 +95,10 @@ class MatrixDFTExecutor:
     def __init__(self):
         """Create a new MatrixDFTExecutor instance."""
         # Eq. (10-11) page 8 from R. Soumer (2007) oe-15--24-15935
-        self.Ein = {}
-        self.Eout = {}
+        self.Ein_fwd = {}
+        self.Eout_fwd = {}
+        self.Ein_rev = {}
+        self.Eout_rev = {}
 
     def _key(self, Q, samples, shift):
         """Key to X, Y, U, V dicts."""
@@ -128,6 +130,64 @@ class MatrixDFTExecutor:
             sampling/grid differences
 
         """
+        self._setup_bases(ary=ary, Q=Q, samples=samples, shift=shift)
+        key = self._key(Q=Q, samples=samples, shift=shift)
+        Eout, Ein = self.Eout_fwd[key], self.Ein_fwd[key]
+        out = Eout.dot(ary).dot(Ein)
+        if norm is not None:
+            coef = self._norm(ary=ary, Q=Q, samples=samples)
+            out *= coef
+
+        return out
+
+    def idft2(self, ary, Q, samples, shift=None, norm=None):
+        """Compute the two dimensional inverse Discrete Fourier Transform of a matrix.
+
+        Parameters
+        ----------
+        ary : `numpy.ndarray`
+            an array, 2D, real or complex.  Not fftshifted.
+        Q : `float`
+            oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
+        samples : `int` or `Iterable`
+            number of samples in the output plane.
+            If an int, used for both dimensions.  If an iterable, used for each dim
+        shift : `float`, optional
+            shift of the output domain, as a frequency.  Same broadcast
+            rules apply as with samples.
+        norm : `str`, optional, {'ortho'}
+            if not None, normalize in a way that mimics np.fft or scipy.fft
+
+        Returns
+        -------
+        `numpy.ndarray`
+            2D array containing the shifted transform.
+            Equivalent to ifftshift(ifft2(fftshift(ary))) modulo output
+            sampling/grid differences
+
+        """
+        self._setup_bases(ary=ary, Q=Q, samples=samples, shift=shift)
+        key = self._key(Q=Q, samples=samples, shift=shift)
+        Eout, Ein = self.Eout_rev[key], self.Ein_rev[key]
+        out = Eout.dot(ary).dot(Ein)
+        if norm is not None:
+            coef = self._norm(ary=ary, Q=Q, samples=samples)
+            out *= coef
+
+        out /= out.size
+        return out
+
+    def _norm(self, ary, Q, samples):
+        """Normalization coefficient associated with a given propagation."""  # NOQA
+        if not isinstance(samples, Iterable):
+            samples = (samples, samples)
+
+        n, m = ary.shape
+        N, M = samples
+        return e.sqrt((1/Q)**2 / (n * m * N * M))
+
+    def _setup_bases(self, ary, Q, samples, shift):
+        """Set up the basis matricies for given sampling parameters."""
         # broadcast sampling and shifts
         if not isinstance(samples, Iterable):
             samples = (samples, samples)
@@ -142,8 +202,7 @@ class MatrixDFTExecutor:
 
         try:
             # assume all arrays for the input are made together
-            Ein = self.Ein[key]
-            Eout = self.Eout[key]
+            self.Ein_fwd[key]
         except KeyError:
             # X is the second dimension in C (numpy) array ordering convention
             X = e.arange(m) - m//2
@@ -159,19 +218,27 @@ class MatrixDFTExecutor:
                 U -= shift[1]
 
             a = 1 / Q
-            Eout = e.exp(-1j * 2 * e.pi * a / n * e.outer(Y, V).T)
-            Ein = e.exp(-1j * 2 * e.pi * a / m * e.outer(X, U))
-            self.Ein[key] = Ein
-            self.Eout[key] = Eout
-
-        out = Eout.dot(ary).dot(Ein)
-        if norm is not None:
-            coef = e.sqrt((1/Q)**2 / (n * m * N * M))
-            out *= coef
-
-        return out
+            Eout_fwd = e.exp(-1j * 2 * e.pi * a / n * e.outer(Y, V).T)
+            Ein_fwd = e.exp(-1j * 2 * e.pi * a / m * e.outer(X, U))
+            Eout_rev = e.exp(1j * 2 * e.pi * a / n * e.outer(Y, V).T)
+            Ein_rev = e.exp(1j * 2 * e.pi * a / m * e.outer(X, U))
+            self.Ein_fwd[key] = Ein_fwd
+            self.Eout_fwd[key] = Eout_fwd
+            self.Eout_rev[key] = Eout_rev
+            self.Ein_rev[key] = Ein_rev
 
     def clear(self):
         """Empty the internal caches to release memory."""
-        self.Ein = {}
-        self.Eout = {}
+        self.Ein_fwd = {}
+        self.Eout_fwd = {}
+        self.Ein_rev = {}
+        self.Eout_rev = {}
+
+    def nbytes(self):
+        """Total size in memory of the cache in bytes."""
+        total = 0
+        for dict_ in (self.Ein_fwd, self.Eout_fwd, self.Ein_rev, self.Eout_rev):
+            for key in dict_:
+                total += dict_[key].nbytes
+
+        return total
