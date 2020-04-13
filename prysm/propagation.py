@@ -2,7 +2,7 @@
 from .conf import config
 from .mathops import engine as e
 from ._richdata import RichData
-from .fttools import pad2d
+from .fttools import pad2d, mdft
 
 
 def prop_pupil_plane_to_psf_plane(wavefunction, Q, incoherent=True, norm=None):
@@ -36,6 +36,116 @@ def prop_pupil_plane_to_psf_plane(wavefunction, Q, incoherent=True, norm=None):
         return abs(impulse_response) ** 2
     else:
         return impulse_response
+
+
+def prop_pupil_plane_to_psf_plane_fixed_sampling(wavefunction, input_sample_spacing, prop_dist, wavelength, output_sample_spacing, output_samples, coherent=False, norm=False):
+    """Propagate a pupil function to the PSF plane with fixed sampling.
+
+    Parameters
+    ----------
+    wavefunction : `numpy.ndarray`
+        the pupil wavefunction
+    input_sample_spacing : `float`
+        spacing between samples in the pupil plane, millimeters
+    prop_dist : `float`
+        propagation distance along the z distance
+    wavelength : `float`
+        wavelength of light
+    output_sample_spacing : `float`
+        sample spacing in the output plane, microns
+    output_samples : `int`
+        number of samples in the square output array
+
+    Returns
+    -------
+    x : `numpy.ndarray`
+        x axis unit, 1D ndarray
+    y : `numpy.ndarray`
+        y axis unit, 1D ndarray
+    data : `numpy.ndarray`
+        2D array of data
+
+    """
+    dia = wavefunction.shape[0] * input_sample_spacing
+    Q = Q_for_sampling(input_diameter=dia,
+                       prop_dist=prop_dist,
+                       wavelength=wavelength,
+                       output_sample_spacing=output_sample_spacing)
+    field = mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples)
+    samples_x, samples_y = output_samples, output_samples
+    x = e.arange(-1 * int(e.ceil(samples_x / 2)), int(e.floor(samples_x / 2))) * output_sample_spacing
+    y = e.arange(-1 * int(e.ceil(samples_y / 2)), int(e.floor(samples_y / 2))) * output_sample_spacing
+    if coherent:
+        return x, y, field
+    else:
+        return x, y, abs(field)**2
+
+
+def prop_psf_plane_to_pupil_plane_fixed_sampling(wavefunction, input_sample_spacing, prop_dist, wavelength, output_sample_spacing, output_samples, norm=False):
+    """Propagate an image plane field to the pupil plane with fixed sampling.
+
+    Parameters
+    ----------
+    wavefunction : `numpy.ndarray`
+        the image plane wavefunction
+    input_sample_spacing : `float`
+        spacing between samples in the pupil plane, millimeters
+    prop_dist : `float`
+        propagation distance along the z distance
+    wavelength : `float`
+        wavelength of light
+    output_sample_spacing : `float`
+        sample spacing in the output plane, microns
+    output_samples : `int`
+        number of samples in the square output array
+
+    Returns
+    -------
+    x : `numpy.ndarray`
+        x axis unit, 1D ndarray
+    y : `numpy.ndarray`
+        y axis unit, 1D ndarray
+    data : `numpy.ndarray`
+        2D array of data
+
+    """
+    # we calculate sampling parameters
+    # backwards so we can reuse as much code as possible
+    dia = output_sample_spacing * output_samples
+    Q = Q_for_sampling(input_diameter=dia,
+                       prop_dist=prop_dist,
+                       wavelength=wavelength,
+                       output_sample_spacing=input_sample_spacing)  # not a typo
+    print(dia, Q, output_samples)
+    field = mdft.idft2(ary=wavefunction, Q=Q, samples=output_samples)
+    samples_x, samples_y = output_samples, output_samples
+    x = e.arange(-1 * int(e.ceil(samples_x / 2)), int(e.floor(samples_x / 2))) * output_sample_spacing
+    y = e.arange(-1 * int(e.ceil(samples_y / 2)), int(e.floor(samples_y / 2))) * output_sample_spacing
+    return x, y, field
+
+
+def Q_for_sampling(input_diameter, prop_dist, wavelength, output_sample_spacing):
+    """Value of Q for a given output sampling, given input sampling.
+
+    Parameters
+    ----------
+    input_diameter : `float`
+        diameter of the input array in millimeters
+    prop_dist : `float`
+        propagation distance along the z distance
+    wavelength : `float`
+        wavelength of light
+    output_sample_spacing : `float`
+        sampling in the output plane, microns
+
+    Returns
+    -------
+    `float`
+        requesite Q
+
+    """
+    resolution_element = (wavelength * prop_dist) / (input_diameter)
+    return resolution_element / output_sample_spacing
 
 
 def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, prop_dist, wavelength, Q):
