@@ -100,7 +100,7 @@ class MatrixDFTExecutor:
         self.Ein_rev = {}
         self.Eout_rev = {}
 
-    def _key(self, Q, samples, shift):
+    def _key(self, ary, Q, samples, shift):
         """Key to X, Y, U, V dicts."""
         if not isinstance(samples, Iterable):
             samples = (samples, samples)
@@ -108,7 +108,7 @@ class MatrixDFTExecutor:
         if not isinstance(shift, Iterable):
             shift = (shift, shift)
 
-        return (Q, samples, shift)
+        return (Q, ary.shape, samples, shift)
 
     def dft2(self, ary, Q, samples, shift=None, norm=None):
         """Compute the two dimensional Discrete Fourier Transform of a matrix.
@@ -137,7 +137,7 @@ class MatrixDFTExecutor:
 
         """
         self._setup_bases(ary=ary, Q=Q, samples=samples, shift=shift)
-        key = self._key(Q=Q, samples=samples, shift=shift)
+        key = self._key(ary=ary, Q=Q, samples=samples, shift=shift)
         Eout, Ein = self.Eout_fwd[key], self.Ein_fwd[key]
         out = Eout.dot(ary).dot(Ein)
         if norm is not None:
@@ -173,7 +173,7 @@ class MatrixDFTExecutor:
 
         """
         self._setup_bases(ary=ary, Q=Q, samples=samples, shift=shift)
-        key = self._key(Q=Q, samples=samples, shift=shift)
+        key = self._key(ary=ary, Q=Q, samples=samples, shift=shift)
         Eout, Ein = self.Eout_rev[key], self.Ein_rev[key]
         out = Eout.dot(ary).dot(Ein)
         if norm is not None:
@@ -201,7 +201,7 @@ class MatrixDFTExecutor:
         if not isinstance(shift, Iterable):
             shift = (shift, shift)
 
-        key = self._key(Q, samples, shift)
+        key = self._key(Q=Q, ary=ary, samples=samples, shift=shift)
 
         n, m = ary.shape
         N, M = samples
