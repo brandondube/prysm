@@ -4,6 +4,8 @@ from .mathops import engine as e
 from ._richdata import RichData
 from .fttools import pad2d, mdft
 
+from astropy import units as u
+
 
 def prop_pupil_plane_to_psf_plane(wavefunction, Q, incoherent=True, norm=None):
     """Propagate a pupil plane to a PSF plane and compute the grid along which the PSF exists.
@@ -116,7 +118,7 @@ def prop_psf_plane_to_pupil_plane_fixed_sampling(wavefunction, input_sample_spac
                        prop_dist=prop_dist,
                        wavelength=wavelength,
                        output_sample_spacing=input_sample_spacing)  # not a typo
-    print(dia, Q, output_samples)
+    Q /= wavefunction.shape[0] / output_samples
     field = mdft.idft2(ary=wavefunction, Q=Q, samples=output_samples)
     samples_x, samples_y = output_samples, output_samples
     x = e.arange(-1 * int(e.ceil(samples_x / 2)), int(e.floor(samples_x / 2))) * output_sample_spacing
@@ -441,7 +443,7 @@ def modified_shifted_angular_spectrum(field, sample_spacing, k, z, x0, y0, qx=0,
 class Wavefront(RichData):
     """(Complex) representation of a wavefront."""
 
-    def __init__(self, x, y, fcn, wavelength):
+    def __init__(self, x, y, fcn, wavelength, space='pupil'):
         """Create a new Wavefront instance.
 
         Parameters
@@ -456,7 +458,12 @@ class Wavefront(RichData):
             wavelength of light, microns
 
         """
-        super().__init__(x=x, y=y, data=fcn, labels=config.pupil_labels, xy_unit=config.phase_xy_unit, z_unit=config.phase_z_unit, wavelength=wavelength)
+        super().__init__(x=x, y=y, data=fcn,
+                         wavelength=wavelength,
+                         labels=config.pupil_labels,
+                         xy_unit=config.phase_xy_unit,
+                         z_unit=config.phase_z_unit)
+        self.space = space
 
     @property
     def fcn(self):
@@ -486,3 +493,147 @@ class Wavefront(RichData):
     def semidiameter(self):
         """Half of self.diameter."""
         return self.diameter / 2
+
+    def plane_to_plane(self, dz, Q=2):
+        """Perform a plane-to-plane propagation.
+
+        Uses angular spectrum and the free space kernel.
+
+        Parameters
+        ----------
+        dz : `float`
+            inter-plane distance, millimeters
+        Q : `float`
+            padding factor.  Q=1 does no padding, Q=2 pads 1024 to 2048.
+
+        Returns
+        -------
+        `Wavefront`
+            the wavefront at the new plane
+
+        """
+        out = angular_spectrum(self.fcn, self.wavelength.to(u.um), self.sample_spacing, dz)
+        return Wavefront(x=self.x, y=self.y, fcn=out, wavelength=self.wavelength, space=self.space)
+
+    def to_focus(self, efl, Q=2):
+        """Perform a "pupil" to "psf" plane propgation.
+
+        Uses an FFT with no quadratic phase.
+
+        Parameters
+        ----------
+        efl : `float`
+            focusing distance, millimeters
+        Q : `float`
+            padding factor.  Q=1 does no padding, Q=2 pads 1024 to 2048.
+            To avoid aliasng, the array must be padded such that Q is at least 2
+            this may happen organically if your data does not span the array.
+
+        Returns
+        -------
+        `Wavefront`
+            the wavefront at the focal plane
+
+        """
+        if self.space != 'pupil':
+            raise ValueError('can only propagate from a pupil to psf plane')
+
+        data = prop_pupil_plane_to_psf_plane(self.fcn, Q=Q, incoherent=False)
+        x, y = prop_pupil_plane_to_psf_plane_units(
+            wavefunction=self.fcn,
+            input_sample_spacing=self.sample_spacing,
+            prop_dist=efl,
+            wavelength=self.wavelength.to(u.um),
+            Q=Q)
+
+        return Wavefront(x=x, y=y, fcn=data, wavelength=self.wavelength, space='psf')
+
+    def from_focus(self, efl, Q=2):
+        """Perform a "psf" to "pupil" plane propagation.
+
+        uses an FFT with no quadratic phase.
+
+        Parameters
+        ----------
+        efl : `float`
+            un-focusing distance, millimeters
+        Q : `float`
+            padding factor.  Q=1 does no padding, Q=2 pads 1024 to 2048.
+            To avoid aliasng, the array must be padded such that Q is at least 2
+            this may happen organically if your data does not span the array.
+
+        Returns
+        -------
+        `Wavefront`
+            the wavefront at the pupil plane
+
+        """
+        pass
+
+    def to_focus_fixed_sampling(self, efl, sample_spacing, samples):
+        """Perform a "pupil" to "psf" propagation with fixed output sampling.
+
+        Uses matrix triple product DFTs to specify the grid directly.
+
+        Parameters
+        ----------
+        efl : `float`
+            focusing distance, millimeters
+        sample_spacing : `float`
+            output sample spacing, microns
+        samples : `int`
+            number of samples in the output plane
+
+        Returns
+        -------
+        `Wavefront`
+            the wavefront at the psf plane
+
+        """
+        if self.space != 'pupil':
+            raise ValueError('can only propagate from a pupil to psf plane')
+
+        x, y, data = prop_pupil_plane_to_psf_plane_fixed_sampling(
+            wavefunction=self.fcn,
+            input_sample_spacing=self.sample_spacing,
+            prop_dist=efl,
+            wavelength=self.wavelength.to(u.um),
+            output_sample_spacing=sample_spacing,
+            output_samples=samples,
+            coherent=True, norm=False)
+
+        return Wavefront(x=x, y=y, fcn=data, wavelength=self.wavelength, space='psf')
+
+    def from_focus_fixed_sampling(self, efl, sample_spacing, samples):
+        """Perform a "psf" to "pupil" propagation with fixed output sampling.
+
+        Uses matrix triple product DFTs to specify the grid directly.
+
+        Parameters
+        ----------
+        efl : `float`
+            un-focusing distance, millimeters
+        sample_spacing : `float`
+            output sample spacing, millimeters
+        samples : `int`
+            number of samples in the output plane
+
+        Returns
+        -------
+        `Wavefront`
+            wavefront at the pupil plane
+
+        """
+        if self.space != 'psf':
+            raise ValueError('can only propagate from a psf to pupil plane')
+
+        x, y, data = prop_psf_plane_to_pupil_plane_fixed_sampling(
+            wavefunction=self.fcn,
+            input_sample_spacing=self.sample_spacing,
+            prop_dist=efl,
+            wavelength=self.wavelength.to(u.um),
+            output_sample_spacing=sample_spacing,
+            output_samples=samples,
+            norm=False)
+
+        return Wavefront(x=x, y=y, fcn=data, wavelength=self.wavelength, space='pupil')
