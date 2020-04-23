@@ -309,8 +309,6 @@ class ZCacheMN:
         self.sin = {}
         self.gridcache = gridcache
         self.offgridj = {}  # jacobi polynomials
-        self.offgridr = {}  # regular
-        self.offgridn = {}  # normed
         self.offgrid_shifted_r = {}
 
     @retry(tries=2)
@@ -377,8 +375,8 @@ class ZCacheMN:
             zernike polynomial n or m at this coordinate.
 
         """
-        key_ = self._gb_key(r, p)
-        key = (n, m, *key_)
+        key_ = self._gb_key(r)
+        key = (n, m, key_)
         rmod = 2 * r ** 2 - 1
         self.offgrid_shifted_r[key] = rmod
 
@@ -393,6 +391,10 @@ class ZCacheMN:
             rterm = r ** abs(m)
             term = term * azterm * rterm
 
+        if norm:
+            norm = zernike_norm(n, m)
+            term *= norm
+
         return term
 
     def grid_bypass_cleanup(self, r, p):
@@ -406,21 +408,18 @@ class ZCacheMN:
             azimuthal coordinates
 
         """
-        key_ = self._gb_key(r, p)
-        for key in self.offgridr.keys():
-            if key[2:] == key_:
-                del self.offgridr[key]
+        key_ = self._gb_key(r)
+        for dict_ in (self.offgridj, self.offgrid_shifted_r):
+            keys = list(dict_.keys())
+            for key in keys:
+                if key[2] == key_[0]:
+                    del dict_[key]
 
-        for key in self.offgridn.keys():
-            if key[2:] == key_:
-                del self.offgridn[key]
-
-        for key in self.offgrid_shifted_r.keys():
-            if key == key_:
-                del self.offgrid_shifted_r[key]
-
-    def _gb_key(self, r, p):
-        return (id(r), id(p))
+    def _gb_key(self, r):
+        spacing = r[1] - r[0]
+        npts = r.shape
+        max_ = r[-1]
+        return f'{spacing}-{npts}-{max_}'
 
     @retry(tries=2)
     def get_azterm(self, m, samples):
@@ -445,7 +444,7 @@ class ZCacheMN:
             nj = (n - m) // 2
 
         if r is not None:
-            key = (nj, m, id(r))
+            key = (nj, m, self._gb_key(r))
             # r provided, grid not wanted
             # this is just a duplication of below with a separate r and cache dict
             try:
@@ -490,11 +489,24 @@ class ZCacheMN:
         self.jac = {}
         self.sin = {}
         self.cos = {}
+        self.offgrid_shifted_r = {}
+        self.offgridj = {}
+        self.offgridn = {}
+        self.offgridr = {}
 
     def nbytes(self):
         """Total size in memory of the cache in bytes."""
         total = 0
-        for dict_ in (self.normed, self.regular, self.jac, self.sin, self.cos):
+        dicts = (
+            self.normed,
+            self.regular,
+            self.jac,
+            self.sin,
+            self.cos,
+            self.offgrid_shifted_r,
+            self.offgridj,
+        )
+        for dict_ in dicts:
             for key in dict_:
                 total += dict_[key].nbytes
 
