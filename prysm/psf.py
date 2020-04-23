@@ -12,8 +12,8 @@ from .plotting import share_fig_ax
 from .util import sort_xy
 from .convolution import Convolvable
 from .propagation import (
-    prop_pupil_plane_to_psf_plane,
-    prop_pupil_plane_to_psf_plane_units,
+    focus,
+    focus_units,
 )
 
 FIRST_AIRY_ZERO = 1.220
@@ -495,8 +495,8 @@ class PSF(Convolvable):
         """
         # propagate PSF data
         fcn, ss, wvl = pupil.fcn, pupil.sample_spacing, pupil.wavelength.to(u.um)
-        data = prop_pupil_plane_to_psf_plane(fcn, Q=Q, incoherent=incoherent,
-                                             norm=norm if norm not in ('max', 'radiometric') else None)
+        data = focus(fcn, Q=Q, incoherent=incoherent,
+                     norm=norm if norm not in ('max', 'radiometric') else None)
         norm = norm.lower()
         if norm == 'max':
             coef = 1 / data.max()
@@ -512,7 +512,7 @@ class PSF(Convolvable):
             raise ValueError('unknown norm')
 
         data = data * coef
-        ux, uy = prop_pupil_plane_to_psf_plane_units(fcn, ss, efl, wvl, Q)
+        ux, uy = focus_units(fcn, ss, efl, wvl, Q)
         psf = PSF(x=ux, y=uy, data=data)
 
         psf.fno = efl / pupil.diameter
