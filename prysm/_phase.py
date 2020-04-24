@@ -32,15 +32,14 @@ class OpticalPhase(RichData):
             y label used on plots
         zlabel : `str`, optional
             z label used on plots
-        xyunit : `str`, optional
+        xy_unit : `str`, optional
             unit used for the XY axes
-        zunit : `str`, optional
+        z_unit : `str`, optional
             unit used for the Z (data) axis
         wavelength : `float`, optional
             wavelength of light, in microns
 
         """
-
         super().__init__(x=x, y=y, data=phase, labels=labels,
                          xy_unit=xy_unit or config.phase_xy_unit,
                          z_unit=z_unit or config.phase_z_unit,
@@ -88,7 +87,7 @@ class OpticalPhase(RichData):
 
     @property
     def phase(self):
-        """phase is the Z ("height" or "opd") data."""
+        """Phase is the Z ("height" or "opd") data."""
         return self.data
 
     @phase.setter
@@ -97,7 +96,7 @@ class OpticalPhase(RichData):
         self.data = ary
 
     def interferogram(self, visibility=1, passes=2, interpolation=config.interpolation, fig=None, ax=None):
-        """Create an interferogram of the `Pupil`.
+        """Create a picture of fringes.
 
         Parameters
         ----------
