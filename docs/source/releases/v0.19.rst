@@ -65,5 +65,6 @@ Bug fixes
 - :meth:`~prysm.convolution.Convolvable.save` now flips the array before writing, rendering images in the expected orientation.
 - :meth:`~prysm.psf.PSF.from_pupil` now passes the :code:`incoherent` and :code:`norm` arguments to the propagation engine
 - the :class:`~prysm.pupil.Pupil` constructor no longer ignores the phase parameter
+- the :class:`~prysm.pupil.Pupil` constructor no longer ignores the transmission parameter
 - :class:`~prysm.propagation.Wavefront` no longer errors on construction
 - :func:`~prysm.zernike.zernikefit` no longer causes a memory leak
