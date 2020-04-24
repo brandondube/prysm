@@ -71,7 +71,6 @@ class Pupil(OpticalPhase):
                          wavelength=wavelength)
 
         phase_mask = mask_cleaner(phase_mask, samples)
-
         if need_to_build:
             self.samples = samples
             self.build()
@@ -83,9 +82,6 @@ class Pupil(OpticalPhase):
             self.transmission = transmission
             self.phase_mask = phase_mask
         else:
-            holes = e.isnan(phase)
-            transmission = e.ones(holes.shape)
-            transmission[holes] = 0
             self.transmission = transmission
             self.phase_mask = phase_mask
 
