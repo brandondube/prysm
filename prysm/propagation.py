@@ -1,5 +1,8 @@
 """Numerical optical propagation."""
+import numbers
 import warnings
+import operator
+from collections.abc import Iterable
 
 
 from .conf import config
@@ -130,12 +133,16 @@ def unfocus_fixed_sampling(wavefunction, input_sample_spacing, prop_dist,
     """
     # we calculate sampling parameters
     # backwards so we can reuse as much code as possible
-    dia = output_sample_spacing * output_samples
+    if not isinstance(output_samples, Iterable):
+        output_samples = (output_samples, output_samples)
+
+    dias = [output_sample_spacing * s for s in output_samples]
+    dia = max(dias)
     Q = Q_for_sampling(input_diameter=dia,
                        prop_dist=prop_dist,
                        wavelength=wavelength,
                        output_sample_spacing=input_sample_spacing)  # not a typo
-    Q /= wavefunction.shape[0] / output_samples
+    Q /= wavefunction.shape[0] / output_samples[0]
     field = mdft.idft2(ary=wavefunction, Q=Q, samples=output_samples)
     return field
 
@@ -462,6 +469,35 @@ class Wavefront(RichData):
         """Half of self.diameter."""
         return self.diameter / 2
 
+    def __numerical_operation__(self, other, op):
+        """Apply an operation to this wavefront with another piece of data."""
+        func = getattr(operator, op)
+        if isinstance(other, Wavefront):
+            criteria = [
+                abs(self.sample_spacing - other.sample_spacing) / self.sample_spacing * 100 < 0.001,  # must match to 1 millipercent
+                self.shape == other.shape,
+                self.wavelength.represents == other.wavelength.represents
+            ]
+
+            if not all(criteria):
+                raise ValueError('all physicality criteria not met: sample spacing, shape, or wavelength different.')
+
+            data = func(self.data, other.data)
+        elif type(other) == type(self.data) or isinstance(other, numbers.Number):  # NOQA
+            data = func(other, self.data)
+        else:
+            raise TypeError(f'unsupported operand type(s) for {op}: \'Wavefront\' and {type(other)}')
+
+        return Wavefront(x=self.x, y=self.y, wavelength=self.wavelength, fcn=data, space=self.space)
+
+    def __mul__(self, other):
+        """Multiply this wavefront by something compatible."""
+        return self.__numerical_operation__(other, 'mul')
+
+    def __truediv__(self, other):
+        """Divide this wavefront by something compatible."""
+        return self.__numerical_operation__(other, 'truediv')
+
     def free_space(self, dz, Q=2):
         """Perform a plane-to-plane free space propagation.
 
@@ -480,7 +516,12 @@ class Wavefront(RichData):
             the wavefront at the new plane
 
         """
-        out = angular_spectrum(self.fcn, self.wavelength.to(u.um), self.sample_spacing, dz)
+        out = angular_spectrum(
+            field=self.fcn,
+            wvl=self.wavelength.to(u.um),
+            sample_spacing=self.sample_spacing,
+            z=dz,
+            Q=Q)
         return Wavefront(x=self.x, y=self.y, fcn=out, wavelength=self.wavelength, space=self.space)
 
     def focus(self, efl, Q=2):
