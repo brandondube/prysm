@@ -547,7 +547,7 @@ class BaseZernike(Pupil):
             for key, value in kwargs.items():
                 if key[0].lower() == 'z' and key[1].isnumeric():
                     idx = int(key[1:])  # strip 'Z' from index
-                    self.coefs[idx - (1-self.base)] = value
+                    self.coefs[idx] = value
                 elif key.lower() == 'norm':
                     self.normalize = value
                 else:
@@ -605,7 +605,7 @@ class BaseZernike(Pupil):
         idxs = idxs[e.argsort(coefs_work[idxs])[::-1]]  # use argsort to sort them in ascending order and reverse
         big_terms = coefs[idxs]  # finally, take the values from the
         big_idxs = oidxs[idxs]
-        names = e.asarray(self.names, dtype=str)[big_idxs - self.base]
+        names = e.asarray(self.names, dtype=str)[big_idxs - 1]
         return list(zip(big_terms, big_idxs, names))
 
     @property
@@ -835,7 +835,7 @@ class BaseZernike(Pupil):
         new_coefs = {}
         for coef in topn:
             mag, index, *_ = coef
-            new_coefs[index+(self.base-1)] = mag
+            new_coefs[index] = mag
 
         self.coefs = new_coefs
         self.build()
@@ -867,7 +867,7 @@ class BaseZernike(Pupil):
             # create the name
             nm = nm_funcs[self._name](number)
             name = n_m_to_name(*nm)
-            name = f'Z{number-(1-self.base)} - {name}'
+            name = f'Z{number} - {name}'
 
             strs.append(' '.join([_, name]))
         body = '\n\t'.join(strs)
