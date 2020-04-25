@@ -13,7 +13,7 @@ def p():
 
 @pytest.fixture
 def p_tlt():
-    return FringeZernike(Z2=1, base=1, samples=64)
+    return FringeZernike(Z2=1, samples=64)
 
 
 def test_pupil_passes_valid_params():

@@ -58,7 +58,7 @@ def test_array_orientation_consistency_tilt():
         a shift in the +y direction.
     """
     samples = 128
-    p = FringeZernike(Z2=1000, base=1, samples=samples)
+    p = FringeZernike(Z2=1000, samples=samples)
     ps = PSF.from_pupil(p, 1)
     idx_y, idx_x = np.unravel_index(ps.data.argmax(), ps.data.shape)  # row-major y, x
     assert idx_x == ps.center_x

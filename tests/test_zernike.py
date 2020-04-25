@@ -70,7 +70,6 @@ def test_repr_is_a_str():
 def test_fringezernike_takes_all_named_args():
     params = {
         'norm': True,
-        'base': 1,
     }
     p = zernike.FringeZernike(**params)
     assert p

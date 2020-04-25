@@ -68,3 +68,14 @@ Bug fixes
 - the :class:`~prysm.pupil.Pupil` constructor no longer ignores the transmission parameter
 - :class:`~prysm.propagation.Wavefront` no longer errors on construction
 - :func:`~prysm.zernike.zernikefit` no longer causes a memory leak
+
+Removed Deprecations
+====================
+
+- :attr:`MTF.exact_tan` has been removed and was marked for removal in v0.18
+- :attr:`MTF.exact_sag` has been removed and was marked for removal in v0.18
+- :attr:`MTF.tan` has been removed and was marked for removal in v0.18
+- :attr:`MTF.sag` has been removed and was marked for removal in v0.18
+- :attr:`RichData.slice_x` has been removed and was marked for removal in v0.18
+- :attr:`RichData.slice_y` has been removed and was marked for removal in v0.18
+- the :code:`base` kwarg which controlled whether indices start at 0 or 1 has been removed from the Zernike classes and was marked for removal in v0.19
