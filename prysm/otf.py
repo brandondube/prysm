@@ -1,6 +1,4 @@
 """A base optical transfer function interface."""
-import warnings
-
 from .conf import config
 from .mathops import engine as e
 from ._richdata import RichData
@@ -159,24 +157,6 @@ class MTF(RichData):
         dat = abs(ft)
         dat /= dat[cy, cx]
         return MTF(data=dat, x=x, y=y)
-
-    @property
-    def tan(self):
-        warnings.warn('.tan is deprecated and will be removed in v0.18, please use .slices().x')
-        return self.slices().x
-
-    @property
-    def sag(self):
-        warnings.warn('.sag is deprecated and will be removed in v0.18, please use .slices().y')
-        return self.slices().y
-
-    def exact_tan(self, freq):
-        warnings.warn('.exact_tan is deprecated and will be removed in v0.18, please use .exact_x')
-        return self.exact_x(freq)
-
-    def exact_sag(self, freq):
-        warnings.warn('.exact_sag is deprecated and will be removed in v0.18, please use .exact_y')
-        return self.exact_y(freq)
 
 
 class PTF(RichData):

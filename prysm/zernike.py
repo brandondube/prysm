@@ -1,5 +1,4 @@
 """Zernike functions."""
-import warnings
 from collections import defaultdict
 
 from retry import retry
@@ -535,15 +534,6 @@ class BaseZernike(Pupil):
         self.normalize = False
         pass_args = {}
 
-        bb = kwargs.get('base', config.zernike_base)
-        if bb != 1:
-            warnings.warn("base of zero is deprecated and will be removed in prysm v0.19")
-        if bb > 1:
-            raise ValueError('It violates convention to use a base greater than 1.')
-        elif bb < 0:
-            raise ValueError('It is nonsensical to use a negative base.')
-        self.base = bb
-
         if args is not None:
             if len(args) == 1:
                 enumerator = args[0]
@@ -560,8 +550,6 @@ class BaseZernike(Pupil):
                     self.coefs[idx - (1-self.base)] = value
                 elif key.lower() == 'norm':
                     self.normalize = value
-                elif key.lower() == 'base':
-                    self.base = value
                 else:
                     pass_args[key] = value
 

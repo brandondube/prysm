@@ -1,7 +1,6 @@
 """Basic class holding data, used to recycle code."""
 import copy
 import inspect
-import warnings
 from numbers import Number
 from collections.abc import Iterable
 
@@ -422,16 +421,6 @@ class RichData:
         ax.set(xlabel=xlab, xlim=xlim, ylabel=ylab, ylim=ylim)
 
         return fig, ax
-
-    @property
-    def slice_x(self):
-        warnings.warn('.slice_x is deprecated and will be removed in prysm v0.18, please use .slices().x')
-        return self.slices().x
-
-    @property
-    def slice_y(self):
-        warnings.warn('.slice_y is deprecated and will be removed in prysm v0.18, please use .slices().y')
-        return self.slices().y
 
 
 class Slices:

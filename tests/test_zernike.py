@@ -67,13 +67,6 @@ def test_repr_is_a_str():
     assert type(repr(p)) is str
 
 
-def test_fringezernike_rejects_base_not_0_or_1():
-    with pytest.raises(ValueError):
-        zernike.FringeZernike(base=2)
-    with pytest.raises(ValueError):
-        zernike.FringeZernike(base=-1)
-
-
 def test_fringezernike_takes_all_named_args():
     params = {
         'norm': True,
