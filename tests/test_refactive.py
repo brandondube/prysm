@@ -9,16 +9,10 @@ C7980_ND = 1.458461
 
 
 def test_cauchy_accuracy_C7980():
-    # from corning datasheet
+    # from wikipedia datasheet
     coefs = [
-        2.104025406E+00,
-        -1.456000330E-04,
-        -9.049135390E-03,
-        8.801830992E-03,
-        8.435237228E-05,
-        1.681656789E-06,
-        -1.675425449E-08,
-        8.326602461E-10
+        1.4580,
+        0.00354,
     ]
     estimated = refractive.cauchy(WVL, coefs[0], *coefs[1:])
     assert estimated == pytest.approx(C7980_ND, abs=0.05)

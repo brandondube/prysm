@@ -31,7 +31,7 @@ def cauchy(wvl, A, *args):
         power = 2*idx + 2
         seed = seed + arg / wvl ** power
 
-    return e.sqrt(seed)
+    return seed
 
 
 def sellmeier(wvl, A, B):
