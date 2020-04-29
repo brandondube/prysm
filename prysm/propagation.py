@@ -29,7 +29,7 @@ def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, efl,
 
 
 def focus(wavefunction, Q, incoherent=True, norm=None):
-    """Propagate a pupil plane to a PSF plane and compute the grid along which the PSF exists.
+    """Propagate a pupil plane to a PSF plane.
 
     Parameters
     ----------
@@ -46,7 +46,7 @@ def focus(wavefunction, Q, incoherent=True, norm=None):
     Returns
     -------
     psf : `numpy.ndarray`
-        incoherent point spread function
+        point spread function
 
     """
     if Q != 1:
@@ -59,6 +59,32 @@ def focus(wavefunction, Q, incoherent=True, norm=None):
         return abs(impulse_response) ** 2
     else:
         return impulse_response
+
+
+def unfocus(wavefunction, Q, norm=None):
+    """Propagate a PSF plane to a pupil plane.
+
+    Parameters
+    ----------
+    wavefunction : `numpy.ndarray`
+        the pupil wavefunction
+    Q : `float`
+        oversampling / padding factor
+    norm : `str`, {None, 'ortho'}
+        normalization parameter passed directly to numpy/cupy fft
+
+    Returns
+    -------
+    pupil : `numpy.ndarray`
+        field in the pupil plane
+
+    """
+    if Q != 1:
+        padded_wavefront = pad2d(wavefunction, Q)
+    else:
+        padded_wavefront = wavefunction
+
+    return e.fft.ifftshift(e.fft.ifft2(e.fft.fftshift(padded_wavefront), norm=norm))
 
 
 def focus_fixed_sampling(wavefunction, input_sample_spacing, prop_dist,
@@ -210,6 +236,45 @@ def focus_units(wavefunction, input_sample_spacing, efl, wavelength, Q):
     return x, y
 
 
+def unfocus_units(wavefunction, input_sample_spacing, efl, wavelength, Q):
+    """Compute the ordinate axes for a PSF plane to pupil plane propagation.
+
+    Parameters
+    ----------
+    wavefunction : `numpy.ndarray`
+        the pupil wavefunction
+    input_sample_spacing : `float`
+        spacing between samples in the PSF plane
+    efl : `float`
+        propagation distance along the z distance
+    wavelength : `float`
+        wavelength of light
+    Q : `float`
+        oversampling / padding factor
+
+    Returns
+    -------
+    x : `numpy.ndarray`
+        x axis unit, 1D ndarray
+    y : `numpy.ndarray`
+        y axis unit, 1D ndarray
+
+    """
+    s = wavefunction.shape
+    samples_x, samples_y = s[1] * Q, s[0] * Q
+    sample_spacing_x = psf_sample_to_pupil_sample(psf_sample=input_sample_spacing,  # factor of
+                                                  samples=samples_x,                  # 1e3 corrects
+                                                  wavelength=wavelength,              # for unit
+                                                  efl=efl) / 1e3                # translation
+    sample_spacing_y = psf_sample_to_pupil_sample(psf_sample=input_sample_spacing,  # factor of
+                                                  samples=samples_y,                  # 1e3 corrects
+                                                  wavelength=wavelength,              # for unit
+                                                  efl=efl) / 1e3                # translation
+    x = e.arange(-1 * int(e.ceil(samples_x / 2)), int(e.floor(samples_x / 2))) * sample_spacing_x
+    y = e.arange(-1 * int(e.ceil(samples_y / 2)), int(e.floor(samples_y / 2))) * sample_spacing_y
+    return x, y
+
+
 def pupil_sample_to_psf_sample(pupil_sample, samples, wavelength, efl):
     """Convert pupil sample spacing to PSF sample spacing.  fλ/D or Q.
 
@@ -333,84 +398,9 @@ def angular_spectrum(field, wvl, sample_spacing, z, Q=2):
     kyy, kxx = e.meshgrid(ky, kx)
     # don't ifftshift, ky, kx computed in shifted space, going to ifft anyway
     forward = e.fft.fft2(e.fft.fftshift(field))
-    # kernel = e.zeros_like(forward)
-    # wavenumber = 2 * e.pi / wvl
-    # transfer_function = e.exp(1j * e.sqrt(wavenumber**2 - kxx**2 - kyy**2) * z)
     transfer_function = e.exp(-1j * e.pi * wvl * z * (kxx**2 + kyy**2))
     res = e.fft.ifftshift(e.fft.ifft2(forward * transfer_function))
     return res
-
-
-def angular_spectrum_transfer_function(z, kx, ky, k, x0=0, y0=0):
-    """Calculate the angular spectrum transfer function.
-
-    Notes
-    -----
-    the transfer function is given in Eq. (2) of oe-22-21-26256,
-    "Modified shifted angular spectrum method for numerical propagation at reduced spatial sampling rates"
-    A. Ritter, Opt. Expr. 2014
-
-    Parameters
-    ----------
-    z : `float`
-        propagation distance
-    kx : `numpy.ndarray`
-        2D array of X spatial frequencies, meshgrid of an output from fftfreq
-    ky : `numpy.ndarray`
-        2D array of Y spatial ferquencies, meshgrid of an output from fftfreq
-    k : `float`
-        wavenumber, 2pi/lambda
-    x0 : `float`
-        x center
-    y0 : `float`
-        y center
-
-    Returns
-    -------
-    `numpy.ndarray`
-        2D array containing the (complex) transfer function
-
-    """
-    term1 = 1j * e.sqrt(k**2 - kx**2 - ky**2)
-    if x0 != 0:
-        # assume x0, y0 given together
-        term2 = 1j * kx * x0
-        term3 = 1j * ky * y0
-    else:
-        term2 = 1j * kx
-        term3 = 1j * ky
-    return e.exp(term1 + term2 + term3)
-
-
-def msas_transfer_function(z, kx, ky, k, x0, y0, qx, qy):
-    """Calculate the modified shifted angular spectrum transfer function.
-
-    Parameters
-    ----------
-    z : `float`
-        propagation distance
-    kx : `numpy.ndarray`
-        2D array of X spatial frequencies, meshgrid of an output from fftfreq
-    ky : `numpy.ndarray`
-        2D array of Y spatial ferquencies, meshgrid of an output from fftfreq
-    k : `float`
-        wavenumber, 2pi/lambda
-    x0 : `float`
-        x center
-    y0 : `float`
-        y center
-    qx : `float`
-        x spatial frequency of the modifying plane wave
-    qy : `float`
-        y spatial frequency of the modifying plane wave
-
-    Returns
-    -------
-    `numpy.ndarray`
-        2D array containing the (complex) transfer function
-
-    """
-    return angular_spectrum_transfer_function(z=z, kx=kx+qx, ky=ky+qy, k=k, x0=x0, y0=y0)
 
 
 class Wavefront(RichData):
@@ -551,7 +541,7 @@ class Wavefront(RichData):
         x, y = focus_units(
             wavefunction=self.fcn,
             input_sample_spacing=self.sample_spacing,
-            prop_dist=efl,
+            efl=efl,
             wavelength=self.wavelength.to(u.um),
             Q=Q)
 
@@ -577,7 +567,18 @@ class Wavefront(RichData):
             the wavefront at the pupil plane
 
         """
-        pass
+        if self.space != 'psf':
+            raise ValueError('can only propagate from a psf to pupil plane')
+
+        data = unfocus(self.fcn, Q=Q)
+        x, y = unfocus_units(
+            wavefunction=self.fcn,
+            input_sample_spacing=self.sample_spacing,
+            efl=efl,
+            wavelength=self.wavelength.to(u.um),
+            Q=Q)
+
+        return Wavefront(x=x, y=y, fcn=data, wavelength=self.wavelength, space='pupil')
 
     def focus_fixed_sampling(self, efl, sample_spacing, samples):
         """Perform a "pupil" to "psf" propagation with fixed output sampling.
