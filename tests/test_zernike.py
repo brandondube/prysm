@@ -144,3 +144,14 @@ def test_nm_to_fringe_round_trips(fringe_idx):
     n, m = zernike.fringe_to_n_m(fringe_idx)
     j = zernike.n_m_to_fringe(n, m)
     assert j == fringe_idx
+
+
+def test_ansi_2_term_can_construct():
+    assert zernike.ANSI2TermZernike(A3_1=1, B4_0=1)
+
+
+def test_ansi_1_term_can_construct():
+    assert zernike.ANSI1TermZernike(Z10=1)
+
+def test_can_stringify_zernike_pupil():
+    assert str(zernike.NollZernike(np.arange(50), samples=32))
