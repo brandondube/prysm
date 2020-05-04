@@ -68,6 +68,7 @@ Bug fixes
 - the :class:`~prysm.pupil.Pupil` constructor no longer ignores the transmission parameter
 - :class:`~prysm.propagation.Wavefront` no longer errors on construction
 - :func:`~prysm.zernike.zernikefit` no longer causes a memory leak
+- :func:`~prysm.zernike.n_m_to_fringe` no longer begins counting fringe indices at 0 and does not mis-order azimuthal orders when radial order >14.
 
 Removed Deprecations
 ====================

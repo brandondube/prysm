@@ -131,3 +131,16 @@ def test_truncate_functions(sample):
 
 def test_truncate_topn_functions(sample):
     assert sample.truncate_topn(9)
+
+
+@pytest.mark.parametrize('n', [2, 4, 6, 8, 10, 12, 14, 16, 18, 20])
+def test_zero_separation_gives_correct_array_sizes(n):
+    sep = zernike.zero_separation(n)
+    assert int(1/sep) == int(n**2)
+
+
+@pytest.mark.parametrize('fringe_idx', range(1, 100))
+def test_nm_to_fringe_round_trips(fringe_idx):
+    n, m = zernike.fringe_to_n_m(fringe_idx)
+    j = zernike.n_m_to_fringe(n, m)
+    assert j == fringe_idx

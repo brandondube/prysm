@@ -149,7 +149,7 @@ def n_m_to_fringe(n, m):
     term1 = (1 + (n + abs(m))/2)**2
     term2 = 2 * abs(m)
     term3 = (1 + sign(m)) / 2
-    return int(term1 - term2 + term3)
+    return int(term1 - term2 - term3) + 1  # shift 0 base to 1 base
 
 
 def n_m_to_ansi_j(n, m):
