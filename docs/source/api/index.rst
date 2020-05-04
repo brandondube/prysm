@@ -25,7 +25,9 @@ API Reference
    psf
    pupil
    qpoly
+   refractive
    sample_data
+   thinfilm
    thinlens
    util
    wavelengths
