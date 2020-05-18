@@ -101,8 +101,20 @@ def test_size_estimation_accurate(tpsf_dense):
     fwhm = tpsf.fwhm()
     one_over_e = tpsf.one_over_e()
     one_over_esq = tpsf.one_over_e2()
-    print(fwhm, one_over_e, one_over_esq)
     assert fwhm == pytest.approx(true_fwhm, abs=1)
     assert one_over_e == pytest.approx(true_airy_radius/2, abs=0.1)
     assert one_over_esq == pytest.approx(true_airy_radius/2*1.414, abs=.2)  # sqrt(2) is an empirical fudge factor.
     # TODO: find a better test for 1/e^2
+
+
+def test_centroid_correct(tpsf_dense):
+    cpy = tpsf_dense.copy()
+    cy, cx = cpy.centroid('pixels')
+    ty, tx = (s/2 for s in cpy.shape)
+    assert cy == pytest.approx(ty, .1)
+    assert cx == pytest.approx(tx, .1)
+
+
+def test_autowindow_functions(tpsf):
+    cpy = tpsf.copy()
+    assert cpy.autowindow(10)
