@@ -49,3 +49,27 @@ def test_focus_fft_mdft_equivalent_Wavefront():
         samples=unfocus_fft.samples_x)
 
     assert np.allclose(unfocus_fft.data, unfocus_mdft.data)
+
+
+def test_frespace_functions():
+    x = y = np.linspace(-1, 1, SAMPLES)
+    z = np.random.rand(SAMPLES, SAMPLES)
+    wf = propagation.Wavefront(x=x, y=y, fcn=z, wavelength=HeNe, space='pupil')
+    wf = wf.free_space(1, 1)
+    assert wf
+
+
+def test_talbot_distance_correct():
+    wvl = 123.456
+    a = 987.654321
+    truth = wvl / (1 - np.sqrt(1 - wvl**2/a**2))
+    tal = propagation.talbot_distance(a, wvl)
+    assert truth == pytest.approx(tal, abs=.1)
+
+
+def test_fresnel_number_correct():
+    wvl = 123.456
+    a = 987.654321
+    z = 5
+    fres = propagation.fresnel_number(a, z, wvl)
+    assert fres == (a**2 / (z * wvl))
