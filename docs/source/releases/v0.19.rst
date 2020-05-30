@@ -80,3 +80,9 @@ Removed Deprecations
 - :attr:`RichData.slice_x` has been removed and was marked for removal in v0.18
 - :attr:`RichData.slice_y` has been removed and was marked for removal in v0.18
 - the :code:`base` kwarg which controlled whether indices start at 0 or 1 has been removed from the Zernike classes and was marked for removal in v0.19
+
+Test Coverage
+=============
+
+- The integration between travis and coveralls has been fixed
+- the test suite now provides over 80% coverage and includes over 500 tests
