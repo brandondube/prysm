@@ -73,3 +73,12 @@ def test_fresnel_number_correct():
     z = 5
     fres = propagation.fresnel_number(a, z, wvl)
     assert fres == (a**2 / (z * wvl))
+
+
+def test_can_mul_wavefronts():
+    data = np.random.rand(2, 2).astype(np.complex128)
+    x = np.array([1, 2])
+    y = np.array([1, 2])
+    wf = propagation.Wavefront(x=x, y=y, fcn=data, wavelength=.6328)
+    wf2 = wf * 2
+    assert wf2

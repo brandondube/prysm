@@ -3,7 +3,7 @@ import pytest
 
 import numpy as np
 
-from prysm import Pupil, FringeZernike
+from prysm import Pupil, FringeZernike, Interferogram
 
 
 @pytest.fixture
@@ -71,3 +71,8 @@ def test_passed_phase_is_not_ignored():
     p = Pupil(x=x, y=y, phase=phase)
     assert np.all(p.phase == phase)
     assert p.samples_y == 32
+
+
+def test_can_astype_to_interferogram(p):
+    i = p.astype(Interferogram)
+    assert i
