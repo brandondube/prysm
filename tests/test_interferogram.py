@@ -131,7 +131,25 @@ def test_print_does_not_throw(sample_i):
 
     assert sample_i
 
+
 def test_constructor_accepts_xynone():
-    z = np.random.rand(128,128)
+    z = np.random.rand(128, 128)
     i = Interferogram(z)
+    assert i
+
+
+def test_bandlimited_rms_works_with_frequency_specs(sample_i):
+    assert sample_i.bandlimited_rms(flow=1, fhigh=10)
+
+
+def test_fit_zernikes_does_not_throw(sample_i):
+    assert sample_i.fit_zernikes(11).any()
+
+
+def test_can_make_with_meta_wavelength_dict():
+    # this basically tests that getting the wavelength property
+    # from a dat or datx file works
+    meta = {'Wavelength': 1.}
+    z = np.random.rand(2, 2)
+    i = Interferogram(z, meta=meta)
     assert i
