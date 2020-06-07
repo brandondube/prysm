@@ -2,5 +2,5 @@
 prysm.thinfilm
 ***************
 
-.. automodule:: prysm.thifilm
+.. automodule:: prysm.thinfilm
     :members:

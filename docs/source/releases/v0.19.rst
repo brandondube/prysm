@@ -17,20 +17,14 @@ Propagation
 In this release, prysm has gained increased capability for performing propagations outside of the pupil-to-image case.  The API has also been revised for reduced verbosity and better clarity.  The old API is provided with deprecations to ease transition.
 
 - :func:`~prysm.propagation.angular_spectrum` for plane-to-plane (i.e free space) propagation via the angular spectrum method
-
 - :func:`~prysm.propagation.angular_spectrum_transfer_function`, the transfer function of free space
-
 - :func:`~prysm.propagation.fresnel_number` for computing the Fresnel number
-
 - :func:`~prysm.propagation.talbot_distance` for computing the Talbot distance
-
 - :func:`~prysm.propagation.Q_for_sampling` indicates the value of Q (or fλ/D, they are the same thing) for a given sample spacing in the psf plane
-
 - :func:`~prysm.propagation.focus_fixed_sampling` for using matrix triple product DFTs to propagate to a fixed grid.  This is useful for propagating to detector grids, and for faster polychromatic computations (since the "natural" grid depends on wavelength)
-
 - :func:`~prysm.propagation.unfocus_fixed_sampling` mimic of focus_fixed_sampling, but from "psf" to "pupil" plane.
 
-- the :class:`Wavefront` class has gained new functions for propagating through a system:
+- the :class:`~prysm.propagation.Wavefront` class has gained new functions for propagating through a system:
 - - :meth:`~prysm.propagation.Wavefront.focus` pupil -> psf
 - - :meth:`~prysm.propagation.Wavefront.unfocus` psf -> pupil
 - - :meth:`~prysm.propagation.Wavefront.focus_fixed_sampling` pupil -> psf, fixed grid
@@ -41,7 +35,6 @@ In this release, prysm has gained increased capability for performing propagatio
 Aliases with deprecation warnings:
 
 - :func:`prop_pupil_plane_to_psf_plane` -> :func:`~prysm.propagation.focus`
-
 - :func:`prop_pupil_plane_to_psf_plane_units` -> :func:`~prysm.propagation.focus_units`
 
 
@@ -50,13 +43,9 @@ Thin Film Calculation and Refractive Indices
 Prysm can now do basic multi-layer thin film calculations and compute a few related values.
 
 - :func:`prysm.thinfilm.multilayer_stack_rt` for computing the equivalent Fresnel coefficients for a stack of thin and thick films.
-
 - :func:`prysm.thinfilm.critical_angle` for computing the minimum angle of incidence for TIR
-
 - :func:`prysm.thinfilm.brewsters_angle` for computing the angle at which a surface is completely unreflective of p-polarized light
-
 - :func:`prysm.refractive.cauchy` for computing refractive index based on Cauchy's model
-
 - :func:`prysm.refractive.sellmeier` for computing refractive index based on the Sellmeier equation
 
 Bug fixes
