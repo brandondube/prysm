@@ -290,7 +290,7 @@ def multilayer_matrix_p(n0, theta0, characteristic_matrices, nnp1, theta_np1):
         [e.cos(theta_np1), 0],
         [nnp1, 0]
     ])
-    return reduce(e.dot, ([term1, term2, term3, term4]))
+    return reduce(e.dot, (term1, term2, term3, term4))
 
 
 def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
