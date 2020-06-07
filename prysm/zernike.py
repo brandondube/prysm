@@ -420,7 +420,6 @@ class ZCacheMN:
         max_ = r[-1]
         return f'{spacing}-{npts}-{max_}'
 
-    @retry(tries=2)
     def get_azterm(self, m, samples):
         key = (m, samples)
         if sign(m) == -1:
@@ -430,14 +429,14 @@ class ZCacheMN:
             d_ = self.cos
             func = e.cos
 
-        try:
-            return d_[key]
-        except KeyError as err:
+        ret = d_.get(key, None)
+        if ret is None:
             _, p = self.get_grid(samples=samples, modified=False)
-            d_[key] = func(m * p)
-            raise err
+            ret = func(m * p)
+            d_[key] = ret
 
-    @retry(tries=3)
+        return ret
+
     def get_jacobi(self, n, m, samples, nj=None, r=None):
         if nj is None:
             nj = (n - m) // 2
@@ -446,9 +445,8 @@ class ZCacheMN:
             key = (nj, m, self._gb_key(r))
             # r provided, grid not wanted
             # this is just a duplication of below with a separate r and cache dict
-            try:
-                return self.offgridj[key]
-            except KeyError as e:
+            jac = self.offgridj.get(key, None)
+            while jac is None:
                 if nj > 2:
                     jnm2 = self.get_jacobi(n=None, nj=nj - 2, m=m, samples=samples, r=r)
                     jnm1 = self.get_jacobi(n=None, nj=nj - 1, m=m, samples=samples, r=r)
@@ -457,21 +455,20 @@ class ZCacheMN:
 
                 jac = jacobi(nj, alpha=0, beta=m, Pnm1=jnm1, Pnm2=jnm2, x=r)
                 self.offgridj[key] = jac
-                raise e
+        else:
+            key = (nj, m, samples)
+            jac = self.jac.get(key, None)
+            while jac is None:
+                r, _ = self.get_grid(samples=samples)
+                if nj > 2:
+                    jnm1 = self.get_jacobi(n=None, nj=nj - 1, m=m, samples=samples)
+                    jnm2 = self.get_jacobi(n=None, nj=nj - 2, m=m, samples=samples)
+                else:
+                    jnm1, jnm2 = None, None
+                jac = jacobi(nj, alpha=0, beta=m, Pnm1=jnm1, Pnm2=jnm2, x=r)
+                self.jac[key] = jac
 
-        key = (nj, m, samples)
-        try:
-            return self.jac[key]
-        except KeyError as e:
-            r, _ = self.get_grid(samples=samples)
-            if nj > 2:
-                jnm1 = self.get_jacobi(n=None, nj=nj - 1, m=m, samples=samples)
-                jnm2 = self.get_jacobi(n=None, nj=nj - 2, m=m, samples=samples)
-            else:
-                jnm1, jnm2 = None, None
-            jac = jacobi(nj, alpha=0, beta=m, Pnm1=jnm1, Pnm2=jnm2, x=r)
-            self.jac[key] = jac
-            raise e
+        return jac
 
     def get_grid(self, samples, modified=True, r=None, p=None):
         if modified:
