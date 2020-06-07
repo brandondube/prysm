@@ -237,7 +237,7 @@ def characteristic_matrix_s(lambda_, d, n, theta):
         a 2x2 matrix
 
     """
-    k = (2 * e.pi) / lambda_
+    k = (2 * e.pi * n) / lambda_
     cost = e.cos(theta)
     beta = k * d * cost
     sinb, cosb = e.sin(beta), e.cos(beta)
