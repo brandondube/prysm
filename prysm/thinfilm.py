@@ -367,7 +367,7 @@ def ttot(Amat):
     return 1 / Amat[0, 0]
 
 
-def multilayer_stack_rt(polarization, indices, thicknesses, wavelength, aoi=0, assume_vac_ambient=True):
+def multilayer_stack_rt(polarization, wavelength, stack, aoi=0, assume_vac_ambient=True):
     """Compute r and t for a given stack of materials.
 
     An infinitely thick layer of vacuum is assumed if assume_vac_ambient is True
@@ -376,10 +376,9 @@ def multilayer_stack_rt(polarization, indices, thicknesses, wavelength, aoi=0, a
     ----------
     polarization : `str`, {'p', 's'}
         the polarization state
-    indices : `iterable`
-        a sequence of refractive indices
-    thicknesses : `iterable`
-        a sequence of thicknesses
+    stack : `Iterable` of `Iterable`
+        iterable of tuples, which looks like [(n1, t1), (n2, t2) ...]
+        where n is the index and t is the thickness in microns
     wavelength : `float`
         wavelength of light, microns
     aoi : `float`, optional
@@ -398,8 +397,13 @@ def multilayer_stack_rt(polarization, indices, thicknesses, wavelength, aoi=0, a
     polarization = polarization.lower()
     aoi = e.radians(aoi)
 
+    indices, thicknesses = [], []
     if assume_vac_ambient:
-        indices = [1, *indices]
+        indices.append(1)
+
+    for index, thickness in stack:
+        indices.append(index)
+        thicknesses.append(thickness)
 
     # index-based loops are a little unusual for python, but it is the most
     # clear in this case I think

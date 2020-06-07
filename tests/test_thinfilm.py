@@ -11,33 +11,23 @@ n_ZrO2 = 2.1588
 
 
 def test_accuracy_of_monolayer_reflectivity_MgF2_on_C7980():
-    indices = [
-        n_MgF2,
-        n_C7980
+    stack = [
+        (n_MgF2, .150),
+        (n_C7980, 10_000),
     ]
-    thicknesses = [
-        .150,
-        10_000  # 10 mm thick substrate
-    ]
-    r, _ = thinfilm.multilayer_stack_rt('p', indices, thicknesses, wvl)
+    r, _ = thinfilm.multilayer_stack_rt('p', wvl, stack)
     R = abs(r)**2
     assert R == pytest.approx(0.022, abs=0.001)  # 98% transmission
 
 
 def test_accuracy_of_multilayer_reflectivity_on_C7980():
-    indices = [
-        n_MgF2,
-        n_ZrO2,
-        n_CeF3,
-        n_C7980
+    stack = [
+        (n_MgF2, wvl/4),
+        (n_ZrO2, wvl/2),
+        (n_CeF3, wvl/4),
+        (n_C7980, 10_000),
     ]
-    thicknesses = [
-        wvl/4,
-        wvl/2,
-        wvl/4,
-        10_000
-    ]
-    r, _ = thinfilm.multilayer_stack_rt('s', indices, thicknesses, wvl)
+    r, _ = thinfilm.multilayer_stack_rt('s', wvl, stack)
     R = abs(r)**2
     assert R == pytest.approx(0.0024, abs=0.0005)  # 99.7% transmission
 
