@@ -2,8 +2,6 @@
 import warnings
 import inspect
 
-from scipy import signal, optimize
-
 from astropy import units as u
 
 from .conf import config, sanitize_unit
@@ -459,7 +457,7 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
         cost = cost_vec.sum() / N
         return cost
 
-    optres = optimize.basinhopping(optfcn, initial_args, minimizer_kwargs=dict(method='L-BFGS-B'))
+    optres = e.scipy.optimize.basinhopping(optfcn, initial_args, minimizer_kwargs=dict(method='L-BFGS-B'))
     if return_.lower() != 'coefficients':
         return optres
     else:
@@ -868,12 +866,12 @@ class Interferogram(OpticalPhase):
         if type_ == 'bandreject':
             type_ = 'bandstop'
 
-        filtfunc = getattr(signal, kind)
+        filtfunc = getattr(e.scipy.signal, kind)
 
         b, a = filtfunc(N=order, Wn=critical_frequency, btype=type_, analog=False, output='ba', **filtkwargs)
 
-        filt_y = signal.lfilter(b, a, self.phase, axis=0)
-        filt_both = signal.lfilter(b, a, filt_y, axis=1)
+        filt_y = e.scipy.signal.lfilter(b, a, self.phase, axis=0)
+        filt_both = e.scipy.signal.lfilter(b, a, filt_y, axis=1)
         self.phase = filt_both
         return self
 

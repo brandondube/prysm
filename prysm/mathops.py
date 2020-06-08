@@ -5,8 +5,7 @@ utilize more high performance engines if they have them installed, or fall
 back to more widely available options in the case that they do not.
 """
 import numpy as np
-
-from scipy.special import j1, j0  # NOQA
+import scipy as sp
 
 from prysm.conf import config
 
@@ -25,10 +24,17 @@ def jinc(r):
         the value of j1(x)/x for x != 0, 0.5 at 0
 
     """
-    if r < 1e-8 and r > -1e-8:  # value of jinc for x < 1/2 machine precision  is 0.5
-        return 0.5
+    if not hasattr(r, '__iter__'):
+        # scalar case
+        if r < 1e-8 and r > -1e-8:  # value of jinc for x < 1/2 machine precision  is 0.5
+            return 0.5
+        else:
+            return engine.scipy.special.j1(r) / r
     else:
-        return j1(r) / r
+        mask = (r < 1e-8) and (r > -1e-8)
+        out = engine.scipy.special.j1(r) / r
+        out[mask] = 0.5
+        return out
 
 
 def sign(x):
@@ -61,7 +67,7 @@ def gamma(n, m):
 
 class MathEngine:
     """An engine allowing an interchangeable backend for mathematical functions."""
-    def __init__(self, source=np):
+    def __init__(self, np=np, sp=sp):
         """Create a new math engine.
 
         Parameters
@@ -70,7 +76,8 @@ class MathEngine:
             a python module.
 
         """
-        self.source = source
+        self.numpy = np
+        self.scipy = sp
 
     def __getattr__(self, key):
         """Get attribute.
@@ -80,22 +87,21 @@ class MathEngine:
         key : `str` attribute name
 
         """
+        if key == 'scipy':
+            return self.scipy
+        elif key == 'numpy':
+            return self.numpy
+
         try:
             return getattr(self.source, key)
         except AttributeError:
             # function not found, fall back to numpy
-            # this will actually work nicely for numpy 1.16+
-            # due to the __array_function__ and __array_ufunc__ interfaces
-            # that were implemented
-            return getattr(self.source, key)  # this can raise, but we don't *need* to catch
+            return getattr(self.numpy, key)  # this can raise, but we don't *need* to catch
 
     def change_backend(self, backend):
         """Run when changing the backend."""
         self.source = backend
-        globals()['jinc'] = self.vectorize(jinc)
 
 
 engine = MathEngine()
 config.chbackend_observers.append(engine.change_backend)
-
-jinc = engine.vectorize(jinc)

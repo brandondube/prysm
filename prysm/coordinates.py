@@ -1,8 +1,4 @@
 """Coordinate conversions."""
-from scipy import interpolate
-
-from retry import retry
-
 from .conf import config
 from .mathops import engine as e
 
@@ -89,7 +85,7 @@ def uniform_cart_to_polar(x, y, data):
     xv, yv = polar_to_cart(rv, pv)
 
     # interpolate the function onto the new points
-    f = interpolate.RegularGridInterpolator((y, x), data, bounds_error=False, fill_value=0)
+    f = e.scipy.interpolate.RegularGridInterpolator((y, x), data, bounds_error=False, fill_value=0)
     return rho, phi, f((yv, xv), method='linear')
 
 
@@ -114,7 +110,7 @@ def resample_2d(array, sample_pts, query_pts, kind='linear'):
         array resampled onto query_pts via bivariate spline
 
     """
-    interpf = interpolate.interp2d(*sample_pts, array, kind=kind)
+    interpf = e.scipy.interpolate.interp2d(*sample_pts, array, kind=kind)
     return interpf(*query_pts)
 
 
@@ -263,29 +259,19 @@ class GridCache:
         transformed = func(original)
         self.grids[(samples, radius)]['transformed'][transformation] = transformed
 
-    @retry(tries=2)
     def get_original_variable(self, samples, radius, variable):
-        try:
-            # if we have already calculated the grid, return it
-            var = self.grids[(samples, radius)]['original'][variable]
-            return var
-        except KeyError as e:
-            # otherwise, raise.  The function will retry which leads to
-            # the above (returning) codepath running
+        outer = self.grids.get((samples, radius), None)
+        if outer is None:
             self.make_basic_grids(samples, radius)
-            raise e
 
-    @retry(tries=2)
+        return outer['original'][variable]
+
     def get_transformed_variable(self, samples, radius, transformation):
-        try:
-            # if we have already calculated the grid, return it
-            var = self.grids[(samples, radius)]['transformed'][transformation]
-            return var
-        except KeyError as e:
-            # otherwise, raise.  The function will retry which leads to
-            # the above (returning) codepath running
+        outer = self.grids.get((samples, radius), None)
+        if outer is None:
             self.make_transformation(samples, radius, transformation)
-            raise e
+
+        return outer['transformed'][transformation]
 
     def get_variable_transformed_or_not(self, samples, radius, variable_or_transformation):
         if variable_or_transformation is None:

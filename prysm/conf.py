@@ -331,14 +331,7 @@ class Config(object):
 
     @property
     def backend(self):
-        """Backend used.
-
-        Returns
-        -------
-        `str`
-            {'np'} only
-
-        """
+        """Backend used."""
         return self._backend
 
     @backend.setter
@@ -356,20 +349,8 @@ class Config(object):
             invalid backend
 
         """
-        if isinstance(backend, str):
-            if backend.lower() in ('np', 'numpy'):
-                backend = 'numpy'
-            elif backend.lower() in ('cp', 'cu', 'cuda'):
-                backend = 'cupy'
-
-            exec(f'import {backend}')
-            self._backend = eval(backend)
-        else:
-            self._backend = backend
-
-        if self.initialized:
-            for obs in self.chbackend_observers:
-                obs(self._backend)
+        for obs in self.chbackend_observers:
+            obs(self._backend)
 
     @property
     def zernike_base(self):

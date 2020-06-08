@@ -1,7 +1,5 @@
 """Objects for image simulation with."""
 
-from scipy.signal import chirp
-
 from .conf import config
 from .mathops import engine as e, jinc
 from .convolution import Convolvable
@@ -438,7 +436,7 @@ class Chirp(Convolvable):
             phi += e.radians(angle)
             xx, yy = polar_to_cart(rho, phi)
 
-        sig = chirp(xx, f0=1 / p0, f1=1 / p1, t1=x[-1], method=method)
+        sig = e.scipy.signal.chirp(xx, f0=1 / p0, f1=1 / p1, t1=x[-1], method=method)
         if binary:
             sig[sig < 0] = 0
             sig[sig > 0] = 1

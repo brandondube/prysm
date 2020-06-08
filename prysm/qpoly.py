@@ -7,8 +7,6 @@ from .mathops import engine as e, kronecker, gamma
 from .coordinates import gridcache
 from .jacobi import jacobi
 
-from scipy.special import factorial, factorial2
-
 MAX_ELEMENTS_IN_CACHE = 1024  # surely no one wants > 1000 terms...
 
 
@@ -413,8 +411,8 @@ def abc_q2d(n, m):
 
 def G_q2d(n, m):
     if n == 0:
-        num = factorial2(2 * m - 1)
-        den = 2 ** (m + 1) * factorial(m - 1)
+        num = e.scipy.special.factorial2(2 * m - 1)
+        den = 2 ** (m + 1) * e.scipy.special.factorial(m - 1)
         return num / den
     elif n > 0 and m == 1:
         t1num = (2 * n ** 2 - 1) * (n ** 2 - 1)
@@ -437,8 +435,8 @@ def G_q2d(n, m):
 
 def F_q2d(n, m):
     if n == 0:
-        num = m ** 2 * factorial2(2 * m - 3)
-        den = 2 ** (m + 1) * factorial(m - 1)
+        num = m ** 2 * e.scipy.special.factorial2(2 * m - 3)
+        den = 2 ** (m + 1) * e.scipy.special.factorial(m - 1)
         return num / den
     elif n > 0 and m == 1:
         t1num = 4 * (n - 1) ** 2 * n ** 2 + 1

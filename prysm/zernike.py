@@ -1,8 +1,6 @@
 """Zernike functions."""
 from collections import defaultdict
 
-from retry import retry
-
 from .conf import config
 from .mathops import engine as e, kronecker, sign
 from .pupil import Pupil
@@ -310,7 +308,6 @@ class ZCacheMN:
         self.offgridj = {}  # jacobi polynomials
         self.offgrid_shifted_r = {}
 
-    @retry(tries=2)
     def get_zernike(self, n, m, samples, norm):
         """Get an array of phase values for a given radial order n, azimuthal order m, number of samples, and orthonormalization."""  # NOQA
         if is_odd(n - m):
@@ -321,15 +318,16 @@ class ZCacheMN:
         else:
             d_ = self.regular
 
-        try:
-            return d_[key]
-        except KeyError as e:
+        ret = d_.get(key, None)
+        if ret is None:
             zern = self.get_term(n=n, m=m, samples=samples)
             if norm:
                 zern = zern * zernike_norm(n=n, m=m)
 
             d_[key] = zern
-            raise e
+            ret = zern
+
+        return ret
 
     def get_term(self, n, m, samples):
         am = abs(m)

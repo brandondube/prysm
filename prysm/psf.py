@@ -1,8 +1,6 @@
 """A base point spread function interface."""
 import numbers
 
-from scipy import optimize, interpolate, special
-
 from astropy import units as u
 
 from .conf import config
@@ -326,7 +324,7 @@ class PSF(Convolvable):
 
         # golden seems to perform best in presence of shallow local minima as in
         # the encircled energy
-        return optimize.golden(optfcn)
+        return e.scipy.optimize.golden(optfcn)
 
     def ee_radius_diffraction(self, energy=FIRST_AIRY_ENCIRCLED):
         """Radius associated with a certain amount of enclosed energy for a diffraction limited circular pupil."""
@@ -554,7 +552,7 @@ class PSF(Convolvable):
                 merge_data[:, :, idx] = psf.data * spectral_weights[idx]
             else:
                 xv, yv = e.meshgrid(ref_x, ref_y)
-                interpf = interpolate.RegularGridInterpolator((psf.y, psf.x), psf.data)
+                interpf = e.scipy.interpolate.RegularGridInterpolator((psf.y, psf.x), psf.data)
                 merge_data[:, :, idx] = interpf((yv, xv), method=interp_method) * spectral_weights[idx]
 
         psf = PSF(data=merge_data.sum(axis=2), x=ref_x, y=ref_y)
@@ -659,7 +657,7 @@ def _encircled_energy_core(mtf_data, radius, nu_p, dx, dy):
         encircled energy for given radius
 
     """
-    integration_fourier = special.j1(2 * e.pi * radius * nu_p) / nu_p
+    integration_fourier = e.scipy.special.j1(2 * e.pi * radius * nu_p) / nu_p
     dat = mtf_data * integration_fourier
     return radius * dat.sum() * dx * dy
 
@@ -683,11 +681,11 @@ def _analytical_encircled_energy(fno, wavelength, points):
 
     """
     p = points * e.pi / fno / wavelength
-    return 1 - special.j0(p)**2 - special.j1(p)**2
+    return 1 - e.scipy.special.j0(p)**2 - e.scipy.special.j1(p)**2
 
 
 def _inverse_analytic_encircled_energy(fno, wavelength, energy=FIRST_AIRY_ENCIRCLED):
     def optfcn(x):
         return (_analytical_encircled_energy(fno, wavelength, x) - energy) ** 2
 
-    return optimize.golden(optfcn)
+    return e.scipy.optimize.golden(optfcn)

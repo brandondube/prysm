@@ -1,8 +1,6 @@
 """Utilities for working with MTF data."""
 import operator
 
-from scipy.interpolate import griddata, RegularGridInterpolator as RGI
-
 from .mathops import engine as e
 from .plotting import share_fig_ax
 from .io import read_trioptics_mtf_vs_field, read_trioptics_mtfvfvf
@@ -612,8 +610,8 @@ def radial_mtf_to_mtfffd_data(tan, sag, imagehts, azimuths, upsample):
     up_s = e.empty((len(aq), sag.shape[1], len(iq)))
     for idx in range(tan.shape[1]):
         t, s = tan[:, idx, :], sag[:, idx, :]
-        interpft = RGI((azimuths, imagehts), t, method='linear')
-        interpfs = RGI((azimuths, imagehts), s, method='linear')
+        interpft = e.scipy.interpolate.RegularGridInterpolator((azimuths, imagehts), t, method='linear')
+        interpfs = e.scipy.interpolate.RegularGridInterpolator((azimuths, imagehts), s, method='linear')
         up_t[:, idx, :] = interpft((aa, ii))
         up_s[:, idx, :] = interpfs((aa, ii))
 
@@ -634,8 +632,8 @@ def radial_mtf_to_mtfffd_data(tan, sag, imagehts, azimuths, upsample):
     outt, outs = [], []
     # for each frequency, interpolate onto the cartesian grid
     for idx in range(up_t.shape[1]):
-        datt = griddata(samples, up_t[:, idx, :].ravel(), (xx, yy), method='linear')
-        dats = griddata(samples, up_s[:, idx, :].ravel(), (xx, yy), method='linear')
+        datt = e.scipy.interpolate.griddata(samples, up_t[:, idx, :].ravel(), (xx, yy), method='linear')
+        dats = e.scipy.interpolate.griddata(samples, up_s[:, idx, :].ravel(), (xx, yy), method='linear')
         outt.append(datt.reshape(xx.shape))
         outs.append(dats.reshape(xx.shape))
 

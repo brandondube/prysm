@@ -4,8 +4,6 @@ import inspect
 from numbers import Number
 from collections.abc import Iterable
 
-from scipy import interpolate
-
 from .conf import config, sanitize_unit
 from .mathops import engine as e
 from .wavelengths import mkwvl
@@ -233,7 +231,7 @@ class RichData:
 
         """
         if self.interpf_2d is None:
-            self.interpf_2d = interpolate.RegularGridInterpolator((self.y, self.x), self.data)
+            self.interpf_2d = e.scipy.interpolate.RegularGridInterpolator((self.y, self.x), self.data)
 
         return self.interpf_2d
 
@@ -252,8 +250,8 @@ class RichData:
             ux, x = self.slices().x
             uy, y = self.slices().y
 
-            self.interpf_x = interpolate.interp1d(ux, x)
-            self.interpf_y = interpolate.interp1d(uy, y)
+            self.interpf_x = e.scipy.interpolate.interp1d(ux, x)
+            self.interpf_y = e.scipy.interpolate.interp1d(uy, y)
 
         return self.interpf_x, self.interpf_y
 
@@ -590,7 +588,7 @@ class Slices:
              ylim=(None, None), yscale=None,
              show_legend=True, show_axlabels=True,
              fig=None, ax=None):
-        """Plot slice(s)
+        """Plot slice(s).
 
         Parameters
         ----------
