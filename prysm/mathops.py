@@ -92,11 +92,7 @@ class MathEngine:
         elif key == 'numpy':
             return self.numpy
 
-        try:
-            return getattr(self.source, key)
-        except AttributeError:
-            # function not found, fall back to numpy
-            return getattr(self.numpy, key)  # this can raise, but we don't *need* to catch
+        return getattr(self.numpy, key)
 
     def change_backend(self, backend):
         """Run when changing the backend."""
