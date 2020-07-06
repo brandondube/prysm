@@ -6,6 +6,7 @@ import codecs
 import datetime
 import calendar
 import shutil
+import warnings
 
 import numpy as np
 
@@ -124,6 +125,27 @@ def read_trioptics_mtf_vs_field(file, metadata=False):
         dictionary with keys of freq, field, tan, sag
 
     """
+    warnings.warn('this function will dispatch to either read_trioptics_mtf_vs_field_mtflab_v4, or _v5 in v0.20.  In v0.19, it always uses _v4.')
+    return read_trioptics_mtf_vs_field_mtflab_v4(file, metadata=metadata)
+
+
+def read_trioptics_mtf_vs_field_mtflab_v4(file, metadata=False):
+    """Read tangential and sagittal MTF data from a Trioptics .mht file.  Compatible with MTF-Lab v4.
+
+    Parameters
+    ----------
+    file : `str` or path_like or file_like
+        contents of a file, path_like to the file, or file object
+    metadata : `bool`
+        whether to also extract and return metadata
+
+    Returns
+    -------
+    `dict`
+        dictionary with keys of freq, field, tan, sag
+
+    """
+    warnings.warn('this function will dispatch to either read_trioptics_mtf_vs_field_mtflab_v4, or _v5 in v0.20.  In v0.19, it always uses _v4.')
     data = read_file_stream_or_path(file)
     data = data[:len(data)//10]  # only search in a subset of the file for speed
 
@@ -158,6 +180,80 @@ def read_trioptics_mtf_vs_field(file, metadata=False):
         return {**res, **parse_trioptics_metadata(data)}
     else:
         return res
+
+
+def read_trioptics_mtf_vs_field_mtflab_v5(file_contents, metadata=False):
+    """Read tangential and sagittal MTF data from a Trioptics .mht file.  Compatible with MTF-Lab v5.
+
+    Parameters
+    ----------
+    file : `str` or path_like or file_like
+        contents of a file, path_like to the file, or file object
+    metadata : `bool`
+        whether to also extract and return metadata
+
+    Returns
+    -------
+    `dict`
+        dictionary with keys of freq, field, tan, sag
+
+    """
+    if metadata:
+        mdata = parse_trioptics_metadata_mtflab_v5(file_contents)
+
+    end = file_contents.find('<!-- close certificate table -->')
+    file_contents = file_contents[:end]
+
+    # now chunk out the first table and get our image heights
+    start = file_contents.find('<!--  begin table caption -->')
+    end = file_contents.find('<!-- end table caption -->')
+    image_heights = []
+    body = file_contents[start+29:end]  # 29 = len of begin text
+    body = body.splitlines()[8:-2]  # first, last few rows are noise
+    for row in body:
+        value = row.split('>', 1)[1].split('<')[0]
+        image_heights.append(float(value))
+
+    # now chunk out the second, which we parse a little differently
+    file_contents = file_contents[end:]
+    start = file_contents.find('<!-- begin measurement data -->')
+    end = file_contents.find('<!-- end measurement data -->')
+    file_contents = file_contents[start+31:end]  # 31 is len of begin
+    # now file_contents is the text of the table and a little noise.
+    # set up parsed tables...
+    tan = []
+    sag = []
+    freqs = []
+    rows = file_contents.split('<tr ')[1:]
+    for row in rows:
+        cells = row.split('<td')[1:-1]  # first, last are garbage
+        # first cell is azimuth and frequency, rest are MTF vs Field
+        az, freq = cells[0].split('>', 1)[1].split('<')[0].split()
+        freq = float(freq.split('(')[0])
+        if az == 'Sag':
+            target = sag
+        else:
+            target = tan
+
+        tmp = []
+        for cell in cells[1:]:  # first, last cells are trash
+            value = cell.split('>', 1)[1].split('<')[0]
+            tmp.append(float(value))
+
+        target.append(tmp)
+        if freq not in freqs:
+            freqs.append(freq)
+
+    data = {
+        'tan':  np.asarray(tan, dtype=config.precision),
+        'sag': np.asarray(sag, dtype=config.precision),
+        'field': np.asarray(image_heights, dtype=config.precision),
+        'freq': np.asarray(freqs, dtype=config.precision),
+    }
+    if metadata:
+        return {**data, **mdata}
+    else:
+        return data
 
 
 def read_trioptics_mtf(file, metadata=False):
@@ -246,6 +342,35 @@ def parse_trioptics_metadata(file_contents):
             - azimuth
 
     """
+    warnings.warn('this function will dispatch to either parse_trioptics_metadata_mtflab_v4, or _v5 in v0.20.  In v0.19, it always uses _v4.')
+    return parse_trioptics_metadata_mtflab_v4(file_contents)
+
+
+def parse_trioptics_metadata_mtflab_v4(file_contents):
+    """Read metadata from the contents of a Trioptics .mht file.  Compatible with MTF-Lab v4.
+
+    Parameters
+    ----------
+    file_contents : `str`
+        contents of a .mht file.
+
+    Returns
+    -------
+    `dict`
+        dictionary with keys:
+            - operator
+            - time
+            - sample_id
+            - instrument
+            - instrument_sn
+            - collimator
+            - wavelength
+            - efl
+            - obj_angle
+            - focus_pos
+            - azimuth
+
+    """
     data = file_contents[750:1500]  # skip large section to make regex faster
 
     operator_scanner = re.compile(r'Operator         : (\S*)')
@@ -294,7 +419,7 @@ def parse_trioptics_metadata(file_contents):
 
 
 def parse_trioptics_metadata_mtflab_v5(file_contents):
-    """Read metadata from the contents of a Trioptics .mht file.
+    """Read metadata from the contents of a Trioptics .mht file.  Compatible with MTF-Lab v5.
 
     Parameters
     ----------
@@ -363,80 +488,6 @@ def parse_trioptics_metadata_mtflab_v5(file_contents):
         'azimuth': azimuth,
     }
     return meta
-
-
-def read_trioptics_mtf_vs_field_mtflab_v5(file_contents, metadata=False):
-    """Read tangential and sagittal MTF data from a Trioptics .mht file.
-
-    Parameters
-    ----------
-    file : `str` or path_like or file_like
-        contents of a file, path_like to the file, or file object
-    metadata : `bool`
-        whether to also extract and return metadata
-
-    Returns
-    -------
-    `dict`
-        dictionary with keys of freq, field, tan, sag
-
-    """
-    if metadata:
-        mdata = parse_trioptics_metadata_mtflab_v5(file_contents)
-
-    end = file_contents.find('<!-- close certificate table -->')
-    file_contents = file_contents[:end]
-
-    # now chunk out the first table and get our image heights
-    start = file_contents.find('<!--  begin table caption -->')
-    end = file_contents.find('<!-- end table caption -->')
-    image_heights = []
-    body = file_contents[start+29:end]  # 29 = len of begin text
-    body = body.splitlines()[8:-2]  # first, last few rows are noise
-    for row in body:
-        value = row.split('>', 1)[1].split('<')[0]
-        image_heights.append(float(value))
-
-    # now chunk out the second, which we parse a little differently
-    file_contents = file_contents[end:]
-    start = file_contents.find('<!-- begin measurement data -->')
-    end = file_contents.find('<!-- end measurement data -->')
-    file_contents = file_contents[start+31:end]  # 31 is len of begin
-    # now file_contents is the text of the table and a little noise.
-    # set up parsed tables...
-    tan = []
-    sag = []
-    freqs = []
-    rows = file_contents.split('<tr ')[1:]
-    for row in rows:
-        cells = row.split('<td')[1:-1]  # first, last are garbage
-        # first cell is azimuth and frequency, rest are MTF vs Field
-        az, freq = cells[0].split('>', 1)[1].split('<')[0].split()
-        freq = float(freq.split('(')[0])
-        if az == 'Sag':
-            target = sag
-        else:
-            target = tan
-
-        tmp = []
-        for cell in cells[1:]:  # first, last cells are trash
-            value = cell.split('>', 1)[1].split('<')[0]
-            tmp.append(float(value))
-
-        target.append(tmp)
-        if freq not in freqs:
-            freqs.append(freq)
-
-    data = {
-        'tan':  np.asarray(tan, dtype=config.precision),
-        'sag': np.asarray(sag, dtype=config.precision),
-        'field': np.asarray(image_heights, dtype=config.precision),
-        'freq': np.asarray(freqs, dtype=config.precision),
-    }
-    if metadata:
-        return {**data, **mdata}
-    else:
-        return data
 
 
 def identify_trioptics_measurement_type(file):

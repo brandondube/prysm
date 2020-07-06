@@ -48,6 +48,15 @@ Prysm can now do basic multi-layer thin film calculations and compute a few rela
 - :func:`prysm.refractive.cauchy` for computing refractive index based on Cauchy's model
 - :func:`prysm.refractive.sellmeier` for computing refractive index based on the Sellmeier equation
 
+I/O
+~~~
+Prysm can now parse MTF vs Field files from Trioptics MTF-Lab v5 software.  The previous parser is compatible with v4 and is untouched.
+
+- :func:`prysm.io.read_trioptics_mtf_vs_field_mtflab_v5`
+- :func:`parse_trioptics_metadata_mtflab_v5`
+
+Note that the existing functions without mtflab_v5 suffixes now issue warnings that their behavior will change in v0.20.  At that time, they will sense whether the file is from v4 or v5 and dispatch appropriately.
+
 Bug fixes
 =========
 
