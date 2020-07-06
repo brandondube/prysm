@@ -173,7 +173,7 @@ def read_trioptics_mtf(file, metadata=False):
     Returns
     -------
     `dict`
-        dictionary with keys focus, wavelength, freq, tan, sag
+        dictionary with keys focus, freq, tan, sag
         if metadata=True, also has keys in the return of
         `io.parse_trioptics_metadata`.
 
@@ -291,6 +291,152 @@ def parse_trioptics_metadata(file_contents):
         'focus_pos': focus_pos,
         'azimuth': azimuth,
     }
+
+
+def parse_trioptics_metadata_mtflab_v5(file_contents):
+    """Read metadata from the contents of a Trioptics .mht file.
+
+    Parameters
+    ----------
+    file_contents : `str`
+        contents of a .mht file.
+
+    Returns
+    -------
+    `dict`
+        dictionary with keys:
+            - operator
+            - time
+            - sample_id
+            - instrument
+            - instrument_sn
+            - collimator
+            - wavelength
+            - efl
+            - obj_angle
+            - focus_pos
+            - azimuth
+
+    """
+    # get the first header block, there are two...
+    top = file_contents.find('<pre>')
+    bottom = file_contents.find('</pre>', top)
+    body = file_contents[top+5:bottom].splitlines()  # 5 is len of <pre>
+    sep = ': '
+
+    company = body[0].split(sep)[-1].strip()
+    operator = body[1].split(sep)[-1].strip()
+    timestamp = body[2].split(sep)[-1].strip()
+    timestamp = datetime.datetime.strptime(timestamp, '%H:%M:%S  %B %d, %Y')
+    sampleid = body[3].split(sep)[-1].strip()
+    instrument_sn = body[8].split(sep)[-1].strip()
+
+    # now the second block
+    top = file_contents.find('<pre>', bottom)
+    bottom = file_contents.find('</pre>', top)
+    body = file_contents[top+5:bottom].splitlines()  # 5 is len of <pre>
+
+    # EFL (Collimator)     : 300 mm => 300 mm => [300, mm] => float(300)
+    collimator_efl = float(body[1].split(sep)[-1].strip().split(' ')[0])
+    wavelength = body[2].split(sep)[-1].strip()
+
+    # EFL (Sample)        : 26.4664 mm => 20.4664 mm => [20.4664, mm] => float(20.4664)
+    efl = float(body[3].split(sep)[-1].split()[0].strip())
+    fno = float(body[4].split(sep)[-1].split('=')[0])
+    obj_angle = float(body[5].split(sep)[-1].split()[0])
+    focus_pos = float(body[6].split(sep)[-1].split()[0])
+    azimuth = float(body[7].split(sep)[-1].split()[0])
+    efl, fno, obj_angle, focus_pos, azimuth
+    meta = {
+        'company': company,
+        'operator': operator,
+        'timestamp': timestamp,
+        'sample_id': sampleid,
+        'instrument': 'Trioptics ImageMaster',
+        'instrument_sn': instrument_sn,
+        'collimator': collimator_efl,
+        'wavelength': wavelength,
+        'efl': efl,
+        'fno': fno,
+        'obj_angle': obj_angle,
+        'focus_pos': focus_pos,
+        'azimuth': azimuth,
+    }
+    return meta
+
+
+def read_trioptics_mtf_vs_field_mtflab_v5(file_contents, metadata=False):
+    """Read tangential and sagittal MTF data from a Trioptics .mht file.
+
+    Parameters
+    ----------
+    file : `str` or path_like or file_like
+        contents of a file, path_like to the file, or file object
+    metadata : `bool`
+        whether to also extract and return metadata
+
+    Returns
+    -------
+    `dict`
+        dictionary with keys of freq, field, tan, sag
+
+    """
+    if metadata:
+        mdata = parse_trioptics_metadata_mtflab_v5(file_contents)
+
+    end = file_contents.find('<!-- close certificate table -->')
+    file_contents = file_contents[:end]
+
+    # now chunk out the first table and get our image heights
+    start = file_contents.find('<!--  begin table caption -->')
+    end = file_contents.find('<!-- end table caption -->')
+    image_heights = []
+    body = file_contents[start+29:end]  # 29 = len of begin text
+    body = body.splitlines()[8:-2]  # first, last few rows are noise
+    for row in body:
+        value = row.split('>', 1)[1].split('<')[0]
+        image_heights.append(float(value))
+
+    # now chunk out the second, which we parse a little differently
+    file_contents = file_contents[end:]
+    start = file_contents.find('<!-- begin measurement data -->')
+    end = file_contents.find('<!-- end measurement data -->')
+    file_contents = file_contents[start+31:end]  # 31 is len of begin
+    # now file_contents is the text of the table and a little noise.
+    # set up parsed tables...
+    tan = []
+    sag = []
+    freqs = []
+    rows = file_contents.split('<tr ')[1:]
+    for row in rows:
+        cells = row.split('<td')[1:-1]  # first, last are garbage
+        # first cell is azimuth and frequency, rest are MTF vs Field
+        az, freq = cells[0].split('>', 1)[1].split('<')[0].split()
+        freq = float(freq.split('(')[0])
+        if az == 'Sag':
+            target = sag
+        else:
+            target = tan
+
+        tmp = []
+        for cell in cells[1:]:  # first, last cells are trash
+            value = cell.split('>', 1)[1].split('<')[0]
+            tmp.append(float(value))
+
+        target.append(tmp)
+        if freq not in freqs:
+            freqs.append(freq)
+
+    data = {
+        'tan':  np.asarray(tan, dtype=config.precision),
+        'sag': np.asarray(sag, dtype=config.precision),
+        'field': np.asarray(image_heights, dtype=config.precision),
+        'freq': np.asarray(freqs, dtype=config.precision),
+    }
+    if metadata:
+        return {**data, **mdata}
+    else:
+        return data
 
 
 def identify_trioptics_measurement_type(file):
