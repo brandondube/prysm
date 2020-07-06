@@ -647,7 +647,7 @@ def plot_mtf_vs_field(data_dict, fig=None, ax=None):
     Parameters
     ----------
     data_dict : `dict`
-        dictionary with keys tan, sag, fields, frequencies
+        dictionary with keys tan, sag, fields, freq
     fig : `matplotlib.figure.Figure`, optional
         figure containing the plot
     axis : `matplotlib.axes.Axis`

@@ -38,7 +38,7 @@ def sanitize_unit(unit, wavelength):
 
 
 def format_unit(unit_or_quantity, fmt):
-    """(string) format a unit or quantity
+    """(string) format a unit or quantity.
 
     Parameters
     ----------
@@ -69,7 +69,7 @@ class Labels:
                  unit_prefix='[',
                  unit_suffix=']',
                  unit_joiner=' '):
-        """Create a new Labels instance
+        """Create a new Labels instance.
 
         Parameters
         ----------
@@ -89,6 +89,7 @@ class Labels:
             suffix used to surround the unit text
         unit_joiner : `str`, optional
             text used to combine the base label and the unit
+
         """
         self.xy_base, self._z = xy_base, z
         self.xy_additions, self.xy_addition_side = xy_additions, xy_addition_side
@@ -97,7 +98,7 @@ class Labels:
         self.unit_joiner = unit_joiner
 
     def _label_factory(self, label, xy_unit, z_unit):
-        """Factory method to produce complex labels.
+        """Produce complex labels.
 
         Parameters
         ----------
@@ -149,7 +150,7 @@ class Labels:
         return self._label_factory('z', xy_unit, z_unit)
 
     def generic(self, xy_unit, z_unit):
-        """Generic label without extra X/Y annotation."""
+        """Label without extra X/Y annotation."""
         base = self.xy_base
         join = self.unit_joiner
         unit = format_unit(xy_unit, config.unit_format)
@@ -158,6 +159,7 @@ class Labels:
         return f'{base}{join}{prefix}{unit}{suffix}'
 
     def copy(self):
+        """(Deep) copy."""
         return copy.deepcopy(self)
 
 
@@ -249,11 +251,11 @@ class Config(object):
             default units used for image-like types
 
         """
+        self.chbackend_observers = []
         self.initialized = False
         self.precision = precision
         self.backend = backend
         self.zernike_base = zernike_base
-        self.chbackend_observers = []
         self.Q = Q
         self.wavelength = wavelength
         self.phase_cmap = phase_cmap
