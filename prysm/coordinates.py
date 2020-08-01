@@ -332,6 +332,7 @@ class GridCache:
         outer = self.grids.get((samples, radius), None)
         if outer is None:
             self.make_basic_grids(samples, radius)
+            outer = self.grids.get((samples, radius), None)
 
         return outer['original'][variable]
 
@@ -358,8 +359,15 @@ class GridCache:
         outer = self.grids.get((samples, radius), None)
         if outer is None:
             self.make_transformation(samples, radius, transformation)
+            outer = self.grids.get((samples, radius), None)
 
-        return outer['transformed'][transformation]
+        try:
+            return outer['transformed'][transformation]
+        except KeyError:
+            # not DRY, doesn't really matter over 2 lines
+            self.make_transformation(samples, radius, transformation)
+            outer = self.grids.get((samples, radius), None)
+            return outer['transformed'][transformation]
 
     def get_variable_transformed_or_not(self, samples, radius, variable_or_transformation):
         """Retrieve a modified variable.
