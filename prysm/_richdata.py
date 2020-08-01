@@ -12,6 +12,21 @@ from .plotting import share_fig_ax
 
 
 def fix_interp_pair(x, y):
+    """Ensure that x, y have the same shape.  If either is scalar, it is broadcast for each value in the other.
+
+    Parameters
+    ----------
+    x : `float` or `Iterable`
+        x data
+    y : `float` or `Iterable`
+        y data
+
+    Returns
+    -------
+    `Iterable`, `Iterable`
+        x, y
+
+    """
     if y is None:
         y = 0
 
@@ -424,6 +439,30 @@ class RichData:
 class Slices:
     """Slices of data."""
     def __init__(self, data, x, y, x_unit, z_unit, labels, xscale, yscale, twosided=True):
+        """Create a new Slices instance.
+
+        Parameters
+        ----------
+        data : `numpy.ndarray`
+            2D array of data
+        x : `numpy.ndarray`
+            1D array of x points
+        y : `numpy.ndarray`
+            1D array of y points
+        x_unit : `astropy.units.unit`
+            spatial unit
+        z_unit : `astropy.units.unit`
+            depth/height axis unit
+        labels : `Labels`
+            labels for the axes
+        xscale : `str`, {'linear', 'log'}
+            scale for x axis when plotting
+        yscale : `str`, {'linear', 'log'}
+            scale for y axis when plotting
+        twosided : `bool`, optional
+            if True, plot slices from (-ext, ext), else from (0,ext)
+
+        """
         self._source = data
         self._source_polar = None
         self._r = None
