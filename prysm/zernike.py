@@ -330,6 +330,23 @@ class ZCacheMN:
         return ret
 
     def get_term(self, n, m, samples):
+        """Get a term from the cache.
+
+        Parameters
+        ----------
+        n : `int`
+            radial order
+        m : `int`
+            azimuthal order
+        samples : `int`
+            square grid size
+
+        Returns
+        -------
+        `numpy.ndarray`
+            zernike term evaluated over the grid
+
+        """
         am = abs(m)
         r, p = self.get_grid(samples=samples, modified=False)
         term = self.get_jacobi(n=n, m=am, samples=samples)
@@ -342,6 +359,25 @@ class ZCacheMN:
         return term
 
     def __call__(self, n, m, samples, norm):
+        """Retrieve a Zernike term from the cache.
+
+        Parameters
+        ----------
+        n : `int`
+            radial order
+        m : `int`
+            azimuthal order
+        samples : `int`
+            square grid size
+        norm : `bool`
+            if True, orthonormalize.
+
+        Returns
+        -------
+        `numpy.ndarray`
+            zernike term evaluated over the grid
+
+        """
         return self.get_zernike(n=n, m=m, samples=samples, norm=norm)
 
     def grid_bypass(self, n, m, norm, r, p):
@@ -419,6 +455,21 @@ class ZCacheMN:
         return f'{spacing}-{npts}-{max_}'
 
     def get_azterm(self, m, samples):
+        """Retrieve the azimuthally variant term.
+
+        Parameters
+        ----------
+        m : `int`
+            azimuthal order
+        samples : `int`
+            number of samples on the (square) grid
+
+        Returns
+        -------
+        `numpy.ndarray`
+            azimuthally variant component
+
+        """
         key = (m, samples)
         if sign(m) == -1:
             d_ = self.sin
@@ -436,6 +487,27 @@ class ZCacheMN:
         return ret
 
     def get_jacobi(self, n, m, samples, nj=None, r=None):
+        """Retrieve the jacobi polynomial for a given zernike set.
+
+        Parameters
+        ----------
+        n : `int`
+            radial order
+        m : `int`
+            azimuthal order
+        samples : `int`
+            square grid size
+        nj : `int`
+            jacobi order, (n-m)/2
+        r : `numpy.ndarray`, optional
+            transformed radial coordinate
+
+        Returns
+        -------
+        `numpy.ndarray`
+            jacobi term evaluated over the grid
+
+        """
         if nj is None:
             nj = (n - m) // 2
 
@@ -468,7 +540,24 @@ class ZCacheMN:
 
         return jac
 
-    def get_grid(self, samples, modified=True, r=None, p=None):
+    def get_grid(self, samples, modified=True):
+        """Retrieve a grid for a given sample count.
+
+        Parameters
+        ----------
+        samples : `int`
+            sample size of the square grid
+        modified : `bool`, optional
+            if True, return the modified grid, r -> 2r^2 - 1
+            suitable for use with the jacobi polynomials
+            (which are used in this impl to generate Zernikes)
+
+        Returns
+        -------
+        `numpy.ndarray`, numpy.ndarray`
+            array of rho, phi values
+
+        """
         if modified:
             res = self.gridcache(samples=samples, radius=1, r='r -> 2r^2 - 1', t='t -> t+90')
         else:
