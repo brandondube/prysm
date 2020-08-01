@@ -1,7 +1,7 @@
 """Unit tests for plotting functions."""
 import matplotlib as mpl
 
-mpl.use('TkAgg')
+mpl.use('Agg')
 
 from matplotlib import pyplot as plt  # NOQA
 
