@@ -296,7 +296,34 @@ def n_m_to_name(n, m):
 
 
 class ZCacheMN:
-    """Cache of Zernike terms evaluated over the unit circle, based on (n, m) indices."""
+    """Cache of Zernike terms evaluated over the unit circle, based on (n, m) indices.
+
+    Users should use the call method:
+
+    zc = ZcacheMN()
+    n = 2
+    m = 2
+    zc(n,m,False) # astigmatism, not normed
+
+    The code of this class is complicated by the heavy caching it does.  See
+    orthopy for a simpler, but slower implementation.
+
+    To understand the code of this class, here are the cliff notes:
+    - Zernikes themselves are cached, as well as all of the pieces of the
+        computation.
+    - Zernike polynomials "are" jacobi polynomials, under two modifications:
+        1) the 'x' variable is replaced with x = 2r^2 - 1
+        2) the order of the jacobi polynomial, n_j, is computed from the Zernike
+            order as n_j = (n - m) / 2
+        3) the azimuthal component of the Zernike polynomials is simply
+            a cosine or sine of (theta * m)
+    - A recurrence relation can be used to generate Jacobi polynomials quickly
+        and with high numerical stability.  This is contained within the
+        get_jacobi method.
+    - the grid_bypass method is likely the 'clearest' code, since it does
+        not deal with any caching mechanisms
+
+    """
     def __init__(self, gridcache=gridcache):
         """Create a new ZCache instance."""
         self.normed = {}
