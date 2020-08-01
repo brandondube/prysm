@@ -5,7 +5,7 @@ before_install:
   - ./miniconda.sh -b
   - export PATH=/home/travis/miniconda3/bin:$PATH
 install:
-  - conda create -n prysmci python=3.7 --yes
+  - conda create -n prysmci python=3.8 --yes
   - source activate prysmci
   - conda config --add channels conda-forge
   - >-
