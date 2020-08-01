@@ -57,6 +57,11 @@ Prysm can now parse MTF vs Field files from Trioptics MTF-Lab v5 software.  The 
 
 Note that the existing functions without mtflab_v5 suffixes now issue warnings that their behavior will change in v0.20.  At that time, they will sense whether the file is from v4 or v5 and dispatch appropriately.
 
+Documentation
+~~~~~~~~~~~~~
+
+The docstrings of the :class:`~prysm.zernike.ZCacheMN` class were expanded.  These should aid developers in understanding the code.
+
 Bug fixes
 =========
 
