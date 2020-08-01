@@ -10,17 +10,17 @@ install:
   - conda config --add channels conda-forge
   - >-
       conda install --yes
-      numpy>=1.15
-      scipy>=1.2
-      astropy>=3.2.1
+      numpy>=1.18
+      scipy>=1.5
+      astropy>=4.0.0
       matplotlib>=3.0
       scikit-image
       imageio
       pandas
       h5py
-      pytest=5.1.2
-      pytest-cov=2.8.1
-      coveralls==2.0.0
+      pytest=5.4.3
+      pytest-cov=2.10.0
+      coveralls==2.1.1
   - pip install .
 services:
   - xvfb
