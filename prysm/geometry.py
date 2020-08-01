@@ -1,5 +1,6 @@
-"""Functions used to generate various geometrical constructs.
-"""
+"""Functions used to generate various geometrical constructs."""
+
+from scipy import spatial
 
 from .conf import config
 from .mathops import engine as e
@@ -553,7 +554,7 @@ def generate_mask(vertices, num_samples=128):
     xxyy = e.stack(e.meshgrid(unit, unit), axis=2)
 
     # use delaunay to fill from the vertices and produce a mask
-    triangles = e.scipy.spatial.Delaunay(vertices, qhull_options='QJ Qf')
+    triangles = spatial.Delaunay(vertices, qhull_options='QJ Qf')
     mask = ~(triangles.find_simplex(xxyy) < 0)
     return mask
 

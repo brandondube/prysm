@@ -5,7 +5,7 @@ from numbers import Number
 from collections.abc import Iterable
 
 from .conf import config, sanitize_unit
-from .mathops import engine as e
+from .mathops import np, interpolate_engine as interpolate
 from .wavelengths import mkwvl
 from .coordinates import uniform_cart_to_polar, polar_to_cart
 from .plotting import share_fig_ax
@@ -116,7 +116,7 @@ class RichData:
         try:
             return self.x[1] - self.x[0]
         except TypeError:
-            return e.nan
+            return np.nan
 
     @property
     def center_x(self):
@@ -246,7 +246,7 @@ class RichData:
 
         """
         if self.interpf_2d is None:
-            self.interpf_2d = e.scipy.interpolate.RegularGridInterpolator((self.y, self.x), self.data)
+            self.interpf_2d = interpolate.RegularGridInterpolator((self.y, self.x), self.data)
 
         return self.interpf_2d
 
@@ -265,8 +265,8 @@ class RichData:
             ux, x = self.slices().x
             uy, y = self.slices().y
 
-            self.interpf_x = e.scipy.interpolate.interp1d(ux, x)
-            self.interpf_y = e.scipy.interpolate.interp1d(uy, y)
+            self.interpf_x = interpolate.interp1d(ux, x)
+            self.interpf_y = interpolate.interp1d(uy, y)
 
         return self.interpf_x, self.interpf_y
 
@@ -472,7 +472,7 @@ class Slices:
         self.x_unit, self.z_unit = x_unit, z_unit
         self.labels = labels
         self.xscale, self.yscale = xscale, yscale
-        self.center_y, self.center_x = (int(e.ceil(s / 2)) for s in data.shape)
+        self.center_y, self.center_x = (int(np.ceil(s / 2)) for s in data.shape)
         self.twosided = twosided
 
     def check_polar_calculated(self):
@@ -529,7 +529,7 @@ class Slices:
 
         """
         self.check_polar_calculated()
-        return self._r, e.nanmean(self._source_polar, axis=0)
+        return self._r, np.nanmean(self._source_polar, axis=0)
 
     @property
     def azmedian(self):
@@ -544,7 +544,7 @@ class Slices:
 
         """
         self.check_polar_calculated()
-        return self._r, e.nanmedian(self._source_polar, axis=0)
+        return self._r, np.nanmedian(self._source_polar, axis=0)
 
     @property
     def azmin(self):
@@ -559,7 +559,7 @@ class Slices:
 
         """
         self.check_polar_calculated()
-        return self._r, e.nanmin(self._source_polar, axis=0)
+        return self._r, np.nanmin(self._source_polar, axis=0)
 
     @property
     def azmax(self):
@@ -574,7 +574,7 @@ class Slices:
 
         """
         self.check_polar_calculated()
-        return self._r, e.nanmax(self._source_polar, axis=0)
+        return self._r, np.nanmax(self._source_polar, axis=0)
 
     @property
     def azpv(self):
@@ -605,7 +605,7 @@ class Slices:
 
         """
         self.check_polar_calculated()
-        return self._r, e.nanvar(self._source_polar, axis=0)
+        return self._r, np.nanvar(self._source_polar, axis=0)
 
     @property
     def azstd(self):
@@ -620,7 +620,7 @@ class Slices:
 
         """
         self.check_polar_calculated()
-        return self._r, e.nanstd(self._source_polar, axis=0)
+        return self._r, np.nanstd(self._source_polar, axis=0)
 
     def plot(self, slices, lw=None, alpha=None, zorder=None, invert_x=False,
              xlim=(None, None), xscale=None,
@@ -676,8 +676,8 @@ class Slices:
             # these values are unsafe for fp32.  Maybe a bit pressimistic, but that's life
             zeros = abs(x) < 1e-9
             x, v = x.copy(), v.copy()
-            x[zeros] = e.nan
-            v[zeros] = e.nan
+            x[zeros] = np.nan
+            v[zeros] = np.nan
             x = 1 / x
             return x, v
 

@@ -7,7 +7,7 @@ from .fttools import forward_ft_unit
 
 
 def transform_psf(psf, sample_spacing):
-    data = e.fft.fftshift(e.fft.fft2(e.fft.ifftshift(psf.data)))  # no need to ifftshift first - phase is unimportant
+    data = e.fft.fftshift(e.fft.fft2(e.fft.ifftshift(psf.data)))
     y, x = [forward_ft_unit(sample_spacing / 1e3, s) for s in psf.shape]  # 1e3 for microns => mm
     return x, y, data
 
@@ -28,6 +28,7 @@ class OTF:
             x Cartesian spatial frequencies
         y : `numpy.ndarray`
             y Cartesian spatial frequencies
+
         """
         self.mtf = mtf
         self.ptf = ptf
@@ -160,7 +161,7 @@ class MTF(RichData):
 
 
 class PTF(RichData):
-    """Phase Transfer Function"""
+    """Phase Transfer Function."""
 
     def __init__(self, data, x, y, xy_unit=None, z_unit=None, labels=None):
         """Create a new `PTF` instance.
@@ -376,7 +377,7 @@ def longexposure_otf(nu, Cn, z, f, lambdabar, h_z_by_r=2.91):
 
 
 def komogorov(r, r0):
-    """Calculate the phase structure function D_phi in the komogorov approximation
+    """Calculate the phase structure function D_phi in the komogorov approximation.
 
     Parameters
     ----------
@@ -391,6 +392,7 @@ def komogorov(r, r0):
 
     """
     return 6.88 * (r/r0) ** (5/3)
+
 
 def estimate_Cn(P=1013, T=273.15, Ct=1e-4):
     """Use Weng et al to estimate Cn from meteorological data.

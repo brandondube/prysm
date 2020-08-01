@@ -5,9 +5,7 @@ utilize more high performance engines if they have them installed, or fall
 back to more widely available options in the case that they do not.
 """
 import numpy as np
-import scipy as sp
-
-from prysm.conf import config
+from scipy import ndimage, interpolate, special
 
 
 def jinc(r):
@@ -29,10 +27,10 @@ def jinc(r):
         if r < 1e-8 and r > -1e-8:  # value of jinc for x < 1/2 machine precision  is 0.5
             return 0.5
         else:
-            return engine.scipy.special.j1(r) / r
+            return special_engine.j1(r) / r
     else:
-        mask = (r < 1e-8) and (r > -1e-8)
-        out = engine.scipy.special.j1(r) / r
+        mask = (r < 1e-8) & (r > -1e-8)
+        out = special_engine.j1(r) / r
         out[mask] = 0.5
         return out
 
@@ -65,9 +63,90 @@ def gamma(n, m):
         return coef * gamma(nm1, m)
 
 
-class MathEngine:
+class NDImageEngine:
+    """An engine which allows scipy.ndimage to be redirected to another lib at runtime."""
+
+    def __init__(self, ndimage=ndimage):
+        """Create a new scipy engine.
+
+        Parameters
+        ----------
+        ndimage : `module`
+            a python module, with the same API as scipy.ndimage
+        interpolate : `module`
+            a python module, with the same API as scipy.interpolate
+        special : `module`
+            a python module, with the same API as scipy.special
+
+        """
+        self.ndimage = ndimage
+
+    def __getattr__(self, key):
+        """Get attribute.
+
+        Parameters
+        ----------
+        key : `str`
+            attribute name
+
+        """
+        return getattr(self.ndimage, key)
+
+
+class InterpolateEngine:
+    """An engine which allows redirection of scipy.inteprolate to another lib at runtime."""
+
+    def __init__(self, interpolate=interpolate):
+        """Create a new interpolation engine.
+
+        Parameters
+        ----------
+        interpolate : `module`
+            a python module, with the same API as scipy.interpolate
+
+        """
+        self.interpolate = interpolate
+
+    def __getattr__(self, key):
+        """Get attribute.
+
+        Parameters
+        ----------
+        key : `str`
+            attribute name
+
+        """
+        return getattr(self.interpolate, key)
+
+
+class SpecialEngine:
+    """An engine which allows redirection of scipy.special to another lib at runtime."""
+    def __init__(self, special=special):
+        """Create a new special engine.
+
+        Parameters
+        ----------
+        special : `module`
+            a python module, with the same API as scipy.special
+
+        """
+        self.special = special
+
+    def __getattr__(self, key):
+        """Get attribute.
+
+        Parameters
+        ----------
+        key : `str`
+            attribute name
+
+        """
+        return getattr(self.special, key)
+
+
+class NumpyEngine:
     """An engine allowing an interchangeable backend for mathematical functions."""
-    def __init__(self, np=np, sp=sp):
+    def __init__(self, np=np):
         """Create a new math engine.
 
         Parameters
@@ -77,21 +156,16 @@ class MathEngine:
 
         """
         self.numpy = np
-        self.scipy = sp
 
     def __getattr__(self, key):
         """Get attribute.
 
         Parameters
         ----------
-        key : `str` attribute name
+        key : `str`
+            attribute name
 
         """
-        if key == 'scipy':
-            return self.scipy
-        elif key == 'numpy':
-            return self.numpy
-
         return getattr(self.numpy, key)
 
     def change_backend(self, backend):
@@ -99,5 +173,9 @@ class MathEngine:
         self.source = backend
 
 
-engine = MathEngine()
-config.chbackend_observers.append(engine.change_backend)
+np = NumpyEngine()
+engine = np
+
+special_engine = SpecialEngine()
+ndimage_engine = NDImageEngine()
+interpolate_engine = InterpolateEngine()

@@ -1,7 +1,9 @@
 """Objects for image simulation with."""
 
+from scipy import signal
+
 from .conf import config
-from .mathops import engine as e, jinc
+from .mathops import np, jinc
 from .convolution import Convolvable
 from .coordinates import cart_to_polar, polar_to_cart
 
@@ -10,7 +12,7 @@ class Slit(Convolvable):
     """Representation of a slit or pair of slits."""
 
     def __init__(self, width, orientation='Vertical', sample_spacing=None, samples=0):
-        """Create a new Slit instance.
+        """Create a new Slit instancnp.
 
         Parameters
         ----------
@@ -26,16 +28,16 @@ class Slit(Convolvable):
         Notes
         -----
         Default of 0 samples allows quick creation for convolutions without
-        generating the image; use samples > 0 for an actual image.
+        generating the image; use samples > 0 for an actual imagnp.
 
         """
         w = width / 2
 
         if samples > 0:
             ext = samples / 2 * sample_spacing
-            x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-            y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-            arr = e.zeros((samples, samples))
+            x = np.arange(-ext, ext, sample_spacing, dtype=config.precision)
+            y = np.arange(-ext, ext, sample_spacing, dtype=config.precision)
+            arr = np.zeros((samples, samples))
         else:
             arr, x, y = None, None, None
 
@@ -78,18 +80,18 @@ class Slit(Convolvable):
 
         """
         if self.width_x > 0 and self.width_y > 0:
-            return (e.sinc(x * self.width_x) +
-                    e.sinc(y * self.width_y)).astype(config.precision)
+            return (np.sinc(x * self.width_x) +
+                    np.sinc(y * self.width_y)).astype(config.precision)
         elif self.width_x > 0 and self.width_y == 0:
-            return e.sinc(x * self.width_x).astype(config.precision)
+            return np.sinc(x * self.width_x).astype(config.precision)
         else:
-            return e.sinc(y * self.width_y).astype(config.precision)
+            return np.sinc(y * self.width_y).astype(config.precision)
 
 
 class Pinhole(Convolvable):
-    """Representation of a pinhole."""
+    """Representation of a pinholnp."""
     def __init__(self, width, sample_spacing=None, samples=0):
-        """Create a Pinhole instance.
+        """Create a Pinhole instancnp.
 
         Parameters
         ----------
@@ -103,7 +105,7 @@ class Pinhole(Convolvable):
         Notes
         -----
         Default of 0 samples allows quick creation for convolutions without
-        generating the image; use samples > 0 for an actual image.
+        generating the image; use samples > 0 for an actual imagnp.
 
         """
         self.width = width
@@ -111,13 +113,13 @@ class Pinhole(Convolvable):
         # produce coordinate arrays
         if samples > 0:
             ext = samples / 2 * sample_spacing
-            x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-            y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-            xv, yv = e.meshgrid(x, y)
+            x = np.arange(-ext, ext, sample_spacing, dtype=config.precision)
+            y = np.arange(-ext, ext, sample_spacing, dtype=config.precision)
+            xv, yv = np.meshgrid(x, y)
             w = width / 2
             # paint a circle on a black background
-            arr = e.zeros((samples, samples))
-            arr[e.sqrt(xv**2 + yv**2) < w] = 1
+            arr = np.zeros((samples, samples))
+            arr[np.sqrt(xv**2 + yv**2) < w] = 1
         else:
             arr, x, y = None, None, None
 
@@ -141,8 +143,8 @@ class Pinhole(Convolvable):
         """
         # factor of pi corrects for jinc being modulo pi
         # factor of 2 converts radius to diameter
-        rho = e.sqrt(x**2 + y**2) * self.width * 2 * e.pi
-        return jinc(rho).astype(config.precision)
+        rho = np.sqrt(x**2 + y**2) * self.width * 2 * np.pi
+        return jinc(rho)
 
 
 class SiemensStar(Convolvable):
@@ -175,16 +177,16 @@ class SiemensStar(Convolvable):
         self.radius = radius
 
         # generate a coordinate grid
-        x = e.linspace(-1, 1, samples, dtype=config.precision)
-        y = e.linspace(-1, 1, samples, dtype=config.precision)
-        xx, yy = e.meshgrid(x, y)
+        x = np.linspace(-1, 1, samples, dtype=config.precision)
+        y = np.linspace(-1, 1, samples, dtype=config.precision)
+        xx, yy = np.meshgrid(x, y)
         rv, pv = cart_to_polar(xx, yy)
         ext = sample_spacing * (samples / 2)
-        ux = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-        uy = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        ux = np.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        uy = np.arange(-ext, ext, sample_spacing, dtype=config.precision)
 
         # generate the siemen's star as a (rho,phi) polynomial
-        arr = e.cos(spokes / 2 * pv)
+        arr = np.cos(spokes / 2 * pv)
 
         if not sinusoidal:  # make binary
             arr[arr < 0] = -1
@@ -203,9 +205,9 @@ class SiemensStar(Convolvable):
 
 
 class TiltedSquare(Convolvable):
-    """Represents a tilted square for e.g. slanted-edge MTF calculation."""
+    """Represents a tilted square for np.g. slanted-edge MTF calculation."""
     def __init__(self, angle=4, background='white', sample_spacing=2, samples=256, radius=0.3, contrast=0.9):
-        """Create a new TitledSquare instance.
+        """Create a new TitledSquare instancnp.
 
         Parameters
         ----------
@@ -224,31 +226,31 @@ class TiltedSquare(Convolvable):
 
         """
         if background.lower() == 'white':
-            arr = e.ones((samples, samples), dtype=config.precision)
+            arr = np.ones((samples, samples), dtype=config.precision)
             fill_with = 1 - contrast
         else:
-            arr = e.zeros((samples, samples), dtype=config.precision)
+            arr = np.zeros((samples, samples), dtype=config.precision)
             fill_with = 1
 
         ext = samples / 2 * sample_spacing
         radius = radius * ext * 2
-        x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-        y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-        xx, yy = e.meshgrid(x, y)
+        x = np.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        y = np.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        xx, yy = np.meshgrid(x, y)
 
         # TODO: convert inline operation to use of rotation matrix
-        angle = e.radians(angle)
-        xp = xx * e.cos(angle) - yy * e.sin(angle)
-        yp = xx * e.sin(angle) + yy * e.cos(angle)
+        angle = np.radians(angle)
+        xp = xx * np.cos(angle) - yy * np.sin(angle)
+        yp = xx * np.sin(angle) + yy * np.cos(angle)
         mask = (abs(xp) < radius) * (abs(yp) < radius)
         arr[mask] = fill_with
         super().__init__(data=arr, x=x, y=y, has_analytic_ft=False)
 
 
 class SlantedEdge(Convolvable):
-    """Representation of a slanted edge."""
+    """Representation of a slanted edgnp."""
     def __init__(self, angle=4, contrast=0.9, crossed=False, sample_spacing=2, samples=256):
-        """Create a new TitledSquare instance.
+        """Create a new TitledSquare instancnp.
 
         Parameters
         ----------
@@ -266,20 +268,20 @@ class SlantedEdge(Convolvable):
 
         """
         diff = (1 - contrast) / 2
-        arr = e.full((samples, samples), 1 - diff)
+        arr = np.full((samples, samples), 1 - diff)
         ext = samples / 2 * sample_spacing
-        x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-        y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-        xx, yy = e.meshgrid(x, y)
+        x = np.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        y = np.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        xx, yy = np.meshgrid(x, y)
 
-        angle = e.radians(angle)
-        xp = xx * e.cos(angle) - yy * e.sin(angle)
-        # yp = xx * e.sin(angle) + yy * e.cos(angle)  # do not need this
+        angle = np.radians(angle)
+        xp = xx * np.cos(angle) - yy * np.sin(angle)
+        # yp = xx * np.sin(angle) + yy * np.cos(angle)  # do not need this
         mask = xp > 0  # single edge
         if crossed:
             mask = xp > 0  # set of 4 edges
-            upperright = mask & e.rot90(mask)
-            lowerleft = e.rot90(upperright, 2)
+            upperright = mask & np.rot90(mask)
+            lowerleft = np.rot90(upperright, 2)
             mask = upperright | lowerleft
 
         arr[mask] = diff
@@ -292,7 +294,7 @@ class SlantedEdge(Convolvable):
 class Grating(Convolvable):
     """A grating with a given ruling."""
     def __init__(self, period, angle=0, sinusoidal=False, sample_spacing=2, samples=256):
-        """Create a new Grating object
+        """Create a new Grating object.
 
         Parameters
         ----------
@@ -312,15 +314,15 @@ class Grating(Convolvable):
         self.sinusoidal = sinusoidal
 
         ext = samples / 2 * sample_spacing
-        x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-        y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-        xx, yy = e.meshgrid(x, y)
+        x = np.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        y = np.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        xx, yy = np.meshgrid(x, y)
         if angle != 0:
             rho, phi = cart_to_polar(xx, yy)
-            phi += e.radians(angle)
+            phi += np.radians(angle)
             xx, yy = polar_to_cart(rho, phi)
 
-        data = e.cos(2 * e.pi / period * xx)
+        data = np.cos(2 * np.pi / period * xx)
         if sinusoidal:
             data += 1
             data /= 2
@@ -344,31 +346,31 @@ class GratingArray(Convolvable):
 
         # calculate the basic grid things are defined on
         ext = samples / 2 * sample_spacing
-        x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-        y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-        xx, yy = e.meshgrid(x, y)
+        x = np.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        y = np.arange(-ext, ext, sample_spacing, dtype=config.precision)
+        xx, yy = np.meshgrid(x, y)
         xxx, yyy = xx, yy
 
         # compute the grid parameters; number of columns, number of samples per column
-        squareness = e.sqrt(len(periods))
-        ncols = int(e.ceil(squareness))
-        samples_per_patch = int(e.floor(samples / ncols))
+        squareness = np.sqrt(len(periods))
+        ncols = int(np.ceil(squareness))
+        samples_per_patch = int(np.floor(samples / ncols))
         low_idx_x = 0
         high_idx_x = samples_per_patch
         low_idx_y = 0
         high_idx_y = samples_per_patch
         curr_row = 0
 
-        out = e.zeros(xx.shape)
+        out = np.zeros(xx.shape)
         for idx, (period, angle) in enumerate(zip(periods, angles)):
             # if we're off at an off angle, adjust the coordinates
             if angle != 0:
                 rho, phi = cart_to_polar(xxx, yyy)
-                phi += e.radians(angle)
+                phi += np.radians(angle)
                 xxx, yyy = polar_to_cart(rho, phi)
 
             # compute the sinusoid
-            data = e.cos(2 * e.pi / period * xxx)
+            data = np.cos(2 * np.pi / period * xxx)
 
             # compute the indices to embed it into the final array;
             # every time the current column advances, advance the X coordinates
@@ -402,7 +404,7 @@ class GratingArray(Convolvable):
 class Chirp(Convolvable):
     """A frequency chirp."""
     def __init__(self, p0, p1, angle=0, method='linear', binary=True, sample_spacing=2, samples=256, aspect=4):
-        """Create a new Chirp instance.
+        """Create a new Chirp instancnp.
 
         Parameters
         ----------
@@ -427,16 +429,16 @@ class Chirp(Convolvable):
         p0 *= 2
         p1 *= 2
         ext = samples / 2 * sample_spacing
-        x = e.arange(0, 2 * ext, sample_spacing, dtype=config.precision)
-        y = e.arange(0, 2 * ext / aspect, sample_spacing, dtype=config.precision)  # 8:1 aspect ratio
-        xx, yy = e.meshgrid(x, y)
+        x = np.arange(0, 2 * ext, sample_spacing, dtype=config.precision)
+        y = np.arange(0, 2 * ext / aspect, sample_spacing, dtype=config.precision)  # 8:1 aspect ratio
+        xx, yy = np.meshgrid(x, y)
 
         if angle != 0:
             rho, phi = cart_to_polar(xx, yy)
-            phi += e.radians(angle)
+            phi += np.radians(angle)
             xx, yy = polar_to_cart(rho, phi)
 
-        sig = e.scipy.signal.chirp(xx, f0=1 / p0, f1=1 / p1, t1=x[-1], method=method)
+        sig = signal.chirp(xx, f0=1 / p0, f1=1 / p1, t1=x[-1], method=method)
         if binary:
             sig[sig < 0] = 0
             sig[sig > 0] = 1

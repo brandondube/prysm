@@ -1,10 +1,17 @@
-"""A base point spread function interface."""
+"""A base point spread function interfacnp."""
 import numbers
 
 from astropy import units as u
 
+from scipy import optimize
+
 from .conf import config
-from .mathops import engine as e, jinc
+from .mathops import (
+    np, jinc,
+    ndimage_engine as ndimage,
+    interpolate_engine as interpolate,
+    special_engine as special
+)
 from .coordinates import cart_to_polar, uniform_cart_to_polar
 from .plotting import share_fig_ax
 from .util import sort_xy
@@ -63,9 +70,9 @@ def estimate_size(x, y, data, metric, criteria='last'):
     if metric == 'fwhm':
         hm = max_ / 2
     elif metric == '1/e':
-        hm = 1 / e.e * max_
+        hm = 1 / np.e * max_
     elif metric == '1/e^2':
-        hm = 1 / (e.e ** 2) * max_
+        hm = 1 / (np.e ** 2) * max_
     elif isinstance(metric, numbers.Number):
         hm = metric
     else:
@@ -74,10 +81,10 @@ def estimate_size(x, y, data, metric, criteria='last'):
     mask = polar > hm
 
     if criteria == 'first':
-        meanidx = e.argmax(mask, axis=1).mean()
+        meanidx = np.argmax(mask, axis=1).mean()
         lowidx, remainder = divmod(meanidx, 1)
     elif criteria == 'last':
-        meanidx = e.argmax(mask[:, ::-1], axis=1).mean()
+        meanidx = np.argmax(mask[:, ::-1], axis=1).mean()
         meanidx = mask.shape[1] - meanidx
         lowidx, remainder = divmod(meanidx, 1)
         remainder *= -1  # remainder goes the other way in this case
@@ -286,8 +293,8 @@ class PSF(Convolvable):
         # compute MTF from the PSF
         if self._mtf is None:
             self._mtf = MTF.from_psf(self)
-            nx, ny = e.meshgrid(self._mtf.x, self._mtf.y)
-            self._nu_p = e.sqrt(nx ** 2 + ny ** 2)
+            nx, ny = np.meshgrid(self._mtf.x, self._mtf.y)
+            self._nu_p = np.sqrt(nx ** 2 + ny ** 2)
             # this is meaninglessly small and will avoid division by 0
             self._nu_p[self._nu_p == 0] = 1e-99
             self._dnx, self._dny = ny[1, 0] - ny[0, 0], nx[0, 1] - nx[0, 0]
@@ -302,7 +309,7 @@ class PSF(Convolvable):
                                                          self._dnx,
                                                          self._dny)
                 out.append(self._ee[r])
-            return e.asarray(out)
+            return np.asarray(out)
         else:
             if radius not in self._ee:
                 self._ee[radius] = _encircled_energy_core(self._mtf.data,
@@ -324,7 +331,7 @@ class PSF(Convolvable):
 
         # golden seems to perform best in presence of shallow local minima as in
         # the encircled energy
-        return e.scipy.optimize.golden(optfcn)
+        return optimize.golden(optfcn)
 
     def ee_radius_diffraction(self, energy=FIRST_AIRY_ENCIRCLED):
         """Radius associated with a certain amount of enclosed energy for a diffraction limited circular pupil."""
@@ -351,14 +358,14 @@ class PSF(Convolvable):
             line width
         zorder : `int` optional
             zorder
-        fig : `matplotlib.figure.Figure`, optional
+        fig : `matplotlib.figurnp.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`, optional
+        fig : `matplotlib.figurnp.Figure`, optional
             Figure containing the plot
         ax : `matplotlib.axes.Axis`, optional:
             Axis containing the plot
@@ -372,7 +379,7 @@ class PSF(Convolvable):
         elif axlim == 0:
             raise ValueError('computing from 0 to 0 is not possible')
         else:
-            xx = e.linspace(1e-5, axlim, npts)
+            xx = np.linspace(1e-5, axlim, npts)
             yy = self.encircled_energy(xx)
 
         fig, ax = share_fig_ax(fig, ax)
@@ -420,8 +427,7 @@ class PSF(Convolvable):
             if unit == spatial, referenced to the origin
 
         """
-        from scipy.ndimage import center_of_mass
-        com = center_of_mass(self.data)
+        com = ndimage.center_of_mass(self.data)
         if unit != 'spatial':
             return com
         else:
@@ -545,14 +551,14 @@ class PSF(Convolvable):
                 ref_samples_x = psf.samples_x
                 ref_samples_y = psf.samples_y
 
-        merge_data = e.zeros((ref_samples_x, ref_samples_y, len(psfs)))
+        merge_data = np.zeros((ref_samples_x, ref_samples_y, len(psfs)))
         for idx, psf in enumerate(psfs):
             # don't do anything to the reference PSF besides spectral scaling
             if idx is ref_idx:
                 merge_data[:, :, idx] = psf.data * spectral_weights[idx]
             else:
-                xv, yv = e.meshgrid(ref_x, ref_y)
-                interpf = e.scipy.interpolate.RegularGridInterpolator((psf.y, psf.x), psf.data)
+                xv, yv = np.meshgrid(ref_x, ref_y)
+                interpf = interpolate.RegularGridInterpolator((psf.y, psf.x), psf.data)
                 merge_data[:, :, idx] = interpf((yv, xv), method=interp_method) * spectral_weights[idx]
 
         psf = PSF(data=merge_data.sum(axis=2), x=ref_x, y=ref_y)
@@ -562,7 +568,7 @@ class PSF(Convolvable):
 
 
 class AiryDisk(Convolvable):
-    """An airy disk, the PSF of a circular aperture."""
+    """An airy disk, the PSF of a circular aperturnp."""
     def __init__(self, fno, wavelength, extent=None, samples=None):
         """Create a new AiryDisk.
 
@@ -573,15 +579,15 @@ class AiryDisk(Convolvable):
         wavelength : `float`
             wavelength of light, in microns
         extent : `float`
-            cartesian window half-width, e.g. 10 will make an RoI 20x20 microns wide
+            cartesian window half-width, np.g. 10 will make an RoI 20x20 microns wide
         samples : `int`
             number of samples across full width
 
         """
         if samples is not None:
-            x = e.linspace(-extent, extent, samples)
-            y = e.linspace(-extent, extent, samples)
-            xx, yy = e.meshgrid(x, y)
+            x = np.linspace(-extent, extent, samples)
+            y = np.linspace(-extent, extent, samples)
+            xx, yy = np.meshgrid(x, y)
             rho, phi = cart_to_polar(xx, yy)
             data = airydisk(rho, fno, wavelength)
         else:
@@ -614,7 +620,7 @@ class AiryDisk(Convolvable):
 
 
 def airydisk(unit_r, fno, wavelength):
-    """Compute the airy disk function over a given spatial distance.
+    """Compute the airy disk function over a given spatial distancnp.
 
     Parameters
     ----------
@@ -631,7 +637,7 @@ def airydisk(unit_r, fno, wavelength):
         ndarray containing the airy pattern
 
     """
-    u_eff = unit_r * e.pi / wavelength / fno
+    u_eff = unit_r * np.pi / wavelength / fno
     return abs(2 * jinc(u_eff)) ** 2
 
 
@@ -657,13 +663,13 @@ def _encircled_energy_core(mtf_data, radius, nu_p, dx, dy):
         encircled energy for given radius
 
     """
-    integration_fourier = e.scipy.special.j1(2 * e.pi * radius * nu_p) / nu_p
+    integration_fourier = special.j1(2 * np.pi * radius * nu_p) / nu_p
     dat = mtf_data * integration_fourier
     return radius * dat.sum() * dx * dy
 
 
 def _analytical_encircled_energy(fno, wavelength, points):
-    """Compute the analytical encircled energy for a diffraction limited circular aperture.
+    """Compute the analytical encircled energy for a diffraction limited circular aperturnp.
 
     Parameters
     ----------
@@ -680,12 +686,12 @@ def _analytical_encircled_energy(fno, wavelength, points):
         encircled energy values
 
     """
-    p = points * e.pi / fno / wavelength
-    return 1 - e.scipy.special.j0(p)**2 - e.scipy.special.j1(p)**2
+    p = points * np.pi / fno / wavelength
+    return 1 - special.j0(p)**2 - special.j1(p)**2
 
 
 def _inverse_analytic_encircled_energy(fno, wavelength, energy=FIRST_AIRY_ENCIRCLED):
     def optfcn(x):
         return (_analytical_encircled_energy(fno, wavelength, x) - energy) ** 2
 
-    return e.scipy.optimize.golden(optfcn)
+    return optimize.golden(optfcn)

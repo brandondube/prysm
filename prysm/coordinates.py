@@ -1,6 +1,6 @@
 """Coordinate conversions."""
 from .conf import config
-from .mathops import engine as e
+from .mathops import np, interpolate_engine as interpolate
 
 
 def cart_to_polar(x, y):
@@ -21,8 +21,8 @@ def cart_to_polar(x, y):
         azimuthal coordinate
 
     '''
-    rho = e.sqrt(x ** 2 + y ** 2)
-    phi = e.arctan2(y, x)
+    rho = np.sqrt(x ** 2 + y ** 2)
+    phi = np.arctan2(y, x)
     return rho, phi
 
 
@@ -44,8 +44,8 @@ def polar_to_cart(rho, phi):
         y coordinate
 
     '''
-    x = rho * e.cos(phi)
-    y = rho * e.sin(phi)
+    x = rho * np.cos(phi)
+    y = rho * np.sin(phi)
     return x, y
 
 
@@ -75,17 +75,17 @@ def uniform_cart_to_polar(x, y, data):
     xmin, xmax = x.min(), x.max()
     ymin, ymax = y.min(), y.max()
 
-    _max = max(abs(e.asarray([xmin, xmax, ymin, ymax])))
+    _max = max(abs(np.asarray([xmin, xmax, ymin, ymax])))
 
-    rho = e.linspace(0, _max, len(x))
-    phi = e.linspace(0, 2 * e.pi, len(y))
-    rv, pv = e.meshgrid(rho, phi)
+    rho = np.linspace(0, _max, len(x))
+    phi = np.linspace(0, 2 * np.pi, len(y))
+    rv, pv = np.meshgrid(rho, phi)
 
     # map points to x, y and make a grid for the original samples
     xv, yv = polar_to_cart(rv, pv)
 
     # interpolate the function onto the new points
-    f = e.scipy.interpolate.RegularGridInterpolator((y, x), data, bounds_error=False, fill_value=0)
+    f = interpolate.RegularGridInterpolator((y, x), data, bounds_error=False, fill_value=0)
     return rho, phi, f((yv, xv), method='linear')
 
 
@@ -110,7 +110,7 @@ def resample_2d(array, sample_pts, query_pts, kind='cubic'):
         array resampled onto query_pts
 
     """
-    interpf = e.scipy.interpolate.interp2d(*sample_pts, array, kind=kind)
+    interpf = interpolate.interp2d(*sample_pts, array, kind=kind)
     return interpf(*query_pts)
 
 
@@ -165,9 +165,9 @@ def make_xy_grid(samples_x, samples_y=None, radius=1):
     """
     if samples_y is None:
         samples_y = samples_x
-    x = e.linspace(-radius, radius, samples_x, dtype=config.precision)
-    y = e.linspace(-radius, radius, samples_y, dtype=config.precision)
-    xx, yy = e.meshgrid(x, y)
+    x = np.linspace(-radius, radius, samples_x, dtype=config.precision)
+    y = np.linspace(-radius, radius, samples_y, dtype=config.precision)
+    xx, yy = np.meshgrid(x, y)
     return xx, yy
 
 
@@ -233,7 +233,7 @@ def v_to_4v2_minus_4v_plus1(v):
 
 def v_to_v_plus90(v):
     """Transform v -> v+90 deg, v should be in radians."""
-    return v - (e.pi/2)
+    return v - (np.pi/2)
     # return v
 
 
