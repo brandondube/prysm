@@ -40,7 +40,7 @@ def is_power_of_2(value):
     https://stackoverflow.com/questions/29480680/finding-if-a-number-is-a-power-of-2-using-recursion
 
     """
-    if value is 1:
+    if value == 1:
         return False
     else:
         return bool(value and not value & (value - 1))
@@ -63,7 +63,7 @@ def fold_array(array, axis=1):
 
     """
     xs, ys = array.shape
-    if axis is 1:
+    if axis == 1:
         xh = xs // 2
         left_chunk = array[:, :xh]
         right_chunk = array[:, xh:]
@@ -112,6 +112,7 @@ def pv(array):
     -------
     `float`
         PV of the array
+
     """
     non_nan = e.isfinite(array)
     return array[non_nan].max() - array[non_nan].min()
@@ -147,6 +148,7 @@ def Sa(array):
     -------
     `float`
         Ra of the array
+
     """
     non_nan = e.isfinite(array)
     ary = array[non_nan]
