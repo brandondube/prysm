@@ -25,26 +25,3 @@ def test_set_precision(precision):
 def test_rejects_bad_precision():
     with pytest.raises(ValueError):
         config.precision = 1
-
-
-# must make certain the backend is set to numpy last to avoid cuda errors for rest of test suite
-@pytest.mark.parametrize('backend', ['np'])
-def test_set_backend(backend):
-    config.backend = backend
-    assert config.backend == np
-
-
-def test_rejects_bad_backend():
-    with pytest.raises(ModuleNotFoundError):
-        config.backend = 'foo'
-
-
-@pytest.mark.parametrize('zbase', [0, 1])
-def test_set_zernike_base(zbase):
-    config.zernike_base = zbase
-    assert config.zernike_base == zbase
-
-
-def test_rejects_bad_zernike_base():
-    with pytest.raises(ValueError):
-        config.zernike_base = 2
