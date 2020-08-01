@@ -6,7 +6,7 @@ import numpy as np
 from prysm import detector, psf, Convolvable
 
 import matplotlib as mpl
-mpl.use('TkAgg')
+mpl.use('Agg')
 
 
 @pytest.fixture

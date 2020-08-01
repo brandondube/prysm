@@ -5,7 +5,7 @@ import pytest
 from prysm import PixelAperture, Pupil, PSF
 
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('Agg')
 
 
 @pytest.fixture
@@ -47,7 +47,7 @@ def test_numerical_convolution_unequal_functions(sample_psf, sample_psf_bigger):
 
 
 def test_sensical_attributes_dataless_convolvable(sample_pixel):
-        assert sample_pixel.shape == (0, 0)
-        assert sample_pixel.size == 0
-        assert sample_pixel.samples_x == 0
-        assert sample_pixel.samples_y == 0
+    assert sample_pixel.shape == (0, 0)
+    assert sample_pixel.size == 0
+    assert sample_pixel.samples_x == 0
+    assert sample_pixel.samples_y == 0

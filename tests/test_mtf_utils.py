@@ -10,7 +10,7 @@ import matplotlib as mpl
 from prysm import sample_files
 from prysm import mtf_utils
 
-mpl.use('TkAgg')
+mpl.use('Agg')
 
 
 @pytest.fixture

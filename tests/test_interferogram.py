@@ -7,7 +7,7 @@ from prysm import sample_files
 from prysm.interferogram import Interferogram, make_window, fit_psd
 
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('Agg')
 
 
 @pytest.fixture

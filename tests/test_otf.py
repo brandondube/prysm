@@ -7,7 +7,7 @@ from prysm import otf
 from prysm.fttools import forward_ft_unit
 
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('Agg')
 
 SAMPLES = 32
 LIM = 1e3

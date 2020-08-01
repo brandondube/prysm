@@ -7,7 +7,7 @@ from prysm.coordinates import cart_to_polar
 from prysm import zernike
 
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('Agg')
 
 SAMPLES = 32
 
@@ -152,6 +152,7 @@ def test_ansi_2_term_can_construct():
 
 def test_ansi_1_term_can_construct():
     assert zernike.ANSI1TermZernike(Z10=1)
+
 
 def test_can_stringify_zernike_pupil():
     assert str(zernike.NollZernike(np.arange(50), samples=32))
