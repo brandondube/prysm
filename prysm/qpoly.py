@@ -102,7 +102,7 @@ def qbfs_recurrence_Q(n, x, Pn=None, Pnm1=None, Pnm2=None, Qnm1=None, Qnm2=None,
 
 @lru_cache(MAX_ELEMENTS_IN_CACHE)
 def g_qbfs(n_minus_1):
-    """g(m-1) from oe-18-19-19700 eq. (A.15)"""
+    """g(m-1) from oe-18-19-19700 eq. (A.15)."""
     if n_minus_1 == 0:
         return - 1 / 2
     else:
@@ -112,14 +112,14 @@ def g_qbfs(n_minus_1):
 
 @lru_cache(MAX_ELEMENTS_IN_CACHE)
 def h_qbfs(n_minus_2):
-    """h(m-2) from oe-18-19-19700 eq. (A.14)"""
+    """h(m-2) from oe-18-19-19700 eq. (A.14)."""
     n = n_minus_2 + 2
     return -n * (n - 1) / (2 * f_qbfs(n_minus_2))
 
 
 @lru_cache(MAX_ELEMENTS_IN_CACHE)
 def f_qbfs(n):
-    """f(m) from oe-18-19-19700 eq. (A.16)"""
+    """f(m) from oe-18-19-19700 eq. (A.16)."""
     if n == 0:
         return 2
     elif n == 1:
@@ -183,6 +183,21 @@ class QBFSCache(object):
         return Pm
 
     def get_PBFS_recursion_coef(self, samples, rho_max=1):
+        """Get a P polynomial recursion coefficient.
+
+        Parameters
+        ----------
+        samples : `int`
+            number of samples
+        rho_max : `float`
+            max value of rho ("x" or "r") for the polynomial evaluation
+
+        Returns
+        -------
+        `float`
+            recursion coefficient
+
+        """
         key = ('recursion', samples, rho_max)
         try:
             coef = self.Ps[key]
@@ -194,11 +209,39 @@ class QBFSCache(object):
         return coef
 
     def get_grid(self, samples, rho_max=1):
-        """Get a grid of rho coordinates for a given number of samples."""
+        """Get a P polynomial recursion coefficient.
+
+        Parameters
+        ----------
+        samples : `int`
+            number of samples
+        rho_max : `float`
+            max value of rho ("x" or "r") for the polynomial evaluation
+
+        Returns
+        -------
+        `numpy.ndarray`
+            2D grid of radial coordinates
+
+        """
         return self.gridcache(samples=samples, radius=rho_max, r='r -> r^2')['r']
 
     def __call__(self, m, samples, rho_max=1):
-        """Get an array of sag values for a given index, norm, and number of samples."""
+        """Get a P polynomial recursion coefficient.
+
+        Parameters
+        ----------
+        samples : `int`
+            number of samples
+        rho_max : `float`
+            max value of rho ("x" or "r") for the polynomial evaluation
+
+        Returns
+        -------
+        `numpy.ndarray`
+            Qbfs polynomial evaluated over a grid of shape (samples, samples)
+
+        """
         return self.get_QBFS(m=m, samples=samples, rho_max=rho_max)
 
     def make_key(self, m, samples, rho_max):
@@ -213,6 +256,7 @@ class QBFSCache(object):
 
     @property
     def nbytes(self):
+        """Bytes of memory occupied by the cache."""
         n = 0
         stores = (self.Qs, self.Ps)
         for store in stores:
@@ -232,6 +276,25 @@ config.chbackend_observers.append(QBFScache.clear)
 
 
 def qcon_recurrence(n, x, Pnm1=None, Pnm2=None):
+    """Recursive Qcon polynomial evaluation.
+
+    Parameters
+    ----------
+    n : `int`
+        polynomial order
+    x : `numpy.ndarray`
+        "x" coordinates, x = r^2
+    Pnm1 : `numpy.ndarray`
+        value of this function for argument (n-1)
+    Pnm2 : `numpy.ndarray`
+        value of this function for argument (n-2)
+
+    Returns
+    -------
+    `numpy.ndarray`
+        Value of the Qcon polynomials of order n over x
+
+    """
     return jacobi(n, x=x, alpha=0, beta=4, Pnm1=Pnm1, Pnm2=Pnm2)
 
 
@@ -302,6 +365,7 @@ class QCONCache(object):
 
     @property
     def nbytes(self):
+        """Bytes of memory occupied by the cache."""
         n = 0
         for key in self.Qs:
             n += self.Qs[key].nbytes
@@ -352,6 +416,7 @@ class QPolySag1D(Pupil):
 
 
 class QBFSSag(QPolySag1D):
+    """Qbfs polynomials evaluated over a grid."""
     _name = 'Qbfs'
     _cache = QBFScache
     """Qbfs aspheric surface sag, excluding base sphere."""
@@ -371,6 +436,7 @@ class QBFSSag(QPolySag1D):
 
 
 class QCONSag(QPolySag1D):
+    """Qcon polynomials evaluated over a grid."""
     _name = 'Qcon'
     _cache = QCONcache
     """Qcon aspheric surface sag, excluding base sphere."""
@@ -390,6 +456,21 @@ class QCONSag(QPolySag1D):
 
 
 def abc_q2d(n, m):
+    """A, B, C terms for 2D-Q polynomials.  oe-20-3-2483 Eq. (A.3).
+
+    Parameters
+    ----------
+    n : `int`
+        radial order
+    m : `int`
+        azimuthal order
+
+    Returns
+    -------
+    `float`, `float`, `float`
+        A, B, C
+
+    """
     # D is used everywhere
     D = (4 * n ** 2 - 1) * (m + n - 2) * (m + 2 * n - 3)
 
@@ -410,6 +491,21 @@ def abc_q2d(n, m):
 
 
 def G_q2d(n, m):
+    """G term for 2D-Q polynomials.  oe-20-3-2483 Eq. (A.15).
+
+    Parameters
+    ----------
+    n : `int`
+        radial order
+    m : `int`
+        azimuthal order
+
+    Returns
+    -------
+    `float`
+        G
+
+    """
     if n == 0:
         num = e.scipy.special.factorial2(2 * m - 1)
         den = 2 ** (m + 1) * e.scipy.special.factorial(m - 1)
@@ -434,6 +530,21 @@ def G_q2d(n, m):
 
 
 def F_q2d(n, m):
+    """F term for 2D-Q polynomials.  oe-20-3-2483 Eq. (A.13).
+
+    Parameters
+    ----------
+    n : `int`
+        radial order
+    m : `int`
+        azimuthal order
+
+    Returns
+    -------
+    `float`
+        F
+
+    """
     if n == 0:
         num = m ** 2 * e.scipy.special.factorial2(2 * m - 3)
         den = 2 ** (m + 1) * e.scipy.special.factorial(m - 1)
@@ -459,10 +570,40 @@ def F_q2d(n, m):
 
 
 def g_q2d(nm1, m):
+    """Lowercase g term for 2D-Q polynomials.  oe-20-3-2483 Eq. (A.18a).
+
+    Parameters
+    ----------
+    nm1 : `int`
+        radial order less one (n - 1)
+    m : `int`
+        azimuthal order
+
+    Returns
+    -------
+    `float`
+        g
+
+    """
     return G_q2d(nm1, m) / f_q2d(nm1, m)
 
 
 def f_q2d(n, m):
+    """Lowercase f term for 2D-Q polynomials.  oe-20-3-2483 Eq. (A.18b).
+
+    Parameters
+    ----------
+    nm1 : `int`
+        radial order
+    m : `int`
+        azimuthal order
+
+    Returns
+    -------
+    `float`
+        f
+
+    """
     if n == 0:
         return e.sqrt(F_q2d(n=0, m=m))
     else:
@@ -470,6 +611,27 @@ def f_q2d(n, m):
 
 
 def q2d_recurrence_P(n, m, x, Pnm1=None, Pnm2=None):
+    """Auxiliary polynomial P to the 2DQ polynomials (Q).  oe-20-3-2483 Eq. (A.17).
+
+    Parameters
+    ----------
+    n : `int`
+        radial order
+    m : `int`
+        azimuthal order
+    x : `numpy.ndarray`
+        spatial coordinates, x = r^4  # TODO: (docs) check this transformation
+    Pnm1 : `numpy.ndarray`
+        value of this function for argument n - 1
+    Pnm2 : `numpy.ndarray`
+        value of this function for argument n - 2
+
+    Returns
+    -------
+    `numpy.ndarray`
+        P polynomial evaluated over x
+
+    """
     if m == 0:
         return qbfs_recurrence_P(n=n, x=x, Pnm1=Pnm1, Pnm2=Pnm2)
     elif n == 0:
@@ -505,17 +667,42 @@ def q2d_recurrence_P(n, m, x, Pnm1=None, Pnm2=None):
         return term1 * term2 - term3
 
 
-def q2d_recurrence_Q(n, m, x, Pnm=None, Qnm1=None, Pnm1=None, Pnm2=None):
+def q2d_recurrence_Q(n, m, x, Pn=None, Qnm1=None, Pnm1=None, Pnm2=None):
+    """2DQ polynomials (Q).  oe-20-3-2483 Eq. (A.22).
+
+    Parameters
+    ----------
+    n : `int`
+        radial order
+    m : `int`
+        azimuthal order
+    x : `numpy.ndarray`
+        spatial coordinates, x = r^4  # TODO: (docs) check this transformation
+    Pn : `numpy.ndarray`
+        value of this function for same order n
+    Qnm1 : `numpy.ndarray`
+        value of this function for argument n - 1
+    Pnm1 : `numpy.ndarray`
+        value of the paired P function for n - 1
+    Pnm2 : `numpy.ndarray`
+        value of the paired P function for n - 2
+
+    Returns
+    -------
+    `numpy.ndarray`
+        P polynomial evaluated over x
+
+    """
     if n == 0:
         return 1 / (2 * f_q2d(0, m))
     elif m == 0:
-        return qbfs_recurrence_Q(n=n, x=x, Pn=Pnm, Pnm1=Pnm1, Pnm2=Pnm2, Qnm1=Qnm1)
+        return qbfs_recurrence_Q(n=n, x=x, Pn=Pn, Pnm1=Pnm1, Pnm2=Pnm2, Qnm1=Qnm1)
 
     if Pnm2 is None:
         Pnm2 = q2d_recurrence_P(n=n-2, m=m, x=x)
     if Pnm1 is None:
         Pnm1 = q2d_recurrence_P(n=n-1, m=m, x=x, Pnm1=Pnm2)
-    if Pnm is None:
+    if Pn is None:
         if n == 0:
             Pnm = f_q2d(0, m) * q2d_recurrence_Q(n=0, m=m, x=x)
         else:
