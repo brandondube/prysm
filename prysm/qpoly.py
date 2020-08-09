@@ -3,7 +3,7 @@ from functools import lru_cache
 
 from .conf import config
 from .pupil import Pupil
-from .mathops import engine as e, kronecker, gamma
+from .mathops import engine as e, special_engine as special, kronecker, gamma
 from .coordinates import gridcache
 from .jacobi import jacobi
 
@@ -507,8 +507,8 @@ def G_q2d(n, m):
 
     """
     if n == 0:
-        num = e.scipy.special.factorial2(2 * m - 1)
-        den = 2 ** (m + 1) * e.scipy.special.factorial(m - 1)
+        num = special.factorial2(2 * m - 1)
+        den = 2 ** (m + 1) * special.factorial(m - 1)
         return num / den
     elif n > 0 and m == 1:
         t1num = (2 * n ** 2 - 1) * (n ** 2 - 1)
@@ -546,8 +546,8 @@ def F_q2d(n, m):
 
     """
     if n == 0:
-        num = m ** 2 * e.scipy.special.factorial2(2 * m - 3)
-        den = 2 ** (m + 1) * e.scipy.special.factorial(m - 1)
+        num = m ** 2 * special.factorial2(2 * m - 3)
+        den = 2 ** (m + 1) * special.factorial(m - 1)
         return num / den
     elif n > 0 and m == 1:
         t1num = 4 * (n - 1) ** 2 * n ** 2 + 1
@@ -620,7 +620,7 @@ def q2d_recurrence_P(n, m, x, Pnm1=None, Pnm2=None):
     m : `int`
         azimuthal order
     x : `numpy.ndarray`
-        spatial coordinates, x = r^4  # TODO: (docs) check this transformation
+        spatial coordinates, x = r^2
     Pnm1 : `numpy.ndarray`
         value of this function for argument n - 1
     Pnm2 : `numpy.ndarray`
@@ -634,16 +634,16 @@ def q2d_recurrence_P(n, m, x, Pnm1=None, Pnm2=None):
     """
     if m == 0:
         return qbfs_recurrence_P(n=n, x=x, Pnm1=Pnm1, Pnm2=Pnm2)
-    elif n == 0:
+    if n == 0:
         return 1 / 2
-    elif n == 1:
+    if n == 1:
         if m == 1:
             return 1 - x / 2
         elif m < 1:
             raise ValueError('2D-Q auxiliary polynomial is undefined for n=1, m < 1')
         else:
             return m - (1 / 2) - (m - 1) * x
-    elif m == 1 and (n == 2 or n == 3):
+    if m == 1 and (n == 2 or n == 3):
         if n == 2:
             num = 3 - x * (12 - 8 * x)
             den = 6
@@ -677,7 +677,7 @@ def q2d_recurrence_Q(n, m, x, Pn=None, Qnm1=None, Pnm1=None, Pnm2=None):
     m : `int`
         azimuthal order
     x : `numpy.ndarray`
-        spatial coordinates, x = r^4  # TODO: (docs) check this transformation
+        spatial coordinates, x = r^2
     Pn : `numpy.ndarray`
         value of this function for same order n
     Qnm1 : `numpy.ndarray`
@@ -698,17 +698,29 @@ def q2d_recurrence_Q(n, m, x, Pn=None, Qnm1=None, Pnm1=None, Pnm2=None):
     elif m == 0:
         return qbfs_recurrence_Q(n=n, x=x, Pn=Pn, Pnm1=Pnm1, Pnm2=Pnm2, Qnm1=Qnm1)
 
+    # manual startup, do not try to recurse for n <= 2
+    if n == 1:
+        Pn = q2d_recurrence_P(n=n, m=m, x=x, Pnm1=Pnm1)
+        Qnm1 = 1 / (2 * f_q2d(0, m))  # same as L2 of this function, n=0
+        g = g_q2d(0, m)
+        f = f_q2d(n, m)
+        return (Pn - g * Qnm1) / f
+    if n == 2:
+        Pn = q2d_recurrence_P(n=n, m=m, x=x, Pnm1=Pnm1, Pnm2=Pnm2)
+        Qnm1 = q2d_recurrence_Q(n=n-1, m=m, x=x, Pnm1=Pnm2, Qnm1=1 / (2 * f_q2d(0, m)))
+        g = g_q2d(1, m)
+        f = f_q2d(n, m)
+        return (Pn - g * Qnm1) / f
+
     if Pnm2 is None:
         Pnm2 = q2d_recurrence_P(n=n-2, m=m, x=x)
     if Pnm1 is None:
         Pnm1 = q2d_recurrence_P(n=n-1, m=m, x=x, Pnm1=Pnm2)
     if Pn is None:
         if n == 0:
-            Pnm = f_q2d(0, m) * q2d_recurrence_Q(n=0, m=m, x=x)
-        else:
-            Pnm = q2d_recurrence_P(n=n, m=m, x=x, Pnm1=Pnm1, Pnm2=Pnm2)
+            Pn = q2d_recurrence_P(n=n, m=m, x=x, Pnm1=Pnm1, Pnm2=Pnm2)
 
     if Qnm1 is None:
         Qnm1 = q2d_recurrence_Q(n=n-1, m=m, x=x, Pnm=Pnm1, Pnm1=Pnm2)
 
-    return (Pnm - g_q2d(n-1, m) * Qnm1) / f_q2d(n, m)
+    return (Pn - g_q2d(n-1, m) * Qnm1) / f_q2d(n, m)
