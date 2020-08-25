@@ -626,6 +626,8 @@ def read_zygo_datx(file):
         if punit == 'Fringes':
             # the usual conversion per malacara
             phase = phase * obliquity * scale_factor * wvl
+        elif punit == 'NanoMeters':
+            pass
         else:
             raise ValueError("datx file does not use expected phase unit, contact the prysm author with a sample file to resolve")
 
