@@ -394,7 +394,7 @@ def angular_spectrum(field, wvl, sample_spacing, z, Q=2):
     if Q != 1:
         field = pad2d(field, Q=Q)
 
-    ky, kx = (e.fft.fftfreq(s, sample_spacing) for s in field.shape)
+    ky, kx = (e.fft.fftfreq(s, sample_spacing).astype(config.precision_complex) for s in field.shape)
     kyy, kxx = e.meshgrid(ky, kx)
     # don't ifftshift, ky, kx computed in shifted space, going to ifft anyway
     forward = e.fft.fft2(e.fft.fftshift(field))
@@ -608,8 +608,8 @@ class Wavefront(RichData):
             samples = (samples, samples)
 
         samples_y, samples_x = samples
-        x = e.arange(-1 * int(e.ceil(samples_x / 2)), int(e.floor(samples_x / 2))) * sample_spacing
-        y = e.arange(-1 * int(e.ceil(samples_y / 2)), int(e.floor(samples_y / 2))) * sample_spacing
+        x = e.arange(-1 * int(e.ceil(samples_x / 2)), int(e.floor(samples_x / 2)), dtype=config.precision) * sample_spacing
+        y = e.arange(-1 * int(e.ceil(samples_y / 2)), int(e.floor(samples_y / 2)), dtype=config.precision) * sample_spacing
         data = focus_fixed_sampling(
             wavefunction=self.fcn,
             input_sample_spacing=self.sample_spacing,

@@ -5,7 +5,7 @@ from numbers import Number
 from collections.abc import Iterable
 
 from .conf import config, sanitize_unit
-from .mathops import np, interpolate_engine as interpolate
+from .mathops import engine as np, interpolate_engine as interpolate
 from .wavelengths import mkwvl
 from .coordinates import uniform_cart_to_polar, polar_to_cart
 from .plotting import share_fig_ax
@@ -61,9 +61,9 @@ class RichData:
             data
         labels : `Labels`
             labels instance, can be shared
-        xyunit : `astropy.unit` or `str`, optional
+        xy_unit : `astropy.unit` or `str`, optional
             astropy unit or string which satisfies hasattr(astropy.units, xyunit)
-        zunit : `astropy.unit` or `str`, optional
+        z_unit : `astropy.unit` or `str`, optional
              astropy unit or string which satisfies hasattr(astropy.units, xyunit)
         wavelength : `astropy.unit` or `float`
             astropy unit or quantity or float with implicit units of microns
@@ -114,7 +114,7 @@ class RichData:
     def sample_spacing(self):
         """center-to-center sample spacing."""
         try:
-            return self.x[1] - self.x[0]
+            return float(self.x[1] - self.x[0])
         except TypeError:
             return np.nan
 
@@ -275,7 +275,7 @@ class RichData:
 
         Parameters
         ----------
-        r : iterable
+        rho : iterable
             radial coordinate(s) to sample
         phi : iterable
             azimuthal coordinate(s) to sample

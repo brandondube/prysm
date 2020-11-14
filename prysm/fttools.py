@@ -2,6 +2,7 @@
 from collections.abc import Iterable
 
 from .mathops import engine as e
+from .conf import config
 
 
 def pad2d(array, Q=2, value=0, mode='constant'):
@@ -139,7 +140,9 @@ class MatrixDFTExecutor:
         self._setup_bases(ary=ary, Q=Q, samples=samples, shift=shift)
         key = self._key(ary=ary, Q=Q, samples=samples, shift=shift)
         Eout, Ein = self.Eout_fwd[key], self.Ein_fwd[key]
+
         out = Eout.dot(ary).dot(Ein)
+        print("out:", Eout.shape, "ary:", ary.shape, "in:", Ein.shape, "out@ary:", Eout.dot(ary).shape, "result:", out.shape)
         if norm is not None:
             coef = self._norm(ary=ary, Q=Q, samples=samples)
             out *= coef
@@ -211,10 +214,10 @@ class MatrixDFTExecutor:
             self.Ein_fwd[key]
         except KeyError:
             # X is the second dimension in C (numpy) array ordering convention
-            X = e.arange(m) - m//2
-            Y = e.arange(n) - n//2
-            U = e.arange(M) - M//2
-            V = e.arange(N) - N//2
+            X = e.arange(m, dtype=config.precision) - m//2
+            Y = e.arange(n, dtype=config.precision) - n//2
+            U = e.arange(M, dtype=config.precision) - M//2
+            V = e.arange(N, dtype=config.precision) - N//2
 
             # do not even perform an op if shift is nothing
             if shift[0] is not None:
