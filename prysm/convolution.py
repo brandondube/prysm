@@ -28,6 +28,10 @@ class Convolvable(RichData):
             analytical fourier tansform
         labels : `Labels`
             labels to use.  If None, will use config.convolvable_labels
+        xy_unit : `astropy.units.Unit`
+            a unit of measure to quantify cartesian dimensions
+        z_unit : `astropy.units.Unit`
+            a unit of measure to quantify the vertical/intensity dimension
 
         """
         xy_unit = 'um'

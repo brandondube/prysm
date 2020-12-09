@@ -459,6 +459,16 @@ class Wavefront(RichData):
         """Half of self.diameter."""
         return self.diameter / 2
 
+    @property
+    def intensity(self):
+        """Intensity, abs(w)^2."""
+        return Wavefront(x=self.x, y=self.y, fcn=abs(self.data)**2, wavelength=self.wavelength, space=self.space)
+
+    @property
+    def phase(self):
+        """Phase, angle(w).  Possibly wrapped for large OPD."""
+        return Wavefront(x=self.x, y=self.y, fcn=e.angle(self.data), wavelength=self.wavelength, space=self.space)
+
     def __numerical_operation__(self, other, op):
         """Apply an operation to this wavefront with another piece of data."""
         func = getattr(operator, op)
@@ -608,8 +618,9 @@ class Wavefront(RichData):
             samples = (samples, samples)
 
         samples_y, samples_x = samples
-        x = e.arange(-1 * int(e.ceil(samples_x / 2)), int(e.floor(samples_x / 2)), dtype=config.precision) * sample_spacing
-        y = e.arange(-1 * int(e.ceil(samples_y / 2)), int(e.floor(samples_y / 2)), dtype=config.precision) * sample_spacing
+        # floor div of negative s, not negative of floor div of s
+        # has correct rounding semantics for fft grid alignment
+        x, y = (e.arange(-s//2, -s//2+s, dtype=config.precision) * sample_spacing for s in (samples_x, samples_y))
         data = focus_fixed_sampling(
             wavefunction=self.fcn,
             input_sample_spacing=self.sample_spacing,
