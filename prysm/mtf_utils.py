@@ -641,7 +641,7 @@ def radial_mtf_to_mtfffd_data(tan, sag, imagehts, azimuths, upsample):
     return xq, yq, outt, outs
 
 
-def plot_mtf_vs_field(data_dict, fig=None, ax=None):
+def plot_mtf_vs_field(data_dict, fig=None, ax=None, labels=('MTF', 'Freq [lp/mm]', 'Field [mm]', 'Az'), palette=None):
     """Plot MTF vs Field.
 
     Parameters
@@ -661,19 +661,31 @@ def plot_mtf_vs_field(data_dict, fig=None, ax=None):
         axis containing the plot
 
     """
-    tan_mtf_array, sag_mtf_array = data_dict['tan'], data_dict['sag']
-    fields, frequencies = data_dict['field'], data_dict['freq']
-    freqs = _int_check_frequencies(frequencies)
+    import pandas as pd
+    import seaborn as sns
+
+    if palette is None:
+        palette = 'tab10'
+
+    tan = data_dict['tan']
+    sag = data_dict['sag']
+    freqs = _int_check_frequencies(data_dict['freq'])
+    fields = data_dict['field']
+    # tan, sag have indices of [freq][field]
+    proto_df = []
+    for i, freq in enumerate(freqs):
+        for j, field in enumerate(fields):
+            local_t = (tan[i][j], freq, field, 'tan')
+            local_s = (sag[i][j], freq, field, 'sag')
+            proto_df.append(local_t)
+            proto_df.append(local_s)
+
+    df = pd.DataFrame(data=proto_df, columns=labels)
 
     fig, ax = share_fig_ax(fig, ax)
 
-    for idx in range(tan_mtf_array.shape[0]):
-        l, = ax.plot(fields, tan_mtf_array[idx, :], label=freqs[idx])
-        ax.plot(fields, sag_mtf_array[idx, :], c=l.get_color(), ls='--')
-
-    ax.legend(title=r'$\nu$ [cy/mm]')
-    ax.set(xlim=(0, 14), xlabel='Image Height [mm]',
-           ylim=(0, 1), ylabel='MTF [Rel. 1.0]')
+    ax = sns.lineplot(x=labels[2], y=labels[0], hue=labels[1], style=labels[3], data=df, palette=palette, legend='full')
+    ax.set(ylim=(0, 1))
     return fig, ax
 
 
