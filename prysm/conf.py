@@ -1,10 +1,9 @@
 """Configuration for this instance of prysm."""
 import copy
 
-import numpy as np
-
 from astropy import units as u
 
+from .mathops import engine as np
 from .wavelengths import HeNe
 
 all_ap_unit_types = (u.Unit, u.core.IrreducibleUnit, u.core.CompositeUnit)
