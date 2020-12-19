@@ -5,9 +5,9 @@ from .mathops import engine as e
 from .conf import config
 
 
-def fftrange(n):
+def fftrange(n, dtype=None):
     """FFT-aligned coordinate grid for n samples."""
-    return e.arange(-n//2, -n//2+n)
+    return e.arange(-n//2, -n//2+n, dtype=dtype)
 
 
 def pad2d(array, Q=2, value=0, mode='constant'):
@@ -229,10 +229,7 @@ class MatrixDFTExecutor:
             self.Ein_fwd[key]
         except KeyError:
             # X is the second dimension in C (numpy) array ordering convention
-            X = e.arange(m, dtype=config.precision) - m//2
-            Y = e.arange(n, dtype=config.precision) - n//2
-            U = e.arange(M, dtype=config.precision) - M//2
-            V = e.arange(N, dtype=config.precision) - N//2
+            X, Y, U, V = (fftrange(n, dtype=config.precision) for n in (m, n, M, N))
 
             # do not even perform an op if shift is nothing
             if shift[0] is not None:
