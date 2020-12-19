@@ -5,6 +5,11 @@ from .mathops import engine as e
 from .conf import config
 
 
+def fftrange(n):
+    """FFT-aligned coordinate grid for n samples."""
+    return e.arange(-n//2, -n//2+n)
+
+
 def pad2d(array, Q=2, value=0, mode='constant'):
     """Symmetrically pads a 2D array with a value.
 
@@ -111,7 +116,7 @@ class MatrixDFTExecutor:
 
         return (Q, ary.shape, samples, shift)
 
-    def dft2(self, ary, Q, samples, shift=None, norm=None):
+    def dft2(self, ary, Q, samples, shift=None, norm=True):
         """Compute the two dimensional Discrete Fourier Transform of a matrix.
 
         Parameters
@@ -126,8 +131,9 @@ class MatrixDFTExecutor:
         shift : `float`, optional
             shift of the output domain, as a frequency.  Same broadcast
             rules apply as with samples.
-        norm : `str`, optional, {'ortho'}
-            if not None, normalize in a way that mimics np.fft or scipy.fft
+        norm : `bool`, optional
+            if True, normalize the computation such that Parseval's theorm
+            is not violated
 
         Returns
         -------
@@ -141,15 +147,14 @@ class MatrixDFTExecutor:
         key = self._key(ary=ary, Q=Q, samples=samples, shift=shift)
         Eout, Ein = self.Eout_fwd[key], self.Ein_fwd[key]
 
-        out = Eout.dot(ary).dot(Ein)
-        print("out:", Eout.shape, "ary:", ary.shape, "in:", Ein.shape, "out@ary:", Eout.dot(ary).shape, "result:", out.shape)
-        if norm is not None:
+        out = Eout @ ary @ Ein
+        if norm:
             coef = self._norm(ary=ary, Q=Q, samples=samples)
-            out *= coef
+            out *= (1/coef)
 
         return out
 
-    def idft2(self, ary, Q, samples, shift=None, norm=None):
+    def idft2(self, ary, Q, samples, shift=None, norm=True):
         """Compute the two dimensional inverse Discrete Fourier Transform of a matrix.
 
         Parameters
@@ -164,8 +169,9 @@ class MatrixDFTExecutor:
         shift : `float`, optional
             shift of the output domain, as a frequency.  Same broadcast
             rules apply as with samples.
-        norm : `str`, optional, {'ortho'}
-            if not None, normalize in a way that mimics np.fft or scipy.fft
+        norm : `bool`, optional
+            if True, normalize the computation such that Parseval's theorm
+            is not violated
 
         Returns
         -------
@@ -178,12 +184,11 @@ class MatrixDFTExecutor:
         self._setup_bases(ary=ary, Q=Q, samples=samples, shift=shift)
         key = self._key(ary=ary, Q=Q, samples=samples, shift=shift)
         Eout, Ein = self.Eout_rev[key], self.Ein_rev[key]
-        out = Eout.dot(ary).dot(Ein)
-        if norm is not None:
+        out = Eout @ ary @ Ein
+        if norm:
             coef = self._norm(ary=ary, Q=Q, samples=samples)
-            out *= coef
+            out *= (1/coef)
 
-        out /= out.size
         return out
 
     def _norm(self, ary, Q, samples):
@@ -191,9 +196,19 @@ class MatrixDFTExecutor:
         if not isinstance(samples, Iterable):
             samples = (samples, samples)
 
+        # commenting out this warning
+        # strictly true in the one-way case
+        # but a 128 => 256, Q=2 fwd followed
+        # by 256 => 128 Q=1 rev produces ~size*eps
+        # max error, so this warning is overzealous
+        # if samples[0]/Q < ary.shape[0]:
+            # warn('mdft: computing normalization for output condition which contains Dirichlet clones, normalization cannot be accurate')
+
         n, m = ary.shape
         N, M = samples
-        return e.sqrt((1/Q)**2 / (n * m * N * M))
+        sz_i = n * m
+        sz_o = N * M
+        return e.sqrt(sz_i) * Q * e.sqrt(sz_i/sz_o)
 
     def _setup_bases(self, ary, Q, samples, shift):
         """Set up the basis matricies for given sampling parameters."""

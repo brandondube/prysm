@@ -89,7 +89,7 @@ def unfocus(wavefunction, Q, norm=None):
 
 def focus_fixed_sampling(wavefunction, input_sample_spacing, prop_dist,
                          wavelength, output_sample_spacing, output_samples,
-                         coherent=False, norm=False):
+                         coherent=False, norm=True):
     """Propagate a pupil function to the PSF plane with fixed sampling.
 
     Parameters
@@ -129,7 +129,7 @@ def focus_fixed_sampling(wavefunction, input_sample_spacing, prop_dist,
 
 def unfocus_fixed_sampling(wavefunction, input_sample_spacing, prop_dist,
                            wavelength, output_sample_spacing, output_samples,
-                           norm=False):
+                           norm=True):
     """Propagate an image plane field to the pupil plane with fixed sampling.
 
     Parameters
@@ -628,7 +628,7 @@ class Wavefront(RichData):
             wavelength=self.wavelength.to(u.um),
             output_sample_spacing=sample_spacing,
             output_samples=samples,
-            coherent=True, norm=False)
+            coherent=True, norm=True)
 
         return Wavefront(x=x, y=y, fcn=data, wavelength=self.wavelength, space='psf')
 
@@ -670,6 +670,6 @@ class Wavefront(RichData):
             wavelength=self.wavelength.to(u.um),
             output_sample_spacing=sample_spacing,
             output_samples=samples,
-            norm=False)
+            norm=True)
 
         return Wavefront(x=x, y=y, fcn=data, wavelength=self.wavelength, space='pupil')
