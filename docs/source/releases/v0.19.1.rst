@@ -1,0 +1,28 @@
+*************
+prysm v0.19.1
+*************
+
+v0.19.1 is primarily a bugfix release, but includes some small quality of life changes.  Users are advised that v0.20 will bring a sweeping round of breaking changes; the final such round before version 1 is released.  Version 1 will only contain breaking changes that polish the v0.20 API and no major rewrites or restructuring.
+
+New Features
+============
+
+- :class:`~prysm.propagation.Wavefront` now has :code:`intensity` and :code:`phase` properties.  These are convenience methods that return a new :code:`Wavefront` with its data set to :code:`abs()^2` and :code:`angle` of the reciever's data, respectively.
+- :func:`~prysm.io.read_zygo_datx` now properly understands files which have phase units of nm.
+
+Bug fixes
+=========
+
+- :func:`~prysm.fttools.pad2d` is now properly FFT-aligned.
+- :func:`~prysm.fttools.MatrixDFTExecutor` has had its normalization coefficient corrected and now produces correct scaling in all cases, if the output plane's support is smaller than the computation region.  This is an improvement to before, which had a scaling error of Q and the ratio of input and ouptut (linear) sizes.
+- Matrix DFTs have been type stabilized, they no longer result in double precision output for single precision input.
+- The sample spacing property has been made friendly to GPU array libraries which produce arrays of shape (1,) for scalar operations.
+
+
+Breaking changes
+================
+
+- :func:`~prysm.fttools.pad2d` is now shifted two samples for odd-sized inputs compared to v0.19.
+- :func:`~prysm.mtf_utils.plot_mtf_vs_field` has been rewritten, and now requires seaborn as a dependency.
+- Fixed sampling propagations now always use unitary matrix DFTs.  The meaning of "unitary" is that they satisfy Parseval's theorem.
+
