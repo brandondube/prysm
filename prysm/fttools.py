@@ -59,8 +59,8 @@ def _padshape(array, Q):
     factor_x = (out_x - x) / 2
     factor_y = (out_y - y) / 2
     return (
-        (int(e.floor(factor_y)), int(e.ceil(factor_y))),
-        (int(e.floor(factor_x)), int(e.ceil(factor_x)))), out_x, out_y
+        (int(e.ceil(factor_y)), int(e.floor(factor_y))),
+        (int(e.ceil(factor_x)), int(e.floor(factor_x)))), out_x, out_y
 
 
 def forward_ft_unit(sample_spacing, samples, shift=True):
