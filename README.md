@@ -5,7 +5,7 @@
 [![Coverage Status](https://coveralls.io/repos/github/brandondube/prysm/badge.svg?branch=master)](https://coveralls.io/github/brandondube/prysm?branch=master) [![DOI](http://joss.theoj.org/papers/10.21105/joss.01352/status.svg)](https://doi.org/10.21105/joss.01352)
 
 
-A python3.6+ module for physical optics based modeling and processing of data from commerical and open source instrumentation.
+A python3.6+ module for physical optics based modeling and processing of data from commerical and open source instrumentation.  Prysm is the fastest numerical diffraction code in the world, more than a factor of 3 faster than its nearest competitor on CPU and more than a factor of 1000 on GPU.  It enables modeling and scientific inquiry not possible with other tools while offering a simple and powerful API that reads like English.
 
 ## Installation
 
@@ -18,7 +18,7 @@ prysm requires only [numpy](http://www.numpy.org/), [scipy](https://www.scipy.or
 
 ### Optional Dependencies
 
-Prysm uses numpy for array operations.  To use an nVidia GPU, you must have [cupy](https://cupy.chainer.org/) installed.  Plotting uses [matplotlib](https://matplotlib.org/).  Images are read and written with [imageio](https://imageio.github.io/).  Some MTF utilities utilize [pandas](https://pandas.pydata.org/).  Reading of Zygo datx files requires [h5py](https://www.h5py.org/).
+Prysm uses numpy for array operations.  To use an nVidia GPU, you must have [cupy](https://cupy.chainer.org/) installed.  Plotting uses [matplotlib](https://matplotlib.org/).  Images are read and written with [imageio](https://imageio.github.io/).  Some MTF utilities utilize [pandas](https://pandas.pydata.org/) and [seaborn](https://seaborn.pydata.org/).  Reading of Zygo datx files requires [h5py](https://www.h5py.org/).
 
 ## Features
 
