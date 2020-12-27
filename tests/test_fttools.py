@@ -12,8 +12,9 @@ ARRAY_SIZES = (8, 16, 32, 64, 128, 256, 512, 1024)
 @pytest.mark.parametrize('samples', ARRAY_SIZES)
 def test_mtp_equivalent_to_fft(samples):
     inp = np.random.rand(samples, samples)
-    fft = np.fft.ifftshift(np.fft.fft2(np.fft.fftshift(inp)))
-    mtp = fttools.mdft.dft2(inp, 1, samples)
+    fft = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(inp)))
+    sf = fttools.mdft._norm(inp, 1, samples)
+    mtp = fttools.mdft.dft2(inp, 1, samples) * sf
     assert np.allclose(fft, mtp)
 
 

@@ -3,7 +3,7 @@ import pytest
 
 import numpy as np
 
-from prysm import propagation
+from prysm import propagation, fttools
 from prysm.wavelengths import HeNe
 
 
@@ -30,12 +30,15 @@ def test_unfocus_fft_mdft_equivalent_Wavefront():
     z = np.random.rand(SAMPLES, SAMPLES)
     wf = propagation.Wavefront(x=x, y=y, fcn=z, wavelength=HeNe, space='psf')
     unfocus_fft = wf.unfocus(Q=2, efl=1)
+    # magic number 4 - a bit unclear, but accounts for non-energy
+    # conserving fft; sf is to satisfy parseval's theorem
+    sf = fttools.mdft._norm(wf.data, 2, unfocus_fft.samples_x) * 4
     unfocus_mdft = wf.unfocus_fixed_sampling(
         efl=1,
         sample_spacing=unfocus_fft.sample_spacing,
         samples=unfocus_fft.samples_x)
 
-    assert np.allclose(unfocus_fft.data, unfocus_mdft.data)
+    assert np.allclose(unfocus_fft.data, unfocus_mdft.data/sf)
 
 
 def test_focus_fft_mdft_equivalent_Wavefront():
@@ -43,12 +46,13 @@ def test_focus_fft_mdft_equivalent_Wavefront():
     z = np.random.rand(SAMPLES, SAMPLES)
     wf = propagation.Wavefront(x=x, y=y, fcn=z, wavelength=HeNe, space='pupil')
     unfocus_fft = wf.focus(Q=2, efl=1)
+    sf = fttools.mdft._norm(wf.data, 2, unfocus_fft.samples_x)
     unfocus_mdft = wf.focus_fixed_sampling(
         efl=1,
         sample_spacing=unfocus_fft.sample_spacing,
         samples=unfocus_fft.samples_x)
 
-    assert np.allclose(unfocus_fft.data, unfocus_mdft.data)
+    assert np.allclose(unfocus_fft.data, unfocus_mdft.data*sf)
 
 
 def test_frespace_functions():
