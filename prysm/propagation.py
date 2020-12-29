@@ -13,21 +13,6 @@ from .fttools import pad2d, mdft
 from astropy import units as u
 
 
-def prop_pupil_plane_to_psf_plane(wavefunction, Q, incoherent=True, norm=None):
-    warnings.warn("this function is deprecated and has been renamed to prysm.propagation.focus")
-    return focus(wavefunction=wavefunction, Q=Q, incoherent=incoherent, norm=norm)
-
-
-def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, efl, wavelength, Q):
-    warnings.warn("this function is deprecated and has been renamed to prysm.propagation.focus_units")
-    return focus_units(
-        wavefunction=wavefunction,
-        input_sample_spacing=input_sample_spacing,
-        Q=Q,
-        efl=efl,
-        wavelength=wavelength)
-
-
 def focus(wavefunction, Q, incoherent=True, norm=None):
     """Propagate a pupil plane to a PSF plane.
 
@@ -406,58 +391,34 @@ def angular_spectrum(field, wvl, sample_spacing, z, Q=2):
 class Wavefront(RichData):
     """(Complex) representation of a wavefront."""
 
-    def __init__(self, x, y, fcn, wavelength, space='pupil'):
+    def __init__(self, cmplx_field, dx, wavelength, space='pupil'):
         """Create a new Wavefront instance.
 
         Parameters
         ----------
-        x : `numpy.ndarray`
-            x coordinates
-        y : `numpy.ndarray`
-            y coordinates
-        fcn : `numpy.ndarray`
-            complex-valued wavefront array
+        cmplx_field : `numpy.ndarray`
+            complex-valued array with both amplitude and phase error
+        dx : `float`
+            inter-sample spacing, mm (space=pupil) or um (space=psf)
         wavelength : `float`
             wavelength of light, microns
         space : `str`, {'pupil', 'psf'}
             what sort of space the field occupies
 
         """
-        super().__init__(x=x, y=y, data=fcn,
-                         wavelength=wavelength,
-                         labels=config.pupil_labels,
-                         xy_unit=config.phase_xy_unit,
-                         z_unit=config.phase_z_unit)
+        super().__init__(data=cmplx_field, dx=dx, wavelength=wavelength)
         self.space = space
 
     @property
     def fcn(self):
         """Complex field / wavefunction."""
+        warnings.warn("wavefront.fcn property will be deleted in v1 (v0.20+1 release), use .data instead")
         return self.data
 
     @fcn.setter
     def fcn(self, ary):
+        warnings.warn("wavefront.fcn property will be deleted in v1 (v0.20+1 release), use .data instead")
         self.data = ary
-
-    @property
-    def diameter_x(self):
-        """Diameter of the data in x."""
-        return self.x[-1] - self.x[0]
-
-    @property
-    def diameter_y(self):
-        """Diameter of the data in y."""
-        return self.y[-1] - self.x[0]
-
-    @property
-    def diameter(self):
-        """Greater of (self.diameter_x, self.diameter_y)."""
-        return max((self.diameter_x, self.diameter_y))
-
-    @property
-    def semidiameter(self):
-        """Half of self.diameter."""
-        return self.diameter / 2
 
     @property
     def intensity(self):

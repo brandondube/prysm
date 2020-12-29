@@ -4,9 +4,8 @@ import inspect
 from numbers import Number
 from collections.abc import Iterable
 
-from .conf import config, sanitize_unit
+from .conf import config
 from .mathops import engine as np, interpolate_engine as interpolate
-from .wavelengths import mkwvl
 from .coordinates import uniform_cart_to_polar, polar_to_cart
 from .plotting import share_fig_ax
 
@@ -43,12 +42,8 @@ def fix_interp_pair(x, y):
 
 class RichData:
     """Abstract base class holding some data properties."""
-    _data_type = 'image'
-    _default_twosided = True
-    _slice_xscale = 'linear'
-    _slice_yscale = 'linear'
 
-    def __init__(self, x, y, data, labels, xy_unit=None, z_unit=None, wavelength=None):
+    def __init__(self, data, dx, wavelength):
         """Initialize a new BasicData instance.
 
         Parameters
@@ -57,16 +52,10 @@ class RichData:
             x unit axis
         y : `numpy.ndarray`
             y unit axis
-        data : `numpy.ndarray`
-            data
-        labels : `Labels`
-            labels instance, can be shared
-        xy_unit : `astropy.unit` or `str`, optional
-            astropy unit or string which satisfies hasattr(astropy.units, xyunit)
-        z_unit : `astropy.unit` or `str`, optional
-             astropy unit or string which satisfies hasattr(astropy.units, xyunit)
-        wavelength : `astropy.unit` or `float`
-            astropy unit or quantity or float with implicit units of microns
+        dx : `float`
+            inter-sample spacing, mm
+        wavelength : float`
+            wavelength of light, um
 
         Returns
         -------
@@ -74,14 +63,8 @@ class RichData:
             the instance
 
         """
-        if wavelength is None:
-            wavelength = config.wavelength
-
-        self.x, self.y, self.data = x, y, data
-        self.labels = labels
-        self.wavelength = mkwvl(wavelength)
-        self.xy_unit = sanitize_unit(xy_unit, self.wavelength)
-        self.z_unit = sanitize_unit(z_unit, self.wavelength)
+        self.data = data
+        self.dx = dx
         self.interpf_x, self.interpf_y, self.interpf_2d = None, None, None
 
     @property
@@ -99,34 +82,6 @@ class RichData:
             return self.data.size
         except AttributeError:
             return 0
-
-    @property
-    def samples_x(self):
-        """Number of samples in the x dimension."""
-        return self.shape[1]
-
-    @property
-    def samples_y(self):
-        """Number of samples in the y dimension."""
-        return self.shape[0]
-
-    @property
-    def sample_spacing(self):
-        """center-to-center sample spacing."""
-        try:
-            return float(self.x[1] - self.x[0])
-        except TypeError:
-            return np.nan
-
-    @property
-    def center_x(self):
-        """Center "pixel" in x."""
-        return self.samples_x // 2
-
-    @property
-    def center_y(self):
-        """Center "pixel" in y."""
-        return self.samples_y // 2
 
     def copy(self):
         """Return a (deep) copy of this instance."""
@@ -159,62 +114,6 @@ class RichData:
         other._original_type = original_type
         other._original_vars = vars(self)
         return other
-
-    def change_xy_unit(self, to, inplace=True):
-        """Change the x/y unit to a new one, scaling the data in the process.
-
-        Parameters
-        ----------
-        to : `astropy.unit` or `str`
-            if not an astropy unit, a string that is a valid attribute of astropy.units.
-        inplace : `bool`, optional
-            if True, returns self.  Otherwise returns the modified data.
-
-        Returns
-        -------
-        `RichData`
-            self, if inplace=True
-        `numpy.ndarray`, `numpy.ndarray`
-            x, y from self, if inplace=False
-
-        """
-        unit = sanitize_unit(to, self.wavelength)
-        coef = self.xy_unit.to(unit)
-        x, y = self.x * coef, self.y * coef
-        if not inplace:
-            return x, y
-        else:
-            self.x, self.y = x, y
-            self.xy_unit = unit
-            return self
-
-    def change_z_unit(self, to, inplace=True):
-        """Change the z unit to a new one, scaling the data in the process.
-
-        Parameters
-        ----------
-        to : `astropy.unit` or `str`
-            if not an astropy unit, a string that is a valid attribute of astropy.units.
-        inplace : `bool`, optional
-            if True, returns self.  Otherwise returns the modified data.
-
-        Returns
-        -------
-        `RichData`
-            self, if inplace=True
-        `numpy.ndarray`
-            data from self, if inplace=False
-
-        """
-        unit = sanitize_unit(to, self.wavelength)
-        coef = self.z_unit.to(unit)
-        modified_data = self.data * coef
-        if not inplace:
-            return modified_data
-        else:
-            self.data = modified_data
-            self.z_unit = unit
-            return self
 
     def slices(self, twosided=None):
         """Create a `Slices` instance from this instance.
