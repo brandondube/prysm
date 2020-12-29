@@ -61,6 +61,13 @@ class OpticalPhase(RichData):
         return Sa(self.phase)
 
     @property
+    def strehl(self):
+        """Strehl ratio of the pupil."""
+        phase = self.change_z_unit(to='um', inplace=False)
+        wav = self.wavelength.to(u.um)
+        return e.exp(-4 * e.pi / wav * std(phase) ** 2)
+
+    @property
     def std(self):
         """Standard deviation of phase error."""
         return std(self.phase)
