@@ -93,6 +93,8 @@ def focus_fixed_sampling(wavefunction, input_sample_spacing, prop_dist,
         number of samples in the square output array
     coherent : `bool`
         if True, returns the complex array.  Else returns its magnitude squared.
+    norm : `bool`, optional
+        if True, satisfy Parseval's theorem, else no normalization
 
     Returns
     -------
@@ -105,7 +107,7 @@ def focus_fixed_sampling(wavefunction, input_sample_spacing, prop_dist,
                        prop_dist=prop_dist,
                        wavelength=wavelength,
                        output_sample_spacing=output_sample_spacing)
-    field = mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples)
+    field = mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples, norm=norm)
     if coherent:
         return field
     else:
@@ -131,6 +133,8 @@ def unfocus_fixed_sampling(wavefunction, input_sample_spacing, prop_dist,
         sample spacing in the output plane, microns
     output_samples : `int`
         number of samples in the square output array
+    norm : `bool`, optional
+        if True, satisfy Parseval's theorem, else no normalization
 
     Returns
     -------
@@ -435,7 +439,7 @@ class Wavefront(RichData):
         func = getattr(operator, op)
         if isinstance(other, Wavefront):
             criteria = [
-                abs(self.sample_spacing - other.sample_spacing) / self.sample_spacing * 100 < 0.001,  # must match to 1 millipercent
+                abs(self.dx - other.dx) / self.dx * 100 < 0.1,  # must match to 0.1% (generous, for fp32 compat)
                 self.shape == other.shape,
                 self.wavelength.represents == other.wavelength.represents
             ]

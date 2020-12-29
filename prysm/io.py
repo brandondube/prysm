@@ -150,7 +150,7 @@ def read_trioptics_mtf_vs_field_mtflab_v4(file, metadata=False):
     data = data[:len(data)//10]  # only search in a subset of the file for speed
 
     # compile a pattern that will search for the image heights in the file and extract
-    fields_pattern = re.compile(f'MTF=09(.*?)Legend=09', flags=re.DOTALL)
+    fields_pattern = re.compile('MTF=09(.*?)Legend=09', flags=re.DOTALL)
     fields = fields_pattern.findall(data)[0]  # two copies, only need 1st
 
     # make a pattern that will search for and extract the tan and sag MTF data.  The match will
@@ -187,7 +187,7 @@ def read_trioptics_mtf_vs_field_mtflab_v5(file_contents, metadata=False):
 
     Parameters
     ----------
-    file : `str` or path_like or file_like
+    file_contents : `str` or path_like or file_like
         contents of a file, path_like to the file, or file object
     metadata : `bool`
         whether to also extract and return metadata
@@ -686,7 +686,7 @@ def read_zygo_dat(file, multi_intensity_action='first'):
     ----------
     file : path_like
         path to a file
-    multi_itensity_action : `str`, {'avg', 'first', 'last'}
+    multi_intensity_action : `str`, {'avg', 'first', 'last'}
         action to take when handling multiple intensitiy frames, only avg is valid at this time
 
     Returns
@@ -1170,7 +1170,7 @@ def read_zygo_metadata(file_contents):
     return {k: v for k, v in zip(all_keys, all_vars)}
 
 
-def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None, high_phase_res=False):
+def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None):
     """Write a Zygo ASCII interferogram file.
 
     Parameters
@@ -1187,8 +1187,6 @@ def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None, high_
         wavelength of light, um
     intensity : `numpy.ndarray`, optional
         intensity data
-    high_phase_res : `float`, optional
-        whether to save with high phase resolution
 
     """
     # construct the header
@@ -1212,12 +1210,25 @@ def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None, high_
     line8 = f'0 0.5 {wavelength*1e-6} 0 1 0 {res} {timestamp_int}'  # end is timestamp in integer seconds
     line9 = f'{py} {px} 0 0 0 0 ' + '"' + ' ' * 9 + '"'
     line10 = '0 0 0 0 0 0 0 0 0 0'
-    line11 = f'{int(high_phase_res)} 1 20 2 0 0 0 0 0'
+    line11 = '1 1 20 2 0 0 0 0 0'
     line12 = '0 ' + '"' + ' ' * 12 + '"'
     line13 = '1 0'
     line14 = '"' + ' ' * 7 + '"'
 
-    header_lines = (line1, line2, line3, line4, line5, line6, line7, line8, line9, line10, line11, line12, line13, line14)
+    header_lines = (line1,
+                    line2,
+                    line3,
+                    line4,
+                    line5,
+                    line6,
+                    line7,
+                    line8,
+                    line9,
+                    line10,
+                    line11,
+                    line12,
+                    line13,
+                    line14)
     header = '\n'.join(header_lines) + '\n'
 
     if intensity is None:
@@ -1226,7 +1237,7 @@ def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None, high_
     line16 = '#'
 
     # process the phase and write out
-    coef = ZYGO_PHASE_RES_FACTORS[int(high_phase_res)]
+    coef = ZYGO_PHASE_RES_FACTORS[1]
     encoded_phase = phase * (coef / wavelength / wavelength / 0.5)
     encoded_phase[e.isnan(encoded_phase)] = ZYGO_INVALID_PHASE
     encoded_phase = e.flipud(encoded_phase.astype(e.int64))
@@ -1249,7 +1260,7 @@ def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None, high_
         with open(file, 'w') as fd:
             shutil.copyfileobj(s, fd)
     else:
-        shutil.copyfileobj(s, fd)
+        shutil.copyfileobj(s, file)
 
 
 def read_sigfit_zernikes(file):

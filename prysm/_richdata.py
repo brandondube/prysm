@@ -44,14 +44,12 @@ class RichData:
     """Abstract base class holding some data properties."""
 
     def __init__(self, data, dx, wavelength):
-        """Initialize a new BasicData instance.
+        """Initialize a new RichData instance.
 
         Parameters
         ----------
-        x : `numpy.ndarray`
-            x unit axis
-        y : `numpy.ndarray`
-            y unit axis
+        data : `numpy.ndarray`
+            2D array containing the z data
         dx : `float`
             inter-sample spacing, mm
         wavelength : float`
@@ -82,6 +80,21 @@ class RichData:
             return self.data.size
         except AttributeError:
             return 0
+
+    @property
+    def support_x(self):
+        """Width of the domain in X."""
+        return self.shape[1] * self.sample_spacing
+
+    @property
+    def support_y(self):
+        """Width of the domain in Y."""
+        return self.shape[0] * self.sample_spacing
+
+    @property
+    def support(self):
+        """Width of the domain."""
+        return max((self.support_x, self.support_y))
 
     def copy(self):
         """Return a (deep) copy of this instance."""

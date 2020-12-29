@@ -46,21 +46,6 @@ class Convolvable(RichData):
         """Pretty print description."""
         return f'{type(self)} with sample spacing {self.sample_spacing:.3f} and support {self.support:.3f} μm'
 
-    @property
-    def support_x(self):
-        """Width of the domain in X."""
-        return (self.samples_x - 1) * self.sample_spacing
-
-    @property
-    def support_y(self):
-        """Width of the domain in Y."""
-        return (self.samples_y - 1) * self.sample_spacing
-
-    @property
-    def support(self):
-        """Width of the domain."""
-        return max((self.support_x, self.support_y))
-
     def conv(self, other):
         """Convolves this convolvable with another.
 

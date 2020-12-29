@@ -1,0 +1,8 @@
+***********
+prysm v0.20
+***********
+
+Breaking Changes
+================
+
+- :func:`~prysm.io.write_zygo_ascii` no longer takes a :code:`high_phase_res` parameter.  It did not do anything before and has been removed, as it is not likely prysm needs to support ancient version of MetroPro that are incompatible with that convention.

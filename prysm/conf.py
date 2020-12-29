@@ -1,10 +1,5 @@
 """Configuration for this instance of prysm."""
-import copy
-
-from astropy import units as u
-
 from .mathops import engine as np
-from .wavelengths import HeNe
 
 
 class Config(object):

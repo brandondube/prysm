@@ -7,16 +7,16 @@ from astropy import units as u
 from scipy import optimize, signal
 
 from .conf import config, sanitize_unit
-from ._phase import OpticalPhase
 from ._richdata import RichData
 from .mathops import np
 from .zernike import defocus, zernikefit, FringeZernike
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar
-from .util import mean, rms  # NOQA
+from .util import mean, rms, pv, Sa, std  # NOQA
 from .geometry import mcache
 from .wavelengths import HeNe
+from .plotting import share_fig_ax
 
 
 def fit_plane(x, y, z):
@@ -150,6 +150,7 @@ def psd(height, sample_spacing, window=None):
     sample_spacing : `float`
         spacing of samples in the input data
     window : {'welch', 'hann'} or ndarray, optional
+        window to apply to the data.  May be a name or a window already computed
 
     Returns
     -------
@@ -423,6 +424,8 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
         1D PSD, units of height^2 / (cy/length)^2
     callable : callable, optional
         a callable object that takes parameters of (frequency, *); all other parameters will be fit
+    guess : `iterable`
+        parameters of callable to seed optimization with
     return_ : `str`, optional, {'coefficients', 'optres'}
         what to return; either return the coefficients (optres.x) or the optimization result (optres)
 
@@ -477,7 +480,7 @@ def make_random_subaperture_mask(ary, ary_diam, mask_diam, shape='circle', seed=
         the diameter of the array on its long side, if it is not square
     mask_diam : `float`
         the desired mask diameter, in the same units as ary_diam
-    `shape` : `str`
+    shape : `str`
         a string accepted by prysm.geometry.MCachnp.__call__, for example 'circle', or 'square' or 'octogon'
     seed : `int`
         a random number seed, None will be a random seed, provide one to make the mask deterministic.
@@ -522,67 +525,40 @@ def make_random_subaperture_mask(ary, ary_diam, mask_diam, shape='circle', seed=
 
 class PSD(RichData):
     """Two dimensional PSD."""
-
-    _default_twosided = False
-    _data_attr = 'data'
-    _data_type = 'image'
-    _slice_xscale = 'log'
-    _slice_yscale = 'log'
-
-    def __init__(self, x, y, data, xy_unit, z_unit, labels=None):
+    def __init__(self, data, dx):
         """Initialize a new BasicData instancnp.
 
         Parameters
         ----------
-        x : `numpy.ndarray`
-            x unit axis
-        y : `numpy.ndarray`
-            y unit axis
         data : `numpy.ndarray`
             data
-        units : `Units`
-            units instance, can be shared
-        labels : `Labels`
-            labels instance, can be shared
-
-        Returns
-        -------
-        RichData
-            the instance
+        dx : `float`
+            inter-sample spacing, 1/mm
 
         """
-        if labels is None:
-            labels = config.psd_labels
-
-        super().__init__(x=x, y=y, data=data, xy_unit=xy_unit, z_unit=z_unit, labels=labels)
+        super().__init__(data=data, dx=dx, wavelength=None)
 
 
-class Interferogram(OpticalPhase):
+class Interferogram(RichData):
     """Class containing logic and data for working with interferometric data."""
 
-    def __init__(self, phase, x=None, y=None, intensity=None,
-                 labels=None, xy_unit=None, z_unit=None, wavelength=HeNe, meta=None):
+    def __init__(self, phase, dx, wavelength=HeNe, intensity=None, meta=None):
         """Create a new Interferogram instancnp.
 
         Parameters
         ----------
         phase : `numpy.ndarray`
-            phase values, units of units.z
-        x : `numpy.ndarray`, optional
-            x (axis 1) values, units of scale
-        y : `numpy.ndarray`, optional
-            y (axis 0) values, units of scale
+            phase values, units of nm
+        dx : `float`
+            inter-sample spacing, mm
+        wavelength : `float`
+            wavelength of light, microns
         intensity : `numpy.ndarray`, optional
             intensity array from interferometer camera
-        labels : `Labels`
-            labels instance, can be shared
-        xyunit : `astropy.unit` or `str`, optional
-            astropy unit or string which satisfies hasattr(astropy.units, xyunit)
-        zunit : `astropy.unit` or `str`, optional
-             astropy unit or string which satisfies hasattr(astropy.units, xyunit)
         meta : `dict`
             dictionary of any metadata.  if a wavelength or Wavelength key is
-            present, this will also be stored in self.wavelength
+            present, this will also be stored in self.wavelength and is assumed
+            to have units of meters (Zygo convention)
 
         """
         if not wavelength:
@@ -593,24 +569,8 @@ class Interferogram(OpticalPhase):
 
                 if wavelength is not None:
                     wavelength *= 1e6  # m to um
-            else:
-                wavelength = 1
 
-        if x is None:
-            # assume x, y both none
-            y, x = (np.arange(s) for s in phase.shape)
-            xy_unit = 'pix'
-
-        if xy_unit is None:
-            xy_unit = config.phase_xy_unit
-
-        if z_unit is None:
-            z_unit = config.phase_z_unit
-
-        super().__init__(x=x, y=y, phase=phase,
-                         labels=config.interferogram_labels,
-                         xy_unit=xy_unit, z_unit=z_unit, wavelength=wavelength)
-
+        super().__init__(data=phase, dx=dx, wavelenght=wavelength)
         self.intensity = intensity
         self.meta = meta
 
@@ -618,6 +578,33 @@ class Interferogram(OpticalPhase):
     def dropout_percentage(self):
         """Percentage of pixels in the data that are invalid (NaN)."""
         return np.count_nonzero(np.isnan(self.phase)) / self.phase.size * 100
+
+    @property
+    def pv(self):
+        """Peak-to-Valley phase error.  DIN/ISO St."""
+        return pv(self.phase)
+
+    @property
+    def rms(self):
+        """RMS phase error.  DIN/ISO Sq."""
+        return rms(self.phase)
+
+    @property
+    def Sa(self):
+        """Sa phase error.  DIN/ISO Sa."""
+        return Sa(self.phase)
+
+    @property
+    def strehl(self):
+        """Strehl ratio of the pupil."""
+        phase = self.change_z_unit(to='um', inplace=False)
+        wav = self.wavelength.to(u.um)
+        return np.exp(-4 * np.pi / wav * std(phase) ** 2)
+
+    @property
+    def std(self):
+        """Standard deviation of phase error."""
+        return std(self.phase)
 
     @property
     def pvr(self):
@@ -1027,7 +1014,47 @@ class Interferogram(OpticalPhase):
         kernel *= self.bandlimited_rms(upper_limit, None) / wavelength
         return 1 - np.exp(-kernel**2)
 
-    def save_zygo_ascii(self, file, high_phase_res=True):
+    def interferogram(self, visibility=1, passes=2, interpolation=None, fig=None, ax=None):
+        """Create a picture of fringes.
+
+        Parameters
+        ----------
+        visibility : `float`
+            Visibility of the interferogram
+        passes : `float`
+            Number of passes (double-pass, quadra-pass, etc.)
+        interpolation : `str`, optional
+            interpolation method, passed directly to matplotlib
+        fig : `matplotlib.figure.Figure`, optional
+            Figure to draw plot in
+        ax : `matplotlib.axes.Axis`
+            Axis to draw plot in
+
+        Returns
+        -------
+        fig : `matplotlib.figure.Figure`, optional
+            Figure containing the plot
+        ax : `matplotlib.axes.Axis`, optional:
+            Axis containing the plot
+
+        """
+        epd = self.diameter
+        phase = self.change_z_unit(to='waves', inplace=False)
+
+        fig, ax = share_fig_ax(fig, ax)
+        plotdata = visibility * np.cos(2 * np.pi * passes * phase)
+        im = ax.imshow(plotdata,
+                       extent=[-epd / 2, epd / 2, -epd / 2, epd / 2],
+                       cmap='Greys_r',
+                       interpolation=interpolation,
+                       clim=(-1, 1),
+                       origin='lower')
+        fig.colorbar(im, label=r'Wrapped Phase [$\lambda$]', ax=ax, fraction=0.046)
+        ax.set(xlabel=self.labels.x(self.xy_unit, self.z_unit),
+               ylabel=self.labels.y(self.xy_unit, self.z_unit))
+        return fig, ax
+
+    def save_zygo_ascii(self, file):
         """Save the interferogram to a Zygo ASCII filnp.
 
         Parameters
@@ -1037,10 +1064,7 @@ class Interferogram(OpticalPhase):
 
         """
         phase = self.change_z_unit(to='waves', inplace=False)
-        write_zygo_ascii(file, phase=phase,
-                         x=self.x, y=self.y,
-                         intensity=None, wavelength=self.wavelength.to(u.um),
-                         high_phase_res=high_phase_res)
+        write_zygo_ascii(file, phase=phase, x=self.x, y=self.y, intensity=None, wavelength=self.wavelength.to(u.um))
 
     def __str__(self):
         """Pretty-print string representation."""
