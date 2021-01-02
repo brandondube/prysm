@@ -2,12 +2,10 @@
 from collections import defaultdict
 
 from .conf import config
-from .mathops import engine as e, kronecker, sign
-from .pupil import Pupil
-from .coordinates import make_rho_phi_grid, cart_to_polar, gridcache
+from .mathops import engine as np, kronecker, sign
 from .util import rms, sort_xy, is_odd
 from .plotting import share_fig_ax
-from .jacobi import jacobi
+from .jacobi import jacobi, jacobi_sequence
 
 # See JCW - http://wp.optics.arizona.edu/jcwyant/wp-content/uploads/sites/13/2016/08/ZernikePolynomialsForTheWeb.pdf
 
@@ -295,336 +293,124 @@ def n_m_to_name(n, m):
     return _name_helper(n, m)
 
 
-class ZCacheMN:
-    """Cache of Zernike terms evaluated over the unit circle, based on (n, m) indices.
+def zernike_nm(n, m, r, t, norm=True):
+    """Zernike polynomial of radial order n, azimuthal order m at point r, t.
 
-    Users should use the call method:
-
-    zc = ZcacheMN()
-    n = 2
-    m = 2
-    zc(n,m,False) # astigmatism, not normed
-
-    The code of this class is complicated by the heavy caching it does.  See
-    orthopy for a simpler, but slower implementation.
-
-    To understand the code of this class, here are the cliff notes:
-    - Zernikes themselves are cached, as well as all of the pieces of the
-        computation.
-    - Zernike polynomials "are" jacobi polynomials, under two modifications:
-        1) the 'x' variable is replaced with x = 2r^2 - 1
-        2) the order of the jacobi polynomial, n_j, is computed from the Zernike
-            order as n_j = (n - m) / 2
-        3) the azimuthal component of the Zernike polynomials is simply
-            a cosine or sine of (theta * m)
-    - A recurrence relation can be used to generate Jacobi polynomials quickly
-        and with high numerical stability.  This is contained within the
-        get_jacobi method.
-    - the grid_bypass method is likely the 'clearest' code, since it does
-        not deal with any caching mechanisms
+    Parameters
+    ----------
+    n : `int`
+        radial order
+    m : `int`
+        azimuthal order
+    r : `numpy.ndarray`
+        radial coordinates
+    t : `numpy.ndarray`
+        azimuthal coordinates
+    norm : `bool`, optional
+        if True, orthonormalize the result (unit RMS)
+        else leave orthogonal (zero-to-peak = 1)
 
     """
-    def __init__(self, gridcache=gridcache):
-        """Create a new ZCache instance."""
-        self.normed = {}
-        self.regular = {}
-        self.jac = {}
-        self.cos = {}
-        self.sin = {}
-        self.gridcache = gridcache
-        self.offgridj = {}  # jacobi polynomials
-        self.offgrid_shifted_r = {}
-
-    def get_zernike(self, n, m, samples, norm):
-        """Get an array of phase values for a given radial order n, azimuthal order m, number of samples, and orthonormalization."""  # NOQA
-        if is_odd(n - m):
-            raise ValueError('Zernike polynomials are only defined for n-m even.')
-        key = (n, m, samples)
-        if norm:
-            d_ = self.normed
+    x = 2 * r ** 2 - 1
+    am = abs(m)
+    n_j = (n - am) // 2
+    out = jacobi(n_j, 0, am, x)
+    if m != 0:
+        if m < 0:
+            out *= (r ** am * np.sin(m*t))
         else:
-            d_ = self.regular
+            out *= (r ** am * np.cos(m*t))
 
-        ret = d_.get(key, None)
-        if ret is None:
-            zern = self.get_term(n=n, m=m, samples=samples)
-            if norm:
-                zern = zern * zernike_norm(n=n, m=m)
+    if norm:
+        out *= zernike_norm(n, m)
 
-            d_[key] = zern
-            ret = zern
+    return out
 
-        return ret
 
-    def get_term(self, n, m, samples):
-        """Get a term from the cache.
+def zernike_nm_sequence(nms, r, t, norm=True):
+    """Zernike polynomial of radial order n, azimuthal order m at point r, t.
 
-        Parameters
-        ----------
-        n : `int`
-            radial order
-        m : `int`
-            azimuthal order
-        samples : `int`
-            square grid size
+    Parameters
+    ----------
+    nms : iterable of tuple of int,
+        sequence of (n, m); looks like [(1,1), (3,1), ...]
+    r : `numpy.ndarray`
+        radial coordinates
+    t : `numpy.ndarray`
+        azimuthal coordinates
+    norm : `bool`, optional
+        if True, orthonormalize the result (unit RMS)
+        else leave orthogonal (zero-to-peak = 1)
 
-        Returns
-        -------
-        `numpy.ndarray`
-            zernike term evaluated over the grid
+    """
+    # this function deduplicates all possible work.  It uses a connection
+    # to the jacobi polynomials to efficiently compute a series of zernike
+    # polynomials
+    # it follows this basic algorithm:
+    # for each (n, m) compute the appropriate Jacobi polynomial order
+    # collate the unique values of that for each |m|
+    # compute a set of jacobi polynomials for each |m|
+    # compute r^|m| , sin(|m|*t), and cos(|m|*t for each |m|
+    #
+    # benchmarked at 12.26 ns/element (256x256), 4.6GHz CPU = 56 clocks per element
+    # ~36% faster than previous impl (12ms => 8.84 ms)
+    x = 2 * r ** 2 - 1
+    ms = list(e[1] for e in nms)
+    am = np.abs(ms)
+    amu = np.unique(am)
 
-        """
-        am = abs(m)
-        r, p = self.get_grid(samples=samples, modified=False)
-        term = self.get_jacobi(n=n, m=am, samples=samples)
+    def factory():
+        return 0
 
-        if m != 0:
-            azterm = self.get_azterm(m=m, samples=samples)
-            rterm = r ** am
-            term = term * azterm * rterm
+    jacobi_sequences_mjn = defaultdict(factory)
+    # jacobi_sequences_mjn is a lookup table from |m| to all orders < max(n_j)
+    # for each |m|, i.e. 0 .. n_j_max
+    for nm, am_ in zip(nms, am):
+        n = nm[0]
+        nj = (n-am_) // 2
+        if nj > jacobi_sequences_mjn[am_]:
+            jacobi_sequences_mjn[am_] = nj
 
-        return term
+    for k in jacobi_sequences_mjn:
+        nj = jacobi_sequences_mjn[k]
+        jacobi_sequences_mjn[k] = np.arange(nj+1)
 
-    def __call__(self, n, m, samples, norm):
-        """Retrieve a Zernike term from the cache.
+    jacobi_sequences = {}
 
-        Parameters
-        ----------
-        n : `int`
-            radial order
-        m : `int`
-            azimuthal order
-        samples : `int`
-            square grid size
-        norm : `bool`
-            if True, orthonormalize.
+    jacobi_sequences_mjn = dict(jacobi_sequences_mjn)
+    for k in jacobi_sequences_mjn:
+        n_jac = jacobi_sequences_mjn[k]
+        jacobi_sequences[k] = list(jacobi_sequence(n_jac, 0, k, x))
 
-        Returns
-        -------
-        `numpy.ndarray`
-            zernike term evaluated over the grid
+    powers_of_m = {}
+    sines = {}
+    cosines = {}
+    for m in amu:
+        powers_of_m[m] = r ** m
+        sines[m] = np.sin(m*t)
+        cosines[m] = np.cos(m*t)
 
-        """
-        return self.get_zernike(n=n, m=m, samples=samples, norm=norm)
+    for n, m in nms:
+        absm = abs(m)
+        nj = (n-absm) // 2
+        jac = jacobi_sequences[absm][nj]
+        if norm:
+            jac = jac * zernike_norm(n, m)
 
-    def grid_bypass(self, n, m, norm, r, p):
-        """Bypass the grid computation, providing radial coordinates directly.
-
-        Notes
-        -----
-        To avoid memory leaks, you should use grid_bypass_cleanup after you are
-        finished with this function for a given pair of r, p arrays
-
-        Parameters
-        ----------
-        n : `int`
-            radial order
-        m : `int`
-            azimuthal order
-        norm : `bool`
-            whether to orthonormalize the polynomials
-        r : `numpy.ndarray`
-            radial coordinates.  Unnormalized in the sense of the coordinate perturbation of the jacobi polynomials.
-            Notionally on a regular grid spanning [0,1]
-        p : `numpy.ndarray`
-            azimuthal coordinates matching r
-
-        Returns
-        -------
-        `numpy.ndarray`
-            zernike polynomial n or m at this coordinate.
-
-        """
-        key_ = self._gb_key(r)
-        key = (n, m, key_)
-        rmod = 2 * r ** 2 - 1
-        self.offgrid_shifted_r[key] = rmod
-
-        term = self.get_jacobi(n=n, m=abs(m), samples=0, r=rmod)  # samples not used, dummy value
-
-        if m != 0:
-            if sign(m) == -1:
-                azterm = e.sin(m * p)
+        if m == 0:
+            # rotationally symmetric Zernikes are jacobi
+            yield jac
+        else:
+            if m < 0:
+                azpiece = sines[absm]
             else:
-                azterm = e.cos(m * p)
+                azpiece = cosines[absm]
 
-            rterm = r ** abs(m)
-            term = term * azterm * rterm
-
-        if norm:
-            norm = zernike_norm(n, m)
-            term *= norm
-
-        return term
-
-    def grid_bypass_cleanup(self, r, p):
-        """Remove data related to r, p from the cache.
-
-        Parameters
-        ----------
-        r : `numpy.ndarray`
-            radial coordinates
-        p : `numpy.ndarray`
-            azimuthal coordinates
-
-        """
-        key_ = self._gb_key(r)
-        for dict_ in (self.offgridj, self.offgrid_shifted_r):
-            keys = list(dict_.keys())
-            for key in keys:
-                if key[2] == key_[0]:
-                    del dict_[key]
-
-    def _gb_key(self, r):
-        spacing = r[1] - r[0]
-        npts = r.shape
-        max_ = r[-1]
-        return f'{spacing}-{npts}-{max_}'
-
-    def get_azterm(self, m, samples):
-        """Retrieve the azimuthally variant term.
-
-        Parameters
-        ----------
-        m : `int`
-            azimuthal order
-        samples : `int`
-            number of samples on the (square) grid
-
-        Returns
-        -------
-        `numpy.ndarray`
-            azimuthally variant component
-
-        """
-        key = (m, samples)
-        if sign(m) == -1:
-            d_ = self.sin
-            func = e.sin
-        else:
-            d_ = self.cos
-            func = e.cos
-
-        ret = d_.get(key, None)
-        if ret is None:
-            _, p = self.get_grid(samples=samples, modified=False)
-            ret = func(m * p)
-            d_[key] = ret
-
-        return ret
-
-    def get_jacobi(self, n, m, samples, nj=None, r=None):
-        """Retrieve the jacobi polynomial for a given zernike set.
-
-        Parameters
-        ----------
-        n : `int`
-            radial order
-        m : `int`
-            azimuthal order
-        samples : `int`
-            square grid size
-        nj : `int`
-            jacobi order, (n-m)/2
-        r : `numpy.ndarray`, optional
-            transformed radial coordinate
-
-        Returns
-        -------
-        `numpy.ndarray`
-            jacobi term evaluated over the grid
-
-        """
-        if nj is None:
-            nj = (n - m) // 2
-
-        if r is not None:
-            key = (nj, m, self._gb_key(r))
-            # r provided, grid not wanted
-            # this is just a duplication of below with a separate r and cache dict
-            jac = self.offgridj.get(key, None)
-            while jac is None:
-                if nj > 2:
-                    jnm2 = self.get_jacobi(n=None, nj=nj - 2, m=m, samples=samples, r=r)
-                    jnm1 = self.get_jacobi(n=None, nj=nj - 1, m=m, samples=samples, r=r)
-                else:
-                    jnm1, jnm2 = None, None
-
-                jac = jacobi(nj, alpha=0, beta=m, Pnm1=jnm1, Pnm2=jnm2, x=r)
-                self.offgridj[key] = jac
-        else:
-            key = (nj, m, samples)
-            jac = self.jac.get(key, None)
-            while jac is None:
-                r, _ = self.get_grid(samples=samples)
-                if nj > 2:
-                    jnm1 = self.get_jacobi(n=None, nj=nj - 1, m=m, samples=samples)
-                    jnm2 = self.get_jacobi(n=None, nj=nj - 2, m=m, samples=samples)
-                else:
-                    jnm1, jnm2 = None, None
-                jac = jacobi(nj, alpha=0, beta=m, Pnm1=jnm1, Pnm2=jnm2, x=r)
-                self.jac[key] = jac
-
-        return jac
-
-    def get_grid(self, samples, modified=True):
-        """Retrieve a grid for a given sample count.
-
-        Parameters
-        ----------
-        samples : `int`
-            sample size of the square grid
-        modified : `bool`, optional
-            if True, return the modified grid, r -> 2r^2 - 1
-            suitable for use with the jacobi polynomials
-            (which are used in this impl to generate Zernikes)
-
-        Returns
-        -------
-        `numpy.ndarray`, numpy.ndarray`
-            array of rho, phi values
-
-        """
-        if modified:
-            res = self.gridcache(samples=samples, radius=1, r='r -> 2r^2 - 1', t='t -> t+90')
-        else:
-            res = self.gridcache(samples=samples, radius=1, r='r', t='t -> t+90')
-
-        return res['r'], res['t']
-
-    def clear(self, *args):
-        """Empty the cache."""
-        self.normed = {}
-        self.regular = {}
-        self.jac = {}
-        self.sin = {}
-        self.cos = {}
-        self.offgrid_shifted_r = {}
-        self.offgridj = {}
-        self.offgridn = {}
-        self.offgridr = {}
-
-    def nbytes(self):
-        """Total size in memory of the cache in bytes."""
-        total = 0
-        dicts = (
-            self.normed,
-            self.regular,
-            self.jac,
-            self.sin,
-            self.cos,
-            self.offgrid_shifted_r,
-            self.offgridj,
-        )
-        for dict_ in dicts:
-            for key in dict_:
-                total += dict_[key].nbytes
-
-        return total
+            radialpiece = powers_of_m[absm]
+            out = jac * azpiece * radialpiece  # jac already contains the norm
+            yield out
 
 
-zcachemn = ZCacheMN()
-config.chbackend_observers.append(zcachemn.clear)
 
 nm_funcs = {
     'Fringe': fringe_to_n_m,

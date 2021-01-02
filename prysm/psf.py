@@ -467,7 +467,7 @@ class PSF(Convolvable):
         return self
 
     @staticmethod
-    def from_pupil(pupil, efl, Q=config.Q, norm='max', radpower=1, incoherent=True):
+    def from_pupil(pupil, efl, Q=2, norm='max', radpower=1, incoherent=True):
         """Use scalar diffraction propogation to generate a PSF from a pupil.
 
         Parameters

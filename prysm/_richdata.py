@@ -63,6 +63,7 @@ class RichData:
         """
         self.data = data
         self.dx = dx
+        self.wavelength = wavelength
         self.interpf_x, self.interpf_y, self.interpf_2d = None, None, None
 
     @property

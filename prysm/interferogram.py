@@ -6,7 +6,7 @@ from astropy import units as u
 
 from scipy import optimize, signal
 
-from .conf import config, sanitize_unit
+from .conf import config
 from ._richdata import RichData
 from .mathops import np
 from .zernike import defocus, zernikefit, FringeZernike
@@ -864,7 +864,7 @@ class Interferogram(RichData):
         self.phase = filt_both
         return self
 
-    def latcal(self, plate_scale, unit='mm'):
+    def latcal(self, plate_scale):
         """Perform lateral calibration.
 
         This probably won't do what you want if your data already has spatial
@@ -874,8 +874,6 @@ class Interferogram(RichData):
         ----------
         plate_scale : `float`
             center-to-center sample spacing of pixels, in (unit)s.
-        unit : `str`, optional
-            unit associated with the plate scalnp.
 
         Returns
         -------
@@ -884,8 +882,6 @@ class Interferogram(RichData):
 
         """
         self.strip_latcal()
-        unit = sanitize_unit(unit, self.wavelength)
-        self.xy_unit = unit
         # sloppy to do this hernp...
         self.x *= plate_scale
         self.y *= plate_scale

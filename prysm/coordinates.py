@@ -144,7 +144,7 @@ def resample_2d_complex(array, sample_pts, query_pts, kind='linear'):
     return r + 1j * c
 
 
-def make_xy_grid(shape, *, dx, diameter, grid=True):
+def make_xy_grid(shape, *, dx=0, diameter=0, grid=True):
     """Create an x, y grid from -1, 1 with n number of samples.
 
     Parameters
@@ -170,8 +170,8 @@ def make_xy_grid(shape, *, dx, diameter, grid=True):
     if not isinstance(shape, tuple):
         shape = (shape, shape)
 
-    if diameter is not None:
-        dx = diameter/shape[0]
+    if diameter != 0:
+        dx = diameter/shape[0]*2
 
     y, x = (fftrange(s, dtype=config.precision) * dx for s in shape)
 
@@ -179,3 +179,53 @@ def make_xy_grid(shape, *, dx, diameter, grid=True):
         x, y = np.meshgrid(x, y)
 
     return x, y
+
+
+class Grid:
+    """Container for a grid of spatial coordinates."""
+
+    def __init__(self, x=None, y=None, r=None, t=None):
+        """Create a new Grid.
+
+        Parameters
+        ----------
+        x : `numpy.ndarray`
+            x coordinates, 2D
+        y : `numpy.ndarray`
+            y coordinates, 2D
+        r : `numpy.ndarray`
+            radial coordinates, 2D
+        t : `numpy.ndarray`
+            azimuthal coordinates, 2D
+
+        Notes
+        -----
+        x and y may be None if you only require radial variables.  If r and t
+        are None, they will be computed once if accessed.
+
+        """
+        self.x = x
+        self.y = y
+        self._r = r
+        self._t = t
+
+    @property
+    def r(self):
+        """Radial variable."""
+        if self._r is None:
+            self._r, self._t = cart_to_polar(self.x, self.y)
+
+        return self._r
+
+    @property
+    def t(self):
+        """Azimuthal variable."""
+        if self._t is None:
+            self._r, self._t = cart_to_polar(self.x, self.y)
+
+        return self._t
+
+    @property
+    def dx(self):
+        """Inter-sample spacing."""
+        return float(self.x[1]-self.x[0])

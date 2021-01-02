@@ -56,7 +56,7 @@ class OTF:
         return OTF(mtf=mtf, ptf=ptf)
 
     @staticmethod
-    def from_pupil(pupil, efl, Q=config.Q, unwrap=True):
+    def from_pupil(pupil, efl, Q=2, unwrap=True):
         psf = PSF.from_pupil(pupil, efl=efl, Q=Q)
         return OTF.from_psf(psf, unwrap=unwrap)
 

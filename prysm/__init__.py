@@ -2,11 +2,10 @@
 from pkg_resources import get_distribution
 
 
-from prysm.conf import config, Labels
+from prysm.conf import config
 from prysm._richdata import RichData
 from prysm.convolution import Convolvable, ConvolutionEngine
 from prysm.detector import Detector, OLPF, PixelAperture
-from prysm.pupil import Pupil
 from prysm.psf import PSF, AiryDisk
 from prysm.otf import MTF
 from prysm.interferogram import Interferogram
