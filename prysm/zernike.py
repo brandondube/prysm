@@ -12,17 +12,17 @@ from .jacobi import jacobi, jacobi_sequence
 
 def piston(rho, phi):
     """Zernike Piston."""
-    return e.ones(rho.shape)
+    return np.ones(rho.shape)
 
 
 def tip(rho, phi):
     """Zernike Tilt-Y."""
-    return rho * e.cos(phi)
+    return rho * np.cos(phi)
 
 
 def tilt(rho, phi):
     """Zernike Tilt-X."""
-    return rho * e.sin(phi)
+    return rho * np.sin(phi)
 
 
 def defocus(rho, phi):
@@ -32,22 +32,22 @@ def defocus(rho, phi):
 
 def primary_astigmatism_00(rho, phi):
     """Zernike primary astigmatism 0°."""
-    return rho**2 * e.cos(2 * phi)
+    return rho**2 * np.cos(2 * phi)
 
 
 def primary_astigmatism_45(rho, phi):
     """Zernike primary astigmatism 45°."""
-    return rho**2 * e.sin(2 * phi)
+    return rho**2 * np.sin(2 * phi)
 
 
 def primary_coma_y(rho, phi):
     """Zernike primary coma Y."""
-    return (3 * rho**3 - 2 * rho) * e.cos(phi)
+    return (3 * rho**3 - 2 * rho) * np.cos(phi)
 
 
 def primary_coma_x(rho, phi):
     """Zernike primary coma X."""
-    return (3 * rho**3 - 2 * rho) * e.sin(phi)
+    return (3 * rho**3 - 2 * rho) * np.sin(phi)
 
 
 def primary_spherical(rho, phi):
@@ -57,12 +57,12 @@ def primary_spherical(rho, phi):
 
 def primary_trefoil_y(rho, phi):
     """Zernike primary trefoil Y."""
-    return rho**3 * e.cos(3 * phi)
+    return rho**3 * np.cos(3 * phi)
 
 
 def primary_trefoil_x(rho, phi):
     """Zernike primary trefoil X."""
-    return rho**3 * e.sin(3 * phi)
+    return rho**3 * np.sin(3 * phi)
 
 
 def zernikes_to_magnitude_angle_nmkey(coefs):
@@ -95,8 +95,8 @@ def zernikes_to_magnitude_angle_nmkey(coefs):
             magnitude = value[0]
             angle = 0
         else:
-            magnitude = e.sqrt(sum([v**2 for v in value]))
-            angle = e.degrees(e.arctan2(*value))
+            magnitude = np.sqrt(sum([v**2 for v in value]))
+            angle = np.degrees(np.arctan2(*value))
 
         combinations[key] = (magnitude, angle)
 
@@ -137,7 +137,7 @@ def zernikes_to_magnitude_angle(coefs):
 
 def zernike_norm(n, m):
     """Norm of a Zernike polynomial with n, m indexing."""
-    return e.sqrt((2 * (n + 1)) / (1 + kronecker(m, 0)))
+    return np.sqrt((2 * (n + 1)) / (1 + kronecker(m, 0)))
 
 
 def n_m_to_fringe(n, m):
@@ -155,7 +155,7 @@ def n_m_to_ansi_j(n, m):
 
 def ansi_j_to_n_m(idx):
     """Convert ANSI single term to (n,m) two-term index."""
-    n = int(e.ceil((-3 + e.sqrt(9 + 8*idx))/2))
+    n = int(np.ceil((-3 + np.sqrt(9 + 8*idx))/2))
     m = 2 * idx - n * (n + 2)
     return n, m
 
@@ -164,7 +164,7 @@ def noll_to_n_m(idx):
     """Convert Noll Z to (n, m) two-term index."""
     # I don't really understand this code, the math is inspired by POPPY
     # azimuthal order
-    n = int(e.ceil((-1 + e.sqrt(1 + 8 * idx)) / 2) - 1)
+    n = int(np.ceil((-1 + np.sqrt(1 + 8 * idx)) / 2) - 1)
     if n == 0:
         m = 0
     else:
@@ -193,10 +193,10 @@ def noll_to_n_m(idx):
 
 def fringe_to_n_m(idx):
     """Convert Fringe Z to (n, m) two-term index."""
-    m_n = 2 * (e.ceil(e.sqrt(idx)) - 1)  # sum of n+m
+    m_n = 2 * (np.ceil(np.sqrt(idx)) - 1)  # sum of n+m
     g_s = (m_n / 2)**2 + 1  # start of each group of equal n+m given as idx index
-    n = m_n / 2 + e.floor((idx - g_s) / 2)
-    m = (m_n - n) * (1 - e.mod(idx-g_s, 2) * 2)
+    n = m_n / 2 + np.floor((idx - g_s) / 2)
+    m = (m_n - n) * (1 - np.mod(idx-g_s, 2) * 2)
     return int(n), int(m)
 
 
@@ -248,9 +248,9 @@ def _name_helper(n, m):
 
     if is_odd(m):
         if sign(m) == 1:
-            suffix = 'Y'
-        else:
             suffix = 'X'
+        else:
+            suffix = 'Y'
     else:
         if sign(m) == 1:
             suffix = '00°'
@@ -273,7 +273,7 @@ def n_m_to_name(n, m):
     Returns
     -------
     `str`
-        a name, e.g. Piston or Primary Spherical
+        a name, np.g. Piston or Primary Spherical
 
     """
     # piston, tip tilt, az invariant order
@@ -281,9 +281,9 @@ def n_m_to_name(n, m):
         return 'Piston'
     if n == 1:
         if sign(m) == 1:
-            return 'Tilt Y'
-        else:
             return 'Tilt X'
+        else:
+            return 'Tilt Y'
     if n == 2 and m == 0:
         return 'Defocus'
     if m == 0:
@@ -425,7 +425,7 @@ class BaseZernike(Pupil):
     _cache = zcachemn
 
     def __init__(self, *args, **kwargs):
-        """Initialize a new Zernike instance."""
+        """Initialize a new Zernike instancnp."""
         self.coefs = {}
 
         self.normalize = False
@@ -463,10 +463,10 @@ class BaseZernike(Pupil):
         """
         nm_func = nm_funcs.get(self._name, None)
         if nm_func is None:
-            raise ValueError("single index notation not understood, modify zernike.nm_funcs")
+            raise ValueError("single index notation not understood, modify zerniknp.nm_funcs")
 
         # build a coordinate system over which to evaluate this function
-        self.data = e.zeros((self.samples, self.samples), dtype=config.precision)
+        self.data = np.zeros((self.samples, self.samples), dtype=config.precision)
         keys = list(sorted(self.coefs.keys()))
 
         for term in keys:
@@ -495,14 +495,14 @@ class BaseZernike(Pupil):
             list of tuples (magnitude, index, term)
 
         """
-        coefs = e.asarray(list(self.coefs.values()))
+        coefs = np.asarray(list(self.coefs.values()))
         coefs_work = abs(coefs)
-        oidxs = e.asarray(list(self.coefs.keys()))
-        idxs = e.argpartition(coefs_work, -n)[-n:]  # argpartition does some magic to identify the top n (unsorted)
-        idxs = idxs[e.argsort(coefs_work[idxs])[::-1]]  # use argsort to sort them in ascending order and reverse
+        oidxs = np.asarray(list(self.coefs.keys()))
+        idxs = np.argpartition(coefs_work, -n)[-n:]  # argpartition does some magic to identify the top n (unsorted)
+        idxs = idxs[np.argsort(coefs_work[idxs])[::-1]]  # use argsort to sort them in ascending order and reverse
         big_terms = coefs[idxs]  # finally, take the values from the
         big_idxs = oidxs[idxs]
-        names = e.asarray(self.names, dtype=str)[big_idxs - 1]
+        names = np.asarray(self.names, dtype=str)[big_idxs - 1]
         return list(zip(big_terms, big_idxs, names))
 
     @property
@@ -541,14 +541,14 @@ class BaseZernike(Pupil):
             offset to apply to bars, useful for before/after Zernike breakdowns
         width : `float`, optional
             width of bars, useful for before/after Zernike breakdowns
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figurnp.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
             Axis containing the plot
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figurnp.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
             Axis containing the plot
@@ -557,8 +557,8 @@ class BaseZernike(Pupil):
         from matplotlib import pyplot as plt
         fig, ax = share_fig_ax(fig, ax)
 
-        coefs = e.asarray(list(self.coefs.values()))
-        idxs = e.asarray(list(self.coefs.keys()))
+        coefs = np.asarray(list(self.coefs.values()))
+        idxs = np.asarray(list(self.coefs.keys()))
         names = self.names
         lab = self.labels.z(self.xy_unit, self.z_unit)
         lims = (idxs[0] - buffer, idxs[-1] + buffer)
@@ -587,7 +587,7 @@ class BaseZernike(Pupil):
                            fig=None, ax=None):
         """Create a barplot of magnitudes of coefficient pairs and their names.
 
-        E.g., astigmatism will get one bar.
+        np.g., astigmatism will get one bar.
 
         Parameters
         ----------
@@ -621,7 +621,7 @@ class BaseZernike(Pupil):
         magang = self.magnitudes
         mags = [m[0] for m in magang.values()]
         names = magang.keys()
-        idxs = e.asarray(list(range(len(names))))
+        idxs = np.asarray(list(range(len(names))))
 
         if sort:
             mags, names = sort_xy(mags, names)
@@ -653,14 +653,14 @@ class BaseZernike(Pupil):
             buffer to use around the left and right (or top and bottom) bars
         zorder : `int`, optional
             zorder of the bars.  Use zorder > 3 to put bars in front of gridlines
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figurnp.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
             Axis containing the plot
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : `matplotlib.figurnp.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
             Axis containing the plot
@@ -698,7 +698,7 @@ class BaseZernike(Pupil):
         Returns
         -------
         `self`
-            modified FringeZernike instance.
+            modified FringeZernike instancnp.
 
         """
         if n > len(self.coefs):
@@ -725,7 +725,7 @@ class BaseZernike(Pupil):
         Returns
         -------
         `self`
-            modified FringeZernike instance.
+            modified FringeZernike instancnp.
 
         """
         topn = self.top_n(n)
@@ -755,7 +755,7 @@ class BaseZernike(Pupil):
                 continue
 
             # positive coefficient, prepend with +
-            if e.sign(coef) == 1:
+            if np.sign(coef) == 1:
                 _ = '+' + f'{coef:.3f}'
             # negative, sign comes from the value
             else:
@@ -793,7 +793,7 @@ class ANSI2TermZernike(Pupil):
     _cache = zcachemn
 
     def __init__(self, *args, **kwargs):
-        """Initialize a new Zernike instance."""
+        """Initialize a new Zernike instancnp."""
         self.normalize = True
         pass_args = {}
 
@@ -838,7 +838,7 @@ class ANSI2TermZernike(Pupil):
 
         """
         # build a coordinate system over which to evaluate this function
-        self.phase = e.zeros((self.samples, self.samples), dtype=config.precision)
+        self.phase = np.zeros((self.samples, self.samples), dtype=config.precision)
         for (n, m, coef) in self.terms:
             # short circuit for speed
             if coef == 0:
@@ -901,7 +901,7 @@ def zernikefit(data, x=None, y=None,
     data = data.T  # transpose to mimic transpose of zernikes
 
     # precompute the valid indexes in the original data
-    pts = e.isfinite(data)
+    pts = np.isfinite(data)
 
     # set up an x/y rho/phi grid to evaluate Zernikes on
     if x is None and rho is None:
@@ -928,11 +928,11 @@ def zernikefit(data, x=None, y=None,
         zerns_raw.append(zern)
 
     zcachemn.grid_bypass_cleanup(rho, phi)
-    zerns = e.asarray(zerns_raw).T
+    zerns = np.asarray(zerns_raw).T
 
     # use least squares to compute the coefficients
     meas_pts = data[pts].flatten()
-    coefs = e.linalg.lstsq(zerns, meas_pts, rcond=None)[0]
+    coefs = np.linalg.lstsq(zerns, meas_pts, rcond=None)[0]
     if round_at is not None:
         coefs = coefs.round(round_at)
 
@@ -941,7 +941,7 @@ def zernikefit(data, x=None, y=None,
         for zern, coef in zip(zerns_raw, coefs):
             components.append(coef * zern)
 
-        _fit = e.asarray(components)
+        _fit = np.asarray(components)
         _fit = _fit.sum(axis=0)
         rmserr = rms(data[pts].flatten() - _fit)
         return coefs, rmserr
