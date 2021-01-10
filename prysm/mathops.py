@@ -35,6 +35,48 @@ def jinc(r):
         return out
 
 
+def is_odd(int):
+    """Determine if an interger is odd using binary operations.
+
+    Parameters
+    ----------
+    int : `int`
+        an integer
+
+    Returns
+    -------
+    `bool`
+        true if odd, False if even
+
+    """
+    return int & 0x1
+
+
+def is_power_of_2(value):
+    """Check if a value is a power of 2 using binary operations.
+
+    Parameters
+    ----------
+    value : `number`
+        value to check
+
+    Returns
+    -------
+    `bool`
+        true if the value is a power of two, False if the value is no
+
+    Notes
+    -----
+    c++ inspired implementation, see SO:
+    https://stackoverflow.com/questions/29480680/finding-if-a-number-is-a-power-of-2-using-recursion
+
+    """
+    if value == 1:
+        return False
+    else:
+        return bool(value and not value & (value - 1))
+
+
 def sign(x):
     """Sign of a number.  Note only works for single values, not arrays."""
     return -1 if x < 0 else 1

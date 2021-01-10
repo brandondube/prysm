@@ -3,7 +3,8 @@ from collections import defaultdict
 
 import numpy as np  # not mathops -- nothing in this file operates on anything worthwhile for a GPU
 
-from prysm.util import is_odd, sign, sort_xy
+from prysm.util import sort_xy
+from prysm.mathops import is_odd, sign
 from prysm.plotting import share_fig_ax
 
 
@@ -192,11 +193,15 @@ def top_n(coefs, n=5):
     return list(zip(big_terms, big_idxs, names))
 
 
-def barplot(self, orientation='h', buffer=1, zorder=3, number=True, offset=0, width=0.8, fig=None, ax=None):
+def barplot(coefs, names=None, orientation='h', buffer=1, zorder=3, number=True, offset=0, width=0.8, fig=None, ax=None):
     """Create a barplot of coefficients and their names.
 
     Parameters
     ----------
+    coefs : `dict`
+        with keys of Zn, values of numbers
+    names : `dict`
+        with keys of Zn, values of names (e.g. Primary Coma X)
     orientation : `str`, {'h', 'v', 'horizontal', 'vertical'}
         orientation of the plot
     buffer : `float`, optional
@@ -225,10 +230,8 @@ def barplot(self, orientation='h', buffer=1, zorder=3, number=True, offset=0, wi
     from matplotlib import pyplot as plt
     fig, ax = share_fig_ax(fig, ax)
 
-    coefs = np.asarray(list(self.coefs.values()))
-    idxs = np.asarray(list(self.coefs.keys()))
-    names = self.names
-    lab = self.labels.z(self.xy_unit, self.z_unit)
+    coefs = np.asarray(list(coefs.values()))
+    idxs = np.asarray(list(coefs.keys()))
     lims = (idxs[0] - buffer, idxs[-1] + buffer)
     if orientation.lower() in ('h', 'horizontal'):
         vmin, vmax = coefs.min(), coefs.max()
@@ -240,26 +243,28 @@ def barplot(self, orientation='h', buffer=1, zorder=3, number=True, offset=0, wi
         if number:
             for i in idxs:
                 ax.text(i, offsetY, str(i), ha='center')
-        ax.set(ylabel=lab, xlim=lims)
     else:
         ax.barh(idxs + offset, coefs, zorder=zorder, height=width)
         plt.yticks(idxs, names)
         if number:
             for i in idxs:
                 ax.text(0, i, str(i), ha='center')
-        ax.set(xlabel=lab, ylim=lims)
+
+    ax.set(xlim=lims)
     return fig, ax
 
 
-def barplot_magnitudes(self, orientation='h', sort=False,
+def barplot_magnitudes(magnitudes, orientation='h', sort=False,
                        buffer=1, zorder=3, offset=0, width=0.8,
                        fig=None, ax=None):
     """Create a barplot of magnitudes of coefficient pairs and their names.
 
-    np.g., astigmatism will get one bar.
+    e.g., astigmatism will get one bar.
 
     Parameters
     ----------
+    magnitudes : `dict`
+        keys of names, values of magnitudes.  E.g., {'Primary Coma': 1234567}
     orientation : `str`, {'h', 'v', 'horizontal', 'vertical'}
         orientation of the plot
     sort : `bool`, optional
@@ -287,72 +292,24 @@ def barplot_magnitudes(self, orientation='h', sort=False,
     """
     from matplotlib import pyplot as plt
 
-    magang = self.magnitudes
-    mags = [m[0] for m in magang.values()]
-    names = magang.keys()
-    idxs = np.asarray(list(range(len(names))))
+    mags = magnitudes.values()
+    names = magnitudes.keys()
+    idxs = np.arange(len(names))
+    # idxs = np.asarray(list(range(len(names))))
 
     if sort:
         mags, names = sort_xy(mags, names)
         mags = list(reversed(mags))
         names = list(reversed(names))
-    lab = self.labels.z(self.xy_unit, self.z_unit)
+
     lims = (idxs[0] - buffer, idxs[-1] + buffer)
     fig, ax = share_fig_ax(fig, ax)
     if orientation.lower() in ('h', 'horizontal'):
         ax.bar(idxs + offset, mags, zorder=zorder, width=width)
         plt.xticks(idxs, names, rotation=90)
-        ax.set(ylabel=lab, xlim=lims)
+        ax.set(xlim=lims)
     else:
         ax.barh(idxs + offset, mags, zorder=zorder, height=width)
         plt.yticks(idxs, names)
-        ax.set(xlabel=lab, ylim=lims)
-    return fig, ax
-
-
-def barplot_topn(self, n=5, orientation='h', buffer=1, zorder=3, fig=None, ax=None):
-    """Plot the top n terms in the wavefront.
-
-    Parameters
-    ----------
-    n : `int`, optional
-        plot the top n terms.
-    orientation : `str`, {'h', 'v', 'horizontal', 'vertical'}
-        orientation of the plot
-    buffer : `float`, optional
-        buffer to use around the left and right (or top and bottom) bars
-    zorder : `int`, optional
-        zorder of the bars.  Use zorder > 3 to put bars in front of gridlines
-    fig : `matplotlib.figurnp.Figure`
-        Figure containing the plot
-    ax : `matplotlib.axes.Axis`
-        Axis containing the plot
-
-    Returns
-    -------
-    fig : `matplotlib.figurnp.Figure`
-        Figure containing the plot
-    ax : `matplotlib.axes.Axis`
-        Axis containing the plot
-
-    """
-    from matplotlib import pyplot as plt
-
-    topn = self.top_n(n)
-    magnitudes = [n[0] for n in topn]
-    names = [n[2] for n in topn]
-    idxs = range(len(names))
-
-    fig, ax = share_fig_ax(fig, ax)
-
-    lab = self.labels.z(self.xy_unit, self.z_unit)
-    lims = (idxs[0] - buffer, idxs[-1] + buffer)
-    if orientation.lower() in ('h', 'horizontal'):
-        ax.bar(idxs, magnitudes, zorder=zorder)
-        plt.xticks(idxs, names, rotation=90)
-        ax.set(ylabel=lab, xlim=lims)
-    else:
-        ax.barh(idxs, magnitudes, zorder=zorder)
-        plt.yticks(idxs, names)
-        ax.set(xlabel=lab, ylim=lims)
+        ax.set(ylim=lims)
     return fig, ax

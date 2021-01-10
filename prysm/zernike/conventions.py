@@ -1,8 +1,8 @@
 """Conversion between various conventions of Zernike polynomials."""
 
-from prysm.mathops import np
+import numpy as np  # not mathops/numpy, nothing here would be better on GPU
 
-from prysm.util import is_odd, sign
+from prysm.mathops import is_odd, sign
 
 
 def n_m_to_fringe(n, m):

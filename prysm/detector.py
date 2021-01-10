@@ -4,7 +4,7 @@ from collections import deque
 from .conf import config
 from .mathops import engine as e
 from .convolution import Convolvable
-from .util import is_odd
+from .mathops import is_odd
 
 
 class Detector(object):

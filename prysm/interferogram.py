@@ -9,7 +9,6 @@ from scipy import optimize, signal
 from .conf import config
 from ._richdata import RichData
 from .mathops import np
-from .zernike import defocus, zernikefit, FringeZernike
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar
@@ -17,6 +16,9 @@ from .util import mean, rms, pv, Sa, std  # NOQA
 from .geometry import mcache
 from .wavelengths import HeNe
 from .plotting import share_fig_ax
+
+zernikefit = 1
+FringeZernike = 2
 
 
 def fit_plane(x, y, z):
@@ -69,12 +71,12 @@ def fit_sphere(z):
     xx, yy = np.meshgrid(x, y)
     pts = np.isfinite(z)
     xx_, yy_ = xx[pts].flatten(), yy[pts].flatten()
-    rho, phi = cart_to_polar(xx_, yy_)
-    focus = defocus(rho, phi)
+    rho, _ = cart_to_polar(xx_, yy_)
+    focus = rho ** 2
 
     coefs = np.linalg.lstsq(np.stack([focus, np.ones(focus.shape)]).T, z[pts].flatten(), rcond=None)[0]
     rho, phi = cart_to_polar(xx, yy)
-    sphere = defocus(rho, phi) * coefs[0]
+    sphere = focus * coefs[0]
     return sphere
 
 
