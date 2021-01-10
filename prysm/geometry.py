@@ -246,7 +246,7 @@ def inverted_circle(radius, rho):
         return mask
 
 
-def regular_polygon(sides, radius, x, y, center=(0, 0)):
+def regular_polygon(sides, radius, x, y, center=(0, 0), rotation=0):
     """Generate a regular polygon mask with the given number of sides.
 
     Parameters
@@ -261,6 +261,8 @@ def regular_polygon(sides, radius, x, y, center=(0, 0)):
         y spatial coordinates, 2D or 1D
     center : `tuple` of `float`
         center of the gaussian, (x,y)
+    rotation : `float`
+        rotation of the polygon, degrees
 
     Returns
     -------
@@ -268,7 +270,7 @@ def regular_polygon(sides, radius, x, y, center=(0, 0)):
         mask for regular polygon with radius equal to the array radius
 
     """
-    verts = _generate_vertices(sides, radius, center)
+    verts = _generate_vertices(sides, radius, center, rotation)
     return _generate_mask(verts, x, y).astype(config.precision)
 
 
@@ -303,14 +305,13 @@ def _generate_mask(vertices, x, y):
             raise Exception('attempted to convert array to genuine numpy array with known methods.  Please make a PR to prysm with a mechanism to convert this data type to real numpy. failed with '+prev)  # NOQA
 
     xxyy = truenp.stack((xx, yy), axis=2)
-
     # use delaunay to fill from the vertices and produce a mask
     triangles = spatial.Delaunay(vertices, qhull_options='QJ Qf')
     mask = ~(triangles.find_simplex(xxyy) < 0)
-    return mask
+    return mask.astype(x.dtype)
 
 
-def _generate_vertices(sides, radius=1, center=(0, 0)):
+def _generate_vertices(sides, radius=1, center=(0, 0), rotation=0):
     """Generate a list of vertices for a convex regular polygon with the given number of sides and radius.
 
     Parameters
@@ -321,6 +322,8 @@ def _generate_vertices(sides, radius=1, center=(0, 0)):
         radius of the polygon
     center : `tuple`
         center of the vertices, (x,y)
+    rotation : `float`
+        rotation of the vertices, degrees
 
     Returns
     -------
@@ -329,12 +332,13 @@ def _generate_vertices(sides, radius=1, center=(0, 0)):
 
     """
     angle = 2 * truenp.pi / sides
+    rotation = truenp.radians(rotation)
     x0, y0 = center
     pts = []
     for point in range(sides):
-        x = radius * truenp.sin(point * angle) + x0
-        y = radius * truenp.cos(point * angle) + y0
-        pts.append((int(x), int(y)))
+        x = radius * truenp.sin(point * angle + rotation) + x0
+        y = radius * truenp.cos(point * angle + rotation) + y0
+        pts.append((x, y))
 
     return truenp.asarray(pts)
 
@@ -366,7 +370,8 @@ def spider(vanes, width, x, y, rotation=0, center=(0, 0)):
     """
     # generate the basic grid
     width /= 2
-    r, p = cart_to_polar(x, y)
+    x0, y0 = center
+    r, p = cart_to_polar(x-x0, y-y0)
 
     if rotation != 0:
         rotation = np.radians(rotation)
