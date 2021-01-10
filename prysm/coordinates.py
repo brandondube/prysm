@@ -4,6 +4,39 @@ from .mathops import np, interpolate_engine as interpolate
 from .fttools import fftrange
 
 
+def optimize_xy_separable(x, y):
+    """Optimize performance for downstream operations.
+
+    Parameters
+    ----------
+    x : `numpy.ndarray`
+        2D or 1D array
+    y : `numpy.ndarray`
+        2D or 1D array
+
+    Returns
+    -------
+    x, y
+        optimized arrays (x as 1D row, y as 1D column)
+
+    Notes
+    -----
+
+    If a calculation is separable in x and y, performing it on a meshgrid of x/y
+    takes 2N^2 operations, for N= the linear dimension (the 2 being x and y).
+    If the calculation is separable, this can be reduced to 2N by using numpy
+    broadcast functionality and two 1D calculations.
+
+    """
+    if x.ndim == 2:
+        # assume same dimensionality of x and y
+        # second indexing converts y to a broadcasted column vector
+        x = x[0, :]
+        y = y[:, 0][:, np.newaxis]
+
+    return x, y
+
+
 def cart_to_polar(x, y):
     '''Return the (rho,phi) coordinates of the (x,y) input points.
 
