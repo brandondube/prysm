@@ -2,6 +2,8 @@
 import warnings
 import inspect
 
+import numpy as truenp
+
 from astropy import units as u
 
 from scipy import optimize, signal
@@ -13,7 +15,6 @@ from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar
 from .util import mean, rms, pv, Sa, std  # NOQA
-from .geometry import mcache
 from .wavelengths import HeNe
 from .plotting import share_fig_ax
 
@@ -356,7 +357,7 @@ def synthesize_surface_from_psd(psd, nu_x, nu_y):
     return x, y, out
 
 
-def render_synthetic_surface(size, samples, rms=None, mask='circle', psd_fcn=abc_psd, **psd_fcn_kwargs):  # NOQA
+def render_synthetic_surface(size, samples, rms=None, mask=None, psd_fcn=abc_psd, **psd_fcn_kwargs):  # NOQA
     """Render a synthetic surface with a given RMS value given a PSD function.
 
     Parameters
@@ -365,10 +366,10 @@ def render_synthetic_surface(size, samples, rms=None, mask='circle', psd_fcn=abc
         diameter of the output surface, mm
     samples : `int`
         number of samples across the output surface
-    rms : `float`
+    rms : `float`, optional
         desired RMS value of the output, if rms=None, no normalization is done
-    mask : `str`, optional
-        mask defining the clear aperture
+    mask : `numpy.ndarray`, optional
+        mask defining the pupil aperture
     psd_fcn : `callable`
         function used to generate the PSD
     **psd_fcn_kwargs:
@@ -403,8 +404,8 @@ def render_synthetic_surface(size, samples, rms=None, mask='circle', psd_fcn=abc
     x, y, z = synthesize_surface_from_psd(psd, nu_x, nu_y)
 
     # mask
-    mask = mcache(mask, samples)
-    z[mask == 0] = np.nan
+    if mask is not None:
+        z[mask == 0] = np.nan
 
     # possibly scale RMS
     if rms is not None:
@@ -471,7 +472,7 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
         return optres.x
 
 
-def make_random_subaperture_mask(ary, ary_diam, mask_diam, shape='circle', seed=None):
+def make_random_subaperture_mask(ary, ary_diam, mask, seed=None):
     """Make a mask of a given diameter that is a random subaperture of the given array.
 
     Parameters
@@ -480,10 +481,8 @@ def make_random_subaperture_mask(ary, ary_diam, mask_diam, shape='circle', seed=
         an array, notionally containing phase data.  Only used for its shapnp.
     ary_diam : `float`
         the diameter of the array on its long side, if it is not square
-    mask_diam : `float`
-        the desired mask diameter, in the same units as ary_diam
-    shape : `str`
-        a string accepted by prysm.geometry.MCachnp.__call__, for example 'circle', or 'square' or 'octogon'
+    mask : `numpy.ndarray`
+        mask to apply for sub-apertures
     seed : `int`
         a random number seed, None will be a random seed, provide one to make the mask deterministic.
 
@@ -494,9 +493,10 @@ def make_random_subaperture_mask(ary, ary_diam, mask_diam, shape='circle', seed=
         ary[ret == 0] = np.nan
 
     """
-    gen = np.random.Generator(np.random.PCG64())
+    gen = truenp.random.Generator(truenp.random.PCG64())
     s = ary.shape
     plate_scale = ary_diam / max(s)
+    mask_diam = mask.shape[0] * plate_scale
     max_shift_mm = (ary_diam - mask_diam) / 2
     max_shift_px = int(np.floor(max_shift_mm / plate_scale))
 
@@ -515,9 +515,6 @@ def make_random_subaperture_mask(ary, ary_diam, mask_diam, shape='circle', seed=
     mask_semidiam = mask_diam / plate_scale / 2
     half_low = int(np.floor(mask_semidiam))
     half_high = int(np.floor(mask_semidiam))
-
-    # generate the mask in an array of only its size (np.g., 128x128 for a 128x128 mask in a 900x900 phase array)
-    mask = mcache(shape, mask_semidiam*2)
 
     # make the output array and insert the mask itself
     out = np.zeros_like(ary)
@@ -775,7 +772,10 @@ class Interferogram(RichData):
         if isinstance(shape_or_mask, str):
             if diameter is None:
                 diameter = self.diameter
-            mask = mcache(shape_or_mask, min(self.shape), radius=diameter / min(self.diameter_x, self.diameter_y))
+
+            # TODO: fix this for old style, and decide if want to accept strings
+            mask = 1
+            # mask = mcache(shape_or_mask, min(self.shape), radius=diameter / min(self.diameter_x, self.diameter_y))
             base = np.zeros(self.shape, dtype=config.precision)
             difference = abs(self.shape[0] - self.shape[1])
             l, u = int(np.floor(difference / 2)), int(np.ceil(difference / 2))

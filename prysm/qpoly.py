@@ -2,7 +2,6 @@
 from functools import lru_cache
 
 from .conf import config
-from .pupil import Pupil
 from .mathops import engine as e, special_engine as special, kronecker, gamma
 from .coordinates import gridcache
 from .jacobi import jacobi
@@ -379,7 +378,7 @@ config.chbackend_observers.append(QCONcache.clear)
 
 
 # Note that this class doesn't implement _name and other RichData requirements
-class QPolySag1D(Pupil):
+class QPolySag1D:
     """Base class with 1D Q polynomial logic."""
 
     def __init__(self, *args, **kwargs):
@@ -394,7 +393,8 @@ class QPolySag1D(Pupil):
                 else:
                     pass_args[key] = value
 
-        super().__init__(**pass_args)
+        # TODO: fix
+        # super().__init__(**pass_args)
 
     def build(self):
         """Use the aspheric coefficients stored in this class instance to build a sag model.

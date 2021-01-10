@@ -16,15 +16,6 @@ from prysm.geometry import (
     rotated_ellipse,
     square,
     regular_polygon,
-    pentagon,
-    hexagon,
-    heptagon,
-    octagon,
-    nonagon,
-    decagon,
-    hendecagon,
-    dodecagon,
-    trisdecagon
 )
 from prysm.objects import (
     Slit,
@@ -37,8 +28,7 @@ from prysm.objects import (
     Chirp,
 )
 from prysm.degredations import Smear, Jitter
-from prysm.zernike import FringeZernike, NollZernike, zernikefit, ANSI1TermZernike, ANSI2TermZernike
-from prysm.qpoly import QBFSSag, QCONSag
+# from prysm.qpoly import QBFSSag, QCONSag
 from prysm.sample_data import sample_files
 from prysm.propagation import Wavefront
 
@@ -47,10 +37,6 @@ __all__ = [
     'Detector',
     'OLPF',
     'PixelAperture',
-    'Pupil',
-    'FringeZernike',
-    'NollZernike',
-    'zernikefit',
     'Interferogram',
     'PSF',
     'AiryDisk',
@@ -59,15 +45,6 @@ __all__ = [
     'rotated_ellipse',
     'regular_polygon',
     'square',
-    'pentagon',
-    'hexagon',
-    'heptagon',
-    'octagon',
-    'nonagon',
-    'decagon',
-    'hendecagon',
-    'dodecagon',
-    'trisdecagon',
     'circle',
     'truecircle',
     'Slit',
@@ -86,8 +63,6 @@ __all__ = [
     'sample_files',
     'RichData',
     'Labels',
-    'ANSI1TermZernike',
-    'ANSI2TermZernike',
     'QBFSSag',
     'QCONSag',
 ]
