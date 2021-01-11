@@ -2,101 +2,10 @@
 from functools import lru_cache
 
 from .conf import config
-from .mathops import engine as e, special_engine as special, kronecker, gamma
-from .coordinates import gridcache
-from .jacobi import jacobi
+from .mathops import engine as np, special_engine as special, kronecker, gamma
+from .jacobi import jacobi, jacobi_sequence
 
 MAX_ELEMENTS_IN_CACHE = 1024  # surely no one wants > 1000 terms...
-
-
-def qbfs_recurrence_P(n, x, Pnm1=None, Pnm2=None, recursion_coef=None):
-    """P(m+1) from oe-18-19-19700 eq. (2.6).
-
-    Parameters
-    ----------
-    n : `int`
-        polynomial order
-    x : `numpy.ndarray`
-        x values, notionally in / orthogonal over [0, 1], to evaluate at
-    Pnm1 : `numpy.ndarray`, optional
-        the value of this function for argument n - 1
-    Pnm2 : `numpy.ndarray`, optional
-        the value of this function for argument n - 2
-    recursion_coef : `numpy.ndarray`, optional
-        the coefficient to apply, if recursion_coef = C: evaluates C * Pnm1 - Pnm2
-
-    Returns
-    -------
-    `numpy.ndarray`
-        the value of the auxiliary P polynomial for given order n and point(s) x
-
-    """
-    if n == 0:
-        return 2
-    elif n == 1:
-        return 6 - 8 * x
-    else:
-        if Pnm2 is None:
-            Pnm2 = qbfs_recurrence_P(n - 2, x)
-        if Pnm1 is None:
-            Pnm1 = qbfs_recurrence_P(n - 1, x, Pnm1=Pnm2)
-
-        if recursion_coef is None:
-            recursion_coef = 2 - 4 * x
-
-        return recursion_coef * Pnm1 - Pnm2
-
-
-def qbfs_recurrence_Q(n, x, Pn=None, Pnm1=None, Pnm2=None, Qnm1=None, Qnm2=None, recursion_coef=None):
-    """Q(m+1) from oe-18-19-19700 eq. (2.7).
-
-    Parameters
-    ----------
-    n : `int`
-        polynomial order
-    x : `numpy.ndarray`
-        x values, notionally in / orthogonal over [0, 1], to evaluate at
-    Pnm1 : `numpy.ndarray`, optional
-        the value of qbfs_recurrence_P for argument n - 1
-    Pnm2 : `numpy.ndarray`, optional
-        the value of qbfs_recurrence_P for argument n - 2
-    Qnm1 : `numpy.ndarray`, optional
-        the value of this function for argument n - 1
-    Qnm2 : `numpy.ndarray`, optional
-        the value of this function for argument n - 2
-    recursion_coef : `numpy.ndarray`, optional
-        the coefficient to apply, if recursion_coef = C: evaluates C * Pnm1 - Pnm2
-
-    Returns
-    -------
-    `numpy.ndarray`
-        the value of the the Qbfs polynomial for given order n and point(s) x
-
-    """
-    if n == 0:
-        return e.ones_like(x)
-    elif n == 1:
-        return 1 / e.sqrt(19) * (13 - 16 * x)
-    else:
-        # allow passing of cached results
-        if Pnm2 is None:
-            Pnm2 = qbfs_recurrence_P(n - 2, x, recursion_coef=recursion_coef)
-        if Pnm1 is None:
-            Pnm1 = qbfs_recurrence_P(n - 1, x, Pnm1=Pnm2, recursion_coef=recursion_coef)
-        if Pn is None:
-            Pn = qbfs_recurrence_P(n, x, Pnm1=Pnm1, Pnm2=Pnm2, recursion_coef=recursion_coef)
-        if Qnm2 is None:
-            Qnm2 = qbfs_recurrence_Q(n - 2, x, Pn=Pn, Pnm1=Pnm1, Pnm2=Pnm2, recursion_coef=recursion_coef)
-        if Qnm1 is None:
-            Qnm1 = qbfs_recurrence_Q(n - 1, x, Pn=Pn, Pnm1=Pnm1, Pnm2=Pnm2, Qnm2=Qnm2, recursion_coef=recursion_coef)
-
-        # now calculate the three-term recursion
-        term1 = Pn
-        term2 = g_qbfs(n - 1) * Qnm1
-        term3 = h_qbfs(n - 2) * Qnm2
-        numerator = term1 - term2 - term3
-        denominator = f_qbfs(n)
-        return numerator / denominator
 
 
 @lru_cache(MAX_ELEMENTS_IN_CACHE)
@@ -122,337 +31,196 @@ def f_qbfs(n):
     if n == 0:
         return 2
     elif n == 1:
-        return e.sqrt(19) / 2
+        return np.sqrt(19) / 2
     else:
         term1 = n * (n + 1) + 3
         term2 = g_qbfs(n - 1) ** 2
         term3 = h_qbfs(n - 2) ** 2
-        return e.sqrt(term1 - term2 - term3)
+        return np.sqrt(term1 - term2 - term3)
 
 
-class QBFSCache(object):
-    """Cache of Qbfs terms evaluated over the unit circle."""
-    def __init__(self, gridcache=gridcache):
-        """Create a new QBFSCache instance."""
-        self.Qs = {}
-        self.Ps = {}
-        self.gridcache = gridcache
-
-    def get_QBFS(self, m, samples, rho_max=1):
-        """Get an array of phase values for a given index, and number of samples."""
-        key = self.make_key(m=m, samples=samples, rho_max=rho_max)
-        try:
-            Qm = self.Qs[key]
-        except KeyError:
-            rho = self.get_grid(samples, rho_max=rho_max)
-            Pm = self.get_PBFS(m=m, samples=samples, rho_max=rho_max)
-            if m > 2:
-                Pnm2 = self.get_PBFS(m=m - 2, samples=samples, rho_max=rho_max)
-                Pnm1 = self.get_PBFS(m=m - 1, samples=samples, rho_max=rho_max)
-                Qnm2 = self.get_QBFS(m=m - 2, samples=samples, rho_max=rho_max)
-                Qnm1 = self.get_QBFS(m=m - 1, samples=samples, rho_max=rho_max)
-            else:
-                Pnm1, Pnm2, Qnm1, Qnm2 = None, None, None, None
-
-            coef = self.get_PBFS_recursion_coef(samples=samples, rho_max=rho_max)
-            Qm = qbfs_recurrence_Q(m, rho, Pn=Pm, Pnm1=Pnm1, Pnm2=Pnm2,
-                                   Qnm1=Qnm1, Qnm2=Qnm2, recursion_coef=coef)
-            self.Qs[key] = Qm
-
-        return Qm
-
-    def get_PBFS(self, m, samples, rho_max=1):
-        """Get an array of P values for a given index."""
-        key = self.make_key(m=m, samples=samples, rho_max=rho_max)
-        try:
-            Pm = self.Ps[key]
-
-        except KeyError:
-            rho = self.get_grid(samples=samples, rho_max=rho_max)
-            if m > 2:
-                Pnm2 = self.get_PBFS(m - 2, samples=samples, rho_max=rho_max)
-                Pnm1 = self.get_PBFS(m - 1, samples=samples, rho_max=rho_max)
-            else:
-                Pnm1, Pnm2 = None, None
-
-            coef = self.get_PBFS_recursion_coef(samples=samples, rho_max=rho_max)
-            Pm = qbfs_recurrence_P(m, rho, Pnm1=Pnm1, Pnm2=Pnm2, recursion_coef=coef)
-            self.Ps[key] = Pm
-
-        return Pm
-
-    def get_PBFS_recursion_coef(self, samples, rho_max=1):
-        """Get a P polynomial recursion coefficient.
-
-        Parameters
-        ----------
-        samples : `int`
-            number of samples
-        rho_max : `float`
-            max value of rho ("x" or "r") for the polynomial evaluation
-
-        Returns
-        -------
-        `float`
-            recursion coefficient
-
-        """
-        key = ('recursion', samples, rho_max)
-        try:
-            coef = self.Ps[key]
-        except KeyError:
-            rho = self.get_grid(samples=samples, rho_max=rho_max)
-            coef = 2 - 4 * rho
-            self.Ps[key] = coef
-
-        return coef
-
-    def get_grid(self, samples, rho_max=1):
-        """Get a P polynomial recursion coefficient.
-
-        Parameters
-        ----------
-        samples : `int`
-            number of samples
-        rho_max : `float`
-            max value of rho ("x" or "r") for the polynomial evaluation
-
-        Returns
-        -------
-        `numpy.ndarray`
-            2D grid of radial coordinates
-
-        """
-        return self.gridcache(samples=samples, radius=rho_max, r='r -> r^2')['r']
-
-    def __call__(self, m, samples, rho_max=1):
-        """Get a P polynomial recursion coefficient.
-
-        Parameters
-        ----------
-        samples : `int`
-            number of samples
-        rho_max : `float`
-            max value of rho ("x" or "r") for the polynomial evaluation
-
-        Returns
-        -------
-        `numpy.ndarray`
-            Qbfs polynomial evaluated over a grid of shape (samples, samples)
-
-        """
-        return self.get_QBFS(m=m, samples=samples, rho_max=rho_max)
-
-    def make_key(self, m, samples, rho_max):
-        """Generate a key into the cache dictionaries."""
-        return (m, samples, rho_max)
-
-    def clear(self, *args):
-        """Empty the cache."""
-        self.Qs = {}
-        self.Ps = {}
-        self.grids = {}
-
-    @property
-    def nbytes(self):
-        """Bytes of memory occupied by the cache."""
-        n = 0
-        stores = (self.Qs, self.Ps)
-        for store in stores:
-            for key in store:
-                n += store[key].nbytes
-
-        return n
-
-
-QBFScache = QBFSCache()
-config.chbackend_observers.append(QBFScache.clear)
-
-
-# Qcon is defined as:
-# r^4 * P_m(0,4)(2x-1)
-# with x = r^2
-
-
-def qcon_recurrence(n, x, Pnm1=None, Pnm2=None):
-    """Recursive Qcon polynomial evaluation.
+def Qbfs(n, x):
+    """Qbfs polynomial of order n at point(s) x.
 
     Parameters
     ----------
-    n : `int`
+    n : int
         polynomial order
-    x : `numpy.ndarray`
-        "x" coordinates, x = r^2
-    Pnm1 : `numpy.ndarray`
-        value of this function for argument (n-1)
-    Pnm2 : `numpy.ndarray`
-        value of this function for argument (n-2)
+    x : `numpy.array`
+        point(s) at which to evaluate
 
     Returns
     -------
     `numpy.ndarray`
-        Value of the Qcon polynomials of order n over x
+        Qbfs_n(x)
 
     """
-    return jacobi(n, x=x, alpha=0, beta=4, Pnm1=Pnm1, Pnm2=Pnm2)
+    # to compute the Qbfs polynomials, compute the auxiliary polynomial P_n
+    # recursively.  Simultaneously use the recurrence relation for Q_n
+    # to compute the intermediary Q polynomials.
+    # for input x, transform r = x ^ 2
+    # then compute P(r) and consequently Q(r)
+    # and scale outputs by Qbfs = r*(1-r) * Q
+    # the auxiliary polynomials are the jacobi polynomials with
+    # alpha,beta = (-1/2,+1/2),
+    # also known as the asymmetric chebyshev polynomials
+
+    rho = x ** 2
+    # c_Q is the leading term used to convert Qm to Qbfs
+    c_Q = rho * (1 - rho)
+    if n == 0:
+        return np.ones_like(x) * c_Q
+
+    if n == 1:
+        return 1 / np.sqrt(19) * (13 - 16 * rho) * c_Q
+
+    # c is the leading term of the recurrence relation for P
+    c = 2 - 4 * rho
+    # P0, P1 are the first two terms of the recurrence relation for auxiliary
+    # polynomial P_n
+    P0 = np.ones_like(x) * 2
+    P1 = 6 - 8 * rho
+    Pnm2 = P0
+    Pnm1 = P1
+
+    # Q0, Q1 are the first two terms of the recurrence relation for Qm
+    Q0 = np.ones_like(x)
+    Q1 = 1 / np.sqrt(19) * (13 - 16 * rho)
+    Qnm2 = Q0
+    Qnm1 = Q1
+    for nn in range(2, n+1):
+        Pn = c * Pnm1 - Pnm2
+        Pnm2 = Pnm1
+        Pnm1 = Pn
+        g = g_qbfs(nn - 1)
+        h = h_qbfs(nn - 2)
+        f = f_qbfs(nn)
+        Qn = (Pn - g * Qnm1 - h * Qnm2) * (1/f)  # small optimization; mul by 1/f instead of div by f
+        Qnm2 = Qnm1
+        Qnm1 = Qn
+
+    # Qn is certainly defined (flake8 can't tell the previous ifs bound the loop
+    # to always happen once)
+    return Qn * c_Q  # NOQA
 
 
-class QCONCache(object):
-    """Cache of Qcon terms evaluated over the unit circle."""
-    def __init__(self, gridcache=gridcache):
-        """Create a new QCONCache instance."""
-        self.Qs = {}
-        self.Ps = {}
-        self.gridcache = gridcache
+def Qbfs_sequence(ns, x):
+    """Qbfs polynomials of orders ns at point(s) x.
 
-    def get_QCON(self, m, samples, rho_max=1):
-        """Get an array of phase values for a given index, and number of samples."""
-        # TODO: update
-        key = self.make_key(m=m, samples=samples, rho_max=rho_max)
-        try:
-            Qm = self.Qs[key]
-        except KeyError:
-            rho = self.get_grid(samples, rho_max=rho_max)
-            if m > 2:
-                Pnm2 = self.get_PJAC(m=m - 2, samples=samples, rho_max=rho_max)
-                Pnm1 = self.get_PJAC(m=m - 1, samples=samples, rho_max=rho_max)
-            else:
-                Pnm1, Pnm2 = None, None
+    Parameters
+    ----------
+    ns : `Iterable` of int
+        polynomial orders
+    x : `numpy.array`
+        point(s) at which to evaluate
 
-            Qm = qcon_recurrence(m, rho, Pnm1=Pnm1, Pnm2=Pnm2)
-            self.Qs[key] = Qm
+    Returns
+    -------
+    generator of `numpy.ndarray`
+        yielding one order of ns at a time
 
-        return Qm
+    """
+    # see the leading comment of Qbfs for some explanation of this code
+    # and prysm:jacobi.py#jacobi_sequence the "_sequence" portion
 
-    def get_PJAC(self, m, samples, rho_max=1):
-        """Get an array of P_n^(0,4) values for a given index."""
-        # TODO: update
-        key = self.make_key(m=m, samples=samples, rho_max=rho_max)
-        try:
-            Pm = self.Ps[key]
+    ns = list(ns)
+    min_i = 0
 
-        except KeyError:
-            rho = self.get_grid(samples, rho_max=rho_max)
-            if m > 2:
-                Pnm2 = self.get_PJAC(m - 2, samples=samples, rho_max=rho_max)
-                Pnm1 = self.get_PJAC(m - 1, samples=samples, rho_max=rho_max)
-            else:
-                Pnm1, Pnm2 = None, None
+    rho = x ** 2
+    # c_Q is the leading term used to convert Qm to Qbfs
+    c_Q = rho * (1 - rho)
+    if ns[min_i] == 0:
+        yield np.ones_like(x) * c_Q
+        min_i += 1
 
-            Pm = jacobi(n=m, x=rho, alpha=0, beta=4, Pnm1=Pnm1, Pnm2=Pnm2)
-            self.Ps[key] = Pm
+    if ns[min_i] == 1:
+        yield 1 / np.sqrt(19) * (13 - 16 * rho) * c_Q
+        min_i += 1
 
-        return Pm
+    # c is the leading term of the recurrence relation for P
+    c = 2 - 4 * rho
+    # P0, P1 are the first two terms of the recurrence relation for auxiliary
+    # polynomial P_n
+    P0 = np.ones_like(x) * 2
+    P1 = 6 - 8 * rho
+    Pnm2 = P0
+    Pnm1 = P1
 
-    def get_grid(self, samples, rho_max=1):
-        """Get a grid of rho coordinates for a given number of samples."""
-        return self.gridcache(samples=samples, radius=rho_max, r='r -> 2r^2 - 1')['r']
-
-    def __call__(self, m, samples, rho_max=1):
-        """Get an array of sag values for a given index, norm, and number of samples."""
-        return self.get_QCON(m=m, samples=samples, rho_max=rho_max)
-
-    def make_key(self, m, samples, rho_max):
-        """Generate a key into the cache dictionaries."""
-        return (m, samples, rho_max)
-
-    def clear(self, *args):
-        """Empty the cache."""
-        self.Qs = {}
-        self.Ps = {}
-        self.grids = {}
-
-    @property
-    def nbytes(self):
-        """Bytes of memory occupied by the cache."""
-        n = 0
-        for key in self.Qs:
-            n += self.Qs[key].nbytes
-            n += self.Ps[key].nbytes
-
-        return n
+    # Q0, Q1 are the first two terms of the recurrence relation for Qbfs_n
+    Q0 = np.ones_like(x)
+    Q1 = 1 / np.sqrt(19) * (13 - 16 * rho)
+    Qnm2 = Q0
+    Qnm1 = Q1
+    for nn in range(2, n+1):
+        Pn = c * Pnm1 - Pnm2
+        Pnm2 = Pnm1
+        Pnm1 = Pn
+        g = g_qbfs(nn - 1)
+        h = h_qbfs(nn - 2)
+        f = f_qbfs(nn)
+        Qn = (Pn - g * Qnm1 - h * Qnm2) * (1/f)  # small optimization; mul by 1/f instead of div by f
+        Qnm2 = Qnm1
+        Qnm1 = Qn
+        if ns[min_i] == nn:
+            yield Qn * c_Q
+            min_i += 1
 
 
-QCONcache = QCONCache()
-config.chbackend_observers.append(QCONcache.clear)
+def Qcon(n, x):
+    """Qcon polynomial of order n at point(s) x.
+
+    Parameters
+    ----------
+    n : int
+        polynomial order
+    x : `numpy.array`
+        point(s) at which to evaluate
+
+    Returns
+    -------
+    `numpy.ndarray`
+        Qcon_n(x)
+
+    Notes
+    -----
+    The argument x is notionally uniformly spaced 0..1.
+    The Qcon polynomials are obtained by computing c = x^4.
+    A transformation is then made, x => 2x^2 - 1
+    and the Qcon polynomials are defined as the jacobi polynomials with
+    alpha=0, beta=4, the same order n, and the transformed x.
+    The result of that is multiplied by c to yield a Qcon polynomial.
+    Sums can more quickly be calculated by deferring the multiplication by
+    c.
+
+    """
+    xx = x ** 2
+    xx = 2 * xx - 1
+    Pn = jacobi(n, 0, 4, xx)
+    return Pn * x ** 4
 
 
-# Note that this class doesn't implement _name and other RichData requirements
-class QPolySag1D:
-    """Base class with 1D Q polynomial logic."""
+def Qcon_sequence(ns, x):
+    """Qcon polynomials of orders ns at point(s) x.
 
-    def __init__(self, *args, **kwargs):
-        """Initialize a new QBFS instance."""
-        self.coefs = {}
-        pass_args = {}
-        if kwargs is not None:
-            for key, value in kwargs.items():
-                if key[0].lower() == 'a':
-                    idx = int(key[1:])  # strip 'A' from index
-                    self.coefs[idx] = value
-                else:
-                    pass_args[key] = value
+    Parameters
+    ----------
+    ns : `Iterable` of int
+        polynomial orders
+    x : `numpy.array`
+        point(s) at which to evaluate
 
-        # TODO: fix
-        # super().__init__(**pass_args)
+    Returns
+    -------
+    generator of `numpy.ndarray`
+        yielding one order of ns at a time
 
-    def build(self):
-        """Use the aspheric coefficients stored in this class instance to build a sag model.
-
-        Returns
-        -------
-        self : `QPolySag1D`
-            this QPolySag1D instance`
-
-        """
-        self.phase = e.zeros([self.samples, self.samples], dtype=config.precision)
-        ordered_terms = sorted(self.coefs)
-        ordered_values = [self.coefs[v] for v in ordered_terms]
-        for term, coef in zip(ordered_terms, ordered_values):
-            if coef == 0:
-                continue
-            else:
-                self.phase += coef * self._cache(term, self.samples)
-
-
-class QBFSSag(QPolySag1D):
-    """Qbfs polynomials evaluated over a grid."""
-    _name = 'Qbfs'
-    _cache = QBFScache
-    """Qbfs aspheric surface sag, excluding base sphere."""
-
-    def build(self):
-        """Use the aspheric coefficients stored in this class instance to build a sag model.
-
-        Returns
-        -------
-        self : `QBFSSag`
-            this QBFSSag instance`
-
-        """
-        super().build()
-        coef = self._cache.gridcache(samples=self.samples, radius=1, r='r -> r^2 (1-r^2)')['r']
-        self.phase *= coef
-
-
-class QCONSag(QPolySag1D):
-    """Qcon polynomials evaluated over a grid."""
-    _name = 'Qcon'
-    _cache = QCONcache
-    """Qcon aspheric surface sag, excluding base sphere."""
-
-    def build(self):
-        """Use the aspheric coefficients stored in this class instance to build a sag model.
-
-        Returns
-        -------
-        self : `QCONSag`
-            this QCONSag instance`
-
-        """
-        super().build()
-        coef = self._cache.gridcache(samples=self.samples, radius=1, r='r -> r^4')['r']
-        self.phase *= coef
+    """
+    xx = x ** 2
+    xx = 2 * xx - 1
+    x4 = x ** 4
+    Pns = jacobi_sequence(ns, 0, 4, xx)
+    for Pn in Pns:
+        yield Pn * x4
 
 
 def abc_q2d(n, m):
