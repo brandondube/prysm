@@ -64,7 +64,7 @@ def jacobi(n, alpha, beta, x):
 
     for i in range(3, n+1):
         Pnm2, Pnm1 = Pnm1, Pn
-        a, c, b1, b2, b3 = recurrence_ac_startb(2, alpha, beta)
+        a, c, b1, b2, b3 = recurrence_ac_startb(i, alpha, beta)
         inva = 1 / a
         Pn = (b1 * (b2 * x + b3) * Pnm1 - c * Pnm2) * inva
 
@@ -129,7 +129,7 @@ def jacobi_sequence(ns, alpha, beta, x):
     max_n = ns[-1]
     for i in range(3, max_n+1):
         Pnm2, Pnm1 = Pnm1, Pn
-        a, c, b1, b2, b3 = recurrence_ac_startb(2, alpha, beta)
+        a, c, b1, b2, b3 = recurrence_ac_startb(i, alpha, beta)
         inva = 1 / a
         Pn = (b1 * (b2 * x + b3) * Pnm1 - c * Pnm2) * inva
         if ns[min_i] == i:
