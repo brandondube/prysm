@@ -1,8 +1,10 @@
 """Tools for working with Q (Forbes) polynomials."""
 from functools import lru_cache
 
-from .conf import config
-from .mathops import engine as np, special_engine as special, kronecker, gamma
+# not special engine, only concerns scalars here
+from scipy import special
+
+from .mathops import engine as np, kronecker, gamma, sign
 from .jacobi import jacobi, jacobi_sequence
 
 MAX_ELEMENTS_IN_CACHE = 1024  # surely no one wants > 1000 terms...
@@ -151,7 +153,7 @@ def Qbfs_sequence(ns, x):
     Q1 = 1 / np.sqrt(19) * (13 - 16 * rho)
     Qnm2 = Q0
     Qnm1 = Q1
-    for nn in range(2, n+1):
+    for nn in range(2, ns[-1]+1):
         Pn = c * Pnm1 - Pnm2
         Pnm2 = Pnm1
         Pnm1 = Pn
@@ -373,122 +375,138 @@ def f_q2d(n, m):
 
     """
     if n == 0:
-        return e.sqrt(F_q2d(n=0, m=m))
+        return np.sqrt(F_q2d(n=0, m=m))
     else:
-        return e.sqrt(F_q2d(n, m) - g_q2d(n-1, m) ** 2)
+        return np.sqrt(F_q2d(n, m) - g_q2d(n-1, m) ** 2)
 
 
-def q2d_recurrence_P(n, m, x, Pnm1=None, Pnm2=None):
-    """Auxiliary polynomial P to the 2DQ polynomials (Q).  oe-20-3-2483 Eq. (A.17).
+def _Qbfs_P(n, x):
+    """Qbfs recurrence relation, only auxiliary polynomial P."""
+    rho = x ** 2
+
+    if n == 0:
+        return np.ones_like(x) * 2
+    if n == 1:
+        return 6 - 8 * rho
+
+    P0 = np.ones_like(x) * 2
+    P1 = 6 - 8 * rho
+    Pnm2, Pnm1 = P0, P1
+    c = 2 - 4 * rho
+    for i in range(2, n+1):
+        Pn = c * Pnm1 - Pnm2
+        Pnm2 = Pnm1
+        Pnm1 = Pn
+
+    return Pn
+
+
+def Q2d(n, m, r, t):
+    """2D Q polynomial, aka the Forbes polynomials.
 
     Parameters
     ----------
     n : `int`
-        radial order
+        radial polynomial order
     m : `int`
-        azimuthal order
-    x : `numpy.ndarray`
-        spatial coordinates, x = r^2
-    Pnm1 : `numpy.ndarray`
-        value of this function for argument n - 1
-    Pnm2 : `numpy.ndarray`
-        value of this function for argument n - 2
+        azimuthal polynomial order
+    r : `numpy.ndarray`
+        radial coordinate, slope orthogonal in [0,1]
+    t : `numpy.ndarray`
+        azimuthal coordinate, radians
 
     Returns
     -------
     `numpy.ndarray`
-        P polynomial evaluated over x
+        array containing Q2d_n^m(r,t)
+        the leading coefficient u^m or u^2 (1 - u^2) and sines/cosines
+        are included in the return
 
     """
+    # Q polynomials have auxiliary polynomials "P"
+    # which are the jacobi polynomials under the change of variables
+    # x => 2x - 1
+    # and alpha = -3/2, beta = m-3/2
+    # there is a prefix which involves double factorials that is not reproduced
+    # here, but may be found in A.4 of oe-20-3-2483
+
+    # impl notes:
+    # Pn is computed using a recurrence over order n.  The recurrence is for
+    # a single value of m, and the 'seed' depends on both m and n.
+    #
+    # in general, Q_n^m = [P_n^m(x) - g_n-1^m Q_n-1^m] / f_n^m
+
+    # for the sake of consistency, this function takes args of (r,t)
+    # but the papers define an argument of u (really, u^2...)
+    # which is what I call rho (or r).
+    # for the sake of consistency of impl, I alias r=>u
+    # and compute x = u**2 to match the papers
+    u = r
+    x = u ** 2
     if m == 0:
-        return qbfs_recurrence_P(n=n, x=x, Pnm1=Pnm1, Pnm2=Pnm2)
-    if n == 0:
-        return 1 / 2
-    if n == 1:
-        if m == 1:
-            return 1 - x / 2
-        elif m < 1:
-            raise ValueError('2D-Q auxiliary polynomial is undefined for n=1, m < 1')
-        else:
-            return m - (1 / 2) - (m - 1) * x
-    if m == 1 and (n == 2 or n == 3):
-        if n == 2:
-            num = 3 - x * (12 - 8 * x)
-            den = 6
-            return num / den
-        if n == 3:
-            numt1 = 5 - x
-            numt2 = 60 - x * (120 - 64 * x)
-            num = numt1 * numt2
-            den = 10
-            return num / den
+        return Qbfs(n, r)
+
+    P0 = 1/2
+    if m == 1 and n == 1:
+        P1 = 1 - x/2
     else:
-        if Pnm2 is None:
-            Pnm2 = q2d_recurrence_P(n=n-2, m=m, x=x)
-        if Pnm1 is None:
-            Pnm1 = q2d_recurrence_P(n=n-1, m=m, x=x, Pnm1=Pnm2)
+        P1 = m - (1/2) - (m-1) * x
 
-        Anm, Bnm, Cnm = abc_q2d(n, m)
-        term1 = Anm + Bnm * x
-        term2 = Pnm1
-        term3 = Cnm * Pnm2
-        return term1 * term2 - term3
+    # m == 0 already was short circuited, so we only
+    # need to consider the m =/= 0 case for azimuthal terms
+    if sign(m) == -1:
+        azfunc = np.sin
+    else:
+        azfunc = np.cos
 
+    prefix = u ** m * azfunc(m*t)
 
-def q2d_recurrence_Q(n, m, x, Pn=None, Qnm1=None, Pnm1=None, Pnm2=None):
-    """2DQ polynomials (Q).  oe-20-3-2483 Eq. (A.22).
-
-    Parameters
-    ----------
-    n : `int`
-        radial order
-    m : `int`
-        azimuthal order
-    x : `numpy.ndarray`
-        spatial coordinates, x = r^2
-    Pn : `numpy.ndarray`
-        value of this function for same order n
-    Qnm1 : `numpy.ndarray`
-        value of this function for argument n - 1
-    Pnm1 : `numpy.ndarray`
-        value of the paired P function for n - 1
-    Pnm2 : `numpy.ndarray`
-        value of the paired P function for n - 2
-
-    Returns
-    -------
-    `numpy.ndarray`
-        P polynomial evaluated over x
-
-    """
+    f0 = f_q2d(n, m)
+    Q0 = 1 / (2 * f0)
     if n == 0:
-        return 1 / (2 * f_q2d(0, m))
-    elif m == 0:
-        return qbfs_recurrence_Q(n=n, x=x, Pn=Pn, Pnm1=Pnm1, Pnm2=Pnm2, Qnm1=Qnm1)
-
-    # manual startup, do not try to recurse for n <= 2
+        return Q0 * prefix
+    Qnm1 = Q0
+    Pnm2, Pnm1 = P0, P1
+    g1 = g_q2d(0, m)
+    f1 = f_q2d(1, m)
+    Q1 = (P1 - g1 * Q0) * (1/f1)
     if n == 1:
-        Pn = q2d_recurrence_P(n=n, m=m, x=x, Pnm1=Pnm1)
-        Qnm1 = 1 / (2 * f_q2d(0, m))  # same as L2 of this function, n=0
-        g = g_q2d(0, m)
-        f = f_q2d(n, m)
-        return (Pn - g * Qnm1) / f
-    if n == 2:
-        Pn = q2d_recurrence_P(n=n, m=m, x=x, Pnm1=Pnm1, Pnm2=Pnm2)
-        Qnm1 = q2d_recurrence_Q(n=n-1, m=m, x=x, Pnm1=Pnm2, Qnm1=1 / (2 * f_q2d(0, m)))
-        g = g_q2d(1, m)
-        f = f_q2d(n, m)
-        return (Pn - g * Qnm1) / f
+        return Q1 * prefix
 
-    if Pnm2 is None:
-        Pnm2 = q2d_recurrence_P(n=n-2, m=m, x=x)
-    if Pnm1 is None:
-        Pnm1 = q2d_recurrence_P(n=n-1, m=m, x=x, Pnm1=Pnm2)
-    if Pn is None:
-        if n == 0:
-            Pn = q2d_recurrence_P(n=n, m=m, x=x, Pnm1=Pnm1, Pnm2=Pnm2)
+    Qnm1 = Q0
+    if m == 1:
+        P2 = (3 - x * (12 - 8 * x)) / 6
+        P3 = (5 - x * (60 - x * (120 - 64 * x))) / 10
 
-    if Qnm1 is None:
-        Qnm1 = q2d_recurrence_Q(n=n-1, m=m, x=x, Pnm=Pnm1, Pnm1=Pnm2)
+        gnm1 = g_q2d(1, m)
+        fn = f_q2d(2, m)
+        Q2 = (P2 - gnm1 * Q1) * (1/fn)
 
-    return (Pn - g_q2d(n-1, m) * Qnm1) / f_q2d(n, m)
+        gnm1 = g_q2d(2, m)
+        fn = f_q2d(3, m)
+        Q3 = (P3 - gnm1 * Q2) * (1/fn)
+        if n == 2:
+            return Q2 * prefix
+        elif n == 3:
+            return Q3 * prefix
+
+        Pnm2, Pnm1 = P2, P3
+        Qnm1 = Q3
+        min_n = 4
+    else:
+        min_n = 2
+
+    for nn in range(min_n, n+1):
+        A, B, C = abc_q2d(nn, m)
+        Pn = (A + B * x) * Pnm1 - C * Pnm2
+
+        gnm1 = g_q2d(nn-1, m)
+        fn = f_q2d(nn, m)
+        Qn = (Pn - gnm1 * Qnm1) * (1/fn)
+
+        Pnm2, Pnm1 = Pnm1, Pn
+        Qnm1 = Qn
+
+    # Qn must have been computed by either an early clause or the loop,
+    # but flake8 can't see that
+    return Qn * prefix  # NOQA
