@@ -1,11 +1,200 @@
-"""Analysis routines for slicing and dicing Zernike coefficient sets."""
+"""Zernike polynomials."""
+
 from collections import defaultdict
 
-import numpy as np  # not mathops -- nothing in this file operates on anything worthwhile for a GPU
+from .jacobi import jacobi, jacobi_sequence
 
+from prysm.mathops import np, kronecker, sign, is_odd
 from prysm.util import sort_xy
-from prysm.mathops import is_odd, sign
 from prysm.plotting import share_fig_ax
+
+
+def zernike_norm(n, m):
+    """Norm of a Zernike polynomial with n, m indexing."""
+    return np.sqrt((2 * (n + 1)) / (1 + kronecker(m, 0)))
+
+
+def zero_separation(n):
+    """Zero separation in normalized r based on radial order n."""
+    return 1 / n ** 2
+
+
+def zernike_nm(n, m, r, t, norm=True):
+    """Zernike polynomial of radial order n, azimuthal order m at point r, t.
+
+    Parameters
+    ----------
+    n : `int`
+        radial order
+    m : `int`
+        azimuthal order
+    r : `numpy.ndarray`
+        radial coordinates
+    t : `numpy.ndarray`
+        azimuthal coordinates
+    norm : `bool`, optional
+        if True, orthonormalize the result (unit RMS)
+        else leave orthogonal (zero-to-peak = 1)
+
+    """
+    x = 2 * r ** 2 - 1
+    am = abs(m)
+    n_j = (n - am) // 2
+    out = jacobi(n_j, 0, am, x)
+    if m != 0:
+        if m < 0:
+            out *= (r ** am * np.sin(m*t))
+        else:
+            out *= (r ** am * np.cos(m*t))
+
+    if norm:
+        out *= zernike_norm(n, m)
+
+    return out
+
+
+def zernike_nm_sequence(nms, r, t, norm=True):
+    """Zernike polynomial of radial order n, azimuthal order m at point r, t.
+
+    Parameters
+    ----------
+    nms : iterable of tuple of int,
+        sequence of (n, m); looks like [(1,1), (3,1), ...]
+    r : `numpy.ndarray`
+        radial coordinates
+    t : `numpy.ndarray`
+        azimuthal coordinates
+    norm : `bool`, optional
+        if True, orthonormalize the result (unit RMS)
+        else leave orthogonal (zero-to-peak = 1)
+
+    """
+    # this function deduplicates all possible work.  It uses a connection
+    # to the jacobi polynomials to efficiently compute a series of zernike
+    # polynomials
+    # it follows this basic algorithm:
+    # for each (n, m) compute the appropriate Jacobi polynomial order
+    # collate the unique values of that for each |m|
+    # compute a set of jacobi polynomials for each |m|
+    # compute r^|m| , sin(|m|*t), and cos(|m|*t for each |m|
+    #
+    # benchmarked at 12.26 ns/element (256x256), 4.6GHz CPU = 56 clocks per element
+    # ~36% faster than previous impl (12ms => 8.84 ms)
+    x = 2 * r ** 2 - 1
+    ms = list(e[1] for e in nms)
+    am = np.abs(ms)
+    amu = np.unique(am)
+
+    def factory():
+        return 0
+
+    jacobi_sequences_mjn = defaultdict(factory)
+    # jacobi_sequences_mjn is a lookup table from |m| to all orders < max(n_j)
+    # for each |m|, i.e. 0 .. n_j_max
+    for nm, am_ in zip(nms, am):
+        n = nm[0]
+        nj = (n-am_) // 2
+        if nj > jacobi_sequences_mjn[am_]:
+            jacobi_sequences_mjn[am_] = nj
+
+    for k in jacobi_sequences_mjn:
+        nj = jacobi_sequences_mjn[k]
+        jacobi_sequences_mjn[k] = np.arange(nj+1)
+
+    jacobi_sequences = {}
+
+    jacobi_sequences_mjn = dict(jacobi_sequences_mjn)
+    for k in jacobi_sequences_mjn:
+        n_jac = jacobi_sequences_mjn[k]
+        jacobi_sequences[k] = list(jacobi_sequence(n_jac, 0, k, x))
+
+    powers_of_m = {}
+    sines = {}
+    cosines = {}
+    for m in amu:
+        powers_of_m[m] = r ** m
+        sines[m] = np.sin(m*t)
+        cosines[m] = np.cos(m*t)
+
+    for n, m in nms:
+        absm = abs(m)
+        nj = (n-absm) // 2
+        jac = jacobi_sequences[absm][nj]
+        if norm:
+            jac = jac * zernike_norm(n, m)
+
+        if m == 0:
+            # rotationally symmetric Zernikes are jacobi
+            yield jac
+        else:
+            if m < 0:
+                azpiece = sines[absm]
+            else:
+                azpiece = cosines[absm]
+
+            radialpiece = powers_of_m[absm]
+            out = jac * azpiece * radialpiece  # jac already contains the norm
+            yield out
+
+
+def n_m_to_fringe(n, m):
+    """Convert (n,m) two term index to Fringe index."""
+    term1 = (1 + (n + abs(m))/2)**2
+    term2 = 2 * abs(m)
+    term3 = (1 + sign(m)) / 2
+    return int(term1 - term2 - term3) + 1  # shift 0 base to 1 base
+
+
+def n_m_to_ansi_j(n, m):
+    """Convert (n,m) two term index to ANSI single term index."""
+    return int((n * (n + 2) + m) / 2)
+
+
+def ansi_j_to_n_m(idx):
+    """Convert ANSI single term to (n,m) two-term index."""
+    n = int(np.ceil((-3 + np.sqrt(9 + 8*idx))/2))
+    m = 2 * idx - n * (n + 2)
+    return n, m
+
+
+def noll_to_n_m(idx):
+    """Convert Noll Z to (n, m) two-term index."""
+    # I don't really understand this code, the math is inspired by POPPY
+    # azimuthal order
+    n = int(np.ceil((-1 + np.sqrt(1 + 8 * idx)) / 2) - 1)
+    if n == 0:
+        m = 0
+    else:
+        # this is sort of a rising factorial to use that term incorrectly
+        nseries = int((n + 1) * (n + 2) / 2)
+        res = idx - nseries - 1
+
+        if is_odd(idx):
+            sign = -1
+        else:
+            sign = 1
+
+        if is_odd(n):
+            ms = [1, 1]
+        else:
+            ms = [0]
+
+        for i in range(n // 2):
+            ms.append(ms[-1] + 2)
+            ms.append(ms[-1])
+
+        m = ms[res] * sign
+
+    return n, m
+
+
+def fringe_to_n_m(idx):
+    """Convert Fringe Z to (n, m) two-term index."""
+    m_n = 2 * (np.ceil(np.sqrt(idx)) - 1)  # sum of n+m
+    g_s = (m_n / 2)**2 + 1  # start of each group of equal n+m given as idx index
+    n = m_n / 2 + np.floor((idx - g_s) / 2)
+    m = (m_n - n) * (1 - np.mod(idx-g_s, 2) * 2)
+    return int(n), int(m)
 
 
 def zernikes_to_magnitude_angle_nmkey(coefs):

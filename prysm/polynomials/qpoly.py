@@ -421,7 +421,7 @@ def Q2d(n, m, r, t):
     # m == 0 already was short circuited, so we only
     # need to consider the m =/= 0 case for azimuthal terms
     if sign(m) == -1:
-        prefix = u ** m * np.sin(m*t)
+        prefix = u ** abs(m) * np.sin(m*t)
     else:
         prefix = u ** m * np.cos(m*t)
 
