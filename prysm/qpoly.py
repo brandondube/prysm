@@ -285,7 +285,7 @@ def G_q2d(n, m):
         t1den = 8 * (4 * n ** 2 - 1)
         term1 = -t1num / t1den
         term2 = 1 / 24 * kronecker(n, 1)
-        return term1 + term2  # this is minus in the paper
+        return term1 - term2
     else:
         # nt1 = numerator term 1, d = denominator...
         nt1 = 2 * n * (m + n - 1) - m
@@ -295,7 +295,7 @@ def G_q2d(n, m):
         dt2 = (m + 2 * n) * (2 * n + 1)
         den = dt1 * dt2
 
-        term1 = num / den  # there is a leading negative in the paper
+        term1 = -num / den
         return term1 * gamma(n, m)
 
 
@@ -339,12 +339,12 @@ def F_q2d(n, m):
         return term1 * gamma(n, m)
 
 
-def g_q2d(nm1, m):
+def g_q2d(n, m):
     """Lowercase g term for 2D-Q polynomials.  oe-20-3-2483 Eq. (A.18a).
 
     Parameters
     ----------
-    nm1 : `int`
+    n : `int`
         radial order less one (n - 1)
     m : `int`
         azimuthal order
@@ -355,7 +355,7 @@ def g_q2d(nm1, m):
         g
 
     """
-    return G_q2d(nm1, m) / f_q2d(nm1, m)
+    return G_q2d(n, m) / f_q2d(n, m)
 
 
 def f_q2d(n, m):
@@ -363,7 +363,7 @@ def f_q2d(n, m):
 
     Parameters
     ----------
-    nm1 : `int`
+    n : `int`
         radial order
     m : `int`
         azimuthal order
@@ -378,27 +378,6 @@ def f_q2d(n, m):
         return np.sqrt(F_q2d(n=0, m=m))
     else:
         return np.sqrt(F_q2d(n, m) - g_q2d(n-1, m) ** 2)
-
-
-def _Qbfs_P(n, x):
-    """Qbfs recurrence relation, only auxiliary polynomial P."""
-    rho = x ** 2
-
-    if n == 0:
-        return np.ones_like(x) * 2
-    if n == 1:
-        return 6 - 8 * rho
-
-    P0 = np.ones_like(x) * 2
-    P1 = 6 - 8 * rho
-    Pnm2, Pnm1 = P0, P1
-    c = 2 - 4 * rho
-    for i in range(2, n+1):
-        Pn = c * Pnm1 - Pnm2
-        Pnm2 = Pnm1
-        Pnm1 = Pn
-
-    return Pn
 
 
 def Q2d(n, m, r, t):
@@ -424,11 +403,9 @@ def Q2d(n, m, r, t):
 
     """
     # Q polynomials have auxiliary polynomials "P"
-    # which are the jacobi polynomials under the change of variables
-    # x => 2x - 1
-    # and alpha = -3/2, beta = m-3/2
-    # there is a prefix which involves double factorials that is not reproduced
-    # here, but may be found in A.4 of oe-20-3-2483
+    # which are scaled jacobi polynomials under the change of variables
+    # x => 2x - 1 with alpha = -3/2, beta = m-3/2
+    # the scaling prefix may be found in A.4 of oe-20-3-2483
 
     # impl notes:
     # Pn is computed using a recurrence over order n.  The recurrence is for
@@ -446,45 +423,44 @@ def Q2d(n, m, r, t):
     if m == 0:
         return Qbfs(n, r)
 
+    # m == 0 already was short circuited, so we only
+    # need to consider the m =/= 0 case for azimuthal terms
+    if sign(m) == -1:
+        prefix = u ** m * np.sin(m*t)
+    else:
+        prefix = u ** m * np.cos(m*t)
+
+    m = abs(m)
+
     P0 = 1/2
     if m == 1 and n == 1:
         P1 = 1 - x/2
     else:
-        P1 = m - (1/2) - (m-1) * x
+        P1 = (m - .5) + (1 - m) * x
 
-    # m == 0 already was short circuited, so we only
-    # need to consider the m =/= 0 case for azimuthal terms
-    if sign(m) == -1:
-        azfunc = np.sin
-    else:
-        azfunc = np.cos
-
-    prefix = u ** m * azfunc(m*t)
-
-    f0 = f_q2d(n, m)
+    f0 = f_q2d(0, m)
     Q0 = 1 / (2 * f0)
     if n == 0:
         return Q0 * prefix
-    Qnm1 = Q0
-    Pnm2, Pnm1 = P0, P1
-    g1 = g_q2d(0, m)
+
+    g0 = g_q2d(0, m)
     f1 = f_q2d(1, m)
-    Q1 = (P1 - g1 * Q0) * (1/f1)
+    Q1 = (P1 - g0 * Q0) * (1/f1)
     if n == 1:
         return Q1 * prefix
-
-    Qnm1 = Q0
+    # everything above here works, or at least everything in the returns works
     if m == 1:
         P2 = (3 - x * (12 - 8 * x)) / 6
         P3 = (5 - x * (60 - x * (120 - 64 * x))) / 10
 
-        gnm1 = g_q2d(1, m)
-        fn = f_q2d(2, m)
-        Q2 = (P2 - gnm1 * Q1) * (1/fn)
+        g1 = g_q2d(1, m)
+        f2 = f_q2d(2, m)
+        Q2 = (P2 - g1 * Q1) * (1/f2)
 
-        gnm1 = g_q2d(2, m)
-        fn = f_q2d(3, m)
-        Q3 = (P3 - gnm1 * Q2) * (1/fn)
+        g2 = g_q2d(2, m)
+        f3 = f_q2d(3, m)
+        Q3 = (P3 - g2 * Q2) * (1/f3)
+        # Q2, Q3 correct
         if n == 2:
             return Q2 * prefix
         elif n == 3:
@@ -494,10 +470,12 @@ def Q2d(n, m, r, t):
         Qnm1 = Q3
         min_n = 4
     else:
+        Pnm2, Pnm1 = P0, P1
+        Qnm1 = Q1
         min_n = 2
 
     for nn in range(min_n, n+1):
-        A, B, C = abc_q2d(nn, m)
+        A, B, C = abc_q2d(nn-1, m)
         Pn = (A + B * x) * Pnm1 - C * Pnm2
 
         gnm1 = g_q2d(nn-1, m)
@@ -507,6 +485,6 @@ def Q2d(n, m, r, t):
         Pnm2, Pnm1 = Pnm1, Pn
         Qnm1 = Qn
 
-    # Qn must have been computed by either an early clause or the loop,
-    # but flake8 can't see that
+    # flake8 can't prove that the branches above the loop guarantee that we
+    # enter the loop and Qn is defined
     return Qn * prefix  # NOQA
