@@ -1,6 +1,4 @@
 """Tools for working with Q (Forbes) polynomials."""
-from functools import lru_cache
-
 # not special engine, only concerns scalars here
 from scipy import special
 
@@ -10,7 +8,6 @@ from .jacobi import jacobi, jacobi_sequence
 MAX_ELEMENTS_IN_CACHE = 1024  # surely no one wants > 1000 terms...
 
 
-@lru_cache(MAX_ELEMENTS_IN_CACHE)
 def g_qbfs(n_minus_1):
     """g(m-1) from oe-18-19-19700 eq. (A.15)."""
     if n_minus_1 == 0:
@@ -20,14 +17,12 @@ def g_qbfs(n_minus_1):
         return - (1 + g_qbfs(n_minus_2) * h_qbfs(n_minus_2)) / f_qbfs(n_minus_1)
 
 
-@lru_cache(MAX_ELEMENTS_IN_CACHE)
 def h_qbfs(n_minus_2):
     """h(m-2) from oe-18-19-19700 eq. (A.14)."""
     n = n_minus_2 + 2
     return -n * (n - 1) / (2 * f_qbfs(n_minus_2))
 
 
-@lru_cache(MAX_ELEMENTS_IN_CACHE)
 def f_qbfs(n):
     """f(m) from oe-18-19-19700 eq. (A.16)."""
     if n == 0:
