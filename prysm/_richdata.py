@@ -1,10 +1,8 @@
 """Basic class holding data, used to recycle code."""
 import copy
-import inspect
 from numbers import Number
 from collections.abc import Iterable
 
-from .conf import config
 from .mathops import engine as np, interpolate_engine as interpolate
 from .coordinates import uniform_cart_to_polar, polar_to_cart
 from .plotting import share_fig_ax
@@ -100,34 +98,6 @@ class RichData:
     def copy(self):
         """Return a (deep) copy of this instance."""
         return copy.deepcopy(self)
-
-    def astype(self, other_type):
-        """Change this instance of one type into another.
-
-        Useful to access methods of the other class.
-
-        Parameters
-        ----------
-        other_type : `object`
-            the name of the other type to "cast" to, e.g. Interferogram.  Not a string.
-
-        Returns
-        -------
-        `self`
-            type-converted to the other type.
-
-        """
-        original_type = type(self)
-        sig = inspect.signature(other_type)
-        pass_params = {}
-        for param in sig.parameters:
-            if hasattr(self, param):
-                pass_params[param] = getattr(self, param)
-
-        other = other_type(**pass_params)
-        other._original_type = original_type
-        other._original_vars = vars(self)
-        return other
 
     def slices(self, twosided=None):
         """Create a `Slices` instance from this instance.
@@ -262,9 +232,9 @@ class RichData:
 
     def plot2d(self, xlim=None, ylim=None, clim=None, cmap=None,
                log=False, power=1, interpolation=None,
-               show_colorbar=True, show_axlabels=True,
+               show_colorbar=True, colorbar_label=None, axis_labels=(None, None),
                fig=None, ax=None):
-        """Plot the data in 2D.
+        """Plot data in 2D.
 
         Parameters
         ----------
@@ -287,8 +257,10 @@ class RichData:
             interpolation method to use, passed directly to matplotlib
         show_colorbar : `bool`, optional
             if True, draws the colorbar
-        show_axlabels : `bool`, optional
-            if True, draws the axis labels
+        colorbar_label : `str`, optional
+            label for the colorbar
+        axis_labels : `iterable` of `str`,
+            (x, y) axis labels.  If None, not drawn
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
@@ -302,15 +274,16 @@ class RichData:
             Axis containing the plot
 
         """
+        data, x, y = self.data, self.y, self.y
         from matplotlib.colors import PowerNorm, LogNorm
         fig, ax = share_fig_ax(fig, ax)
 
         # sanitize some inputs
         if cmap is None:
-            cmap = getattr(config, f'{self._data_type}_cmap')
+            cmap = 'inferno'
 
         if interpolation is None:
-            interpolation = config.interpolation
+            interpolation = 'lanczos'
 
         if xlim is not None and not isinstance(xlim, Iterable):
             xlim = (-xlim, xlim)
@@ -329,8 +302,8 @@ class RichData:
         elif power != 1:
             norm = PowerNorm(power)
 
-        im = ax.imshow(self.data,
-                       extent=[self.x[0], self.x[-1], self.y[0], self.y[-1]],
+        im = ax.imshow(data,
+                       extent=[x.min(), x.max(), y.min(), y.max()],
                        cmap=cmap,
                        clim=clim,
                        norm=norm,
@@ -338,12 +311,9 @@ class RichData:
                        interpolation=interpolation)
 
         if show_colorbar:
-            fig.colorbar(im, label=self.labels.z(self.xy_unit, self.z_unit), ax=ax, fraction=0.046)
+            fig.colorbar(im, label=colorbar_label, ax=ax, fraction=0.046)
 
-        xlab, ylab = None, None
-        if show_axlabels:
-            xlab = self.labels.x(self.xy_unit, self.z_unit)
-            ylab = self.labels.y(self.xy_unit, self.z_unit)
+        xlab, ylab = axis_labels
         ax.set(xlabel=xlab, xlim=xlim, ylabel=ylab, ylim=ylim)
 
         return fig, ax
@@ -351,7 +321,7 @@ class RichData:
 
 class Slices:
     """Slices of data."""
-    def __init__(self, data, x, y, x_unit, z_unit, labels, xscale, yscale, twosided=True):
+    def __init__(self, data, x, y, xscale, yscale, twosided=True):
         """Create a new Slices instance.
 
         Parameters
@@ -382,8 +352,6 @@ class Slices:
         self._p = None
         self._x = x
         self._y = y
-        self.x_unit, self.z_unit = x_unit, z_unit
-        self.labels = labels
         self.xscale, self.yscale = xscale, yscale
         self.center_y, self.center_x = (int(np.ceil(s / 2)) for s in data.shape)
         self.twosided = twosided
@@ -538,7 +506,7 @@ class Slices:
     def plot(self, slices, lw=None, alpha=None, zorder=None, invert_x=False,
              xlim=(None, None), xscale=None,
              ylim=(None, None), yscale=None,
-             show_legend=True, show_axlabels=True,
+             show_legend=True, axis_labels=(None, None),
              fig=None, ax=None):
         """Plot slice(s).
 
@@ -570,8 +538,8 @@ class Slices:
             scale used for the y axis
         show_legend : `bool`, optional
             if True, show the legend
-        show_axlabels : `bool`, optional
-            if True, show the axis labels
+        axis_labels : `iterable` of `str`,
+            (x, y) axis labels.  If None, not drawn
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
@@ -596,13 +564,13 @@ class Slices:
 
         # error check everything
         if alpha is None:
-            alpha = config.alpha
+            alpha = 1
 
         if lw is None:
-            lw = config.lw
+            lw = 2
 
         if zorder is None:
-            zorder = config.zorder
+            zorder = 3
 
         if isinstance(slices, str):
             slices = [slices]
@@ -631,25 +599,8 @@ class Slices:
         if show_legend:
             ax.legend(title='Slice')
 
-        # the x label has some special text manipulation
+        xlabel, ylabel = axis_labels
 
-        if invert_x:
-            xlabel = self.labels.generic(self.x_unit ** -1, self.z_unit)
-            # ax.invert_xaxis()
-            if 'Period' in xlabel:
-                xlabel = xlabel.replace('Period', 'Frequency')
-            elif 'Frequency' in xlabel:
-                xlabel = xlabel.replace('Frequency', 'Period')
-        else:
-            # slightly unclean code duplication here
-            xlabel = self.labels.generic(self.x_unit, self.z_unit)
-
-        ylabel = self.labels.z(self.x_unit, self.z_unit)
-
-        if not show_axlabels:
-            xlabel, ylabel = '', ''
-
-        # z looks wrong here, but z from 2D is y in 1D.
         ax.set(xscale=xscale or self.xscale, xlim=xlim, xlabel=xlabel,
                yscale=yscale or self.yscale, ylim=ylim, ylabel=ylabel)
         if invert_x:

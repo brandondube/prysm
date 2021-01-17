@@ -1,4 +1,5 @@
 """Plotting-related functions."""
+
 from .conf import config
 
 
@@ -39,7 +40,7 @@ def share_fig_ax(fig=None, ax=None, numax=1, sharex=False, sharey=False):
 def add_psd_model(psd, fig=None, ax=None, invert_x=False,
                   lw=None, ls='--', color='k', alpha=1, zorder=None,
                   psd_fcn=None, **psd_fcn_kwargs):
-    """add a PSD model to
+    """Add a PSD model to a line plot.
 
     Parameters
     ----------
@@ -53,6 +54,8 @@ def add_psd_model(psd, fig=None, ax=None, invert_x=False,
         if True, plot with x axis of spatial period
     lw : `float`, optional
         line width
+    ls : `str`, optional
+        line style
     color : `str`, optional
         something matplotlib understands as a color
     alpha : `float`, optional
