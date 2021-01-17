@@ -41,9 +41,9 @@ def legendre_2d_sequence(ns, ms, x, y):
     Parameters
     ----------
     ns : iterable of `int`
-        orders n for the x axis
+        orders n for the x axis, if None not computed and return only contains y
     ms : iterable of `int`
-        orders m for the y axis
+        orders m for the y axis, if None not computed and return only contains x
     x : `numpy.ndarray`
         x coordinates, 1D or 2D
     y : `numpy.ndarray`
@@ -56,6 +56,11 @@ def legendre_2d_sequence(ns, ms, x, y):
 
     """
     x, y = optimize_xy_separable(x, y)
-    xs = list(jacobi_sequence(ns, 0, 0, x))
-    ys = list(jacobi_sequence(ms, 0, 0, y))
-    return xs, ys
+    if ns is not None and ms is not None:
+        xs = list(jacobi_sequence(ns, 0, 0, x))
+        ys = list(jacobi_sequence(ms, 0, 0, y))
+        return xs, ys
+    if ns is not None:
+        return list(jacobi_sequence(ns, 0, 0, x))
+    if ms is not None:
+        return list(jacobi_sequence(ns, 0, 0, y))

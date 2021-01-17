@@ -2,10 +2,9 @@
 # not special engine, only concerns scalars here
 from scipy import special
 
-from .mathops import engine as np, kronecker, gamma, sign
 from .jacobi import jacobi, jacobi_sequence
 
-MAX_ELEMENTS_IN_CACHE = 1024  # surely no one wants > 1000 terms...
+from prysm.mathops import engine as np, kronecker, gamma, sign
 
 
 def g_qbfs(n_minus_1):
@@ -483,3 +482,7 @@ def Q2d(n, m, r, t):
     # flake8 can't prove that the branches above the loop guarantee that we
     # enter the loop and Qn is defined
     return Qn * prefix  # NOQA
+
+
+def Q2d_sequence(nms, r, t):
+    return

@@ -137,7 +137,7 @@ def zernike_nm_sequence(nms, r, t, norm=True):
             yield out
 
 
-def n_m_to_fringe(n, m):
+def nm_to_fringe(n, m):
     """Convert (n,m) two term index to Fringe index."""
     term1 = (1 + (n + abs(m))/2)**2
     term2 = 2 * abs(m)
@@ -145,19 +145,19 @@ def n_m_to_fringe(n, m):
     return int(term1 - term2 - term3) + 1  # shift 0 base to 1 base
 
 
-def n_m_to_ansi_j(n, m):
+def nm_to_ansi_j(n, m):
     """Convert (n,m) two term index to ANSI single term index."""
     return int((n * (n + 2) + m) / 2)
 
 
-def ansi_j_to_n_m(idx):
+def ansi_j_to_nm(idx):
     """Convert ANSI single term to (n,m) two-term index."""
     n = int(np.ceil((-3 + np.sqrt(9 + 8*idx))/2))
     m = 2 * idx - n * (n + 2)
     return n, m
 
 
-def noll_to_n_m(idx):
+def noll_to_nm(idx):
     """Convert Noll Z to (n, m) two-term index."""
     # I don't really understand this code, the math is inspired by POPPY
     # azimuthal order
@@ -188,7 +188,7 @@ def noll_to_n_m(idx):
     return n, m
 
 
-def fringe_to_n_m(idx):
+def fringe_to_nm(idx):
     """Convert Fringe Z to (n, m) two-term index."""
     m_n = 2 * (np.ceil(np.sqrt(idx)) - 1)  # sum of n+m
     g_s = (m_n / 2)**2 + 1  # start of each group of equal n+m given as idx index
@@ -255,7 +255,7 @@ def zernikes_to_magnitude_angle(coefs):
     d2 = {}
     for k, v in d.items():
         # (n,m) -> "Primary Coma X" -> ['Primary', 'Coma', 'X'] -> 'Primary Coma'
-        name = n_m_to_name(*k)
+        name = nm_to_name(*k)
         split = name.split(" ")
         if len(split) < 3 and 'Tilt' not in name:  # oh, how special the low orders are
             k2 = name
@@ -322,7 +322,7 @@ def _name_helper(n, m):
     return f'{prefix} {name} {suffix}'
 
 
-def n_m_to_name(n, m):
+def nm_to_name(n, m):
     """Convert an (n,m) index into a human readable name.
 
     Parameters
@@ -378,7 +378,7 @@ def top_n(coefs, n=5):
     idxs = idxs[np.argsort(coefs_work[idxs])[::-1]]  # use argsort to sort them in ascending order and reverse
     big_terms = coefs[idxs]  # finally, take the values from the
     big_idxs = oidxs[idxs]
-    names = [n_m_to_name(*p) for p in oidxs][idxs]  # p = pair (n,m)
+    names = [nm_to_name(*p) for p in oidxs][idxs]  # p = pair (n,m)
     return list(zip(big_terms, big_idxs, names))
 
 

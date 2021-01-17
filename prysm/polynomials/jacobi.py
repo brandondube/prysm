@@ -1,5 +1,5 @@
 """High performance / recursive jacobi polynomial calculation."""
-from .mathops import engine as np
+from prysm.mathops import engine as np
 
 
 def weight(alpha, beta, x):
