@@ -1,10 +1,9 @@
 """Functions used to generate various geometrical constructs."""
-
 import numpy as truenp
 
 from scipy import spatial
 
-from .conf import config
+# from .conf import config
 from .mathops import engine as np
 from .coordinates import cart_to_polar, optimize_xy_separable, polar_to_cart
 
@@ -271,7 +270,7 @@ def regular_polygon(sides, radius, x, y, center=(0, 0), rotation=0):
 
     """
     verts = _generate_vertices(sides, radius, center, rotation)
-    return _generate_mask(verts, x, y).astype(config.precision)
+    return _generate_mask(verts, x, y)
 
 
 def _generate_mask(vertices, x, y):
@@ -308,7 +307,7 @@ def _generate_mask(vertices, x, y):
     # use delaunay to fill from the vertices and produce a mask
     triangles = spatial.Delaunay(vertices, qhull_options='QJ Qf')
     mask = ~(triangles.find_simplex(xxyy) < 0)
-    return mask.astype(x.dtype)
+    return mask
 
 
 def _generate_vertices(sides, radius=1, center=(0, 0), rotation=0):
