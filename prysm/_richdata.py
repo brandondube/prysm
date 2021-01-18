@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from .mathops import engine as np, interpolate_engine as interpolate
 from .coordinates import uniform_cart_to_polar, polar_to_cart
 from .plotting import share_fig_ax
+from .fttools import fftrange
 
 
 def fix_interp_pair(x, y):
@@ -40,6 +41,7 @@ def fix_interp_pair(x, y):
 
 class RichData:
     """Abstract base class holding some data properties."""
+    _default_twosided = True
 
     def __init__(self, data, dx, wavelength):
         """Initialize a new RichData instance.
@@ -115,9 +117,10 @@ class RichData:
         """
         if twosided is None:
             twosided = self._default_twosided
-        return Slices(data=self.data, x=self.x, y=self.y,
-                      twosided=twosided, x_unit=self.xy_unit, z_unit=self.z_unit, labels=self.labels,
-                      xscale=self._slice_xscale, yscale=self._slice_yscale)
+
+        y, x = (fftrange(n, self.data.dtype)*self.dx for n in self.data.shape)
+
+        return Slices(data=self.data, x=x, y=y, twosided=twosided)
 
     def _make_interp_function_2d(self):
         """Generate a 2D interpolation function for this instance, used in sampling with exact_xy.
@@ -274,7 +277,9 @@ class RichData:
             Axis containing the plot
 
         """
-        data, x, y = self.data, self.y, self.y
+        data = self.data
+        y, x = (fftrange(n, data.dtype)*self.dx for n in data.shape)
+
         from matplotlib.colors import PowerNorm, LogNorm
         fig, ax = share_fig_ax(fig, ax)
 
@@ -321,7 +326,7 @@ class RichData:
 
 class Slices:
     """Slices of data."""
-    def __init__(self, data, x, y, xscale, yscale, twosided=True):
+    def __init__(self, data, x, y, twosided=True):
         """Create a new Slices instance.
 
         Parameters
@@ -332,16 +337,6 @@ class Slices:
             1D array of x points
         y : `numpy.ndarray`
             1D array of y points
-        x_unit : `astropy.units.unit`
-            spatial unit
-        z_unit : `astropy.units.unit`
-            depth/height axis unit
-        labels : `Labels`
-            labels for the axes
-        xscale : `str`, {'linear', 'log'}
-            scale for x axis when plotting
-        yscale : `str`, {'linear', 'log'}
-            scale for y axis when plotting
         twosided : `bool`, optional
             if True, plot slices from (-ext, ext), else from (0,ext)
 
@@ -352,8 +347,7 @@ class Slices:
         self._p = None
         self._x = x
         self._y = y
-        self.xscale, self.yscale = xscale, yscale
-        self.center_y, self.center_x = (int(np.ceil(s / 2)) for s in data.shape)
+        self.center_y, self.center_x = np.argmin(abs(y)), np.argmin(abs(x))  # fftrange produced x/y, so argmin=center
         self.twosided = twosided
 
     def check_polar_calculated(self):
@@ -504,8 +498,8 @@ class Slices:
         return self._r, np.nanstd(self._source_polar, axis=0)
 
     def plot(self, slices, lw=None, alpha=None, zorder=None, invert_x=False,
-             xlim=(None, None), xscale=None,
-             ylim=(None, None), yscale=None,
+             xlim=(None, None), xscale='linear',
+             ylim=(None, None), yscale='linear',
              show_legend=True, axis_labels=(None, None),
              fig=None, ax=None):
         """Plot slice(s).
@@ -601,8 +595,8 @@ class Slices:
 
         xlabel, ylabel = axis_labels
 
-        ax.set(xscale=xscale or self.xscale, xlim=xlim, xlabel=xlabel,
-               yscale=yscale or self.yscale, ylim=ylim, ylabel=ylabel)
+        ax.set(xscale=xscale, xlim=xlim, xlabel=xlabel,
+               yscale=yscale, ylim=ylim, ylabel=ylabel)
         if invert_x:
             ax.invert_xaxis()
 
