@@ -154,7 +154,7 @@ def hopkins(a, b, c, r, t, H):
     """
     # c = "component"
     if a < 0:
-        c1 = np.sin(a*t)
+        c1 = np.sin(abs(a)*t)
     else:
         c1 = np.cos(a*t)
 
