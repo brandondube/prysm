@@ -16,6 +16,7 @@ px_to_axial_0 = truenp.linalg.inv(axial_to_px_0)
 
 
 def add_hex(h1, h2):
+    """Add two hex coordinates together."""
     q = h1.q + h2.q
     r = h1.r + h2.r
     s = h1.s + h2.s
@@ -23,6 +24,7 @@ def add_hex(h1, h2):
 
 
 def sub_hex(h1, h2):
+    """Subtract two hex coordinates."""
     q = h1.q - h2.q
     r = h1.r - h2.r
     s = h1.s - h2.s
@@ -30,6 +32,7 @@ def sub_hex(h1, h2):
 
 
 def mul_hex(h1, h2):
+    """Multiply two hex coordinates."""
     q = h1.q * h2.q
     r = h1.r * h2.r
     s = h1.s * h2.s
@@ -42,23 +45,19 @@ hex_dirs = [
     Hex(-1, 0, 1), Hex(-1, 1, 0), Hex(0, 1, -1)
 ]
 
-# rolled to put up first
-# hex_dirs = [
-#     Hex(0, 1, -1), Hex(1, 0, -1), Hex(1, -1, 0),
-#     Hex(0, -1, 1), Hex(-1, 0, 1), Hex(-1, 1, 0),
-# ]
-
 
 def hex_dir(i):
+    """Hex direction associated with a given integer, wrapped at 6."""
     return hex_dirs[i % 6]  # wrap dirs at 6 (there are only 6)
 
 
 def hex_neighbor(h, direction):
+    """Neighboring hex in a given direction."""
     return add_hex(h, hex_dir(direction))
 
 
 def hex_to_xy(h, radius, rot=90):
-    """r is the radius of all hexagons."""
+    """Convert hexagon coordinate to (x,y), if all hexagons have a given radius and rotation."""
     if rot == 90:
         x = 3/2 * h.q
         y = truenp.sqrt(3)/2 * h.q + truenp.sqrt(3) * h.r
@@ -69,16 +68,19 @@ def hex_to_xy(h, radius, rot=90):
 
 
 def scale_hex(h, k):
+    """Scale a hex coordinate by some constant factor."""
     return Hex(h.q * k, h.r * k, h.s * k)
 
 
 def hex_ring(radius):
+    """Compute all hex coordinates in a given ring."""
     start = Hex(-radius, radius, 0)
     add_hex(start, scale_hex(hex_dir(0), radius))
     tile = start
-    # need to wrap every 6 times,
-    # since there are only 6 directions
     results = []
+    # there are 6*r hexes per ring (the i)
+    # the j ensures that we reset the direction we travel every time we reach a
+    # 'corner' of the ring.
     for i in range(6*radius):
         for j in range(radius):
             results.append(tile)
