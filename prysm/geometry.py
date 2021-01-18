@@ -74,9 +74,7 @@ def rectangle(width, x, y, height=None, angle=0):
         height = width
     w_mask = (y <= height) & (y >= -height)
     h_mask = (x <= width) & (x >= -width)
-    data = np.zeros_like(x)
-    data[w_mask & h_mask] = 1
-    return data
+    return w_mask & h_mask
 
 
 def rotated_ellipse(width_major, width_minor, x, y, major_axis_angle=0):
