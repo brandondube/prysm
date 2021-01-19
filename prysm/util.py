@@ -97,35 +97,6 @@ def std(array):
     return ary.std()
 
 
-def guarantee_array(variable):
-    """Guarantee that a varaible is a numpy ndarray and supports -, *, +, and other operators.
-
-    Parameters
-    ----------
-    variable : `number` or `numpy.ndarray`
-        variable to coalesce
-
-    Returns
-    -------
-    `object`
-        an object that  supports * / and other operations with ndarrays
-
-    Raises
-    ------
-    ValueError
-        non-numeric type
-
-    """
-    if type(variable) in [float, e.ndarray, e.int32, e.int64, e.float32, e.float64, e.complex64, e.complex128]:
-        return variable
-    elif type(variable) is int:
-        return float(variable)
-    elif type(variable) is list:
-        return e.asarray(variable)
-    else:
-        raise ValueError(f'variable is of invalid type {type(variable)}')
-
-
 def ecdf(x):
     """Compute the empirical cumulative distribution function of a dataset.
 

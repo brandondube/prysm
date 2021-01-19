@@ -1,8 +1,6 @@
 """A collection of thin lens equations for system modeling."""
 
-from .mathops import engine as e
-from .util import guarantee_array
-from .zernike import defocus as _defocus
+from .mathops import np
 
 
 def object_to_image_dist(efl, object_distance):
@@ -28,7 +26,6 @@ def object_to_image_dist(efl, object_distance):
     be in the same units as the inputs.
 
     """
-    object_distance = guarantee_array(object_distance)
     ret = 1 / efl + 1 / object_distance
     return 1 / ret
 
@@ -40,7 +37,7 @@ def image_to_object_dist(efl, image_distance):
     ----------
     efl : `float`
         focal length of the lens
-    object_distance : `float` or `numpy.ndarray`
+    image_distance : `float` or `numpy.ndarray`
         distance from the object to the front principal plane of the lens,
         positive for an object in front of a lens of positive focal length.
 
@@ -50,7 +47,6 @@ def image_to_object_dist(efl, image_distance):
     be in the same units as the input.
 
     """
-    image_distance = guarantee_array(image_distance)
     ret = 1 / efl - 1 / image_distance
     return 1 / ret
 
@@ -71,10 +67,8 @@ def image_dist_epd_to_na(image_distance, epd):
         numerical aperture.  The NA of the system.
 
     """
-    image_distance = guarantee_array(image_distance)
-
     rho = epd / 2
-    marginal_ray_angle = abs(e.arctan2(rho, image_distance))
+    marginal_ray_angle = abs(np.arctan2(rho, image_distance))
     return marginal_ray_angle
 
 
@@ -129,7 +123,7 @@ def na_to_fno(na):
         fno.  The f/# of the system.
 
     """
-    return 1 / (2 * e.sin(na))
+    return 1 / (2 * np.sin(na))
 
 
 def object_dist_to_mag(efl, object_dist):
@@ -148,7 +142,6 @@ def object_dist_to_mag(efl, object_dist):
         linear magnification.  Also known as the lateral magnification
 
     """
-    object_dist = guarantee_array(object_dist)
     return efl / (efl - object_dist)
 
 
@@ -206,25 +199,20 @@ def mag_to_fno(mag, infinite_fno, pupil_mag=1):
         working f/number
 
     """
-    mag = guarantee_array(mag)
     return (1 + abs(mag) / pupil_mag) * infinite_fno
 
 
-def defocus_to_image_displacement(defocus, fno, wavelength, zernike=False, norm=False):
+def defocus_to_image_displacement(W020, fno, wavelength=None):
     """Compute image displacment from wavefront defocus expressed in waves 0-P to.
 
     Parameters
     ----------
-    defocus : `float` or `numpy.ndarray`
-        wavefront defocus
+    W020 : `float` or `numpy.ndarray`
+        wavefront defocus, units of waves if wavelength != None, else units of length
     fno : `float`
         f/# of the lens or system
-    wavelength : `float`
-        wavelength of light, expressed in micron
-    zernike : `bool`
-        zernike model of defocus (otherwise model is Seidel)
-    norm : `bool`
-        if zernike model, term is rms normalized
+    wavelength : `float`, optional
+        wavelength of light, if None W020 takes units of length
 
     Returns
     -------
@@ -232,47 +220,34 @@ def defocus_to_image_displacement(defocus, fno, wavelength, zernike=False, norm=
         image displacement.  Motion of image in um caused by defocus OPD
 
     """
-    defocus = guarantee_array(defocus)
-
-    # if the defocus is a zernike, make it match Seidel notation for equation validity
-    if zernike is True:
-        if norm is True:
-            defocus = defocus * e.sqrt(3) # not using *= on these to avoid side effects with in-place ops
-        defocus = defocus * 2
-    return 8 * fno**2 * wavelength * defocus
+    if wavelength is not None:
+        return 8 * fno**2 * wavelength * W020
+    else:
+        return 8 * fno**2 * W020
 
 
-def image_displacement_to_defocus(image_displacement, fno, wavelength, zernike=False, norm=False):
+def image_displacement_to_defocus(dz, fno, wavelength=None):
     """Compute the wavefront defocus from image shift, expressed in the same units as the shift.
 
     Parameters
     ----------
-    image_displacement : `float` or ~`numpy.ndarray`
+    dz : `float` or `numpy.ndarray`
         displacement of the image
     fno : `float`
         f/# of the lens or system
-    wavelength : `float`
-        wavelength of light, expressed in microns
-    zernike : `bool`
-        return in Zernike notation
-    norm : `bool`
-        subset of zernike -- return rms normalized zernike
+    wavelength : `float`, optional
+        wavelength of light, if None return has units the same as dz, else waves
 
     Returns
     -------
     `float`
-        wavefront defocus
+        wavefront defocus, waves if Wavelength != None, else same units as dz
 
     """
-    image_displacement = guarantee_array(image_displacement)
-    defocus = image_displacement / (8 * fno ** 2 * wavelength)
-    if zernike is True:
-        if norm is True:
-            return defocus / 2 / e.sqrt(3)
-        else:
-            return defocus / 2
+    if wavelength is not None:
+        return dz / (8 * fno ** 2 * wavelength)
     else:
-        return defocus
+        return dz / (8 * fno ** 2)
 
 
 def twolens_efl(efl1, efl2, separation):

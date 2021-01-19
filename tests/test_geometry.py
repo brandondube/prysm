@@ -5,23 +5,6 @@ import numpy as np
 
 from prysm import geometry
 
-SHAPES = [
-    geometry.square,
-    geometry.pentagon,
-    geometry.hexagon,
-    geometry.heptagon,
-    geometry.octagon,
-    geometry.nonagon,
-    geometry.decagon,
-    geometry.hendecagon,
-    geometry.dodecagon,
-    geometry.trisdecagon]
-
-
-def test_all_predefined_shapes():  # TODO: test more than just that these are ndarrays
-    for shape in SHAPES:
-        assert type(shape()) is np.ndarray
-
 
 @pytest.mark.parametrize('sides, samples', [
     [5,  128],

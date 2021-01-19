@@ -144,7 +144,7 @@ def one_over_e2(x, y, psf, criteria='last'):
         x coordinates, 1D
     y : `numpy.ndarray`
         y coordinates, 1D
-    data : `numpy.ndarray`
+    psf : `numpy.ndarray`
         f(x,y), 2D
     criteria : `str`, optional, {'first', 'last'}
         whether to use the first or last occurence of <metric>

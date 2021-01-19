@@ -62,29 +62,26 @@ def test_imagedist_epd_to_fno():  # purely functional test
 
 
 def test_image_displacement_to_defocus_all_cases():
-    displacement = [-50, 5, 50]
+    displacement = np.array([-50, 0, 5, 50])
     fno, wvl = 4, 0.55
-    result_nonzern = thinlens.image_displacement_to_defocus(displacement, fno, wvl, zernike=False)
-    result_zern = thinlens.image_displacement_to_defocus(displacement, fno, wvl, zernike=True)
-    result_zern_rms = thinlens.image_displacement_to_defocus(displacement, fno, wvl, zernike=True, norm=True)
-
-    assert result_nonzern.all()
-    assert ~np.allclose(result_nonzern, result_zern)
-    assert ~np.allclose(result_zern, result_zern_rms)
-    # TODO: assertion that rms_norm applies correct scale factor
+    result_wvs = thinlens.image_displacement_to_defocus(displacement, fno, wvl)
+    result_um = thinlens.image_displacement_to_defocus(displacement, fno)
+    true_wvs = displacement / (8 * fno ** 2 * wvl)
+    true_um = displacement / (8 * fno ** 2)
+    assert np.allclose(result_wvs, true_wvs)
+    assert np.allclose(result_um, true_um)
 
 
 def test_defocus_to_image_displacement_all_cases():
-    defocus = [-2, 0.0005, 2]
+    defocus = np.array([-2, 0.0005, 2])
     fno, wvl = 4, 0.55
-    result_nonzern = thinlens.defocus_to_image_displacement(defocus, fno, wvl, zernike=False)
-    result_zern = thinlens.defocus_to_image_displacement(defocus, fno, wvl, zernike=True)
-    result_zern_rms = thinlens.defocus_to_image_displacement(defocus, fno, wvl, zernike=True, norm=True)
+    result_wvs = thinlens.defocus_to_image_displacement(defocus, fno, wvl)
+    result_um = thinlens.defocus_to_image_displacement(defocus, fno)
+    true_wvs = 8 * fno ** 2 * wvl * defocus
+    true_um = 8 * fno ** 2 * defocus
 
-    assert result_nonzern.all()
-    assert ~np.allclose(result_nonzern, result_zern)
-    assert ~np.allclose(result_zern, result_zern_rms)
-    # TODO: assertion that rms_norm applies correct scale factor
+    assert np.allclose(result_wvs, true_wvs)
+    assert np.allclose(result_um, true_um)
 
 
 def test_twolens_efl_matches_in_contact():
