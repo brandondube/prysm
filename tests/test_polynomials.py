@@ -6,6 +6,7 @@ import numpy as np
 from prysm.coordinates import cart_to_polar
 from prysm import polynomials
 
+# TODO: add regression tests against scipy.special.eval_legendre etc
 
 SAMPLES = 32
 X, Y = np.linspace(-1, 1, SAMPLES), np.linspace(-1, 1, SAMPLES)

@@ -83,14 +83,24 @@ class RichData:
             return 0
 
     @property
+    def x(self):
+        """X coordinate axis, 1D."""
+        return fftrange(self.data.shape[1], self.data.dtype) * self.dx
+
+    @property
+    def y(self):
+        """Y coordinate axis, 1D."""
+        return fftrange(self.data.shape[0], self.data.dtype) * self.dx
+
+    @property
     def support_x(self):
         """Width of the domain in X."""
-        return self.shape[1] * self.sample_spacing
+        return float(self.shape[1] * self.sample_spacing)
 
     @property
     def support_y(self):
         """Width of the domain in Y."""
-        return self.shape[0] * self.sample_spacing
+        return float(self.shape[0] * self.sample_spacing)
 
     @property
     def support(self):

@@ -1,25 +1,18 @@
 """A base point spread function interfacnp."""
 import numbers
 
-from astropy import units as u
-
 from scipy import optimize
 
-from .conf import config
 from .mathops import (
     np, jinc,
     ndimage_engine as ndimage,
-    interpolate_engine as interpolate,
     special_engine as special
 )
 from .coordinates import cart_to_polar, uniform_cart_to_polar
-from .plotting import share_fig_ax
-from .util import sort_xy
 from .convolution import Convolvable
-from .propagation import (
-    focus,
-    focus_units,
-)
+
+from .otf import mtf_from_psf
+
 
 FIRST_AIRY_ZERO = 1.220
 SECOND_AIRY_ZERO = 2.233
@@ -119,7 +112,7 @@ def fwhm(x, y, data, criteria='last'):
     return estimate_size(x=x, y=y, data=data, metric='fwhm', criteria=criteria) * 2
 
 
-def one_over_e(x, y, data, criteria='last'):
+def one_over_e(x, y, psf, criteria='last'):
     """Calculate the 1/e radius of (data).
 
     Parameters
@@ -128,7 +121,7 @@ def one_over_e(x, y, data, criteria='last'):
         x coordinates, 1D
     y : `numpy.ndarray`
         y coordinates, 1D
-    data : `numpy.ndarray`
+    psf : `numpy.ndarray`
         f(x,y), 2D
     criteria : `str`, optional, {'first', 'last'}
         whether to use the first or last occurence of <metric>
@@ -139,11 +132,11 @@ def one_over_e(x, y, data, criteria='last'):
         the 1/e radius
 
     """
-    return estimate_size(x=x, y=y, data=data, metric='1/e', criteria=criteria)
+    return estimate_size(x=x, y=y, data=psf, metric='1/e', criteria=criteria)
 
 
-def one_over_e2(x, y, data, criteria='last'):
-    """Calculate the 1/e^2 radius of (data).
+def one_over_e2(x, y, psf, criteria='last'):
+    """Calculate the 1/e^2 radius of psf.
 
     Parameters
     ----------
@@ -162,413 +155,69 @@ def one_over_e2(x, y, data, criteria='last'):
         the 1/e^2 radius
 
     """
-    return estimate_size(x=x, y=y, data=data, metric='1/e^2', criteria=criteria)
+    return estimate_size(x=x, y=y, data=psf, metric='1/e^2', criteria=criteria)
 
 
-class PSF(Convolvable):
-    """A Point Spread Function."""
+def centroid(data, dx=None, unit='spatial'):
+    """Calculate the centroid of the PSF.
 
-    def __init__(self, x, y, data):
-        """Create a PSF object.
+    Parameters
+    ----------
+    data : `numpy.ndarray`
+        data to centroid
+    dx : `float`
+        sample spacing, may be None if unit != spatial
+    unit : `str`, {'spatial', 'pixels'}
+        unit to return the centroid in.
+        If pixels, corner indexed.  If spatial, center indexed.
 
-        Parameters
-        ----------
-        data : `numpy.ndarray`
-            intensity data for the PSF
-        x : `numpy.ndarray`
-            1D ndarray defining x data grid
-        y  : `numpy.ndarray`
-            1D ndarray defining y data grid
-        sample_spacing : `float`
-            center-to-center spacing of samples, expressed in microns
+    Returns
+    -------
+    `int`, `int`
+        if unit == pixels, indices into the array
+    `float`, `float`
+        if unit == spatial, referenced to the origin
 
-        """
-        super().__init__(x=x, y=y, data=data, has_analytic_ft=False)
-        self._ee = {}
-        self._mtf = None
-        self._nu_p = None
-        self._dnx = None
-        self._dny = None
+    """
+    center = (int(np.ceil(c/2)) for c in data.shape)
+    com = ndimage.center_of_mass(data)
+    if unit != 'spatial':
+        return com
+    else:
+        # tuple - cast from generator
+        # sample spacing - indices to units
+        # x-c -- index shifted from center
+        return tuple(dx * (x-c) for x, c in zip(com, center))
 
-    def estimate_size(self, metric, criteria='last'):
-        """Calculate the size of self.
 
-        Parameters
-        ----------
-        metric : `str` or `float`, {'fwhm', '1/e', '1/e^2', float()}
-            what metric to apply
-        criteria : `str`, optional, {'first', 'last'}
-            whether to use the first or last occurence of <metric>
+def autocrop(data, px):
+    """Crop to a rectangular window around the centroid.
 
-        Returns
-        -------
-        `float`
-            estimate for the radius of self calculated via (metric)
+    Parameters
+    ----------
+    data : `numpy.ndarray`
+        data to crop into
+    px : `int`
+        window full width, samples
 
-        """
-        return estimate_size(self.x, self.y, self.data, metric=metric, criteria=criteria)
+    Returns
+    -------
+    `numpy.ndarray`
+        cropped data
 
-    def fwhm(self, criteria='last'):
-        """Calculate the FWHM of self.
-
-        Parameters
-        ----------
-        metric : `str` or `float`, {'fwhm', '1/e', '1/e^2', float()}
-            what metric to apply
-        criteria : `str`, optional, {'first', 'last'}
-            whether to use the first or last occurence of <metric>
-
-        Returns
-        -------
-        `float`
-            the FWHM radius of self
-
-        """
-        return fwhm(self.x, self.y, self.data, criteria=criteria)
-
-    def one_over_e(self, criteria='last'):
-        """Calculate the 1/e radius of self.
-
-        Parameters
-        ----------
-        metric : `str` or `float`, {'fwhm', '1/e', '1/e^2', float()}
-            what metric to apply
-        criteria : `str`, optional, {'first', 'last'}
-            whether to use the first or last occurence of <metric>
-
-        Returns
-        -------
-        `float`
-            the FWHM radius of self
-
-        """
-        return one_over_e(self.x, self.y, self.data, criteria=criteria)
-
-    def one_over_e2(self, criteria='last'):
-        """Calculate the 1/e^2 of self.
-
-        Parameters
-        ----------
-        metric : `str` or `float`, {'fwhm', '1/e', '1/e^2', float()}
-            what metric to apply
-        criteria : `str`, optional, {'first', 'last'}
-            whether to use the first or last occurence of <metric>
-
-        Returns
-        -------
-        `float`
-            the FWHM radius of self
-
-        """
-        return one_over_e2(self.x, self.y, self.data, criteria=criteria)
-
-    def encircled_energy(self, radius):
-        """Compute the encircled energy of the PSF.
-
-        Parameters
-        ----------
-        radius : `float` or iterable
-            radius or radii to evaluate encircled energy at
-
-        Returns
-        -------
-        encircled energy
-            if radius is a float, returns a float, else returns a list.
-
-        Notes
-        -----
-        implementation of "Simplified Method for Calculating Encircled Energy,"
-        Baliga, J. V. and Cohn, B. D., doi: 10.1117/12.944334
-
-        """
-        from .otf import MTF
-
-        if hasattr(radius, '__iter__'):
-            # user wants multiple points
-            # um to mm, cy/mm assumed in Fourier plane
-            radius_is_array = True
-        else:
-            radius_is_array = False
-
-        # compute MTF from the PSF
-        if self._mtf is None:
-            self._mtf = MTF.from_psf(self)
-            nx, ny = np.meshgrid(self._mtf.x, self._mtf.y)
-            self._nu_p = np.sqrt(nx ** 2 + ny ** 2)
-            # this is meaninglessly small and will avoid division by 0
-            self._nu_p[self._nu_p == 0] = 1e-99
-            self._dnx, self._dny = ny[1, 0] - ny[0, 0], nx[0, 1] - nx[0, 0]
-
-        if radius_is_array:
-            out = []
-            for r in radius:
-                if r not in self._ee:
-                    self._ee[r] = _encircled_energy_core(self._mtf.data,
-                                                         r / 1e3,
-                                                         self._nu_p,
-                                                         self._dnx,
-                                                         self._dny)
-                out.append(self._ee[r])
-            return np.asarray(out)
-        else:
-            if radius not in self._ee:
-                self._ee[radius] = _encircled_energy_core(self._mtf.data,
-                                                          radius / 1e3,
-                                                          self._nu_p,
-                                                          self._dnx,
-                                                          self._dny)
-            return self._ee[radius]
-
-    def ee_radius(self, energy=FIRST_AIRY_ENCIRCLED):
-        """Radius associated with a certain amount of enclosed energy."""
-        k, v = list(self._ee.keys()), list(self._ee.values())
-        if energy in v:
-            idx = v.index(energy)
-            return k[idx]
-
-        def optfcn(x):
-            return (self.encircled_energy(x) - energy) ** 2
-
-        # golden seems to perform best in presence of shallow local minima as in
-        # the encircled energy
-        return optimize.golden(optfcn)
-
-    def ee_radius_diffraction(self, energy=FIRST_AIRY_ENCIRCLED):
-        """Radius associated with a certain amount of enclosed energy for a diffraction limited circular pupil."""
-        return _inverse_analytic_encircled_energy(self.fno, self.wavelength, energy)
-
-    def ee_radius_ratio_to_diffraction(self, energy=FIRST_AIRY_ENCIRCLED):
-        """Ratio of this PSF and the diffraction limited PSFs' radii enclosing a certain amount of energy."""
-        self_rad = self.ee_radius(energy)
-        diff_rad = _inverse_analytic_encircled_energy(self.fno, self.wavelength, energy)
-        return self_rad / diff_rad
-
-    def plot_encircled_energy(self, axlim=None, npts=50, lw=config.lw, zorder=config.zorder, fig=None, ax=None):
-        """Make a 1D plot of the encircled energy at the given azimuth.
-
-        Parameters
-        ----------
-        azimuth : `float`
-            azimuth to plot at, in degrees
-        axlim : `float`
-            limits of axis, will plot [0, axlim]
-        npts : `int`, optional
-            number of points to use from [0, axlim]
-        lw : `float`, optional
-            line width
-        zorder : `int` optional
-            zorder
-        fig : `matplotlib.figurnp.Figure`, optional
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`, optional:
-            Axis containing the plot
-
-        Returns
-        -------
-        fig : `matplotlib.figurnp.Figure`, optional
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`, optional:
-            Axis containing the plot
-
-        """
-        if axlim is None:
-            if len(self._ee) != 0:
-                xx, yy = sort_xy(self._ee.keys(), self._ee.values())
-            else:
-                raise ValueError('if no values for encircled energy have been computed, axlim must be provided')
-        elif axlim == 0:
-            raise ValueError('computing from 0 to 0 is not possible')
-        else:
-            xx = np.linspace(1e-5, axlim, npts)
-            yy = self.encircled_energy(xx)
-
-        fig, ax = share_fig_ax(fig, ax)
-        ax.plot(xx, yy, lw=lw, zorder=zorder)
-        ax.set(xlabel='Image Plane Distance [μm]',
-               ylabel='Encircled Energy [Rel 1.0]',
-               xlim=(0, axlim))
-        return fig, ax
-
-    def _renorm(self, to='peak'):
-        """Renormalize the PSF to unit peak intensity.
-
-        Parameters
-        ----------
-        to : `string`, {'peak', 'total'}
-            renormalization target; produces a PSF of unit peak or total intensity
-
-        Returns
-        -------
-        `PSF`
-            a renormalized PSF instance
-
-        """
-        if to.lower() == 'peak':
-            self.data /= self.data.max()
-        elif to.lower() == 'total':
-            ttl = self.data.sum()
-            self.data /= ttl
-        return self
-
-    def centroid(self, unit='spatial'):
-        """Calculate the centroid of the PSF.
-
-        Parameters
-        ----------
-        unit : `str`, {'spatial', 'pixels'}
-            unit to return the centroid in.
-            If pixels, corner indexed.  If spatial, center indexed.
-
-        Returns
-        -------
-        `int`, `int`
-            if unit == pixels, indices into the array
-        `float`, `float`
-            if unit == spatial, referenced to the origin
-
-        """
-        com = ndimage.center_of_mass(self.data)
-        if unit != 'spatial':
-            return com
-        else:
-            # tuple - cast from generator
-            # sample spacing - indices to units
-            # x-c -- index shifted from center
-            return tuple(self.sample_spacing * (x-c) for x, c in zip(com, (self.center_y, self.center_x)))
-
-    def autowindow(self, width, unit='pixels'):
-        """Crop to a rectangular window around the centroid.
-
-        Parameters
-        ----------
-        width : `float`
-            diameter of the output window
-        unit : `str`, {'pixels', 'spatial'}
-            if pixels, the width is measured in pixels.  Otherwise, in spatial units
-
-        Returns
-        -------
-        `self`
-            modified PSF instance
-
-        """
-        com = self.centroid('pixels')
-        cy, cx = (int(c) for c in com)
-        w = width // 2
-        aoi_y_l = cy - w
-        aoi_y_h = cy + w
-        aoi_x_l = cx - w
-        aoi_x_h = cx + w
-        print(aoi_y_l, aoi_y_h)
-        print(aoi_x_l, aoi_x_h)
-        self.data = self.data[aoi_y_l:aoi_y_h, aoi_x_l:aoi_x_h]
-        self.x = self.x[aoi_x_l:aoi_x_h]
-        self.y = self.y[aoi_y_l:aoi_y_h]
-        return self
-
-    @staticmethod
-    def from_pupil(pupil, efl, Q=2, norm='max', radpower=1, incoherent=True):
-        """Use scalar diffraction propogation to generate a PSF from a pupil.
-
-        Parameters
-        ----------
-        pupil : `Pupil`
-            Pupil, with OPD data and wavefunction
-        efl : `int` or `float`
-            effective focal length of the optical system, mm
-        Q : `int` or `float`
-            ratio of pupil sample count to PSF sample count; Q > 2 satisfies nyquist
-        norm : `str`, {'max', 'radiometric'}, optional
-            how to normalize the result, if radiometric will follow Born & Wolf with:
-            I0 = P * A / (L^2 R^2) with
-            P = radpower,
-            A = integral over aperture,
-            L = wavelength
-            R = efl
-        radpower : `float`
-            total power of the incident beam over the clear aperture, W
-            only used when norm='radiometric'
-        incoherent: `bool`, optional
-            if True, propagate the incoherent PSF, else propagate the coherent one
-
-        Returns
-        -------
-        `PSF`
-            A new PSF instance
-
-        """
-        # propagate PSF data
-        fcn, ss, wvl = pupil.fcn, pupil.sample_spacing, pupil.wavelength.to(u.um)
-        data = focus(fcn, Q=Q, incoherent=incoherent,
-                     norm=norm if norm not in ('max', 'radiometric') else None)
-        norm = norm.lower()
-        if norm == 'max':
-            coef = 1 / data.max()
-        elif norm == 'radiometric':
-            # C = P D / (L^2 R^2) from Principles of Optics.
-            P = radpower
-            S2 = (pupil._mask ** 2).sum()
-            coef = 1 / S2 ** 2  # normalize by "S2" in GH_FFT language
-            D = pupil._mask.sum() * (ss ** 2)
-            coef_BornWolf = P * D / ((wvl * 1e-3) ** 2 * efl ** 2)  # wvl 1e-3 um => mm
-            coef = coef * coef_BornWolf
-        else:
-            raise ValueError('unknown norm')
-
-        data = data * coef
-        ux, uy = focus_units(fcn, ss, efl, wvl, Q)
-        psf = PSF(x=ux, y=uy, data=data)
-
-        psf.fno = efl / pupil.diameter
-        psf.wavelength = wvl
-        return psf
-
-    @staticmethod
-    def polychromatic(psfs, spectral_weights=None, interp_method='linear'):
-        """Create a new PSF instance from an ensemble of monochromatic PSFs given spectral weights.
-
-        The new PSF is the polychromatic PSF, assuming the wavelengths are
-        sufficiently different that they do not interfere and the mode of
-        imaging is incoherent.
-
-        """
-        if spectral_weights is None:
-            spectral_weights = [1] * len(psfs)
-
-        # find the most densely sampled PSF
-        min_spacing = 1e99
-        ref_idx = None
-        ref_x = None
-        ref_y = None
-        ref_samples_x = None
-        ref_samples_y = None
-        for idx, psf in enumerate(psfs):
-            if psf.sample_spacing < min_spacing:
-                min_spacing = psf.sample_spacing
-                ref_idx = idx
-                ref_x = psf.x
-                ref_y = psf.y
-                ref_samples_x = psf.samples_x
-                ref_samples_y = psf.samples_y
-
-        merge_data = np.zeros((ref_samples_x, ref_samples_y, len(psfs)))
-        for idx, psf in enumerate(psfs):
-            # don't do anything to the reference PSF besides spectral scaling
-            if idx is ref_idx:
-                merge_data[:, :, idx] = psf.data * spectral_weights[idx]
-            else:
-                xv, yv = np.meshgrid(ref_x, ref_y)
-                interpf = interpolate.RegularGridInterpolator((psf.y, psf.x), psf.data)
-                merge_data[:, :, idx] = interpf((yv, xv), method=interp_method) * spectral_weights[idx]
-
-        psf = PSF(data=merge_data.sum(axis=2), x=ref_x, y=ref_y)
-        psf.spectral_weights = spectral_weights
-        psf._renorm()
-        return psf
+    """
+    com = centroid(data, unit='pixels')
+    cy, cx = (int(c) for c in com)
+    w = px // 2
+    aoi_y_l = cy - w
+    aoi_y_h = aoi_y_l + w
+    aoi_x_l = cx - w
+    aoi_x_h = aoi_x_l + w
+    return data[aoi_y_l:aoi_y_h, aoi_x_l:aoi_x_h]
 
 
 class AiryDisk(Convolvable):
-    """An airy disk, the PSF of a circular aperturnp."""
+    """An airy disk, the PSF of a circular aperture."""
     def __init__(self, fno, wavelength, extent=None, samples=None):
         """Create a new AiryDisk.
 
@@ -639,6 +288,48 @@ def airydisk(unit_r, fno, wavelength):
     """
     u_eff = unit_r * np.pi / wavelength / fno
     return abs(2 * jinc(u_eff)) ** 2
+
+
+def encircled_energy(psf, dx, radius):
+    """Compute the encircled energy of the PSF.
+
+    Parameters
+    ----------
+    psf : `numpy.ndarray`
+        2D array containing PSF data
+    dx : `float`
+        sample spacing of psf
+    radius : `float` or iterable
+        radius or radii to evaluate encircled energy at
+
+    Returns
+    -------
+    encircled energy
+        if radius is a float, returns a float, else returns a list.
+
+    Notes
+    -----
+    implementation of "Simplified Method for Calculating Encircled Energy,"
+    Baliga, J. V. and Cohn, B. D., doi: 10.1117/12.944334
+
+    """
+    # compute MTF from the PSF
+    mtf = mtf_from_psf(psf, dx)
+    nx, ny = np.meshgrid(mtf.x, mtf.y)
+    nu_p = np.sqrt(nx ** 2 + ny ** 2)
+    # this is meaninglessly small and will avoid division by 0
+    nu_p[nu_p == 0] = 1e-16
+    dnx, dny = ny[1, 0] - ny[0, 0], nx[0, 1] - nx[0, 0]
+
+    if not isinstance(radius, numbers.Number):
+        out = []
+        for r in radius:
+            v = _encircled_energy_core(mtf.data, r / 1e3, nu_p, dnx, dny)
+            out.append(v)
+
+        return np.asarray(out)
+    else:
+        return _encircled_energy_core(mtf.data, radius / 1e3, nu_p, dnx, dny)
 
 
 def _encircled_energy_core(mtf_data, radius, nu_p, dx, dy):

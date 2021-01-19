@@ -40,6 +40,7 @@ def zernike_nm(n, m, r, t, norm=True):
     -------
     `numpy.ndarray`
         zernike mode of order n,m at points r,t
+
     """
     x = 2 * r ** 2 - 1
     am = abs(m)

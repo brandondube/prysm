@@ -1,274 +1,84 @@
-"""A base optical transfer function interface."""
-from .conf import config
-from .mathops import engine as e
+"""MTF/PTF/OTF calculations."""
+from .mathops import np
 from ._richdata import RichData
-from .psf import PSF
-from .fttools import forward_ft_unit
 
 
-def transform_psf(psf, sample_spacing):
-    data = e.fft.fftshift(e.fft.fft2(e.fft.ifftshift(psf.data)))
-    y, x = [forward_ft_unit(sample_spacing / 1e3, s) for s in psf.shape]  # 1e3 for microns => mm
-    return x, y, data
+def transform_psf(psf, dx):
+    """Transform a PSF to k-space without further modification."""
+    data = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(psf.data)))
+    df = 1 / dx
+    return data, df
 
 
-class OTF:
-    """Optical Transfer Function."""
+def mtf_from_psf(psf, dx):
+    """Compute the MTF from a given PSF.
 
-    def __init__(self, mtf, ptf):
-        """Create a new OTF Instance.
+    Parameters
+    ----------
+    psf : `numpy.ndarray`
+        2D data containing the psf
+    dx : `float`
+        sample spacing of the data
 
-        Will have .mtf and .ptf attributes holding the MTF and PTF.
+    Returns
+    -------
+    RichData
+        container holding the MTF, ready for plotting or slicing.
 
-        Parameters
-        ----------
-        data : `numpy.ndarray`
-            complex ndarray, 2D
-        x : `numpy.ndarray`
-            x Cartesian spatial frequencies
-        y : `numpy.ndarray`
-            y Cartesian spatial frequencies
-
-        """
-        self.mtf = mtf
-        self.ptf = ptf
-
-    @staticmethod
-    def from_psf(psf, unwrap=True):
-        """Create an OTF instance from a PSF.
-
-        Parameters
-        ----------
-        psf : `PSF`
-            Point Spread Function
-        unwrap : `bool`, optional
-            if True, unwrap phase
-
-        Returns
-        -------
-        `OTF`
-            new OTF instance with mtf and PSF attributes holding MTF and PSF instances
-
-        """
-        x, y, ft = transform_psf(psf, psf.sample_spacing)
-        mtf = MTF.from_ftdata(ft=ft, x=x, y=y)
-        ptf = PTF.from_ftdata(ft=ft, x=x, y=y, unwrap=unwrap)
-        return OTF(mtf=mtf, ptf=ptf)
-
-    @staticmethod
-    def from_pupil(pupil, efl, Q=2, unwrap=True):
-        psf = PSF.from_pupil(pupil, efl=efl, Q=Q)
-        return OTF.from_psf(psf, unwrap=unwrap)
+    """
+    data, df = transform_psf(psf, dx)
+    cy, cx = (int(np.ceil(s / 2)) for s in data.shape)
+    dat = abs(data)
+    dat /= dat[cy, cx]
+    return RichData(data=dat, dx=df, wavelength=None)
 
 
-class MTF(RichData):
-    """Modulation Transfer Function."""
-    _data_attr = 'data'
-    _data_type = 'image'
-    _default_twosided = False
+def ptf_from_psf(psf, dx):
+    """Compute the PTF from a given PSF.
 
-    def __init__(self, data, x, y, xy_unit=None, z_unit=None, labels=None):
-        """Create a new `MTF` instance.
+    Parameters
+    ----------
+    psf : `numpy.ndarray`
+        2D data containing the psf
+    dx : `float`
+        sample spacing of the data
 
-        Parameters
-        ----------
-        data : `numpy.ndarray`
-            2D array of MTF data
-        x : `numpy.ndarray`
-            1D array of x spatial frequencies
-        y : `numpy.ndarray`
-            1D array of y spatial frequencies
-        units : `Units`
-            units instance, can be shared
-        labels : `Labels`
-            labels instance, can be shared
+    Returns
+    -------
+    RichData
+        container holding the MTF, ready for plotting or slicing.
 
-        """
-        super().__init__(x=x, y=y, data=data,
-                         xy_unit=xy_unit or config.mtf_xy_unit,
-                         z_unit=z_unit or config.mtf_z_unit,
-                         labels=labels or config.mtf_labels)
-
-    @staticmethod
-    def from_psf(psf):
-        """Generate an MTF from a PSF.
-
-        Parameters
-        ----------
-        psf : `PSF`
-            PSF to compute an MTF from
-
-        Returns
-        -------
-        `MTF`
-            A new MTF instance
-
-        """
-        # some code duplication here:
-        # MTF is a hot code path, and the drop of a shift operation
-        # improves performance in exchange for sharing some code with
-        # the OTF class definition
-        dat = e.fft.fftshift(e.fft.fft2(psf.data))  # no need to ifftshift first - phase is unimportant
-        x = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_x)  # 1e3 for microns => mm
-        y = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_y)
-        return MTF.from_ftdata(ft=dat, x=x, y=y)
-
-    @staticmethod
-    def from_pupil(pupil, efl, Q=2):
-        """Generate an MTF from a pupil, given a focal length (propagation distance).
-
-        Parameters
-        ----------
-        pupil : `Pupil`
-            A pupil to propagate to a PSF, and convert to an MTF
-        efl : `float`
-            Effective focal length or propagation distance of the wavefunction
-        Q : `float`
-            ratio of pupil sample count to PSF sample count.  Q > 2 satisfies nyquist
-
-        Returns
-        -------
-        `MTF`
-            A new MTF instance
-
-        """
-        psf = PSF.from_pupil(pupil, efl=efl, Q=Q)
-        return MTF.from_psf(psf)
-
-    @staticmethod
-    def from_ftdata(ft, x, y):
-        """Generate an MTF from the Fourier transform of a PSF.
-
-        Parameters
-        ----------
-        ft : `numpy.ndarray`
-            2D ndarray of Fourier transform data
-        x : `numpy.ndarray`
-            1D ndarray of x (axis 1) coordinates
-        y : `numpy.ndarray`
-            1D ndarray of y (axis 0) coordinates
-
-        Returns
-        -------
-        `MTF`
-            a new MTF instance
-
-        """
-        cy, cx = (int(e.ceil(s / 2)) for s in ft.shape)
-        dat = abs(ft)
-        dat /= dat[cy, cx]
-        return MTF(data=dat, x=x, y=y)
+    """
+    data, df = transform_psf(psf, dx)
+    cy, cx = (int(np.ceil(s / 2)) for s in data.shape)
+    dat = np.angle(data)
+    dat /= dat[cy, cx]
+    return RichData(data=dat, dx=df, wavelength=None)
 
 
-class PTF(RichData):
-    """Phase Transfer Function."""
+def otf_from_psf(psf, dx):
+    """Compute the OTF from a given PSF.
 
-    def __init__(self, data, x, y, xy_unit=None, z_unit=None, labels=None):
-        """Create a new `PTF` instance.
+    Parameters
+    ----------
+    psf : `numpy.ndarray`
+        2D data containing the psf
+    dx : `float`
+        sample spacing of the data
 
-        Parameters
-        ----------
-        data : `numpy.ndarray`
-            2D array of MTF data
-        x : `numpy.ndarray`
-            1D array of x spatial frequencies
-        y : `numpy.ndarray`
-            1D array of y spatial frequencies
-        units : `Units`
-            units instance, can be shared
-        labels : `Labels`
-            labels instance, can be shared
+    Returns
+    -------
+    RichData
+        container holding the OTF, complex.
 
-        """
-        super().__init__(x=x, y=y, data=data,
-                         xy_unit=xy_unit or config.ptf_xy_unit,
-                         z_unit=z_unit or config.ptf_z_unit,
-                         labels=labels or config.mtf_labels)
+    """
+    data, df = transform_psf(psf, dx)
+    cy, cx = (int(np.ceil(s / 2)) for s in data.shape)
+    data /= data[cy, cx]
+    return RichData(data=data, dx=df, wavelength=None)
 
-    @staticmethod
-    def from_psf(psf, unwrap=True):
-        """Generate a PTF from a PSF.
 
-        Parameters
-        ----------
-        psf : `PSF`
-            PSF to compute an MTF from
-        unwrap : `bool,` optional
-            whether to unwrap the phase
-
-        Returns
-        -------
-        `PTF`
-            A new PTF instance
-
-        """
-        # some code duplication here:
-        # MTF is a hot code path, and the drop of a shift operation
-        # improves performance in exchange for sharing some code with
-        # the OTF class definition
-
-        # repeat this duplication in PTF for symmetry more than performance
-        dat = e.fft.fftshift(e.fft.fft2(e.fft.ifftshift(psf.data)))
-        x = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_x)  # 1e3 for microns => mm
-        y = forward_ft_unit(psf.sample_spacing / 1e3, psf.samples_y)
-        return PTF.from_ftdata(ft=dat, x=x, y=y)
-
-    @staticmethod
-    def from_pupil(pupil, efl, Q=2, unwrap=True):
-        """Generate a PTF from a pupil, given a focal length (propagation distance).
-
-        Parameters
-        ----------
-        pupil : `Pupil`
-            A pupil to propagate to a PSF, and convert to an MTF
-        efl : `float`
-            Effective focal length or propagation distance of the wavefunction
-        Q : `float`, optional
-            ratio of pupil sample count to PSF sample count.  Q > 2 satisfies nyquist
-        unwrap : `bool,` optional
-            whether to unwrap the phase
-
-        Returns
-        -------
-        `PTF`
-            A new PTF instance
-
-        """
-        psf = PSF.from_pupil(pupil, efl=efl, Q=Q)
-        return PTF.from_psf(psf, unwrap=unwrap)
-
-    @staticmethod
-    def from_ftdata(ft, x, y, unwrap=True):
-        """Generate a PTF from the Fourier transform of a PSF.
-
-        Parameters
-        ----------
-        ft : `numpy.ndarray`
-            2D ndarray of Fourier transform data
-        x : `numpy.ndarray`
-            1D ndarray of x (axis 1) coordinates
-        y : `numpy.ndarray`
-            1D ndarray of y (axis 0) coordinates
-        unwrap : `bool`, optional
-            if True, unwrap phase
-
-        Returns
-        -------
-        `PTF`
-            a new PTF instance
-
-        """
-        ft = e.angle(ft)
-        cy, cx = (int(e.ceil(s / 2)) for s in ft.shape)
-        offset = ft[cy, cx]
-        if offset != 0:
-            ft /= offset
-
-        if unwrap:
-            from skimage import restoration
-            ft = restoration.unwrap_phase(ft)
-        return PTF(ft, x, y)
-
+# TODO: mtf_and_ptf_from_psf to only do the FT one time
 
 def diffraction_limited_mtf(fno, wavelength, frequencies=None, samples=128):
     """Give the diffraction limited MTF for a circular pupil and the given parameters.
@@ -303,9 +113,9 @@ def diffraction_limited_mtf(fno, wavelength, frequencies=None, samples=128):
     """
     extinction = 1 / (wavelength / 1000 * fno)
     if frequencies is None:
-        normalized_frequency = e.linspace(0, 1, samples)
+        normalized_frequency = np.linspace(0, 1, samples)
     else:
-        normalized_frequency = e.asarray(frequencies) / extinction
+        normalized_frequency = np.asarray(frequencies) / extinction
         try:
             normalized_frequency[normalized_frequency > 1] = 1  # clamp values
         except TypeError:  # single freq
@@ -334,9 +144,9 @@ def _difflim_mtf_core(normalized_frequency):
         The diffraction MTF function at a given normalized spatial frequency
 
     """
-    return (2 / e.pi) * \
-           (e.arccos(normalized_frequency) - normalized_frequency *
-            e.sqrt(1 - normalized_frequency ** 2))
+    return (2 / np.pi) * \
+           (np.arccos(normalized_frequency) - normalized_frequency *
+            np.sqrt(1 - normalized_frequency ** 2))
 
 
 def longexposure_otf(nu, Cn, z, f, lambdabar, h_z_by_r=2.91):
@@ -369,11 +179,11 @@ def longexposure_otf(nu, Cn, z, f, lambdabar, h_z_by_r=2.91):
     lambdabar = lambdabar / 1e6
 
     power = 5/3
-    const1 = - e.pi ** 2 * 2 * h_z_by_r * Cn ** 2
+    const1 = - np.pi ** 2 * 2 * h_z_by_r * Cn ** 2
     const2 = z * f ** power / (lambdabar ** 3)
     nupow = nu ** power
     const = const1 * const2
-    return e.exp(const * nupow)
+    return np.exp(const * nupow)
 
 
 def komogorov(r, r0):
