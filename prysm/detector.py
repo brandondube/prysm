@@ -2,7 +2,7 @@
 from collections import deque
 
 from .conf import config
-from .mathops import engine as e
+from .mathops import np
 from .convolution import Convolvable
 from .mathops import is_odd
 
@@ -51,160 +51,6 @@ class Detector(object):
         self.bit_depth = nbits
         self.captures = deque(maxlen=framebuffer)
 
-    def capture(self, convolvable):
-        """Sample a convolvable, mimics capturing a photo of an oversampled representation of an image.
-
-        Parameters
-        ----------
-        convolvable : `prysm.Convolvable`
-            a convolvable object
-
-        Returns
-        -------
-        `prysm.convolvable`
-            a new convolvable object, as it would be sampled by the detector
-
-        Raises
-        ------
-        ValueError
-            if the convolvable would have to become supersampled by the detector;
-            this would lead to an inaccurate result and is not supported
-
-        """
-        ss = convolvable.sample_spacing
-        pitch_x_err = abs(self.pitch_x % ss) / ss
-        pitch_y_err = abs(self.pitch_y % ss) / ss
-
-        ptol = 0.01  # 1%
-        if (self.rectangular_100pct_fillfactor_pix
-           and (pitch_x_err < ptol)
-           and (pitch_y_err < ptol)):
-            ux, uy, data = bindown_with_units(self.pitch_x,
-                                              self.pitch_y,
-                                              convolvable.sample_spacing,
-                                              convolvable.data)
-            c_out = Convolvable(data=data, x=ux, y=uy, has_analytic_ft=False)
-        else:
-            from skimage.transform import resize
-            c_out = self.pixel.conv(convolvable)
-            ss = c_out.sample_spacing
-            py, px = c_out.shape
-            oy = int(e.floor(py * (ss / self.pitch_y)))
-            ox = int(e.floor(px * (ss / self.pitch_x)))
-
-            # resize combines decimation and interpolation and is an effective resampler
-            out_data = resize(c_out.data, (oy, ox), mode='reflect', anti_aliasing=False, clip=False, order=3)
-
-            oext_x = (ox - 1) * self.pitch_x / 2
-            oext_y = (oy - 1) * self.pitch_y / 2
-            out_x = e.arange(ox) * self.pitch_x - oext_x
-            out_y = e.arange(oy) * self.pitch_y - oext_y
-            c_out = Convolvable(data=out_data, x=out_x, y=out_y)
-
-        self.captures.append(c_out)
-        return c_out
-
-    def save_image(self, path, which='last'):
-        """Save an image captured by the detector.
-
-        Parameters
-        ----------
-        path : `string`
-            path to save the image to
-
-        which : `string` or `int`
-            if string, "first" or "last", otherwise index into the capture buffer of the camera.
-
-        Raises
-        ------
-        ValueError
-            bad target frame to save; should always be the a valid int < buffer_depth
-
-        """
-        if which.lower() == 'last':
-            self.captures[-1].save(path, self.bit_depth)
-        elif type(which) is int:
-            self.captures[which].save(path, self.bit_depth)
-        else:
-            raise ValueError('invalid "which" provided')
-
-    def show_image(self, which='last', fig=None, ax=None):
-        """Show an image captured by the detector.
-
-        Parameters
-        ----------
-        which : `string` or `int`
-            if string, "first" or "last", otherwise index into the capture buffer of the camera
-        fig : `matplotlib.figure.Figure`, optional
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`, optional
-            Axis containing the plot
-
-        Returns
-        -------
-        fig : `matplotlib.figure.Figure
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`
-            Axis containing the plot
-
-        """
-        if which.lower() == 'last':
-            which = -1
-
-        fig, ax = self.captures[which].plot2d(fig=fig, ax=ax)
-        return fig, ax
-
-    @property
-    def pitch(self):
-        """1D pixel pitch - minimum of x/y pitches."""
-        return min(self.pitch_x, self.pitch_y)
-
-    @pitch.setter
-    def pitch(self, pitch_x, pitch_y=None):
-        """Set the pixel pitch.
-
-        Parameters
-        ----------
-        pitch_x : `float`
-            x axis pixel pitch
-        pitch_y : `float`, optional
-            y axis pixel pitch, copies x pitch if not given.
-
-        """
-        pitch_y = pitch_x or pitch_y
-        self.pitch_x = pitch_x
-        self.pitch_y = pitch_y
-
-    @property
-    def fill_factor_x(self):
-        """Fill factor in the X axis."""
-        return self.pixel.width_x / self.pitch_x
-
-    @property
-    def fill_factor_y(self):
-        """Fill factor in the Y axis."""
-        return self.pixel.width_y / self.pitch_y
-
-    @property
-    def fill_factor(self):
-        """1D fill factor -- minimum of x/y fill factors."""
-        return min(self.fill_factor_x, self.fill_factor_y)
-
-    @property
-    def fs(self):
-        """Sampling frequency in cy/mm."""  # NQOA
-        return 1 / self.pitch * 1e3
-
-    @property
-    def nyquist(self):
-        """Nyquist frequency in cy/mm."""
-        return self.fs / 2
-
-    @property
-    def last(self):
-        """Last frame captured."""
-        return self.captures[-1]
-
 
 class OLPF(Convolvable):
     """Optical Low Pass Filter."""
@@ -245,14 +91,14 @@ class OLPF(Convolvable):
             center_x = samples_x // 2
             center_y = samples_y // 2
 
-            data = e.zeros((samples_x, samples_y))
+            data = np.zeros((samples_x, samples_y))
 
             data[center_y - shift_y, center_x - shift_x] = 1
             data[center_y - shift_y, center_x + shift_x] = 1
             data[center_y + shift_y, center_x - shift_x] = 1
             data[center_y + shift_y, center_x + shift_x] = 1
-            ux = e.linspace(-space_x, space_x, samples_x)
-            uy = e.linspace(-space_y, space_y, samples_y)
+            ux = np.linspace(-space_x, space_x, samples_x)
+            uy = np.linspace(-space_y, space_y, samples_y)
 
         super().__init__(data=data, x=ux, y=uy, has_analytic_ft=True)
 
@@ -272,8 +118,8 @@ class OLPF(Convolvable):
             2D numpy array containing the analytic fourier transform
 
         """
-        return (e.cos(2 * self.width_x * x) *
-                e.cos(2 * self.width_y * y)).astype(config.precision)
+        return (np.cos(2 * self.width_x * x) *
+                np.cos(2 * self.width_y * y)).astype(config.precision)
 
 
 class PixelAperture(Convolvable):
@@ -313,11 +159,11 @@ class PixelAperture(Convolvable):
             steps_x = int(half_width // sample_spacing)
             steps_y = int(half_height // sample_spacing)
 
-            data = e.zeros((samples_x, samples_y))
+            data = np.zeros((samples_x, samples_y))
             data[center_y - steps_y:center_y + steps_y,
                  center_x - steps_x:center_x + steps_x] = 1
             extx, exty = samples_x // 2 * sample_spacing, samples_y // 2 * sample_spacing
-            ux, uy = e.linspace(-extx, extx, samples_x), e.linspace(-exty, exty, samples_y)
+            ux, uy = np.linspace(-extx, extx, samples_x), np.linspace(-exty, exty, samples_y)
         super().__init__(data=data, x=ux, y=uy, has_analytic_ft=True)
 
     def analytic_ft(self, x, y):
@@ -359,7 +205,7 @@ def pixelaperture_analytic_otf(width_x, width_y, freq_x, freq_y):
         MTF of the pixel aperture
 
     """
-    return e.sinc(freq_x * width_x) * e.sinc(freq_y * width_y)
+    return np.sinc(freq_x * width_x) * np.sinc(freq_y * width_y)
 
 
 def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
@@ -422,10 +268,10 @@ def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
     else:
         samples_tmp_x = (samples_x - final_idx_x) // 2
         samples_tmp_y = (samples_y - final_idx_y) // 2
-        samples_top = int(e.floor(samples_tmp_y))
-        samples_bottom = int(e.ceil(samples_tmp_y))
-        samples_left = int(e.ceil(samples_tmp_x))
-        samples_right = int(e.floor(samples_tmp_x))
+        samples_top = int(np.floor(samples_tmp_y))
+        samples_bottom = int(np.ceil(samples_tmp_y))
+        samples_left = int(np.ceil(samples_tmp_x))
+        samples_right = int(np.floor(samples_tmp_x))
         trimmed_data = array[samples_left:final_idx_x + samples_right,
                              samples_bottom:final_idx_y + samples_top]
 
@@ -481,10 +327,10 @@ def bindown_with_units(px_x, px_y, source_spacing, source_data):
     if min(spp_x, spp_y) < 1:
         raise ValueError('Pixels smaller than samples, bindown not possible.')
     else:
-        spp_x, spp_y = int(e.ceil(spp_x)), int(e.ceil(spp_y))
+        spp_x, spp_y = int(np.ceil(spp_x)), int(np.ceil(spp_y))
 
     data = bindown(source_data, spp_x, spp_y, 'avg')
     s = data.shape
     extx, exty = s[0] * px_x // 2, s[1] * px_y // 2
-    ux, uy = e.arange(-extx, extx, px_x), e.arange(-exty, exty, px_y)
+    ux, uy = np.arange(-extx, extx, px_x), np.arange(-exty, exty, px_y)
     return ux, uy, data
