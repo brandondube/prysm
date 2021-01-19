@@ -1,7 +1,7 @@
 """Tools for performing thin film calculations."""
 from functools import reduce
 
-from prysm.mathops import engine as e
+from prysm.mathops import np
 
 
 def brewsters_angle(n0, n1, deg=True):
@@ -17,9 +17,9 @@ def brewsters_angle(n0, n1, deg=True):
         if True, convert output to degrees
 
     """
-    ang = e.arctan2(n1, n0)
+    ang = np.arctan2(n1, n0)
     if deg:
-        return e.degrees(ang)
+        return np.degrees(ang)
     else:
         return ang
 
@@ -33,6 +33,8 @@ def critical_angle(n0, n1, deg=True):
         index of refraction of the "left" material
     n1 : `float`
         index of refraction of the "right" material
+    deg : `bool`, optional
+        if true, returns degrees, else radians
 
     Returns
     -------
@@ -40,9 +42,9 @@ def critical_angle(n0, n1, deg=True):
         the angle in degrees at which TIR begins to occur
 
     """
-    ang = e.arcsin(n0/n1)
+    ang = np.arcsin(n0/n1)
     if deg:
-        return e.degrees(ang)
+        return np.degrees(ang)
 
     return ang
 
@@ -68,8 +70,8 @@ def snell_aor(n0, n1, theta, degrees=True):
 
     """
     if degrees:
-        theta = e.radians(theta)
-    return e.lib.scimath.arcsin(n0/n1 * e.sin(theta))
+        theta = np.radians(theta)
+    return np.lib.scimath.arcsin(n0/n1 * np.sin(theta))
 
 
 def fresnel_rs(n0, n1, theta0, theta1):
@@ -94,8 +96,8 @@ def fresnel_rs(n0, n1, theta0, theta1):
         the fresnel coefficient "r sub s"
 
     """
-    num = n0 * e.cos(theta0) - n1 * e.cos(theta1)
-    den = n1 * e.cos(theta0) + n1 * e.cos(theta1)
+    num = n0 * np.cos(theta0) - n1 * np.cos(theta1)
+    den = n1 * np.cos(theta0) + n1 * np.cos(theta1)
     return num / den
 
 
@@ -121,8 +123,8 @@ def fresnel_ts(n0, n1, theta0, theta1):
         the fresnel coefficient "t sub s"
 
     """
-    num = 2 * n0 * e.cos(theta0)
-    den = n0 * e.cos(theta0) + n1 * e.cos(theta1)
+    num = 2 * n0 * np.cos(theta0)
+    den = n0 * np.cos(theta0) + n1 * np.cos(theta1)
     return num / den
 
 
@@ -148,8 +150,8 @@ def fresnel_rp(n0, n1, theta0, theta1):
         the fresnel coefficient "r sub p"
 
     """
-    num = n0 * e.cos(theta1) - n1 * e.cos(theta0)
-    den = n0 * e.cos(theta1) + n1 * e.cos(theta0)
+    num = n0 * np.cos(theta1) - n1 * np.cos(theta0)
+    den = n0 * np.cos(theta1) + n1 * np.cos(theta0)
     return num / den
 
 
@@ -175,8 +177,8 @@ def fresnel_tp(n0, n1, theta0, theta1):
         the fresnel coefficient "t sub p"
 
     """
-    num = 2 * n0 * e.cos(theta0)
-    den = n0 * e.cos(theta1) + n1 * e.cos(theta0)
+    num = 2 * n0 * np.cos(theta0)
+    den = n0 * np.cos(theta1) + n1 * np.cos(theta0)
     return num / den
 
 
@@ -202,14 +204,14 @@ def characteristic_matrix_p(lambda_, d, n, theta):
         a 2x2 matrix
 
     """
-    k = (2 * e.pi * n) / lambda_
-    cost = e.cos(theta)
+    k = (2 * np.pi * n) / lambda_
+    cost = np.cos(theta)
     beta = k * d * cost
-    sinb, cosb = e.sin(beta), e.cos(beta)
+    sinb, cosb = np.sin(beta), np.cos(beta)
 
     upper_right = -1j * sinb * cost / n
     lower_left = -1j * n * sinb / cost
-    return e.array([
+    return np.array([
         [cosb, upper_right],
         [lower_left, cosb]
     ])
@@ -237,14 +239,14 @@ def characteristic_matrix_s(lambda_, d, n, theta):
         a 2x2 matrix
 
     """
-    k = (2 * e.pi * n) / lambda_
-    cost = e.cos(theta)
+    k = (2 * np.pi * n) / lambda_
+    cost = np.cos(theta)
     beta = k * d * cost
-    sinb, cosb = e.sin(beta), e.cos(beta)
+    sinb, cosb = np.sin(beta), np.cos(beta)
 
     upper_right = -1j * sinb / (cost * n)
     lower_left = -1j * n * sinb * cost
-    return e.array([
+    return np.array([
         [cosb, upper_right],
         [lower_left, cosb]
     ])
@@ -274,23 +276,23 @@ def multilayer_matrix_p(n0, theta0, characteristic_matrices, nnp1, theta_np1):
         2x2 matrix A^s
 
     """
-    cost0 = e.cos(theta0)
+    cost0 = np.cos(theta0)
     term1 = 1 / (2 * n0 * cost0)
 
-    term2 = e.array([
+    term2 = np.array([
         [n0, cost0],
         [n0, -cost0]
     ])
     if len(characteristic_matrices) > 1:
-        term3 = reduce(e.dot, characteristic_matrices)  # reduce does M1 * M2 * M3 [...]
+        term3 = reduce(np.dot, characteristic_matrices)  # reduce does M1 * M2 * M3 [...]
     else:
         term3 = characteristic_matrices[0]
 
-    term4 = e.array([
-        [e.cos(theta_np1), 0],
+    term4 = np.array([
+        [np.cos(theta_np1), 0],
         [nnp1, 0]
     ])
-    return reduce(e.dot, (term1, term2, term3, term4))
+    return reduce(np.dot, (term1, term2, term3, term4))
 
 
 def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
@@ -317,20 +319,20 @@ def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
         2x2 matrix A^s
 
     """
-    cost0 = e.cos(theta0)
+    cost0 = np.cos(theta0)
     term1 = 1 / (2 * n0 * cost0)
     n0cost0 = n0 * cost0
 
-    term2 = e.array([
+    term2 = np.array([
         [n0cost0, 1],
         [n0cost0, -1]
     ])
-    term3 = reduce(e.dot, characteristic_matrices)  # reduce does M1 * M2 * M3 [...]
-    term4 = e.array([
+    term3 = reduce(np.dot, characteristic_matrices)  # reduce does M1 * M2 * M3 [...]
+    term4 = np.array([
         [1, 0],
-        [nnp1 * e.cos(theta_np1), 0]
+        [nnp1 * np.cos(theta_np1), 0]
     ])
-    return reduce(e.dot, (term1, term2, term3, term4))
+    return reduce(np.dot, (term1, term2, term3, term4))
 
 
 def rtot(Amat):
@@ -395,7 +397,7 @@ def multilayer_stack_rt(polarization, wavelength, stack, aoi=0, assume_vac_ambie
     """
     # digest inputs a little bit
     polarization = polarization.lower()
-    aoi = e.radians(aoi)
+    aoi = np.radians(aoi)
 
     indices, thicknesses = [], []
     if assume_vac_ambient:
