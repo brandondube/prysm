@@ -416,7 +416,7 @@ class Wavefront:
         self.space = space
 
     @classmethod
-    def from_amp_and_phase(cls, amplitude, phase, wavelength, dx=None):
+    def from_amp_and_phase(cls, amplitude, phase, wavelength, dx):
         """Create a Wavefront from amplitude and phase.
 
         Parameters
@@ -438,17 +438,6 @@ class Wavefront:
         else:
             P = amplitude
         return cls(P, wavelength, dx)
-
-    @property
-    def fcn(self):
-        """Complex field / wavefunction."""
-        warnings.warn("wavefront.fcn property will be deleted in v1 (v0.20+1 release), use .data instead")
-        return self.data
-
-    @fcn.setter
-    def fcn(self, ary):
-        warnings.warn("wavefront.fcn property will be deleted in v1 (v0.20+1 release), use .data instead")
-        self.data = ary
 
     @property
     def intensity(self):
@@ -540,7 +529,6 @@ class Wavefront:
 
         data = focus(self.data, Q=Q, incoherent=False)
         dx = pupil_sample_to_psf_sample(self.dx, data.shape[1], self.wavelength, efl)
-
         return Wavefront(data, self.wavelength, dx, space='psf')
 
     def unfocus(self, efl, Q=2):

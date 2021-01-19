@@ -6,7 +6,7 @@ from ._richdata import RichData
 def transform_psf(psf, dx):
     """Transform a PSF to k-space without further modification."""
     data = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(psf.data)))
-    df = 1 / dx
+    df = 2 / dx  # cy/um to cy/mm
     return data, df
 
 
@@ -115,7 +115,10 @@ def diffraction_limited_mtf(fno, wavelength, frequencies=None, samples=128):
     if frequencies is None:
         normalized_frequency = np.linspace(0, 1, samples)
     else:
-        normalized_frequency = np.asarray(frequencies) / extinction
+        normalized_frequency = abs(np.asarray(frequencies) / extinction)
+        print(wavelength, fno, extinction)
+        print(normalized_frequency.max())
+
         try:
             normalized_frequency[normalized_frequency > 1] = 1  # clamp values
         except TypeError:  # single freq
