@@ -36,6 +36,10 @@ def zernike_nm(n, m, r, t, norm=True):
         if True, orthonormalize the result (unit RMS)
         else leave orthogonal (zero-to-peak = 1)
 
+    Returns
+    -------
+    `numpy.ndarray`
+        zernike mode of order n,m at points r,t
     """
     x = 2 * r ** 2 - 1
     am = abs(m)
@@ -67,6 +71,11 @@ def zernike_nm_sequence(nms, r, t, norm=True):
     norm : `bool`, optional
         if True, orthonormalize the result (unit RMS)
         else leave orthogonal (zero-to-peak = 1)
+
+    Returns
+    -------
+    generator
+        yields one mode at a time of nms
 
     """
     # this function deduplicates all possible work.  It uses a connection

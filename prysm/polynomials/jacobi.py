@@ -89,6 +89,7 @@ def jacobi_sequence(ns, alpha, beta, x):
     -------
     `numpy.ndarray`
         array of shape (n_max+1, len(x))
+
     """
     # three key flavors: return list, return array, or return generator
     # return generator has most pleasant interface, benchmarked at 68 ns

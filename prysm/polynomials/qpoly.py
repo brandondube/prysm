@@ -1,5 +1,6 @@
 """Tools for working with Q (Forbes) polynomials."""
 # not special engine, only concerns scalars here
+from collections import defaultdict
 from scipy import special
 
 from .jacobi import jacobi, jacobi_sequence
@@ -485,4 +486,129 @@ def Q2d(n, m, r, t):
 
 
 def Q2d_sequence(nms, r, t):
-    return
+    """Sequence of 2D-Q polynomials.
+
+    Parameters
+    ----------
+    nms : iterable of `tuple`
+        (n,m) for each desired term
+    r : `numpy.ndarray`
+        radial coordinates
+    t : `numpy.ndarray`
+        azimuthal coordinates
+
+    Returns
+    -------
+    generator
+        yields one term for each element of nms
+
+    """
+    # see Q2d for general sense of this algorithm.
+    # the way this one works is to compute the maximum N for each |m|, and then
+    # compute the recurrence for each of those sequences and storing it.  A loop
+    # is then iterated over the input nms, and selected value with appropriate
+    # prefixes / other terms yielded.
+
+    u = r
+    x = u ** 2
+
+    def factory():
+        return 0
+
+    # maps |m| => N
+    m_has_pos = set()
+    m_has_neg = set()
+    max_ns = defaultdict(factory)
+    for n, m in nms:
+        m_ = abs(m)
+        if max_ns[m_] < n:
+            max_ns[m_] = n
+        if m > 0:
+            m_has_pos.add(m_)
+        else:
+            m_has_neg.add(m_)
+
+    # precompute these reusable pieces of data
+    u_scales = {}
+    sin_scales = {}
+    cos_scales = {}
+
+    for absm in max_ns.keys():
+        u_scales[absm] = u ** absm
+        if absm in m_has_neg:
+            sin_scales[absm] = np.sin(absm * t)
+        if absm in m_has_pos:
+            cos_scales[absm] = np.cos(absm * t)
+
+    sequences = {}
+    for m, N in max_ns.items():
+        if m == 0:
+            sequences[m] = list(Qbfs_sequence(range(N+1), r))
+        else:
+            sequences[m] = []
+            P0 = 1/2
+            if m == 1 and N == 1:
+                P1 = 1 - x/2
+            else:
+                P1 = (m - .5) + (1 - m) * x
+
+            f0 = f_q2d(0, m)
+            Q0 = 1 / (2 * f0)
+            sequences[m].append(Q0)
+            if N == 0:
+                continue
+
+            g0 = g_q2d(0, m)
+            f1 = f_q2d(1, m)
+            Q1 = (P1 - g0 * Q0) * (1/f1)
+            sequences[m].append(Q1)
+            if N == 1:
+                continue
+            # everything above here works, or at least everything in the returns works
+            if m == 1:
+                P2 = (3 - x * (12 - 8 * x)) / 6
+                P3 = (5 - x * (60 - x * (120 - 64 * x))) / 10
+
+                g1 = g_q2d(1, m)
+                f2 = f_q2d(2, m)
+                Q2 = (P2 - g1 * Q1) * (1/f2)
+
+                g2 = g_q2d(2, m)
+                f3 = f_q2d(3, m)
+                Q3 = (P3 - g2 * Q2) * (1/f3)
+                sequences[m].append(Q2)
+                sequences[m].append(Q3)
+                # Q2, Q3 correct
+                if N <= 3:
+                    continue
+                Pnm2, Pnm1 = P2, P3
+                Qnm1 = Q3
+                min_n = 4
+            else:
+                Pnm2, Pnm1 = P0, P1
+                Qnm1 = Q1
+                min_n = 2
+
+            for nn in range(min_n, N+1):
+                A, B, C = abc_q2d(nn-1, m)
+                Pn = (A + B * x) * Pnm1 - C * Pnm2
+
+                gnm1 = g_q2d(nn-1, m)
+                fn = f_q2d(nn, m)
+                Qn = (Pn - gnm1 * Qnm1) * (1/fn)
+                sequences[m].append(Qn)
+
+                Pnm2, Pnm1 = Pnm1, Pn
+                Qnm1 = Qn
+
+    for n, m in nms:
+        if m != 0:
+            if m < 0:
+                # m < 0, double neg = pos
+                prefix = sin_scales[-m] * u_scales[-m]
+            else:
+                prefix = cos_scales[m] * u_scales[m]
+
+            yield sequences[abs(m)][n] * prefix
+        else:
+            yield sequences[0][n]

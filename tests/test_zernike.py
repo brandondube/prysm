@@ -13,20 +13,6 @@ SAMPLES = 32
 
 X, Y = np.linspace(-1, 1, SAMPLES), np.linspace(-1, 1, SAMPLES)
 
-all_zernikes = [
-    zernike.piston,
-    zernike.tilt,
-    zernike.tip,
-    zernike.defocus,
-    zernike.primary_astigmatism_00,
-    zernike.primary_astigmatism_45,
-    zernike.primary_coma_y,
-    zernike.primary_coma_x,
-    zernike.primary_spherical,
-    zernike.primary_trefoil_y,
-    zernike.primary_trefoil_x,
-]
-
 
 @pytest.fixture
 def rho():
@@ -49,39 +35,6 @@ def fit_data():
 @pytest.fixture
 def sample():
     return zernike.NollZernike(np.random.rand(9), samples=64)
-
-
-def test_all_zernfcns_run_without_error_or_nans(rho, phi):
-    for func in all_zernikes:
-        assert func(rho, phi).all()
-
-
-def test_can_build_fringezernike_pupil_with_vector_args():
-    abers = np.random.rand(48)
-    p = zernike.FringeZernike(abers, samples=SAMPLES)
-    assert p
-
-
-def test_repr_is_a_str():
-    p = zernike.FringeZernike()
-    assert type(repr(p)) is str
-
-
-def test_fringezernike_takes_all_named_args():
-    params = {
-        'norm': True,
-    }
-    p = zernike.FringeZernike(**params)
-    assert p
-
-
-def test_fringezernike_will_pass_pupil_args():
-    params = {
-        'samples': 32,
-        'dia': 50,
-    }
-    p = zernike.FringeZernike(**params)
-    assert p
 
 
 def test_fit_agrees_with_truth(fit_data):
@@ -125,14 +78,6 @@ def test_barplot_topn_functions(sample, orientation):
     assert ax
 
 
-def test_truncate_functions(sample):
-    assert sample.truncate(9)
-
-
-def test_truncate_topn_functions(sample):
-    assert sample.truncate_topn(9)
-
-
 @pytest.mark.parametrize('n', [2, 4, 6, 8, 10, 12, 14, 16, 18, 20])
 def test_zero_separation_gives_correct_array_sizes(n):
     sep = zernike.zero_separation(n)
@@ -147,12 +92,5 @@ def test_nm_to_fringe_round_trips(fringe_idx):
 
 
 def test_ansi_2_term_can_construct():
-    assert zernike.ANSI2TermZernike(A3_1=1, B4_0=1)
-
-
-def test_ansi_1_term_can_construct():
-    assert zernike.ANSI1TermZernike(Z10=1)
-
-
-def test_can_stringify_zernike_pupil():
-    assert str(zernike.NollZernike(np.arange(50), samples=32))
+    ary = zernike.zernike_nm(3, 1, rho, phi)
+    assert ary.any()
