@@ -1,3 +1,4 @@
+"""Tools for working with segmented systems."""
 from collections import namedtuple
 
 import numpy as truenp
@@ -6,13 +7,6 @@ from .geometry import regular_polygon
 from .mathops import np
 
 Hex = namedtuple('Hex', ['q', 'r', 's'])
-
-axial_to_px_0 = truenp.array([
-    [truenp.sqrt(3), truenp.sqrt(3)/2],
-    [0,          3/2],
-])
-
-px_to_axial_0 = truenp.linalg.inv(axial_to_px_0)
 
 
 def add_hex(h1, h2):
