@@ -75,57 +75,110 @@ def scale_hex(h, k):
 def hex_ring(radius):
     """Compute all hex coordinates in a given ring."""
     start = Hex(-radius, radius, 0)
-    add_hex(start, scale_hex(hex_dir(0), radius))
     tile = start
     results = []
     # there are 6*r hexes per ring (the i)
     # the j ensures that we reset the direction we travel every time we reach a
     # 'corner' of the ring.
-    for i in range(6*radius):
+    for i in range(6):
         for j in range(radius):
             results.append(tile)
             tile = hex_neighbor(tile, i)
 
+    # rotate one so that the first element is 'north'
+    for _ in range(radius):
+        results.append(results.pop(0))  # roll < radius > elements so that the first element is "north"
+
     return results
 
 
-# The 18 hexagonal segments are arranged in a large hexagon, with the central
-# segment removed to allow the light to reach the instruments. Each segment is
-# 1.32 m, measured flat to flat. Beginning with a geometric area of 1.50 m2;
-# after cryogenic shrinking and edge removal, the average projected segment area
-# is 1.46 m2. With obscuration by the secondary mirror support system of no more
-# than 0.86 m2, the total polished area equals 25.37 m2, and vignetting by the
-# pupil stops is minimized so that it meets the >25 m2 requirement for the total
-# unobscured collecting area for the telescope. The outer diameter, measured
-# along the mirror, point to point on the larger hexagon, but flat to flat on
-# the individual segments, is 5 times the 1.32 m segment size, or 6.6 m
-# (see figure). The minimum diameter from inside point to inside point is 5.50 m.
-# The maximum diameter from outside point to outside point is 6.64 m. The average
-# distance between the segments is about 7 mm, a distance that is adjustable
-# on-orbit. The 25 m2 is equivalent to a filled circle of diameter 5.64 m. The
-# telescope has an effective f/# of 20 and an effective focal length of 131.4 m,
-# corresponding to an effective diameter of 6.57 m. The secondary mirror is circular,
-# 0.74 m in diameter and has a convex aspheric prescription. There are three
-# different primary mirror segment prescriptions, with 6 flight segments and 1
-# spare segment of each prescription. The telescope is a three-mirror anastigmat,
-# so it has primary, secondary and tertiary mirrors, a fine steering mirror, and
-# each instrument has one or more pick-off mirrors.
-# jwst = 1.32m segments
+def _local_window(cy, cx, center, dx, samples_per_seg, x, y):
+    offset_x = cx + int(center[0]/dx) - samples_per_seg
+    offset_y = cy + int(center[1]/dx) - samples_per_seg
 
-def composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x, y, segment_angle=90):
+    upper_x = offset_x + (2*samples_per_seg)
+    upper_y = offset_y + (2*samples_per_seg)
+
+    # clamp the offsets
+    if offset_x < 0:
+        offset_x = 0
+    if offset_x > x.shape[1]:
+        offset_x = x.shape[1]
+    if offset_y < 0:
+        offset_y = 0
+    if offset_y > y.shape[0]:
+        offset_y = y.shape[0]
+    if upper_x < 0:
+        upper_x = 0
+    if upper_x > x.shape[1]:
+        upper_x = x.shape[1]
+    if upper_y < 0:
+        upper_y = 0
+    if upper_y > y.shape[0]:
+        upper_y = y.shape[0]
+
+    return slice(offset_y, upper_y), slice(offset_x, upper_x)
+
+
+def composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x, y, segment_angle=90, exclude=(0,)):
     if segment_angle not in {0, 90}:
         raise ValueError('can only synthesize composite apertures with hexagons along a cartesian axis')
 
     flat_to_flat_to_vertex_vertex = 2 / truenp.sqrt(3)
     segment_vtov = segment_diameter * flat_to_flat_to_vertex_vertex
     rseg = segment_vtov / 2
-    mask = regular_polygon(6, rseg, x, y, center=(0, 0), rotation=segment_angle)
+
+    # center segment
+    dx = x[0, 1] - x[0, 0]
+    samples_per_seg = rseg / dx
+    # add 1, must avoid error in the case that non-center segments
+    # fall on a different subpixel and have different rounding
+    # use rseg since it is what we are directly interested in
+    samples_per_seg = int(samples_per_seg+1)
+
+    # compute the center segment over the entire x, y array
+    # so that mask covers the entirety of the x/y extent
+    # this may look out of place/unused, but the window is used when creating
+    # the 'windows' list
+    cx = int(np.ceil(x.shape[1]/2))
+    cy = int(np.ceil(y.shape[0]/2))
+    center_segment_window = _local_window(cy, cx, (0, 0), dx, samples_per_seg, x, y)
+
+    mask = np.zeros(x.shape, dtype=np.bool)
+    if 0 in exclude:
+        mask = np.logical_xor(mask, mask)
 
     all_centers = [(0, 0)]
+    segment_id = 0
+    segment_ids = [segment_id]
+    windows = [center_segment_window]
+    xx = x[center_segment_window]
+    yy = y[center_segment_window]
+    local_coords = [
+        (xx, yy)
+    ]
+    center_mask = regular_polygon(6, rseg, xx, yy, center=(0, 0), rotation=segment_angle)
+    local_masks = [center_mask]
     for i in range(1, rings+1):
         hexes = hex_ring(i)
         centers = [hex_to_xy(h, rseg+segment_separation, rot=segment_angle) for h in hexes]
         all_centers += centers
         for center in centers:
-            lcl_mask = regular_polygon(6, rseg, x, y, center=center, rotation=segment_angle)
-            mask |= lcl_mask
+            segment_id += 1
+            segment_ids.append(segment_id)
+
+            local_window = _local_window(cy, cx, center, dx, samples_per_seg, x, y)
+            windows.append(local_window)
+
+            xx = x[local_window]
+            yy = y[local_window]
+
+            local_coords.append((xx-center[0], yy-center[1]))
+
+            local_mask = regular_polygon(6, rseg, xx, yy, center=center, rotation=segment_angle)
+            local_masks.append(local_mask)
+            if segment_id in exclude:
+                continue
+            mask[local_window] |= local_mask
+
+    return segment_vtov, all_centers, windows, local_coords, local_masks, segment_ids, mask
