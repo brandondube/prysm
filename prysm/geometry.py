@@ -210,37 +210,33 @@ def circle(radius, rho):
         binary ndarray representation of the mask
 
     """
-    if radius == 0:
-        return np.zeros_like(rho)
-    else:
-        mask = np.ones_like(rho)
-        mask[rho > radius] = 0
-        return mask
+    return rho <= radius
 
 
-def inverted_circle(radius, rho):
-    """Create an inverted circular mask (obscuration).
+def offset_circle(radius, x, y, center=(0, 0)):
+    """A circle not centered on the radial grid.
 
     Parameters
     ----------
-    radius : `float`, optional
-        radius of the circle, same units as rho.  The return is 1 outside the
-        radius and 0 inside
-    rho : `numpy.ndarray`
-        2D array of radial coordinates
+    radius : `float`
+        radius of the circle
+    x : `numpy.ndarray`
+        x grid
+    y : `numpy.ndarray`
+        y grid
+    center : `tuple`
+        center of the circle, (x,y)
 
     Returns
     -------
     `numpy.ndarray`
-        binary ndarray representation of the mask
+        binary representation of the circle
 
     """
-    if radius == 0:
-        return np.zeros_like(rho)
-    else:
-        mask = np.ones_like(rho)
-        mask[rho <= radius] = 0
-        return mask
+    x2 = x - center[0]
+    y2 = y - center[1]
+    r_sq = x2 ** 2 + y2 ** 2
+    return r_sq <= (radius ** 2)
 
 
 def regular_polygon(sides, radius, x, y, center=(0, 0), rotation=0):
@@ -379,7 +375,7 @@ def spider(vanes, width, x, y, rotation=0, center=(0, 0)):
     rotation = np.radians(360 / vanes)
 
     # initialize a blank mask
-    mask = np.zeros_like(x)
+    mask = np.zeros_like(x, dtype=np.bool)
     for multiple in range(vanes):
         # iterate through the vanes and generate a mask for each
         # adding it to the initialized mask
@@ -391,10 +387,6 @@ def spider(vanes, width, x, y, rotation=0, center=(0, 0)):
 
         xxx, yyy = polar_to_cart(r, pp)
         mask_ = (xxx > 0) & (abs(yyy) < width)
-        mask += mask_
+        mask |= mask_
 
-    # clamp the values to zero or unity
-    # and invert the max
-    mask[mask > 1] = 1
-    mask = 1 - mask
-    return mask
+    return ~mask

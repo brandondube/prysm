@@ -139,8 +139,6 @@ def composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x,
     center_segment_window = _local_window(cy, cx, (0, 0), dx, samples_per_seg, x, y)
 
     mask = np.zeros(x.shape, dtype=np.bool)
-    if 0 in exclude:
-        mask = np.logical_xor(mask, mask)
 
     all_centers = [(0, 0)]
     segment_id = 0
@@ -152,6 +150,8 @@ def composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x,
         (xx, yy)
     ]
     center_mask = regular_polygon(6, rseg, xx, yy, center=(0, 0), rotation=segment_angle)
+    if 0 not in exclude:
+        mask[center_segment_window] |= center_mask
     local_masks = [center_mask]
     for i in range(1, rings+1):
         hexes = hex_ring(i)
