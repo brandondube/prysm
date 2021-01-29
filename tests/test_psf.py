@@ -3,8 +3,8 @@ import pytest
 
 import numpy as np
 
-from prysm import psf, Pupil
-from prysm.coordinates import cart_to_polar
+from prysm import psf
+from prysm.coordinates import cart_to_polar, make_xy_grid
 
 SAMPLES = 32
 LIM = 100
@@ -12,82 +12,22 @@ LIM = 100
 
 @pytest.fixture
 def tpsf():
-    x = y = np.linspace(-LIM, LIM, SAMPLES)
-    xx, yy = np.meshgrid(x, y)
+    xx, yy = make_xy_grid(SAMPLES, diameter=LIM*2)
     rho, phi = cart_to_polar(xx, yy)
     dat = psf.airydisk(rho, 10, 0.55)
-    return psf.PSF(data=dat, x=x, y=y)
+    return dat, xx[0, 1]-xx[0, 0]
 
 
 @pytest.fixture
 def tpsf_dense():
-    x = y = np.linspace(-LIM/4, LIM/4, SAMPLES*8)
-    xx, yy = np.meshgrid(x, y)
+    xx, yy = make_xy_grid(SAMPLES*4, diameter=LIM/2)
     rho, phi = cart_to_polar(xx, yy)
     dat = psf.airydisk(rho, 10, 0.55)
-    return psf.PSF(data=dat, x=x, y=y)
-
-
-@pytest.fixture
-def tpsf_mutate():
-    x = y = np.linspace(-LIM, LIM, SAMPLES)
-    xx, yy = np.meshgrid(x, y)
-    rho, phi = cart_to_polar(xx, yy)
-    dat = psf.airydisk(rho, 10, 0.55)
-    _psf = psf.PSF(data=dat, x=x, y=y)
-    _psf.fno = 10
-    _psf.wavelength = 0.55
-    return _psf
-
-
-def test_psf_plot2d_functions(tpsf):
-    fig, ax = tpsf.plot2d()
-    assert fig
-    assert ax
-
-
-def test_plot_encircled_energy_functions(tpsf):
-    fig, ax = tpsf.plot_encircled_energy(axlim=10)
-    assert fig
-    assert ax
-
-
-def test_renorm_functions(tpsf_mutate):
-    mutated = tpsf_mutate._renorm()
-    assert mutated.data.max() == 1
-
-
-def test_polychromatic_functions():
-    from prysm import Pupil
-    from prysm.wavelengths import HeNe, Cu, XeF
-    pupils = [Pupil(wavelength=wvl) for wvl in (HeNe, Cu, XeF)]
-
-    psfs = [psf.PSF.from_pupil(p, 1) for p in pupils]
-    poly = psf.PSF.polychromatic(psfs)
-    assert isinstance(poly, psf.PSF)
+    return dat, xx[0, 1]-xx[0, 0]
 
 
 def test_airydisk_aft_origin():
-    ad = psf.AiryDisk(0.5, 0.5)
-    assert ad.analytic_ft(0, 0) == 1
-
-
-def test_encircled_energy_radius_functions(tpsf_mutate):
-    assert tpsf_mutate.ee_radius(0.9)
-
-
-def test_encircled_energy_radius_diffraction_functions(tpsf_mutate):
-    assert tpsf_mutate.ee_radius_diffraction(0.9)
-
-
-def test_encircled_energy_radius_ratio_functions(tpsf_mutate):
-    assert tpsf_mutate.ee_radius_ratio_to_diffraction(0.9) > 1
-
-
-def test_coherent_propagation_is_used_in_object_oriented_api():
-    p = Pupil()
-    ps = psf.PSF.from_pupil(p, 1, incoherent=False)
-    assert ps.data.dtype == np.complex128
+    assert pytest.approx(psf.airydisk_ft(0, 3.14, 2.718), 1)
 
 
 def test_size_estimation_accurate(tpsf_dense):
@@ -95,26 +35,26 @@ def test_size_estimation_accurate(tpsf_dense):
     # FWHM
     # 1.22 * .55 * 10 = 6.71 um
     # the 1/e^2 width is about the same as the airy radius
-    tpsf = tpsf_dense
+    tpsf, dx = tpsf_dense
     true_airy_radius = 1.22 * .55 * 10
     true_fwhm = 1.028 * .55 * 10
-    fwhm = tpsf.fwhm()
-    one_over_e = tpsf.one_over_e()
-    one_over_esq = tpsf.one_over_e2()
+    fwhm = psf.fwhm(tpsf, dx)
+    one_over_e = psf.one_over_e(tpsf, dx)
+    one_over_esq = psf.one_over_e_sq(tpsf, dx)
     assert fwhm == pytest.approx(true_fwhm, abs=1)
-    assert one_over_e == pytest.approx(true_airy_radius/2, abs=0.1)
-    assert one_over_esq == pytest.approx(true_airy_radius/2*1.414, abs=.2)  # sqrt(2) is an empirical fudge factor.
+    assert one_over_e == pytest.approx(true_airy_radius, abs=0.4)
+    assert one_over_esq == pytest.approx(true_airy_radius*1.414, abs=.8)  # sqrt(2) is an empirical fudge factor.
     # TODO: find a better test for 1/e^2
 
 
 def test_centroid_correct(tpsf_dense):
-    cpy = tpsf_dense.copy()
-    cy, cx = cpy.centroid('pixels')
-    ty, tx = (s/2 for s in cpy.shape)
+    tpsf, _ = tpsf_dense
+    cy, cx = psf.centroid(tpsf, unit='pixels')
+    ty, tx = (s/2 for s in tpsf.shape)
     assert cy == pytest.approx(ty, .1)
     assert cx == pytest.approx(tx, .1)
 
 
 def test_autowindow_functions(tpsf):
-    cpy = tpsf.copy()
-    assert cpy.autowindow(10)
+    tpsf, _ = tpsf
+    assert psf.autocrop(tpsf, 10).any

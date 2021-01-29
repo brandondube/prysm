@@ -116,9 +116,6 @@ def diffraction_limited_mtf(fno, wavelength, frequencies=None, samples=128):
         normalized_frequency = np.linspace(0, 1, samples)
     else:
         normalized_frequency = abs(np.asarray(frequencies) / extinction)
-        print(wavelength, fno, extinction)
-        print(normalized_frequency.max())
-
         try:
             normalized_frequency[normalized_frequency > 1] = 1  # clamp values
         except TypeError:  # single freq

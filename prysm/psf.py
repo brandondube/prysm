@@ -1,5 +1,6 @@
 """A base point spread function interfacnp."""
 import numbers
+from prysm.fttools import fftrange
 
 from scipy import optimize
 
@@ -8,10 +9,7 @@ from .mathops import (
     ndimage_engine as ndimage,
     special_engine as special
 )
-from .coordinates import cart_to_polar, uniform_cart_to_polar
-from .convolution import Convolvable
-
-from .otf import mtf_from_psf
+from .coordinates import uniform_cart_to_polar
 
 
 FIRST_AIRY_ZERO = 1.220
@@ -28,19 +26,21 @@ AIRYDATA = {
 }
 
 
-def estimate_size(x, y, data, metric, criteria='last'):
+def estimate_size(data, metric, dx=None, x=None, y=None, criteria='last'):
     """Calculate the "size" of the function in data based on a metric.
 
     Parameters
     ----------
-    x : `numpy.ndarray`
-        x coordinates, 1D
-    y : `numpy.ndarray`
-        y coordinates, 1D
     data : `numpy.ndarray`
         f(x,y), 2D
     metric : `str` or `float`, {'fwhm', '1/e', '1/e^2', float()}
         what metric to apply
+    dx : `float`
+        inter-sample spacing, if x and y != None, they supercede this parameter
+    x : `numpy.ndarray`
+        x coordinates, 2D
+    y : `numpy.ndarray`
+        y coordinates, 2D
     criteria : `str`, optional, {'first', 'last'}
         whether to use the first or last occurence of <metric>
 
@@ -57,6 +57,9 @@ def estimate_size(x, y, data, metric, criteria='last'):
     """
     criteria = criteria.lower()
     metric = metric.lower()
+
+    if x is None and y is None:
+        y, x = (fftrange(s, dtype=data.dtype)*dx for s in data.shape)
 
     r, p, polar = uniform_cart_to_polar(x, y, data)
     max_ = polar.max()
@@ -88,19 +91,22 @@ def estimate_size(x, y, data, metric, criteria='last'):
     return r[lowidx] + remainder * r[1]  # subpixel calculation of r
 
 
-def fwhm(x, y, data, criteria='last'):
+def fwhm(data, dx=None, x=None, y=None, criteria='last'):
     """Calculate the FWHM of (data).
 
     Parameters
     ----------
-    x : `numpy.ndarray`
-        x coordinates, 1D
-    y : `numpy.ndarray`
-        y coordinates, 1D
     data : `numpy.ndarray`
         f(x,y), 2D
+    dx : `float`
+        inter-sample spacing, if x and y != None, they supercede this parameter
+    x : `numpy.ndarray`
+        x coordinates, 2D
+    y : `numpy.ndarray`
+        y coordinates, 2D
     criteria : `str`, optional, {'first', 'last'}
         whether to use the first or last occurence of <metric>
+
 
     Returns
     -------
@@ -109,53 +115,61 @@ def fwhm(x, y, data, criteria='last'):
 
     """
     # native calculation is a radius, "HWHM", *2 is FWHM
-    return estimate_size(x=x, y=y, data=data, metric='fwhm', criteria=criteria) * 2
+    return estimate_size(x=x, y=y, dx=dx, data=data, metric='fwhm', criteria=criteria) * 2
 
 
-def one_over_e(x, y, psf, criteria='last'):
-    """Calculate the 1/e radius of (data).
+def one_over_e(data, dx=None, x=None, y=None, criteria='last'):
+    """Calculate the 1/e diameter of data.
 
     Parameters
     ----------
-    x : `numpy.ndarray`
-        x coordinates, 1D
-    y : `numpy.ndarray`
-        y coordinates, 1D
-    psf : `numpy.ndarray`
+    data : `numpy.ndarray`
         f(x,y), 2D
+    dx : `float`
+        inter-sample spacing, if x and y != None, they supercede this parameter
+    x : `numpy.ndarray`
+        x coordinates, 2D
+    y : `numpy.ndarray`
+        y coordinates, 2D
     criteria : `str`, optional, {'first', 'last'}
         whether to use the first or last occurence of <metric>
+
 
     Returns
     -------
     `float`
-        the 1/e radius
+        the FWHM
 
     """
-    return estimate_size(x=x, y=y, data=psf, metric='1/e', criteria=criteria)
+    # native calculation is a radius, "HWHM", *2 is FWHM
+    return estimate_size(x=x, y=y, dx=dx, data=data, metric='1/e', criteria=criteria) * 2
 
 
-def one_over_e2(x, y, psf, criteria='last'):
-    """Calculate the 1/e^2 radius of psf.
+def one_over_e_sq(data, dx=None, x=None, y=None, criteria='last'):
+    """Calculate the 1/e^2 diameter of data.
 
     Parameters
     ----------
-    x : `numpy.ndarray`
-        x coordinates, 1D
-    y : `numpy.ndarray`
-        y coordinates, 1D
-    psf : `numpy.ndarray`
+    data : `numpy.ndarray`
         f(x,y), 2D
+    dx : `float`
+        inter-sample spacing, if x and y != None, they supercede this parameter
+    x : `numpy.ndarray`
+        x coordinates, 2D
+    y : `numpy.ndarray`
+        y coordinates, 2D
     criteria : `str`, optional, {'first', 'last'}
         whether to use the first or last occurence of <metric>
+
 
     Returns
     -------
     `float`
-        the 1/e^2 radius
+        the FWHM
 
     """
-    return estimate_size(x=x, y=y, data=psf, metric='1/e^2', criteria=criteria)
+    # native calculation is a radius, "HWHM", *2 is FWHM
+    return estimate_size(x=x, y=y, dx=dx, data=data, metric='1/e^2', criteria=criteria) * 2
 
 
 def centroid(data, dx=None, unit='spatial'):
@@ -216,58 +230,6 @@ def autocrop(data, px):
     return data[aoi_y_l:aoi_y_h, aoi_x_l:aoi_x_h]
 
 
-class AiryDisk(Convolvable):
-    """An airy disk, the PSF of a circular aperture."""
-    def __init__(self, fno, wavelength, extent=None, samples=None):
-        """Create a new AiryDisk.
-
-        Parameters
-        ----------
-        fno : `float`
-            F/# associated with the PSF
-        wavelength : `float`
-            wavelength of light, in microns
-        extent : `float`
-            cartesian window half-width, np.g. 10 will make an RoI 20x20 microns wide
-        samples : `int`
-            number of samples across full width
-
-        """
-        if samples is not None:
-            x = np.linspace(-extent, extent, samples)
-            y = np.linspace(-extent, extent, samples)
-            xx, yy = np.meshgrid(x, y)
-            rho, phi = cart_to_polar(xx, yy)
-            data = airydisk(rho, fno, wavelength)
-        else:
-            x, y, data = None, None, None
-
-        super().__init__(data=data, x=x, y=y)
-        self.fno = fno
-        self.wavelength = wavelength
-        self.has_analytic_ft = True
-
-    def analytic_ft(self, x, y):
-        """Analytic fourier transform of an airy disk.
-
-        Parameters
-        ----------
-        x : `numpy.ndarray`
-            sample points in x axis
-        y : `numpy.ndarray`
-            sample points in y axis
-
-        Returns
-        -------
-        `numpy.ndarray`
-            2D numpy array containing the analytic fourier transform
-
-        """
-        from .otf import diffraction_limited_mtf
-        r, p = cart_to_polar(x, y)
-        return diffraction_limited_mtf(self.fno, self.wavelength, r*1e3)  # um to mm
-
-
 def airydisk(unit_r, fno, wavelength):
     """Compute the airy disk function over a given spatial distancnp.
 
@@ -288,6 +250,33 @@ def airydisk(unit_r, fno, wavelength):
     """
     u_eff = unit_r * np.pi / wavelength / fno
     return abs(2 * jinc(u_eff)) ** 2
+
+
+def airydisk_ft(r, fno, wavelength):
+    """Compute the Fourier transform of the airy disk.
+
+    Parameters
+    ----------
+    r : `numpy.ndarray`
+        radial spatial frequency, if wvl has units of um, then r has units of 1/um
+    fno : `float`
+        f number of the system, dimensionless
+    wavelength : `float`
+        wavelength of light, notionally units of um
+
+    Returns
+    -------
+    `numpy.ndarray`
+        ndarray of same shape as r
+
+    """
+    extinction = 1 / (wavelength * fno)
+    s = abs(r) / extinction
+    if not isinstance(s, numbers.Number):
+        s[s > 1] = 1
+    elif s > 1:
+        return 0
+    return (2 / np.pi) * (np.arccos(s) - s * np.sqrt(1 - s ** 2))
 
 
 def encircled_energy(psf, dx, radius):
@@ -313,6 +302,7 @@ def encircled_energy(psf, dx, radius):
     Baliga, J. V. and Cohn, B. D., doi: 10.1117/12.944334
 
     """
+    from .otf import mtf_from_psf
     # compute MTF from the PSF
     mtf = mtf_from_psf(psf, dx)
     nx, ny = np.meshgrid(mtf.x, mtf.y)

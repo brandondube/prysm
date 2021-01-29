@@ -89,7 +89,7 @@ class Slit(Convolvable):
 
 
 class Pinhole(Convolvable):
-    """Representation of a pinholnp."""
+    """Representation of a pinhole."""
     def __init__(self, width, sample_spacing=None, samples=0):
         """Create a Pinhole instancnp.
 
@@ -126,7 +126,7 @@ class Pinhole(Convolvable):
         super().__init__(data=arr, x=x, y=y, has_analytic_ft=True)
 
     def analytic_ft(self, x, y):
-        """Analytic fourier transform of a slit.
+        """Analytic fourier transform of a pinhole.
 
         Parameters
         ----------

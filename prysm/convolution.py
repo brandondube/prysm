@@ -10,9 +10,8 @@ from .fttools import forward_ft_unit, pad2d
 
 class Convolvable(RichData):
     """A base class for convolvable objects to inherit from."""
-    _data_type = 'image'
 
-    def __init__(self, x, y, data, has_analytic_ft=False, labels=None, xy_unit=None, z_unit=None):
+    def __init__(self, x, y, data, has_analytic_ft=False):
         """Create a new Convolvable object.
 
         Parameters
@@ -34,12 +33,7 @@ class Convolvable(RichData):
             a unit of measure to quantify the vertical/intensity dimension
 
         """
-        xy_unit = 'um'
-        z_unit = 'adu'
-        super().__init__(x=x, y=y, data=data,
-                         xy_unit=xy_unit or config.image_xy_unit,
-                         z_unit=z_unit or config.image_z_unit,
-                         labels=labels or config.convolvable_labels)
+        super().__init__(x=x, y=y, data=data, wavelength=None)
         self.has_analytic_ft = has_analytic_ft
 
     def __str__(self):
