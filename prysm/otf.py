@@ -6,7 +6,7 @@ from ._richdata import RichData
 def transform_psf(psf, dx):
     """Transform a PSF to k-space without further modification."""
     data = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(psf.data)))
-    df = 2 / dx  # cy/um to cy/mm
+    df = 1000 / (data.shape[0] * dx)  # cy/um to cy/mm
     return data, df
 
 
