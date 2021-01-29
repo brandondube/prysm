@@ -48,7 +48,7 @@ def zernike_nm(n, m, r, t, norm=True):
     out = jacobi(n_j, 0, am, x)
     if m != 0:
         if m < 0:
-            out *= (r ** am * np.sin(m*t))
+            out *= (r ** am * np.sin(am*t))
         else:
             out *= (r ** am * np.cos(m*t))
 
