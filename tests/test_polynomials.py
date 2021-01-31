@@ -6,6 +6,9 @@ import numpy as np
 from prysm.coordinates import cart_to_polar
 from prysm import polynomials
 
+from scipy.special import jacobi as sps_jac
+
+
 # TODO: add regression tests against scipy.special.eval_legendre etc
 
 SAMPLES = 32
@@ -94,3 +97,16 @@ def test_nm_to_fringe_round_trips(fringe_idx):
 def test_ansi_2_term_can_construct(rho, phi):
     ary = polynomials.zernike_nm(3, 1, rho, phi)
     assert ary.any()
+
+
+@pytest.mark.parametrize('n', [0, 1, 2, 3, 4])
+@pytest.mark.parametrize('alpha, beta', [
+    (0, 0),
+    (1, 1),
+    (-0.75, 0),
+    (1, -0.75)])
+def test_jacobi_1_4_match_scipy(n, alpha, beta):
+    x = np.linspace(-1, 1, 32)
+    prysm_ = polynomials.jacobi(n=n, alpha=alpha, beta=beta, x=x)
+    scipy_ = sps_jac(n=n, alpha=alpha, beta=beta)(x)
+    assert np.allclose(prysm_, scipy_)

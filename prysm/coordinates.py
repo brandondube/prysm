@@ -38,7 +38,7 @@ def optimize_xy_separable(x, y):
 
 
 def cart_to_polar(x, y):
-    '''Return the (rho,phi) coordinates of the (x,y) input points.
+    """Return the (rho,phi) coordinates of the (x,y) input points.
 
     Parameters
     ----------
@@ -54,14 +54,19 @@ def cart_to_polar(x, y):
     phi : `numpy.ndarray` or number
         azimuthal coordinate
 
-    '''
+    """
+    # if given x, y as vectors, assume the user wants a grid out
+    if x.ndim == 1:  # don't need to check y, let np crash for the user
+        y = y[:, np.newaxis]
+        x = x[np.newaxis, :]
+
     rho = np.sqrt(x ** 2 + y ** 2)
     phi = np.arctan2(y, x)
     return rho, phi
 
 
 def polar_to_cart(rho, phi):
-    '''Return the (x,y) coordinates of the (rho,phi) input points.
+    """Return the (x,y) coordinates of the (rho,phi) input points.
 
     Parameters
     ----------
@@ -77,7 +82,7 @@ def polar_to_cart(rho, phi):
     y : `numpy.ndarray` or number
         y coordinate
 
-    '''
+    """
     x = rho * np.cos(phi)
     y = rho * np.sin(phi)
     return x, y

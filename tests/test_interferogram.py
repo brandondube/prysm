@@ -3,8 +3,9 @@ import pytest
 
 import numpy as np
 
-from prysm import sample_files
+from prysm.sample_data import sample_files
 from prysm.interferogram import Interferogram, make_window, fit_psd
+from prysm.geometry import circle
 
 import matplotlib
 matplotlib.use('Agg')
@@ -13,21 +14,17 @@ matplotlib.use('Agg')
 @pytest.fixture
 def sample_i():
     i = Interferogram.from_zygo_dat(sample_files('dat'))
-    return i.mask('circle', 40).crop().remove_piston_tiptilt()
+    return i.mask(circle(40, i.r)).crop().remove_piston().remove_tiptilt()
 
 
 @pytest.fixture
 def sample_i_mutate():
     i = Interferogram.from_zygo_dat(sample_files('dat'))
-    return i.mask('circle', 40).crop().remove_piston_tiptilt_power().fill()
+    return i.mask(circle(40, i.r)).crop().remove_piston().remove_tiptilt().remove_power().fill()
 
 
 def test_dropout_is_correct(sample_i):
     assert pytest.approx(sample_i.dropout_percentage, 21.67, abs=1e-2)
-
-
-def test_pvr_is_correct(sample_i):
-    assert pytest.approx(sample_i.pvr, 118.998, abs=1e-3)
 
 
 def test_pv_is_correct(sample_i):
@@ -52,7 +49,6 @@ def test_spike_clip_functions(sample_i_mutate):
 
 
 def test_tis_functions(sample_i_mutate):
-    sample_i_mutate.change_xy_unit('um')
     sample_i_mutate.fill()
     assert sample_i_mutate.total_integrated_scatter(0.4, 0)
 
@@ -70,11 +66,11 @@ def test_doublecrop_has_no_effect(sample_i_mutate):
 
 
 def test_descale_latcal_ok(sample_i_mutate):
-    plate_scale = sample_i_mutate.sample_spacing
+    plate_scale = sample_i_mutate.dx
     sample_i_mutate.strip_latcal()
-    assert pytest.approx(sample_i_mutate.sample_spacing, 1, abs=1e-8)
-    sample_i_mutate.latcal(plate_scale, 'mm')
-    assert pytest.approx(plate_scale, sample_i_mutate.sample_spacing, abs=1e-8)
+    assert pytest.approx(sample_i_mutate.dx, 1, abs=1e-8)
+    sample_i_mutate.latcal(plate_scale)
+    assert pytest.approx(plate_scale, sample_i_mutate.dx, abs=1e-8)
 
 
 def test_make_window_passes_array():
@@ -92,18 +88,6 @@ def test_make_window_functions_for_known_geometries(win):
 
 def test_synthesize_from_psd_functions():
     assert Interferogram.render_from_psd(100, 64, rms=5, a=1e4, b=1/100, c=2)
-
-
-@pytest.mark.parametrize('freq, period', [
-    [None, 10],
-    [None, (25, 10)],
-    [1, None],
-    [(0.1, 1), None]
-])
-def test_filter_functions(sample_i_mutate, freq, period):
-    sample_i_mutate.fill()
-    sample_i_mutate.filter(freq, period)
-    assert sample_i_mutate
 
 
 def test_pad_functions(sample_i_mutate):
@@ -140,10 +124,6 @@ def test_constructor_accepts_xynone():
 
 def test_bandlimited_rms_works_with_frequency_specs(sample_i):
     assert sample_i.bandlimited_rms(flow=1, fhigh=10)
-
-
-def test_fit_zernikes_does_not_throw(sample_i):
-    assert sample_i.fit_zernikes(11).any()
 
 
 def test_can_make_with_meta_wavelength_dict():

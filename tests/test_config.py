@@ -3,7 +3,7 @@ import pytest
 
 import numpy as np
 
-from prysm import config
+from prysm.conf import config
 
 PRECISIONS = {
     32: np.float32,

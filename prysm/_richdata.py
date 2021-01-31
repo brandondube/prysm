@@ -4,7 +4,7 @@ from numbers import Number
 from collections.abc import Iterable
 
 from .mathops import engine as np, interpolate_engine as interpolate
-from .coordinates import uniform_cart_to_polar, polar_to_cart
+from .coordinates import cart_to_polar, uniform_cart_to_polar, polar_to_cart
 from .plotting import share_fig_ax
 from .fttools import fftrange
 
@@ -65,6 +65,7 @@ class RichData:
         self.dx = dx
         self.wavelength = wavelength
         self.interpf_x, self.interpf_y, self.interpf_2d = None, None, None
+        self._x, self._y, self._r, self._t = None, None, None, None
 
     @property
     def shape(self):
@@ -85,22 +86,62 @@ class RichData:
     @property
     def x(self):
         """X coordinate axis, 1D."""
-        return fftrange(self.data.shape[1], self.data.dtype) * self.dx
+        if self._x is None:
+            self._x = fftrange(self.data.shape[1], self.data.dtype) * self.dx
+
+        return self._x
+
+    @x.setter
+    def x(self, x):
+        """Set a new value for the X array."""
+        self._x = x
 
     @property
     def y(self):
         """Y coordinate axis, 1D."""
-        return fftrange(self.data.shape[0], self.data.dtype) * self.dx
+        if self._y is None:
+            self._y = fftrange(self.data.shape[0], self.data.dtype) * self.dx
+
+        return self._y
+
+    @y.setter
+    def y(self, y):
+        """Set a new value for the Y array."""
+        self._y = y
+
+    @property
+    def r(self):
+        """r coordinate axis, 2D."""
+        if self._r is None:
+            self._r, _ = cart_to_polar(self.x, self.y)
+
+        return self._r
+
+    @r.setter
+    def r(self, r):
+        self._r = r
+
+    @property
+    def t(self):
+        """t coordinate axis, 2D."""
+        if self._t is None:
+            _, self._t = cart_to_polar(self.x, self.y)
+
+        return self._t
+
+    @t.setter
+    def t(self, t):
+        self._t = t
 
     @property
     def support_x(self):
         """Width of the domain in X."""
-        return float(self.shape[1] * self.sample_spacing)
+        return float(self.shape[1] * self.dx)
 
     @property
     def support_y(self):
         """Width of the domain in Y."""
-        return float(self.shape[0] * self.sample_spacing)
+        return float(self.shape[0] * self.dx)
 
     @property
     def support(self):
@@ -288,7 +329,7 @@ class RichData:
 
         """
         data = self.data
-        y, x = (fftrange(n, data.dtype)*self.dx for n in data.shape)
+        x, y = self.x, self.y
 
         from matplotlib.colors import PowerNorm, LogNorm
         fig, ax = share_fig_ax(fig, ax)

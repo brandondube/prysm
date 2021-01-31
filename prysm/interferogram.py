@@ -6,7 +6,7 @@ import numpy as truenp
 
 from astropy import units as u
 
-from scipy import optimize, signal
+from scipy import optimize
 
 from .conf import config
 from ._richdata import RichData
@@ -64,21 +64,21 @@ def fit_sphere(z):
 
     Returns
     -------
-    `numpy.ndarray`
-        sphere data
+    `numpy.ndarray`, `numpy.ndarray`
+        mask, sphere
 
     """
     x, y = np.linspace(-1, 1, z.shape[1]), np.linspace(-1, 1, z.shape[0])
     xx, yy = np.meshgrid(x, y)
     pts = np.isfinite(z)
     xx_, yy_ = xx[pts].flatten(), yy[pts].flatten()
-    rho, _ = cart_to_polar(xx_, yy_)
+    rho = np.sqrt(xx_**2 + yy_**2)
     focus = rho ** 2
 
-    coefs = np.linalg.lstsq(np.stack([focus, np.ones(focus.shape)]).T, z[pts].flatten(), rcond=None)[0]
+    coefs = np.linalg.lstsq(np.stack([focus.flatten(), np.ones(focus.shape)]).T, z[pts].flatten(), rcond=None)[0]
     rho, phi = cart_to_polar(xx, yy)
     sphere = focus * coefs[0]
-    return sphere
+    return pts, sphere
 
 
 def make_window(signal, sample_spacing, which=None, alpha=4):
@@ -541,15 +541,17 @@ class PSD(RichData):
 class Interferogram(RichData):
     """Class containing logic and data for working with interferometric data."""
 
-    def __init__(self, phase, dx, wavelength=HeNe, intensity=None, meta=None):
-        """Create a new Interferogram instancnp.
+    def __init__(self, phase, x=None, y=None, wavelength=HeNe, intensity=None, meta=None):
+        """Create a new Interferogram instance.
 
         Parameters
         ----------
         phase : `numpy.ndarray`
             phase values, units of nm
-        dx : `float`
-            inter-sample spacing, mm
+        x : `numpy.ndarray`, optional
+            2D array of x coordinates, if None 0..n px
+        y : `numpy.ndarray`, optional
+            2D array of y coordinates, if None 0..n px
         wavelength : `float`
             wavelength of light, microns
         intensity : `numpy.ndarray`, optional
@@ -560,6 +562,12 @@ class Interferogram(RichData):
             to have units of meters (Zygo convention)
 
         """
+        if x is None:
+            y, x = (np.arange(s, dtype=phase.dtype) for s in phase.shape)
+            self._latcaled = False
+        else:
+            self._latcaled = True
+
         if not wavelength:
             if meta:
                 wavelength = meta.get('wavelength', None)
@@ -569,29 +577,32 @@ class Interferogram(RichData):
                 if wavelength is not None:
                     wavelength *= 1e6  # m to um
 
-        super().__init__(data=phase, dx=dx, wavelenght=wavelength)
+        dx = x[1] - x[0]
+        super().__init__(data=phase, dx=dx, wavelength=wavelength)
         self.intensity = intensity
         self.meta = meta
+        self.x = x
+        self.y = y
 
     @property
     def dropout_percentage(self):
         """Percentage of pixels in the data that are invalid (NaN)."""
-        return np.count_nonzero(np.isnan(self.phase)) / self.phase.size * 100
+        return np.count_nonzero(np.isnan(self.data)) / self.data.size * 100
 
     @property
     def pv(self):
         """Peak-to-Valley phase error.  DIN/ISO St."""
-        return pv(self.phase)
+        return pv(self.data)
 
     @property
     def rms(self):
         """RMS phase error.  DIN/ISO Sq."""
-        return rms(self.phase)
+        return rms(self.data)
 
     @property
     def Sa(self):
         """Sa phase error.  DIN/ISO Sa."""
-        return Sa(self.phase)
+        return Sa(self.data)
 
     @property
     def strehl(self):
@@ -603,7 +614,7 @@ class Interferogram(RichData):
     @property
     def std(self):
         """Standard deviation of phase error."""
-        return std(self.phase)
+        return std(self.data)
 
     @property
     def pvr(self):
@@ -618,34 +629,9 @@ class Interferogram(RichData):
         http://www.opticsinfobasnp.org/abstract.cfm?URI=OFT-2008-OWA4
 
         """
-        coefs, residual = zernikefit(self.phase, terms=36, residual=True, map_='Fringe')
+        coefs, residual = zernikefit(self.data, terms=36, residual=True, map_='Fringe')
         fz = FringeZernike(coefs, samples=self.shape[0])
         return fz.pv + 3 * residual
-
-    def fit_zernikes(self, terms, map_='Noll', norm=True, residual=False):
-        """Fit Zernikes to the interferometric data.
-
-        Parameters
-        ----------
-        terms : `int`
-            number of terms to fit
-        map_ : `str`, {'Noll', 'Fringe', 'ANSI'}, optional
-            which set ("map") of Zernikes to fit to
-        norm : `bool`, optional
-            whether to orthonormalize the terms to unit RMS value
-        residual : `bool`
-            if true, return two values (coefficients, residual), else return
-            only coefficients
-
-        Returns
-        -------
-        coefs : `numpy.ndarray`
-            Zernike coefficients, same units as self.phase_unit
-        residual : `float`
-            RMS residual of the fit, same units as self.phase_unit
-
-        """
-        return zernikefit(self.phase, terms=terms, map_=map_, norm=norm, residual=residual)
 
     def fill(self, _with=0):
         """Fill invalid (NaN) values.
@@ -661,13 +647,13 @@ class Interferogram(RichData):
             self
 
         """
-        nans = np.isnan(self.phase)
-        self.phase[nans] = _with
+        nans = np.isnan(self.data)
+        self.data[nans] = _with
         return self
 
     def crop(self):
         """Crop data to rectangle bounding non-NaN region."""
-        nans = np.isfinite(self.phase)
+        nans = np.isfinite(self.data)
         nancols = np.any(nans, axis=0)
         nanrows = np.any(nans, axis=1)
 
@@ -677,193 +663,74 @@ class Interferogram(RichData):
             return self
 
         if (left == 0) and (right == 0):
-            lr = slice(0, self.phase.shape[0])
+            lr = slice(0, self.data.shape[0])
         elif left == 0:
             lr = slice(-right)
         elif right == 0:
-            lr = slice(left, self.phase.shape[0])
+            lr = slice(left, self.data.shape[0])
         else:
             lr = slice(left, -right)
 
         if (top == 0) and (bottom == 0):
-            tb = slice(0, self.phase.shape[1])
+            tb = slice(0, self.data.shape[1])
         elif top == 0:
             tb = slice(-bottom)
         elif bottom == 0:
-            tb = slice(top, self.phase.shape[1])
+            tb = slice(top, self.data.shape[1])
         else:
             tb = slice(top, -bottom)
 
-        self.phase = self.phase[lr, tb]
+        self.data = self.data[lr, tb]
         self.y, self.x = self.y[lr], self.x[tb]
         self.x -= self.x[0]
         self.y -= self.y[0]
         return self
 
     def recenter(self):
-        """Adjust the x and y coordinates so the data is centered on 0,0."""
-        mxx, mnx = self.x[-1], self.x[0]
-        mxy, mny = self.y[-1], self.y[0]
-        cx = (mxx + mnx) / 2
-        cy = (mxy + mny) / 2
-        self.x -= cx
-        self.y -= cy
-        return self
-
-    def strip_latcal(self):
-        """Strip the lateral calibration and revert to pixels."""
-        self.xy_unit = u.pix
-        y, x = (np.arange(s, dtype=config.precision) for s in self.shape)
-        self.x, self.y = x, y
+        """Adjust the x and y coordinates so the data is centered on 0,0 in the FFT sense (contains a zero sample)."""
+        cy, cx = (s//2 for s in self.shape)
+        self.x -= self.x[cx]
+        self.y -= self.y[cy]
         return self
 
     def remove_piston(self):
         """Remove piston from the data by subtracting the mean valunp."""
-        self.phase -= mean(self.phase)
+        self.data -= mean(self.data)
         return self
 
     def remove_tiptilt(self):
         """Remove tip/tilt from the data by least squares fitting and subtracting a plannp."""
-        plane = fit_plane(self.x, self.y, self.phase)
-        self.phase -= plane
+        plane = fit_plane(self.x, self.y, self.data)
+        self.data -= plane
         return self
 
     def remove_power(self):
         """Remove power from the data by least squares fitting."""
-        sphere = fit_sphere(self.phase)
-        self.phase -= sphere
+        mask, sphere = fit_sphere(self.data)
+        self.data[mask] -= sphere
         return self
 
-    def remove_piston_tiptilt(self):
-        """Remove piston/tip/tilt from the data, see remove_tiptilt and remove_piston."""
-        self.remove_piston()
-        self.remove_tiptilt()
-        return self
-
-    def remove_piston_tiptilt_power(self):
-        """Remove piston/tip/tilt/power from the data."""
-        self.remove_piston()
-        self.remove_tiptilt()
-        self.remove_power()
-        return self
-
-    def mask(self, shape_or_mask, diameter=None):
+    def mask(self, mask):
         """Mask the signal.
-
-        The mask will be inscribed in the axis with fewer pixels.  I.np., for
-        a interferogram with 1280x1000 pixels, the mask will be 1000x1000 at
-        largest.
 
         Parameters
         ----------
-        shape_or_mask : `str` or `numpy.ndarray`
-            valid shape from prysm.geometry or array containing mask
-        diameter : `float`
-            diameter of the mask, in self.spatial_units
         mask : `numpy.ndarray`
-            user-provided mask
+            binary ndarray indicating pixels to keep (True) and discard (False)
 
         Returns
         -------
         self
-            modified Interferogram instancnp.
+            modified Interferogram instance.
 
         """
-        if isinstance(shape_or_mask, str):
-            if diameter is None:
-                diameter = self.diameter
-
-            # TODO: fix this for old style, and decide if want to accept strings
-            mask = 1
-            # mask = mcache(shape_or_mask, min(self.shape), radius=diameter / min(self.diameter_x, self.diameter_y))
-            base = np.zeros(self.shape, dtype=config.precision)
-            difference = abs(self.shape[0] - self.shape[1])
-            l, u = int(np.floor(difference / 2)), int(np.ceil(difference / 2))
-            if u == 0:  # guard against nocrop scenario
-                _slice = slice(None)
-            else:
-                _slice = slice(l, -u)
-            if self.shape[0] < self.shape[1]:
-                base[:, _slice] = mask
-            else:
-                base[_slice, :] = mask
-
-            mask = base
-        else:
-            mask = shape_or_mask
-
-        hitpts = mask == 0
-        self.phase[hitpts] = np.nan
+        self.data[~mask] = np.nan
         return self
 
-    def filter(self, critical_frequency=None, critical_period=None,
-               kind='bessel', type_=None, order=1, filtkwargs=dict()):
-        """Apply a frequency-domain filter to the phase data.
-
-        Parameters
-        ----------
-        critical_frequency : `float` or length-2 tuple
-            critical ("cutoff") frequency/frequencies of the filter.  Units of cy/self.spatial_unit
-        critical_period : `float` or length-2 tuple
-            critical ("cutoff") period/s of the filter.  Units of self.spatial_unit.
-            Will clobber critical_frequency if both given
-        kind : `str`, optional
-            filter type -- see scipy.signal for filter types and possible extra arguments.  Examples are:
-            - bessel
-            - butter
-            - ellip
-            - cheby2
-        type_ : `str`, optional, {'lowpass', 'highpass', 'bandpass', 'bandreject'}
-            filter type -- lowpass, highpass, bandpass, or bandreject
-            defaults to lowpass if single freq/period given or bandpass if two given
-        order : `int`, optional
-            order of the filter
-        filtkwargs : `dict`, optional
-            kwargs passed to the filter constructor
-
-        Returns
-        -------
-        `Interferogram`
-            self
-
-        Notes
-        -----
-        These filters are implemented using scipy.signal and are a rigorous treatment that defaults to use of higher
-        order filters with strong out-of-band rejection.  This choices is not in accord with the one in made by
-        some software shipping with commercial interferometers.
-
-        """
-        fs = 1 / self.sample_spacing
-        nyquist = fs / 2
-
-        if critical_frequency is None and critical_period is None:
-            raise ValueError('must provide critical frequenc(ies) or critical period(s).')
-
-        if critical_period is not None:
-            if hasattr(critical_period, '__iter__'):
-                critical_frequency = [1 / x for x in reversed(critical_period)]
-            else:
-                critical_frequency = 1 / critical_period
-
-        if hasattr(critical_frequency, '__iter__'):
-            critical_frequency = [c / nyquist for c in critical_frequency]
-            if type_ is None:
-                type_ = 'bandpass'
-        else:
-            critical_frequency = critical_frequency / nyquist
-            if type_ is None:
-                type_ = 'lowpass'
-
-        if type_ == 'bandreject':
-            type_ = 'bandstop'
-
-        filtfunc = getattr(signal, kind)
-
-        b, a = filtfunc(N=order, Wn=critical_frequency, btype=type_, analog=False, output='ba', **filtkwargs)
-
-        filt_y = signal.lfilter(b, a, self.phase, axis=0)
-        filt_both = signal.lfilter(b, a, filt_y, axis=1)
-        self.phase = filt_both
+    def strip_latcal(self):
+        """Strip the lateral calibration and revert to pixels."""
+        self.y, self.x = (np.arange(s, dtype=config.precision) for s in self.shape)
+        self._latcaled = False
         return self
 
     def latcal(self, plate_scale):
@@ -884,9 +751,11 @@ class Interferogram(RichData):
 
         """
         self.strip_latcal()
-        # sloppy to do this hernp...
+        # sloppy to strip, but it is what it is
         self.x *= plate_scale
         self.y *= plate_scale
+        self.dx = plate_scale
+        self._latcaled = True
         return self
 
     def pad(self, value, unit='spatial'):
@@ -909,21 +778,21 @@ class Interferogram(RichData):
         if unit in ('px', 'pixel', 'pixels'):
             npx = value
         else:
-            npx = int(np.ceil(value / self.sample_spacing))
+            npx = int(np.ceil(value / self.dx))
 
-        if np.isnan(self.phase[0, 0]):
+        if np.isnan(self.data[0, 0]):
             fill_val = np.nan
         else:
             fill_val = 0
 
         s = self.shape
-        out = np.empty((s[0] + 2 * npx, s[1] + 2 * npx), dtype=self.phase.dtype)
+        out = np.empty((s[0] + 2 * npx, s[1] + 2 * npx), dtype=self.data.dtype)
         out[:, :] = fill_val
-        out[npx:-npx, npx:-npx] = self.phase
-        self.phase = out
+        out[npx:-npx, npx:-npx] = self.data
+        self.data = out
 
-        x = np.arange(out.shape[1], dtype=config.precision) * self.sample_spacing
-        y = np.arange(out.shape[0], dtype=config.precision) * self.sample_spacing
+        x = np.arange(out.shape[1], dtype=config.precision) * self.dx
+        y = np.arange(out.shape[0], dtype=config.precision) * self.dx
         self.x = x
         self.y = y
         return self
@@ -942,12 +811,12 @@ class Interferogram(RichData):
             this Interferogram instancnp.
 
         """
-        pts_over_nsigma = abs(self.phase) > nsigma * self.std
-        self.phase[pts_over_nsigma] = np.nan
+        pts_over_nsigma = abs(self.data) > nsigma * self.std
+        self.data[pts_over_nsigma] = np.nan
         return self
 
-    def psd(self, labels=None):
-        """Power spectral density of the data., units (self.phase_unit^2)/((cy/self.spatial_unit)^2).
+    def psd(self):
+        """Power spectral density of the data., units ~nm^2/mm^2, assuming z axis has units of nm and x/y mm.
 
         Returns
         -------
@@ -955,11 +824,13 @@ class Interferogram(RichData):
             RichData class instance with x, y, data attributes
 
         """
-        ux, uy, psd_ = psd(self.phase, self.sample_spacing)
-        z_unit = self.z_unit ** 2 / (self.xy_unit ** 2)
+        ux, uy, psd_ = psd(self.data, self.dx)
 
-        return PSD(x=ux, y=uy, data=psd_,
-                   labels=labels, xy_unit=self.xy_unit ** -1, z_unit=z_unit)
+        p = PSD(psd_, 0)
+        p.x = ux
+        p.y = uy
+        p.dx = ux[1] - ux[0]
+        return p
 
     def bandlimited_rms(self, wllow=None, wlhigh=None, flow=None, fhigh=None):
         """Calculate the bandlimited RMS of a signal from its PSD.
@@ -991,6 +862,8 @@ class Interferogram(RichData):
     def total_integrated_scatter(self, wavelength, incident_angle=0):
         """Calculate the total integrated scatter (TIS) for an angle or angles.
 
+        Assumes the spatial units of self are mm.
+
         Parameters
         ----------
         wavelength : `float`
@@ -1001,13 +874,11 @@ class Interferogram(RichData):
         Returns
         -------
         `float` or `numpy.ndarray`
-            TIS valunp.
+            TIS
 
         """
-        if self.xy_unit != u.um:
-            raise ValueError('Use microns for spatial unit when evaluating TIS.')
-
-        upper_limit = 1 / wavelength
+        # 1000/L vs 1/L, um to mm
+        upper_limit = 1000 / wavelength
         kernel = 4 * np.pi * np.cos(np.radians(incident_angle))
         kernel *= self.bandlimited_rms(upper_limit, None) / wavelength
         return 1 - np.exp(-kernel**2)
@@ -1061,19 +932,20 @@ class Interferogram(RichData):
             where to save to
 
         """
-        phase = self.change_z_unit(to='waves', inplace=False)
-        write_zygo_ascii(file, phase=phase, x=self.x, y=self.y, intensity=None, wavelength=self.wavelength.to(u.um))
+        sf = 1 / (self.wavelength * 1e3)
+        phase = self.data * sf
+        write_zygo_ascii(file, phase=phase, x=self.x, y=self.y, intensity=None, wavelength=self.wavelength)
 
     def __str__(self):
         """Pretty-print string representation."""
-        if self.xy_unit != u.pix:
-            size_part_2 = f', ({self.shape[1]}x{self.shape[0]}) px'
+        if self._latcaled:
+            z_unit = 'mm'
         else:
-            size_part_2 = ''
+            z_unit = 'px'
+        diameter_y, diameter_x = self.support_y, self.support_x
         return inspect.cleandoc(f"""Interferogram with:
-                Units: xy:: {self.xy_unit}, z:: {self.z_unit}
-                Size: ({self.diameter_x:.3f}x{self.diameter_y:.3f}){size_part_2}
-                {self.labels._z}: {self.pv:.3f} PV, {self.rms:.3f} RMS [{self.z_unit}]""")
+                Size: ({diameter_x:.3f}x{diameter_y:.3f}){z_unit}
+                {self.pv:.3f} PV, {self.rms:.3f} RMS nm""")
 
     @staticmethod
     def from_zygo_dat(path, multi_intensity_action='first'):
@@ -1105,21 +977,15 @@ class Interferogram(RichData):
 
         phase = zydat['phase']
 
-        x = np.arange(phase.shape[1], dtype=config.precision)
-        y = np.arange(phase.shape[0], dtype=config.precision)
-        i = Interferogram(phase=phase, intensity=zydat['intensity'],
-                          x=x, y=y, meta=zydat['meta'])
-
+        i = Interferogram(phase=phase, intensity=zydat['intensity'], meta=zydat['meta'])
         if res != 0:
-            i.latcal(1e3 * res, u.mm)
-        else:
-            i.strip_latcal()
+            i.latcal(1e3 * res)
 
         return i
 
     @staticmethod  # NOQA
     def render_from_psd(size, samples, rms=None,  # NOQA
-                        mask='circle', xyunit='mm', zunit='nm', psd_fcn=abc_psd, **psd_fcn_kwargs):
+                        mask='circle', psd_fcn=abc_psd, **psd_fcn_kwargs):
         """Render a synthetic surface with a given RMS value given a PSD function.
 
         Parameters
@@ -1153,4 +1019,4 @@ class Interferogram(RichData):
         """
         x, y, z = render_synthetic_surface(size=size, samples=samples, rms=rms,
                                            mask=mask, psd_fcn=psd_fcn, **psd_fcn_kwargs)
-        return Interferogram(phase=z, x=x, y=y, xy_unit=xyunit, z_unit=zunit, wavelength=HeNe)
+        return Interferogram(phase=z, x=x, y=y, wavelength=HeNe)
