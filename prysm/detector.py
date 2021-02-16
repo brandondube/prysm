@@ -1,211 +1,76 @@
 """Detector-related simulations."""
-from collections import deque
 
-from .conf import config
 from .mathops import np
-from .convolution import Convolvable
 from .mathops import is_odd
 
 
-class Detector(object):
-    """Model of a image sensor."""
-
-    def __init__(self, pitch_x=None, pitch_y=None, pixel='rectangle',
-                 resolution=(1024, 1024), nbits=16, framebuffer=10):
-        """Create a new Detector object.
-
-        Parameters
-        ----------
-        pixel_size : `float`
-            size of pixels, in um
-        resolution : `iterable`
-            (x,y) resolution in pixels
-        nbits : `int`
-            number of bits to digitize to
-        framebuffer : `int`
-            number of frames of data to store
-
-        """
-        if isinstance(pixel, str):
-            pixel = pixel.lower()
-            if pixel == 'rectangle' and pitch_x is None and pitch_y is None:
-                raise ValueError('must provide at least x pitch for rectangular pixels.')
-
-            if pixel == 'rectangle':
-                pixel = PixelAperture(pitch_x, pitch_y)
-                self.rectangular_100pct_fillfactor_pix = True
-        else:
-            self.rectangular_100pct_fillfactor_pix = False
-
-        self.pixel = pixel
-
-        if pitch_y is None:
-            pitch_y = pitch_x
-
-        if not hasattr(resolution, '__iter__'):
-            resolution = (resolution, resolution)
-
-        self.pitch_x = pitch_x
-        self.pitch_y = pitch_y
-        self.resolution = resolution
-        self.bit_depth = nbits
-        self.captures = deque(maxlen=framebuffer)
-
-
-class OLPF(Convolvable):
-    """Optical Low Pass Filter."""
-
-    def __init__(self, width_x, width_y=None, sample_spacing=0, samples_x=None, samples_y=None):
-        """Create a new OLPF object.
-
-        Parameters
-        ----------
-        width_x : `float`
-            blur width in the x direction, microns
-        width_y : `float`
-            blur width in the y direction, microns
-        sample_spacing : `float`, optional
-            center to center spacing of samples
-        samples_x : `int`, optional
-            number of samples along x axis
-        samples_y : `int`, optional
-            number of samples along y axis; duplicates x if None
-
-        """
-        # compute relevant spacings
-        if width_y is None:
-            width_y = width_x
-        if samples_y is None:
-            samples_y = samples_x
-
-        self.width_x = width_x
-        self.width_y = width_y
-
-        if samples_x is None:  # do no math
-            data, ux, uy = None, None, None
-        else:
-            space_x = width_x / 2
-            space_y = width_y / 2
-            shift_x = int(space_x // sample_spacing)
-            shift_y = int(space_y // sample_spacing)
-            center_x = samples_x // 2
-            center_y = samples_y // 2
-
-            data = np.zeros((samples_x, samples_y))
-
-            data[center_y - shift_y, center_x - shift_x] = 1
-            data[center_y - shift_y, center_x + shift_x] = 1
-            data[center_y + shift_y, center_x - shift_x] = 1
-            data[center_y + shift_y, center_x + shift_x] = 1
-            ux = np.linspace(-space_x, space_x, samples_x)
-            uy = np.linspace(-space_y, space_y, samples_y)
-
-        super().__init__(data=data, x=ux, y=uy, has_analytic_ft=True)
-
-    def analytic_ft(self, x, y):
-        """Analytic fourier transform of a pixel aperture.
-
-        Parameters
-        ----------
-        x : `numpy.ndarray`
-            sample points in x axis
-        y : `numpy.ndarray`
-            sample points in y axis
-
-        Returns
-        -------
-        `numpy.ndarray`
-            2D numpy array containing the analytic fourier transform
-
-        """
-        return (np.cos(2 * self.width_x * x) *
-                np.cos(2 * self.width_y * y)).astype(config.precision)
-
-
-class PixelAperture(Convolvable):
-    """The aperture of a rectangular pixel."""
-    def __init__(self, width_x, width_y=None, sample_spacing=0, samples_x=None, samples_y=None):
-        """Create a new `PixelAperture` object.
-
-        Parameters
-        ----------
-        width_x : `float`
-            width of the aperture in the x dimension, in microns.
-        width_y : `float`, optional
-            siez of the aperture in the y dimension, in microns
-        sample_spacing : `float`, optional
-            spacing of samples, in microns
-        samples_x : `int`, optional
-            number of samples in the x dimension
-        samples_y : `int`, optional
-            number of samples in the y dimension
-
-        """
-        if width_y is None:
-            width_y = width_x
-        if samples_y is None:
-            samples_y = samples_x
-
-        self.width_x = width_x
-        self.width_y = width_y
-
-        if samples_x is None:  # do no math
-            data, ux, uy = None, None, None
-        else:  # build PixelAperture model
-            center_x = samples_x // 2
-            center_y = samples_y // 2
-            half_width = width_x / 2
-            half_height = width_y / 2
-            steps_x = int(half_width // sample_spacing)
-            steps_y = int(half_height // sample_spacing)
-
-            data = np.zeros((samples_x, samples_y))
-            data[center_y - steps_y:center_y + steps_y,
-                 center_x - steps_x:center_x + steps_x] = 1
-            extx, exty = samples_x // 2 * sample_spacing, samples_y // 2 * sample_spacing
-            ux, uy = np.linspace(-extx, extx, samples_x), np.linspace(-exty, exty, samples_y)
-        super().__init__(data=data, x=ux, y=uy, has_analytic_ft=True)
-
-    def analytic_ft(self, x, y):
-        """Analytic fourier transform of a pixel aperture.
-
-        Parameters
-        ----------
-        x : `numpy.ndarray`
-            sample points in x axis
-        y : `numpy.ndarray`
-            sample points in y axis
-
-        Returns
-        -------
-        `numpy.ndarray`
-            2D numpy array containing the analytic fourier transform
-
-        """
-        return pixelaperture_analytic_otf(self.width_x, self.width_y, x, y)
-
-
-def pixelaperture_analytic_otf(width_x, width_y, freq_x, freq_y):
-    """Analytic MTF of a rectangular pixel aperture.
+def olpf_ft(fx, fy, width_x, width_y):
+    """Analytic FT of an optical low-pass filter, two or four pole.
 
     Parameters
     ----------
+    fx : `numpy.ndarray`
+        x spatial frequency, in cycles per micron
+    fy : `numpy.ndarray`
+        y spatial frequency, in cycles per micron
     width_x : `float`
         x diameter of the pixel, in microns
     width_y : `float`
         y diameter of the pixel, in microns
-    freq_x : `numpy.ndarray`
-        x spatial frequency, in cycles per micron
-    freq_y : `numpy.ndarray`
-        y spatial frequency, in cycles per micron
 
     Returns
     -------
     `numpy.ndarray`
-        MTF of the pixel aperture
+        FT of the OLPF
 
     """
-    return np.sinc(freq_x * width_x) * np.sinc(freq_y * width_y)
+    return np.cos(2 * width_x * fx) * np.cos(2 * width_y * fy)
+
+
+def pixel_ft(fx, fy, width_x, width_y):
+    """Analytic FT of a rectangular pixel aperture.
+
+    Parameters
+    ----------
+    fx : `numpy.ndarray`
+        x spatial frequency, in cycles per micron
+    fy : `numpy.ndarray`
+        y spatial frequency, in cycles per micron
+    width_x : `float`
+        x diameter of the pixel, in microns
+    width_y : `float`
+        y diameter of the pixel, in microns
+
+    Returns
+    -------
+    `numpy.ndarray`
+        FT of the pixel
+
+    """
+    return np.sinc(fx * width_x) * np.sinc(fy * width_y)
+
+
+def pixel(x, y, width_x, width_y):
+    """Spatial representation of a pixel.
+
+    Parameters
+    ----------
+    x : `numpy.ndarray`
+        x coordinates
+    y : `numpy.ndarray`
+        y coordinates
+    width_x : `float`
+        x diameter of the pixel, in microns
+    width_y : `float`
+        y diameter of the pixel, in microns
+
+    Returns
+    -------
+    `numpy.ndarray`
+        spatial representation of the pixel
+
+    """
+    return x < width_x & x > -width_x & y < width_y & y > -width_y
 
 
 def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
