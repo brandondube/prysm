@@ -41,7 +41,7 @@ def slit(x, y, width_x, width_y=None):
     return mask
 
 
-def slit_analytic_ft(width_x, width_y, fx, fy):
+def slit_ft(width_x, width_y, fx, fy):
     """Analytic fourier transform of a slit.
 
     Parameters
@@ -89,7 +89,7 @@ def pinhole(radius, rho):
     return rho <= radius
 
 
-def pinhole_analytic_ft(radius, fr):
+def pinhole_ft(radius, fr):
     """Analytic fourier transform of a pinhole.
 
     Parameters
