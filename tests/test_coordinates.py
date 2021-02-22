@@ -34,7 +34,7 @@ def data_2d_complex():
     [-1, -1],
     [np.linspace(-1, 1, TEST_SAMPLES), np.linspace(-1, 1, TEST_SAMPLES)]])
 def test_cart_to_polar(x, y):
-    rho, phi = coordinates.cart_to_polar(x, y)
+    rho, phi = coordinates.cart_to_polar(x, y, vec_to_grid=False)
     assert np.allclose(rho, e.sqrt(x**2 + y**2))
     assert np.allclose(phi, e.arctan2(y, x))
 

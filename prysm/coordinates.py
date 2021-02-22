@@ -21,7 +21,6 @@ def optimize_xy_separable(x, y):
 
     Notes
     -----
-
     If a calculation is separable in x and y, performing it on a meshgrid of x/y
     takes 2N^2 operations, for N= the linear dimension (the 2 being x and y).
     If the calculation is separable, this can be reduced to 2N by using numpy
@@ -37,7 +36,7 @@ def optimize_xy_separable(x, y):
     return x, y
 
 
-def cart_to_polar(x, y):
+def cart_to_polar(x, y, vec_to_grid=True):
     """Return the (rho,phi) coordinates of the (x,y) input points.
 
     Parameters
@@ -46,6 +45,8 @@ def cart_to_polar(x, y):
         x coordinate
     y : `numpy.ndarray` or number
         y coordinate
+    vec_to_grid : `bool`, optional
+        if True, convert a vector (x,y) input to a grid (r,t) output
 
     Returns
     -------
@@ -55,8 +56,10 @@ def cart_to_polar(x, y):
         azimuthal coordinate
 
     """
-    # if given x, y as vectors, assume the user wants a grid out
-    if x.ndim == 1:  # don't need to check y, let np crash for the user
+    # if given x, y as vectors, and the user wants a grid out
+    # don't need to check y, let np crash for the user
+    # hasattr introduces support for scalars as well as array-likes
+    if vec_to_grid and hasattr(x, 'ndim') and x.ndim == 1:
         y = y[:, np.newaxis]
         x = x[np.newaxis, :]
 
