@@ -37,6 +37,13 @@ Prysm uses numpy for array operations or any compatible library.  To use GPUs, y
 - Hopkins
 - fitting
 
+### Pupil Masks
+- circles, binary and anti-aliased
+- ellipses
+- rectangles
+- N-sided regular convex polygons
+- N-vaned spiders
+
 ### Segmented systems
 - parametrized pupil mask generation
 - per-segment errors
@@ -54,6 +61,7 @@ Prysm uses numpy for array operations or any compatible library.  To use GPUs, y
 - - Pinhole
 - - Slit
 - - Tilted Square
+
 ### Metrics
 - Strehl
 - Encircled Energy
@@ -91,7 +99,7 @@ Prysm uses numpy for array operations or any compatible library.  To use GPUs, y
 - Sellmeier's equation
 
 ### Thin Lenses
-- Defocus to dz and reverse
+- Defocus to delta z at the image and reverse
 - object/image distance relation
 - image/object distances and magnification
 - image/object distances and NA/F#

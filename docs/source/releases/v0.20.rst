@@ -2,6 +2,16 @@
 prysm v0.20
 ***********
 
+Summary
+=======
+
+Version 20 of prysm is the largest breaking release the library has ever had.  Your programs will be more a bit verbose when written in this style, but they will be more clear, contain fewer bugs, and run faster.  This version marks prysm transitioning from an extremely object oriented style to a data oriented style.  The result is that code is more direct, and there is less of it.  Side benefits are that by deferring the caches that used to help keep prysm fast to the user level, the user is in control over their program's static memory usage.
+
+This version will produce one more zero point release (0.21) for cleanup after longer experience in this style, after which version 1 will be released.  In addition to the breaking changes, this release brings landmark additions of **2D-Q polynomials**, also known as Forbes polynomials, **Chebyshev, Legendre, and Hopkins polynomials,** **sophistocated tools for segmented apertures**, and **classical phase retrieval algorithms** included in the box.
+
+The remainder of this page will be divided by logical unit of function, then sub-divided between breaking changes and new features.
+
+
 Breaking Changes
 ================
 
@@ -75,6 +85,12 @@ coordinates
 - :class:`GridCache` and its variable transformation functions have been deleted.  The functionality is deferred to the user, who can quite naturally write code that reuses grids.
 - :func:`~prysm.coordinates.make_xy_grid` has had its signature changed from :code:`(samples_x, samples_y, radius=1)` to :code:`(shape, *, dx, diameter, grid=True)`.  shape auto-broadcasts to 2D and dx/diameter are keyword only.  grid controls returning vectors or a meshgrid.  :code:`make_xy_grid` is now FFT-aligned (always containing a zero sample).
 - :func:`make_rho_phi_grid` has been removed, combine :func:`make_xy_grid` with :func:`~prysm.coordinates.cart_to_polar`.
+
+qpoly
+-----
+
+- the :class:`QCONSag` and :class:`QBFSSag` classes have been removed, use the :func:`~prysm.qpoly.Qbfs` :func:`~prysm.qpoly.Qbfs_sequence`, :func:`~prysm.qpoly.Qcon`, and :func:`~prysm.qpoly.Qcon_sequence` functions to replicate the synthesis behavior.
+- new functions :func:`~prysm.qpoly.Q2d` and :func:`~prysm.qpoly.Q2d_sequence` to compute 2D-Q polynomials.
 
 pupil
 -----
