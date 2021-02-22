@@ -3,33 +3,36 @@ import pytest
 
 import numpy as np
 
-from prysm import detector, psf
-from prysm.convolution import Convolvable
+from prysm import detector, coordinates
 
 import matplotlib as mpl
 mpl.use('Agg')
 
+SAMPLES = 128
 
-@pytest.fixture
-def sample_psf():
-    ps = psf.AiryDisk(4, .55, 20, 64)
-    return Convolvable(x=ps.x, y=ps.y, data=ps.data, has_analytic_ft=False)
-
-
-@pytest.fixture
-def sample_detector():
-    return detector.Detector(10)
+x, y = coordinates.make_xy_grid(SAMPLES, dx=1)
+r, t = coordinates.cart_to_polar(x, y)
 
 
-def test_detector_can_sample_convolvable(sample_detector, sample_psf):
-    assert sample_detector.capture(sample_psf)
+def test_pixel_shades_properly():
+    px = detector.pixel(x, y, 10, 10)
+    # 121 samples should be white, 5 row/col on each side of zero, plus zero,
+    # = 11x11 = 121
+    assert px.sum() == 121
 
 
-def test_olpf_render_doesnt_crash():
-    olpf = detector.OLPF(5, samples_x=32, sample_spacing=0.5)
-    assert olpf
+def test_analytic_fts_function():
+    # these numbers have no meaning, and the sense of x and y is wrong.  Just
+    # testing for crashes.
+    # TODO: more thorough tests
+    olpf_ft = detector.olpf_ft(x, y, 1.234, 4.567)
+    assert olpf_ft.any()
+    pixel_ft = detector.pixel_ft(x, y, 9.876, 5.4321)
+    assert pixel_ft.any()
 
 
-def test_olpf_ft_correct_at_origin():
-    olpf = detector.OLPF(5)
-    assert olpf.analytic_ft(0, 0) == 1
+def test_detector_functions():
+    d = detector.Detector(0.1, 8, 200, 60_000, .5, 14, 1)
+    field = np.ones((128, 128))
+    img = d.expose(field)
+    assert img.any()

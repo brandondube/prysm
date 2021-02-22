@@ -176,7 +176,9 @@ def pixel(x, y, width_x, width_y):
         spatial representation of the pixel
 
     """
-    return x < width_x & x > -width_x & y < width_y & y > -width_y
+    width_x = width_x / 2
+    width_y = width_y / 2
+    return (x <= width_x) & (x >= -width_x) & (y <= width_y) & (y >= -width_y)
 
 
 def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
