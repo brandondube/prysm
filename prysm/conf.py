@@ -1,5 +1,5 @@
 """Configuration for this instance of prysm."""
-from .mathops import engine as np
+from .mathops import np
 
 
 class Config(object):

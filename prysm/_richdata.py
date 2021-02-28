@@ -3,7 +3,7 @@ import copy
 from numbers import Number
 from collections.abc import Iterable
 
-from .mathops import engine as np, interpolate_engine as interpolate
+from .mathops import np, interpolate
 from .coordinates import cart_to_polar, uniform_cart_to_polar, polar_to_cart
 from .plotting import share_fig_ax
 from .fttools import fftrange

@@ -1,6 +1,6 @@
 """Coordinate conversions."""
 from .conf import config
-from .mathops import np, interpolate_engine as interpolate
+from .mathops import np, interpolate
 from .fttools import fftrange
 
 

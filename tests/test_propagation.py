@@ -14,21 +14,22 @@ SAMPLES = 32
 def test_psf_to_pupil_sample_inverts_pupil_to_psf_sample(dzeta):
     samples, wvl, efl = 128, 0.55, 10
     psf_sample = propagation.pupil_sample_to_psf_sample(dzeta, samples, wvl, efl)
-    assert propagation.psf_sample_to_pupil_sample(psf_sample, samples, wvl, efl) == dzeta
+    dzeta2 = propagation.psf_sample_to_pupil_sample(psf_sample, samples, wvl, efl)
+    assert dzeta2 == dzeta
 
 
 def test_obj_oriented_wavefront_focusing_reverses():
-    x = y = np.arange(128, dtype=np.float32)
     z = np.random.rand(128, 128)
-    wf = propagation.Wavefront(x=x, y=y, fcn=z, wavelength=HeNe)
-    wf2 = wf.focus(1, 1).unfocus(1, 1)  # first is efl, meaningless.  second is Q, we neglect padding at the moment
-    assert np.allclose(wf.fcn, wf2.fcn)
+    dx = 1
+    wf = propagation.Wavefront(dx=dx, cmplx_field=z, wavelength=HeNe)
+    wf2 = wf.focus(1, 1).unfocus(1, 1)  # first is efl, meaningless.  second is Q, we neglect padding here
+    assert np.allclose(wf.data, wf2.data)
 
 
 def test_unfocus_fft_mdft_equivalent_Wavefront():
-    x = y = np.linspace(-1, 1, SAMPLES)
-    z = np.random.rand(SAMPLES, SAMPLES)
-    wf = propagation.Wavefront(x=x, y=y, fcn=z, wavelength=HeNe, space='psf')
+    z = np.random.rand(128, 128)
+    dx = 1
+    wf = propagation.Wavefront(dx=dx, cmplx_field=z, wavelength=HeNe, space='psf')
     unfocus_fft = wf.unfocus(Q=2, efl=1)
     # magic number 4 - a bit unclear, but accounts for non-energy
     # conserving fft; sf is to satisfy parseval's theorem
@@ -42,23 +43,23 @@ def test_unfocus_fft_mdft_equivalent_Wavefront():
 
 
 def test_focus_fft_mdft_equivalent_Wavefront():
-    x = y = np.linspace(-1, 1, SAMPLES)
+    dx = 1
     z = np.random.rand(SAMPLES, SAMPLES)
-    wf = propagation.Wavefront(x=x, y=y, fcn=z, wavelength=HeNe, space='pupil')
+    wf = propagation.Wavefront(dx=dx, cmplx_field=z, wavelength=HeNe, space='pupil')
     unfocus_fft = wf.focus(Q=2, efl=1)
-    sf = fttools.mdft._norm(wf.data, 2, unfocus_fft.samples_x)
+    sf = fttools.mdft._norm(wf.data, 2, unfocus_fft.data.shape[1])
     unfocus_mdft = wf.focus_fixed_sampling(
         efl=1,
-        sample_spacing=unfocus_fft.sample_spacing,
-        samples=unfocus_fft.samples_x)
+        dx=unfocus_fft.dx,
+        samples=unfocus_fft.data.shape[1])
 
     assert np.allclose(unfocus_fft.data, unfocus_mdft.data*sf)
 
 
 def test_frespace_functions():
-    x = y = np.linspace(-1, 1, SAMPLES)
+    dx = 1
     z = np.random.rand(SAMPLES, SAMPLES)
-    wf = propagation.Wavefront(x=x, y=y, fcn=z, wavelength=HeNe, space='pupil')
+    wf = propagation.Wavefront(dx=dx, cmplx_field=z, wavelength=HeNe, space='pupil')
     wf = wf.free_space(1, 1)
     assert wf
 
@@ -81,8 +82,6 @@ def test_fresnel_number_correct():
 
 def test_can_mul_wavefronts():
     data = np.random.rand(2, 2).astype(np.complex128)
-    x = np.array([1, 2])
-    y = np.array([1, 2])
-    wf = propagation.Wavefront(x=x, y=y, fcn=data, wavelength=.6328)
+    wf = propagation.Wavefront(cmplx_field=data, dx=1, wavelength=.6328)
     wf2 = wf * 2
     assert wf2
