@@ -148,6 +148,7 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
                        prop_dist=prop_dist,
                        wavelength=wavelength,
                        output_dx=input_dx)  # not a typo
+
     Q /= wavefunction.shape[0] / output_samples[0]
     field = mdft.idft2(ary=wavefunction, Q=Q, samples=output_samples)
     return field
@@ -161,9 +162,9 @@ def Q_for_sampling(input_diameter, prop_dist, wavelength, output_dx):
     input_diameter : `float`
         diameter of the input array in millimeters
     prop_dist : `float`
-        propagation distance along the z distance
+        propagation distance along the z distance, millimeters
     wavelength : `float`
-        wavelength of light
+        wavelength of light, microns
     output_dx : `float`
         sampling in the output plane, microns
 
@@ -173,7 +174,7 @@ def Q_for_sampling(input_diameter, prop_dist, wavelength, output_dx):
         requesite Q
 
     """
-    resolution_element = (wavelength * prop_dist) / (input_diameter)
+    resolution_element = (wavelength * prop_dist * 1e3) / (input_diameter)
     return resolution_element / output_dx
 
 
@@ -207,7 +208,7 @@ def focus_units(wavefunction, input_dx, efl, wavelength, Q):
                                       samples=samples_x,      # 1e3 corrects
                                       wavelength=wavelength,  # for unit
                                       efl=efl) / 1e3          # translation
-    dx_y = pupil_sample_to_psf_sample(pupil_sample=input_dx,  # factor of
+    dx_y = pupil_sample_to_psf_sample(pupil_sample=input_dx,
                                       samples=samples_y,
                                       wavelength=wavelength,
                                       efl=efl) / 1e3
@@ -577,10 +578,6 @@ class Wavefront:
         if isinstance(samples, int):
             samples = (samples, samples)
 
-        samples_y, samples_x = samples
-        # floor div of negative s, not negative of floor div of s
-        # has correct rounding semantics for fft grid alignment
-        y, x = [fftrange(s, config.precision)*dx for s in samples]
         data = focus_fixed_sampling(
             wavefunction=self.data,
             input_dx=self.dx,
