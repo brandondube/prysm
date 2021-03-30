@@ -38,3 +38,21 @@ A [guide](https://prysm.readthedocs.io/en/stable/user_guide/index.html) for usin
 
 If you find an issue with prysm, please open an [issue](https://github.com/brandondube/prysm/issues) or [pull request](https://github.com/brandondube/prysm/pulls).  Prysm has some usage of f-strings, so any code contributed is only expected to work on python 3.6+, and is licensed under the [MIT license](https://github.com/brandondube/prysm/blob/master/LICENSE.md).  The library is
 most in need of contributions in the form of tests and documentation.
+
+## Heritage
+
+Here lies a short list of organizations or projects using prysm:
+
+- prysm was used to perform phase retrieval used to focus Nav and Hazcam, enhanced engineering cameras used to operate the Mars2020 Perserverence rover.
+
+- prysm is used to build the official model of LOWFS, the Low Order Wavefront Sensing (and Control) system for the Roman coronoagraph instrument.  In this application, it has been used to validate dynamics of a hardware testbed to 35 picometers, or 0.08% of the injected dynamics.
+
+- prysm is used by several FFRDCs in the US, as well as their equivalent organizations abroad
+
+- prysm is used by multiple high and ultra precision optics manufactures as part of their metrology data processing workflow
+
+- prysm is used by multiple interferometer vendors to cross validate their own software offerings
+
+- prysm is used at multiple universities to model optics both in a generic capacity and laboratory systems
+
+There are likely many more.  These are key uses known to the authors.
