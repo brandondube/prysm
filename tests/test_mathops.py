@@ -14,17 +14,6 @@ def sample_data_2d():
     return np.random.rand(TEST_ARR_SIZE, TEST_ARR_SIZE)
 
 
-# below here, tests purely for function not accuracy
-def test_fft2(sample_data_2d):
-    result = mathops.engine.fft.fft2(sample_data_2d)
-    assert type(result) is np.ndarray
-
-
-def test_ifft2(sample_data_2d):
-    result = mathops.engine.fft.ifft2(sample_data_2d)
-    assert type(result) is np.ndarray
-
-
 @pytest.mark.parametrize('num', [1, 3, 5, 7, 9, 11, 13, 15, 991, 100000000000001])
 def test_is_odd_odd_numbers(num):
     assert mathops.is_odd(num)

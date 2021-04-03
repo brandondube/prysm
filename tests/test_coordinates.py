@@ -4,7 +4,6 @@ import pytest
 import numpy as np
 
 from prysm import coordinates
-from prysm.mathops import engine as e
 
 TEST_SAMPLES = 32
 
@@ -35,8 +34,8 @@ def data_2d_complex():
     [np.linspace(-1, 1, TEST_SAMPLES), np.linspace(-1, 1, TEST_SAMPLES)]])
 def test_cart_to_polar(x, y):
     rho, phi = coordinates.cart_to_polar(x, y, vec_to_grid=False)
-    assert np.allclose(rho, e.sqrt(x**2 + y**2))
-    assert np.allclose(phi, e.arctan2(y, x))
+    assert np.allclose(rho, np.sqrt(x**2 + y**2))
+    assert np.allclose(phi, np.arctan2(y, x))
 
 
 @pytest.mark.parametrize('rho, phi', [
@@ -44,11 +43,11 @@ def test_cart_to_polar(x, y):
     [0, 90],
     [0, 180],
     [-1, 90],
-    [np.linspace(0, 1, TEST_SAMPLES), np.linspace(0, 2 * e.pi, TEST_SAMPLES)]])
+    [np.linspace(0, 1, TEST_SAMPLES), np.linspace(0, 2 * np.pi, TEST_SAMPLES)]])
 def test_polar_to_cart(rho, phi):
     x, y = coordinates.polar_to_cart(rho, phi)
-    assert np.allclose(x, rho * e.cos(phi))
-    assert np.allclose(y, rho * e.sin(phi))
+    assert np.allclose(x, rho * np.cos(phi))
+    assert np.allclose(y, rho * np.sin(phi))
 
 
 # TODO: tests below here are for function, not accuracy

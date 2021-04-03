@@ -6,8 +6,8 @@ from scipy import optimize
 
 from .mathops import (
     np, jinc,
-    ndimage_engine as ndimage,
-    special_engine as special
+    ndimage,
+    special
 )
 from .coordinates import uniform_cart_to_polar
 

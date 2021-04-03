@@ -5,7 +5,7 @@ from scipy import special
 
 from .jacobi import jacobi, jacobi_sequence
 
-from prysm.mathops import engine as np, kronecker, gamma, sign
+from prysm.mathops import np, kronecker, gamma, sign
 
 
 def g_qbfs(n_minus_1):

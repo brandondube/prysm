@@ -1,7 +1,7 @@
 """Utility functions."""
 from operator import itemgetter
 
-from .mathops import engine as e
+from .mathops import np
 
 
 def mean(array):
@@ -18,7 +18,7 @@ def mean(array):
         mean value
 
     """
-    non_nan = e.isfinite(array)
+    non_nan = np.isfinite(array)
     return array[non_nan].mean()
 
 
@@ -36,7 +36,7 @@ def pv(array):
         PV of the array
 
     """
-    non_nan = e.isfinite(array)
+    non_nan = np.isfinite(array)
     return array[non_nan].max() - array[non_nan].min()
 
 
@@ -54,8 +54,8 @@ def rms(array):
         RMS of the array
 
     """
-    non_nan = e.isfinite(array)
-    return e.sqrt((array[non_nan] ** 2).mean())
+    non_nan = np.isfinite(array)
+    return np.sqrt((array[non_nan] ** 2).mean())
 
 
 def Sa(array):
@@ -72,7 +72,7 @@ def Sa(array):
         Ra of the array
 
     """
-    non_nan = e.isfinite(array)
+    non_nan = np.isfinite(array)
     ary = array[non_nan]
     mean = ary.mean()
     return abs(ary - mean).sum() / ary.size
@@ -92,7 +92,7 @@ def std(array):
         std of the array
 
     """
-    non_nan = e.isfinite(array)
+    non_nan = np.isfinite(array)
     ary = array[non_nan]
     return ary.std()
 
@@ -113,8 +113,8 @@ def ecdf(x):
         cumulative distribution function of the data
 
     """
-    xs = e.sort(x)
-    ys = e.arange(1, len(xs) + 1) / float(len(xs))
+    xs = np.sort(x)
+    ys = np.arange(1, len(xs) + 1) / float(len(xs))
     return xs, ys
 
 

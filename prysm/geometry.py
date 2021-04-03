@@ -4,7 +4,7 @@ import numpy as truenp
 from scipy import spatial
 
 # from .conf import config
-from .mathops import engine as np
+from .mathops import np
 from .coordinates import cart_to_polar, optimize_xy_separable, polar_to_cart
 
 
