@@ -51,8 +51,11 @@ def ptf_from_psf(psf, dx):
     """
     data, df = transform_psf(psf, dx)
     cy, cx = (int(np.ceil(s / 2)) for s in data.shape)
+    # it might be slightly faster to do this after conversion to rad with a -=
+    # op, but the phase wrapping there would be tricky.  Best to do this before
+    # for robustness.
+    data /= data[cy, cx]
     dat = np.angle(data)
-    dat /= dat[cy, cx]
     return RichData(data=dat, dx=df, wavelength=None)
 
 
