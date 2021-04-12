@@ -174,7 +174,7 @@ def Q_for_sampling(input_diameter, prop_dist, wavelength, output_dx):
         requesite Q
 
     """
-    resolution_element = (wavelength * prop_dist * 1e3) / (input_diameter)
+    resolution_element = (wavelength * prop_dist) / (input_diameter)
     return resolution_element / output_dx
 
 
@@ -276,7 +276,7 @@ def pupil_sample_to_psf_sample(pupil_sample, samples, wavelength, efl):
         the sample spacing in the PSF plane
 
     """
-    return (efl * wavelength * 1e3) / (pupil_sample * samples)
+    return (efl * wavelength) / (pupil_sample * samples)
 
 
 def psf_sample_to_pupil_sample(psf_sample, samples, wavelength, efl):
@@ -299,7 +299,7 @@ def psf_sample_to_pupil_sample(psf_sample, samples, wavelength, efl):
         the sample spacing in the pupil plane
 
     """
-    return (wavelength * efl * 1e3) / (psf_sample * samples)
+    return (efl * wavelength) / (psf_sample * samples)
 
 
 def fresnel_number(a, L, lambda_):
