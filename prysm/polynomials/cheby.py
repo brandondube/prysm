@@ -16,7 +16,8 @@ def cheby1(n, x):
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
-    return jacobi(n, -.5, -.5, x)
+    c = 1 / jacobi(n, -.5, -.5, 1)  # single div, many mul
+    return jacobi(n, -.5, -.5, x) * c
 
 
 def cheby1_sequence(ns, x):
@@ -32,7 +33,13 @@ def cheby1_sequence(ns, x):
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
-    return jacobi_sequence(ns, -.5, -.5, x)
+    ns = list(ns)
+    cs = [1/jacobi(n, -.5, -.5, 1) for n in ns]
+    seq = jacobi_sequence(ns, -.5, -.5, x)
+    cntr = 0
+    for elem in seq:
+        yield elem * cs[cntr]
+        cntr += 1
 
 
 def cheby2(n, x):
@@ -46,7 +53,8 @@ def cheby2(n, x):
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
-    return jacobi(n, .5, .5, x)
+    c = (n+1) / jacobi(n, .5, .5, 1)  # single div, many mul
+    return jacobi(n, .5, .5, x) * c
 
 
 def cheby2_sequence(ns, x):
@@ -62,7 +70,13 @@ def cheby2_sequence(ns, x):
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
-    return jacobi_sequence(ns, .5, .5, x)
+    ns = list(ns)
+    cs = [(n+1)/jacobi(n, .5, .5, 1) for n in ns]
+    seq = jacobi_sequence(ns, .5, .5, x)
+    cntr = 0
+    for elem in seq:
+        yield elem * cs[cntr]
+        cntr += 1
 
 
 def cheby1_2d_sequence(ns, ms, x, y):

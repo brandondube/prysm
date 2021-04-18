@@ -4,8 +4,7 @@ from prysm.mathops import np
 
 def weight(alpha, beta, x):
     """The weight function of the jacobi polynomials for a given alpha, beta value."""
-    one_minus_x = 1 - x
-    return (one_minus_x ** alpha) * (one_minus_x ** beta)
+    return (1 - x) ** alpha * (1 + x) ** beta
 
 
 def recurrence_ac_startb(n, alpha, beta):
