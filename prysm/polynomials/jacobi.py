@@ -11,7 +11,7 @@ def recurrence_ac_startb(n, alpha, beta):
     """a and c terms of the recurrence relation from Wikipedia, * P_n^(a,b).
 
     Also computes partial b term; all components without x
-    """  # NOQA
+    """
     a = (2 * n) * (n + alpha + beta) * (2 * n + alpha + beta - 2)
     c = 2 * (n + alpha - 1) * (n + beta - 1) * (2 * n + alpha + beta)
     b1 = (2 * n + alpha + beta - 1)

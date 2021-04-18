@@ -2,6 +2,8 @@
 
 from collections import defaultdict
 
+import numpy as truenp
+
 from .jacobi import jacobi, jacobi_sequence
 
 from prysm.mathops import np, kronecker, sign, is_odd
@@ -11,7 +13,7 @@ from prysm.plotting import share_fig_ax
 
 def zernike_norm(n, m):
     """Norm of a Zernike polynomial with n, m indexing."""
-    return np.sqrt((2 * (n + 1)) / (1 + kronecker(m, 0)))
+    return truenp.sqrt((2 * (n + 1)) / (1 + kronecker(m, 0)))
 
 
 def zero_separation(n):
@@ -91,9 +93,9 @@ def zernike_nm_sequence(nms, r, t, norm=True):
     # benchmarked at 12.26 ns/element (256x256), 4.6GHz CPU = 56 clocks per element
     # ~36% faster than previous impl (12ms => 8.84 ms)
     x = 2 * r ** 2 - 1
-    ms = list(e[1] for e in nms)
-    am = np.abs(ms)
-    amu = np.unique(am)
+    ms = [e[1] for e in nms]
+    am = truenp.abs(ms)
+    amu = truenp.unique(am)
 
     def factory():
         return 0
@@ -109,7 +111,7 @@ def zernike_nm_sequence(nms, r, t, norm=True):
 
     for k in jacobi_sequences_mjn:
         nj = jacobi_sequences_mjn[k]
-        jacobi_sequences_mjn[k] = np.arange(nj+1)
+        jacobi_sequences_mjn[k] = truenp.arange(nj+1)
 
     jacobi_sequences = {}
 
