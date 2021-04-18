@@ -122,6 +122,27 @@ def sum_of_xy_modes(modesx, modesy, x, y, weightsx=None, weightsy=None):
     return sum_x + sum_y
 
 
+def sum_of_modes(modes, weights):
+    """Compute a sum of 2D modes.
+
+    Parameters
+    ----------
+    modes : `iterable`
+        sequence of ndarray of shape (k, m, n);
+        a list of length k with elements of shape (m,n) works
+    weights : `numpy.ndarray`
+        weight of each mode
+
+    Returns
+    -------
+    `numpy.ndarry`
+        ndarray of shape (m, n) that is the sum of modes as given
+
+    """
+    # dot product of the 0th dim of modes and weights => weighted sum
+    return np.tensordot(modes, weights, axes=(0, 0))
+
+
 def hopkins(a, b, c, r, t, H):
     """Hopkins' aberration expansion.
 
@@ -163,3 +184,29 @@ def hopkins(a, b, c, r, t, H):
     c3 = H ** c
 
     return c1 * c2 * c3
+
+
+def lstsq(modes, data):
+    """Least-Squares fit of modes to data.
+
+    Parameters
+    ----------
+    modes : iterable
+        modes to fit; sequence of ndarray of shape (m, n)
+    data : `numpy.ndarray`
+        data to fit, of shape (m, n)
+        place NaN values in data for points to ignore
+
+    Returns
+    -------
+    `numpy.ndarray`
+        fit coefficients
+
+    """
+    mask = np.isfinite(data)
+    data = data[mask]
+    modes = np.array(modes)
+    modes = modes.reshape((modes.shape[0], -1))  # flatten second dim
+    modes = modes[:, mask.ravel()].T  # transpose moves modes to columns, as needed for least squares fit
+    c, *_ = np.linalg.lstsq(modes, data, rcond=None)
+    return c
