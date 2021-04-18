@@ -6,7 +6,12 @@ import numpy as np
 from prysm.coordinates import cart_to_polar
 from prysm import polynomials
 
-from scipy.special import jacobi as sps_jac
+from scipy.special import (
+    jacobi as sps_jac,
+    legendre as sps_leg,
+    chebyt as sps_cheby1,
+    chebyu as sps_cheby2
+)
 
 
 # TODO: add regression tests against scipy.special.eval_legendre etc
@@ -99,6 +104,45 @@ def test_ansi_2_term_can_construct(rho, phi):
     assert ary.any()
 
 
+def test_zernike_sequence_same_as_loop(rho, phi):
+    nms = (
+        (2, 0),  # defocus
+        (4, 0),  # sph1
+        (6, 0),
+        (8, 0),  # sph3
+        (2, 2),  # ast, cma, trefoil sort of out of order, test there isn't some implicit assumption about ordering
+        (2, -2),
+        (3, 1),
+        (3, 3),
+        (3, -1),
+        (3, -3),
+    )
+    seq = list(polynomials.zernike_nm_sequence(nms, rho, phi))
+    for elem, nm in zip(seq, nms):
+        exp = polynomials.zernike_nm(*nm, rho, phi)
+        assert np.allclose(exp, elem)
+
+
+def test_zernike_to_magang_functions():
+    # data has piston, tt, power, sph, ast, cma, tre = 7 unique things
+    data = [
+        (0, 0, 1),
+        (1, 1, 1),
+        (1, -1, 1),
+        (2, 0, 1),
+        (4, 0, 1),
+        (2, 2, 1),
+        (2, -2, 1),
+        (3, 1, 1),
+        (3, -1, 1),
+        (3, 3, 1),
+        (3, -3, 1)
+    ]
+    magang = polynomials.zernikes_to_magnitude_angle(data)
+    # TODO: also test correct magnitude and angle
+    assert len(magang) == 7
+
+
 @pytest.mark.parametrize('n', [0, 1, 2, 3, 4])
 @pytest.mark.parametrize('alpha, beta', [
     (0, 0),
@@ -106,7 +150,54 @@ def test_ansi_2_term_can_construct(rho, phi):
     (-0.75, 0),
     (1, -0.75)])
 def test_jacobi_1_4_match_scipy(n, alpha, beta):
-    x = np.linspace(-1, 1, 32)
-    prysm_ = polynomials.jacobi(n=n, alpha=alpha, beta=beta, x=x)
-    scipy_ = sps_jac(n=n, alpha=alpha, beta=beta)(x)
+    prysm_ = polynomials.jacobi(n=n, alpha=alpha, beta=beta, x=X)
+    scipy_ = sps_jac(n=n, alpha=alpha, beta=beta)(X)
     assert np.allclose(prysm_, scipy_)
+
+
+def test_jacobi_weight_correct():
+    from prysm.polynomials.jacobi import weight
+    # these are cheby1 weights
+    alpha = -0.5
+    beta = -0.5
+    x = X
+    res = weight(alpha, beta, x)
+    exp = (1-x)**alpha * (1+x)**beta
+    assert np.allclose(res, exp)
+
+
+@pytest.mark.parametrize('n', [0, 1, 2, 3, 4, 5])
+def test_legendre_matches_scipy(n):
+    prysm_ = polynomials.legendre(n, X)
+    scipy_ = sps_leg(n)(X)
+    assert np.allclose(prysm_, scipy_)
+
+
+@pytest.mark.parametrize('n', [0, 1, 2, 3, 4, 5])
+def test_cheby1_matches_scipy(n):
+    prysm_ = polynomials.cheby1(n, X)
+    scipy_ = sps_cheby1(n)(X)
+    assert np.allclose(prysm_, scipy_)
+
+
+@pytest.mark.parametrize('n', [0, 1, 2, 3, 4, 5])
+def test_cheby2_matches_scipy(n):
+    prysm_ = polynomials.cheby2(n, X)
+    scipy_ = sps_cheby2(n)(X)
+    assert np.allclose(prysm_, scipy_)
+
+
+def test_cheby1_seq_matches_loop():
+    ns = [0, 1, 2, 3, 4, 5]
+    seq = list(polynomials.cheby1_sequence(ns, X))
+    for elem, n in zip(seq, ns):
+        exp = polynomials.cheby1(n, X)
+        assert np.allclose(exp, elem)
+
+
+def test_cheby2_seq_matches_loop():
+    ns = [0, 1, 2, 3, 4, 5]
+    seq = list(polynomials.cheby2_sequence(ns, X))
+    for elem, n in zip(seq, ns):
+        exp = polynomials.cheby2(n, X)
+        assert np.allclose(exp, elem)
