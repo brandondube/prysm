@@ -602,7 +602,7 @@ def read_zygo_datx(file):
         try:
             intens_block = list(f['Data']['Intensity'].keys())[0]
             intensity = np.flipud(f['Data']['Intensity'][intens_block][()].astype(np.uint16))
-        except KeyError:
+        except (KeyError, OSError):
             intensity = None
 
         # load phase
@@ -613,11 +613,13 @@ def read_zygo_datx(file):
         # get a little metadata
         no_data = phase_obj.attrs['No Data'][0]
         wvl = phase_obj.attrs['Wavelength'][0] * 1e9  # Zygo stores wavelength in meters, we want output in nanometers
-        punit = phase_obj.attrs['Unit'][0].decode('UTF-8')  # this for some reason is "b'Fringes'", need to slice off b' and '
+        punit = phase_obj.attrs['Unit'][0]
+        if isinstance(punit, bytes):
+            punit = punit.decode('UTF-8')
         scale_factor = phase_obj.attrs['Interferometric Scale Factor']
         obliquity = phase_obj.attrs['Obliquity Factor']
         # get the phase and process it as required
-        phase = np.flipud(f['Data']['Surface'][phase_key][()])
+        phase = phase_obj[()]
         # step 1, flip (above)
         # step 2, clip the nans
         # step 3, convert punit to nm
@@ -653,7 +655,9 @@ def read_zygo_datx(file):
             elif key in ['Property Bag List', 'Group Number', 'TextCount']:
                 continue  # h5py particulars
             if value.dtype == 'object':
-                value = value[0].decode('UTF-8')  # object dtype is a string
+                value = value[0]
+                if isinstance(value, bytes):
+                    value = value.decode('UTF-8')
             elif value.dtype in ['uint8', 'int32']:
                 value = int(value[0])
             elif value.dtype in ['float64']:
