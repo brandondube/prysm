@@ -3,7 +3,7 @@ import pytest
 
 import numpy as np
 
-from prysm.coordinates import cart_to_polar
+from prysm.coordinates import cart_to_polar, make_xy_grid
 from prysm import polynomials
 
 from scipy.special import (
@@ -143,6 +143,9 @@ def test_zernike_to_magang_functions():
     assert len(magang) == 7
 
 
+# - Jacobi, Cheby, Legendre
+
+
 @pytest.mark.parametrize('n', [0, 1, 2, 3, 4])
 @pytest.mark.parametrize('alpha, beta', [
     (0, 0),
@@ -173,6 +176,14 @@ def test_legendre_matches_scipy(n):
     assert np.allclose(prysm_, scipy_)
 
 
+def test_legendre_sequence_matches_loop():
+    ns = [1, 2, 3, 4, 5]
+    seq = polynomials.legendre_sequence(ns, X)
+    loop = [polynomials.legendre(n, X) for n in ns]
+    for elem, exp in zip(seq, loop):
+        assert np.allclose(elem, exp)
+
+
 @pytest.mark.parametrize('n', [0, 1, 2, 3, 4, 5])
 def test_cheby1_matches_scipy(n):
     prysm_ = polynomials.cheby1(n, X)
@@ -201,3 +212,25 @@ def test_cheby2_seq_matches_loop():
     for elem, n in zip(seq, ns):
         exp = polynomials.cheby2(n, X)
         assert np.allclose(exp, elem)
+
+
+# - higher order routines
+
+def test_sum_and_lstsq():
+    x, y = make_xy_grid(100, diameter=2)
+    ns = [0, 1, 2, 3, 4, 5]
+    ms = [1, 2, 3, 4, 5, 6, 7]
+    weights_x = np.random.rand(len(ns))
+    weights_y = np.random.rand(len(ms))
+    # "fun" thing, mix first and second kind chebyshev polynomials
+    mx, my = polynomials.separable_2d_sequence(ns, ms, x, y,
+                                               polynomials.cheby1_sequence,
+                                               polynomials.cheby2_sequence)
+
+    data = polynomials.sum_of_xy_modes(mx, my, x, y, weights_x, weights_y)
+    mx = [polynomials.mode_1d_to_2d(m, x, y, 'x') for m in mx]
+    my = [polynomials.mode_1d_to_2d(m, x, y, 'y') for m in my]
+    modes = mx + my  # concat
+    exp = list(weights_x) + list(weights_y)  # concat
+    coefs = polynomials.lstsq(modes, data)
+    assert np.allclose(coefs, exp)
