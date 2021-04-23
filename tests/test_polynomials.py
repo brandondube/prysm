@@ -283,3 +283,16 @@ def test_sum_and_lstsq():
     exp = list(weights_x) + list(weights_y)  # concat
     coefs = polynomials.lstsq(modes, data)
     assert np.allclose(coefs, exp)
+
+
+@pytest.mark.parametrize(['a', 'b', 'c'], [
+    [1, 1, 1],
+    [1, 3, 1],
+    [0, 2, 0],
+    [0, 4, 0],
+    [2, 2, 2]])
+def test_hopkins_correct(a, b, c, rho, phi):
+    H = np.sqrt(2)/2
+    res = polynomials.hopkins(a, b, c, rho, phi, H)
+    exp = np.cos(a*phi) * rho ** b * H ** c  # H =
+    assert np.allclose(res, exp)
