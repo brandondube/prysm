@@ -5,7 +5,7 @@ import numpy as np
 
 from prysm import bayer
 
-TEST_CFAs = ['rggb']
+TEST_CFAs = ['rggb', 'bggr']
 
 
 N = 100
@@ -31,3 +31,14 @@ def test_demosaic_malvar_right_shape(cfa):
     data = np.random.rand(N, N)
     trichrom = bayer.demosaic_malvar(data, cfa)
     assert trichrom.shape == (N, N, 3)
+
+
+@pytest.mark.parametrize('cfa', TEST_CFAs)
+def test_wb_prescale_functions(cfa):
+    data = np.random.rand(N, N)
+    bayer.wb_prescale(data, 1, 2, 3, 4, cfa)
+
+
+def test_wb_scale_functions():
+    data = np.random.rand(N, N, 3)
+    bayer.wb_scale(data, 1, 2, 3)

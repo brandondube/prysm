@@ -49,7 +49,7 @@ def wb_scale(trichromatic, wr, wg, wb):
     Parameters
     ----------
     trichromatic : `numpy.ndarray`
-        ndarray of shape (3, m, n), a float dtype
+        ndarray of shape (m, n, 3), a float dtype
     wr : `float`
         red scale factor, out = in * wr
     wg : `float`
@@ -62,11 +62,11 @@ def wb_scale(trichromatic, wr, wg, wb):
     # speedup vs similarity of interface to wb_prescale and impact of wg almost
     # always being 1, and thus skippable
     if wr != 1:
-        trichromatic[0, ...] *= wr
+        trichromatic[..., 0] *= wr
     if wg != 1:
-        trichromatic[1, ...] *= wg
+        trichromatic[..., 1] *= wg
     if wb != 1:
-        trichromatic[2, ...] *= wb
+        trichromatic[..., 2] *= wb
 
 
 def composite_bayer(r, g1, g2, b, cfa='rggb', output=None):
