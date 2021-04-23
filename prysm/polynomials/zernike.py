@@ -383,15 +383,15 @@ def top_n(coefs, n=5):
         list of tuples (magnitude, index, term)
 
     """
-    coefsv = np.asarray(coefs.values())
+    coefsv = np.array(list(coefs.values()))
     coefs_work = abs(coefsv)
-    oidxs = np.asarray(list(coefs.keys()))
+    oidxs = np.array(list(coefs.keys()))
     idxs = np.argpartition(coefs_work, -n)[-n:]  # argpartition does some magic to identify the top n (unsorted)
     idxs = idxs[np.argsort(coefs_work[idxs])[::-1]]  # use argsort to sort them in ascending order and reverse
-    big_terms = coefs[idxs]  # finally, take the values from the
-    big_idxs = oidxs[idxs]
-    names = [nm_to_name(*p) for p in oidxs][idxs]  # p = pair (n,m)
-    return list(zip(big_terms, big_idxs, names))
+    big_terms = coefsv[idxs]  # finally, take the values from the
+    names = [nm_to_name(*p) for p in oidxs]
+    names = np.array(names)[idxs]  # p = pair (n,m)
+    return list(zip(big_terms, idxs, names))
 
 
 def barplot(coefs, names=None, orientation='h', buffer=1, zorder=3, number=True, offset=0, width=0.8, fig=None, ax=None):
@@ -431,8 +431,9 @@ def barplot(coefs, names=None, orientation='h', buffer=1, zorder=3, number=True,
     from matplotlib import pyplot as plt
     fig, ax = share_fig_ax(fig, ax)
 
-    coefs = np.asarray(list(coefs.values()))
+    coefs2 = np.asarray(list(coefs.values()))
     idxs = np.asarray(list(coefs.keys()))
+    coefs = coefs2
     lims = (idxs[0] - buffer, idxs[-1] + buffer)
     if orientation.lower() in ('h', 'horizontal'):
         vmin, vmax = coefs.min(), coefs.max()

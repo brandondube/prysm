@@ -99,6 +99,13 @@ def test_nm_to_fringe_round_trips(fringe_idx):
     assert j == fringe_idx
 
 
+@pytest.mark.parametrize('j', range(1, 100))
+def test_ansij_roudn_trips(j):
+    n, m = polynomials.ansi_j_to_nm(j)
+    jj = polynomials.nm_to_ansi_j(n, m)
+    assert j == jj
+
+
 def test_ansi_2_term_can_construct(rho, phi):
     ary = polynomials.zernike_nm(3, 1, rho, phi)
     assert ary.any()
@@ -141,6 +148,51 @@ def test_zernike_to_magang_functions():
     magang = polynomials.zernikes_to_magnitude_angle(data)
     # TODO: also test correct magnitude and angle
     assert len(magang) == 7
+
+
+def test_zernike_topn_correct():
+    data = {
+        (3, 1): 1,
+        (3, -1): -1,
+        (2, 0): 10,  # mag 10 index 1 term == (2,0)
+        (4, 0): 9,
+        (6, 0): 12,
+        (2, 2): 8,
+        (3, 3): 7,
+    }
+    exp = [
+        (12, 4, 'Secondary Spherical'),
+        (10, 2, 'Defocus'),
+        (9, 3, 'Primary Spherical'),
+        (8, 5, 'Primary Astigmatism 00°'),
+        (7, 6, 'Primary Trefoil X')
+    ]
+    res = polynomials.top_n(data, 5)
+    assert exp == res
+
+
+def test_barplot_functions():
+    data = {
+        2: 1,
+        3: 2,
+        4: 3,
+        5: 4,
+        6: 5
+    }
+    fig, ax = polynomials.zernike_barplot(data)
+    assert fig, ax
+
+
+def test_barplot_magnitudes_functions():
+    data = {
+        2: 1,
+        3: 2,
+        4: 3,
+        5: 4,
+        6: 5
+    }
+    fig, ax = polynomials.zernike_barplot_magnitudes(data)
+    assert fig, ax
 
 
 @pytest.mark.parametrize('n', [0, 1, 2, 3, 4])
@@ -201,3 +253,25 @@ def test_cheby2_seq_matches_loop():
     for elem, n in zip(seq, ns):
         exp = polynomials.cheby2(n, X)
         assert np.allclose(exp, elem)
+
+
+def test_sum_of_2d_matches_loop(rho, phi):
+    nms = [polynomials.noll_to_nm(i) for i in range(1, 12)]
+    weights = np.random.rand(len(nms))
+    modes = list(polynomials.zernike_nm_sequence(nms, rho, phi))
+    summed = polynomials.sum_of_modes(modes, weights)
+    exp = sum([m*w for m, w in zip(modes, weights)])
+    assert np.allclose(summed, exp)
+
+
+@pytest.mark.parametrize(['a', 'b', 'c'], [
+    [1, 1, 1],
+    [1, 3, 1],
+    [0, 2, 0],
+    [0, 4, 0],
+    [2, 2, 2]])
+def test_hopkins_correct(a, b, c, rho, phi):
+    H = np.sqrt(2)/2
+    res = polynomials.hopkins(a, b, c, rho, phi, H)
+    exp = np.cos(a*phi) * rho ** b * H ** c  # H =
+    assert np.allclose(res, exp)
