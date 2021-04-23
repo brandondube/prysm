@@ -425,7 +425,7 @@ class Wavefront:
 
         """
         if phase is not None:
-            phase_prefix = -1j * 2 * np.pi / wavelength / 1e3  # / 1e3 does nm-to-um for phase on a scalar
+            phase_prefix = 1j * 2 * np.pi / wavelength / 1e3  # / 1e3 does nm-to-um for phase on a scalar
             P = amplitude * np.exp(phase_prefix * phase)
         else:
             P = amplitude
