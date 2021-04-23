@@ -1,3 +1,4 @@
+"""Basic operations for bayer data."""
 from .mathops import np, ndimage
 
 top_left = (slice(0, None, 2), slice(0, None, 2))
@@ -6,6 +7,66 @@ bottom_left = (slice(0, None, 2), slice(1, None, 2))
 bottom_right = (slice(1, None, 2), slice(1, None, 2))
 
 ErrBadCFA = NotImplementedError('only rggb, bggr bayer patterns currently implemented')
+
+
+def wb_prescale(mosaic, wr, wg1, wg2, wb, cfa='rggb'):
+    """Apply white-balance prescaling in-place to mosaic.
+
+    Parameters
+    ----------
+    mosaic : `numpy.ndarray`
+        ndarray of shape (m, n), a float dtype
+    wr : `float`
+        red white balance prescalar
+    wg1 : `float`
+        G1 white balance prescalar
+    wg2 : `float`
+        G2 white balance prescalar
+    wb : `float`
+        blue white balance prescalar
+    cfa : `str`, optional, {'rggb', 'bggr'}
+        color filter arrangement
+
+    """
+    cfa = cfa.lower()
+    if cfa == 'rggb':
+        mosaic[top_left] *= wr
+        mosaic[top_right] *= wg1
+        mosaic[bottom_left] *= wg2
+        mosaic[bottom_right] *= wb
+    elif cfa == 'bggr':
+        mosaic[top_left] *= wb
+        mosaic[top_right] *= wg1
+        mosaic[bottom_left] *= wg2
+        mosaic[bottom_right] *= wr
+    else:
+        raise ErrBadCFA
+
+
+def wb_scale(trichromatic, wr, wg, wb):
+    """Apply white balance scaling in-place to trichromatic.
+
+    Parameters
+    ----------
+    trichromatic : `numpy.ndarray`
+        ndarray of shape (3, m, n), a float dtype
+    wr : `float`
+        red scale factor, out = in * wr
+    wg : `float`
+        green scale factor, out = in * wg
+    wb : `float`
+        blue scale factor, out = in * wb
+
+    """
+    # TODO: a tensordot might be faster than this, consider value of possible
+    # speedup vs similarity of interface to wb_prescale and impact of wg almost
+    # always being 1, and thus skippable
+    if wr != 1:
+        trichromatic[0, ...] *= wr
+    if wg != 1:
+        trichromatic[1, ...] *= wg
+    if wb != 1:
+        trichromatic[2, ...] *= wb
 
 
 def composite_bayer(r, g1, g2, b, cfa='rggb', output=None):
@@ -46,6 +107,89 @@ def composite_bayer(r, g1, g2, b, cfa='rggb', output=None):
         output[top_right] = g1[top_right]
         output[bottom_left] = g2[bottom_left]
         output[bottom_right] = r[bottom_right]
+    else:
+        raise ErrBadCFA
+
+    return output
+
+
+def decomposite_bayer(img, cfa='rggb'):
+    """Decomposite an interleaved image into densely sampled color planes.
+
+    Parameters
+    ----------
+    img : `numpy.ndarray`
+        composited ndarray of shape (m, n)
+    cfa : `str`, optional, {'rggb', 'bggr'}
+        color filter arangement
+
+    Returns
+    -------
+    r : `numpy.ndarray`
+        ndarray of shape (m//2, n//2)
+    g1 : `numpy.ndarray`
+        ndarray of shape (m//2, n//2)
+    g2 : `numpy.ndarray`
+        ndarray of shape (m//2, n//2)
+    b : `numpy.ndarray`
+        ndarray of shape (m//2, n//2)
+
+    """
+    if cfa == 'rggb':
+        r = img[top_left]
+        g1 = img[top_right]
+        g2 = img[bottom_left]
+        b = img[bottom_right]
+    elif cfa == 'bggr':
+        b = img[top_left]
+        g1 = img[top_right]
+        g2 = img[bottom_left]
+        r = img[bottom_right]
+
+    return r, g1, g2, b
+
+
+def recomposite_bayer(r, g1, g2, b, cfa='rggb', output=None):
+    """Recomposite raw color planes back into a mosaic.
+
+    This function is the reciprocal of decomposite_bayer
+
+    Parameters
+    ----------
+    r : `numpy.ndarray`
+        ndarray of shape (m, n)
+    g1 : `numpy.ndarray`
+        ndarray of shape (m, n)
+    g2 : `numpy.ndarray`
+        ndarray of shape (m, n)
+    b : `numpy.ndarray`
+        ndarray of shape (m, n)
+    cfa : `str`, optional, {'rggb', 'bggr'}
+        color filter arangement
+    output : `numpy.ndarray`, optional
+        output array, of shape (2m, 2n) and same dtype as r, g1, g2, b
+
+    Returns
+    -------
+    `numpy.ndarray`
+        array containing the re-composited color planes
+
+    """
+    m, n = r.shape
+    if output is None:
+        output = np.empty((2*m, 2*n), dtype=r.dtype)
+
+    cfa = cfa.lower()
+    if cfa == 'rggb':
+        output[top_left] = r
+        output[top_right] = g1
+        output[bottom_left] = g2
+        output[bottom_right] = b
+    elif cfa == 'bggr':
+        output[top_left] = b
+        output[top_right] = g1
+        output[bottom_left] = g2
+        output[bottom_right] = r
     else:
         raise ErrBadCFA
 
