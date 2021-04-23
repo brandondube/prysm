@@ -63,7 +63,7 @@ def cart_to_polar(x, y, vec_to_grid=True):
         y = y[:, np.newaxis]
         x = x[np.newaxis, :]
 
-    rho = np.sqrt(x ** 2 + y ** 2)
+    rho = np.hypot(x, y)
     phi = np.arctan2(y, x)
     return rho, phi
 

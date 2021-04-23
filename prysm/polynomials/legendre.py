@@ -2,8 +2,6 @@
 
 from .jacobi import jacobi, jacobi_sequence
 
-from prysm.coordinates import optimize_xy_separable
-
 
 def legendre(n, x):
     """Legendre polynomial of order n.
@@ -33,34 +31,3 @@ def legendre_sequence(ns, x):
 
     """
     return jacobi_sequence(ns, 0, 0, x)
-
-
-def legendre_2d_sequence(ns, ms, x, y):
-    """Legendre polynomials in both X and Y (as for a rectangular aperture).
-
-    Parameters
-    ----------
-    ns : iterable of `int`
-        orders n for the x axis, if None not computed and return only contains y
-    ms : iterable of `int`
-        orders m for the y axis, if None not computed and return only contains x
-    x : `numpy.ndarray`
-        x coordinates, 1D or 2D
-    y : `numpy.ndarray`
-        y coordinates, 1D or 2D
-
-    Returns
-    -------
-    `list`, `list` [x, y] modes, with each of 'x' and 'y' in the return being
-        a list of its own containing 1D modes
-
-    """
-    x, y = optimize_xy_separable(x, y)
-    if ns is not None and ms is not None:
-        xs = list(jacobi_sequence(ns, 0, 0, x))
-        ys = list(jacobi_sequence(ms, 0, 0, y))
-        return xs, ys
-    if ns is not None:
-        return list(jacobi_sequence(ns, 0, 0, x))
-    if ms is not None:
-        return list(jacobi_sequence(ns, 0, 0, y))

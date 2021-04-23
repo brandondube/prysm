@@ -3,7 +3,7 @@ import pytest
 
 import numpy as np
 
-from prysm.coordinates import cart_to_polar
+from prysm.coordinates import cart_to_polar, make_xy_grid
 from prysm import polynomials
 
 from scipy.special import (
@@ -225,6 +225,14 @@ def test_legendre_matches_scipy(n):
     assert np.allclose(prysm_, scipy_)
 
 
+def test_legendre_sequence_matches_loop():
+    ns = [1, 2, 3, 4, 5]
+    seq = polynomials.legendre_sequence(ns, X)
+    loop = [polynomials.legendre(n, X) for n in ns]
+    for elem, exp in zip(seq, loop):
+        assert np.allclose(elem, exp)
+
+
 @pytest.mark.parametrize('n', [0, 1, 2, 3, 4, 5])
 def test_cheby1_matches_scipy(n):
     prysm_ = polynomials.cheby1(n, X)
@@ -255,23 +263,23 @@ def test_cheby2_seq_matches_loop():
         assert np.allclose(exp, elem)
 
 
-def test_sum_of_2d_matches_loop(rho, phi):
-    nms = [polynomials.noll_to_nm(i) for i in range(1, 12)]
-    weights = np.random.rand(len(nms))
-    modes = list(polynomials.zernike_nm_sequence(nms, rho, phi))
-    summed = polynomials.sum_of_modes(modes, weights)
-    exp = sum([m*w for m, w in zip(modes, weights)])
-    assert np.allclose(summed, exp)
+# - higher order routines
 
+def test_sum_and_lstsq():
+    x, y = make_xy_grid(100, diameter=2)
+    ns = [0, 1, 2, 3, 4, 5]
+    ms = [1, 2, 3, 4, 5, 6, 7]
+    weights_x = np.random.rand(len(ns))
+    weights_y = np.random.rand(len(ms))
+    # "fun" thing, mix first and second kind chebyshev polynomials
+    mx, my = polynomials.separable_2d_sequence(ns, ms, x, y,
+                                               polynomials.cheby1_sequence,
+                                               polynomials.cheby2_sequence)
 
-@pytest.mark.parametrize(['a', 'b', 'c'], [
-    [1, 1, 1],
-    [1, 3, 1],
-    [0, 2, 0],
-    [0, 4, 0],
-    [2, 2, 2]])
-def test_hopkins_correct(a, b, c, rho, phi):
-    H = np.sqrt(2)/2
-    res = polynomials.hopkins(a, b, c, rho, phi, H)
-    exp = np.cos(a*phi) * rho ** b * H ** c  # H =
-    assert np.allclose(res, exp)
+    data = polynomials.sum_of_xy_modes(mx, my, x, y, weights_x, weights_y)
+    mx = [polynomials.mode_1d_to_2d(m, x, y, 'x') for m in mx]
+    my = [polynomials.mode_1d_to_2d(m, x, y, 'y') for m in my]
+    modes = mx + my  # concat
+    exp = list(weights_x) + list(weights_y)  # concat
+    coefs = polynomials.lstsq(modes, data)
+    assert np.allclose(coefs, exp)

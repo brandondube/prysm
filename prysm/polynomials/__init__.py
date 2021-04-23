@@ -5,13 +5,12 @@ from prysm.coordinates import optimize_xy_separable
 
 from .jacobi import jacobi, jacobi_sequence  # NOQA
 from .cheby import (  # NOQA
-    cheby1, cheby1_sequence, cheby1_2d_sequence,
-    cheby2, cheby2_sequence, cheby2_2d_sequence,
+    cheby1, cheby1_sequence,
+    cheby2, cheby2_sequence,
 )
 from .legendre import (  # NOQA
     legendre,
     legendre_sequence,
-    legendre_2d_sequence,
 )  # NOQA
 from .zernike import (  # NOQA
     zernike_norm,
@@ -35,6 +34,49 @@ from .qpoly import (  # NOQA
     Qcon, Qcon_sequence,
     Q2d, Q2d_sequence,
 )
+
+
+def separable_2d_sequence(ns, ms, x, y, fx, fy=None, greedy=True):
+    """Sequence of separable (x,y) orthogonal polynomials.
+
+    Parameters
+    ----------
+    ns : `Iterable` of `int`
+        sequence of orders to evaluate in the X dimension
+    ms : `Iterable` of `int`
+        sequence of orders to evaluate in the Y dimension
+    x : `numpy.ndarray`
+        array of shape (m, n) or (n,) containing the X points
+    y : `numpy.ndarray`
+        array of shape (m, n) or (m,) containing the Y points
+    fx : `callable`
+        function which returns a generator or other sequence
+        of modes, given args (ns, x)
+    fy : `callable`, optional
+        function which returns a generator or other sequence
+        of modes, given args (ns, x);
+        y equivalent of fx, fx is used if None
+    greedy : `bool`, optional
+        if True, consumes any generators returned by fx or fy and
+        returns lists.
+
+    Returns
+    -------
+    `Iterable`, `Iterable`
+        sequence of x modes (1D) and y modes (1D)
+
+    """
+    if fy is None:
+        fy = fx
+
+    x, y = optimize_xy_separable(x, y)
+    modes_x = fx(ns, x)
+    modes_y = fy(ms, y)
+    if greedy:
+        modes_x = list(modes_x)
+        modes_y = list(modes_y)
+
+    return modes_x, modes_y
 
 
 def mode_1d_to_2d(mode, x, y, which='x'):
@@ -64,11 +106,7 @@ def mode_1d_to_2d(mode, x, y, which='x'):
 
     """
     x, y = optimize_xy_separable(x, y)
-
-    out = np.broadcast_to(mode, (x.size, y.size))
-    if which.lower() == 'y':
-        out = out.swapaxes(0, 1)  # broadcast_to will repeat along rows
-
+    out = np.broadcast_to(mode, (y.size, x.size))
     return out
 
 
@@ -116,13 +154,13 @@ def sum_of_xy_modes(modesx, modesy, x, y, weightsx=None, weightsy=None):
         sum_y += m
 
     # broadcast to 2D and return
-    shape = (x.size, y.size)
+    shape = (y.size, x.size)
     sum_x = np.broadcast_to(sum_x, shape)
     sum_y = np.broadcast_to(sum_y, shape)
     return sum_x + sum_y
 
 
-def sum_of_modes(modes, weights):
+def sum_of_2d_modes(modes, weights):
     """Compute a sum of 2D modes.
 
     Parameters
