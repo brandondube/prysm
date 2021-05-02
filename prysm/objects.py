@@ -61,10 +61,10 @@ def slit_ft(width_x, width_y, fx, fy):
         2D array containing the analytic fourier transform
 
     """
-    if width_x > 0 and width_y > 0:
+    if width_x is not None and width_y is not None:
         return (np.sinc(fx * width_x) +
                 np.sinc(fy * width_y)).astype(config.precision)
-    elif width_x > 0 and width_y == 0:
+    elif width_x is not None and width_y is None:
         return np.sinc(fx * width_x).astype(config.precision)
     else:
         return np.sinc(fy * width_y).astype(config.precision)

@@ -61,5 +61,5 @@ def test_pinhole_ft_functional(rt):
     [.05, None],
     [.05, .05]])
 def test_slit_ft_functional(xy, wx, wy):
-    r, _ = rt
+    r, _ = xy
     assert objects.slit_ft(wx, wy, *xy).any()
