@@ -114,7 +114,49 @@ def _local_window(cy, cx, center, dx, samples_per_seg, x, y):
     return slice(offset_y, upper_y), slice(offset_x, upper_x)
 
 
-def composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x, y, segment_angle=90, exclude=(0,)):
+class CompositeHexagonalAperture:
+    """An aperture composed of several hexagonal segments."""
+
+    def __init__(self, x, y, rings, segment_diameter, segment_separation, segment_angle=90, exclude=()):
+        """Create a new CompositeHexagonalAperture.
+
+        Note that __init__ is relatively computationally expensive and hides a lot of work.
+
+        Parameters
+        ----------
+        x : `numpy.ndarray`
+            array of x sample positions, of shape (m, n)
+        y : `numpy.ndarray`
+            array of y sample positions, of shape (m, n)
+        rings : `int`
+            number of rings in the structure
+        segment_diameter : `float`
+            diameter of each segment, same units as x
+        segment_separation : `float`
+            center-to-center distance between segments, same units as x
+        segment_angle : `float`, optional, {0, 90}
+            rotation angle of each segment
+        exclude : sequence of `int`
+            which segment numbers to exclude.
+            defaults to all segments included.
+            The 0th segment is the center of the array.
+            Other segments begin from the "up" orientation and count clockwise.
+
+        """
+        (
+            self.vtov,
+            self.all_centers,
+            self.windows,
+            self.local_coords,
+            self. local_masks,
+            self.segment_ids,
+            self.amp
+         ) = _composite_hexagonal_aperture(rings, segment_diameter, segment_separation,
+                                           x, y, segment_angle, exclude)
+        self.exclude = exclude
+
+
+def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x, y, segment_angle=90, exclude=(0,)):
     if segment_angle not in {0, 90}:
         raise ValueError('can only synthesize composite apertures with hexagons along a cartesian axis')
 
