@@ -1,4 +1,6 @@
 """Detector-related simulations."""
+import numbers
+import itertools
 
 from .mathops import np
 from .mathops import is_odd
@@ -181,17 +183,17 @@ def pixel(x, y, width_x, width_y):
     return (x <= width_x) & (x >= -width_x) & (y <= width_y) & (y >= -width_y)
 
 
-def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
+def bindown(array, factor, mode='avg'):
     """Bin (resample) an array.
 
+    Note, for each axis of array, shape must be an integer multiple of nx/ny
     Parameters
     ----------
     array : `numpy.ndarray`
         array of values
-    nsamples_x : `int`
-        number of samples in x axis to bin by
-    nsamples_y : `int`
-        number of samples in y axis to bin by.  If None, duplicates value from nsamples_x
+    factor : `int` or sequence of `int`
+        binning factor.  If an integer, broadcast to each axis of array,
+        else unique factors may be used for each axis.
     mode : `str`, {'avg', 'sum'}
         sum or avg, how to adjust the output signal
 
@@ -202,7 +204,7 @@ def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
 
     Notes
     -----
-    Array should be 2D.  TODO: patch to allow 3D data.
+    Array should be 2D.
 
     If the size of `array` is not evenly divisible by the number of samples,
     the algorithm will trim around the border of the array.  If the trim
@@ -215,56 +217,24 @@ def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
         invalid mode
 
     """
-    if nsamples_y is None:
-        nsamples_y = nsamples_x
+    if isinstance(factor, numbers.Number):
+        factor = tuple([factor] * array.ndim)
 
-    if nsamples_x == 1 and nsamples_y == 1:
-        return array
-
-    # determine amount we need to trim the array
-    samples_x, samples_y = array.shape
-    total_samples_x = samples_x // nsamples_x
-    total_samples_y = samples_y // nsamples_y
-    final_idx_x = total_samples_x * nsamples_x
-    final_idx_y = total_samples_y * nsamples_y
-
-    residual_x = int(samples_x - final_idx_x)
-    residual_y = int(samples_y - final_idx_y)
-
-    # if the amount to trim is symmetric, trim symmetrically.
-    if not is_odd(residual_x) and not is_odd(residual_y):
-        samples_to_trim_x = residual_x // 2
-        samples_to_trim_y = residual_y // 2
-        trimmed_data = array[samples_to_trim_x:final_idx_x + samples_to_trim_x,
-                             samples_to_trim_y:final_idx_y + samples_to_trim_y]
-    # if not, trim more on the left.
-    else:
-        samples_tmp_x = (samples_x - final_idx_x) // 2
-        samples_tmp_y = (samples_y - final_idx_y) // 2
-        samples_top = int(np.floor(samples_tmp_y))
-        samples_bottom = int(np.ceil(samples_tmp_y))
-        samples_left = int(np.ceil(samples_tmp_x))
-        samples_right = int(np.floor(samples_tmp_x))
-        trimmed_data = array[samples_left:final_idx_x + samples_right,
-                             samples_bottom:final_idx_y + samples_top]
-
-    intermediate_view = trimmed_data.reshape(total_samples_x, nsamples_x,
-                                             total_samples_y, nsamples_y)
+    # these two lines look very complicated
+    # we want to take an array of shape (m, n) and a binning factor of say, 2
+    # and reshape the array to (m/2, 2, n/2, 2)
+    # these lines do that, for an arbitrary number of dimensions
+    output_shape = tuple(s//n for s, n in zip(array.shape, factor))
+    output_shape = tuple(itertools.chain(*zip(output_shape, factor)))
+    intermediate_view = array.reshape(output_shape)
+    # reductiona xes produces (1, 3) for 2D, or (1, 3, 5) for 3D, etc.
+    reduction_axes = tuple(range(1, 2*array.ndim, 2))
 
     if mode.lower() in ('avg', 'average', 'mean'):
-        output_data = intermediate_view.mean(axis=(1, 3))
+        output_data = intermediate_view.mean(axis=reduction_axes)
     elif mode.lower() == 'sum':
-        output_data = intermediate_view.sum(axis=(1, 3))
+        output_data = intermediate_view.sum(axis=reduction_axes)
     else:
         raise ValueError('mode must be average of sum.')
 
-    # trim as needed to make even number of samples.
-    # TODO: allow work with images that are of odd dimensions
-    px_x, px_y = output_data.shape
-    trim_x, trim_y = 0, 0
-    if is_odd(px_x):
-        trim_x = 1
-    if is_odd(px_y):
-        trim_y = 1
-
-    return output_data[:px_x - trim_x, :px_y - trim_y]
+    return output_data
