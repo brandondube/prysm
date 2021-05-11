@@ -98,6 +98,7 @@ def test_recenter_functions(sample_i_mutate):
     assert sample_i_mutate.recenter()
 
 
+@pytest.mark.skip
 def test_fit_psd(sample_i_mutate):
     a, b, c = fit_psd(*sample_i_mutate.psd().slices().azavg)
     assert a
