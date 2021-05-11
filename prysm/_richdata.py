@@ -4,7 +4,7 @@ from numbers import Number
 from collections.abc import Iterable
 
 from .mathops import np, interpolate
-from .coordinates import cart_to_polar, uniform_cart_to_polar, polar_to_cart
+from .coordinates import cart_to_polar, make_xy_grid, uniform_cart_to_polar, polar_to_cart
 from .plotting import share_fig_ax
 from .fttools import fftrange
 
@@ -70,24 +70,18 @@ class RichData:
     @property
     def shape(self):
         """Proxy to phase or data shape."""
-        try:
-            return self.data.shape
-        except AttributeError:
-            return (0, 0)
+        return self.data.shape
 
     @property
     def size(self):
         """Proxy to phase or data size."""
-        try:
-            return self.data.size
-        except AttributeError:
-            return 0
+        return self.data.size
 
     @property
     def x(self):
         """X coordinate axis, 1D."""
         if self._x is None:
-            self._x = fftrange(self.data.shape[1], self.data.dtype) * self.dx
+            self._x, self._y = make_xy_grid(self.data.shape, dx=self.dx)
 
         return self._x
 
@@ -100,7 +94,7 @@ class RichData:
     def y(self):
         """Y coordinate axis, 1D."""
         if self._y is None:
-            self._y = fftrange(self.data.shape[0], self.data.dtype) * self.dx
+            self._x, self._y = make_xy_grid(self.data.shape, dx=self.dx)
 
         return self._y
 
@@ -113,7 +107,7 @@ class RichData:
     def r(self):
         """r coordinate axis, 2D."""
         if self._r is None:
-            self._r, _ = cart_to_polar(self.x, self.y)
+            self._r, self._t = cart_to_polar(self.x, self.y)
 
         return self._r
 
@@ -125,7 +119,7 @@ class RichData:
     def t(self):
         """t coordinate axis, 2D."""
         if self._t is None:
-            _, self._t = cart_to_polar(self.x, self.y)
+            self._r, self._t = cart_to_polar(self.x, self.y)
 
         return self._t
 

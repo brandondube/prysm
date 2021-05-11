@@ -87,3 +87,15 @@ def test_plot2d_log():
     fig, ax = rd.plot2d(log=True)
     assert fig
     plt.close(fig)
+
+
+def test_xyrt_synthesis_for_no_xytr_as_expected():
+    data = np.random.rand(10, 10)
+    dx = 1.234
+    rd = rdata.RichData(data, dx, None)
+    x, y = rd.x, rd.y
+    r, t = rd.r, rd.t
+    assert (x[0, 1] - x[0, 0]) == pytest.approx(dx, 0.001)
+    assert y.shape == data.shape
+    assert r.shape == data.shape
+    assert t.shape == data.shape
