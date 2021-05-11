@@ -4,8 +4,6 @@ import inspect
 
 import numpy as truenp
 
-from astropy import units as u
-
 from scipy import optimize
 
 from .conf import config
@@ -998,10 +996,6 @@ class Interferogram(RichData):
             desired RMS value of the output, if rms=None, no normalization is done
         mask : `str`, optional
             mask defining the clear aperture
-        xyunit : `astropy.unit` or `str`, optional
-            astropy unit or string which satisfies hasattr(astropy.units, xyunit)
-        zunit : `astropy.unit` or `str`, optional
-             astropy unit or string which satisfies hasattr(astropy.units, xyunit)
         psd_fcn : `callable`
             function used to generate the PSD
         **psd_fcn_kwargs:
