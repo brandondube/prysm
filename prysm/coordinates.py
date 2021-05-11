@@ -212,7 +212,7 @@ def make_xy_grid(shape, *, dx=0, diameter=0, grid=True):
         shape = (shape, shape)
 
     if diameter != 0:
-        dx = diameter/shape[0]
+        dx = diameter/max(shape)
 
     y, x = (fftrange(s, dtype=config.precision) * dx for s in shape)
 
