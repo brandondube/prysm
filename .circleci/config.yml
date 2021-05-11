@@ -35,9 +35,10 @@ jobs:
           pkg-manager: pip
           app-dir: ~/project/.circleci/
           pip-dependency-file: req.txt
+          args: ../.  # install prysm, too.
           # app-dir: ~/project/package-directory/  # If you're requirements.txt isn't in the root directory.
           # pip-dependency-file: test-requirements.txt  # if you have a different name for your requirements file, maybe one that combines your runtime and test requirements.
       - run:
           name: Run tests
           # This assumes pytest is installed via the install-package step above
-          command: pytest
+          command: pytest --cov=prysm tests/
