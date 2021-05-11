@@ -1,7 +1,6 @@
 """Tests for samplefiles."""
-import pytest
 
-from prysm import sample_files
+from prysm.sample_data import sample_files
 
 
 def test_barbara():

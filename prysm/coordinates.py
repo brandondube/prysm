@@ -1,10 +1,43 @@
 """Coordinate conversions."""
 from .conf import config
-from .mathops import np, interpolate_engine as interpolate
+from .mathops import np, interpolate
+from .fttools import fftrange
 
 
-def cart_to_polar(x, y):
-    '''Return the (rho,phi) coordinates of the (x,y) input points.
+def optimize_xy_separable(x, y):
+    """Optimize performance for downstream operations.
+
+    Parameters
+    ----------
+    x : `numpy.ndarray`
+        2D or 1D array
+    y : `numpy.ndarray`
+        2D or 1D array
+
+    Returns
+    -------
+    x, y
+        optimized arrays (x as 1D row, y as 1D column)
+
+    Notes
+    -----
+    If a calculation is separable in x and y, performing it on a meshgrid of x/y
+    takes 2N^2 operations, for N= the linear dimension (the 2 being x and y).
+    If the calculation is separable, this can be reduced to 2N by using numpy
+    broadcast functionality and two 1D calculations.
+
+    """
+    if x.ndim == 2:
+        # assume same dimensionality of x and y
+        # second indexing converts y to a broadcasted column vector
+        x = x[0, :]
+        y = y[:, 0][:, np.newaxis]
+
+    return x, y
+
+
+def cart_to_polar(x, y, vec_to_grid=True):
+    """Return the (rho,phi) coordinates of the (x,y) input points.
 
     Parameters
     ----------
@@ -12,6 +45,8 @@ def cart_to_polar(x, y):
         x coordinate
     y : `numpy.ndarray` or number
         y coordinate
+    vec_to_grid : `bool`, optional
+        if True, convert a vector (x,y) input to a grid (r,t) output
 
     Returns
     -------
@@ -20,14 +55,21 @@ def cart_to_polar(x, y):
     phi : `numpy.ndarray` or number
         azimuthal coordinate
 
-    '''
-    rho = np.sqrt(x ** 2 + y ** 2)
+    """
+    # if given x, y as vectors, and the user wants a grid out
+    # don't need to check y, let np crash for the user
+    # hasattr introduces support for scalars as well as array-likes
+    if vec_to_grid and hasattr(x, 'ndim') and x.ndim == 1:
+        y = y[:, np.newaxis]
+        x = x[np.newaxis, :]
+
+    rho = np.hypot(x, y)
     phi = np.arctan2(y, x)
     return rho, phi
 
 
 def polar_to_cart(rho, phi):
-    '''Return the (x,y) coordinates of the (rho,phi) input points.
+    """Return the (x,y) coordinates of the (rho,phi) input points.
 
     Parameters
     ----------
@@ -43,7 +85,7 @@ def polar_to_cart(rho, phi):
     y : `numpy.ndarray` or number
         y coordinate
 
-    '''
+    """
     x = rho * np.cos(phi)
     y = rho * np.sin(phi)
     return x, y
@@ -143,294 +185,38 @@ def resample_2d_complex(array, sample_pts, query_pts, kind='linear'):
     return r + 1j * c
 
 
-def make_xy_grid(samples_x, samples_y=None, radius=1):
+def make_xy_grid(shape, *, dx=0, diameter=0, grid=True):
     """Create an x, y grid from -1, 1 with n number of samples.
 
     Parameters
     ----------
-    samples_x : `int`
-        number of samples in x direction
-    samples_y : `int`
-        number of samples in y direction, if None, copied from sample_x
-    radius : `float`
-        radius of the output array, will span -radius, radius
+    shape : `int` or tuple of int
+        number of samples per dimension.  If a scalar value, broadcast to
+        both dimensions.  Order is numpy axis convention, (row, col)
+    dx : `float`
+        inter-sample spacing, ignored if diameter is provided
+    diameter : `float`
+        diameter, clobbers dx if both given
+    grid : `bool`, optional
+        if True, return meshgrid of x,y; else return 1D vectors (x, y)
 
     Returns
     -------
-    xx : `numpy.ndarray`
-        x meshgrid
-    yy : `numpy.ndarray`
-        y meshgrid
+    x : `numpy.ndarray`
+        x grid
+    y : `numpy.ndarray`
+        y grid
 
     """
-    if samples_y is None:
-        samples_y = samples_x
-    x = np.linspace(-radius, radius, samples_x, dtype=config.precision)
-    y = np.linspace(-radius, radius, samples_y, dtype=config.precision)
-    xx, yy = np.meshgrid(x, y)
-    return xx, yy
+    if not isinstance(shape, tuple):
+        shape = (shape, shape)
 
+    if diameter != 0:
+        dx = diameter/max(shape)
 
-def make_rho_phi_grid(samples_x, samples_y=None, aligned='x', radius=1):
-    """Create an rho, phi grid from -1, 1 with n number of samples.
+    y, x = (fftrange(s, dtype=config.precision) * dx for s in shape)
 
-    Parameters
-    ----------
-    samples_x : `int`
-        number of samples in x direction
-    samples_y : `int`
-        number of samples in y direction, if None, copied from sample_x
-    radius : `float`
-        radius of the output array
+    if grid:
+        x, y = np.meshgrid(x, y)
 
-    Returns
-    -------
-    rho : `numpy.ndarray`
-        radial meshgrid
-    phi : `numpy.ndarray`
-        angular meshgrid
-
-    """
-    xx, yy = make_xy_grid(samples_x, samples_y, radius)
-    if aligned == 'x':
-        rho, phi = cart_to_polar(xx, yy)
-    else:
-        rho, phi = cart_to_polar(yy, xx)
-    return rho, phi
-
-
-def v_to_2v_minus_one(v):
-    """Transform v -> 2v-1."""
-    return 2 * v - 1
-
-
-def v_to_2v2_minus_one(v):
-    """Transform v -> 2v^2-1."""
-    return 2 * v ** 2 - 1
-
-
-def v_to_v_squared(v):
-    """Transform v -> v^2."""
-    return v ** 2
-
-
-def v_to_v_fouth(v):
-    """Transform v -> v^4."""
-    return v ** 4
-
-
-def v_to_v2_times_1_minus_v2(v):
-    """Transform v -> v^2(1 - v^2)."""
-    v2 = v ** 2
-    return v2 * (1 - v2)
-
-
-def v_to_4v2_minus_4v_plus1(v):
-    """Transform v -> (4v)^2 - 4v - 1."""
-    v4 = 4 * v
-    return v4 * v4 - v4 + 1
-
-
-def v_to_v_plus90(v):
-    """Transform v -> v+90 deg, v should be in radians."""
-    return v - (np.pi/2)
-    # return v
-
-
-def convert_transformation_to_v(transformation):
-    """Replace any of x,y,r,t with v in a transformation string."""
-    s = transformation
-    for letter in ('x', 'y', 'r', 't'):
-        s = s.replace(letter, 'v')
-
-    return s
-
-
-class GridCache:
-    """Cache of grid points."""
-    def __init__(self):
-        """Create a new GridCache instance."""
-        self.grids = {}
-        self.transformation_functions = {
-            'v -> 4v^2 - 4v + 1': v_to_4v2_minus_4v_plus1,
-            'v -> v^2 (1-v^2)': v_to_v2_times_1_minus_v2,
-            'v -> 2v^2 - 1': v_to_2v2_minus_one,
-            'v -> 2v - 1': v_to_2v_minus_one,
-            'v -> v^2': v_to_v_squared,
-            'v -> v^4': v_to_v_fouth,
-            'v -> v+90': v_to_v_plus90
-        }
-
-    def make_basic_grids(self, samples, radius):
-        """Create basic (unmodified) grids.
-
-        Parameters
-        ----------
-        samples : `int`
-            number of samples in the square grid
-        radius : `float`
-            radius of the array in units (not samples)
-
-        """
-        x, y = make_xy_grid(samples, radius=radius)
-        r, t = cart_to_polar(x, y)
-        self.grids[(samples, radius)] = {
-            'original': {
-                'x': x,
-                'y': y,
-                'r': r,
-                't': t,
-            },
-            'transformed': {}
-        }
-
-    def make_transformation(self, samples, radius, transformation):
-        """Make a transformed grid.
-
-        Parameters
-        ----------
-        samples : `int`
-            number of samples in the square grid
-        radius : `float`
-            radius of the array in units (not samples)
-        transformation : `str`
-            looks like "r => 2r^2 - 1"
-
-        """
-        # transformation looks like "r -> 2r^2 - 1"
-        # first letter is the variable
-        var = transformation[0]
-        trans2 = convert_transformation_to_v(transformation)
-
-        # the string is a key into a registry of functions
-        func = self.transformation_functions[trans2]
-
-        # there is a cache of this shape and radius,
-        # get the original variable and make/store the transformation
-        original = self.get_original_variable(samples, radius, var)
-        transformed = func(original)
-        self.grids[(samples, radius)]['transformed'][transformation] = transformed
-
-    def get_original_variable(self, samples, radius, variable):
-        """Retrieve an unmodified variable.
-
-        Parameters
-        ----------
-        samples : `int`
-            number of samples in the square grid
-        radius : `float`
-            radius of the array in units (not samples)
-        variable : `str`, {'x', 'y', 'r', 'p'}
-            which variable on the grid
-
-        Returns
-        -------
-        `numpy.ndarray`
-            array of shape (samples,samples)
-
-        """
-        outer = self.grids.get((samples, radius), None)
-        if outer is None:
-            self.make_basic_grids(samples, radius)
-            outer = self.grids.get((samples, radius), None)
-
-        return outer['original'][variable]
-
-    def get_transformed_variable(self, samples, radius, transformation):
-        """Retrieve a modified variable.
-
-        Parameters
-        ----------
-        samples : `int`
-            number of samples in the square grid
-        radius : `float`
-            radius of the array in units (not samples)
-        variable : `str`, {'x', 'y', 'r', 't'}
-            which variable on the grid
-        transformation : `str`
-            looks like "r => 2r^2 - 1"
-
-        Returns
-        -------
-        `numpy.ndarray`
-            array of shape (samples,samples)
-
-        """
-        outer = self.grids.get((samples, radius), None)
-        if outer is None:
-            self.make_transformation(samples, radius, transformation)
-            outer = self.grids.get((samples, radius), None)
-
-        try:
-            return outer['transformed'][transformation]
-        except KeyError:
-            # not DRY, doesn't really matter over 2 lines
-            self.make_transformation(samples, radius, transformation)
-            outer = self.grids.get((samples, radius), None)
-            return outer['transformed'][transformation]
-
-    def get_variable_transformed_or_not(self, samples, radius, variable_or_transformation):
-        """Retrieve a modified variable.
-
-        Parameters
-        ----------
-        samples : `int`
-            number of samples in the square grid
-        radius : `float`
-            radius of the array in units (not samples)
-        variable_or_transformation : `str` or None
-            looks like "r => 2r^2 - 1" for a transformation, or "r" for a variable
-            if None, returns None
-
-        Returns
-        -------
-        `numpy.ndarray`
-            array of shape (samples,samples)
-
-        """
-        if variable_or_transformation is None:
-            return None
-        elif len(variable_or_transformation) > 1:
-            return self.get_transformed_variable(samples, radius, variable_or_transformation)
-        else:
-            return self.get_original_variable(samples, radius, variable_or_transformation)
-
-    def __call__(self, samples, radius, x=None, y=None, r=None, t=None):
-        """Retrieve a modified variable.
-
-        Parameters
-        ----------
-        samples : `int`
-            number of samples in the square grid
-        radius : `float`
-            radius of the array in units (not samples)
-        x : `str`, optional
-            either 'x' or a transformation string which looks like "r => 2r^2 - 1"
-        y : `str`, optional
-            either 'y' or a transformation string which looks like "r => 2r^2 - 1"
-        r : `str`, optional
-            either 'r' or a transformation string which looks like "r => 2r^2 - 1"
-        t : `str`, optional
-            either 't' or a transformation string which looks like "r => 2r^2 - 1"
-        transformation : `str`
-            looks like "r => 2r^2 - 1"
-
-        Returns
-        -------
-        `dict`
-            has keys x,y,r,t which are 2D arrays of shape (samples,samples)
-
-        """
-        return {
-            'x': self.get_variable_transformed_or_not(samples, radius, x),
-            'y': self.get_variable_transformed_or_not(samples, radius, y),
-            'r': self.get_variable_transformed_or_not(samples, radius, r),
-            't': self.get_variable_transformed_or_not(samples, radius, t),
-        }
-
-    def clear(self):
-        """Empty the cache."""
-        self.grids = {}
-
-
-gridcache = GridCache()
+    return x, y

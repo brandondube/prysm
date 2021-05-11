@@ -1,378 +1,199 @@
 """Detector-related simulations."""
-from collections import deque
+import numbers
+import itertools
 
-from .conf import config
-from .mathops import engine as e
-from .convolution import Convolvable
-from .util import is_odd
+from .mathops import np
+from .mathops import is_odd
 
 
-class Detector(object):
-    """Model of a image sensor."""
+class Detector:
+    """Basic model of a detector, no fuss."""
 
-    def __init__(self, pitch_x=None, pitch_y=None, pixel='rectangle',
-                 resolution=(1024, 1024), nbits=16, framebuffer=10):
-        """Create a new Detector object.
+    def __init__(self, dark_current, read_noise, bias, fwc, conversion_gain, bits, exposure_time, prnu=None, dcnu=None):
+        """Initialize a new camera model.
 
         Parameters
         ----------
-        pixel_size : `float`
-            size of pixels, in um
-        resolution : `iterable`
-            (x,y) resolution in pixels
-        nbits : `int`
-            number of bits to digitize to
-        framebuffer : `int`
-            number of frames of data to store
+        dark_current : `float`
+            e-/sec, charge accumulated with no light reaching the sensor.
+        read_noise : `float`
+            e-, random gaussian noise associated with readout
+        bias : `float`
+            e-, uniform value added to readout to avoid negative numbers
+        fwc : `float`
+            e-, maximum number of electrons that can be held by one pixel
+        conversion_gain : `float`
+            e-/DN gain converting e- to DN,
+        bits : `int`
+            number of bits for the ADC, multiples of 2 in 8..16 are contemporary
+        exposure_time : `float`
+            exposure time, seconds
+        prnu : `numpy.ndarray`, optional
+            relative pixel response nonuiformity, a fixed map that the
+            input field is multiplied by.  ones_like is perfectly uniform.
+        dcnu : `numpy.ndarray`, optional
+            dark current nonuniformity, a fixed map that the dark current
+            is multiplied by.  ones_like is perfectly uniform.
 
         """
-        if isinstance(pixel, str):
-            pixel = pixel.lower()
-            if pixel == 'rectangle' and pitch_x is None and pitch_y is None:
-                raise ValueError('must provide at least x pitch for rectangular pixels.')
+        self.dark_current = dark_current
+        self.read_noise = read_noise
+        self.bias = bias
+        self.fwc = fwc
+        self.conversion_gain = conversion_gain
+        self.bits = bits
+        self.exposure_time = exposure_time
+        self.prnu = prnu
+        self.dcnu = dcnu
 
-            if pixel == 'rectangle':
-                pixel = PixelAperture(pitch_x, pitch_y)
-                self.rectangular_100pct_fillfactor_pix = True
-        else:
-            self.rectangular_100pct_fillfactor_pix = False
-
-        self.pixel = pixel
-
-        if pitch_y is None:
-            pitch_y = pitch_x
-
-        if not hasattr(resolution, '__iter__'):
-            resolution = (resolution, resolution)
-
-        self.pitch_x = pitch_x
-        self.pitch_y = pitch_y
-        self.resolution = resolution
-        self.bit_depth = nbits
-        self.captures = deque(maxlen=framebuffer)
-
-    def capture(self, convolvable):
-        """Sample a convolvable, mimics capturing a photo of an oversampled representation of an image.
+    def expose(self, aerial_img, frames=1):
+        """Form an exposure of an aerial image.
 
         Parameters
         ----------
-        convolvable : `prysm.Convolvable`
-            a convolvable object
-
-        Returns
-        -------
-        `prysm.convolvable`
-            a new convolvable object, as it would be sampled by the detector
-
-        Raises
-        ------
-        ValueError
-            if the convolvable would have to become supersampled by the detector;
-            this would lead to an inaccurate result and is not supported
-
-        """
-        ss = convolvable.sample_spacing
-        pitch_x_err = abs(self.pitch_x % ss) / ss
-        pitch_y_err = abs(self.pitch_y % ss) / ss
-
-        ptol = 0.01  # 1%
-        if (self.rectangular_100pct_fillfactor_pix
-           and (pitch_x_err < ptol)
-           and (pitch_y_err < ptol)):
-            ux, uy, data = bindown_with_units(self.pitch_x,
-                                              self.pitch_y,
-                                              convolvable.sample_spacing,
-                                              convolvable.data)
-            c_out = Convolvable(data=data, x=ux, y=uy, has_analytic_ft=False)
-        else:
-            from skimage.transform import resize
-            c_out = self.pixel.conv(convolvable)
-            ss = c_out.sample_spacing
-            py, px = c_out.shape
-            oy = int(e.floor(py * (ss / self.pitch_y)))
-            ox = int(e.floor(px * (ss / self.pitch_x)))
-
-            # resize combines decimation and interpolation and is an effective resampler
-            out_data = resize(c_out.data, (oy, ox), mode='reflect', anti_aliasing=False, clip=False, order=3)
-
-            oext_x = (ox - 1) * self.pitch_x / 2
-            oext_y = (oy - 1) * self.pitch_y / 2
-            out_x = e.arange(ox) * self.pitch_x - oext_x
-            out_y = e.arange(oy) * self.pitch_y - oext_y
-            c_out = Convolvable(data=out_data, x=out_x, y=out_y)
-
-        self.captures.append(c_out)
-        return c_out
-
-    def save_image(self, path, which='last'):
-        """Save an image captured by the detector.
-
-        Parameters
-        ----------
-        path : `string`
-            path to save the image to
-
-        which : `string` or `int`
-            if string, "first" or "last", otherwise index into the capture buffer of the camera.
-
-        Raises
-        ------
-        ValueError
-            bad target frame to save; should always be the a valid int < buffer_depth
-
-        """
-        if which.lower() == 'last':
-            self.captures[-1].save(path, self.bit_depth)
-        elif type(which) is int:
-            self.captures[which].save(path, self.bit_depth)
-        else:
-            raise ValueError('invalid "which" provided')
-
-    def show_image(self, which='last', fig=None, ax=None):
-        """Show an image captured by the detector.
-
-        Parameters
-        ----------
-        which : `string` or `int`
-            if string, "first" or "last", otherwise index into the capture buffer of the camera
-        fig : `matplotlib.figure.Figure`, optional
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`, optional
-            Axis containing the plot
-
-        Returns
-        -------
-        fig : `matplotlib.figure.Figure
-            Figure containing the plot
-        ax : `matplotlib.axes.Axis`
-            Axis containing the plot
-
-        """
-        if which.lower() == 'last':
-            which = -1
-
-        fig, ax = self.captures[which].plot2d(fig=fig, ax=ax)
-        return fig, ax
-
-    @property
-    def pitch(self):
-        """1D pixel pitch - minimum of x/y pitches."""
-        return min(self.pitch_x, self.pitch_y)
-
-    @pitch.setter
-    def pitch(self, pitch_x, pitch_y=None):
-        """Set the pixel pitch.
-
-        Parameters
-        ----------
-        pitch_x : `float`
-            x axis pixel pitch
-        pitch_y : `float`, optional
-            y axis pixel pitch, copies x pitch if not given.
-
-        """
-        pitch_y = pitch_x or pitch_y
-        self.pitch_x = pitch_x
-        self.pitch_y = pitch_y
-
-    @property
-    def fill_factor_x(self):
-        """Fill factor in the X axis."""
-        return self.pixel.width_x / self.pitch_x
-
-    @property
-    def fill_factor_y(self):
-        """Fill factor in the Y axis."""
-        return self.pixel.width_y / self.pitch_y
-
-    @property
-    def fill_factor(self):
-        """1D fill factor -- minimum of x/y fill factors."""
-        return min(self.fill_factor_x, self.fill_factor_y)
-
-    @property
-    def fs(self):
-        """Sampling frequency in cy/mm."""  # NQOA
-        return 1 / self.pitch * 1e3
-
-    @property
-    def nyquist(self):
-        """Nyquist frequency in cy/mm."""
-        return self.fs / 2
-
-    @property
-    def last(self):
-        """Last frame captured."""
-        return self.captures[-1]
-
-
-class OLPF(Convolvable):
-    """Optical Low Pass Filter."""
-
-    def __init__(self, width_x, width_y=None, sample_spacing=0, samples_x=None, samples_y=None):
-        """Create a new OLPF object.
-
-        Parameters
-        ----------
-        width_x : `float`
-            blur width in the x direction, microns
-        width_y : `float`
-            blur width in the y direction, microns
-        sample_spacing : `float`, optional
-            center to center spacing of samples
-        samples_x : `int`, optional
-            number of samples along x axis
-        samples_y : `int`, optional
-            number of samples along y axis; duplicates x if None
-
-        """
-        # compute relevant spacings
-        if width_y is None:
-            width_y = width_x
-        if samples_y is None:
-            samples_y = samples_x
-
-        self.width_x = width_x
-        self.width_y = width_y
-
-        if samples_x is None:  # do no math
-            data, ux, uy = None, None, None
-        else:
-            space_x = width_x / 2
-            space_y = width_y / 2
-            shift_x = int(space_x // sample_spacing)
-            shift_y = int(space_y // sample_spacing)
-            center_x = samples_x // 2
-            center_y = samples_y // 2
-
-            data = e.zeros((samples_x, samples_y))
-
-            data[center_y - shift_y, center_x - shift_x] = 1
-            data[center_y - shift_y, center_x + shift_x] = 1
-            data[center_y + shift_y, center_x - shift_x] = 1
-            data[center_y + shift_y, center_x + shift_x] = 1
-            ux = e.linspace(-space_x, space_x, samples_x)
-            uy = e.linspace(-space_y, space_y, samples_y)
-
-        super().__init__(data=data, x=ux, y=uy, has_analytic_ft=True)
-
-    def analytic_ft(self, x, y):
-        """Analytic fourier transform of a pixel aperture.
-
-        Parameters
-        ----------
-        x : `numpy.ndarray`
-            sample points in x axis
-        y : `numpy.ndarray`
-            sample points in y axis
+        aerial_img : `numpy.ndarray`
+            aerial image, with units of e-/sec.  Should include any QE as part
+            of its Z scaling
+        frames : `int`
+            number of images to expose, > 1 is functionally equivalent to
+            calling with frames=1 in a loop, but the random values are all drawn
+            at once which can much improve performance in GPU-based modeling.
 
         Returns
         -------
         `numpy.ndarray`
-            2D numpy array containing the analytic fourier transform
+            of shape (frames, *aerial_img.shape), if frames=1 the first dim
+            is squeezed, and output shape is same as input shape.
+            dtype=uint8 if nbits <= 8, else uint16 for <= 16, etc
+            not scaled to fill containers, i.e. a 12-bit image will have peak
+            DN of 4095 in a container that can reach 65535.
+
+            has units of DN.
 
         """
-        return (e.cos(2 * self.width_x * x) *
-                e.cos(2 * self.width_y * y)).astype(config.precision)
+        electrons = aerial_img * self.exposure_time
+        dark = self.dark_current * self.exposure_time
+        # if the dark is not uniform, scale by nonuniformity
+        if self.dcnu is not None:
+            dark = dark * self.dcnu
+
+        # ravel so that the random generation can be batched
+        electrons = (electrons + dark).ravel()
+        shot_noise = np.random.poisson(electrons, (frames, electrons.size))
+
+        if self.prnu is not None:
+            shot_noise = shot_noise * self.prnu
+
+        # 0 is zero mean
+        read_noise = np.random.normal(0, self.read_noise, shot_noise.shape)
+
+        # invert conversion gain, mul is faster than div
+        scaling = 1 / self.conversion_gain
+        input_to_adc = (shot_noise + read_noise + self.bias)
+        input_to_adc[input_to_adc > self.fwc] = self.fwc
+        output = input_to_adc * scaling
+        adc_cap = 2 ** self.bits
+        output[output < 0] = 0
+        output[output > adc_cap] = adc_cap
+        # output will be of type int64, only good for 63 unsigned bits
+        if self.bits <= 8:
+            output = output.astype(np.uint8)
+        elif self.bits <= 16:
+            output = output.astype(np.uint16)
+        elif self.bits <= 32:
+            output = output.astype(np.uint32)
+        else:
+            raise ValueError('numpy''s random functionality is inadequate for > 32 unsigned bits')
+
+        output = output.reshape((frames, *aerial_img.shape))
+        if frames == 1:
+            output = output[0, :, :]
+
+        return output
 
 
-class PixelAperture(Convolvable):
-    """The aperture of a rectangular pixel."""
-    def __init__(self, width_x, width_y=None, sample_spacing=0, samples_x=None, samples_y=None):
-        """Create a new `PixelAperture` object.
-
-        Parameters
-        ----------
-        width_x : `float`
-            width of the aperture in the x dimension, in microns.
-        width_y : `float`, optional
-            siez of the aperture in the y dimension, in microns
-        sample_spacing : `float`, optional
-            spacing of samples, in microns
-        samples_x : `int`, optional
-            number of samples in the x dimension
-        samples_y : `int`, optional
-            number of samples in the y dimension
-
-        """
-        if width_y is None:
-            width_y = width_x
-        if samples_y is None:
-            samples_y = samples_x
-
-        self.width_x = width_x
-        self.width_y = width_y
-
-        if samples_x is None:  # do no math
-            data, ux, uy = None, None, None
-        else:  # build PixelAperture model
-            center_x = samples_x // 2
-            center_y = samples_y // 2
-            half_width = width_x / 2
-            half_height = width_y / 2
-            steps_x = int(half_width // sample_spacing)
-            steps_y = int(half_height // sample_spacing)
-
-            data = e.zeros((samples_x, samples_y))
-            data[center_y - steps_y:center_y + steps_y,
-                 center_x - steps_x:center_x + steps_x] = 1
-            extx, exty = samples_x // 2 * sample_spacing, samples_y // 2 * sample_spacing
-            ux, uy = e.linspace(-extx, extx, samples_x), e.linspace(-exty, exty, samples_y)
-        super().__init__(data=data, x=ux, y=uy, has_analytic_ft=True)
-
-    def analytic_ft(self, x, y):
-        """Analytic fourier transform of a pixel aperture.
-
-        Parameters
-        ----------
-        x : `numpy.ndarray`
-            sample points in x axis
-        y : `numpy.ndarray`
-            sample points in y axis
-
-        Returns
-        -------
-        `numpy.ndarray`
-            2D numpy array containing the analytic fourier transform
-
-        """
-        return pixelaperture_analytic_otf(self.width_x, self.width_y, x, y)
-
-
-def pixelaperture_analytic_otf(width_x, width_y, freq_x, freq_y):
-    """Analytic MTF of a rectangular pixel aperture.
+def olpf_ft(fx, fy, width_x, width_y):
+    """Analytic FT of an optical low-pass filter, two or four pole.
 
     Parameters
     ----------
+    fx : `numpy.ndarray`
+        x spatial frequency, in cycles per micron
+    fy : `numpy.ndarray`
+        y spatial frequency, in cycles per micron
     width_x : `float`
         x diameter of the pixel, in microns
     width_y : `float`
         y diameter of the pixel, in microns
-    freq_x : `numpy.ndarray`
-        x spatial frequency, in cycles per micron
-    freq_y : `numpy.ndarray`
-        y spatial frequency, in cycles per micron
 
     Returns
     -------
     `numpy.ndarray`
-        MTF of the pixel aperture
+        FT of the OLPF
 
     """
-    return e.sinc(freq_x * width_x) * e.sinc(freq_y * width_y)
+    return np.cos(2 * width_x * fx) * np.cos(2 * width_y * fy)
 
 
-def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
+def pixel_ft(fx, fy, width_x, width_y):
+    """Analytic FT of a rectangular pixel aperture.
+
+    Parameters
+    ----------
+    fx : `numpy.ndarray`
+        x spatial frequency, in cycles per micron
+    fy : `numpy.ndarray`
+        y spatial frequency, in cycles per micron
+    width_x : `float`
+        x diameter of the pixel, in microns
+    width_y : `float`
+        y diameter of the pixel, in microns
+
+    Returns
+    -------
+    `numpy.ndarray`
+        FT of the pixel
+
+    """
+    return np.sinc(fx * width_x) * np.sinc(fy * width_y)
+
+
+def pixel(x, y, width_x, width_y):
+    """Spatial representation of a pixel.
+
+    Parameters
+    ----------
+    x : `numpy.ndarray`
+        x coordinates
+    y : `numpy.ndarray`
+        y coordinates
+    width_x : `float`
+        x diameter of the pixel, in microns
+    width_y : `float`
+        y diameter of the pixel, in microns
+
+    Returns
+    -------
+    `numpy.ndarray`
+        spatial representation of the pixel
+
+    """
+    width_x = width_x / 2
+    width_y = width_y / 2
+    return (x <= width_x) & (x >= -width_x) & (y <= width_y) & (y >= -width_y)
+
+
+def bindown(array, factor, mode='avg'):
     """Bin (resample) an array.
 
+    Note, for each axis of array, shape must be an integer multiple of nx/ny
     Parameters
     ----------
     array : `numpy.ndarray`
         array of values
-    nsamples_x : `int`
-        number of samples in x axis to bin by
-    nsamples_y : `int`
-        number of samples in y axis to bin by.  If None, duplicates value from nsamples_x
+    factor : `int` or sequence of `int`
+        binning factor.  If an integer, broadcast to each axis of array,
+        else unique factors may be used for each axis.
     mode : `str`, {'avg', 'sum'}
         sum or avg, how to adjust the output signal
 
@@ -383,7 +204,7 @@ def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
 
     Notes
     -----
-    Array should be 2D.  TODO: patch to allow 3D data.
+    Array should be 2D.
 
     If the size of `array` is not evenly divisible by the number of samples,
     the algorithm will trim around the border of the array.  If the trim
@@ -396,95 +217,24 @@ def bindown(array, nsamples_x, nsamples_y=None, mode='avg'):
         invalid mode
 
     """
-    if nsamples_y is None:
-        nsamples_y = nsamples_x
+    if isinstance(factor, numbers.Number):
+        factor = tuple([factor] * array.ndim)
 
-    if nsamples_x == 1 and nsamples_y == 1:
-        return array
-
-    # determine amount we need to trim the array
-    samples_x, samples_y = array.shape
-    total_samples_x = samples_x // nsamples_x
-    total_samples_y = samples_y // nsamples_y
-    final_idx_x = total_samples_x * nsamples_x
-    final_idx_y = total_samples_y * nsamples_y
-
-    residual_x = int(samples_x - final_idx_x)
-    residual_y = int(samples_y - final_idx_y)
-
-    # if the amount to trim is symmetric, trim symmetrically.
-    if not is_odd(residual_x) and not is_odd(residual_y):
-        samples_to_trim_x = residual_x // 2
-        samples_to_trim_y = residual_y // 2
-        trimmed_data = array[samples_to_trim_x:final_idx_x + samples_to_trim_x,
-                             samples_to_trim_y:final_idx_y + samples_to_trim_y]
-    # if not, trim more on the left.
-    else:
-        samples_tmp_x = (samples_x - final_idx_x) // 2
-        samples_tmp_y = (samples_y - final_idx_y) // 2
-        samples_top = int(e.floor(samples_tmp_y))
-        samples_bottom = int(e.ceil(samples_tmp_y))
-        samples_left = int(e.ceil(samples_tmp_x))
-        samples_right = int(e.floor(samples_tmp_x))
-        trimmed_data = array[samples_left:final_idx_x + samples_right,
-                             samples_bottom:final_idx_y + samples_top]
-
-    intermediate_view = trimmed_data.reshape(total_samples_x, nsamples_x,
-                                             total_samples_y, nsamples_y)
+    # these two lines look very complicated
+    # we want to take an array of shape (m, n) and a binning factor of say, 2
+    # and reshape the array to (m/2, 2, n/2, 2)
+    # these lines do that, for an arbitrary number of dimensions
+    output_shape = tuple(s//n for s, n in zip(array.shape, factor))
+    output_shape = tuple(itertools.chain(*zip(output_shape, factor)))
+    intermediate_view = array.reshape(output_shape)
+    # reductiona xes produces (1, 3) for 2D, or (1, 3, 5) for 3D, etc.
+    reduction_axes = tuple(range(1, 2*array.ndim, 2))
 
     if mode.lower() in ('avg', 'average', 'mean'):
-        output_data = intermediate_view.mean(axis=(1, 3))
+        output_data = intermediate_view.mean(axis=reduction_axes)
     elif mode.lower() == 'sum':
-        output_data = intermediate_view.sum(axis=(1, 3))
+        output_data = intermediate_view.sum(axis=reduction_axes)
     else:
         raise ValueError('mode must be average of sum.')
 
-    # trim as needed to make even number of samples.
-    # TODO: allow work with images that are of odd dimensions
-    px_x, px_y = output_data.shape
-    trim_x, trim_y = 0, 0
-    if is_odd(px_x):
-        trim_x = 1
-    if is_odd(px_y):
-        trim_y = 1
-
-    return output_data[:px_x - trim_x, :px_y - trim_y]
-
-
-def bindown_with_units(px_x, px_y, source_spacing, source_data):
-    """Perform bindown, returning unit axes and data.
-
-    Parameters
-    ----------
-    px_x : `float`
-        pixel pitch in the x direction, microns
-    px_y : `float`
-        pixel pitch in the y direction, microns
-    source_spacing : `float`
-        pixel pitch in the source data, microns
-    source_data : `numpy.ndarray`
-        ndarray of regularly spaced data
-
-    Returns
-    -------
-    ux : `numpy.ndarray`
-        1D array of sample coordinates in the x direction
-    uy : `numpy.ndarray`
-        1D array of sample coordinates in the y direction
-    data : `numpy.ndarray`
-        binned-down data
-
-    """
-    # we assume the pixels are bigger than the samples in the source
-    spp_x = px_x / source_spacing
-    spp_y = px_y / source_spacing
-    if min(spp_x, spp_y) < 1:
-        raise ValueError('Pixels smaller than samples, bindown not possible.')
-    else:
-        spp_x, spp_y = int(e.ceil(spp_x)), int(e.ceil(spp_y))
-
-    data = bindown(source_data, spp_x, spp_y, 'avg')
-    s = data.shape
-    extx, exty = s[0] * px_x // 2, s[1] * px_y // 2
-    ux, uy = e.arange(-extx, extx, px_x), e.arange(-exty, exty, px_y)
-    return ux, uy, data
+    return output_data

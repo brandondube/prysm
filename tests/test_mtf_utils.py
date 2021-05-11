@@ -7,7 +7,7 @@ import pytest
 
 import matplotlib as mpl
 
-from prysm import sample_files
+from prysm.sample_data import sample_files
 from prysm import mtf_utils
 
 mpl.use('Agg')

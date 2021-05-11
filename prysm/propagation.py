@@ -1,34 +1,16 @@
 """Numerical optical propagation."""
 import numbers
-import warnings
 import operator
 from collections.abc import Iterable
 
 
 from .conf import config
-from .mathops import engine as e
+from .mathops import np, fft
 from ._richdata import RichData
-from .fttools import pad2d, mdft
-
-from astropy import units as u
+from .fttools import pad2d, mdft, fftrange
 
 
-def prop_pupil_plane_to_psf_plane(wavefunction, Q, incoherent=True, norm=None):
-    warnings.warn("this function is deprecated and has been renamed to prysm.propagation.focus")
-    return focus(wavefunction=wavefunction, Q=Q, incoherent=incoherent, norm=norm)
-
-
-def prop_pupil_plane_to_psf_plane_units(wavefunction, input_sample_spacing, efl, wavelength, Q):
-    warnings.warn("this function is deprecated and has been renamed to prysm.propagation.focus_units")
-    return focus_units(
-        wavefunction=wavefunction,
-        input_sample_spacing=input_sample_spacing,
-        Q=Q,
-        efl=efl,
-        wavelength=wavelength)
-
-
-def focus(wavefunction, Q, incoherent=True, norm=None):
+def focus(wavefunction, Q, norm=None):
     """Propagate a pupil plane to a PSF plane.
 
     Parameters
@@ -37,9 +19,6 @@ def focus(wavefunction, Q, incoherent=True, norm=None):
         the pupil wavefunction
     Q : `float`
         oversampling / padding factor
-    incoherent : `bool`, optional
-        whether to return the incoherent (real valued) PSF, or the
-        coherent (complex-valued) PSF.  Incoherent = |coherent|^2
     norm : `str`, {None, 'ortho'}
         normalization parameter passed directly to numpy/cupy fft
 
@@ -54,11 +33,8 @@ def focus(wavefunction, Q, incoherent=True, norm=None):
     else:
         padded_wavefront = wavefunction
 
-    impulse_response = e.fft.ifftshift(e.fft.fft2(e.fft.fftshift(padded_wavefront), norm=norm))
-    if incoherent:
-        return abs(impulse_response) ** 2
-    else:
-        return impulse_response
+    impulse_response = fft.fftshift(fft.fft2(fft.ifftshift(padded_wavefront), norm=norm))
+    return impulse_response
 
 
 def unfocus(wavefunction, Q, norm=None):
@@ -84,11 +60,11 @@ def unfocus(wavefunction, Q, norm=None):
     else:
         padded_wavefront = wavefunction
 
-    return e.fft.ifftshift(e.fft.ifft2(e.fft.fftshift(padded_wavefront), norm=norm))
+    return fft.fftshift(fft.ifft2(fft.ifftshift(padded_wavefront), norm=norm))
 
 
-def focus_fixed_sampling(wavefunction, input_sample_spacing, prop_dist,
-                         wavelength, output_sample_spacing, output_samples,
+def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
+                         wavelength, output_dx, output_samples,
                          coherent=False, norm=True):
     """Propagate a pupil function to the PSF plane with fixed sampling.
 
@@ -96,18 +72,20 @@ def focus_fixed_sampling(wavefunction, input_sample_spacing, prop_dist,
     ----------
     wavefunction : `numpy.ndarray`
         the pupil wavefunction
-    input_sample_spacing : `float`
+    input_dx : `float`
         spacing between samples in the pupil plane, millimeters
     prop_dist : `float`
         propagation distance along the z distance
     wavelength : `float`
         wavelength of light
-    output_sample_spacing : `float`
+    output_dx : `float`
         sample spacing in the output plane, microns
     output_samples : `int`
         number of samples in the square output array
     coherent : `bool`
         if True, returns the complex array.  Else returns its magnitude squared.
+    norm : `bool`, optional
+        if True, satisfy Parseval's theorem, else no normalization
 
     Returns
     -------
@@ -115,20 +93,20 @@ def focus_fixed_sampling(wavefunction, input_sample_spacing, prop_dist,
         2D array of data
 
     """
-    dia = wavefunction.shape[0] * input_sample_spacing
+    dia = wavefunction.shape[0] * input_dx
     Q = Q_for_sampling(input_diameter=dia,
                        prop_dist=prop_dist,
                        wavelength=wavelength,
-                       output_sample_spacing=output_sample_spacing)
-    field = mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples)
+                       output_dx=output_dx)
+    field = mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples, norm=norm)
     if coherent:
         return field
     else:
         return abs(field)**2
 
 
-def unfocus_fixed_sampling(wavefunction, input_sample_spacing, prop_dist,
-                           wavelength, output_sample_spacing, output_samples,
+def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
+                           wavelength, output_dx, output_samples,
                            norm=True):
     """Propagate an image plane field to the pupil plane with fixed sampling.
 
@@ -136,16 +114,18 @@ def unfocus_fixed_sampling(wavefunction, input_sample_spacing, prop_dist,
     ----------
     wavefunction : `numpy.ndarray`
         the image plane wavefunction
-    input_sample_spacing : `float`
+    input_dx : `float`
         spacing between samples in the pupil plane, millimeters
     prop_dist : `float`
         propagation distance along the z distance
     wavelength : `float`
         wavelength of light
-    output_sample_spacing : `float`
+    output_dx : `float`
         sample spacing in the output plane, microns
     output_samples : `int`
         number of samples in the square output array
+    norm : `bool`, optional
+        if True, satisfy Parseval's theorem, else no normalization
 
     Returns
     -------
@@ -162,18 +142,19 @@ def unfocus_fixed_sampling(wavefunction, input_sample_spacing, prop_dist,
     if not isinstance(output_samples, Iterable):
         output_samples = (output_samples, output_samples)
 
-    dias = [output_sample_spacing * s for s in output_samples]
+    dias = [output_dx * s for s in output_samples]
     dia = max(dias)
     Q = Q_for_sampling(input_diameter=dia,
                        prop_dist=prop_dist,
                        wavelength=wavelength,
-                       output_sample_spacing=input_sample_spacing)  # not a typo
+                       output_dx=input_dx)  # not a typo
+
     Q /= wavefunction.shape[0] / output_samples[0]
     field = mdft.idft2(ary=wavefunction, Q=Q, samples=output_samples)
     return field
 
 
-def Q_for_sampling(input_diameter, prop_dist, wavelength, output_sample_spacing):
+def Q_for_sampling(input_diameter, prop_dist, wavelength, output_dx):
     """Value of Q for a given output sampling, given input sampling.
 
     Parameters
@@ -181,10 +162,10 @@ def Q_for_sampling(input_diameter, prop_dist, wavelength, output_sample_spacing)
     input_diameter : `float`
         diameter of the input array in millimeters
     prop_dist : `float`
-        propagation distance along the z distance
+        propagation distance along the z distance, millimeters
     wavelength : `float`
-        wavelength of light
-    output_sample_spacing : `float`
+        wavelength of light, microns
+    output_dx : `float`
         sampling in the output plane, microns
 
     Returns
@@ -194,17 +175,17 @@ def Q_for_sampling(input_diameter, prop_dist, wavelength, output_sample_spacing)
 
     """
     resolution_element = (wavelength * prop_dist) / (input_diameter)
-    return resolution_element / output_sample_spacing
+    return resolution_element / output_dx
 
 
-def focus_units(wavefunction, input_sample_spacing, efl, wavelength, Q):
+def focus_units(wavefunction, input_dx, efl, wavelength, Q):
     """Compute the ordinate axes for a pupil plane to PSF plane propagation.
 
     Parameters
     ----------
     wavefunction : `numpy.ndarray`
         the pupil wavefunction
-    input_sample_spacing : `float`
+    input_dx : `float`
         spacing between samples in the pupil plane
     efl : `float`
         propagation distance along the z distance
@@ -223,27 +204,27 @@ def focus_units(wavefunction, input_sample_spacing, efl, wavelength, Q):
     """
     s = wavefunction.shape
     samples_x, samples_y = s[1] * Q, s[0] * Q
-    sample_spacing_x = pupil_sample_to_psf_sample(pupil_sample=input_sample_spacing,  # factor of
-                                                  samples=samples_x,                  # 1e3 corrects
-                                                  wavelength=wavelength,              # for unit
-                                                  efl=efl) / 1e3                # translation
-    sample_spacing_y = pupil_sample_to_psf_sample(pupil_sample=input_sample_spacing,  # factor of
-                                                  samples=samples_y,                  # 1e3 corrects
-                                                  wavelength=wavelength,              # for unit
-                                                  efl=efl) / 1e3                # translation
-    x = e.arange(-1 * int(e.ceil(samples_x / 2)), int(e.floor(samples_x / 2))) * sample_spacing_x
-    y = e.arange(-1 * int(e.ceil(samples_y / 2)), int(e.floor(samples_y / 2))) * sample_spacing_y
+    dx_x = pupil_sample_to_psf_sample(pupil_sample=input_dx,  # factor of
+                                      samples=samples_x,      # 1e3 corrects
+                                      wavelength=wavelength,  # for unit
+                                      efl=efl) / 1e3          # translation
+    dx_y = pupil_sample_to_psf_sample(pupil_sample=input_dx,
+                                      samples=samples_y,
+                                      wavelength=wavelength,
+                                      efl=efl) / 1e3
+    x = np.arange(-1 * int(np.ceil(samples_x / 2)), int(np.floor(samples_x / 2))) * dx_x
+    y = np.arange(-1 * int(np.ceil(samples_y / 2)), int(np.floor(samples_y / 2))) * dx_y
     return x, y
 
 
-def unfocus_units(wavefunction, input_sample_spacing, efl, wavelength, Q):
+def unfocus_units(wavefunction, input_dx, efl, wavelength, Q):
     """Compute the ordinate axes for a PSF plane to pupil plane propagation.
 
     Parameters
     ----------
     wavefunction : `numpy.ndarray`
         the pupil wavefunction
-    input_sample_spacing : `float`
+    input_dx : `float`
         spacing between samples in the PSF plane
     efl : `float`
         propagation distance along the z distance
@@ -262,16 +243,16 @@ def unfocus_units(wavefunction, input_sample_spacing, efl, wavelength, Q):
     """
     s = wavefunction.shape
     samples_x, samples_y = s[1] * Q, s[0] * Q
-    sample_spacing_x = psf_sample_to_pupil_sample(psf_sample=input_sample_spacing,  # factor of
-                                                  samples=samples_x,                  # 1e3 corrects
-                                                  wavelength=wavelength,              # for unit
-                                                  efl=efl) / 1e3                # translation
-    sample_spacing_y = psf_sample_to_pupil_sample(psf_sample=input_sample_spacing,  # factor of
-                                                  samples=samples_y,                  # 1e3 corrects
-                                                  wavelength=wavelength,              # for unit
-                                                  efl=efl) / 1e3                # translation
-    x = e.arange(-1 * int(e.ceil(samples_x / 2)), int(e.floor(samples_x / 2))) * sample_spacing_x
-    y = e.arange(-1 * int(e.ceil(samples_y / 2)), int(e.floor(samples_y / 2))) * sample_spacing_y
+    dx_x = psf_sample_to_pupil_sample(psf_sample=input_dx,    # factor of
+                                      samples=samples_x,      # 1e3 corrects
+                                      wavelength=wavelength,  # for unit
+                                      efl=efl) / 1e3          # translation
+    dx_y = psf_sample_to_pupil_sample(psf_sample=input_dx,
+                                      samples=samples_y,
+                                      wavelength=wavelength,
+                                      efl=efl) / 1e3
+    x = np.arange(-1 * int(np.ceil(samples_x / 2)), int(np.floor(samples_x / 2))) * dx_x
+    y = np.arange(-1 * int(np.ceil(samples_y / 2)), int(np.floor(samples_y / 2))) * dx_y
     return x, y
 
 
@@ -295,7 +276,7 @@ def pupil_sample_to_psf_sample(pupil_sample, samples, wavelength, efl):
         the sample spacing in the PSF plane
 
     """
-    return (wavelength * efl * 1e3) / (pupil_sample * samples)
+    return (efl * wavelength) / (pupil_sample * samples)
 
 
 def psf_sample_to_pupil_sample(psf_sample, samples, wavelength, efl):
@@ -318,7 +299,7 @@ def psf_sample_to_pupil_sample(psf_sample, samples, wavelength, efl):
         the sample spacing in the pupil plane
 
     """
-    return (wavelength * efl * 1e3) / (psf_sample * samples)
+    return (efl * wavelength) / (psf_sample * samples)
 
 
 def fresnel_number(a, L, lambda_):
@@ -363,11 +344,11 @@ def talbot_distance(a, lambda_):
 
     """
     num = lambda_
-    den = 1 - e.sqrt(1 - lambda_**2/a**2)
+    den = 1 - np.sqrt(1 - lambda_**2/a**2)
     return num / den
 
 
-def angular_spectrum(field, wvl, sample_spacing, z, Q=2):
+def angular_spectrum(field, wvl, dx, z, Q=2):
     """Propagate a field via the angular spectrum method.
 
     Parameters
@@ -378,7 +359,7 @@ def angular_spectrum(field, wvl, sample_spacing, z, Q=2):
         wavelength of light, microns
     z : `float`
         propagation distance, units of millimeters
-    sample_spacing : `float`
+    dx : `float`
         cartesian sample spacing, units of millimeters
     Q : `float`
         sampling factor used.  Q>=2 for Nyquist sampling of incoherent fields
@@ -394,87 +375,78 @@ def angular_spectrum(field, wvl, sample_spacing, z, Q=2):
     if Q != 1:
         field = pad2d(field, Q=Q)
 
-    ky, kx = (e.fft.fftfreq(s, sample_spacing).astype(config.precision_complex) for s in field.shape)
-    kyy, kxx = e.meshgrid(ky, kx)
-    # don't ifftshift, ky, kx computed in shifted space, going to ifft anyway
-    forward = e.fft.fft2(e.fft.fftshift(field))
-    transfer_function = e.exp(-1j * e.pi * wvl * z * (kxx**2 + kyy**2))
-    res = e.fft.ifftshift(e.fft.ifft2(forward * transfer_function))
-    return res
+    ky, kx = (fft.fftfreq(s, dx) for s in field.shape)
+    ky = np.broadcast_to(ky, field.shape).swapaxes(0, 1)
+    kx = np.broadcast_to(kx, field.shape)
+
+    transfer_function = np.exp(-1j * np.pi * wvl * z * (kx**2 + ky**2))
+    forward = fft.fft2(field)
+    return fft.ifft2(forward*transfer_function)
 
 
-class Wavefront(RichData):
+class Wavefront:
     """(Complex) representation of a wavefront."""
 
-    def __init__(self, x, y, fcn, wavelength, space='pupil'):
+    def __init__(self, cmplx_field, wavelength, dx, space='pupil'):
         """Create a new Wavefront instance.
 
         Parameters
         ----------
-        x : `numpy.ndarray`
-            x coordinates
-        y : `numpy.ndarray`
-            y coordinates
-        fcn : `numpy.ndarray`
-            complex-valued wavefront array
+        cmplx_field : `numpy.ndarray`
+            complex-valued array with both amplitude and phase error
         wavelength : `float`
             wavelength of light, microns
+        dx : `float`
+            inter-sample spacing, mm (space=pupil) or um (space=psf)
         space : `str`, {'pupil', 'psf'}
             what sort of space the field occupies
 
         """
-        super().__init__(x=x, y=y, data=fcn,
-                         wavelength=wavelength,
-                         labels=config.pupil_labels,
-                         xy_unit=config.phase_xy_unit,
-                         z_unit=config.phase_z_unit)
+        self.data = cmplx_field
+        self.wavelength = wavelength
+        self.dx = dx
         self.space = space
 
-    @property
-    def fcn(self):
-        """Complex field / wavefunction."""
-        return self.data
+    @classmethod
+    def from_amp_and_phase(cls, amplitude, phase, wavelength, dx):
+        """Create a Wavefront from amplitude and phase.
 
-    @fcn.setter
-    def fcn(self, ary):
-        self.data = ary
+        Parameters
+        ----------
+        amplitude : `numpy.ndarray`
+            array containing the amplitude
+        phase : `numpy.ndarray`, optional
+            array containing the optical path error with units of nm
+            if None, assumed zero
+        wavelength : `float`
+            wavelength of light with units of microns
+        dx : `float`
+            sample spacing with units of mm
 
-    @property
-    def diameter_x(self):
-        """Diameter of the data in x."""
-        return self.x[-1] - self.x[0]
-
-    @property
-    def diameter_y(self):
-        """Diameter of the data in y."""
-        return self.y[-1] - self.x[0]
-
-    @property
-    def diameter(self):
-        """Greater of (self.diameter_x, self.diameter_y)."""
-        return max((self.diameter_x, self.diameter_y))
-
-    @property
-    def semidiameter(self):
-        """Half of self.diameter."""
-        return self.diameter / 2
+        """
+        if phase is not None:
+            phase_prefix = 1j * 2 * np.pi / wavelength / 1e3  # / 1e3 does nm-to-um for phase on a scalar
+            P = amplitude * np.exp(phase_prefix * phase)
+        else:
+            P = amplitude
+        return cls(P, wavelength, dx)
 
     @property
     def intensity(self):
         """Intensity, abs(w)^2."""
-        return Wavefront(x=self.x, y=self.y, fcn=abs(self.data)**2, wavelength=self.wavelength, space=self.space)
+        return RichData(abs(self.data)**2, self.dx, self.wavelength)
 
     @property
     def phase(self):
         """Phase, angle(w).  Possibly wrapped for large OPD."""
-        return Wavefront(x=self.x, y=self.y, fcn=e.angle(self.data), wavelength=self.wavelength, space=self.space)
+        return RichData(np.angle(self.data), self.dx, self.wavelength)
 
     def __numerical_operation__(self, other, op):
         """Apply an operation to this wavefront with another piece of data."""
         func = getattr(operator, op)
         if isinstance(other, Wavefront):
             criteria = [
-                abs(self.sample_spacing - other.sample_spacing) / self.sample_spacing * 100 < 0.001,  # must match to 1 millipercent
+                abs(self.dx - other.dx) / self.dx * 100 < 0.1,  # must match to 0.1% (generous, for fp32 compat)
                 self.shape == other.shape,
                 self.wavelength.represents == other.wavelength.represents
             ]
@@ -488,7 +460,7 @@ class Wavefront(RichData):
         else:
             raise TypeError(f'unsupported operand type(s) for {op}: \'Wavefront\' and {type(other)}')
 
-        return Wavefront(x=self.x, y=self.y, wavelength=self.wavelength, fcn=data, space=self.space)
+        return Wavefront(dx=self.dx, wavelength=self.wavelength, cmplx_field=data, space=self.space)
 
     def __mul__(self, other):
         """Multiply this wavefront by something compatible."""
@@ -498,7 +470,7 @@ class Wavefront(RichData):
         """Divide this wavefront by something compatible."""
         return self.__numerical_operation__(other, 'truediv')
 
-    def free_space(self, dz, Q=2):
+    def free_space(self, dz, Q=1):
         """Perform a plane-to-plane free space propagation.
 
         Uses angular spectrum and the free space kernel.
@@ -517,12 +489,12 @@ class Wavefront(RichData):
 
         """
         out = angular_spectrum(
-            field=self.fcn,
-            wvl=self.wavelength.to(u.um),
-            sample_spacing=self.sample_spacing,
+            field=self.data,
+            wvl=self.wavelength,
+            dx=self.dx,
             z=dz,
             Q=Q)
-        return Wavefront(x=self.x, y=self.y, fcn=out, wavelength=self.wavelength, space=self.space)
+        return Wavefront(out, self.wavelength, self.dx, self.space)
 
     def focus(self, efl, Q=2):
         """Perform a "pupil" to "psf" plane propgation.
@@ -547,15 +519,9 @@ class Wavefront(RichData):
         if self.space != 'pupil':
             raise ValueError('can only propagate from a pupil to psf plane')
 
-        data = focus(self.fcn, Q=Q, incoherent=False)
-        x, y = focus_units(
-            wavefunction=self.fcn,
-            input_sample_spacing=self.sample_spacing,
-            efl=efl,
-            wavelength=self.wavelength.to(u.um),
-            Q=Q)
-
-        return Wavefront(x=x, y=y, fcn=data, wavelength=self.wavelength, space='psf')
+        data = focus(self.data, Q=Q, norm=None)
+        dx = pupil_sample_to_psf_sample(self.dx, data.shape[1], self.wavelength, efl)
+        return Wavefront(data, self.wavelength, dx, space='psf')
 
     def unfocus(self, efl, Q=2):
         """Perform a "psf" to "pupil" plane propagation.
@@ -580,17 +546,12 @@ class Wavefront(RichData):
         if self.space != 'psf':
             raise ValueError('can only propagate from a psf to pupil plane')
 
-        data = unfocus(self.fcn, Q=Q)
-        x, y = unfocus_units(
-            wavefunction=self.fcn,
-            input_sample_spacing=self.sample_spacing,
-            efl=efl,
-            wavelength=self.wavelength.to(u.um),
-            Q=Q)
+        data = unfocus(self.data, Q=Q, norm=None)
+        dx = psf_sample_to_pupil_sample(self.dx, data.shape[1], self.wavelength, efl)
 
-        return Wavefront(x=x, y=y, fcn=data, wavelength=self.wavelength, space='pupil')
+        return Wavefront(data, self.wavelength, dx, space='pupil')
 
-    def focus_fixed_sampling(self, efl, sample_spacing, samples):
+    def focus_fixed_sampling(self, efl, dx, samples):
         """Perform a "pupil" to "psf" propagation with fixed output sampling.
 
         Uses matrix triple product DFTs to specify the grid directly.
@@ -599,7 +560,7 @@ class Wavefront(RichData):
         ----------
         efl : `float`
             focusing distance, millimeters
-        sample_spacing : `float`
+        dx : `float`
             output sample spacing, microns
         samples : `int`
             number of samples in the output plane.  If int, interpreted as square
@@ -617,22 +578,18 @@ class Wavefront(RichData):
         if isinstance(samples, int):
             samples = (samples, samples)
 
-        samples_y, samples_x = samples
-        # floor div of negative s, not negative of floor div of s
-        # has correct rounding semantics for fft grid alignment
-        x, y = (e.arange(-s//2, -s//2+s, dtype=config.precision) * sample_spacing for s in (samples_x, samples_y))
         data = focus_fixed_sampling(
-            wavefunction=self.fcn,
-            input_sample_spacing=self.sample_spacing,
+            wavefunction=self.data,
+            input_dx=self.dx,
             prop_dist=efl,
-            wavelength=self.wavelength.to(u.um),
-            output_sample_spacing=sample_spacing,
+            wavelength=self.wavelength,
+            output_dx=dx,
             output_samples=samples,
             coherent=True, norm=True)
 
-        return Wavefront(x=x, y=y, fcn=data, wavelength=self.wavelength, space='psf')
+        return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='psf')
 
-    def unfocus_fixed_sampling(self, efl, sample_spacing, samples):
+    def unfocus_fixed_sampling(self, efl, dx, samples):
         """Perform a "psf" to "pupil" propagation with fixed output sampling.
 
         Uses matrix triple product DFTs to specify the grid directly.
@@ -641,7 +598,7 @@ class Wavefront(RichData):
         ----------
         efl : `float`
             un-focusing distance, millimeters
-        sample_spacing : `float`
+        dx : `float`
             output sample spacing, millimeters
         samples : `int`
             number of samples in the output plane.  If int, interpreted as square
@@ -659,17 +616,13 @@ class Wavefront(RichData):
         if isinstance(samples, int):
             samples = (samples, samples)
 
-        samples_y, samples_x = samples
-        x = e.arange(-1 * int(e.ceil(samples_x / 2)), int(e.floor(samples_x / 2))) * sample_spacing
-        y = e.arange(-1 * int(e.ceil(samples_y / 2)), int(e.floor(samples_y / 2))) * sample_spacing
-
         data = unfocus_fixed_sampling(
-            wavefunction=self.fcn,
-            input_sample_spacing=self.sample_spacing,
+            wavefunction=self.data,
+            input_dx=self.dx,
             prop_dist=efl,
-            wavelength=self.wavelength.to(u.um),
-            output_sample_spacing=sample_spacing,
+            wavelength=self.wavelength,
+            output_dx=dx,
             output_samples=samples,
             norm=True)
 
-        return Wavefront(x=x, y=y, fcn=data, wavelength=self.wavelength, space='pupil')
+        return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')

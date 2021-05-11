@@ -3,69 +3,36 @@ import pytest
 
 import numpy as np
 
-from prysm import detector, psf, Convolvable
+from prysm import detector, coordinates
 
 import matplotlib as mpl
 mpl.use('Agg')
 
+SAMPLES = 128
 
-@pytest.fixture
-def sample_psf():
-    ps = psf.AiryDisk(4, .55, 20, 64)
-    return Convolvable(x=ps.x, y=ps.y, data=ps.data, has_analytic_ft=False)
-
-
-@pytest.fixture
-def sample_detector():
-    return detector.Detector(10)
+x, y = coordinates.make_xy_grid(SAMPLES, dx=1)
+r, t = coordinates.cart_to_polar(x, y)
 
 
-def test_detector_can_sample_convolvable(sample_detector, sample_psf):
-    assert sample_detector.capture(sample_psf)
+def test_pixel_shades_properly():
+    px = detector.pixel(x, y, 10, 10)
+    # 121 samples should be white, 5 row/col on each side of zero, plus zero,
+    # = 11x11 = 121
+    assert px.sum() == 121
 
 
-def test_detector_can_save_result(tmpdir, sample_detector, sample_psf):
-    p = tmpdir.mkdir('detector_out').join('out.png')
-    sample_detector.capture(sample_psf)
-    sample_detector.save_image(str(p))
+def test_analytic_fts_function():
+    # these numbers have no meaning, and the sense of x and y is wrong.  Just
+    # testing for crashes.
+    # TODO: more thorough tests
+    olpf_ft = detector.olpf_ft(x, y, 1.234, 4.567)
+    assert olpf_ft.any()
+    pixel_ft = detector.pixel_ft(x, y, 9.876, 5.4321)
+    assert pixel_ft.any()
 
 
-def test_detector_can_show(sample_detector, sample_psf):
-    sample_detector.capture(sample_psf)
-    fig, ax = sample_detector.show_image()
-    assert fig
-    assert ax
-
-
-def test_detector_bindown_doesnt_fail(sample_detector):
-    samples = 8
-    x = np.arange(samples) * sample_detector.pitch / 2
-    y = np.arange(samples) * sample_detector.pitch / 2
-    z = np.ones((samples, samples))
-    c = Convolvable(x=x, y=y, data=z)
-    sample_detector.capture(c)
-    assert sample_detector.last.sample_spacing == sample_detector.pitch
-
-
-def test_olpf_render_doesnt_crash():
-    olpf = detector.OLPF(5, samples_x=32, sample_spacing=0.5)
-    assert olpf
-
-
-def test_olpf_aft_correct_at_origin():
-    olpf = detector.OLPF(5)
-    assert olpf.analytic_ft(0, 0) == 1
-
-
-def test_detector_properties(sample_detector):
-    sd = sample_detector
-    assert sd.pitch == 10
-    assert sd.fill_factor == 1
-    assert pytest.approx(sd.fs, 1 / sd.pitch * 1e3)
-    assert pytest.approx(sd.nyquist, sd.fs / 2)
-
-
-def test_detector_pitch_change_correctness():
-    d = detector.Detector(5)
-    d.pitch = 10
-    assert d.pitch == 10
+def test_detector_functions():
+    d = detector.Detector(0.1, 8, 200, 60_000, .5, 14, 1)
+    field = np.ones((128, 128))
+    img = d.expose(field)
+    assert img.any()

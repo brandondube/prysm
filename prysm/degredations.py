@@ -1,99 +1,53 @@
 """Degredations in the image chain."""
 
-from .conf import config
-from .mathops import engine as e
+from .mathops import np
 from .coordinates import cart_to_polar, polar_to_cart
-from .convolution import Convolvable
 
 
-class Smear(Convolvable):
-    """Smear (motion blur)."""
-    def __init__(self, width, angle=0):
-        """Create a new Smear model.
+def smear_ft(fx, fy, width, angle):
+    """Analytic Fourier Transform (OTF) of smear.
 
-        Parameters
-        ----------
-        width : `float`
-            full width of the blur in microns
-        angle : `float`
-            clockwise angle of the blur with respect to the x axis in degrees.
+    Parameters
+    ----------
+    fx : `numpy.ndarray`
+        X spatial frequencies, units of reciprocal width
+    fy : `numpy.ndarray`
+        Y spatial frequencies, units of reciprocal width
+    width : `float`
+        width of the smear, units of length (e.g. um)
+    angle : `float`
+        angle w.r.t the X axis of the smear, degrees
 
-        """
-        super().__init__(None, None, None, True)
-        self.width = width
-        self.angle = angle
+    Returns
+    -------
+    `numpy.ndarray`
+        transfer function of the smear
 
-    def analytic_ft(self, x, y):
-        """Analytic FT of the smear.
+    """
+    # TODO: faster to do inline projection of fx, fy?
+    if angle != 0:
+        rho, phi = cart_to_polar(fx, fy)
+        phi += np.radians(angle)
+        x, y = polar_to_cart(rho, phi)
 
-        Parameters
-        ----------
-        x : `numpy.ndarray`
-            x Cartesian spatial frequency, cy/um
-        y : `numpy.ndarray`
-            y Cartesian spatial frequency, cy/um
-
-        Returns
-        -------
-        `numpy.ndarray`
-            analytical FT of the smear.
-
-        """
-        if self.angle != 0:
-            rho, phi = cart_to_polar(x, y)
-            phi += e.radians(self.angle)
-            x, y = polar_to_cart(rho, phi)
-
-        return e.sinc(x * self.width)
+    return np.sinc(x * width)
 
 
-class Jitter(Convolvable):
-    """Jitter (high frequency motion)."""
-    def __init__(self, scale, sample_spacing=None, samples=None):
-        """Create a new Jitter instance.
+def jitter_ft(fr, scale):
+    """Analytic Fourier transform (OTF) of jitter.
 
-        Parameters
-        ----------
-        scale : `float`
-            scale of the jitter, units of microns
-        sample_spacing : `float`, optional
-            center-to-center sample spacing, units of microns
-        samples : `int`, optional
-            number of samples in X and Y
+    Parameters
+    ----------
+    fr : `numpy.ndarray`
+        radial spatial frequency, units of reciprocal scale
+    scale : `float`
+        scale of the jitter
 
-        """
-        self.scale = scale
-        if samples is not None:
-            ext = (samples - 1) * sample_spacing / 2
-            x = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
-            y = e.arange(-ext, ext, sample_spacing, dtype=config.precision)
+    Returns
+    -------
+    `numpy.ndarray`
+        transfer function of the jitter
 
-            coef = 1 / (scale * e.sqrt(2 * e.pi))
-            xx, yy = e.meshgrid(x, y)
-            rho, _ = cart_to_polar(xx, yy)
-            kernel = rho ** 2 / (2 * scale ** 2)
-            z = coef * e.exp(-kernel)
-        else:
-            x, y, z = None, None, None
-
-        super().__init__(data=z, x=x, y=y, has_analytic_ft=True)
-
-    def analytic_ft(self, x, y):
-        """Analytic FT of jitter.
-
-        Parameters
-        ----------
-        x : `numpy.ndarray`
-            x Cartesian spatial frequency, units of cy/um
-        y : `numpy.ndarray`
-            y Cartesian spatial frequency, units of cy/um
-
-        Returns
-        -------
-        `numpy.ndarray`
-            value of analytic FT
-
-        """
-        rho, _ = cart_to_polar(x, y)
-        kernel = e.pi * self.scale / 2 * rho
-        return e.exp(-2 * kernel**2)
+    """
+    kernel = np.pi * scale / 2 * fr
+    return np.exp(-2 * kernel**2)

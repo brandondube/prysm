@@ -1,0 +1,122 @@
+***********
+prysm v0.20
+***********
+
+Summary
+=======
+
+Version 20 of prysm is the largest breaking release the library has ever had.  Your programs will be more a bit verbose when written in this style, but they will be more clear, contain fewer bugs, and run faster.  This version marks prysm transitioning from an extremely object oriented style to a data oriented style.  The result is that code is more direct, and there is less of it.  Side benefits are that by deferring the caches that used to help keep prysm fast to the user level, the user is in control over their program's static memory usage.
+
+This version will produce one more zero point release (0.21) for cleanup after longer experience in this style, after which version 1 will be released.  In addition to the breaking changes, this release brings landmark additions of **2D-Q polynomials**, also known as Forbes polynomials, **Chebyshev, Legendre, and Hopkins polynomials,** **sophistocated tools for segmented apertures**, and **classical phase retrieval algorithms** included in the box.
+
+The remainder of this page will be divided by logical unit of function, then sub-divided between breaking changes and new features.
+
+
+Breaking Changes
+================
+
+.. toctree::
+
+    conf
+    convolution
+    coordinates
+    degredations
+    detector
+    fttools
+    geometry
+    interferogram
+    io
+    jacobi
+    mathops
+    mtf_utils
+    objects
+    otf
+    plotting
+    propagation
+    psf
+    qpoly
+    refractive
+    sample_data
+    thinfilm
+    thinlens
+    util
+    wavelength
+
+io
+--
+
+- :func:`~prysm.io.write_zygo_ascii` no longer takes a :code:`high_phase_res` parameter.  It did not do anything before and has been removed, as it is not likely prysm needs to support ancient version of MetroPro that are incompatible with that convention.
+
+conf
+----
+
+- All :code:`Labels` related code has been removed.  There is no substitute.
+- Unit munging has been removed; wavelengths are no longer astropy units but are floats with units of microns again.
+- The following parameters have been removed from :class:`~prysm.config.Config`:
+- - Q
+- - wavelength
+- - interpolation
+- - unit_format
+- - show_units
+- - phase_xy_unit
+- - phase_z_unit
+- - image_xy_unit
+- - image_z_unit
+- - mtf_xy_unit
+- - mtf_z_unit
+- - ptf_xy_unit
+- - ptf_z_unit
+- - pupil_labels
+- - interferogram_labels
+- - convolvable_labels
+- - mtf_labels
+- - ptf_labels
+- - psd_labels
+
+
+util
+----
+
+- :func:`~prysm.mathops.is_odd` and :func:`~prysm.mathops.is_power_of_2` have been moved to the mathops module.
+
+coordinates
+-----------
+
+- :class:`GridCache` and its variable transformation functions have been deleted.  The functionality is deferred to the user, who can quite naturally write code that reuses grids.
+- :func:`~prysm.coordinates.make_xy_grid` has had its signature changed from :code:`(samples_x, samples_y, radius=1)` to :code:`(shape, *, dx, diameter, grid=True)`.  shape auto-broadcasts to 2D and dx/diameter are keyword only.  grid controls returning vectors or a meshgrid.  :code:`make_xy_grid` is now FFT-aligned (always containing a zero sample).
+- :func:`make_rho_phi_grid` has been removed, combine :func:`make_xy_grid` with :func:`~prysm.coordinates.cart_to_polar`.
+
+qpoly
+-----
+
+- the :class:`QCONSag` and :class:`QBFSSag` classes have been removed, use the :func:`~prysm.qpoly.Qbfs` :func:`~prysm.qpoly.Qbfs_sequence`, :func:`~prysm.qpoly.Qcon`, and :func:`~prysm.qpoly.Qcon_sequence` functions to replicate the synthesis behavior.
+- new functions :func:`~prysm.qpoly.Q2d` and :func:`~prysm.qpoly.Q2d_sequence` to compute 2D-Q polynomials.
+
+pupil
+-----
+
+- this entire submodule has been removed.  To synthesize pupil functions which have given phase and amplitude, combine prysm.geometry with prysm.zernike or other phase synthesis code.  The function :func:`~prysm.propagation.Wavefront.from_phase_amplitude` largely replicates the behavior of the :code:`Pupil` constructor, with the user generating their own phase and amplitude arrays.
+
+zernike
+-------
+
+- Stand-alone functions for the first few terms have been removed, use zernike_nm with one of the naming convention functions to replace the behavior:
+- - :func:`piston`
+- - :func:`tip`
+- - :func:`tilt`
+- - :func:`defocus`
+- - :func:`primary_astigmatism_00`
+- - :func:`primary_astigmatism_45`
+- - :func:`primary_coma_y`
+- - :func:`primary_coma_x`
+- - :func:`primary_spherical`
+- - :func:`primary_trefoil_x`
+- - :func:`primary_trefoil_y`
+- - e.g., :code:`for primary_coma_y`, either :code:`zernike_nm(3, 1, ...)` or :code:`zernike_nm(*zernike_noll_to_nm(7), ...)`
+- classes :class:`FringeZernike`, :class:`NollZernike`, :class:`ANSI1TermZernike`, :class:`ANSI2TermZernike` have been removed.  This is part of a stylistic change of prysm from extremely object oriented to data oriented.  Combine :func:`~prysm.zernike.zernike_nm` with one of the naming functions to replace the phase synthesis behavior.
+- new function :func:`~prysm.zernike.zernike_nm_sequence` -- use to compute a series of Zernike polynomials.  Much faster than :func:`~prysm.zernike.zernike_nm` in a loop.  Returns a generator.
+
+propagation
+-----------
+
+- :func:`prop_pupil_plane_to_psf_plane` and :func:`prop_pupil_plane_to_psf_plane_units` have been removed, they were deprecated and marked for removal.

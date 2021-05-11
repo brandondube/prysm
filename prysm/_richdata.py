@@ -1,13 +1,10 @@
 """Basic class holding data, used to recycle code."""
 import copy
-import inspect
 from numbers import Number
 from collections.abc import Iterable
 
-from .conf import config, sanitize_unit
-from .mathops import engine as np, interpolate_engine as interpolate
-from .wavelengths import mkwvl
-from .coordinates import uniform_cart_to_polar, polar_to_cart
+from .mathops import np, interpolate
+from .coordinates import cart_to_polar, make_xy_grid, uniform_cart_to_polar, polar_to_cart
 from .plotting import share_fig_ax
 
 
@@ -43,30 +40,19 @@ def fix_interp_pair(x, y):
 
 class RichData:
     """Abstract base class holding some data properties."""
-    _data_type = 'image'
     _default_twosided = True
-    _slice_xscale = 'linear'
-    _slice_yscale = 'linear'
 
-    def __init__(self, x, y, data, labels, xy_unit=None, z_unit=None, wavelength=None):
-        """Initialize a new BasicData instance.
+    def __init__(self, data, dx, wavelength):
+        """Initialize a new RichData instance.
 
         Parameters
         ----------
-        x : `numpy.ndarray`
-            x unit axis
-        y : `numpy.ndarray`
-            y unit axis
         data : `numpy.ndarray`
-            data
-        labels : `Labels`
-            labels instance, can be shared
-        xy_unit : `astropy.unit` or `str`, optional
-            astropy unit or string which satisfies hasattr(astropy.units, xyunit)
-        z_unit : `astropy.unit` or `str`, optional
-             astropy unit or string which satisfies hasattr(astropy.units, xyunit)
-        wavelength : `astropy.unit` or `float`
-            astropy unit or quantity or float with implicit units of microns
+            2D array containing the z data
+        dx : `float`
+            inter-sample spacing, mm
+        wavelength : float`
+            wavelength of light, um
 
         Returns
         -------
@@ -74,147 +60,90 @@ class RichData:
             the instance
 
         """
-        if wavelength is None:
-            wavelength = config.wavelength
-
-        self.x, self.y, self.data = x, y, data
-        self.labels = labels
-        self.wavelength = mkwvl(wavelength)
-        self.xy_unit = sanitize_unit(xy_unit, self.wavelength)
-        self.z_unit = sanitize_unit(z_unit, self.wavelength)
+        self.data = data
+        self.dx = dx
+        self.wavelength = wavelength
         self.interpf_x, self.interpf_y, self.interpf_2d = None, None, None
+        self._x, self._y, self._r, self._t = None, None, None, None
 
     @property
     def shape(self):
         """Proxy to phase or data shape."""
-        try:
-            return self.data.shape
-        except AttributeError:
-            return (0, 0)
+        return self.data.shape
 
     @property
     def size(self):
         """Proxy to phase or data size."""
-        try:
-            return self.data.size
-        except AttributeError:
-            return 0
+        return self.data.size
 
     @property
-    def samples_x(self):
-        """Number of samples in the x dimension."""
-        return self.shape[1]
+    def x(self):
+        """X coordinate axis, 1D."""
+        if self._x is None:
+            self._x, self._y = make_xy_grid(self.data.shape, dx=self.dx)
+
+        return self._x
+
+    @x.setter
+    def x(self, x):
+        """Set a new value for the X array."""
+        self._x = x
 
     @property
-    def samples_y(self):
-        """Number of samples in the y dimension."""
-        return self.shape[0]
+    def y(self):
+        """Y coordinate axis, 1D."""
+        if self._y is None:
+            self._x, self._y = make_xy_grid(self.data.shape, dx=self.dx)
+
+        return self._y
+
+    @y.setter
+    def y(self, y):
+        """Set a new value for the Y array."""
+        self._y = y
 
     @property
-    def sample_spacing(self):
-        """center-to-center sample spacing."""
-        try:
-            return float(self.x[1] - self.x[0])
-        except TypeError:
-            return np.nan
+    def r(self):
+        """r coordinate axis, 2D."""
+        if self._r is None:
+            self._r, self._t = cart_to_polar(self.x, self.y)
+
+        return self._r
+
+    @r.setter
+    def r(self, r):
+        self._r = r
 
     @property
-    def center_x(self):
-        """Center "pixel" in x."""
-        return self.samples_x // 2
+    def t(self):
+        """t coordinate axis, 2D."""
+        if self._t is None:
+            self._r, self._t = cart_to_polar(self.x, self.y)
+
+        return self._t
+
+    @t.setter
+    def t(self, t):
+        self._t = t
 
     @property
-    def center_y(self):
-        """Center "pixel" in y."""
-        return self.samples_y // 2
+    def support_x(self):
+        """Width of the domain in X."""
+        return float(self.shape[1] * self.dx)
+
+    @property
+    def support_y(self):
+        """Width of the domain in Y."""
+        return float(self.shape[0] * self.dx)
+
+    @property
+    def support(self):
+        """Width of the domain."""
+        return max((self.support_x, self.support_y))
 
     def copy(self):
         """Return a (deep) copy of this instance."""
         return copy.deepcopy(self)
-
-    def astype(self, other_type):
-        """Change this instance of one type into another.
-
-        Useful to access methods of the other class.
-
-        Parameters
-        ----------
-        other_type : `object`
-            the name of the other type to "cast" to, e.g. Interferogram.  Not a string.
-
-        Returns
-        -------
-        `self`
-            type-converted to the other type.
-
-        """
-        original_type = type(self)
-        sig = inspect.signature(other_type)
-        pass_params = {}
-        for param in sig.parameters:
-            if hasattr(self, param):
-                pass_params[param] = getattr(self, param)
-
-        other = other_type(**pass_params)
-        other._original_type = original_type
-        other._original_vars = vars(self)
-        return other
-
-    def change_xy_unit(self, to, inplace=True):
-        """Change the x/y unit to a new one, scaling the data in the process.
-
-        Parameters
-        ----------
-        to : `astropy.unit` or `str`
-            if not an astropy unit, a string that is a valid attribute of astropy.units.
-        inplace : `bool`, optional
-            if True, returns self.  Otherwise returns the modified data.
-
-        Returns
-        -------
-        `RichData`
-            self, if inplace=True
-        `numpy.ndarray`, `numpy.ndarray`
-            x, y from self, if inplace=False
-
-        """
-        unit = sanitize_unit(to, self.wavelength)
-        coef = self.xy_unit.to(unit)
-        x, y = self.x * coef, self.y * coef
-        if not inplace:
-            return x, y
-        else:
-            self.x, self.y = x, y
-            self.xy_unit = unit
-            return self
-
-    def change_z_unit(self, to, inplace=True):
-        """Change the z unit to a new one, scaling the data in the process.
-
-        Parameters
-        ----------
-        to : `astropy.unit` or `str`
-            if not an astropy unit, a string that is a valid attribute of astropy.units.
-        inplace : `bool`, optional
-            if True, returns self.  Otherwise returns the modified data.
-
-        Returns
-        -------
-        `RichData`
-            self, if inplace=True
-        `numpy.ndarray`
-            data from self, if inplace=False
-
-        """
-        unit = sanitize_unit(to, self.wavelength)
-        coef = self.z_unit.to(unit)
-        modified_data = self.data * coef
-        if not inplace:
-            return modified_data
-        else:
-            self.data = modified_data
-            self.z_unit = unit
-            return self
 
     def slices(self, twosided=None):
         """Create a `Slices` instance from this instance.
@@ -232,9 +161,12 @@ class RichData:
         """
         if twosided is None:
             twosided = self._default_twosided
-        return Slices(data=self.data, x=self.x, y=self.y,
-                      twosided=twosided, x_unit=self.xy_unit, z_unit=self.z_unit, labels=self.labels,
-                      xscale=self._slice_xscale, yscale=self._slice_yscale)
+
+        x, y = self.x, self.y
+        x = x[0]
+        y = y[..., 0]
+
+        return Slices(data=self.data, x=x, y=y, twosided=twosided)
 
     def _make_interp_function_2d(self):
         """Generate a 2D interpolation function for this instance, used in sampling with exact_xy.
@@ -245,8 +177,12 @@ class RichData:
             interpolator instance.
 
         """
+        x = self.x
+        y = self.y
+        x = x[0]
+        y = y[..., 0]
         if self.interpf_2d is None:
-            self.interpf_2d = interpolate.RegularGridInterpolator((self.y, self.x), self.data)
+            self.interpf_2d = interpolate.RegularGridInterpolator((y, x), self.data)
 
         return self.interpf_2d
 
@@ -261,9 +197,10 @@ class RichData:
             y interpolator
 
         """
+        slc = self.slices()
         if self.interpf_x is None or self.interpf_y is None:
-            ux, x = self.slices().x
-            uy, y = self.slices().y
+            ux, x = slc.x
+            uy, y = slc.y
 
             self.interpf_x = interpolate.interp1d(ux, x)
             self.interpf_y = interpolate.interp1d(uy, y)
@@ -290,7 +227,7 @@ class RichData:
 
         rho, phi = fix_interp_pair(rho, phi)
         x, y = polar_to_cart(rho, phi)
-        return self.interpf_2d((x, y), method='linear')
+        return self.interpf_2d((y, x), method='linear')
 
     def exact_xy(self, x, y=None):
         """Retrieve data at the specified X-Y frequency pairs.
@@ -349,9 +286,9 @@ class RichData:
 
     def plot2d(self, xlim=None, ylim=None, clim=None, cmap=None,
                log=False, power=1, interpolation=None,
-               show_colorbar=True, show_axlabels=True,
+               show_colorbar=True, colorbar_label=None, axis_labels=(None, None),
                fig=None, ax=None):
-        """Plot the data in 2D.
+        """Plot data in 2D.
 
         Parameters
         ----------
@@ -374,8 +311,10 @@ class RichData:
             interpolation method to use, passed directly to matplotlib
         show_colorbar : `bool`, optional
             if True, draws the colorbar
-        show_axlabels : `bool`, optional
-            if True, draws the axis labels
+        colorbar_label : `str`, optional
+            label for the colorbar
+        axis_labels : `iterable` of `str`,
+            (x, y) axis labels.  If None, not drawn
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
@@ -389,15 +328,18 @@ class RichData:
             Axis containing the plot
 
         """
+        data = self.data
+        x, y = self.x, self.y
+
         from matplotlib.colors import PowerNorm, LogNorm
         fig, ax = share_fig_ax(fig, ax)
 
         # sanitize some inputs
         if cmap is None:
-            cmap = getattr(config, f'{self._data_type}_cmap')
+            cmap = 'inferno'
 
         if interpolation is None:
-            interpolation = config.interpolation
+            interpolation = 'lanczos'
 
         if xlim is not None and not isinstance(xlim, Iterable):
             xlim = (-xlim, xlim)
@@ -416,8 +358,8 @@ class RichData:
         elif power != 1:
             norm = PowerNorm(power)
 
-        im = ax.imshow(self.data,
-                       extent=[self.x[0], self.x[-1], self.y[0], self.y[-1]],
+        im = ax.imshow(data,
+                       extent=[x.min(), x.max(), y.min(), y.max()],
                        cmap=cmap,
                        clim=clim,
                        norm=norm,
@@ -425,12 +367,9 @@ class RichData:
                        interpolation=interpolation)
 
         if show_colorbar:
-            fig.colorbar(im, label=self.labels.z(self.xy_unit, self.z_unit), ax=ax, fraction=0.046)
+            fig.colorbar(im, label=colorbar_label, ax=ax, fraction=0.046)
 
-        xlab, ylab = None, None
-        if show_axlabels:
-            xlab = self.labels.x(self.xy_unit, self.z_unit)
-            ylab = self.labels.y(self.xy_unit, self.z_unit)
+        xlab, ylab = axis_labels
         ax.set(xlabel=xlab, xlim=xlim, ylabel=ylab, ylim=ylim)
 
         return fig, ax
@@ -438,7 +377,7 @@ class RichData:
 
 class Slices:
     """Slices of data."""
-    def __init__(self, data, x, y, x_unit, z_unit, labels, xscale, yscale, twosided=True):
+    def __init__(self, data, x, y, twosided=True):
         """Create a new Slices instance.
 
         Parameters
@@ -449,16 +388,6 @@ class Slices:
             1D array of x points
         y : `numpy.ndarray`
             1D array of y points
-        x_unit : `astropy.units.unit`
-            spatial unit
-        z_unit : `astropy.units.unit`
-            depth/height axis unit
-        labels : `Labels`
-            labels for the axes
-        xscale : `str`, {'linear', 'log'}
-            scale for x axis when plotting
-        yscale : `str`, {'linear', 'log'}
-            scale for y axis when plotting
         twosided : `bool`, optional
             if True, plot slices from (-ext, ext), else from (0,ext)
 
@@ -469,10 +398,7 @@ class Slices:
         self._p = None
         self._x = x
         self._y = y
-        self.x_unit, self.z_unit = x_unit, z_unit
-        self.labels = labels
-        self.xscale, self.yscale = xscale, yscale
-        self.center_y, self.center_x = (int(np.ceil(s / 2)) for s in data.shape)
+        self.center_y, self.center_x = np.argmin(abs(y)), np.argmin(abs(x))  # fftrange produced x/y, so argmin=center
         self.twosided = twosided
 
     def check_polar_calculated(self):
@@ -623,9 +549,9 @@ class Slices:
         return self._r, np.nanstd(self._source_polar, axis=0)
 
     def plot(self, slices, lw=None, alpha=None, zorder=None, invert_x=False,
-             xlim=(None, None), xscale=None,
-             ylim=(None, None), yscale=None,
-             show_legend=True, show_axlabels=True,
+             xlim=(None, None), xscale='linear',
+             ylim=(None, None), yscale='linear',
+             show_legend=True, axis_labels=(None, None),
              fig=None, ax=None):
         """Plot slice(s).
 
@@ -657,8 +583,8 @@ class Slices:
             scale used for the y axis
         show_legend : `bool`, optional
             if True, show the legend
-        show_axlabels : `bool`, optional
-            if True, show the axis labels
+        axis_labels : `iterable` of `str`,
+            (x, y) axis labels.  If None, not drawn
         fig : `matplotlib.figure.Figure`
             Figure containing the plot
         ax : `matplotlib.axes.Axis`
@@ -683,13 +609,13 @@ class Slices:
 
         # error check everything
         if alpha is None:
-            alpha = config.alpha
+            alpha = 1
 
         if lw is None:
-            lw = config.lw
+            lw = 2
 
         if zorder is None:
-            zorder = config.zorder
+            zorder = 3
 
         if isinstance(slices, str):
             slices = [slices]
@@ -718,27 +644,10 @@ class Slices:
         if show_legend:
             ax.legend(title='Slice')
 
-        # the x label has some special text manipulation
+        xlabel, ylabel = axis_labels
 
-        if invert_x:
-            xlabel = self.labels.generic(self.x_unit ** -1, self.z_unit)
-            # ax.invert_xaxis()
-            if 'Period' in xlabel:
-                xlabel = xlabel.replace('Period', 'Frequency')
-            elif 'Frequency' in xlabel:
-                xlabel = xlabel.replace('Frequency', 'Period')
-        else:
-            # slightly unclean code duplication here
-            xlabel = self.labels.generic(self.x_unit, self.z_unit)
-
-        ylabel = self.labels.z(self.x_unit, self.z_unit)
-
-        if not show_axlabels:
-            xlabel, ylabel = '', ''
-
-        # z looks wrong here, but z from 2D is y in 1D.
-        ax.set(xscale=xscale or self.xscale, xlim=xlim, xlabel=xlabel,
-               yscale=yscale or self.yscale, ylim=ylim, ylabel=ylabel)
+        ax.set(xscale=xscale, xlim=xlim, xlabel=xlabel,
+               yscale=yscale, ylim=ylim, ylabel=ylabel)
         if invert_x:
             ax.invert_xaxis()
 

@@ -5,7 +5,9 @@
 [![Coverage Status](https://coveralls.io/repos/github/brandondube/prysm/badge.svg?branch=master)](https://coveralls.io/github/brandondube/prysm?branch=master) [![DOI](http://joss.theoj.org/papers/10.21105/joss.01352/status.svg)](https://doi.org/10.21105/joss.01352)
 
 
-A python3.6+ module for physical optics based modeling and processing of data from commerical and open source instrumentation.  Prysm is the fastest numerical diffraction code in the world, more than a factor of 3 faster than its nearest competitor on CPU and more than a factor of 1000 on GPU.  It enables modeling and scientific inquiry not possible with other tools while offering a simple and powerful API that reads like English.
+Prysm is a python 3.6+ library for numerical optics.  It contains features that are a superset of POPPY or PROPER for physical optics, as well as thin lens, thin film, and detector modeling.  There is also a submodule that can replace the software that comes with an interferometer for data analysis.  On CPU, end-to-end calculation is more than 3x as fast as the above for like-for-like calculations.  On GPU, prysm is more than 1,000x faster than its competition.
+
+The library can be used for everything from forward modeling of optical systems from camera lenses to coronographs to reverse modeling and phase retrieval.  Due to its composable structure, it plays well with others and can be substituted in or out of other code easily.  For a list of features, see the documentation.  Of special note is prysm's interchangeable backend system, which allows the user to freely exchange numpy for cupy, enabling use of a GPU for _all_ computations, or other similar exchanges, such as pytorch for algorithmic differentiation.
 
 ## Installation
 
@@ -14,17 +16,97 @@ prysm is on pypi:
 pip install prysm
 ```
 
-prysm requires only [numpy](http://www.numpy.org/), [scipy](https://www.scipy.org/), and [astropy](https://www.astropy.org/).
+prysm requires only [numpy](http://www.numpy.org/), and [scipy](https://www.scipy.org/).
 
 ### Optional Dependencies
 
-Prysm uses numpy for array operations.  To use an nVidia GPU, you must have [cupy](https://cupy.chainer.org/) installed.  Plotting uses [matplotlib](https://matplotlib.org/).  Images are read and written with [imageio](https://imageio.github.io/).  Some MTF utilities utilize [pandas](https://pandas.pydata.org/) and [seaborn](https://seaborn.pydata.org/).  Reading of Zygo datx files requires [h5py](https://www.h5py.org/).
+Prysm uses numpy for array operations or any compatible library.  To use GPUs, you may install [cupy](https://cupy.chainer.org/) and use it as the backend at runtime.  Plotting uses [matplotlib](https://matplotlib.org/).  Images are read and written with [imageio](https://imageio.github.io/).  Some MTF utilities utilize [pandas](https://pandas.pydata.org/) and [seaborn](https://seaborn.pydata.org/).  Reading of Zygo datx files requires [h5py](https://www.h5py.org/).
 
 ## Features
 
-Prysm features robust tools for modeling and propagation of wavefronts to image planes and MTF.  It also features object synthesis routines and a flexible convolution system in support of image simulation.  Finally, it contains rich features for analysis of interferometric data.
+### Propagation
+- Fraunhofer, FFT or Matrix DFT
+- Fresnel
 
-For a complete list of features, see [the docs](https://prysm.readthedocs.io/en/stable/).
+### Polynomials
+- Zernike
+- Legendre
+- Chebyshev
+- Jacobi
+- 2D-Q, Qbfs, Qcon
+- Hopkins
+- fitting
+
+### Pupil Masks
+- circles, binary and anti-aliased
+- ellipses
+- rectangles
+- N-sided regular convex polygons
+- N-vaned spiders
+
+### Segmented systems
+- parametrized pupil mask generation
+- per-segment errors
+- segment indexing / identification
+
+### Image Simulation
+- equal sampling convolution
+- unequal sampling convolution
+- Smear
+- Jitter
+- in-the-box targets
+- - Siemens' Star
+- - Slanted Edge
+- - BMW Target (crossed edges)
+- - Pinhole
+- - Slit
+- - Tilted Square
+
+### Metrics
+- Strehl
+- Encircled Energy
+- RMS, PV, Sa, Std, Var
+- Centroid
+- FWHM, 1/e, 1/e^2
+- PSD
+- MTF / PTF / OTF
+- PSD (and parametric fit, synthesis from parameters)
+- slope / gradient
+- Total integrated scatter
+- Bandlimited RMS
+
+### Detectors
+- fully integrated noise model (shot, read, prnu, etc)
+- arbitrary pixel apertures (square, oblong, purely numerical)
+- optical low pass filters
+
+### Phase Retrieval
+- Gerchberg-Saxton
+- Fienup's algorithms:
+- - Input-Input
+- - Output-Output
+- - Hybrid Input-Output
+- Parametric nonlinear optimization
+
+### Thin Films
+- r, t parameters
+- Brewster's angle
+- Critical Angle
+- Snell's law
+
+### Refractive Index
+- Cauchy's equation
+- Sellmeier's equation
+
+### Thin Lenses
+- Defocus to delta z at the image and reverse
+- object/image distance relation
+- image/object distances and magnification
+- image/object distances and NA/F#
+- magnification and working F/#
+- two lens BFL, EFL (thick lenses)
+
+Some features may be missing from this list.
 
 ## Examples
 

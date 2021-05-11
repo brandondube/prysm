@@ -1,13 +1,13 @@
 """Supplimental tools for computing fourier transforms."""
 from collections.abc import Iterable
 
-from .mathops import engine as e
+from .mathops import np, fft
 from .conf import config
 
 
 def fftrange(n, dtype=None):
     """FFT-aligned coordinate grid for n samples."""
-    return e.arange(-n//2, -n//2+n, dtype=dtype)
+    return np.arange(-n//2, -n//2+n, dtype=dtype)
 
 
 def pad2d(array, Q=2, value=0, mode='constant'):
@@ -41,9 +41,9 @@ def pad2d(array, Q=2, value=0, mode='constant'):
             pad_shape, out_x, out_y = _padshape(array, Q)
             y, x = array.shape
             if value == 0:
-                out = e.zeros((out_y, out_x), dtype=array.dtype)
+                out = np.zeros((out_y, out_x), dtype=array.dtype)
             else:
-                out = e.zeros((out_y, out_x), dtype=array.dtype) + value
+                out = np.zeros((out_y, out_x), dtype=array.dtype) + value
             yy, xx = pad_shape
             out[yy[0]:yy[0] + y, xx[0]:xx[0] + x] = array
             return out
@@ -54,18 +54,18 @@ def pad2d(array, Q=2, value=0, mode='constant'):
                 kwargs = {'constant_values': value, 'mode': mode}
             else:
                 kwargs = {'mode': mode}
-            return e.pad(array, pad_shape, **kwargs)
+            return np.pad(array, pad_shape, **kwargs)
 
 
 def _padshape(array, Q):
     y, x = array.shape
-    out_x = int(e.ceil(x * Q))
-    out_y = int(e.ceil(y * Q))
+    out_x = int(np.ceil(x * Q))
+    out_y = int(np.ceil(y * Q))
     factor_x = (out_x - x) / 2
     factor_y = (out_y - y) / 2
     return (
-        (int(e.ceil(factor_y)), int(e.floor(factor_y))),
-        (int(e.ceil(factor_x)), int(e.floor(factor_x)))), out_x, out_y
+        (int(np.ceil(factor_y)), int(np.floor(factor_y))),
+        (int(np.ceil(factor_x)), int(np.floor(factor_x)))), out_x, out_y
 
 
 def forward_ft_unit(sample_spacing, samples, shift=True):
@@ -87,10 +87,10 @@ def forward_ft_unit(sample_spacing, samples, shift=True):
         array of sample frequencies in the output of an fft
 
     """
-    unit = e.fft.fftfreq(samples, sample_spacing)
+    unit = fft.fftfreq(samples, sample_spacing)
 
     if shift:
-        return e.fft.fftshift(unit)
+        return fft.fftshift(unit)
     else:
         return unit
 
@@ -208,7 +208,7 @@ class MatrixDFTExecutor:
         N, M = samples
         sz_i = n * m
         sz_o = N * M
-        return e.sqrt(sz_i) * Q * e.sqrt(sz_i/sz_o)
+        return np.sqrt(sz_i) * Q * np.sqrt(sz_i/sz_o)
 
     def _setup_bases(self, ary, Q, samples, shift):
         """Set up the basis matricies for given sampling parameters."""
@@ -239,10 +239,10 @@ class MatrixDFTExecutor:
                 U -= shift[1]
 
             a = 1 / Q
-            Eout_fwd = e.exp(-1j * 2 * e.pi * a / n * e.outer(Y, V).T)
-            Ein_fwd = e.exp(-1j * 2 * e.pi * a / m * e.outer(X, U))
-            Eout_rev = e.exp(1j * 2 * e.pi * a / n * e.outer(Y, V).T)
-            Ein_rev = e.exp(1j * 2 * e.pi * a / m * e.outer(X, U))
+            Eout_fwd = np.exp(-1j * 2 * np.pi * a / n * np.outer(Y, V).T)
+            Ein_fwd = np.exp(-1j * 2 * np.pi * a / m * np.outer(X, U))
+            Eout_rev = np.exp(1j * 2 * np.pi * a / n * np.outer(Y, V).T)
+            Ein_rev = np.exp(1j * 2 * np.pi * a / m * np.outer(X, U))
             self.Ein_fwd[key] = Ein_fwd
             self.Eout_fwd[key] = Eout_fwd
             self.Eout_rev[key] = Eout_rev

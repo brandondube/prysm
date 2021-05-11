@@ -1,5 +1,5 @@
 """Code for working with refractive index data."""
-from .mathops import engine as e
+from .mathops import np
 
 
 def cauchy(wvl, A, *args):
@@ -53,10 +53,10 @@ def sellmeier(wvl, A, B):
 
     """
     wvlsq = wvl ** 2
-    seed = e.ones_like(wvl)
+    seed = np.ones_like(wvl)
     for a, b, in zip(A, B):
         num = a * wvlsq
         den = wvlsq - b
         seed += (num/den)
 
-    return e.sqrt(seed)
+    return np.sqrt(seed)

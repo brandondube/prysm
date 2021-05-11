@@ -8,10 +8,10 @@ import calendar
 import shutil
 import warnings
 
-import numpy as np
+import numpy as truenp
 
 from .conf import config
-from .mathops import engine as e
+from .mathops import np
 
 
 def read_file_stream_or_path(path_or_file):
@@ -89,17 +89,17 @@ def read_trioptics_mtfvfvf(file, filename=None):
         metavalues = meta.split()
         imght, objang, focuspos, freqpitch = metavalues[1::2]
         mtf_raw = data.split()[1:]  # first element is "MTF"
-        mtf = e.asarray(mtf_raw, dtype=config.precision)
+        mtf = np.asarray(mtf_raw, dtype=config.precision)
         imghts.append(imght)
         objangs.append(objang)
         focusposes.append(focuspos)
         mtfs.append(mtf)
 
-    focuses = e.unique(e.asarray(focusposes, dtype=config.precision))
-    focuses = (focuses - e.mean(focuses)) * 1e3
-    imghts = e.unique(e.asarray(imghts, dtype=config.precision))
-    freqs = e.arange(len(mtfs[0]), dtype=config.precision) * float(freqpitch)
-    data = e.swapaxes(e.asarray(mtfs).reshape(len(focuses), len(imghts), len(freqs)), 0, 1)
+    focuses = np.unique(np.asarray(focusposes, dtype=config.precision))
+    focuses = (focuses - np.mean(focuses)) * 1e3
+    imghts = np.unique(np.asarray(imghts, dtype=config.precision))
+    freqs = np.arange(len(mtfs[0]), dtype=config.precision) * float(freqpitch)
+    data = np.swapaxes(np.asarray(mtfs).reshape(len(focuses), len(imghts), len(freqs)), 0, 1)
     return {
         'data': data,
         'focus': focuses,
@@ -150,7 +150,7 @@ def read_trioptics_mtf_vs_field_mtflab_v4(file, metadata=False):
     data = data[:len(data)//10]  # only search in a subset of the file for speed
 
     # compile a pattern that will search for the image heights in the file and extract
-    fields_pattern = re.compile(f'MTF=09(.*?)Legend=09', flags=re.DOTALL)
+    fields_pattern = re.compile('MTF=09(.*?)Legend=09', flags=re.DOTALL)
     fields = fields_pattern.findall(data)[0]  # two copies, only need 1st
 
     # make a pattern that will search for and extract the tan and sag MTF data.  The match will
@@ -162,14 +162,14 @@ def read_trioptics_mtf_vs_field_mtflab_v4(file, metadata=False):
     tan, sag = tan[:endpt], sag[:endpt]
 
     # now extract the freqs from the tan data
-    freqs = e.asarray([float(s.split('(')[0][1:]) for s in tan])
+    freqs = np.asarray([float(s.split('(')[0][1:]) for s in tan])
 
     # lastly, extract the floating point tan and sag data
     # also take fields, to the 4th decimal place (nearest .1um)
     # reformat T/S to 2D arrays with indices of (freq, field)
-    tan = e.asarray([s.split('=09')[1:-1] for s in tan], dtype=config.precision)
-    sag = e.asarray([s.split('=09')[1:-1] for s in sag], dtype=config.precision)
-    fields = e.asarray(fields.split('=09')[0:-1], dtype=config.precision).round(4)
+    tan = np.asarray([s.split('=09')[1:-1] for s in tan], dtype=config.precision)
+    sag = np.asarray([s.split('=09')[1:-1] for s in sag], dtype=config.precision)
+    fields = np.asarray(fields.split('=09')[0:-1], dtype=config.precision).round(4)
     res = {
         'freq': freqs,
         'field': fields,
@@ -187,7 +187,7 @@ def read_trioptics_mtf_vs_field_mtflab_v5(file_contents, metadata=False):
 
     Parameters
     ----------
-    file : `str` or path_like or file_like
+    file_contents : `str` or path_like or file_like
         contents of a file, path_like to the file, or file object
     metadata : `bool`
         whether to also extract and return metadata
@@ -301,8 +301,8 @@ def read_trioptics_mtf(file, metadata=False):
         mtfs.append(dat[1])
 
     breakpt = len(mtfs) // 2
-    t = e.asarray(mtfs[:breakpt], dtype=config.precision)
-    s = e.asarray(mtfs[breakpt:], dtype=config.precision)
+    t = np.asarray(mtfs[:breakpt], dtype=config.precision)
+    s = np.asarray(mtfs[breakpt:], dtype=config.precision)
     freqs = tuple(freqs[:breakpt])
 
     res = {
@@ -567,8 +567,8 @@ def read_mtfmapper_sfr_single(file, pixel_pitch=None):
     data = read_file_stream_or_path(file)
     floats = [float(d) for d in data.splitlines()[0].split(' ')[:-1]]
     edge_angle, *mtf = floats
-    mtf = e.asarray(mtf)
-    freqs = e.arange(len(mtf)) / 64
+    mtf = np.asarray(mtf)
+    freqs = np.arange(len(mtf)) / 64
     if pixel_pitch is not None:  # convert cy/px to cy/mm
         freqs /= (pixel_pitch / 1e3)
 
@@ -601,8 +601,8 @@ def read_zygo_datx(file):
         # cast intensity down to int16, saves memory and Zygo doesn't use cameras >> 16-bit
         try:
             intens_block = list(f['Data']['Intensity'].keys())[0]
-            intensity = e.flipud(f['Data']['Intensity'][intens_block][()].astype(e.uint16))
-        except KeyError:
+            intensity = np.flipud(f['Data']['Intensity'][intens_block][()].astype(np.uint16))
+        except (KeyError, OSError):
             intensity = None
 
         # load phase
@@ -613,16 +613,17 @@ def read_zygo_datx(file):
         # get a little metadata
         no_data = phase_obj.attrs['No Data'][0]
         wvl = phase_obj.attrs['Wavelength'][0] * 1e9  # Zygo stores wavelength in meters, we want output in nanometers
-        punit = str(phase_obj.attrs['Unit'][0])[2:-1]  # this for some reason is "b'Fringes'", need to slice off b' and '
+        punit = phase_obj.attrs['Unit'][0]
+        if isinstance(punit, bytes):
+            punit = punit.decode('UTF-8')
         scale_factor = phase_obj.attrs['Interferometric Scale Factor']
         obliquity = phase_obj.attrs['Obliquity Factor']
-
         # get the phase and process it as required
-        phase = e.flipud(f['Data']['Surface'][phase_key][()])
+        phase = phase_obj[()]
         # step 1, flip (above)
         # step 2, clip the nans
         # step 3, convert punit to nm
-        phase[phase >= no_data] = e.nan
+        phase[phase >= no_data] = np.nan
         if punit == 'Fringes':
             # the usual conversion per malacara
             phase = phase * obliquity * scale_factor * wvl
@@ -654,7 +655,9 @@ def read_zygo_datx(file):
             elif key in ['Property Bag List', 'Group Number', 'TextCount']:
                 continue  # h5py particulars
             if value.dtype == 'object':
-                value = str(value[0])  # object dtype is a string
+                value = value[0]
+                if isinstance(value, bytes):
+                    value = value.decode('UTF-8')
             elif value.dtype in ['uint8', 'int32']:
                 value = int(value[0])
             elif value.dtype in ['float64']:
@@ -686,7 +689,7 @@ def read_zygo_dat(file, multi_intensity_action='first'):
     ----------
     file : path_like
         path to a file
-    multi_itensity_action : `str`, {'avg', 'first', 'last'}
+    multi_intensity_action : `str`, {'avg', 'first', 'last'}
         action to take when handling multiple intensitiy frames, only avg is valid at this time
 
     Returns
@@ -707,7 +710,7 @@ def read_zygo_dat(file, multi_intensity_action='first'):
     plen = pw * ph  # phase
     header_len = meta['header']['size']
 
-    intensity = e.frombuffer(contents, offset=header_len, count=ilen, dtype=e.uint16).reshape((ib, ih, iw))
+    intensity = np.frombuffer(contents, offset=header_len, count=ilen, dtype=np.uint16).reshape((ib, ih, iw))
     if multi_intensity_action.lower() == 'avg':
         intensity = intensity.mean(axis=0)
     elif multi_intensity_action.lower() == 'first':
@@ -718,9 +721,9 @@ def read_zygo_dat(file, multi_intensity_action='first'):
         raise ValueError(f'multi_intensity_action {multi_intensity_action} not among valid options of avg, first, last.')
 
     # little-endian camera data, not sure if always need to byteswap, may break for some users...
-    phase_raw = e.frombuffer(contents, offset=header_len + ilen * 2, count=plen, dtype=e.int32)
+    phase_raw = np.frombuffer(contents, offset=header_len + ilen * 2, count=plen, dtype=np.int32)
     phase = phase_raw.copy().byteswap(True).astype(config.precision).reshape((ph, pw))
-    phase[phase >= ZYGO_INVALID_PHASE] = e.nan
+    phase[phase >= ZYGO_INVALID_PHASE] = np.nan
     phase *= (meta['scale_factor'] * meta['obliquity_factor'] * meta['wavelength'] /
               ZYGO_PHASE_RES_FACTORS[meta['phase_res']]) * 1e9  # unit m to nm
     return {
@@ -1170,7 +1173,7 @@ def read_zygo_metadata(file_contents):
     return {k: v for k, v in zip(all_keys, all_vars)}
 
 
-def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None, high_phase_res=False):
+def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None):
     """Write a Zygo ASCII interferogram file.
 
     Parameters
@@ -1187,8 +1190,6 @@ def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None, high_
         wavelength of light, um
     intensity : `numpy.ndarray`, optional
         intensity data
-    high_phase_res : `float`, optional
-        whether to save with high phase resolution
 
     """
     # construct the header
@@ -1200,8 +1201,8 @@ def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None, high_
     else:
         raise NotImplementedError('writing of ASCII files with nonempty intensity not yet supported.')
     px, py = phase.shape
-    ox = e.searchsorted(x, 0)
-    oy = e.searchsorted(y, 0)
+    ox = np.searchsorted(x, 0)
+    oy = np.searchsorted(y, 0)
     line4 = f'{oy} {ox} {py} {px}'
     line5 = '"' + ' ' * 81 + '"'
     line6 = '"' + ' ' * 39 + '"'
@@ -1212,12 +1213,25 @@ def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None, high_
     line8 = f'0 0.5 {wavelength*1e-6} 0 1 0 {res} {timestamp_int}'  # end is timestamp in integer seconds
     line9 = f'{py} {px} 0 0 0 0 ' + '"' + ' ' * 9 + '"'
     line10 = '0 0 0 0 0 0 0 0 0 0'
-    line11 = f'{int(high_phase_res)} 1 20 2 0 0 0 0 0'
+    line11 = '1 1 20 2 0 0 0 0 0'
     line12 = '0 ' + '"' + ' ' * 12 + '"'
     line13 = '1 0'
     line14 = '"' + ' ' * 7 + '"'
 
-    header_lines = (line1, line2, line3, line4, line5, line6, line7, line8, line9, line10, line11, line12, line13, line14)
+    header_lines = (line1,
+                    line2,
+                    line3,
+                    line4,
+                    line5,
+                    line6,
+                    line7,
+                    line8,
+                    line9,
+                    line10,
+                    line11,
+                    line12,
+                    line13,
+                    line14)
     header = '\n'.join(header_lines) + '\n'
 
     if intensity is None:
@@ -1226,10 +1240,10 @@ def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None, high_
     line16 = '#'
 
     # process the phase and write out
-    coef = ZYGO_PHASE_RES_FACTORS[int(high_phase_res)]
+    coef = ZYGO_PHASE_RES_FACTORS[1]
     encoded_phase = phase * (coef / wavelength / wavelength / 0.5)
-    encoded_phase[e.isnan(encoded_phase)] = ZYGO_INVALID_PHASE
-    encoded_phase = e.flipud(encoded_phase.astype(e.int64))
+    encoded_phase[np.isnan(encoded_phase)] = ZYGO_INVALID_PHASE
+    encoded_phase = np.flipud(encoded_phase.astype(np.int64))
     encoded_phase = encoded_phase.flatten()
     npts = encoded_phase.shape[0]
     fits_by_ten = npts // 10
@@ -1239,7 +1253,7 @@ def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None, high_
     s = StringIO()
     s.write(header)
     s.write('\n'.join([line15, line16, '']))
-    e.savetxt(s, encoded_phase[:boundary].reshape(-1, 10), fmt='%d', delimiter=' ', newline=' \n')
+    truenp.savetxt(s, encoded_phase[:boundary].reshape(-1, 10), fmt='%d', delimiter=' ', newline=' \n')
     tail = ' '.join((str(d) for d in encoded_phase[boundary:]))
     s.write(tail)
     s.write('\n#\n')
@@ -1249,7 +1263,7 @@ def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None, high_
         with open(file, 'w') as fd:
             shutil.copyfileobj(s, fd)
     else:
-        shutil.copyfileobj(s, fd)
+        shutil.copyfileobj(s, file)
 
 
 def read_sigfit_zernikes(file):
@@ -1313,7 +1327,7 @@ def _read_sigfit_zernike_core(text):
         else:
             coefs.append(float(coef))
 
-    coefs = e.asarray(coefs)
+    coefs = np.asarray(coefs)
 
     wvl = float(wvl) * fctr
     return surface, {
@@ -1348,7 +1362,7 @@ def read_sigfit_rigidbody(file):
     else:
         fctr = 1
 
-    data = np.genfromtxt(file, skip_header=7, delimiter=',')[:, 4:12]
+    data = truenp.genfromtxt(file, skip_header=7, delimiter=',')[:, 4:12]
     data[:, 1:] *= fctr
     out = {}
     for row in data:

@@ -3,24 +3,7 @@ import pytest
 
 import numpy as np
 
-from prysm import geometry
-
-SHAPES = [
-    geometry.square,
-    geometry.pentagon,
-    geometry.hexagon,
-    geometry.heptagon,
-    geometry.octagon,
-    geometry.nonagon,
-    geometry.decagon,
-    geometry.hendecagon,
-    geometry.dodecagon,
-    geometry.trisdecagon]
-
-
-def test_all_predefined_shapes():  # TODO: test more than just that these are ndarrays
-    for shape in SHAPES:
-        assert type(shape()) is np.ndarray
+from prysm import geometry, coordinates
 
 
 @pytest.mark.parametrize('sides, samples', [
@@ -29,22 +12,26 @@ def test_all_predefined_shapes():  # TODO: test more than just that these are nd
     [25, 128],
     [5,  256],
     [25, 68]])
-def test_regular_polygon(sides, samples):  # TODO: test more than just that these are ndarrays
-    assert type(geometry.regular_polygon(sides, samples)) is np.ndarray
+def test_regular_polygon(sides, samples):
+    x, y = coordinates.make_xy_grid(samples, diameter=2)
+    mask = geometry.regular_polygon(sides, 1, x, y)
+    assert isinstance(mask, np.ndarray)
+    assert mask.shape == (samples, samples)
 
 
 @pytest.mark.parametrize('sigma, samples', [
     [0.5, 128],
     [5,   256]])
 def test_gaussian(sigma, samples):
-    assert type(geometry.gaussian(sigma, samples)) is np.ndarray
+    x, y = coordinates.make_xy_grid(samples, diameter=2)
+    assert type(geometry.gaussian(sigma, x, y)) is np.ndarray
 
 
 def test_rotated_ellipse_fails_if_minor_is_bigger_than_major():
     minor = 1
     major = 0.5
     with pytest.raises(ValueError):
-        geometry.rotated_ellipse(width_major=major, width_minor=minor)
+        geometry.rotated_ellipse(width_major=major, width_minor=minor, x=None, y=None)
 
 
 @pytest.mark.parametrize('maj, min, majang', [
@@ -52,48 +39,50 @@ def test_rotated_ellipse_fails_if_minor_is_bigger_than_major():
     [1, 1, 5],
     [0.8, 0.1, 90]])
 def test_rotated_ellipse(maj, min, majang):
-    assert type(geometry.rotated_ellipse(width_major=maj,
+    x, y = coordinates.make_xy_grid(32, diameter=2)
+    assert type(geometry.rotated_ellipse(x=x, y=y,
+                                         width_major=maj,
                                          width_minor=min,
                                          major_axis_angle=majang)) is np.ndarray
 
 
-def test_allcircles_zeros():
-    funcs = ['circle', 'truecircle', 'inverted_circle']
-    for func in funcs:
-        assert (getattr(geometry, func)(32, 0) == 0).all()
+def test_circle_correct_area():
+    x, y = coordinates.make_xy_grid(256, diameter=2)
+    r, _ = coordinates.cart_to_polar(x, y)
+    mask = geometry.circle(1, r)
+    expected_area_of_circle = x.size * 3.14
+    # sum is integer quantized, binary mask, allow one half quanta of error
+    assert pytest.approx(mask.sum(), expected_area_of_circle, abs=0.5)
 
 
-def test_mask_cleaner_with_tuple():
-    type_radius = ('circle', 1)
-    assert type(geometry.mask_cleaner(type_radius, 64)) is np.ndarray
-
-
-def test_truecircle_doesnt_error():
-    circ = geometry.truecircle()
-    assert type(circ) is np.ndarray
-
-
-def test_inverted_circle_doesnt_error():
-    icirc = geometry.inverted_circle()
-    assert type(icirc) is np.ndarray
+def test_truecircle_correct_area():
+    # this test is identical to the test for circle.  The tested accuracy is
+    # 10x finer since this mask shader is not integer quantized
+    x, y = coordinates.make_xy_grid(256, diameter=2)
+    r, _ = coordinates.cart_to_polar(x, y)
+    mask = geometry.truecircle(1, r)
+    expected_area_of_circle = x.size * 3.14
+    # sum is integer quantized, binary mask, allow one half quanta of error
+    assert pytest.approx(mask.sum(), expected_area_of_circle, abs=0.05)
 
 
 @pytest.mark.parametrize('vanes', [2, 3, 5, 6, 10])
 def test_generate_spider_doesnt_error(vanes):
-    mask = geometry.generate_spider(vanes, 1, 0, 25, 128)
-    assert type(mask) is np.ndarray
+    x, y = coordinates.make_xy_grid(32, diameter=2)
+    mask = geometry.spider(vanes, 1, x, y)
+    assert isinstance(mask, np.ndarray)
 
 
-def test_rectangle_duplicates_y_from_x():
-    mask = geometry.rectangle(1)
-    assert (mask == 1).all()
+def test_rectangle_correct_area():
+    # really this test should be done for a rectangle that is less than the
+    # entire array
+    x, y = coordinates.make_xy_grid(256, diameter=2)
+    mask = geometry.rectangle(1, x, y)
+    expected = x.size
+    assert mask.sum() == expected
 
 
-def test_rectangle_doesnt_break_angle_90():
-    mask = geometry.rectangle(1, angle=90)
-    assert mask.any()
-
-
-def test_rectangle_doesnt_break_angle_not_0_or_90():
-    mask = geometry.rectangle(1, angle=45)
+def test_rectangle_doesnt_break_angle():
+    x, y = coordinates.make_xy_grid(16, diameter=2)
+    mask = geometry.rectangle(1, x, y, angle=45)
     assert mask.any()

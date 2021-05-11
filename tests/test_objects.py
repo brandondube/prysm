@@ -1,56 +1,65 @@
-"""Tests for the various objects prysm knows how to synthesize."""
+"""Tests for object (target) synthesis routines."""
 import pytest
 
-from prysm import objects
+import numpy as np
+
+from prysm import objects, coordinates
 
 
-@pytest.mark.parametrize('orientation', ['h', 'v', 'crossed', 'horizontal', 'vertical'])
-def test_slit_renders_correctly_for_all_orientations(orientation):
-    slit = objects.Slit(1, orientation, 0.05, 19)
-    assert (slit.data == 1).all()
+@pytest.fixture
+def xy():
+    x, y = coordinates.make_xy_grid(32, diameter=1)
+    return x, y
 
 
-@pytest.mark.parametrize('orientation', ['h', 'v', 'crossed'])
-def test_slit_analytic_ft_correct_at_origin(orientation):
-    s = objects.Slit(1, orientation=orientation)
-    aft = s.analytic_ft(0, 0)
-    assert aft == 1 or aft == 2
+@pytest.fixture
+def rt(xy):
+    x, y = xy
+    return coordinates.cart_to_polar(x, y)
 
 
-def test_pinhole_renders_properly_undersized_support():
-    p = objects.Pinhole(1, 0.01, 10)
-    assert (p.data == 1).all()
+@pytest.mark.parametrize(['wx', 'wy'], [
+    [None, .05],
+    [.05, None],
+    [.05, .05]])
+def test_slit(xy, wx, wy):
+    x, y = xy
+    ary = objects.slit(x, y, wx, wy)
+    assert ary.any()  # at least something white
 
 
-def test_pinhole_analytic_ft_correct_at_origin():
-    p = objects.Pinhole(1, 0, 0)
-    assert p.analytic_ft(0, 0) == 0.5
+def test_pinhole(rt):
+    r, _ = rt
+    assert objects.pinhole(1, r).any()
 
 
-@pytest.mark.parametrize('sinusoid, background', [[True, 'w'], [True, 'b'], [False, 'w'], [False, 'b']])
-def test_siemens_star_renders(sinusoid, background):
-    ss = objects.SiemensStar(32, sinusoidal=sinusoid,
-                             background=background,
-                             sample_spacing=1,
-                             samples=32)
-    assert ss
+@pytest.mark.parametrize('bg', ['w', 'b'])
+def test_siemensstar(rt, bg):
+    star = objects.siemensstar(*rt, 80, background=bg)
+    assert star.any()
 
 
-def test_tiltedsquare_renders():
-    ts = objects.TiltedSquare(4)
-    assert ts
+@pytest.mark.parametrize('bg', ['w', 'b'])
+def test_tiltedsquare(xy, bg):
+    sq = objects.tiltedsquare(*xy, background=bg)
+    assert sq.any()
 
 
-def test_slantededge_renders():
-    se = objects.SlantedEdge()
-    assert se
+@pytest.mark.parametrize('crossed', [True, False])
+def test_slantededge(xy, crossed):
+    se = objects.slantededge(*xy, crossed=crossed)
+    assert se.any()
 
 
-def test_grating_renders():
-    g = objects.Grating(1)
-    assert g
+def test_pinhole_ft_functional(rt):
+    r, _ = rt
+    assert objects.pinhole_ft(1., r).any()
 
 
-def test_grating_array_renders():
-    ga = objects.GratingArray([1, 2], [1, 2])
-    assert ga
+@pytest.mark.parametrize(['wx', 'wy'], [
+    [None, .05],
+    [.05, None],
+    [.05, .05]])
+def test_slit_ft_functional(xy, wx, wy):
+    r, _ = xy
+    assert objects.slit_ft(wx, wy, *xy).any()
