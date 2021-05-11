@@ -99,3 +99,55 @@ def test_xyrt_synthesis_for_no_xytr_as_expected():
     assert y.shape == data.shape
     assert r.shape == data.shape
     assert t.shape == data.shape
+
+
+def test_slices_does_not_alter_twosided():
+    data = np.random.rand(11, 11)
+    dx = 1.234
+    rd = rdata.RichData(data, dx, None)
+    slc = rd.slices(twosided=True)
+    _, y = slc.y
+    _, x = slc.x
+    assert (y == data[:, 6]).all()
+    assert (x == data[6, :]).all()
+
+
+def test_slices_various_interped_profiles_function():
+    data = np.random.rand(11, 11)
+    dx = 1.234
+    rd = rdata.RichData(data, dx, None)
+    slc = rd.slices(twosided=True)
+    u, azavg = slc.azavg
+    assert np.isfinite(u).all()
+    assert np.isfinite(azavg).all()
+
+    u, azmin = slc.azmin
+    assert np.isfinite(u).all()
+    assert np.isfinite(azmin).all()
+
+    u, azmax = slc.azmax
+    assert np.isfinite(u).all()
+    assert np.isfinite(azmax).all()
+
+    u, azpv = slc.azpv
+    assert np.isfinite(u).all()
+    assert np.isfinite(azpv).all()
+
+    u, azvar = slc.azvar
+    assert np.isfinite(u).all()
+    assert np.isfinite(azvar).all()
+
+    u, azstd = slc.azstd
+    assert np.isfinite(u).all()
+    assert np.isfinite(azstd).all()
+
+
+def test_slice_plot_all_flavors():
+    data = np.random.rand(11, 11)
+    dx = 1.234
+    rd = rdata.RichData(data, dx, None)
+    slc = rd.slices(twosided=True)
+    fig, ax = slc.plot(alpha=None, lw=None, zorder=None, slices='x', show_legend=True, invert_x=True)
+    assert fig
+    assert ax
+    plt.close(fig)
