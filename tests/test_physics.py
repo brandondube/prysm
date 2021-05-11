@@ -3,8 +3,6 @@ from itertools import product
 
 import numpy as np
 
-from astropy import units as u
-
 import pytest
 
 from prysm.coordinates import make_xy_grid, cart_to_polar
