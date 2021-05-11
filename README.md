@@ -1,6 +1,6 @@
 # Prysm
 
-[![CircleCI](https://circleci.com/gh/brandondube/prysm/tree/v-020-dev.svg?style=svg)](https://circleci.com/gh/gh/brandondube/prysm?branch=master)
+[![CircleCI](https://circleci.com/gh/brandondube/prysm.svg?style=svg)](https://circleci.com/gh/gh/brandondube/prysm?branch=master)
 [![Documentation Status](https://readthedocs.org/projects/prysm/badge/?version=stable)](http://prysm.readthedocs.io/en/stable/?badge=stable)
 [![Coverage Status](https://coveralls.io/repos/github/brandondube/prysm/badge.svg?branch=master)](https://coveralls.io/github/brandondube/prysm?branch=master) [![DOI](http://joss.theoj.org/papers/10.21105/joss.01352/status.svg)](https://doi.org/10.21105/joss.01352)
 
