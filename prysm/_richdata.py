@@ -6,7 +6,6 @@ from collections.abc import Iterable
 from .mathops import np, interpolate
 from .coordinates import cart_to_polar, make_xy_grid, uniform_cart_to_polar, polar_to_cart
 from .plotting import share_fig_ax
-from .fttools import fftrange
 
 
 def fix_interp_pair(x, y):
@@ -163,7 +162,9 @@ class RichData:
         if twosided is None:
             twosided = self._default_twosided
 
-        y, x = (fftrange(n, self.data.dtype)*self.dx for n in self.data.shape)
+        x, y = self.x, self.y
+        x = x[0]
+        y = y[..., 0]
 
         return Slices(data=self.data, x=x, y=y, twosided=twosided)
 
@@ -176,8 +177,12 @@ class RichData:
             interpolator instance.
 
         """
+        x = self.x
+        y = self.y
+        x = x[0]
+        y = y[..., 0]
         if self.interpf_2d is None:
-            self.interpf_2d = interpolate.RegularGridInterpolator((self.y, self.x), self.data)
+            self.interpf_2d = interpolate.RegularGridInterpolator((y, x), self.data)
 
         return self.interpf_2d
 
@@ -192,9 +197,10 @@ class RichData:
             y interpolator
 
         """
+        slc = self.slices()
         if self.interpf_x is None or self.interpf_y is None:
-            ux, x = self.slices().x
-            uy, y = self.slices().y
+            ux, x = slc.x
+            uy, y = slc.y
 
             self.interpf_x = interpolate.interp1d(ux, x)
             self.interpf_y = interpolate.interp1d(uy, y)
@@ -221,7 +227,7 @@ class RichData:
 
         rho, phi = fix_interp_pair(rho, phi)
         x, y = polar_to_cart(rho, phi)
-        return self.interpf_2d((x, y), method='linear')
+        return self.interpf_2d((y, x), method='linear')
 
     def exact_xy(self, x, y=None):
         """Retrieve data at the specified X-Y frequency pairs.
