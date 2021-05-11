@@ -7,11 +7,8 @@ orbs:
   # See the orb documentation here: https://circleci.com/developer/orbs/orb/circleci/python
   python: circleci/python@1.2
 
-  # coveralls for coverage
-  coveralls: coveralls/coveralls@1.0.6
-
 workflows:
-  sample:  # This is the name of the workflow, feel free to change it to better match your workflow.
+  build-and-test:  # This is the name of the workflow, feel free to change it to better match your workflow.
     # Inside the workflow, you define the jobs you want to run.
     # For more details on extending your workflow, see the configuration docs: https://circleci.com/docs/2.0/configuration-reference/#workflows
     jobs:
@@ -45,6 +42,5 @@ jobs:
           name: Run tests
           # This assumes pytest is installed via the install-package step above
           command: pytest --cov=prysm tests/
-      - store_artifacts:
-          path: .coverage
-      - coveralls/upload
+      - run:
+          command: coveralls
