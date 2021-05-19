@@ -1,9 +1,9 @@
 """Detector-related simulations."""
 import numbers
+import functools
 import itertools
 
 from .mathops import np
-from .mathops import is_odd
 
 
 class Detector:
@@ -186,7 +186,6 @@ def pixel(x, y, width_x, width_y):
 def bindown(array, factor, mode='avg'):
     """Bin (resample) an array.
 
-    Note, for each axis of array, shape must be an integer multiple of nx/ny
     Parameters
     ----------
     array : `numpy.ndarray`
@@ -204,12 +203,11 @@ def bindown(array, factor, mode='avg'):
 
     Notes
     -----
-    Array should be 2D.
+    For each axis of array, shape must be an integer multiple of factor.
 
-    If the size of `array` is not evenly divisible by the number of samples,
-    the algorithm will trim around the border of the array.  If the trim
-    length is odd, one extra sample will be lost on the left side as opposed
-    to the right side.
+    array may be ND, a scalar factor will broadcast to all dimensions.
+
+    To bin an image cube e.g. of shape (3, m, n),  use bindown(img, [1, factor, factor])
 
     Raises
     ------
@@ -227,7 +225,7 @@ def bindown(array, factor, mode='avg'):
     output_shape = tuple(s//n for s, n in zip(array.shape, factor))
     output_shape = tuple(itertools.chain(*zip(output_shape, factor)))
     intermediate_view = array.reshape(output_shape)
-    # reductiona xes produces (1, 3) for 2D, or (1, 3, 5) for 3D, etc.
+    # reduction axes produces (1, 3) for 2D, or (1, 3, 5) for 3D, etc.
     reduction_axes = tuple(range(1, 2*array.ndim, 2))
 
     if mode.lower() in ('avg', 'average', 'mean'):
@@ -235,6 +233,71 @@ def bindown(array, factor, mode='avg'):
     elif mode.lower() == 'sum':
         output_data = intermediate_view.sum(axis=reduction_axes)
     else:
-        raise ValueError('mode must be average of sum.')
+        raise ValueError('mode must be average or sum.')
 
     return output_data
+
+
+def tile(array, factor, scaling='sum'):
+    """Tile (repeat) an array by factor
+
+    Parameters
+    ----------
+    array : `numpy.ndarray`
+        array of values
+    factor : `int` or sequence of `int`
+        binning factor.  If an integer, broadcast to each axis of array,
+        else unique factors may be used for each axis.
+    scaling : `str`, {'avg', 'sum'}
+        sum or avg, how to adjust the output signal
+
+    Returns
+    -------
+    `numpy.ndarray`
+        ndarray binned by given number of samples
+
+    Notes
+    -----
+    This function is the adjoint operation for bindown.
+
+    It works with ND arrays, with the same rules as bindown.
+
+    In 2D, it is equivalent to array.repeat(factor, axis=0).repeat(factor, axis=1)
+    (and is more generally equivalent for higher dimensionality, but it runs
+    about ndim times faster (twice as fast in 2D, 3x in 3D, etc).
+
+    The return may be a view into the argument and is mutated after
+    calling tile at the user's risk
+
+    """
+    if isinstance(factor, numbers.Number):
+        factor = tuple([factor] * array.ndim)
+
+    intermediate = [None] * len(factor)
+
+    slc = (slice(s) for s in array.shape)
+    shape1 = tuple(itertools.chain(*zip(slc, intermediate)))
+    shape2 = tuple(itertools.chain(*zip(array.shape, factor)))
+    output_shape = tuple(s*n for s, n in zip(array.shape, factor))
+
+    # view an array of shape
+    # (m, n)
+    # => (m, 1, n, 1)
+    # => (m, factor, n, factor) (via broadcast_to)
+    view = np.broadcast_to(array[shape1], shape2)
+    view = view.reshape(output_shape)
+    if scaling == 'sum':
+        # due to our ND nature, we can't just do factor ** array.ndim,
+        # although in the majority of cases this line will do the same
+        # thing that that would
+        sf = functools.reduce(lambda x, y: x*y, factor)
+        sf = 1 / sf
+    elif scaling in ('avg', 'average', 'mean'):
+        sf = 1
+    else:
+        raise ValueError('scaling must be average or sum')
+
+    if sf != 1:
+        view = view * sf
+
+    return view

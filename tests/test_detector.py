@@ -36,3 +36,11 @@ def test_detector_functions():
     field = np.ones((128, 128))
     img = d.expose(field)
     assert img.any()
+
+
+def test_bindown_tile_reciprocate():
+    d = np.random.rand(16, 16)
+    binned = detector.bindown(d, 4, 'sum')
+    tiled = detector.tile(binned, 4, 'sum')
+    assert tiled.shape == d.shape
+    assert tiled.sum() == pytest.approx(d.sum())  # energy conservation scaling
