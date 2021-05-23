@@ -6,6 +6,7 @@ API Reference
    :maxdepth: 1
 
    base_classes
+   bayer
    conf
    convolution
    coordinates
@@ -15,20 +16,18 @@ API Reference
    geometry
    interferogram
    io
-   jacobi
    mathops
    mtf_utils
    objects
    otf
    plotting
+   polynomials
    propagation
    psf
-   pupil
-   qpoly
    refractive
    sample_data
+   segmented
    thinfilm
    thinlens
    util
    wavelengths
-   zernike

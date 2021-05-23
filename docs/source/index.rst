@@ -44,6 +44,7 @@ API Reference
 -------------
 
 .. toctree::
+    :maxdepth: 2
 
     api/index.rst
 
@@ -58,5 +59,6 @@ Release History
 ---------------
 
 .. toctree::
+    :maxdepth: 2
 
     releases/index.rst

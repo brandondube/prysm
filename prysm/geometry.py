@@ -213,32 +213,6 @@ def circle(radius, rho):
     return rho <= radius
 
 
-def offset_circle(radius, x, y, center=(0, 0)):
-    """A circle not centered on the radial grid.
-
-    Parameters
-    ----------
-    radius : `float`
-        radius of the circle
-    x : `numpy.ndarray`
-        x grid
-    y : `numpy.ndarray`
-        y grid
-    center : `tuple`
-        center of the circle, (x,y)
-
-    Returns
-    -------
-    `numpy.ndarray`
-        binary representation of the circle
-
-    """
-    x2 = x - center[0]
-    y2 = y - center[1]
-    r_sq = x2 ** 2 + y2 ** 2
-    return r_sq <= (radius ** 2)
-
-
 def regular_polygon(sides, radius, x, y, center=(0, 0), rotation=0):
     """Generate a regular polygon mask with the given number of sides.
 
