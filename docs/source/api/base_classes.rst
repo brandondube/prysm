@@ -7,6 +7,3 @@ Base Classes
 
 .. autoclass :: prysm._richdata.Slices
     :members:
-
-.. autoclass :: prysm._phase.OpticalPhase
-    :members:

@@ -239,7 +239,7 @@ def bindown(array, factor, mode='avg'):
 
 
 def tile(array, factor, scaling='sum'):
-    """Tile (repeat) an array by factor
+    """Tile (repeat) an array by factor.
 
     Parameters
     ----------

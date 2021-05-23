@@ -5,18 +5,19 @@ prysm v0.20
 Summary
 =======
 
-Version 20 of prysm is the largest breaking release the library has ever had.  Your programs will be more a bit verbose when written in this style, but they will be more clear, contain fewer bugs, and run faster.  This version marks prysm transitioning from an extremely object oriented style to a data oriented style.  The result is that code is more direct, and there is less of it.  Side benefits are that by deferring the caches that used to help keep prysm fast to the user level, the user is in control over their program's static memory usage.
+Version 20 of prysm is the largest breaking release the library has ever had.  Your programs will be more a bit verbose when written in this style, but they will be more clear, contain fewer bugs, and run faster.  This version marks prysm transitioning from an extremely object oriented style to a data oriented style.  The result is that code is more direct, and there is less of it.  Side benefits are that by deferring the caches that used to help keep prysm fast to the user level, the user is in control over their program's memory usage.
 
-This version will produce one more zero point release (0.21) for cleanup after longer experience in this style, after which version 1 will be released.  In addition to the breaking changes, this release brings landmark additions of **2D-Q polynomials**, also known as Forbes polynomials, **Chebyshev, Legendre, and Hopkins polynomials,** **sophistocated tools for segmented apertures**, and **classical phase retrieval algorithms** included in the box.
+This version will produce one more zero point release (0.21) for cleanup after longer experience in this style, after which version 1 will be released.  In addition to the breaking changes, this release brings landmark additions of **2D-Q polynomials**, also known as Forbes polynomials, **Chebyshev, Legendre, and Hopkins polynomials,** and **sophistocated tools for segmented apertures**.
 
 The remainder of this page will be divided by logical unit of function, then sub-divided between breaking changes and new features.
 
 
-Breaking Changes
-================
+Changes
+=======
 
 .. toctree::
 
+    bayer
     conf
     convolution
     coordinates
@@ -42,10 +43,20 @@ Breaking Changes
     util
     wavelength
 
-io
---
 
-- :func:`~prysm.io.write_zygo_ascii` no longer takes a :code:`high_phase_res` parameter.  It did not do anything before and has been removed, as it is not likely prysm needs to support ancient version of MetroPro that are incompatible with that convention.
+
+bayer
+-----
+
+This is a new submodule, for working with bayer imaging systems.  It provides a complete toolkit for both forward modeling and processing of bayer images, real or synthetic.  The following functions are included:
+
+- :func:`~prysm.bayer.wb_prescale` for performing white-balance pre-scaling to mosaiced data in-place.
+- :func:`~prysm.bayer.wb_scale` for performing white-balance scaling to RGB data in-place.
+- :func:`~prysm.bayer.composite_bayer` for compositing dense color plane data into a bayer mosaic.  This function is used to synthesize "raw" bayer imagery in a forward model.
+- :func:`~prysm.bayer.decomposite_bayer` for "sifting" bayer subplanes from a mosaiced image.
+- :func:`~prysm.bayer.recomposite_bayer` the inverse operation of decomposite_bayer, for taking bayer subplanes and re-mosaicing them.  :code:`composite_bayer` works with fully dense data with (m, n) pixels per color plane.  :code:`recomposite_bayer` works with sparse data with (m/2, n/2) pixels per color plane.
+- :func:`~prysm.bayer.demosaic_malvar` for performing Malvar-He-Cutler demosaicing.
+
 
 conf
 ----
@@ -74,10 +85,21 @@ conf
 - - psd_labels
 
 
-util
-----
+convolution
+-----------
 
-- :func:`~prysm.mathops.is_odd` and :func:`~prysm.mathops.is_power_of_2` have been moved to the mathops module.
+This module has been substantially rewritten.  Up to version 0.19, a :code:`Convolvable` object was the key to the convolution API, which was capable of forming prototypical FFT based convolution, as well as convolution with various analytic blurs, and convolution of datasets which were not equally sampled.  The API has been significantly simplified and disentangled in this version.
+
+Breaking:
+
+- :class:`Convolvable` no longer exists.
+- the :code:`deconv` method for Wiener-Helstrom deconvolution no longer exists
+
+The new API is comprised of:
+
+- :func:`~prysm.convolution.conv`, for convolving an object with a PSF.
+- :func:`~prysm.convolution.apply_transfer_functions`, for blurring an object with N transfer functions.
+
 
 coordinates
 -----------
@@ -86,11 +108,67 @@ coordinates
 - :func:`~prysm.coordinates.make_xy_grid` has had its signature changed from :code:`(samples_x, samples_y, radius=1)` to :code:`(shape, *, dx, diameter, grid=True)`.  shape auto-broadcasts to 2D and dx/diameter are keyword only.  grid controls returning vectors or a meshgrid.  :code:`make_xy_grid` is now FFT-aligned (always containing a zero sample).
 - :func:`make_rho_phi_grid` has been removed, combine :func:`make_xy_grid` with :func:`~prysm.coordinates.cart_to_polar`.
 
+
+degredations
+------------
+
+- The :class:`Smear` class has been removed, and replaced with :func:`~prysm.degredations.smear_ft`
+- The :class:`Jitter` class has been removed, and replaced with :func:`~prysm.degredations.jitter_ft`
+
+
+detector
+--------
+
+- The :class:`~prysm.detector.Detector` class has been reworked, and its purpose changed.  Previously, it existed to impart blur into a system as would be experienced given a particular pixel design.  It now exists to model noise.  Expect no API compatibility between v0.19 and v0.20.
+- The :class:`OLPF` class has been removed, and replaced with :func:`~prysm.detector.olpf_ft`
+- The :class:`PixelAperture` class has been removed, and replaced with :func:`~prysm.detector.pixel_ft`
+- :func:`~prysm.detector.bindown_with_units` was removed.
+- :func:`~prysm.detector.bindown` will now error if the array dimensions are not an integer multiple of the binning factor.  It now supports ND data, with possible unique factors per dimension.
+- :func:`~prysm.detector.tile` has been added, which is the adjoint operation to bindown.  It replicates the elements of an array :code:`factor` times, and has the same ND support bindown now does.
+
+
+geometry
+--------
+
+The geometry module was rewritten.  The object oriented mask interface and :class:`MaskCache` have been removed.  All functions now take :code:`x, y` or :code:`r, t` args as appropriate, instead of :code:`samples`.  The arguments now all have consistent units.
+
+- Higher side count regular polygon functions have been removed, use :func:`~prysm.geometry.regular_polygon` directly:
+- - :func:`~prysm.geometry.heptagon`
+- - :func:`~prysm.geometry.octagon`
+- - :func:`~prysm.geometry.nonagon`
+- - :func:`~prysm.geometry.decagon`
+- - :func:`~prysm.geometry.hendecagon`
+- - :func:`~prysm.geometry.dodecagon`
+- - :func:`~prysm.geometry.trisdecagon`
+- :func:`~prysm.geometry.inverted_circle` was removed, call :code:`~circle(...)` for equivalent output.
+- :func:`~prysm.geometry.offset_circle` was removed; shift the grid prior to calling circle.
+
+
+io
+--
+
+- :func:`~prysm.io.write_zygo_ascii` no longer takes a :code:`high_phase_res` parameter.  It did not do anything before and has been removed, as it is not likely prysm needs to support ancient version of MetroPro that are incompatible with that convention.
+
+- the dat and datx readers no longer flip the phase and intensity data upside down.  They used to do this due to prysm explicitly having an origin in lower left convention, but v0.20 has no enforced convention for array orientation, and the flipud is an unexpected behavior in this paradigm.
+
+interferogram
+-------------
+
+The interferogram module is largely unchanged.  With the removal of astropy units, the user must manage their own units.  Phase is loaded from dat/datx files in units of nm.
+
+- :func:`prysm.interferogram.Interferogram.fit_zernikes` was removed, use lstsq from the polynomials submodule with :code:`Interferogram.data, Interferogram.x, Interferogram.y` directly, minding spatial axis normalization.
+- :func:`prysm.interferogram.Interferogram.remove_piston_tiptilt_power` and :func:`prysm.interferogram.Interferogram.remove_piston_tiptilt` have been removed, call :func:`~prysm.interferogram.Interferogram.remove_piston`, etc, in sequence.
+- :func:`prysm.interferogram.Interferogram.mask` now accepts arrays only.
+
+jacobi
+------
+
+See the new polynomials module.
+
 qpoly
 -----
 
-- the :class:`QCONSag` and :class:`QBFSSag` classes have been removed, use the :func:`~prysm.qpoly.Qbfs` :func:`~prysm.qpoly.Qbfs_sequence`, :func:`~prysm.qpoly.Qcon`, and :func:`~prysm.qpoly.Qcon_sequence` functions to replicate the synthesis behavior.
-- new functions :func:`~prysm.qpoly.Q2d` and :func:`~prysm.qpoly.Q2d_sequence` to compute 2D-Q polynomials.
+See the new polynomials module.
 
 pupil
 -----
@@ -120,3 +198,8 @@ propagation
 -----------
 
 - :func:`prop_pupil_plane_to_psf_plane` and :func:`prop_pupil_plane_to_psf_plane_units` have been removed, they were deprecated and marked for removal.
+
+util
+----
+
+- :func:`~prysm.mathops.is_odd` and :func:`~prysm.mathops.is_power_of_2` have been moved to the mathops module.

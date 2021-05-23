@@ -3,20 +3,28 @@ from .mathops import np
 from ._richdata import RichData
 
 
-def transform_psf(psf, dx):
+def transform_psf(psf, dx=None):
     """Transform a PSF to k-space without further modification."""
-    data = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(psf.data)))
+    if not hasattr(psf, 'ndim'):  # container object, not array
+        dx = psf.dx
+        psf = psf.data
+
+    if dx is None:
+        raise ValueError('dx is None: dx must be provided if psf is an array')
+
+    data = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(psf)))
     df = 1000 / (data.shape[0] * dx)  # cy/um to cy/mm
     return data, df
 
 
-def mtf_from_psf(psf, dx):
+def mtf_from_psf(psf, dx=None):
     """Compute the MTF from a given PSF.
 
     Parameters
     ----------
-    psf : `numpy.ndarray`
-        2D data containing the psf
+    psf : `prysm.RichData` or `numpy.ndarray`
+        object with data property having 2D data containing the psf,
+        or the array itself
     dx : `float`
         sample spacing of the data
 
@@ -33,13 +41,14 @@ def mtf_from_psf(psf, dx):
     return RichData(data=dat, dx=df, wavelength=None)
 
 
-def ptf_from_psf(psf, dx):
+def ptf_from_psf(psf, dx=None):
     """Compute the PTF from a given PSF.
 
     Parameters
     ----------
-    psf : `numpy.ndarray`
-        2D data containing the psf
+    psf : `prysm.RichData` or `numpy.ndarray`
+        object with data property having 2D data containing the psf,
+        or the array itself
     dx : `float`
         sample spacing of the data
 
@@ -59,7 +68,7 @@ def ptf_from_psf(psf, dx):
     return RichData(data=dat, dx=df, wavelength=None)
 
 
-def otf_from_psf(psf, dx):
+def otf_from_psf(psf, dx=None):
     """Compute the OTF from a given PSF.
 
     Parameters

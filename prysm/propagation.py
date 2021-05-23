@@ -98,6 +98,7 @@ def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
                        prop_dist=prop_dist,
                        wavelength=wavelength,
                        output_dx=output_dx)
+
     field = mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples, norm=norm)
     if coherent:
         return field
@@ -521,6 +522,7 @@ class Wavefront:
 
         data = focus(self.data, Q=Q, norm=None)
         dx = pupil_sample_to_psf_sample(self.dx, data.shape[1], self.wavelength, efl)
+
         return Wavefront(data, self.wavelength, dx, space='psf')
 
     def unfocus(self, efl, Q=2):

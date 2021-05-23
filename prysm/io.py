@@ -601,7 +601,7 @@ def read_zygo_datx(file):
         # cast intensity down to int16, saves memory and Zygo doesn't use cameras >> 16-bit
         try:
             intens_block = list(f['Data']['Intensity'].keys())[0]
-            intensity = np.flipud(f['Data']['Intensity'][intens_block][()].astype(np.uint16))
+            intensity = f['Data']['Intensity'][intens_block][()].astype(np.uint16)
         except (KeyError, OSError):
             intensity = None
 
@@ -1243,7 +1243,7 @@ def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None):
     coef = ZYGO_PHASE_RES_FACTORS[1]
     encoded_phase = phase * (coef / wavelength / wavelength / 0.5)
     encoded_phase[np.isnan(encoded_phase)] = ZYGO_INVALID_PHASE
-    encoded_phase = np.flipud(encoded_phase.astype(np.int64))
+    encoded_phase = encoded_phase.astype(np.int64)
     encoded_phase = encoded_phase.flatten()
     npts = encoded_phase.shape[0]
     fits_by_ten = npts // 10
