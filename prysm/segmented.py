@@ -131,9 +131,9 @@ class CompositeHexagonalAperture:
         rings : `int`
             number of rings in the structure
         segment_diameter : `float`
-            diameter of each segment, same units as x
+            flat-to-flat diameter of each segment, same units as x
         segment_separation : `float`
-            center-to-center distance between segments, same units as x
+            edge-to-nearest-edge distance between segments, same units as x
         segment_angle : `float`, optional, {0, 90}
             rotation angle of each segment
         exclude : sequence of `int`
@@ -197,7 +197,7 @@ def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x
     local_masks = [center_mask]
     for i in range(1, rings+1):
         hexes = hex_ring(i)
-        centers = [hex_to_xy(h, rseg+segment_separation, rot=segment_angle) for h in hexes]
+        centers = [hex_to_xy(h, rseg+(segment_separation/2), rot=segment_angle) for h in hexes]
         all_centers += centers
         for center in centers:
             segment_id += 1
