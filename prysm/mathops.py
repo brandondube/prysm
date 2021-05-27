@@ -145,6 +145,7 @@ np = NumpyEngine()
 special = SpecialEngine()
 ndimage = NDImageEngine()
 fft = FFTEngine()
+interpolate = InterpolateEngine()
 
 
 def jinc(r):
