@@ -73,13 +73,13 @@ def apply_transfer_functions(obj, dx, *tfs, fx=None, fy=None, ft=None, fr=None):
             sig = inspect.signature(tf)
             params = sig.parameters
             kwargs = {}
-            if fx in params:
+            if 'fx' in params:
                 kwargs['fx'] = fx
-            if fy in params:
+            if 'fy' in params:
                 kwargs['fy'] = fy
-            if fr in params:
+            if 'fr' in params:
                 kwargs['fr'] = fr
-            if ft in params:
+            if 'ft' in params:
                 kwargs['ft'] = ft
 
             tf = tf(**kwargs)
