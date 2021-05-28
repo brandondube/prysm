@@ -35,15 +35,21 @@ Guidelines
 
 * PRs should update tests or introduce new tests as needed to maintain coverage and correctness.
 
-* Use :code:`from prysm.mathops import e` instead of :code:`import numpy as np`, using the :code:`e` object as you would the :code:`np` one.  You cannot import from :code:`e`, so for example you may have to write :code:`e.fft.fft2`.
+For mathematical libraries, import them from :code:`prysm.mathops`.  These include:
+
+..code-block :: python
+
+    from prysm.mathops import np, special, fft, interpolate, ndimage
+
+prysm's backend can be changed at will by the user.  Importing this way avoids locking the user into numpy or scipy.
 
 * If your code creates new arrays, please maintain conformance with prysm's precision options:
 
 .. code-block :: python
 
-    from .conf import config
+    from prysm.conf import config
 
-    ary = e.arange(lower, upper, spacing, dtype=config.precision)
+    ary = np.arange(lower, upper, spacing, dtype=config.precision)
 
 
-For a not-all-inclusive list of welcome contributions, please see the `open issues <https://github.com/brandondube/prysm/issues>`_.
+For a list of eagerly welcomed, please see the `open issues <https://github.com/brandondube/prysm/issues>`_.  Feel free to open a new issue to discuss other contributions!
