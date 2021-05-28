@@ -11,7 +11,7 @@ from ._richdata import RichData
 from .mathops import np
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
-from .coordinates import cart_to_polar
+from .coordinates import cart_to_polar, broadcast_1d_to_2d
 from .util import mean, rms, pv, Sa, std  # NOQA
 from .wavelengths import HeNe
 from .plotting import share_fig_ax
@@ -179,6 +179,7 @@ def psd(height, sample_spacing, window=None):
 
     ux = forward_ft_unit(sample_spacing, height.shape[1])
     uy = forward_ft_unit(sample_spacing, height.shape[0])
+    ux, uy = broadcast_1d_to_2d(ux, uy)
     return ux, uy, psd
 
 
@@ -520,22 +521,6 @@ def make_random_subaperture_mask(ary, ary_diam, mask, seed=None):
     return out
 
 
-class PSD(RichData):
-    """Two dimensional PSD."""
-    def __init__(self, data, dx):
-        """Initialize a new BasicData instancnp.
-
-        Parameters
-        ----------
-        data : `numpy.ndarray`
-            data
-        dx : `float`
-            inter-sample spacing, 1/mm
-
-        """
-        super().__init__(data=data, dx=dx, wavelength=None)
-
-
 class Interferogram(RichData):
     """Class containing logic and data for working with interferometric data."""
 
@@ -606,8 +591,7 @@ class Interferogram(RichData):
     def strehl(self):
         """Strehl ratio of the pupil."""
         phase = self.change_z_unit(to='um', inplace=False)
-        wav = self.wavelength.to(u.um)
-        return np.exp(-4 * np.pi / wav * std(phase) ** 2)
+        return np.exp(-4 * np.pi / self.wavelength * std(phase) ** 2)
 
     @property
     def std(self):
@@ -824,10 +808,11 @@ class Interferogram(RichData):
         """
         ux, uy, psd_ = psd(self.data, self.dx)
 
-        p = PSD(psd_, 0)
+        p = RichData(psd_, 0, self.wavelength)
         p.x = ux
         p.y = uy
         p.dx = ux[1] - ux[0]
+        p._default_twosided = False
         return p
 
     def bandlimited_rms(self, wllow=None, wlhigh=None, flow=None, fhigh=None):

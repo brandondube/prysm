@@ -36,6 +36,31 @@ def optimize_xy_separable(x, y):
     return x, y
 
 
+def broadcast_1d_to_2d(x, y):
+    """Broadcast two (x,y) vectors to 2D.
+
+    Parameters
+    ----------
+    x : `numpy.ndarray`
+        ndarray of shape (n,)
+    y : `numpy.ndarray`
+        ndarray of shape (m,)
+
+    Returns
+    -------
+    xx : `numpy.ndarray`
+        ndarray of shape (m, n)
+    yy : `numpy.ndarray`
+        ndarray of shape (m, n)
+
+    """
+    shpx = (y.size, x.size)
+    shpy = (x.size, y.size)
+    xx = np.broadcast_to(x, shpx)
+    yy = np.broadcast_to(y, shpy).T
+    return xx, yy
+
+
 def cart_to_polar(x, y, vec_to_grid=True):
     """Return the (rho,phi) coordinates of the (x,y) input points.
 
