@@ -11,7 +11,7 @@ from ._richdata import RichData
 from .mathops import np
 from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
 from .fttools import forward_ft_unit
-from .coordinates import cart_to_polar, broadcast_1d_to_2d
+from .coordinates import cart_to_polar, broadcast_1d_to_2d, make_xy_grid
 from .util import mean, rms, pv, Sa, std  # NOQA
 from .wavelengths import HeNe
 from .plotting import share_fig_ax
@@ -79,14 +79,14 @@ def fit_sphere(z):
     return pts, sphere
 
 
-def make_window(signal, sample_spacing, which=None, alpha=4):
+def make_window(signal, dx, which=None, alpha=4):
     """Generate a window function to be used in PSD analysis.
 
     Parameters
     ----------
     signal : `numpy.ndarray`
         signal or phase data
-    sample_spacing : `float`
+    dx : `float`
         spacing of samples in the input data
     which : `str,` {'welch', 'hann', None}, optional
         which window to producnp.  If auto, attempts to guess the appropriate
@@ -118,9 +118,9 @@ def make_window(signal, sample_spacing, which=None, alpha=4):
         corner4 = signal[-ysamples:, -xsamples:] == 0
         if corner1.all() and corner2.all() and corner3.all() and corner4.all():
             # four corners all "black" -- circular data, Welch window is best
-            # looks wrong but 2D welch takes x, y while indices are y, x
-            y, x = (np.arange(N) - (N / 2) for N in s)
-            which = window_2d_welch(x, y)
+            x, y = make_xy_grid(s, dx=dx)
+            r, _ = cart_to_polar(x, y)
+            which = window_2d_welch(r, alpha=alpha)
         else:
             # if not circular, square data; use Hanning window
             y, x = (np.hanning(N) for N in s)
@@ -130,8 +130,9 @@ def make_window(signal, sample_spacing, which=None, alpha=4):
             # known window type
             wl = which.lower()
             if wl == 'welch':
-                y, x = (np.arange(N) - (N / 2) for N in s)
-                which = window_2d_welch(x, y, alpha=alpha)
+                x, y = make_xy_grid(s, dx=dx)
+                r, _ = cart_to_polar(x, y)
+                which = window_2d_welch(r, alpha=alpha)
             elif wl in ('hann', 'hanning'):
                 y, x = (np.hanning(N) for N in s)
                 which = np.outer(y, x)
@@ -141,14 +142,14 @@ def make_window(signal, sample_spacing, which=None, alpha=4):
     return which  # window provided as ndarray
 
 
-def psd(height, sample_spacing, window=None):
+def psd(height, dx, window=None):
     """Compute the power spectral density of a signal.
 
     Parameters
     ----------
     height : `numpy.ndarray`
         height or phase data
-    sample_spacing : `float`
+    dx : `float`
         spacing of samples in the input data
     window : {'welch', 'hann'} or ndarray, optional
         window to apply to the data.  May be a name or a window already computed
@@ -168,30 +169,28 @@ def psd(height, sample_spacing, window=None):
     https://holometer.fnal.gov/GH_FFT.pdf
 
     """
-    window = make_window(height, sample_spacing, window)
+    window = make_window(height, dx, window)
     fft = np.fft.ifftshift(np.fft.fft2(np.fft.fftshift(height * window)))
     psd = abs(fft)**2  # mag squared first as per GH_FFT
 
-    fs = 1 / sample_spacing
+    fs = 1 / dx
     S2 = (window**2).sum()
     coef = S2 * fs * fs
     psd /= coef
 
-    ux = forward_ft_unit(sample_spacing, height.shape[1])
-    uy = forward_ft_unit(sample_spacing, height.shape[0])
+    ux = forward_ft_unit(dx, height.shape[1])
+    uy = forward_ft_unit(dx, height.shape[0])
     ux, uy = broadcast_1d_to_2d(ux, uy)
     return ux, uy, psd
 
 
-def bandlimited_rms(x, y, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
+def bandlimited_rms(r, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
     """Calculate the bandlimited RMS of a signal from its PSD.
 
     Parameters
     ----------
-    x : `numpy.ndarray`
-        x spatial frequencies
-    y : `numpy.ndarray`
-        y spatial frequencies
+    r : `numpy.ndarray`
+        radial spatial frequencies
     psd : `numpy.ndarray`
         power spectral density
     wllow : `float`
@@ -209,6 +208,7 @@ def bandlimited_rms(x, y, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
         band-limited RMS value
 
     """
+    default_max = r.max()
     if wllow is not None or wlhigh is not None:
         # spatial period given
         if wllow is None:
@@ -217,7 +217,7 @@ def bandlimited_rms(x, y, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
             fhigh = 1 / wllow
 
         if wlhigh is None:
-            fhigh = max(x[-1], y[-1])
+            fhigh = default_max
         else:
             flow = 1 / wlhigh
     elif flow is not None or fhigh is not None:
@@ -225,12 +225,10 @@ def bandlimited_rms(x, y, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
         if flow is None:
             flow = 0
         if fhigh is None:
-            fhigh = max(x[-1], y[-1])
+            fhigh = default_max
     else:
         raise ValueError('must specify either period (wavelength) or frequency')
 
-    x2, y2 = np.meshgrid(x, y)
-    r, p = cart_to_polar(x2, y2)
 
     if flow is None:
         warnings.warn('no lower limit given, using 0 for low frequency')
@@ -243,20 +241,28 @@ def bandlimited_rms(x, y, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
     work = psd.copy()
     work[r < flow] = 0
     work[r > fhigh] = 0
-    first = np.trapz(work, y, axis=0)
-    second = np.trapz(first, x, axis=0)
+    # tuple => list for editable copy => tuple for valid slice type
+    c = tuple(s//2 for s in work.shape)
+    c2 = list(c)
+    c2[0] = c2[0] - 1
+    c2 = tuple(c2)
+    pt1 = r[c]
+    pt2 = r[c2]
+    # prysm doesn't enforce the user to be "top left" or "lower left" origin,
+    # abs makes sure we do things right no matter what
+    dx = abs(pt2 - pt1)
+    first = np.trapz(work, dx=dx, axis=0)
+    second = np.trapz(first, dx=dx, axis=0)
     return np.sqrt(second)
 
 
-def window_2d_welch(x, y, alpha=8):
+def window_2d_welch(r, alpha=8):
     """Return a 2D welch window for a given alpha.
 
     Parameters
     ----------
-    x : `numpy.ndarray`
-        x values, 1D array
-    y : `numpy.ndarray`
-        y values, 1D array
+    r : `numpy.ndarray`
+        radial coordinate
     alpha : `float`
         alpha (edge roll) parameter
 
@@ -266,10 +272,11 @@ def window_2d_welch(x, y, alpha=8):
         window
 
     """
-    xx, yy = np.meshgrid(x, y)
-    r, _ = cart_to_polar(xx, yy)
-
-    rmax = max(x.max(), y.max())
+    loc = list(r.shape)
+    loc[1] = loc[1] // 2
+    loc[0] = loc[0] - 1
+    loc = tuple(loc)
+    rmax = r[loc]
     window = 1 - abs(r/rmax)**alpha
     return window
 
@@ -389,8 +396,8 @@ def render_synthetic_surface(size, samples, rms=None, mask=None, psd_fcn=abc_psd
 
     """
     # compute the grid and PSD
-    sample_spacing = size / (samples - 1)
-    nu_x = nu_y = forward_ft_unit(sample_spacing, samples)
+    dxg = size / (samples - 1)
+    nu_x = nu_y = forward_ft_unit(dxg, samples)
     center = samples // 2  # some bullshit here to gloss over zeros for ab_psd
     nu_x[center] = nu_x[center+1] / 10
     nu_y[center] = nu_y[center+1] / 10
@@ -836,11 +843,7 @@ class Interferogram(RichData):
 
         """
         psd = self.psd()
-        return bandlimited_rms(x=psd.x, y=psd.y, psd=psd.data,
-                               wllow=wllow,
-                               wlhigh=wlhigh,
-                               flow=flow,
-                               fhigh=fhigh)
+        return bandlimited_rms(r=psd.r, psd=psd.data, wllow=wllow, wlhigh=wlhigh, flow=flow, fhigh=fhigh)
 
     def total_integrated_scatter(self, wavelength, incident_angle=0):
         """Calculate the total integrated scatter (TIS) for an angle or angles.
