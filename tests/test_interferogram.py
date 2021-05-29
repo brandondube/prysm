@@ -39,6 +39,10 @@ def test_std_is_correct(sample_i):
     assert pytest.approx(sample_i.std, 15.696, abs=1e-3)
 
 
+def test_pvr_is_correct(sample_i):
+    assert pytest.approx(sample_i.pvr(24), 316.537, abs=1e-3)
+
+
 def test_bandlimited_rms_is_correct(sample_i_mutate):
     assert pytest.approx(sample_i_mutate.bandlimited_rms(1, 10), 10.6, abs=1e-3)
 
@@ -116,7 +120,7 @@ def test_print_does_not_throw(sample_i):
     assert sample_i
 
 
-def test_constructor_accepts_xynone():
+def test_constructor_accepts_no_dx():
     z = np.random.rand(128, 128)
     i = Interferogram(z)
     assert i
