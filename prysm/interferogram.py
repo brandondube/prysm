@@ -1,24 +1,30 @@
 """tools to analyze interferometric data."""
-from prysm.polynomials import lstsq, mode_1d_to_2d
 import warnings
 import inspect
-
-import numpy as truenp
+import random
+import math
 
 from scipy import optimize
 
 from .conf import config
 from ._richdata import RichData
 from .mathops import np
-from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
+from .io import (
+    read_zygo_dat,
+    read_zygo_datx,
+    write_zygo_ascii
+)
 from .fttools import forward_ft_unit
-from .coordinates import cart_to_polar, broadcast_1d_to_2d, make_xy_grid, optimize_xy_separable
+from .coordinates import (
+    cart_to_polar,
+    broadcast_1d_to_2d,
+    make_xy_grid,
+    optimize_xy_separable
+)
+from prysm.polynomials import lstsq, mode_1d_to_2d
 from .util import mean, rms, pv, Sa, std  # NOQA
 from .wavelengths import HeNe
 from .plotting import share_fig_ax
-
-zernikefit = 1
-FringeZernike = 2
 
 
 def _rmax_square_array(r):
@@ -481,19 +487,15 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
         return optres.x
 
 
-def make_random_subaperture_mask(ary, ary_diam, mask, seed=None):
+def make_random_subaperture_mask(shape, mask):
     """Make a mask of a given diameter that is a random subaperture of the given array.
 
     Parameters
     ----------
-    ary : `numpy.ndarray`
-        an array, notionally containing phase data.  Only used for its shapnp.
-    ary_diam : `float`
-        the diameter of the array on its long side, if it is not square
+    shape : `tuple`
+        length two tuple, containing (m, n) of the returned mask
     mask : `numpy.ndarray`
         mask to apply for sub-apertures
-    seed : `int`
-        a random number seed, None will be a random seed, provide one to make the mask deterministic.
 
     Returns
     -------
@@ -502,39 +504,26 @@ def make_random_subaperture_mask(ary, ary_diam, mask, seed=None):
         ary[ret == 0] = np.nan
 
     """
-    gen = truenp.random.Generator(truenp.random.PCG64())
-    s = ary.shape
-    plate_scale = ary_diam / max(s)
-    mask_diam = mask.shape[0] * plate_scale
-    max_shift_mm = (ary_diam - mask_diam) / 2
-    max_shift_px = int(np.floor(max_shift_mm / plate_scale))
+    max_shift = [(s1-s2) for s1, s2 in zip(shape, mask.shape)]
 
     # get random offsets
-    rng_y = (gen.random() - 0.5) * 2  # shift [0,1] => [-1, 1]
-    rng_x = (gen.random() - 0.5) * 2
-    dy = int(np.floor(rng_y * max_shift_px))
-    dx = int(np.floor(rng_x * max_shift_px))
+    rng_y = random.random()
+    rng_x = random.random()
+    dy = math.floor(rng_y * max_shift[0])
+    dx = math.floor(rng_x * max_shift[1])
 
-    # get the current center pixel and then offset by the RNG
-    cy, cx = (v // 2 for v in s)
-    cy += dy
-    cx += dx
-
-    # generate the mask and calculate the insertion point
-    mask_semidiam = mask_diam / plate_scale / 2
-    half_low = int(np.floor(mask_semidiam))
-    half_high = int(np.floor(mask_semidiam))
-
+    high_y = mask.shape[0] + dy
+    high_x = mask.shape[1] + dx
     # make the output array and insert the mask itself
-    out = np.zeros_like(ary)
-    out[cy-half_low:cy+half_high, cx-half_low:cx+half_high] = mask
+    out = np.zeros(shape, dtype=bool)
+    out[dy:high_y, dx:high_x] = mask
     return out
 
 
 class Interferogram(RichData):
     """Class containing logic and data for working with interferometric data."""
 
-    def __init__(self, phase, dx=np.nan, wavelength=HeNe, intensity=None, meta=None):
+    def __init__(self, phase, dx=0, wavelength=HeNe, intensity=None, meta=None):
         """Create a new Interferogram instance.
 
         Parameters
@@ -542,7 +531,8 @@ class Interferogram(RichData):
         phase : `numpy.ndarray`
             phase values, units of nm
         dx : `float`
-            sample spacing in mm
+            sample spacing in mm; if zero the data has no lateral calibration
+            (xy scale only "px", not mm)
         wavelength : `float`
             wavelength of light, microns
         intensity : `numpy.ndarray`, optional
@@ -592,9 +582,14 @@ class Interferogram(RichData):
 
     @property
     def strehl(self):
-        """Strehl ratio of the pupil."""
-        phase = self.change_z_unit(to='um', inplace=False)
-        return np.exp(-4 * np.pi / self.wavelength * std(phase) ** 2)
+        """Strehl ratio of the data, assuming it represents wavefront error."""
+        # Welford, Aberrations of Optical Systems, Eq. (13.2), p.243
+
+        # 1e3 um => nm, all units same
+        wvl = self.wavelength * 1e3
+        prefix = (4 * np.pi / wvl**2)
+        coef = std(self.data) ** 2
+        return 1 - prefix * coef
 
     @property
     def std(self):
@@ -786,15 +781,16 @@ class Interferogram(RichData):
         self._latcaled = True
         return self
 
-    def pad(self, value, unit='spatial'):
-        """Pad the interferogram.
+    def pad(self, value):
+        """Pad the interferogram with N samples of NaN or zeros.
+
+        NaNs are used if NaNs fill the periphery of the data.  If zeros fill
+        the periphery, zero is used.
 
         Parameters
         ----------
-        value : `float`
-            how much to pad the interferogram
-        unit : `str`, {'spatial', 'px'}, optional
-            what unit to use for padding, spatial units (self.spatial_unit), or pixels
+        value : `int`
+            how many samples to pad the data with
 
         Returns
         -------
@@ -802,11 +798,7 @@ class Interferogram(RichData):
             self
 
         """
-        unit = unit.lower()
-        if unit in ('px', 'pixel', 'pixels'):
-            npx = value
-        else:
-            npx = int(np.ceil(value / self.dx))
+        npx = value
 
         if np.isnan(self.data[0, 0]):
             fill_val = np.nan
@@ -819,11 +811,7 @@ class Interferogram(RichData):
         out[npx:-npx, npx:-npx] = self.data
         self.data = out
 
-        x = np.arange(out.shape[1], dtype=config.precision) * self.dx
-        y = np.arange(out.shape[0], dtype=config.precision) * self.dx
-        self.x = x
-        self.y = y
-        return self
+        return self.latcal(self.dx)
 
     def spike_clip(self, nsigma=3):
         """Clip points in the data that exceed a certain multiple of the standard deviation.
@@ -1002,7 +990,7 @@ class Interferogram(RichData):
 
         phase = zydat['phase']
 
-        i = Interferogram(phase=phase, dx=res*1e3, intensity=zydat['intensity'], meta=zydat['meta'])
+        i = Interferogram(phase=phase, dx=res*1e3, intensity=zydat['intensity'], meta=zydat['meta'], wavelength=None)
         return i
 
     @staticmethod  # NOQA

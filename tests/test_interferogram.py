@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 
 from prysm.sample_data import sample_files
-from prysm.interferogram import Interferogram, make_window, fit_psd
+from prysm.interferogram import Interferogram, make_random_subaperture_mask, make_window, fit_psd
 from prysm.geometry import circle
 
 import matplotlib
@@ -41,6 +41,14 @@ def test_std_is_correct(sample_i):
 
 def test_pvr_is_correct(sample_i):
     assert pytest.approx(sample_i.pvr(24), 316.537, abs=1e-3)
+
+
+def test_sa_is_correct(sample_i):
+    assert pytest.approx(sample_i.Sa, 29.552, abs=1e3)
+
+
+def test_strehl_is_correct(sample_i):
+    assert pytest.approx(sample_i.strehl, 0.938, abs=1e3)
 
 
 def test_bandlimited_rms_is_correct(sample_i_mutate):
@@ -137,3 +145,19 @@ def test_can_make_with_meta_wavelength_dict():
     z = np.random.rand(2, 2)
     i = Interferogram(z, meta=meta)
     assert i
+
+
+def test_crop_mask_works():
+    z = np.random.rand(32, 32)
+    i = Interferogram(z, dx=1)
+    i.mask(circle(10, i.r))
+    i.crop()
+    assert i
+
+
+def test_random_subaperture_mask_works():
+    mask = np.zeros((10, 10), dtype=bool)
+    mask[5, 5] = 1
+    shp = (100, 100)
+    out = make_random_subaperture_mask(shp, mask)
+    assert out.sum() == 1
