@@ -364,3 +364,32 @@ def spider(vanes, width, x, y, rotation=0, center=(0, 0)):
         mask |= mask_
 
     return ~mask
+
+
+def offset_circle(radius, x, y, center):
+    """Rasterize an offset circle.
+
+    Parameters
+    ----------
+    radius : `float`
+        radius of the circle, same units as x and y
+    x : `numpy.ndarray`
+        array of x coordinates
+    y : `numpy.ndarray`
+        array of y coordinates
+    center : `tuple`
+        tuple of (x, y) centers
+
+    Returns
+    -------
+    `numpy.ndarray`
+        ndarray containing the boolean mask
+
+    """
+    x, y = optimize_xy_separable(x, y)
+    # no in-place ops, x, y are shared memory
+    x = x - center[0]
+    y = y - center[1]
+    # not cart to polar; computing theta is waste work
+    r = np.hypot(x, y)
+    return circle(radius, r)
