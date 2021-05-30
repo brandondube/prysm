@@ -93,4 +93,4 @@ def test_offset_circle():
     x, y = coordinates.make_xy_grid(32, dx=1)
     c = geometry.offset_circle(3, x, y, center=(2, 2))
     s = c.sum()
-    assert s == 29 # 29 = roundup of 3^2 * pi
+    assert s == 29  # 29 = roundup of 3^2 * pi

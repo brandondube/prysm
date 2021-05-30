@@ -343,13 +343,12 @@ def spider(vanes, width, x, y, rotation=0, center=(0, 0)):
     if rotation != 0:
         rotation = np.radians(rotation)
         p = p - rotation
-    pp = p.copy()
 
     # compute some constants
     rotation = np.radians(360 / vanes)
 
     # initialize a blank mask
-    mask = np.zeros_like(x, dtype=np.bool)
+    mask = np.zeros(x.shape, dtype=np.bool)
     for multiple in range(vanes):
         # iterate through the vanes and generate a mask for each
         # adding it to the initialized mask
