@@ -151,6 +151,8 @@ interpolate = InterpolateEngine()
 def jinc(r):
     """Jinc.
 
+    The first zero of jinc occurs at r=pi
+
     Parameters
     ----------
     r : `number`

@@ -8,7 +8,7 @@ from scipy import optimize
 
 from .conf import config
 from ._richdata import RichData
-from .mathops import np
+from .mathops import np, fft, jinc
 from .io import (
     read_zygo_dat,
     read_zygo_datx,
@@ -487,6 +487,97 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
         return optres.x
 
 
+def hann2d(M, N):
+    """Hanning window in 2D."""
+    # M = num rows
+    # N = num cols
+    n = np.arange(N)[np.newaxis, :] - (N//2)
+    m = np.arange(M)[:, np.newaxis] - (M//2)
+
+    nn = np.hypot(n, m)
+    N = min(N, M)
+    w = np.cos(np.pi/N * nn) ** 2
+    w[nn > N // 2] = 0
+    return w
+
+
+def ideal_lpf_iir2d(r, dx, fc_over_nyq):
+    """Ideal impulse response of a 2D lowpass filter."""
+    c = np.pi * fc_over_nyq / dx
+    # fc/nyq^2 * pi = area of circle; /2 = jinc has peak of 1
+    return jinc(r*c) * (fc_over_nyq**2 * np.pi / 2)
+
+
+def designfilt2d(r, dx, fc, typ='lowpass'):
+    """Design a rotationally symmetric filter for 2D data.
+
+    Parameters
+    ----------
+    x : `numpy.ndarray`
+        x coordinates for the data to be filtered, units of length (mm, m, etc)
+    y : `numpy.ndarray`
+        y coordinates for the data to be filtered, units of length (mm, m, etc)
+    fl : `float`
+        lower critical frequency for a high pass, bandpass, or band reject filter
+    fh : `float`
+        upper critical frequency for a low pass, bandpass, or band reject filter
+    typ : `str`, {'lowpass' , 'lp', 'highpass', 'hp', 'bandpass', 'bp', 'bandreject', 'br'}
+        what type of filter.  Can use two-letter shorthands.
+    N : `tuple` of `int` of length 2
+        number of samples per axis to use.  If N=None, N=x.shape
+
+    Returns
+    -------
+    `numpy.ndarray`
+        2D array containing the infinite impulse response, h.
+        Convolution of the data with this "PSF" will produce
+        the desired spectral filtering
+
+    """
+    w = hann2d(*r.shape)
+    nyq = 1 / (2*dx)
+    tl = typ.lower()
+    if tl in ('lp', 'lowpass'):
+        fc_over_nyq = fc/nyq
+        h = ideal_lpf_iir2d(r, dx, fc_over_nyq)
+        hprime = w * h
+        H = fft.fft2(hprime)
+        H = abs(H)
+    elif tl in ('hp', 'highpass'):
+        fc_over_nyq = fc/nyq
+        h = ideal_lpf_iir2d(r, dx, fc_over_nyq)
+        hprime = w * h
+        H = fft.fft2(hprime)
+        H = abs(H)
+        H = 1 - H
+    elif tl in ('bp', 'bandpass'):
+        # bandpass is made by producing the transfer function of low and high pass,
+        # then combining them
+        hl = ideal_lpf_iir2d(r, dx, fc[0]/nyq)
+        hh = ideal_lpf_iir2d(r, dx, fc[1]/nyq)
+        hlp = hl * w  # h_low prime
+        hhp = hh * w
+        Hl = fft.fft2(hlp)
+        Hh = fft.fft2(hhp)
+        Hl = abs(Hl)
+        Hh = abs(Hh)
+        Hh = 1 - Hh
+        H = 1 - (Hh + Hl)
+    elif tl in ('br', 'bandreject'):
+        hl = ideal_lpf_iir2d(r, dx, fc[0]/nyq)
+        hh = ideal_lpf_iir2d(r, dx, fc[1]/nyq)
+        hlp = hl * w  # h_low prime
+        hhp = hh * w
+        Hl = fft.fft2(hlp)
+        Hh = fft.fft2(hhp)
+        Hl = abs(Hl)
+        Hh = abs(Hh)
+        Hh = 1 - Hh
+        H = (Hh + Hl)
+
+    return H
+
+
 def make_random_subaperture_mask(shape, mask):
     """Make a mask of a given diameter that is a random subaperture of the given array.
 
@@ -849,6 +940,24 @@ class Interferogram(RichData):
         p._default_twosided = False
         return p
 
+    def filter(self, fc, typ='lowpass'):
+        """Apply a frequency domain filter to the data.
+
+        Parameters
+        ----------
+        fc : `float` or length 2 tuple
+            scalar critical frequency for the filter for either low or highpass
+            (lower, upper) critical frequencies for bandpass and bandreject filters
+        typ : `str`, {'lp', 'hp', 'bp', 'br', 'lowpass', 'highpass', 'bandpass', 'bandreject'}
+            what type of filter to apply
+
+        """
+        H = designfilt2d(self.r, self.dx, fc, typ)
+        D = fft.fft2(self.data)
+        Dprime = D * H
+        dprime = fft.ifft2(Dprime)
+        self.data = dprime.real
+
     def bandlimited_rms(self, wllow=None, wlhigh=None, flow=None, fhigh=None):
         """Calculate the bandlimited RMS of a signal from its PSD.
 
@@ -1028,3 +1137,92 @@ class Interferogram(RichData):
 
         dx = x[1] - x[0]
         return Interferogram(phase=z, dx=dx, wavelength=HeNe)
+
+
+# below this line is commented out, but working code that was written to design the 2D filtering code.
+# It is equivalent, but 1D.
+
+# def hann(N):
+#     n = np.arange(N)
+#     return np.sin(np.pi/N * n)**2
+
+# def ideal_lpf_iir(x, fc_over_nyq):
+#     """Ideal PSF of a low-pass filter."""
+#     dx = x[1] - x[0]
+#     return np.sinc(x*(fc_over_nyq/dx)) * fc_over_nyq
+
+
+# def ideal_hpf_iir(x, fc_over_nyq):
+#     """Ideal PSF of a high-pass filter."""
+#     dx = x[1]-x[0]
+#     c = 1/dx
+#     term1 = np.sinc(x*c)
+#     term2 = ideal_lpf_iir(x, fc_over_nyq)
+#     return term1 - term2
+
+# def ideal_bpf_iir(x, fl_over_nyq, fh_over_nyq):
+#     """Ideal PSF of a band-pass filter."""
+#     term1 = ideal_lpf_iir(x, fh_over_nyq)
+#     term2 = ideal_lpf_iir(x, fl_over_nyq)
+#     return term1 - term2
+
+
+# def gaussfilt1d(x, fl=None, fh=None, typ='lowpass'):
+#     fft = np.fft
+#     dx = x[1] - x[0]
+#     nu = fft.fftfreq(len(x), dx)
+#     H = abs(nu) <= fh
+#     softener = gauss(nu, 0, 0.25*fh)
+#     H = conv(H, softener)
+#     return H
+
+# def designfilt1d(x, fc, typ='lowpass', N=None):
+#     lx = len(x)
+#     if N is None:
+#         N = lx
+#         xprime = x
+#     else:
+#         offset = (lx - N) // 2
+#         xprime = x[offset:offset+N]
+
+#     w = hann(N)
+#     dx = x[1] - x[0]
+#     nyq = 1 / (2*dx)
+#     tl = typ.lower()
+#     if tl in ('lp', 'lowpass'):
+#         fc_over_nyq = fc/nyq
+#         h = ideal_lpf_iir(xprime, fc_over_nyq)
+#     elif tl in ('hp', 'highpass'):
+#         fc_over_nyq = fc/nyq
+#         h = ideal_hpf_iir(xprime, fc_over_nyq)
+#     elif tl in ('bp', 'bandpass'):
+#         fl_over_nyq = fc[0]/nyq
+#         fh_over_nyq = fc[1]/nyq
+#         h = ideal_bpf_iir(xprime, fl_over_nyq, fh_over_nyq)
+#     elif tl in ('br', 'bandreject'):
+#         # NOTE: band-reject we do by making a bandpass
+#         # and taking 1 minus the transfer function
+#         fl_over_nyq = fc[0]/nyq
+#         fh_over_nyq = fc[1]/nyq
+#         h = ideal_bpf_iir(xprime, fl_over_nyq, fh_over_nyq)
+
+#     hprime = w * h
+#     if N != lx:
+#         tmp = np.zeros(x.shape, dtype=hprime.dtype)
+#         tmp[:N] = hprime
+#         hprime = tmp
+
+#     H = fft.fft(hprime)
+#     H = abs(H) # zero phase filter
+#     if tl in ('br', 'bandreject'):
+#         H = 1 - H
+#     return H
+
+# def apply_tf(f, H):
+#     F = fft.fft(f)
+#     Fprime = F * H
+#     fprime = fft.ifft(Fprime)
+#     return fprime.real
+
+# def to_db(H):
+#     return 10 * np.log10(H)

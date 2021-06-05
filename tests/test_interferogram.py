@@ -161,3 +161,14 @@ def test_random_subaperture_mask_works():
     shp = (100, 100)
     out = make_random_subaperture_mask(shp, mask)
     assert out.sum() == 1
+
+
+@pytest.mark.parametrize('fc, typ', [
+    (0.5, 'lp'),
+    (0.5, 'hp'),
+    ((0.1, 0.2), 'bp'),
+    ((0.1, 0.2), 'br')
+])
+def test_filter_functions(sample_i_mutate, fc, typ):
+    sample_i_mutate.filter(fc, typ)
+    assert sample_i_mutate
