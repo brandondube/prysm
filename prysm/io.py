@@ -1173,7 +1173,7 @@ def read_zygo_metadata(file_contents):
     return {k: v for k, v in zip(all_keys, all_vars)}
 
 
-def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None):
+def write_zygo_ascii(file, phase, dx, wavelength=0.6328, intensity=None):
     """Write a Zygo ASCII interferogram file.
 
     Parameters
@@ -1182,10 +1182,8 @@ def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None):
         filename
     phase : `numpy.ndarray`
         array of phase values
-    x : `numpy.ndarray`
-        (1-d) x coordinates, mm
-    y: `numpy.ndarray`
-        (1-d) y coordinates, mm
+    dx : `numpy.ndarray`
+        inter-sample spacing, mm
     wavelength : `float`, optional
         wavelength of light, um
     intensity : `numpy.ndarray`, optional
@@ -1201,15 +1199,15 @@ def write_zygo_ascii(file, phase, x, y, wavelength=0.6328, intensity=None):
     else:
         raise NotImplementedError('writing of ASCII files with nonempty intensity not yet supported.')
     px, py = phase.shape
-    ox = np.searchsorted(x, 0)
-    oy = np.searchsorted(y, 0)
+    ox = 0
+    oy = 0
     line4 = f'{oy} {ox} {py} {px}'
     line5 = '"' + ' ' * 81 + '"'
     line6 = '"' + ' ' * 39 + '"'
     line7 = '"' + ' ' * 39 + '"'
 
     timestamp_int = int(str(timestamp.timestamp()).split('.')[0])
-    res = (x[1] - x[0]) * 1e-3  # mm to m
+    res = dx * 1e3
     line8 = f'0 0.5 {wavelength*1e-6} 0 1 0 {res} {timestamp_int}'  # end is timestamp in integer seconds
     line9 = f'{py} {px} 0 0 0 0 ' + '"' + ' ' * 9 + '"'
     line10 = '0 0 0 0 0 0 0 0 0 0'

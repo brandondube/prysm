@@ -198,9 +198,18 @@ def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x
     for i in range(1, rings+1):
         hexes = hex_ring(i)
         centers = [hex_to_xy(h, rseg+(segment_separation/2), rot=segment_angle) for h in hexes]
-        all_centers += centers
-        for center in centers:
-            segment_id += 1
+        ids = np.arange(segment_id+1, segment_id+1+len(centers), dtype=int)
+        id_mask = ~np.isin(ids, exclude, assume_unique=True)
+        valid_ids = ids[id_mask]
+        centers = truenp.array(centers)
+        centers = centers[id_mask]
+        all_centers += centers.tolist()
+        for segment_id, center in zip(valid_ids, centers):
+            # short circuit: if we do not wish to include a segment,
+            # do no further work on it
+            if segment_id in exclude:
+                continue
+
             segment_ids.append(segment_id)
 
             local_window = _local_window(cy, cx, center, dx, samples_per_seg, x, y)
@@ -213,8 +222,8 @@ def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x
 
             local_mask = regular_polygon(6, rseg, xx, yy, center=center, rotation=segment_angle)
             local_masks.append(local_mask)
-            if segment_id in exclude:
-                continue
             mask[local_window] |= local_mask
+
+        segment_id = ids[-1]
 
     return segment_vtov, all_centers, windows, local_coords, local_masks, segment_ids, mask

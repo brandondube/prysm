@@ -1,23 +1,39 @@
 """tools to analyze interferometric data."""
 import warnings
 import inspect
-
-import numpy as truenp
+import random
+import math
 
 from scipy import optimize
 
 from .conf import config
 from ._richdata import RichData
 from .mathops import np
-from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
+from .io import (
+    read_zygo_dat,
+    read_zygo_datx,
+    write_zygo_ascii
+)
 from .fttools import forward_ft_unit
-from .coordinates import cart_to_polar
+from .coordinates import (
+    cart_to_polar,
+    broadcast_1d_to_2d,
+    make_xy_grid,
+    optimize_xy_separable
+)
+from prysm.polynomials import lstsq, mode_1d_to_2d
 from .util import mean, rms, pv, Sa, std  # NOQA
 from .wavelengths import HeNe
 from .plotting import share_fig_ax
 
-zernikefit = 1
-FringeZernike = 2
+
+def _rmax_square_array(r):
+    loc = list(r.shape)
+    loc[1] = loc[1] // 2
+    loc[0] = loc[0] - 1
+    loc = tuple(loc)
+    rmax = r[loc]
+    return rmax
 
 
 def fit_plane(x, y, z):
@@ -26,9 +42,9 @@ def fit_plane(x, y, z):
     Parameters
     ----------
     x : `numpy.ndarray`
-        1D array of x (axis 1) values
+        2D array of x (axis 1) values
     y : `numpy.ndarray`
-        1D array of y (axis 0) values
+        2D array of y (axis 0) values
     z : `numpy.ndarray`
         2D array of z values
 
@@ -38,17 +54,15 @@ def fit_plane(x, y, z):
         array representation of plane
 
     """
-    pts = np.isfinite(z)
-    if len(z.shape) > 1:
-        x, y = np.meshgrid(x, y)
-        xx, yy = x[pts].flatten(), y[pts].flatten()
-    else:
-        xx, yy = x, y
+    xx, yy = optimize_xy_separable(x, y)
 
-    flat = np.ones(xx.shape)
+    mode1 = xx
+    mode2 = yy
+    mode1 = mode_1d_to_2d(mode1, x, y, 'x')
+    mode2 = mode_1d_to_2d(mode2, x, y, 'y')
 
-    coefs = np.linalg.lstsq(np.stack([xx, yy, flat]).T, z[pts].flatten(), rcond=None)[0]
-    plane_fit = coefs[0] * x + coefs[1] * y + coefs[2]
+    coefs = lstsq([mode1, mode2], z)
+    plane_fit = coefs[0] * mode1 + coefs[1] * mode2
     return plane_fit
 
 
@@ -79,14 +93,14 @@ def fit_sphere(z):
     return pts, sphere
 
 
-def make_window(signal, sample_spacing, which=None, alpha=4):
+def make_window(signal, dx, which=None, alpha=4):
     """Generate a window function to be used in PSD analysis.
 
     Parameters
     ----------
     signal : `numpy.ndarray`
         signal or phase data
-    sample_spacing : `float`
+    dx : `float`
         spacing of samples in the input data
     which : `str,` {'welch', 'hann', None}, optional
         which window to producnp.  If auto, attempts to guess the appropriate
@@ -118,9 +132,9 @@ def make_window(signal, sample_spacing, which=None, alpha=4):
         corner4 = signal[-ysamples:, -xsamples:] == 0
         if corner1.all() and corner2.all() and corner3.all() and corner4.all():
             # four corners all "black" -- circular data, Welch window is best
-            # looks wrong but 2D welch takes x, y while indices are y, x
-            y, x = (np.arange(N) - (N / 2) for N in s)
-            which = window_2d_welch(x, y)
+            x, y = make_xy_grid(s, dx=dx)
+            r, _ = cart_to_polar(x, y)
+            which = window_2d_welch(r, alpha=alpha)
         else:
             # if not circular, square data; use Hanning window
             y, x = (np.hanning(N) for N in s)
@@ -130,8 +144,9 @@ def make_window(signal, sample_spacing, which=None, alpha=4):
             # known window type
             wl = which.lower()
             if wl == 'welch':
-                y, x = (np.arange(N) - (N / 2) for N in s)
-                which = window_2d_welch(x, y, alpha=alpha)
+                x, y = make_xy_grid(s, dx=dx)
+                r, _ = cart_to_polar(x, y)
+                which = window_2d_welch(r, alpha=alpha)
             elif wl in ('hann', 'hanning'):
                 y, x = (np.hanning(N) for N in s)
                 which = np.outer(y, x)
@@ -141,14 +156,14 @@ def make_window(signal, sample_spacing, which=None, alpha=4):
     return which  # window provided as ndarray
 
 
-def psd(height, sample_spacing, window=None):
+def psd(height, dx, window=None):
     """Compute the power spectral density of a signal.
 
     Parameters
     ----------
     height : `numpy.ndarray`
         height or phase data
-    sample_spacing : `float`
+    dx : `float`
         spacing of samples in the input data
     window : {'welch', 'hann'} or ndarray, optional
         window to apply to the data.  May be a name or a window already computed
@@ -168,29 +183,28 @@ def psd(height, sample_spacing, window=None):
     https://holometer.fnal.gov/GH_FFT.pdf
 
     """
-    window = make_window(height, sample_spacing, window)
+    window = make_window(height, dx, window)
     fft = np.fft.ifftshift(np.fft.fft2(np.fft.fftshift(height * window)))
     psd = abs(fft)**2  # mag squared first as per GH_FFT
 
-    fs = 1 / sample_spacing
+    fs = 1 / dx
     S2 = (window**2).sum()
     coef = S2 * fs * fs
     psd /= coef
 
-    ux = forward_ft_unit(sample_spacing, height.shape[1])
-    uy = forward_ft_unit(sample_spacing, height.shape[0])
+    ux = forward_ft_unit(dx, height.shape[1])
+    uy = forward_ft_unit(dx, height.shape[0])
+    ux, uy = broadcast_1d_to_2d(ux, uy)
     return ux, uy, psd
 
 
-def bandlimited_rms(x, y, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
+def bandlimited_rms(r, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
     """Calculate the bandlimited RMS of a signal from its PSD.
 
     Parameters
     ----------
-    x : `numpy.ndarray`
-        x spatial frequencies
-    y : `numpy.ndarray`
-        y spatial frequencies
+    r : `numpy.ndarray`
+        radial spatial frequencies
     psd : `numpy.ndarray`
         power spectral density
     wllow : `float`
@@ -208,6 +222,7 @@ def bandlimited_rms(x, y, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
         band-limited RMS value
 
     """
+    default_max = r.max()
     if wllow is not None or wlhigh is not None:
         # spatial period given
         if wllow is None:
@@ -216,7 +231,7 @@ def bandlimited_rms(x, y, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
             fhigh = 1 / wllow
 
         if wlhigh is None:
-            fhigh = max(x[-1], y[-1])
+            fhigh = default_max
         else:
             flow = 1 / wlhigh
     elif flow is not None or fhigh is not None:
@@ -224,12 +239,9 @@ def bandlimited_rms(x, y, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
         if flow is None:
             flow = 0
         if fhigh is None:
-            fhigh = max(x[-1], y[-1])
+            fhigh = default_max
     else:
         raise ValueError('must specify either period (wavelength) or frequency')
-
-    x2, y2 = np.meshgrid(x, y)
-    r, p = cart_to_polar(x2, y2)
 
     if flow is None:
         warnings.warn('no lower limit given, using 0 for low frequency')
@@ -242,20 +254,28 @@ def bandlimited_rms(x, y, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
     work = psd.copy()
     work[r < flow] = 0
     work[r > fhigh] = 0
-    first = np.trapz(work, y, axis=0)
-    second = np.trapz(first, x, axis=0)
+    # tuple => list for editable copy => tuple for valid slice type
+    c = tuple(s//2 for s in work.shape)
+    c2 = list(c)
+    c2[0] = c2[0] - 1
+    c2 = tuple(c2)
+    pt1 = r[c]
+    pt2 = r[c2]
+    # prysm doesn't enforce the user to be "top left" or "lower left" origin,
+    # abs makes sure we do things right no matter what
+    dx = abs(pt2 - pt1)
+    first = np.trapz(work, dx=dx, axis=0)
+    second = np.trapz(first, dx=dx, axis=0)
     return np.sqrt(second)
 
 
-def window_2d_welch(x, y, alpha=8):
+def window_2d_welch(r, alpha=8):
     """Return a 2D welch window for a given alpha.
 
     Parameters
     ----------
-    x : `numpy.ndarray`
-        x values, 1D array
-    y : `numpy.ndarray`
-        y values, 1D array
+    r : `numpy.ndarray`
+        radial coordinate
     alpha : `float`
         alpha (edge roll) parameter
 
@@ -265,10 +285,7 @@ def window_2d_welch(x, y, alpha=8):
         window
 
     """
-    xx, yy = np.meshgrid(x, y)
-    r, _ = cart_to_polar(xx, yy)
-
-    rmax = max(x.max(), y.max())
+    rmax = _rmax_square_array(r)
     window = 1 - abs(r/rmax)**alpha
     return window
 
@@ -388,8 +405,8 @@ def render_synthetic_surface(size, samples, rms=None, mask=None, psd_fcn=abc_psd
 
     """
     # compute the grid and PSD
-    sample_spacing = size / (samples - 1)
-    nu_x = nu_y = forward_ft_unit(sample_spacing, samples)
+    dxg = size / (samples - 1)
+    nu_x = nu_y = forward_ft_unit(dxg, samples)
     center = samples // 2  # some bullshit here to gloss over zeros for ab_psd
     nu_x[center] = nu_x[center+1] / 10
     nu_y[center] = nu_y[center+1] / 10
@@ -470,19 +487,15 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
         return optres.x
 
 
-def make_random_subaperture_mask(ary, ary_diam, mask, seed=None):
+def make_random_subaperture_mask(shape, mask):
     """Make a mask of a given diameter that is a random subaperture of the given array.
 
     Parameters
     ----------
-    ary : `numpy.ndarray`
-        an array, notionally containing phase data.  Only used for its shapnp.
-    ary_diam : `float`
-        the diameter of the array on its long side, if it is not square
+    shape : `tuple`
+        length two tuple, containing (m, n) of the returned mask
     mask : `numpy.ndarray`
         mask to apply for sub-apertures
-    seed : `int`
-        a random number seed, None will be a random seed, provide one to make the mask deterministic.
 
     Returns
     -------
@@ -491,65 +504,35 @@ def make_random_subaperture_mask(ary, ary_diam, mask, seed=None):
         ary[ret == 0] = np.nan
 
     """
-    gen = truenp.random.Generator(truenp.random.PCG64())
-    s = ary.shape
-    plate_scale = ary_diam / max(s)
-    mask_diam = mask.shape[0] * plate_scale
-    max_shift_mm = (ary_diam - mask_diam) / 2
-    max_shift_px = int(np.floor(max_shift_mm / plate_scale))
+    max_shift = [(s1-s2) for s1, s2 in zip(shape, mask.shape)]
 
     # get random offsets
-    rng_y = (gen.random() - 0.5) * 2  # shift [0,1] => [-1, 1]
-    rng_x = (gen.random() - 0.5) * 2
-    dy = int(np.floor(rng_y * max_shift_px))
-    dx = int(np.floor(rng_x * max_shift_px))
+    rng_y = random.random()
+    rng_x = random.random()
+    dy = math.floor(rng_y * max_shift[0])
+    dx = math.floor(rng_x * max_shift[1])
 
-    # get the current center pixel and then offset by the RNG
-    cy, cx = (v // 2 for v in s)
-    cy += dy
-    cx += dx
-
-    # generate the mask and calculate the insertion point
-    mask_semidiam = mask_diam / plate_scale / 2
-    half_low = int(np.floor(mask_semidiam))
-    half_high = int(np.floor(mask_semidiam))
-
+    high_y = mask.shape[0] + dy
+    high_x = mask.shape[1] + dx
     # make the output array and insert the mask itself
-    out = np.zeros_like(ary)
-    out[cy-half_low:cy+half_high, cx-half_low:cx+half_high] = mask
+    out = np.zeros(shape, dtype=bool)
+    out[dy:high_y, dx:high_x] = mask
     return out
-
-
-class PSD(RichData):
-    """Two dimensional PSD."""
-    def __init__(self, data, dx):
-        """Initialize a new BasicData instancnp.
-
-        Parameters
-        ----------
-        data : `numpy.ndarray`
-            data
-        dx : `float`
-            inter-sample spacing, 1/mm
-
-        """
-        super().__init__(data=data, dx=dx, wavelength=None)
 
 
 class Interferogram(RichData):
     """Class containing logic and data for working with interferometric data."""
 
-    def __init__(self, phase, x=None, y=None, wavelength=HeNe, intensity=None, meta=None):
+    def __init__(self, phase, dx=0, wavelength=HeNe, intensity=None, meta=None):
         """Create a new Interferogram instance.
 
         Parameters
         ----------
         phase : `numpy.ndarray`
             phase values, units of nm
-        x : `numpy.ndarray`, optional
-            2D array of x coordinates, if None 0..n px
-        y : `numpy.ndarray`, optional
-            2D array of y coordinates, if None 0..n px
+        dx : `float`
+            sample spacing in mm; if zero the data has no lateral calibration
+            (xy scale only "px", not mm)
         wavelength : `float`
             wavelength of light, microns
         intensity : `numpy.ndarray`, optional
@@ -560,12 +543,6 @@ class Interferogram(RichData):
             to have units of meters (Zygo convention)
 
         """
-        if x is None:
-            y, x = (np.arange(s, dtype=phase.dtype) for s in phase.shape)
-            self._latcaled = False
-        else:
-            self._latcaled = True
-
         if not wavelength:
             if meta:
                 wavelength = meta.get('wavelength', None)
@@ -575,12 +552,13 @@ class Interferogram(RichData):
                 if wavelength is not None:
                     wavelength *= 1e6  # m to um
 
-        dx = x[1] - x[0]
         super().__init__(data=phase, dx=dx, wavelength=wavelength)
         self.intensity = intensity
         self.meta = meta
-        self.x = x
-        self.y = y
+        if dx == 0:
+            self._latcaled = False
+        else:
+            self._latcaled = True
 
     @property
     def dropout_percentage(self):
@@ -604,19 +582,29 @@ class Interferogram(RichData):
 
     @property
     def strehl(self):
-        """Strehl ratio of the pupil."""
-        phase = self.change_z_unit(to='um', inplace=False)
-        wav = self.wavelength.to(u.um)
-        return np.exp(-4 * np.pi / wav * std(phase) ** 2)
+        """Strehl ratio of the data, assuming it represents wavefront error."""
+        # Welford, Aberrations of Optical Systems, Eq. (13.2), p.243
+
+        # 1e3 um => nm, all units same
+        wvl = self.wavelength * 1e3
+        prefix = (4 * np.pi / wvl**2)
+        coef = std(self.data) ** 2
+        return 1 - prefix * coef
 
     @property
     def std(self):
         """Standard deviation of phase error."""
         return std(self.data)
 
-    @property
-    def pvr(self):
+    def pvr(self, normalization_radius=None):
         """Peak-to-Valley residual.
+
+        Parameters
+        ----------
+        normalization_radius : `float`
+            radius used to normalize the radial coordinate during Zernike computation.
+            If None, the data array is assumed square and the radius is automatically
+            chosen to be the radius of the array.
 
         Notes
         -----
@@ -624,12 +612,43 @@ class Interferogram(RichData):
         C. Evans, "Robust Estimation of PV for Optical Surface Specification and Testing"
         in Optical Fabrication and Testing, OSA Technical Digest (CD)
         (Optical Society of America, 2008), paper OWA4.
-        http://www.opticsinfobasnp.org/abstract.cfm?URI=OFT-2008-OWA4
+        http://www.opticsinfobase.org/abstract.cfm?URI=OFT-2008-OWA4
 
         """
-        coefs, residual = zernikefit(self.data, terms=36, residual=True, map_='Fringe')
-        fz = FringeZernike(coefs, samples=self.shape[0])
-        return fz.pv + 3 * residual
+        from prysm.polynomials import (
+            zernike_nm_sequence,
+            fringe_to_nm,
+            lstsq,
+            sum_of_2d_modes
+        )
+
+        r = self.r
+        t = self.t
+        if normalization_radius is None:
+            shp = self.data.shape
+            if shp[0] != shp[1]:
+                raise ValueError('pvr: if normalization_radius is None, data must be square')
+
+            normalization_radius = _rmax_square_array(r)
+
+        r = r / normalization_radius
+        mask = r > 1
+        data = self.data.copy()
+        data[mask] = np.nan
+
+        nms = [fringe_to_nm(j) for j in range(1, 38)]  # 1 => 37; 36 terms
+        basis = list(zernike_nm_sequence(nms, r, t, norm=False))  # slightly faster without norm, no need for pvr
+        coefs = lstsq(basis, data)
+
+        projected = sum_of_2d_modes(basis, coefs)
+        projected[mask] = np.nan
+
+        fit_err = data - projected
+        rms_resid = rms(fit_err)
+        pv_fit = pv(projected)
+
+        pvr = pv_fit + 3 * rms_resid
+        return pvr
 
     def fill(self, _with=0):
         """Fill invalid (NaN) values.
@@ -679,16 +698,22 @@ class Interferogram(RichData):
             tb = slice(top, -bottom)
 
         self.data = self.data[lr, tb]
-        self.y, self.x = self.y[lr], self.x[tb]
-        self.x -= self.x[0]
-        self.y -= self.y[0]
-        return self
+        # now cropped data, need to adjust coords
+        # do nothing if they have not been computed
+        if self._x is not None:
+            self.x = self.x[lr, tb]
+            self.y = self.y[lr, tb]
+        if self._r is not None:
+            self.r = self.r[lr, tb]
+            self.t = self.t[lr, tb]
 
     def recenter(self):
         """Adjust the x and y coordinates so the data is centered on 0,0 in the FFT sense (contains a zero sample)."""
-        cy, cx = (s//2 for s in self.shape)
-        self.x -= self.x[cx]
-        self.y -= self.y[cy]
+        c = tuple((s//2 for s in self.shape))
+        self.x -= self.x[c]
+        self.y -= self.y[c]
+        self._r = None
+        self._t = None
         return self
 
     def remove_piston(self):
@@ -756,15 +781,16 @@ class Interferogram(RichData):
         self._latcaled = True
         return self
 
-    def pad(self, value, unit='spatial'):
-        """Pad the interferogram.
+    def pad(self, value):
+        """Pad the interferogram with N samples of NaN or zeros.
+
+        NaNs are used if NaNs fill the periphery of the data.  If zeros fill
+        the periphery, zero is used.
 
         Parameters
         ----------
-        value : `float`
-            how much to pad the interferogram
-        unit : `str`, {'spatial', 'px'}, optional
-            what unit to use for padding, spatial units (self.spatial_unit), or pixels
+        value : `int`
+            how many samples to pad the data with
 
         Returns
         -------
@@ -772,11 +798,7 @@ class Interferogram(RichData):
             self
 
         """
-        unit = unit.lower()
-        if unit in ('px', 'pixel', 'pixels'):
-            npx = value
-        else:
-            npx = int(np.ceil(value / self.dx))
+        npx = value
 
         if np.isnan(self.data[0, 0]):
             fill_val = np.nan
@@ -789,11 +811,7 @@ class Interferogram(RichData):
         out[npx:-npx, npx:-npx] = self.data
         self.data = out
 
-        x = np.arange(out.shape[1], dtype=config.precision) * self.dx
-        y = np.arange(out.shape[0], dtype=config.precision) * self.dx
-        self.x = x
-        self.y = y
-        return self
+        return self.latcal(self.dx)
 
     def spike_clip(self, nsigma=3):
         """Clip points in the data that exceed a certain multiple of the standard deviation.
@@ -824,10 +842,11 @@ class Interferogram(RichData):
         """
         ux, uy, psd_ = psd(self.data, self.dx)
 
-        p = PSD(psd_, 0)
+        p = RichData(psd_, 0, self.wavelength)
         p.x = ux
         p.y = uy
         p.dx = ux[1] - ux[0]
+        p._default_twosided = False
         return p
 
     def bandlimited_rms(self, wllow=None, wlhigh=None, flow=None, fhigh=None):
@@ -851,11 +870,7 @@ class Interferogram(RichData):
 
         """
         psd = self.psd()
-        return bandlimited_rms(x=psd.x, y=psd.y, psd=psd.data,
-                               wllow=wllow,
-                               wlhigh=wlhigh,
-                               flow=flow,
-                               fhigh=fhigh)
+        return bandlimited_rms(r=psd.r, psd=psd.data, wllow=wllow, wlhigh=wlhigh, flow=flow, fhigh=fhigh)
 
     def total_integrated_scatter(self, wavelength, incident_angle=0):
         """Calculate the total integrated scatter (TIS) for an angle or angles.
@@ -932,7 +947,7 @@ class Interferogram(RichData):
         """
         sf = 1 / (self.wavelength * 1e3)
         phase = self.data * sf
-        write_zygo_ascii(file, phase=phase, x=self.x, y=self.y, intensity=None, wavelength=self.wavelength)
+        write_zygo_ascii(file, phase=phase, dx=self.dx, intensity=None, wavelength=self.wavelength)
 
     def __str__(self):
         """Pretty-print string representation."""
@@ -975,10 +990,7 @@ class Interferogram(RichData):
 
         phase = zydat['phase']
 
-        i = Interferogram(phase=phase, intensity=zydat['intensity'], meta=zydat['meta'])
-        if res != 0:
-            i.latcal(1e3 * res)
-
+        i = Interferogram(phase=phase, dx=res*1e3, intensity=zydat['intensity'], meta=zydat['meta'], wavelength=None)
         return i
 
     @staticmethod  # NOQA
@@ -1013,4 +1025,6 @@ class Interferogram(RichData):
         """
         x, y, z = render_synthetic_surface(size=size, samples=samples, rms=rms,
                                            mask=mask, psd_fcn=psd_fcn, **psd_fcn_kwargs)
-        return Interferogram(phase=z, x=x, y=y, wavelength=HeNe)
+
+        dx = x[1] - x[0]
+        return Interferogram(phase=z, dx=dx, wavelength=HeNe)

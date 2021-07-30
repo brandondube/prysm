@@ -86,3 +86,11 @@ def test_rectangle_doesnt_break_angle():
     x, y = coordinates.make_xy_grid(16, diameter=2)
     mask = geometry.rectangle(1, x, y, angle=45)
     assert mask.any()
+
+
+def test_offset_circle():
+    # [-16, 15] grid
+    x, y = coordinates.make_xy_grid(32, dx=1)
+    c = geometry.offset_circle(3, x, y, center=(2, 2))
+    s = c.sum()
+    assert s == 29  # 29 = roundup of 3^2 * pi
