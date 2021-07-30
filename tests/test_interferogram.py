@@ -172,3 +172,9 @@ def test_random_subaperture_mask_works():
 def test_filter_functions(sample_i_mutate, fc, typ):
     sample_i_mutate.filter(fc, typ)
     assert sample_i_mutate
+
+
+def test_interferogram_functions(sample_i_mutate):
+    fig, ax = sample_i_mutate.interferogram()
+    assert fig
+    assert ax

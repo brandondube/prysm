@@ -363,7 +363,6 @@ class RichData:
                        cmap=cmap,
                        clim=clim,
                        norm=norm,
-                       origin='lower',
                        interpolation=interpolation)
 
         if show_colorbar:

@@ -1005,7 +1005,7 @@ class Interferogram(RichData):
         kernel *= self.bandlimited_rms(upper_limit, None) / wavelength
         return 1 - np.exp(-kernel**2)
 
-    def interferogram(self, visibility=1, passes=2, interpolation=None, fig=None, ax=None):
+    def interferogram(self, visibility=1, passes=2, tilt_waves=(0,0), interpolation=None, fig=None, ax=None):
         """Create a picture of fringes.
 
         Parameters
@@ -1014,6 +1014,8 @@ class Interferogram(RichData):
             Visibility of the interferogram
         passes : `float`
             Number of passes (double-pass, quadra-pass, etc.)
+        tilt_waves : `tuple`
+            (x,y) waves of tilt to use for the interferogram
         interpolation : `str`, optional
             interpolation method, passed directly to matplotlib
         fig : `matplotlib.figure.Figure`, optional
@@ -1029,20 +1031,24 @@ class Interferogram(RichData):
             Axis containing the plot
 
         """
-        epd = self.diameter
-        phase = self.change_z_unit(to='waves', inplace=False)
-
+        data = self.data
+        # divide by two because -1 to 1 is 2 units PV, waves are "1" PV
+        yramp = np.linspace(-1, 1, data.shape[0]) * (tilt_waves[1] / 2)
+        xramp = np.linspace(-1, 1, data.shape[1]) * (tilt_waves[0] / 2)
+        yramp = np.broadcast_to(yramp, reversed(data.shape)).T
+        xramp = np.broadcast_to(xramp, data.shape)
+        phase = self.data / 1e3 * self.wavelength  # 1e3 = nm to um
+        phase = phase + (xramp + yramp)
         fig, ax = share_fig_ax(fig, ax)
         plotdata = visibility * np.cos(2 * np.pi * passes * phase)
+        x, y = self.x, self.y
         im = ax.imshow(plotdata,
-                       extent=[-epd / 2, epd / 2, -epd / 2, epd / 2],
-                       cmap='Greys_r',
+                       extent=[x.min(), x.max(), y.min(), y.max()],
+                       cmap='gray',
                        interpolation=interpolation,
                        clim=(-1, 1),
                        origin='lower')
         fig.colorbar(im, label=r'Wrapped Phase [$\lambda$]', ax=ax, fraction=0.046)
-        ax.set(xlabel=self.labels.x(self.xy_unit, self.z_unit),
-               ylabel=self.labels.y(self.xy_unit, self.z_unit))
         return fig, ax
 
     def save_zygo_ascii(self, file):
