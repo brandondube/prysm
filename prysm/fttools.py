@@ -108,6 +108,7 @@ class MatrixDFTExecutor:
 
     def _key(self, ary, Q, samples, shift):
         """Key to X, Y, U, V dicts."""
+        Q = float(Q)
         if not isinstance(samples, Iterable):
             samples = (samples, samples)
 
@@ -116,7 +117,7 @@ class MatrixDFTExecutor:
 
         return (Q, ary.shape, samples, shift)
 
-    def dft2(self, ary, Q, samples, shift=None, norm=True):
+    def dft2(self, ary, Q, samples, shift=None):
         """Compute the two dimensional Discrete Fourier Transform of a matrix.
 
         Parameters
@@ -131,9 +132,6 @@ class MatrixDFTExecutor:
         shift : `float`, optional
             shift of the output domain, as a frequency.  Same broadcast
             rules apply as with samples.
-        norm : `bool`, optional
-            if True, normalize the computation such that Parseval's theorm
-            is not violated
 
         Returns
         -------
@@ -148,13 +146,10 @@ class MatrixDFTExecutor:
         Eout, Ein = self.Eout_fwd[key], self.Ein_fwd[key]
 
         out = Eout @ ary @ Ein
-        if norm:
-            coef = self._norm(ary=ary, Q=Q, samples=samples)
-            out *= (1/coef)
 
         return out
 
-    def idft2(self, ary, Q, samples, shift=None, norm=True):
+    def idft2(self, ary, Q, samples, shift=None):
         """Compute the two dimensional inverse Discrete Fourier Transform of a matrix.
 
         Parameters
@@ -169,9 +164,6 @@ class MatrixDFTExecutor:
         shift : `float`, optional
             shift of the output domain, as a frequency.  Same broadcast
             rules apply as with samples.
-        norm : `bool`, optional
-            if True, normalize the computation such that Parseval's theorm
-            is not violated
 
         Returns
         -------
@@ -185,30 +177,8 @@ class MatrixDFTExecutor:
         key = self._key(ary=ary, Q=Q, samples=samples, shift=shift)
         Eout, Ein = self.Eout_rev[key], self.Ein_rev[key]
         out = Eout @ ary @ Ein
-        if norm:
-            coef = self._norm(ary=ary, Q=Q, samples=samples)
-            out *= (1/coef)
 
         return out
-
-    def _norm(self, ary, Q, samples):
-        """Coefficient associated with a given propagation."""
-        if not isinstance(samples, Iterable):
-            samples = (samples, samples)
-
-        # commenting out this warning
-        # strictly true in the one-way case
-        # but a 128 => 256, Q=2 fwd followed
-        # by 256 => 128 Q=1 rev produces ~size*eps
-        # max error, so this warning is overzealous
-        # if samples[0]/Q < ary.shape[0]:
-            # warn('mdft: computing normalization for output condition which contains Dirichlet clones, normalization cannot be accurate')
-
-        n, m = ary.shape
-        N, M = samples
-        sz_i = n * m
-        sz_o = N * M
-        return np.sqrt(sz_i) * Q * np.sqrt(sz_i/sz_o)
 
     def _setup_bases(self, ary, Q, samples, shift):
         """Set up the basis matricies for given sampling parameters."""
@@ -218,6 +188,9 @@ class MatrixDFTExecutor:
 
         if not isinstance(shift, Iterable):
             shift = (shift, shift)
+
+        # this is for dtype stabilization
+        Q = float(Q)
 
         key = self._key(Q=Q, ary=ary, samples=samples, shift=shift)
 
@@ -229,6 +202,7 @@ class MatrixDFTExecutor:
             self.Ein_fwd[key]
         except KeyError:
             # X is the second dimension in C (numpy) array ordering convention
+
             X, Y, U, V = (fftrange(n, dtype=config.precision) for n in (m, n, M, N))
 
             # do not even perform an op if shift is nothing
