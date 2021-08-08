@@ -13,8 +13,7 @@ ARRAY_SIZES = (8, 16, 32, 64, 128, 256, 512, 1024)
 def test_mtp_equivalent_to_fft(samples):
     inp = np.random.rand(samples, samples)
     fft = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(inp)))
-    sf = fttools.mdft._norm(inp, 1, samples)
-    mtp = fttools.mdft.dft2(inp, 1, samples) * sf
+    mtp = fttools.mdft.dft2(inp, 1, samples)
     assert np.allclose(fft, mtp)
 
 

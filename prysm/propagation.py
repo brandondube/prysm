@@ -7,10 +7,10 @@ from collections.abc import Iterable
 from .conf import config
 from .mathops import np, fft
 from ._richdata import RichData
-from .fttools import pad2d, mdft, fftrange
+from .fttools import pad2d, mdft
 
 
-def focus(wavefunction, Q, norm=None):
+def focus(wavefunction, Q):
     """Propagate a pupil plane to a PSF plane.
 
     Parameters
@@ -19,8 +19,6 @@ def focus(wavefunction, Q, norm=None):
         the pupil wavefunction
     Q : `float`
         oversampling / padding factor
-    norm : `str`, {None, 'ortho'}
-        normalization parameter passed directly to numpy/cupy fft
 
     Returns
     -------
@@ -33,11 +31,11 @@ def focus(wavefunction, Q, norm=None):
     else:
         padded_wavefront = wavefunction
 
-    impulse_response = fft.fftshift(fft.fft2(fft.ifftshift(padded_wavefront), norm=norm))
+    impulse_response = fft.fftshift(fft.fft2(fft.ifftshift(padded_wavefront)))
     return impulse_response
 
 
-def unfocus(wavefunction, Q, norm=None):
+def unfocus(wavefunction, Q):
     """Propagate a PSF plane to a pupil plane.
 
     Parameters
@@ -46,8 +44,6 @@ def unfocus(wavefunction, Q, norm=None):
         the pupil wavefunction
     Q : `float`
         oversampling / padding factor
-    norm : `str`, {None, 'ortho'}
-        normalization parameter passed directly to numpy/cupy fft
 
     Returns
     -------
@@ -60,12 +56,11 @@ def unfocus(wavefunction, Q, norm=None):
     else:
         padded_wavefront = wavefunction
 
-    return fft.fftshift(fft.ifft2(fft.ifftshift(padded_wavefront), norm=norm))
+    return fft.fftshift(fft.ifft2(fft.ifftshift(padded_wavefront)))
 
 
 def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
-                         wavelength, output_dx, output_samples,
-                         coherent=False, norm=True):
+                         wavelength, output_dx, output_samples):
     """Propagate a pupil function to the PSF plane with fixed sampling.
 
     Parameters
@@ -82,10 +77,6 @@ def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
         sample spacing in the output plane, microns
     output_samples : `int`
         number of samples in the square output array
-    coherent : `bool`
-        if True, returns the complex array.  Else returns its magnitude squared.
-    norm : `bool`, optional
-        if True, satisfy Parseval's theorem, else no normalization
 
     Returns
     -------
@@ -99,16 +90,11 @@ def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
                        wavelength=wavelength,
                        output_dx=output_dx)
 
-    field = mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples, norm=norm)
-    if coherent:
-        return field
-    else:
-        return abs(field)**2
+    return mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples)
 
 
 def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
-                           wavelength, output_dx, output_samples,
-                           norm=True):
+                           wavelength, output_dx, output_samples):
     """Propagate an image plane field to the pupil plane with fixed sampling.
 
     Parameters
@@ -125,8 +111,6 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
         sample spacing in the output plane, microns
     output_samples : `int`
         number of samples in the square output array
-    norm : `bool`, optional
-        if True, satisfy Parseval's theorem, else no normalization
 
     Returns
     -------
@@ -376,7 +360,7 @@ def angular_spectrum(field, wvl, dx, z, Q=2):
     if Q != 1:
         field = pad2d(field, Q=Q)
 
-    ky, kx = (fft.fftfreq(s, dx) for s in field.shape)
+    ky, kx = (fft.fftfreq(s, dx).astype(config.precision) for s in field.shape)
     ky = np.broadcast_to(ky, field.shape).swapaxes(0, 1)
     kx = np.broadcast_to(kx, field.shape)
 
@@ -448,10 +432,9 @@ class Wavefront:
         if isinstance(other, Wavefront):
             criteria = [
                 abs(self.dx - other.dx) / self.dx * 100 < 0.1,  # must match to 0.1% (generous, for fp32 compat)
-                self.shape == other.shape,
-                self.wavelength.represents == other.wavelength.represents
+                self.data.shape == other.data.shape,
+                self.wavelength == other.wavelength
             ]
-
             if not all(criteria):
                 raise ValueError('all physicality criteria not met: sample spacing, shape, or wavelength different.')
 
@@ -520,7 +503,7 @@ class Wavefront:
         if self.space != 'pupil':
             raise ValueError('can only propagate from a pupil to psf plane')
 
-        data = focus(self.data, Q=Q, norm=None)
+        data = focus(self.data, Q=Q)
         dx = pupil_sample_to_psf_sample(self.dx, data.shape[1], self.wavelength, efl)
 
         return Wavefront(data, self.wavelength, dx, space='psf')
@@ -548,7 +531,7 @@ class Wavefront:
         if self.space != 'psf':
             raise ValueError('can only propagate from a psf to pupil plane')
 
-        data = unfocus(self.data, Q=Q, norm=None)
+        data = unfocus(self.data, Q=Q)
         dx = psf_sample_to_pupil_sample(self.dx, data.shape[1], self.wavelength, efl)
 
         return Wavefront(data, self.wavelength, dx, space='pupil')
@@ -587,7 +570,7 @@ class Wavefront:
             wavelength=self.wavelength,
             output_dx=dx,
             output_samples=samples,
-            coherent=True, norm=True)
+            coherent=True)
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='psf')
 
@@ -624,7 +607,6 @@ class Wavefront:
             prop_dist=efl,
             wavelength=self.wavelength,
             output_dx=dx,
-            output_samples=samples,
-            norm=True)
+            output_samples=samples)
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')
