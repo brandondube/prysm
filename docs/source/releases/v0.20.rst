@@ -258,7 +258,7 @@ pupil
 segmented
 ---------
 
-This is a new module for working with segmented systems.  It contains routines for rasterizing segmented apertures and for working with per-segment phase errors.  prysm's segmented module is considerably faster than anything else in open source, and is approximately constant time in the number of segments.  For the TMT aperture, it is more than 100x faster to rasterize the amplitude than POPPY.  For more information, see `This post <https://www.retrorefractions.com/blog/massively-faster-segmented/>`.  The :doc:`Notable Telescope Apertures <../How-tos/Notable-Telescope-Apertures>` page also contains example usage.
+This is a new module for working with segmented systems.  It contains routines for rasterizing segmented apertures and for working with per-segment phase errors.  prysm's segmented module is considerably faster than anything else in open source, and is approximately constant time in the number of segments.  For the TMT aperture, it is more than 100x faster to rasterize the amplitude than POPPY.  For more information, see `This post <https://www.retrorefractions.com/blog/massively-faster-segmented/>`.  The :doc:`Notable Telescope Apertures <../How-tos/Notable-Telescope-Apertures.ipynb>` page also contains example usage.
 
 - :class:`~prysm.segmented.CompositeHexagonalAperture`
 - - rasterizes the pupil upon initialization and prepares local coordinate systems for each segment.

@@ -24,21 +24,27 @@ prysm requires only `numpy <http://www.numpy.org/>`_ and `scipy <https://www.sci
 
 To use an nVidia GPU, you must have `cupy <https://cupy.chainer.org/>`_ installed.  Plotting uses `matplotlib <https://matplotlib.org/>`_.  Images are read and written with `imageio <https://imageio.github.io/>`_.  Some MTF utilities utilize `pandas <https://pandas.pydata.org/>`_.  Reading of Zygo datx files requires `h5py <https://www.h5py.org/>`_.  Installation of these must be done offline.
 
-User's Guide
+Tutorials
+---------
+
+.. toctree::
+    tutorials/index.rst
+
+How-Tos
+-------
+
+.. toctree::
+    :maxdepth: 2
+
+    how-tos/index.rst
+
+Explanations
 ------------
 
 .. toctree::
+    :maxdepth: 2
 
-   user_guide/index.rst
-
-
-Examples
---------
-
-.. toctree::
-
-    examples/index.rst
-
+    explanation/index.rst
 
 API Reference
 -------------
