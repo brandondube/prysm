@@ -231,6 +231,7 @@ propagation
 - :func:`prop_pupil_plane_to_psf_plane` and :func:`prop_pupil_plane_to_psf_plane_units` have been removed, they were deprecated and marked for removal.
 - Any argument which was :code:`sample_spacing` is now :code:`dx`.
 - Units are no logner fed through astropy units, but are mm for pupil plane dimensions, um for image plane dimensions, and nm for OPD.
+- Angular spectrum (free space) propagation now allows the transfer function to be computed once and passed as the :code:`tf` kwarg, accelerating repetitive calculations.
 
 psf
 ---
