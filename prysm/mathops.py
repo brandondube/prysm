@@ -6,10 +6,13 @@ from scipy import ndimage, interpolate, special, fft
 class BackendShim:
     """A shim that allows a backend to be swapped at runtime."""
     def __init__(self, src):
-        self.__src = src
+        self._srcmodule = src
 
     def __getattr__(self, key):
-        return getattr(self.__src, key)
+        if key == '_srcmodule':
+            return self._srcmodule
+
+        return getattr(self._srcmodule, key)
 
 np = BackendShim(np)
 ndimage = BackendShim(ndimage)
