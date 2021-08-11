@@ -333,7 +333,7 @@ def talbot_distance(a, lambda_):
     return num / den
 
 
-def angular_spectrum(field, wvl, dx, z, Q=2):
+def angular_spectrum(field, wvl, dx, z, Q=2, tf=None):
     """Propagate a field via the angular spectrum method.
 
     Parameters
@@ -348,6 +348,9 @@ def angular_spectrum(field, wvl, dx, z, Q=2):
         cartesian sample spacing, units of millimeters
     Q : `float`
         sampling factor used.  Q>=2 for Nyquist sampling of incoherent fields
+    tf : `numpy.ndarray`
+        if not None, clobbers all other arguments
+        transfer function for the propagation
 
     Returns
     -------
@@ -355,6 +358,9 @@ def angular_spectrum(field, wvl, dx, z, Q=2):
         2D ndarray of the output field, complex
 
     """
+    if tf is not None:
+        return fft.ifft2(fft.fft2(field) * tf)
+
     # match all the units
     wvl = wvl / 1e3  # um -> mm
     if Q != 1:
@@ -367,6 +373,38 @@ def angular_spectrum(field, wvl, dx, z, Q=2):
     transfer_function = np.exp(-1j * np.pi * wvl * z * (kx**2 + ky**2))
     forward = fft.fft2(field)
     return fft.ifft2(forward*transfer_function)
+
+
+def angular_spectrum_transfer_function(samples, wvl, dx, z):
+    """Precompute the transfer function of free space.
+
+    Parameters
+    ----------
+    samples : `int` or `tuple`
+        (y,x) or (r,c) samples in the output array
+    wvl : `float`
+        wavelength of light, microns
+    dx : `float`
+        intersample spacing, mm
+    z : `float`
+        propagation distance, mm
+
+    Returns
+    -------
+    `numpy.ndarray`
+        ndarray of shape samples containing the complex valued transfer function
+        such that X = fft2(x); xhat = ifft2(X*tf) is signal x after free space propagation
+
+    """
+    if isinstance(samples, int):
+        samples = (samples, samples)
+
+    wvl = wvl / 1e3
+    ky, kx = (fft.fftfreq(s, dx).astype(config.precision) for s in samples)
+    ky = np.broadcast_to(ky, samples).swapaxes(0, 1)
+    kx = np.broadcast_to(kx, samples)
+
+    return np.exp(-1j * np.pi * wvl * z * (kx**2 + ky**2))
 
 
 class Wavefront:
@@ -454,7 +492,7 @@ class Wavefront:
         """Divide this wavefront by something compatible."""
         return self.__numerical_operation__(other, 'truediv')
 
-    def free_space(self, dz, Q=1):
+    def free_space(self, dz=np.nan, Q=1, tf=None):
         """Perform a plane-to-plane free space propagation.
 
         Uses angular spectrum and the free space kernel.
@@ -465,6 +503,9 @@ class Wavefront:
             inter-plane distance, millimeters
         Q : `float`
             padding factor.  Q=1 does no padding, Q=2 pads 1024 to 2048.
+        tf : `numpy.ndarray`
+            if not None, clobbers all other arguments
+            transfer function for the propagation
 
         Returns
         -------
@@ -472,12 +513,15 @@ class Wavefront:
             the wavefront at the new plane
 
         """
+        if np.isnan(dz) and tf is None:
+            raise ValueError('dz must be provided if tf is None')
         out = angular_spectrum(
             field=self.data,
             wvl=self.wavelength,
             dx=self.dx,
             z=dz,
-            Q=Q)
+            Q=Q,
+            tf=tf)
         return Wavefront(out, self.wavelength, self.dx, self.space)
 
     def focus(self, efl, Q=2):
@@ -569,8 +613,7 @@ class Wavefront:
             prop_dist=efl,
             wavelength=self.wavelength,
             output_dx=dx,
-            output_samples=samples,
-            coherent=True)
+            output_samples=samples)
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='psf')
 
