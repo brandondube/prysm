@@ -212,11 +212,14 @@ class MatrixDFTExecutor:
                 V -= shift[0]
                 U -= shift[1]
 
+            nm = n*m
+            NM = N*M
+            r = NM/nm
             a = 1 / Q
             Eout_fwd = np.exp(-1j * 2 * np.pi * a / n * np.outer(Y, V).T)
             Ein_fwd = np.exp(-1j * 2 * np.pi * a / m * np.outer(X, U))
-            Eout_rev = np.exp(1j * 2 * np.pi * a / n * np.outer(Y, V).T)
-            Ein_rev = np.exp(1j * 2 * np.pi * a / m * np.outer(X, U))
+            Eout_rev = np.exp(1j * 2 * np.pi * a / n * np.outer(Y, V).T) * (1/r)
+            Ein_rev = np.exp(1j * 2 * np.pi * a / m * np.outer(X, U)) * (1/nm)
             self.Ein_fwd[key] = Ein_fwd
             self.Eout_fwd[key] = Eout_fwd
             self.Eout_rev[key] = Eout_rev
