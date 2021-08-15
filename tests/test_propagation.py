@@ -33,13 +33,12 @@ def test_unfocus_fft_mdft_equivalent_Wavefront():
     unfocus_fft = wf.unfocus(Q=2, efl=1)
     # magic number 4 - a bit unclear, but accounts for non-energy
     # conserving fft; sf is to satisfy parseval's theorem
-    sf = fttools.mdft._norm(wf.data, 2, unfocus_fft.data.shape[1]) * 4
     unfocus_mdft = wf.unfocus_fixed_sampling(
         efl=1,
         dx=unfocus_fft.dx,
         samples=unfocus_fft.data.shape[1])
 
-    assert np.allclose(unfocus_fft.data, unfocus_mdft.data/sf)
+    assert np.allclose(unfocus_fft.data, unfocus_mdft.data)
 
 
 def test_focus_fft_mdft_equivalent_Wavefront():
@@ -47,13 +46,12 @@ def test_focus_fft_mdft_equivalent_Wavefront():
     z = np.random.rand(SAMPLES, SAMPLES)
     wf = propagation.Wavefront(dx=dx, cmplx_field=z, wavelength=HeNe, space='pupil')
     unfocus_fft = wf.focus(Q=2, efl=1)
-    sf = fttools.mdft._norm(wf.data, 2, unfocus_fft.data.shape[1])
     unfocus_mdft = wf.focus_fixed_sampling(
         efl=1,
         dx=unfocus_fft.dx,
         samples=unfocus_fft.data.shape[1])
 
-    assert np.allclose(unfocus_fft.data, unfocus_mdft.data*sf)
+    assert np.allclose(unfocus_fft.data, unfocus_mdft.data)
 
 
 def test_frespace_functions():

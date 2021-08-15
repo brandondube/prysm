@@ -52,4 +52,4 @@ prysm's backend can be changed at will by the user.  Importing this way avoids l
     ary = np.arange(lower, upper, spacing, dtype=config.precision)
 
 
-For a list of eagerly welcomed, please see the `open issues <https://github.com/brandondube/prysm/issues>`_.  Feel free to open a new issue to discuss other contributions!
+For a list of eagerly welcomed contributions, please see the `open issues <https://github.com/brandondube/prysm/issues>`_.  Feel free to open a new issue to discuss other contributions!
