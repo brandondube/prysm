@@ -122,12 +122,13 @@ See the [documentation](https://prysm.readthedocs.io/en/stable/tutorials/index.h
 
 ## Contributing
 
-If you find an issue with prysm, please open an [issue](https://github.com/brandondube/prysm/issues) or [pull request](https://github.com/brandondube/prysm/pulls).  Prysm has some usage of f-strings, so any code contributed is only expected to work on python 3.6+, and is licensed under the [MIT license](https://github.com/brandondube/prysm/blob/master/LICENSE.md).  The library is
-most in need of contributions in the form of tests and documentation.
+If you find an issue with prysm, please open an [issue](https://github.com/brandondube/prysm/issues) or [pull request](https://github.com/brandondube/prysm/pulls).  Prysm has some usage of f-strings, so any code contributed is only expected to work on python 3.6+, and is licensed under the [MIT license](https://github.com/brandondube/prysm/blob/master/LICENSE.md).
+
+Issue tracking, roadmaps, and project planning are done on Zenhub.  Contact Brandon for an invite if you would like to participate; all are welcome.
 
 ## Heritage
 
-Here lies a short list of organizations or projects using prysm:
+Organizations or projects using prysm:
 
 - prysm was used to perform phase retrieval used to focus Nav and Hazcam, enhanced engineering cameras used to operate the Mars2020 Perserverence rover.
 
