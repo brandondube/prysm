@@ -3,7 +3,7 @@ import pytest
 
 import numpy as np
 
-from prysm import propagation, fttools
+from prysm import propagation
 from prysm.wavelengths import HeNe
 
 
@@ -82,4 +82,19 @@ def test_can_mul_wavefronts():
     data = np.random.rand(2, 2).astype(np.complex128)
     wf = propagation.Wavefront(cmplx_field=data, dx=1, wavelength=.6328)
     wf2 = wf * 2
+    assert wf2
+
+
+def test_can_div_wavefronts():
+    data = np.random.rand(2, 2).astype(np.complex128)
+    wf = propagation.Wavefront(cmplx_field=data, dx=1, wavelength=.6328)
+    wf2 = wf / 2
+    assert wf2
+
+
+def test_precomputed_angular_spectrum_functions():
+    data = np.random.rand(2, 2)
+    wf = propagation.Wavefront(cmplx_field=data, dx=1, wavelength=.6328)
+    tf = propagation.angular_spectrum_transfer_function(2, wf.wavelength, wf.dx, 1)
+    wf2 = wf.free_space(tf=tf)
     assert wf2

@@ -253,11 +253,12 @@ propagation
 
 - :func:`prop_pupil_plane_to_psf_plane` and :func:`prop_pupil_plane_to_psf_plane_units` have been removed, they were deprecated and marked for removal.
 - Any argument which was :code:`sample_spacing` is now :code:`dx`.
-- Any :code:`coherent` argument was removed, all routines now explicitly work with fields (see :function:`prysm.propagation.Wavefront.intensity`).
+- Any :code:`coherent` argument was removed, all routines now explicitly work with fields (see :func:`prysm.propagation.Wavefront.intensity`).
 - Any :code:`norm` argument was removed.
 - Units are no longer fed through astropy units, but are mm for pupil plane dimensions, um for image plane dimensions, and nm for OPD.
 - Angular spectrum (free space) propagation now allows the transfer function to be computed once and passed as the :code:`tf` kwarg, accelerating repetitive calculations.
 - - See also: :code:`~prysm.propagation.angular_spectrum_transfer_function`
+- The :code:`focus_units` and :code:`unfocus_units` functions were removed.  Since prysm largely bookkeeps :code:`dx` now, they are superfluous.
 
 psf
 ---
