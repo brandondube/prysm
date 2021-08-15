@@ -178,7 +178,7 @@ def sum_of_2d_modes(modes, weights):
 
     """
     # dot product of the 0th dim of modes and weights => weighted sum
-    return np.tensordot(modes, weights, axes=(0, 0))
+    return np.tensordot(modes, weights.astype(modes.dtype), axes=(0, 0))
 
 
 def hopkins(a, b, c, r, t, H):
