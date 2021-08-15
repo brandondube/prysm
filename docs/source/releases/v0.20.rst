@@ -7,7 +7,15 @@ Summary
 
 Version 20 of prysm is the largest breaking release the library has ever had.  Your programs will be more a bit verbose when written in this style, but they will be more clear, contain fewer bugs, and run faster.  This version marks prysm transitioning from an extremely object oriented style to a data oriented style.  The result is that code is more direct, and there is less of it.  Side benefits are that by deferring the caches that used to help keep prysm fast to the user level, the user is in control over their program's memory usage.  A new high level object oriented API may be produced at some point, likely in a separate package.
 
-This version will produce one more zero point release (0.21) for cleanup after longer experience in this style, after which version 1 will be released.  In addition to the breaking changes, this release brings landmark additions of **2D-Q polynomials**, also known as Forbes polynomials, **Chebyshev, Legendre, and Hopkins polynomials,** and **sophistocated tools for segmented apertures**.
+This version will produce one more zero point release (0.21) for cleanup after longer experience in this style, after which version 1 will be released.  In addition to the breaking changes, this release brings landmark additions:
+
+- 2D-Q polynomials also known as Forbes polynomials, Chebyshev, Legendre, and Hopkins polynomials,
+- Sophistocated, highly optimized tools for segmented apertures.
+- Tilted plane projections for DMs and other oblique elements
+- Realistic detector noise modeling
+- Bayer focal plane routines
+
+As perhaps a motivational comment, the official model of the Low Order Wavefront Sensing and Control (LOWFS/C) system on the Roman Coronagraph Instrument was ported from prysm v0.19 to v0.20, and runs 12x faster on CPU and 6x faster on GPU.  A total of two new lines of code were gained in aggregate.  The port took approximately two person-hours.  The model now runs in 430 microseconds per wavelength through the 7-plane model; over twice faster than the actual realtime WFSC system!
 
 The remainder of this page will be divided by logical unit of function, then sub-divided between breaking changes and new features.
 
@@ -80,6 +88,10 @@ coordinates
 - :class:`GridCache` and its variable transformation functions have been deleted.  The functionality is deferred to the user, who can quite naturally write code that reuses grids.
 - :func:`~prysm.coordinates.make_xy_grid` has had its signature changed from :code:`(samples_x, samples_y, radius=1)` to :code:`(shape, *, dx, diameter, grid=True)`.  shape auto-broadcasts to 2D and dx/diameter are keyword only.  grid controls returning vectors or a meshgrid.  :code:`make_xy_grid` is now FFT-aligned (always containing a zero sample).
 - :func:`make_rho_phi_grid` has been removed, combine :func:`make_xy_grid` with :func:`~prysm.coordinates.cart_to_polar`.
+- New warping function suite used to work with non-normal incidence beams (e.g., DMs, OAPs)
+- - :func:`~prysm.coordinates.make_rotation_matrix`
+- - :func:`~prysm.coordinates.apply_rotation_matrix`
+- - :func:`~prysm.coordinates.regularize`
 
 
 degredations
@@ -99,6 +111,11 @@ detector
 - :func:`~prysm.detector.bindown` will now error if the array dimensions are not an integer multiple of the binning factor.  It now supports ND data, with possible unique factors per dimension.
 - :func:`~prysm.detector.tile` has been added, which is the adjoint operation to bindown.  It replicates the elements of an array :code:`factor` times, and has the same ND support bindown now does.
 
+
+fttools
+-------
+
+- The matrix DFT executor was mildly reworked.  There is no more :code:`norm` option.  The code was modified such that a forward-reverse calculation that goes to *any* domain containing the majority of the spectrum of the signal and returns to the same input domain will be energy conserving automatically.  This means that :code:`idft2(dft2(x)) ~= x`
 
 geometry
 --------
@@ -124,14 +141,20 @@ io
 
 - the dat and datx readers no longer flip the phase and intensity data upside down.  They used to do this due to prysm explicitly having an origin in lower left convention, but v0.20 has no enforced convention for array orientation, and the flipud is an unexpected behavior in this paradigm.
 
+mathops
+-------
+
+The several quasi-identical classes to shim over numpy and scipy were removed and replaced with a single :class:`~prysm.mathops.BackendShim` type.  The :code:`engine` variable no longer exists.  Users should overwrite :code:`prysm.backend.np._srcmodule`, as well as the same for fft, ndimage, etc.
+
 interferogram
 -------------
 
 The interferogram module is largely unchanged.  With the removal of astropy units, the user must manage their own units.  Phase is loaded from dat/datx files in units of nm.
 
-- :func:`prysm.interferogram.Interferogram.fit_zernikes` was removed, use lstsq from the polynomials submodule with :code:`Interferogram.data, Interferogram.x, Interferogram.y` directly, minding spatial axis normalization.
+- :func:`prysm.interferogram.Interferogram.fit_zernikes` was removed, use lstsq from the polynomials submodule with :code:`Interferogram.data, Interferogram.x, Interferogram.y, Interferogram.r, Interferogram.t` directly, minding spatial axis normalization.
 - :func:`prysm.interferogram.Interferogram.remove_piston_tiptilt_power` and :func:`prysm.interferogram.Interferogram.remove_piston_tiptilt` have been removed, call :func:`~prysm.interferogram.Interferogram.remove_piston`, etc, in sequence.
 - :func:`prysm.interferogram.Interferogram.mask` now accepts arrays only.
+- :func:`~prysm.interferogram.Interferogram.filter` has returned to stay and uses a new 2D filter design method behind the scenes.  The out-of-band rejection is approximately 50dB higher for typical sized arrays.
 
 jacobi
 ------
@@ -230,8 +253,11 @@ propagation
 
 - :func:`prop_pupil_plane_to_psf_plane` and :func:`prop_pupil_plane_to_psf_plane_units` have been removed, they were deprecated and marked for removal.
 - Any argument which was :code:`sample_spacing` is now :code:`dx`.
-- Units are no logner fed through astropy units, but are mm for pupil plane dimensions, um for image plane dimensions, and nm for OPD.
+- Any :code:`coherent` argument was removed, all routines now explicitly work with fields (see :function:`prysm.propagation.Wavefront.intensity`).
+- Any :code:`norm` argument was removed.
+- Units are no longer fed through astropy units, but are mm for pupil plane dimensions, um for image plane dimensions, and nm for OPD.
 - Angular spectrum (free space) propagation now allows the transfer function to be computed once and passed as the :code:`tf` kwarg, accelerating repetitive calculations.
+- - See also: :code:`~prysm.propagation.angular_spectrum_transfer_function`
 
 psf
 ---

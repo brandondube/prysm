@@ -5,7 +5,7 @@
 [![Coverage Status](https://coveralls.io/repos/github/brandondube/prysm/badge.svg?branch=master)](https://coveralls.io/github/brandondube/prysm?branch=master) [![DOI](http://joss.theoj.org/papers/10.21105/joss.01352/status.svg)](https://doi.org/10.21105/joss.01352)
 
 
-Prysm is a python 3.6+ library for numerical optics.  It contains features that are a superset of POPPY or PROPER for physical optics, as well as thin lens, thin film, and detector modeling.  There is also a submodule that can replace the software that comes with an interferometer for data analysis.  On CPU, end-to-end calculation is more than 3x as fast as the above for like-for-like calculations.  On GPU, prysm is more than 1,000x faster than its competition.
+Prysm is a python 3.6+ library for numerical optics.  It contains features that are a superset of POPPY or PROPER for physical optics, as well as thin lens, thin film, and detector modeling.  There is also a submodule that can replace the software that comes with an interferometer for data analysis.  On CPU, end-to-end calculation is more than 100x as fast as the above for like-for-like calculations.  On GPU, prysm is more than 1,000x faster than its competition.
 
 The library can be used for everything from forward modeling of optical systems from camera lenses to coronographs to reverse modeling and phase retrieval.  Due to its composable structure, it plays well with others and can be substituted in or out of other code easily.  For a list of features, see the documentation.  Of special note is prysm's interchangeable backend system, which allows the user to freely exchange numpy for cupy, enabling use of a GPU for _all_ computations, or other similar exchanges, such as pytorch for algorithmic differentiation.
 
@@ -36,6 +36,7 @@ Prysm uses numpy for array operations or any compatible library.  To use GPUs, y
 - 2D-Q, Qbfs, Qcon
 - Hopkins
 - fitting
+- projection
 
 ### Pupil Masks
 - circles, binary and anti-aliased
@@ -50,8 +51,7 @@ Prysm uses numpy for array operations or any compatible library.  To use GPUs, y
 - segment indexing / identification
 
 ### Image Simulation
-- equal sampling convolution
-- unequal sampling convolution
+- Convolution
 - Smear
 - Jitter
 - in-the-box targets
@@ -79,14 +79,7 @@ Prysm uses numpy for array operations or any compatible library.  To use GPUs, y
 - fully integrated noise model (shot, read, prnu, etc)
 - arbitrary pixel apertures (square, oblong, purely numerical)
 - optical low pass filters
-
-### Phase Retrieval
-- Gerchberg-Saxton
-- Fienup's algorithms:
-- - Input-Input
-- - Output-Output
-- - Hybrid Input-Output
-- Parametric nonlinear optimization
+- Bayer compositing, demosaicing
 
 ### Thin Films
 - r, t parameters
@@ -106,15 +99,26 @@ Prysm uses numpy for array operations or any compatible library.  To use GPUs, y
 - magnification and working F/#
 - two lens BFL, EFL (thick lenses)
 
+### Tilted Planes and other surfaces
+
+- forward or reverse projection of surfaces such as those on Deformable Mirrors
+
 Some features may be missing from this list.
 
-## Examples
+### Interferometry
 
-Several [examples](https://prysm.readthedocs.io/en/stable/examples/index.html) are provided in the documentation.
+- PSD
+- Low/High/Bandpass/Bandreject filtering
+- spike clipping
+- polynomial fitting and projection
+- statistical evaluation (PV, RMS, PVr, Sa, bandlimited RMS...)
+- total integrated scatter
+- synthetic fringe maps with extra tilt fringes
+- synthesize map from PSD spec
 
-## User's Guide
+## Tutorials, How-Tos
 
-A [guide](https://prysm.readthedocs.io/en/stable/user_guide/index.html) for using the library is provided in the documentation.
+See the [documentation](https://prysm.readthedocs.io/en/stable/tutorials/index.html) on [each](https://prysm.readthedocs.io/en/stable/how-tos/index.html)
 
 ## Contributing
 
@@ -127,11 +131,11 @@ Here lies a short list of organizations or projects using prysm:
 
 - prysm was used to perform phase retrieval used to focus Nav and Hazcam, enhanced engineering cameras used to operate the Mars2020 Perserverence rover.
 
-- prysm is used to build the official model of LOWFS, the Low Order Wavefront Sensing (and Control) system for the Roman coronoagraph instrument.  In this application, it has been used to validate dynamics of a hardware testbed to 35 picometers, or 0.08% of the injected dynamics.
+- prysm is used to build the official model of LOWFS, the Low Order Wavefront Sensing (and Control) system for the Roman coronoagraph instrument.  In this application, it has been used to validate dynamics of a hardware testbed to 35 picometers, or 0.08% of the injected dynamics.  The model runs at over 2kHz, faster than the real-time control system, at the same fidelity used to achieve 35 pm model agreement.
 
 - prysm is used by several FFRDCs in the US, as well as their equivalent organizations abroad
 
-- prysm is used by multiple high and ultra precision optics manufactures as part of their metrology data processing workflow
+- prysm is used by multiple ultra precision optics manufactures as part of their metrology data processing workflow
 
 - prysm is used by multiple interferometer vendors to cross validate their own software offerings
 
