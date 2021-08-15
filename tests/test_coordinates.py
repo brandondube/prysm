@@ -72,3 +72,21 @@ def test_resample_2d_complex_does_not_distort(data_2d_complex):
     x, y, dat = data_2d_complex
     resampled = coordinates.resample_2d_complex(dat, (x, y), (x, y))
     assert np.allclose(dat, resampled)
+
+
+def test_make_rotation_matrix_matches_scipy():
+    from scipy.spatial.transform import Rotation as R
+
+    angles = (0, 30, 0)
+    sp = R.from_euler('ZXZ', angles, degrees=True).as_matrix()
+    pry = coordinates.make_rotation_matrix(angles)
+    assert np.allclose(sp, pry)
+
+
+def test_plane_warping_pipeline_functions(data_2d):
+    x, y, z = data_2d
+    x, y = np.meshgrid(x, y)
+    m = coordinates.make_rotation_matrix((0, 30, 0))
+    x2, y2 = coordinates.apply_rotation_matrix(m, x, y)
+    regular = coordinates.regularize([x, y], [x2, y2], z)
+    assert regular.any()

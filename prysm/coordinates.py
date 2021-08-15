@@ -1,6 +1,8 @@
 """Coordinate conversions."""
+import numpy as truenp
+
 from .conf import config
-from .mathops import np, interpolate
+from .mathops import np, interpolate, ndimage
 from .fttools import fftrange
 
 
@@ -245,3 +247,198 @@ def make_xy_grid(shape, *, dx=0, diameter=0, grid=True):
         x, y = np.meshgrid(x, y)
 
     return x, y
+
+
+def make_rotation_matrix(abg, radians=False):
+    """Build a rotation matrix.
+
+    The angles are Tait-Bryan angles describing extrinsic rotations about
+    Z, Y, X in that order.
+
+    Note that the return is the location of the input points in the output
+    space
+
+    For more information, see Wikipedia
+    https://en.wikipedia.org/wiki/Euler_angles#Tait%E2%80%93Bryan_angles
+    The "Tait-Bryan angles" X1Y2Z3 entry is the rotation matrix
+    used in this function.
+
+
+    Parameters
+    ----------
+    abg : `tuple` of `float`
+        the Tait-Bryan angles (α,β,γ)
+        units of degrees unless radians=True
+        if len < 3, remaining angles are zero
+    radians : `bool`, optional
+        if True, abg are assumed to be radians.  If False, abg are
+        assumed to be degrees.
+
+    Returns
+    -------
+    `numpy.ndarray`
+        3x3 rotation matrix
+
+    """
+    ABG = truenp.zeros(3)
+    ABG[:len(abg)] = abg
+    abg = ABG
+    if not radians:
+        abg = np.radians(abg)
+
+    # would be more efficient to call cos and sine once, but
+    # the computation of these variables will be a vanishingly
+    # small faction of total runtime for this function if
+    # x, y, z are of "reasonable" size
+
+    alpha, beta, gamma = abg
+    cosa = truenp.cos(alpha)
+    cosb = truenp.cos(beta)
+    cosg = truenp.cos(gamma)
+    sina = truenp.sin(alpha)
+    sinb = truenp.sin(beta)
+    sing = truenp.sin(gamma)
+    # originally wrote this as a Homomorphic matrix
+    # the m = m[:3,:3] crops it to just the rotation matrix
+    # unclear if may some day want the Homomorphic matrix,
+    # PITA to take it out, so leave it in
+    m = truenp.array([
+        [cosa*cosg - sina*sinb*sing, -cosb*sina, cosa*sing + cosg*sina*sinb, 0],
+        [cosg*sina + cosa*sinb*sing,  cosa*cosb, sina*sing - cosa*cosg*sinb, 0],
+        [-cosb*sing,                  sinb,      cosb*cosg,                  0],
+        [0,                           0,         0,                          1],
+    ])
+    # bit of a weird dance with truenp/np here
+    # truenp -- make "m" on CPU, no matter what.
+    # np.array on last line will move data from numpy to any other "numpy"
+    # (like Cupy/GPU)
+    return np.array(m[:3, :3])
+
+
+def apply_rotation_matrix(m, x, y, z=None, points=None, return_z=False):
+    """Rotate the coordinates (x,y,[z]) about the origin by angles (α,β,γ).
+
+    Parameters
+    ----------
+    m : `numpy.ndarray`, optional
+        rotation matrix; see make_rotation_matrix
+    x : `numpy.ndarray`
+        N dimensional array of x coordinates
+    y : `numpy.ndarray`
+        N dimensional array of x coordinates
+    z : `numpy.ndarray`
+        N dimensional array of z coordinates
+        assumes to be unity if not given
+    points : `numpy.ndarray`, optional
+        array of dimension [x.size, 3] containing [x,y,z]
+        points will be made by stacking x,y,z if not given.
+        passing points directly if this is the native storage
+        of your coordinates can improve performance.
+    return_z : `bool`, optional
+        if True, returns array of shape [3, x.shape]
+        if False, returns an array of shape [2, x.shape]
+        either return unpacks, such that x, y = rotate(...)
+
+    Returns
+    -------
+    `numpy.ndarray`
+        ndarray with rotated coordinates
+
+    """
+    if z is None:
+        z = np.ones_like(x)
+
+    if points is None:
+        points = np.stack((x, y, z), axis=2)
+
+    out = np.tensordot(m, points, axes=((1), (2)))
+    if return_z:
+        return out
+    else:
+        return out[:2, ...]
+
+
+def xyXY_to_pixels(xy, XY):
+    """Given input points xy and warped points XY, compute pixel indices.
+
+    Lists or tuples work for xy and XY, as do 3D arrays.
+
+    Parameters
+    ----------
+    xy : `numpy.ndarray`
+        ndarray of shape (2, m, n)
+        with [x, y] on the first dimension
+        represents the input coordinates
+        implicitly rectilinear
+    XY : `numpy.ndarray`
+        ndarray of shape (2, m, n)
+        with [x, y] on the first dimension
+        represents the input coordinates
+        not necessarily rectilinear
+
+    Returns
+    -------
+    `numpy.ndarray`
+        ndarray of shape (2, m, n) with XY linearly projected
+        into pixels
+
+    """
+    xy = np.array(xy)
+    XY = np.array(XY)
+    # map coordinates says [0,0] is the upper left corner
+    # need to adjust XYZ by xyz origin and sample spacing
+    # d = delta; o = origin
+    x, y = xy
+    ox = x[0, 0]
+    oy = y[0, 0]
+    dx = x[0, 1] - ox
+    dy = y[1, 0] - oy
+    XY2 = XY.copy()
+    X, Y = XY2
+    X -= ox
+    Y -= oy
+    X /= dx
+    Y /= dy
+    # ::-1 = reverse X,Y
+    # ... = leave other axes as-is
+    XY2 = XY2[::-1, ...]
+    return XY2
+
+
+def regularize(xy, XY, z, XY2=None):
+    """Regularize the coordinates XY relative to the frame xy.
+
+    This function is used in conjunction with rotate to project
+    surface figure errors onto tilted planes or other geometries.
+
+    Parameters
+    ----------
+    xy : `numpy.ndarray`
+        ndarray of shape (2, m, n)
+        with [x, y] on the first dimension
+        represents the input coordinates
+        implicitly rectilinear
+    XY : `numpy.ndarray`
+        ndarray of shape (2, m, n)
+        with [x, y] on the first dimension
+        represents the input coordinates
+        not necessarily rectilinear
+    z : `numpy.ndarray`
+        ndarray of shape (m, n)
+        flat data to warp
+    XY2 : `numpy.ndarray`, optional
+        ndarray of shape (2, m, n)
+        XY, after output from xyXY_to_pixels
+        compute XY2 once and pass many times
+        to optimize models
+
+    Returns
+    -------
+    Z : `numpy.ndarray`
+        z which exists on the grid XY, looked up at the points xy
+
+    """
+    if XY2 is None:
+        XY2 = xyXY_to_pixels(xy, XY)
+
+    return ndimage.map_coordinates(z, XY2)
