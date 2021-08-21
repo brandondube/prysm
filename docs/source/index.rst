@@ -31,25 +31,23 @@ Optionally, plotting uses `matplotlib <https://matplotlib.org/>`_.  Images are r
 
 Prysm's backend is runtime interchangeable, you may also install and use `cupy <https://cupy.chainer.org/>`_ or other numpy/scipy API compatible libraries if you wish.
 
+
 Tutorials
 ---------
 
+.. toctree::
+    :maxdepth: 2
+
+    tutorials/index.rst
 
 
-User's Guide
-------------
+How-Tos
+-------
 
 .. toctree::
+    :maxdepth: 2
 
-   user_guide/index.rst
-
-
-Examples
---------
-
-.. toctree::
-
-    examples/index.rst
+    how-tos/index.rst
 
 
 API Reference

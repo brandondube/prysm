@@ -131,7 +131,6 @@ The geometry module was rewritten.  The object oriented mask interface and :clas
 - - :func:`~prysm.geometry.dodecagon`
 - - :func:`~prysm.geometry.trisdecagon`
 - :func:`~prysm.geometry.inverted_circle` was removed, call :code:`~circle(...)` for equivalent output.
-- :func:`~prysm.geometry.offset_circle` was removed; shift the grid prior to calling circle.
 
 
 io
@@ -212,12 +211,12 @@ prysm's support of polynomials has been unified under a single package.  The pol
 - - - - :func:`primary_trefoil_y`
 - - - e.g., :code:`for primary_coma_y`, either :code:`zernike_nm(3, 1, ...)` or :code:`zernike_nm(*zernike_noll_to_nm(7), ...)`
 - - - classes :class:`FringeZernike`, :class:`NollZernike`, :class:`ANSI1TermZernike`, :class:`ANSI2TermZernike` have been removed.  Combine :func:`~prysm.polynomials.zernike.zernike_nm` with one of the naming functions to replace the phase synthesis behavior.
-- - - new function :func:`~prysm.polynomials.zernike.zernike_nm_sequence` -- use to compute a series of Zernike polynomials.  Much faster than :func:`~prysm.polynomials.zernike.zernike_nm` in a loop.  Returns a generator, which you may want to exhaust into a list or into a list, then an array.
+
 
 - - - :func:`~prysm.polynomials.zernike.zernike_norm` for computing the norm of a given Zernike polynomial, given the ANSI order (n, m).
 - - - :func:`~prysm.polynomials.zernike.zero_separation` for computing the minimum zero separation on the domain [0,1] for a Zernike polynomial, given the ANSI order (n, m).
 - - - :func:`~prysm.polynomials.zernike.zernike_nm` for computing a Zernike polynomial, given the ANSI order (n, m).
-- - - :func:`~prysm.polynomials.zernike.zernike_nm_sequence`, the same as :code:`zernike_nm`, but for several polynomials at once.  Much faster than :code:`zernike_nm` in a loop, thanks to the recurrence relation prysm uses to compute Zernikes.
+- - - :func:`~prysm.polynomials.zernike.zernike_nm_sequence` -- use to compute a series of Zernike polynomials.  Much faster than :func:`~prysm.polynomials.zernike.zernike_nm` in a loop.  Returns a generator, which you may want to exhaust into a list or into a list, then an array.
 - - - :func:`~prysm.polynomials.zernike.nm_to_fringe` for converting ANSI (n, m) indices to FRINGE indices, which begin with Z1 for piston.
 - - - :func:`~prysm.polynomials.zernike.nm_to_ansi_j` for converting ANSI (n, m) indices to ANSI j indices (dual to mono index).
 - - - :func:`~prysm.polynomials.zernike.noll_to_nm` for converting the Noll indexing scheme to ANSI (n, m).
@@ -280,7 +279,7 @@ The PSF module has changed from being a core part of propagation usage to a modu
 pupil
 -----
 
-- this entire submodule has been removed.  To synthesize pupil functions which have given phase and amplitude, combine prysm.geometry with prysm.polynomials or other phase synthesis code.  The function :func:`~prysm.propagation.Wavefront.from_phase_amplitude` largely replicates the behavior of the :code:`Pupil` constructor, with the user generating their own phase and amplitude arrays.
+- this entire submodule has been removed.  To synthesize pupil functions which have given phase and amplitude, combine prysm.geometry with prysm.polynomials or other phase synthesis code.  The function :func:`~prysm.propagation.Wavefront.from_amp_and_phase` largely replicates the behavior of the :code:`Pupil` constructor, with the user generating their own phase and amplitude arrays.
 
 
 segmented
