@@ -8,6 +8,9 @@ from prysm import fttools
 
 ARRAY_SIZES = (8, 16, 32, 64, 128, 256, 512, 1024)
 
+# one power of two, one odd number, one even non power of two
+ARRAY_SIZES_FOR_PAD = (8, 9, 12)
+
 
 @pytest.mark.parametrize('samples', ARRAY_SIZES)
 def test_mtp_equivalent_to_fft(samples):
@@ -28,3 +31,11 @@ def test_mtp_reverses_self(samples):
 def test_mtp_cache_empty_zeros_nbytes():
     fttools.mdft.clear()
     assert fttools.mdft.nbytes() == 0
+
+
+@pytest.mark.parametrize('shape', ARRAY_SIZES_FOR_PAD)
+def test_pad2d_cropcenter_adjoints(shape):
+    inp = np.random.rand(shape, shape)
+    intermediate = fttools.pad2d(inp, Q=2)
+    out = fttools.crop_center(intermediate, inp.shape)
+    assert np.allclose(inp, out)

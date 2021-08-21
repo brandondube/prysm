@@ -1,4 +1,5 @@
 """Supplimental tools for computing fourier transforms."""
+import math
 from collections.abc import Iterable
 
 from .mathops import np, fft
@@ -10,7 +11,7 @@ def fftrange(n, dtype=None):
     return np.arange(-n//2, -n//2+n, dtype=dtype)
 
 
-def pad2d(array, Q=2, value=0, mode='constant'):
+def pad2d(array, Q=2, value=0, mode='constant', out_shape=None):
     """Symmetrically pads a 2D array with a value.
 
     Parameters
@@ -23,49 +24,75 @@ def pad2d(array, Q=2, value=0, mode='constant'):
         value with which to pad the array
     mode : `str`, optional
         mode, passed directly to np.pad
+    out_shape : `tuple`
+        output shape for the array.  Overrides Q if given.
+        in_shape * Q ~= out_shape (up to integer rounding)
 
     Returns
     -------
     `numpy.ndarray`
-        padded array
+        padded array, may share memory with input array
 
     Notes
     -----
     padding will be symmetric.
 
     """
-    if Q == 1:
+    if Q == 1 and out_shape is None:
         return array
     else:
-        if mode == 'constant':
-            pad_shape, out_x, out_y = _padshape(array, Q)
-            y, x = array.shape
-            if value == 0:
-                out = np.zeros((out_y, out_x), dtype=array.dtype)
-            else:
-                out = np.zeros((out_y, out_x), dtype=array.dtype) + value
-            yy, xx = pad_shape
-            out[yy[0]:yy[0] + y, xx[0]:xx[0] + x] = array
-            return out
+        in_shape = array.shape
+        if out_shape is None:
+            out_shape = [math.ceil(s*Q) for s in in_shape]
         else:
-            pad_shape, *_ = _padshape(array, Q)
+            if isinstance(out_shape, int):
+                out_shape = [out_shape]*array.ndim
 
-            if mode == 'constant':
-                kwargs = {'constant_values': value, 'mode': mode}
-            else:
-                kwargs = {'mode': mode}
-            return np.pad(array, pad_shape, **kwargs)
+        shape_diff = [o-i for o, i in zip(out_shape, in_shape)]
+        pad_shape = []
+        for d in shape_diff:
+            divby2 = d//2
+            lcl = (d-divby2, divby2)  # 13 => 6; (7,6) correct; 12 => 6; (6,6) correct
+            pad_shape.append(lcl)
+
+        if mode == 'constant':
+            slcs = tuple((slice(p[0], -p[1]) for p in pad_shape))
+            out = np.zeros(out_shape, dtype=array.dtype)
+            if value != 0:
+                out += value
+
+            out[slcs] = array
+
+        else:
+            kwargs = {'mode': mode}
+            out = np.pad(array, pad_shape, **kwargs)
+
+        return out
 
 
-def _padshape(array, Q):
-    y, x = array.shape
-    out_x = int(np.ceil(x * Q))
-    out_y = int(np.ceil(y * Q))
-    factor_x = (out_x - x) / 2
-    factor_y = (out_y - y) / 2
-    return (
-        (int(np.ceil(factor_y)), int(np.floor(factor_y))),
-        (int(np.ceil(factor_x)), int(np.floor(factor_x)))), out_x, out_y
+def crop_center(img, out_shape):
+    """Crop the central (out_shape) of an image, with FFT alignment.
+
+    As an example, if img=512x512 and out_shape=200
+    out_shape => 200x200 and the returned array is 200x200, 156 elements from the [0,0]th pixel
+
+    This function is the adjoint of pad2d.
+
+    Parameters
+    ----------
+    img : `numpy.ndarray`
+        ndarray of shape (m, n)
+    out_shape : `int` or `iterable` of int
+        shape to crop out, either a scalar or pair of values
+
+    """
+    if isinstance(out_shape, int):
+        out_shape = (out_shape, out_shape)
+
+    padding = [i-o for i, o in zip(img.shape, out_shape)]
+    left = [math.ceil(p/2) for p in padding]
+    slcs = tuple((slice(l, l+o) for l, o in zip(left, out_shape)))  # NOQA -- l ambiguous
+    return img[slcs]
 
 
 def forward_ft_unit(dx, samples, shift=True):
