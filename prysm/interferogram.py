@@ -1135,12 +1135,12 @@ class Interferogram(OpticalPhase):
 
     @staticmethod
     def from_codev_int(path):
-        """Create a new interferogram from a Codev V INT file.
+        """Create a new interferogram from a CodeV INT file.
 
         Parameters
         ----------
         path : path_like
-            path to a zygo dat file
+            path to a CodeV INT file
 
         Returns
         -------

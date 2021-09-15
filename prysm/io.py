@@ -1365,7 +1365,7 @@ def read_sigfit_rigidbody(file):
     return out
 
 def read_codev_int(filename):
-    """Read the contens of a Code V INT (.int/.cvg) file.
+    """Read the content of a CodeV INT (.int/.cvg) file.
     
     Parameters
     ----------
