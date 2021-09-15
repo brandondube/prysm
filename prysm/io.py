@@ -1396,8 +1396,20 @@ def read_codev_int(filename):
             else:
                 num_rows = int(param[2])
             datatype = param[3]    #SUR | WFR | FIL
-            wavelength = float(param[5])
-            scale_size = float(param[7])
+            #need to test now because different orders are allow
+            p=4
+            while p < len(param):
+                if param[p].upper() == 'WVL':
+                    wavelength = float(param[p+1])
+                if param[p].upper() == 'NMB':
+                    pass
+                if param[p].upper() == 'SSZ':
+                    scale_size = float(param[p+1])
+                if param[p].upper() == 'NDA':
+                    nda = int(param[p+1])
+                if param[p].upper() == 'XSC':
+                    x_scale = float(param[p+1])
+                p += 1    
             #read grid data
             grdlist=[]
             while True:
@@ -1410,8 +1422,11 @@ def read_codev_int(filename):
                 raise ValueError('Error during INT-file import. Length of list does not match row*cols')
             if (datatype == 'WFR') or (datatype == 'SUR') :
                 # return values in nm (zygo convention, fit to prysm)
-                phase = np.array(grdlist)*wavelength*1e3/scale_size
-                phase = phase.reshape((num_rows, num_cols)) 
+                phase = e.array(grdlist).astype(config.precision)
+                phase[phase == nda] = e.nan
+                phase = phase*wavelength*1e3/scale_size
+                phase = phase.reshape((num_rows, num_cols))
+                phase = e.flipud(phase)
             else:
                 #for "FIL"
                 raise ValueError('Intensity apodization filter data (FIL) INT-File type not supported')
@@ -1419,12 +1434,16 @@ def read_codev_int(filename):
             #zernike polynomial data
             #not implemented
             raise ValueError('Zernike Data (ZRN¦ZRF) INT-File type not supported.')
+        elif (param[0] == 'UDI'):
+            #user-defined data
+            #not implemented
+            raise ValueError('User-defined data (UDI) INT-File type not supported.')
         else:
             #seems to be non-valid INT file
             raise ValueError('Error while parsing INT-file. Wrong format?')    
     #set intensity to 1 as INT-Files do not contain intensity information
     #could be used for FIL file type maybe
-    intensity = np.ones(phase.shape)
+    intensity = e.ones(phase.shape)
     meta = {
         'title' : title,
         'wavelength': wavelength,  #in micron
