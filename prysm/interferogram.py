@@ -11,7 +11,7 @@ from ._phase import OpticalPhase
 from ._richdata import RichData
 from .mathops import np
 from .zernike import defocus, zernikefit, FringeZernike
-from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii
+from .io import read_zygo_dat, read_zygo_datx, write_zygo_ascii, read_codev_int
 from .fttools import forward_ft_unit
 from .coordinates import cart_to_polar
 from .util import mean, rms  # NOQA
@@ -1132,3 +1132,33 @@ class Interferogram(OpticalPhase):
         x, y, z = render_synthetic_surface(size=size, samples=samples, rms=rms,
                                            mask=mask, psd_fcn=psd_fcn, **psd_fcn_kwargs)
         return Interferogram(phase=z, x=x, y=y, xy_unit=xyunit, z_unit=zunit, wavelength=HeNe)
+
+    @staticmethod
+    def from_codev_int(path):
+        """Create a new interferogram from a Codev V INT file.
+
+        Parameters
+        ----------
+        path : path_like
+            path to a zygo dat file
+
+        Returns
+        -------
+        `Interferogram`
+            new Interferogram instance
+
+        """
+        cvint = read_codev_int(path)
+        phase = cvint['phase']
+
+        x = np.arange(phase.shape[1], dtype=config.precision)
+        y = np.arange(phase.shape[0], dtype=config.precision)
+        i = Interferogram(phase=phase, intensity=cvint['intensity'],
+                          x=x, y=y, meta=cvint['meta'])
+
+        # if res != 0:
+        #     i.latcal(1e3 * res, u.mm)
+        # else:
+        #     i.strip_latcal()
+
+        return i
