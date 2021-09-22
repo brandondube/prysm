@@ -1375,3 +1375,94 @@ def read_sigfit_rigidbody(file):
             'dR': dR
         }
     return out
+
+def read_codev_int(filename):
+    """Read the content of a CodeV INT (.int/.cvg) file.
+    
+    Parameters
+    ----------
+    file : path_like
+        path to a file
+    
+    Returns
+    -------
+    'dict'
+        dictionary with keys: phase, intensity, meta
+
+    """
+    with open(filename, 'rt') as f:
+        # skip headerlines starting with "!"
+        while True:
+            title = f.readline()
+            if not title.lstrip().startswith('!'):
+                break
+        # read parameter line
+        param = f.readline().split()
+        # parse parameters
+        if param[0] == 'GRD':
+            num_cols = int(param[1])
+            if param[2] == 'R':
+                #radial grid data
+                #not implemented
+                raise ValueError('Radial Grid Data INT-File type not supported.')
+            else:
+                num_rows = int(param[2])
+            datatype = param[3]    #SUR | WFR | FIL
+            #need to test now because different orders are allow
+            p=4
+            while p < len(param):
+                if param[p].upper() == 'WVL':
+                    wavelength = float(param[p+1])
+                if param[p].upper() == 'NMB':
+                    pass
+                if param[p].upper() == 'SSZ':
+                    scale_size = float(param[p+1])
+                if param[p].upper() == 'NDA':
+                    nda = int(param[p+1])
+                if param[p].upper() == 'XSC':
+                    x_scale = float(param[p+1])
+                p += 1    
+            #read grid data
+            phase=np.array([], dtype=config.precision)
+            while True:
+                line = f.readline()
+                if not line:
+                    break
+                phase = np.append(phase,[int(i) for i in line.split()])
+            
+            if not len(phase) == num_cols*num_rows:
+                raise ValueError('Error during INT-file import. Length of list does not match row*cols')
+            if (datatype == 'WFR') or (datatype == 'SUR') :
+                # return values in nm (zygo convention, fit to prysm)
+                phase[phase == nda] = np.nan
+                phase = phase*wavelength*1e3/scale_size
+                phase = phase.reshape((num_rows, num_cols))
+            else:
+                #for "FIL"
+                raise ValueError('Intensity apodization filter data (FIL) INT-File type not supported')
+        elif (param[0] == 'ZRN') or (param[0] == 'ZRF'):
+            #zernike polynomial data
+            #not implemented
+            raise ValueError('Zernike Data (ZRN¦ZRF) INT-File type not supported.')
+        elif (param[0] == 'UDI'):
+            #user-defined data
+            #not implemented
+            raise ValueError('User-defined data (UDI) INT-File type not supported.')
+        else:
+            #seems to be non-valid INT file
+            raise ValueError('Error while parsing INT-file. Wrong format?')    
+    #set intensity to 1 as INT-Files do not contain intensity information
+    #could be used for FIL file type maybe
+    intensity = np.ones(phase.shape)
+    meta = {
+        'title' : title,
+        'wavelength': wavelength,  #in micron
+        'codev_type': datatype,
+        'width' : num_cols,
+        'height' : num_rows,
+        }
+    return {
+        'phase': phase,
+        'intensity': intensity,
+        'meta': meta,
+    }

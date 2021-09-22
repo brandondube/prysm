@@ -12,7 +12,8 @@ from .mathops import np, fft, jinc
 from .io import (
     read_zygo_dat,
     read_zygo_datx,
-    write_zygo_ascii
+    write_zygo_ascii,
+    read_codev_int
 )
 from .fttools import forward_ft_unit
 from .coordinates import (
@@ -1144,6 +1145,28 @@ class Interferogram(RichData):
         dx = x[1] - x[0]
         return Interferogram(phase=z, dx=dx, wavelength=HeNe)
 
+    @staticmethod
+    def from_codev_int(path):
+        """Create a new interferogram from a CodeV INT file.
+
+        Parameters
+        ----------
+        path : path_like
+            path to a CodeV INT file
+
+        Returns
+        -------
+        `Interferogram`
+            new Interferogram instance
+
+        """
+        cvint = read_codev_int(path)
+        
+        #INT Files do not contain lateral calibration
+        i = Interferogram(phase=cvint['phase'], dx=1.0, intensity=cvint['intensity'],
+                          meta=cvint['meta'])
+
+        return i
 
 # below this line is commented out, but working code that was written to design the 2D filtering code.
 # It is equivalent, but 1D.
