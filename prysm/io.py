@@ -1376,12 +1376,13 @@ def read_sigfit_rigidbody(file):
         }
     return out
 
+
 def read_codev_int(filename):
     """Read the content of a CodeV INT (.int/.cvg) file.
     
     Parameters
     ----------
-    file : path_like
+    filename : path_like
         path to a file
     
     Returns
@@ -1402,13 +1403,13 @@ def read_codev_int(filename):
         if param[0] == 'GRD':
             num_cols = int(param[1])
             if param[2] == 'R':
-                #radial grid data
-                #not implemented
+                # radial grid data
+                # not implemented
                 raise ValueError('Radial Grid Data INT-File type not supported.')
             else:
                 num_rows = int(param[2])
-            datatype = param[3]    #SUR | WFR | FIL
-            #need to test now because different orders are allow
+            datatype = param[3]    # SUR | WFR | FIL
+            # need to test now because different orders are allow
             p=4
             while p < len(param):
                 if param[p].upper() == 'WVL':
@@ -1422,7 +1423,7 @@ def read_codev_int(filename):
                 if param[p].upper() == 'XSC':
                     x_scale = float(param[p+1])
                 p += 1    
-            #read grid data
+            # read grid data
             phase=np.array([], dtype=config.precision)
             while True:
                 line = f.readline()
@@ -1431,7 +1432,9 @@ def read_codev_int(filename):
                 phase = np.append(phase,[int(i) for i in line.split()])
             
             if not len(phase) == num_cols*num_rows:
-                raise ValueError('Error during INT-file import. Length of list does not match row*cols')
+                raise ValueError('Error during INT-File import. Grid data in header is {} {}. \n\
+                                 Length of data grid is {}. Please check your INT-File!'.format(
+                                 num_cols, num_rows,len(phase)))
             if (datatype == 'WFR') or (datatype == 'SUR') :
                 # return values in nm (zygo convention, fit to prysm)
                 phase[phase == nda] = np.nan
@@ -1441,22 +1444,22 @@ def read_codev_int(filename):
                 #for "FIL"
                 raise ValueError('Intensity apodization filter data (FIL) INT-File type not supported')
         elif (param[0] == 'ZRN') or (param[0] == 'ZRF'):
-            #zernike polynomial data
-            #not implemented
+            # zernike polynomial data
+            # not implemented
             raise ValueError('Zernike Data (ZRN¦ZRF) INT-File type not supported.')
         elif (param[0] == 'UDI'):
-            #user-defined data
-            #not implemented
+            # user-defined data
+            # not implemented
             raise ValueError('User-defined data (UDI) INT-File type not supported.')
         else:
-            #seems to be non-valid INT file
+            # seems to be non-valid INT file
             raise ValueError('Error while parsing INT-file. Wrong format?')    
-    #set intensity to 1 as INT-Files do not contain intensity information
-    #could be used for FIL file type maybe
-    intensity = np.ones(phase.shape)
+    # set intensity to 1 as INT-Files do not contain intensity information
+    # could be used for FIL file type maybe
+    intensity = np.ones_like(phase)
     meta = {
         'title' : title,
-        'wavelength': wavelength,  #in micron
+        'wavelength': wavelength,  # in micron
         'codev_type': datatype,
         'width' : num_cols,
         'height' : num_rows,
