@@ -1382,7 +1382,7 @@ def read_codev_int(filename):
     
     Parameters
     ----------
-    filename : path_like
+    filename : str or path_like
         path to a file
     
     Returns
@@ -1391,69 +1391,69 @@ def read_codev_int(filename):
         dictionary with keys: phase, intensity, meta
 
     """
+    filename = str(filename)
     with open(filename, 'rt') as f:
-        # skip headerlines starting with "!"
-        while True:
-            title = f.readline()
-            if not title.lstrip().startswith('!'):
-                break
-        # read parameter line
-        param = f.readline().split()
-        # parse parameters
-        if param[0] == 'GRD':
-            num_cols = int(param[1])
-            if param[2] == 'R':
-                # radial grid data
-                # not implemented
-                raise ValueError('Radial Grid Data INT-File type not supported.')
-            else:
-                num_rows = int(param[2])
-            datatype = param[3]    # SUR | WFR | FIL
-            # need to test now because different orders are allow
-            p=4
-            while p < len(param):
-                if param[p].upper() == 'WVL':
-                    wavelength = float(param[p+1])
-                if param[p].upper() == 'NMB':
-                    pass
-                if param[p].upper() == 'SSZ':
-                    scale_size = float(param[p+1])
-                if param[p].upper() == 'NDA':
-                    nda = int(param[p+1])
-                if param[p].upper() == 'XSC':
-                    x_scale = float(param[p+1])
-                p += 1    
-            # read grid data
-            phase=np.array([], dtype=config.precision)
-            while True:
-                line = f.readline()
-                if not line:
-                    break
-                phase = np.append(phase,[int(i) for i in line.split()])
-            
-            if not len(phase) == num_cols*num_rows:
-                raise ValueError('Error during INT-File import. Grid data in header is {} {}. \n\
-                                 Length of data grid is {}. Please check your INT-File!'.format(
-                                 num_cols, num_rows,len(phase)))
-            if (datatype == 'WFR') or (datatype == 'SUR') :
-                # return values in nm (zygo convention, fit to prysm)
-                phase[phase == nda] = np.nan
-                phase = phase*wavelength*1e3/scale_size
-                phase = phase.reshape((num_rows, num_cols))
-            else:
-                #for "FIL"
-                raise ValueError('Intensity apodization filter data (FIL) INT-File type not supported')
-        elif (param[0] == 'ZRN') or (param[0] == 'ZRF'):
-            # zernike polynomial data
+        file_data = f.readlines()
+    
+    i = 0    
+    # skip headerlines starting with "!"
+    while file_data[i].lstrip().startswith('!'):
+        i += 1
+    
+    title = file_data[i]
+    
+    # read parameter line
+    param = file_data[i+1].split()
+    # parse parameters
+    if param[0] == 'GRD':
+        num_cols = int(param[1])
+        if param[2] == 'R':
+            # radial grid data
             # not implemented
-            raise ValueError('Zernike Data (ZRN¦ZRF) INT-File type not supported.')
-        elif (param[0] == 'UDI'):
-            # user-defined data
-            # not implemented
-            raise ValueError('User-defined data (UDI) INT-File type not supported.')
+            raise ValueError('Radial Grid Data INT-File type not supported.')
         else:
-            # seems to be non-valid INT file
-            raise ValueError('Error while parsing INT-file. Wrong format?')    
+            num_rows = int(param[2])
+        datatype = param[3]    # SUR | WFR | FIL
+        # need to test now because different orders are allow
+        p=4
+        while p < len(param):
+            if param[p].upper() == 'WVL':
+                wavelength = float(param[p+1])
+            if param[p].upper() == 'NMB':
+                pass
+            if param[p].upper() == 'SSZ':
+                scale_size = float(param[p+1])
+            if param[p].upper() == 'NDA':
+                nda = int(param[p+1])
+            if param[p].upper() == 'XSC':
+                x_scale = float(param[p+1])
+            p += 1    
+        # read grid data
+        phase  = np.fromstring(''.join(file_data[i+2:]), sep=' ', dtype=config.precision)
+        # check that data length matches info in parameter line
+        if not len(phase) == num_cols*num_rows:
+            raise ValueError('Error during INT-File import. Grid data in header is {} {}. \n\
+                             Length of data grid is {}. Please check your INT-File!'.format(
+                             num_cols, num_rows,len(phase)))
+        if (datatype == 'WFR') or (datatype == 'SUR') :
+            # return values in nm (zygo convention, fit to prysm)
+            phase[phase == nda] = np.nan
+            phase = phase*wavelength*1e3/scale_size
+            phase = phase.reshape((num_rows, num_cols))
+        else:
+            #for "FIL"
+            raise ValueError('Intensity apodization filter data (FIL) INT-File type not supported')
+    elif (param[0] == 'ZRN') or (param[0] == 'ZRF'):
+        # zernike polynomial data
+        # not implemented
+        raise ValueError('Zernike Data (ZRN¦ZRF) INT-File type not supported.')
+    elif (param[0] == 'UDI'):
+        # user-defined data
+        # not implemented
+        raise ValueError('User-defined data (UDI) INT-File type not supported.')
+    else:
+        # seems to be non-valid INT file
+        raise ValueError('Error while parsing INT-file. Wrong format?')    
     # set intensity to 1 as INT-Files do not contain intensity information
     # could be used for FIL file type maybe
     intensity = np.ones_like(phase)
