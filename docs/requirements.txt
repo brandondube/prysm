@@ -1,5 +1,5 @@
 setuptools==58.0.4
-sphinx==2.0.1
+sphinx==4.2.0
 nbconvert==6.1.0
 ipykernel
 nbsphinx==0.8.7
