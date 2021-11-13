@@ -11,9 +11,9 @@ def optimize_xy_separable(x, y):
 
     Parameters
     ----------
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         2D or 1D array
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         2D or 1D array
 
     Returns
@@ -43,16 +43,16 @@ def broadcast_1d_to_2d(x, y):
 
     Parameters
     ----------
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         ndarray of shape (n,)
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         ndarray of shape (m,)
 
     Returns
     -------
-    xx : `numpy.ndarray`
+    xx : numpy.ndarray
         ndarray of shape (m, n)
-    yy : `numpy.ndarray`
+    yy : numpy.ndarray
         ndarray of shape (m, n)
 
     """
@@ -68,18 +68,18 @@ def cart_to_polar(x, y, vec_to_grid=True):
 
     Parameters
     ----------
-    x : `numpy.ndarray` or number
+    x : numpy.ndarray or number
         x coordinate
-    y : `numpy.ndarray` or number
+    y : numpy.ndarray or number
         y coordinate
-    vec_to_grid : `bool`, optional
+    vec_to_grid : bool, optional
         if True, convert a vector (x,y) input to a grid (r,t) output
 
     Returns
     -------
-    rho : `numpy.ndarray` or number
+    rho : numpy.ndarray or number
         radial coordinate
-    phi : `numpy.ndarray` or number
+    phi : numpy.ndarray or number
         azimuthal coordinate
 
     """
@@ -100,16 +100,16 @@ def polar_to_cart(rho, phi):
 
     Parameters
     ----------
-    rho : `numpy.ndarray` or number
+    rho : numpy.ndarray or number
         radial coordinate
-    phi : `numpy.ndarray` or number
+    phi : numpy.ndarray or number
         azimuthal coordinate
 
     Returns
     -------
-    x : `numpy.ndarray` or number
+    x : numpy.ndarray or number
         x coordinate
-    y : `numpy.ndarray` or number
+    y : numpy.ndarray or number
         y coordinate
 
     """
@@ -123,20 +123,20 @@ def uniform_cart_to_polar(x, y, data):
 
     Parameters
     ----------
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         sorted 1D array of x sample pts
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         sorted 1D array of y sample pts
-    data : `numpy.ndarray`
+    data : numpy.ndarray
         data sampled over the (x,y) coordinates
 
     Returns
     -------
-    rho : `numpy.ndarray`
+    rho : numpy.ndarray
         samples for interpolated values
-    phi : `numpy.ndarray`
+    phi : numpy.ndarray
         samples for interpolated values
-    f(rho,phi) : `numpy.ndarray`
+    f(rho,phi) : numpy.ndarray
         data uniformly sampled in (rho,phi)
 
     """
@@ -163,19 +163,19 @@ def resample_2d(array, sample_pts, query_pts, kind='cubic'):
 
     Parameters
     ----------
-    array : `numpy.ndarray`
+    array : numpy.ndarray
         2D array
-    sample_pts : `tuple`
-        pair of `numpy.ndarray` objects that contain the x and y sample locations,
+    sample_pts : tuple
+        pair of numpy.ndarray objects that contain the x and y sample locations,
         each array should be 1D
-    query_pts : `tuple`
+    query_pts : tuple
         points to interpolate onto, also 1D for each array
-    kind : `str`, {'linear', 'cubic', 'quintic'}
+    kind : str, {'linear', 'cubic', 'quintic'}
         kind / order of spline to use
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         array resampled onto query_pts
 
     """
@@ -188,19 +188,19 @@ def resample_2d_complex(array, sample_pts, query_pts, kind='linear'):
 
     Parameters
     ----------
-    array : `numpy.ndarray`
+    array : numpy.ndarray
         2D array
-    sample_pts : `tuple`
-        pair of `numpy.ndarray` objects that contain the x and y sample locations,
+    sample_pts : tuple
+        pair of numpy.ndarray objects that contain the x and y sample locations,
         each array should be 1D
-    query_pts : `tuple`
+    query_pts : tuple
         points to interpolate onto, also 1D for each array
-    kind : `str`, {'linear', 'cubic', 'quintic'}
+    kind : str, {'linear', 'cubic', 'quintic'}
         kind / order of spline to use
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         array resampled onto query_pts
 
     """
@@ -217,21 +217,21 @@ def make_xy_grid(shape, *, dx=0, diameter=0, grid=True):
 
     Parameters
     ----------
-    shape : `int` or tuple of int
+    shape : int or tuple of int
         number of samples per dimension.  If a scalar value, broadcast to
         both dimensions.  Order is numpy axis convention, (row, col)
-    dx : `float`
+    dx : float
         inter-sample spacing, ignored if diameter is provided
-    diameter : `float`
+    diameter : float
         diameter, clobbers dx if both given
-    grid : `bool`, optional
+    grid : bool, optional
         if True, return meshgrid of x,y; else return 1D vectors (x, y)
 
     Returns
     -------
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x grid
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y grid
 
     """
@@ -266,17 +266,18 @@ def make_rotation_matrix(abg, radians=False):
 
     Parameters
     ----------
-    abg : `tuple` of `float`
+    abg : tuple of float
         the Tait-Bryan angles (α,β,γ)
         units of degrees unless radians=True
         if len < 3, remaining angles are zero
-    radians : `bool`, optional
+        beta produces horizontal compression and gamma vertical
+    radians : bool, optional
         if True, abg are assumed to be radians.  If False, abg are
         assumed to be degrees.
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         3x3 rotation matrix
 
     """
@@ -320,28 +321,28 @@ def apply_rotation_matrix(m, x, y, z=None, points=None, return_z=False):
 
     Parameters
     ----------
-    m : `numpy.ndarray`, optional
+    m : numpy.ndarray, optional
         rotation matrix; see make_rotation_matrix
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         N dimensional array of x coordinates
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         N dimensional array of x coordinates
-    z : `numpy.ndarray`
+    z : numpy.ndarray
         N dimensional array of z coordinates
         assumes to be unity if not given
-    points : `numpy.ndarray`, optional
+    points : numpy.ndarray, optional
         array of dimension [x.size, 3] containing [x,y,z]
         points will be made by stacking x,y,z if not given.
         passing points directly if this is the native storage
         of your coordinates can improve performance.
-    return_z : `bool`, optional
+    return_z : bool, optional
         if True, returns array of shape [3, x.shape]
         if False, returns an array of shape [2, x.shape]
         either return unpacks, such that x, y = rotate(...)
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         ndarray with rotated coordinates
 
     """
@@ -365,12 +366,12 @@ def xyXY_to_pixels(xy, XY):
 
     Parameters
     ----------
-    xy : `numpy.ndarray`
+    xy : numpy.ndarray
         ndarray of shape (2, m, n)
         with [x, y] on the first dimension
         represents the input coordinates
         implicitly rectilinear
-    XY : `numpy.ndarray`
+    XY : numpy.ndarray
         ndarray of shape (2, m, n)
         with [x, y] on the first dimension
         represents the input coordinates
@@ -378,7 +379,7 @@ def xyXY_to_pixels(xy, XY):
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         ndarray of shape (2, m, n) with XY linearly projected
         into pixels
 
@@ -413,20 +414,20 @@ def regularize(xy, XY, z, XY2=None):
 
     Parameters
     ----------
-    xy : `numpy.ndarray`
+    xy : numpy.ndarray
         ndarray of shape (2, m, n)
         with [x, y] on the first dimension
         represents the input coordinates
         implicitly rectilinear
-    XY : `numpy.ndarray`
+    XY : numpy.ndarray
         ndarray of shape (2, m, n)
         with [x, y] on the first dimension
         represents the input coordinates
         not necessarily rectilinear
-    z : `numpy.ndarray`
+    z : numpy.ndarray
         ndarray of shape (m, n)
         flat data to warp
-    XY2 : `numpy.ndarray`, optional
+    XY2 : numpy.ndarray, optional
         ndarray of shape (2, m, n)
         XY, after output from xyXY_to_pixels
         compute XY2 once and pass many times
@@ -434,7 +435,7 @@ def regularize(xy, XY, z, XY2=None):
 
     Returns
     -------
-    Z : `numpy.ndarray`
+    Z : numpy.ndarray
         z which exists on the grid XY, looked up at the points xy
 
     """
