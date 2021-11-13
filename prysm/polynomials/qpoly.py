@@ -1,6 +1,8 @@
 """Tools for working with Q (Forbes) polynomials."""
 # not special engine, only concerns scalars here
 from collections import defaultdict
+from functools import lru_cache
+
 from scipy import special
 
 from .jacobi import jacobi, jacobi_sequence
@@ -8,6 +10,7 @@ from .jacobi import jacobi, jacobi_sequence
 from prysm.mathops import np, kronecker, gamma, sign
 
 
+@lru_cache(1000)
 def g_qbfs(n_minus_1):
     """g(m-1) from oe-18-19-19700 eq. (A.15)."""
     if n_minus_1 == 0:
@@ -17,12 +20,14 @@ def g_qbfs(n_minus_1):
         return - (1 + g_qbfs(n_minus_2) * h_qbfs(n_minus_2)) / f_qbfs(n_minus_1)
 
 
+@lru_cache(1000)
 def h_qbfs(n_minus_2):
     """h(m-2) from oe-18-19-19700 eq. (A.14)."""
     n = n_minus_2 + 2
     return -n * (n - 1) / (2 * f_qbfs(n_minus_2))
 
 
+@lru_cache(1000)
 def f_qbfs(n):
     """f(m) from oe-18-19-19700 eq. (A.16)."""
     if n == 0:
@@ -220,6 +225,7 @@ def Qcon_sequence(ns, x):
         yield Pn * x4
 
 
+@lru_cache(4000)
 def abc_q2d(n, m):
     """A, B, C terms for 2D-Q polynomials.  oe-20-3-2483 Eq. (A.3).
 
@@ -255,6 +261,7 @@ def abc_q2d(n, m):
     return A, B, C
 
 
+@lru_cache(4000)
 def G_q2d(n, m):
     """G term for 2D-Q polynomials.  oe-20-3-2483 Eq. (A.15).
 
@@ -294,6 +301,7 @@ def G_q2d(n, m):
         return term1 * gamma(n, m)
 
 
+@lru_cache(4000)
 def F_q2d(n, m):
     """F term for 2D-Q polynomials.  oe-20-3-2483 Eq. (A.13).
 
@@ -334,6 +342,7 @@ def F_q2d(n, m):
         return term1 * gamma(n, m)
 
 
+@lru_cache(4000)
 def g_q2d(n, m):
     """Lowercase g term for 2D-Q polynomials.  oe-20-3-2483 Eq. (A.18a).
 
@@ -353,6 +362,7 @@ def g_q2d(n, m):
     return G_q2d(n, m) / f_q2d(n, m)
 
 
+@lru_cache(4000)
 def f_q2d(n, m):
     """Lowercase f term for 2D-Q polynomials.  oe-20-3-2483 Eq. (A.18b).
 
