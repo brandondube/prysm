@@ -263,6 +263,43 @@ def test_cheby2_seq_matches_loop():
         assert np.allclose(exp, elem)
 
 
+@pytest.mark.parametrize('n', [1, 2, 3, 4, 8])
+def test_dickson1_alpha0_powers(n):
+    d = polynomials.dickson1(n, 0, X)
+    exp = X ** n
+    assert np.allclose(exp, d)
+
+
+@pytest.mark.parametrize('n', [1, 2, 3, 4, 8])
+def test_dickson1_alpha1_cheby(n):
+    d = polynomials.dickson1(n, 1, 2*X)
+    c = polynomials.cheby1(n, X)
+    assert np.allclose(d, 2*c)
+
+
+# no known identities
+@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+def test_dickson2_functions(n):
+    d = polynomials.dickson2(n, 1, X)
+    assert d.any()
+
+
+def test_dickson1_seq_matches_loop():
+    ns = [0, 1, 2, 3, 4, 5]
+    seq = list(polynomials.dickson1_sequence(ns, 1, X))
+    for elem, n in zip(seq, ns):
+        exp = polynomials.dickson1(n, 1, X)
+        assert np.allclose(exp, elem)
+
+
+def test_dickson2_seq_matches_loop():
+    ns = [0, 1, 2, 3, 4, 5]
+    seq = list(polynomials.dickson2_sequence(ns, 1, X))
+    for elem, n in zip(seq, ns):
+        exp = polynomials.dickson2(n, 1, X)
+        assert np.allclose(exp, elem)
+
+
 # - higher order routines
 
 def test_sum_and_lstsq():

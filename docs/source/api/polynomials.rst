@@ -19,3 +19,6 @@ prysm.polynomials
 
 .. automodule:: prysm.polynomials.legendre
     :members:
+
+.. automodule:: prysm.polynomials.dickson
+    :members:

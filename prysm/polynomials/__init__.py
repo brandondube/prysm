@@ -34,6 +34,10 @@ from .qpoly import (  # NOQA
     Qcon, Qcon_sequence,
     Q2d, Q2d_sequence,
 )
+from .dickson import (  # NOQA
+    dickson1, dickson1_sequence,
+    dickson2, dickson2_sequence
+)
 
 
 def separable_2d_sequence(ns, ms, x, y, fx, fy=None, greedy=True):

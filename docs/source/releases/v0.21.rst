@@ -1,0 +1,13 @@
+***********
+prysm v0.21
+***********
+
+New Features
+============
+
+The polynomials module has gained support for the dickson polynomials of the first and second kind:
+
+* :func:`~prysm.polynomials.dickson1`
+* :func:`~prysm.polynomials.dickson1_sequence`
+* :func:`~prysm.polynomials.dickson2`
+* :func:`~prysm.polynomials.dickson1_sequence`
