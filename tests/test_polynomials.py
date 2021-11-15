@@ -319,6 +319,47 @@ def test_jacobi_der_sequence_same_as_loop():
         exp = polynomials.jacobi_der(n, 0.5, 0.5, X)
         assert np.allclose(exp, elem)
 
+
+@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+def test_cheby1_der_matches_finite_diff(n):
+    # need more points for accurate finite diff
+    x = np.linspace(-1, 1, 128)
+    Pn = polynomials.cheby1(n, x)
+    Pnprime = polynomials.cheby1_der(n, x)
+    dx = x[1] - x[0]
+    Pnprime_numerical = np.gradient(Pn, dx)
+    ratio = Pnprime / Pnprime_numerical
+    assert abs(ratio-1).max() < 0.15  # 15% relative error
+
+
+def test_cheby1_der_sequence_same_as_loop():
+    ns = [0, 1, 2, 3, 4, 5]
+    seq = list(polynomials.cheby1_der_sequence(ns, X))
+    for elem, n in zip(seq, ns):
+        exp = polynomials.cheby1_der(n, X)
+        assert np.allclose(exp, elem)
+
+
+@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+def test_cheby2_der_matches_finite_diff(n):
+    # need more points for accurate finite diff
+    x = np.linspace(-1, 1, 128)
+    Pn = polynomials.cheby2(n, x)
+    Pnprime = polynomials.cheby2_der(n, x)
+    dx = x[1] - x[0]
+    Pnprime_numerical = np.gradient(Pn, dx)
+    ratio = Pnprime / Pnprime_numerical
+    assert abs(ratio-1).max() < 0.15  # 15% relative error
+
+
+def test_cheby2_der_sequence_same_as_loop():
+    ns = [0, 1, 2, 3, 4, 5]
+    seq = list(polynomials.cheby2_der_sequence(ns, X))
+    for elem, n in zip(seq, ns):
+        exp = polynomials.cheby2_der(n, X)
+        assert np.allclose(exp, elem)
+
+
 # - higher order routines
 
 def test_sum_and_lstsq():

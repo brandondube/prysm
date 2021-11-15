@@ -7,11 +7,11 @@ from .jacobi import (  # NOQA
     jacobi,
     jacobi_sequence,
     jacobi_der,
-    jacobi_der_sequence
+    jacobi_der_sequence,
 )
 from .cheby import (  # NOQA
-    cheby1, cheby1_sequence,
-    cheby2, cheby2_sequence,
+    cheby1, cheby1_sequence, cheby1_der, cheby1_der_sequence,
+    cheby2, cheby2_sequence, cheby2_der, cheby2_der_sequence,
 )
 from .legendre import (  # NOQA
     legendre,
