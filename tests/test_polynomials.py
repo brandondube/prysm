@@ -360,6 +360,26 @@ def test_cheby2_der_sequence_same_as_loop():
         assert np.allclose(exp, elem)
 
 
+@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+def test_legendre_der_matches_finite_diff(n):
+    # need more points for accurate finite diff
+    x = np.linspace(-1, 1, 128)
+    Pn = polynomials.legendre(n, x)
+    Pnprime = polynomials.legendre_der(n, x)
+    dx = x[1] - x[0]
+    Pnprime_numerical = np.gradient(Pn, dx)
+    ratio = Pnprime / Pnprime_numerical
+    assert abs(ratio-1).max() < 0.15  # 15% relative error
+
+
+def test_legendre_der_sequence_same_as_loop():
+    ns = [0, 1, 2, 3, 4, 5]
+    seq = list(polynomials.legendre_der_sequence(ns, X))
+    for elem, n in zip(seq, ns):
+        exp = polynomials.legendre_der(n, X)
+        assert np.allclose(exp, elem)
+
+
 # - higher order routines
 
 def test_sum_and_lstsq():

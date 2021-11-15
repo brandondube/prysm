@@ -10,12 +10,20 @@ from .jacobi import (  # NOQA
     jacobi_der_sequence,
 )
 from .cheby import (  # NOQA
-    cheby1, cheby1_sequence, cheby1_der, cheby1_der_sequence,
-    cheby2, cheby2_sequence, cheby2_der, cheby2_der_sequence,
+    cheby1,
+    cheby1_sequence,
+    cheby1_der,
+    cheby1_der_sequence,
+    cheby2,
+    cheby2_sequence,
+    cheby2_der,
+    cheby2_der_sequence,
 )
 from .legendre import (  # NOQA
     legendre,
     legendre_sequence,
+    legendre_der,
+    legendre_der_sequence,
 )  # NOQA
 from .zernike import (  # NOQA
     zernike_norm,
@@ -35,13 +43,18 @@ from .zernike import (  # NOQA
     top_n,
 )
 from .qpoly import (  # NOQA
-    Qbfs, Qbfs_sequence,
-    Qcon, Qcon_sequence,
-    Q2d, Q2d_sequence,
+    Qbfs,
+    Qbfs_sequence,
+    Qcon,
+    Qcon_sequence,
+    Q2d,
+    Q2d_sequence,
 )
 from .dickson import (  # NOQA
-    dickson1, dickson1_sequence,
-    dickson2, dickson2_sequence
+    dickson1,
+    dickson1_sequence,
+    dickson2,
+    dickson2_sequence
 )
 
 
@@ -50,28 +63,28 @@ def separable_2d_sequence(ns, ms, x, y, fx, fy=None, greedy=True):
 
     Parameters
     ----------
-    ns : `Iterable` of `int`
+    ns : Iterable of int
         sequence of orders to evaluate in the X dimension
-    ms : `Iterable` of `int`
+    ms : Iterable of int
         sequence of orders to evaluate in the Y dimension
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         array of shape (m, n) or (n,) containing the X points
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         array of shape (m, n) or (m,) containing the Y points
-    fx : `callable`
+    fx : callable
         function which returns a generator or other sequence
         of modes, given args (ns, x)
-    fy : `callable`, optional
+    fy : callable, optional
         function which returns a generator or other sequence
         of modes, given args (ns, x);
         y equivalent of fx, fx is used if None
-    greedy : `bool`, optional
+    greedy : bool, optional
         if True, consumes any generators returned by fx or fy and
         returns lists.
 
     Returns
     -------
-    `Iterable`, `Iterable`
+    Iterable, Iterable
         sequence of x modes (1D) and y modes (1D)
 
     """
@@ -99,18 +112,18 @@ def mode_1d_to_2d(mode, x, y, which='x'):
 
     Parameters
     ----------
-    mode : `numpy.ndarray`
+    mode : numpy.ndarray
         mode, representing a separable mode in X, Y along {which} axis
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x dimension, either 1D or 2D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y dimension, either 1D or 2D
-    which : `str`, {'x', 'y'}
+    which : str, {'x', 'y'}
         which dimension the mode is produced along
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         2D version of the mode
 
     """
@@ -124,22 +137,22 @@ def sum_of_xy_modes(modesx, modesy, x, y, weightsx=None, weightsy=None):
 
     Parameters
     ----------
-    modesx : `iterable`
+    modesx : iterable
         sequence of x modes
-    modesy : `iterable`
+    modesy : iterable
         sequence of y modes
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x points
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y points
-    weightsx : `iterable`, optional
+    weightsx : iterable, optional
         weights to apply to modesx.  If None, [1]*len(modesx)
-    weightsy : `iterable`, optional
+    weightsy : iterable, optional
         weights to apply to modesy.  If None, [1]*len(modesy)
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         modes summed over the 2D aperture
 
     """
@@ -174,15 +187,15 @@ def sum_of_2d_modes(modes, weights):
 
     Parameters
     ----------
-    modes : `iterable`
+    modes : iterable
         sequence of ndarray of shape (k, m, n);
         a list of length k with elements of shape (m,n) works
-    weights : `numpy.ndarray`
+    weights : numpy.ndarray
         weight of each mode
 
     Returns
     -------
-    `numpy.ndarry`
+    numpy.ndarry
         ndarray of shape (m, n) that is the sum of modes as given
 
     """
@@ -204,22 +217,22 @@ def hopkins(a, b, c, r, t, H):
 
     Parameters
     ----------
-    a : `int`
+    a : int
         azimuthal order
-    b : `int`
+    b : int
         radial order
-    c : `int`
+    c : int
         order in field ("H-order")
-    r : `numpy.ndarray`
+    r : numpy.ndarray
         radial pupil coordinate
-    t : `numpy.ndarray`
+    t : numpy.ndarray
         azimuthal pupil coordinate
-    H : `numpy.ndarray`
+    H : numpy.ndarray
         field coordinate
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         polynomial evaluated at this point
 
     """
@@ -243,13 +256,13 @@ def lstsq(modes, data):
     ----------
     modes : iterable
         modes to fit; sequence of ndarray of shape (m, n)
-    data : `numpy.ndarray`
+    data : numpy.ndarray
         data to fit, of shape (m, n)
         place NaN values in data for points to ignore
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         fit coefficients
 
     """
