@@ -24,11 +24,6 @@ def recurrence_ac_startb(n, alpha, beta):
 def jacobi(n, alpha, beta, x):
     """Jacobi polynomial of order n with weight parameters alpha and beta.
 
-    Notes
-    -----
-    This function is faster than scipy.special.jacobi when Pnm1 and Pnm2 are
-    supplied and is stable to high order.  Performance benefit ranges from 2-5x.
-
     Parameters
     ----------
     n : `int`
@@ -135,3 +130,30 @@ def jacobi_sequence(ns, alpha, beta, x):
         if ns[min_i] == i:
             yield Pn
             min_i += 1
+
+
+def jacobi_der(n, alpha, beta, x):
+    """First derivative of Pn with respect to x, at points x.
+
+    Parameters
+    ----------
+    n : `int`
+        polynomial order
+    alpha : `float`
+        first weight parameter
+    beta : `float`
+        second weight parameter
+    x : `numpy.ndarray`
+        x coordinates to evaluate at
+
+    Returns
+    -------
+    `numpy.ndarray`
+        jacobi polynomial evaluated at the given points
+
+    """
+    # see https://dlmf.nist.gov/18.9
+    # dPn = (1/2) (n + a + b + 1)P_{n-1}^{a+1,b+1}
+    Pn = jacobi(n-1, alpha+1, beta+1, x)
+    coef = 0.5 * (n + alpha + beta + 1)
+    return coef * Pn

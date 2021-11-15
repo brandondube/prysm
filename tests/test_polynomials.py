@@ -300,6 +300,17 @@ def test_dickson2_seq_matches_loop():
         assert np.allclose(exp, elem)
 
 
+@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+def test_jacobi_der_matches_finite_diff(n):
+    # need more points for accurate finite diff
+    x = np.linspace(-1, 1, 128)
+    Pn = polynomials.jacobi(n, 1, 1, x)
+    Pnprime = polynomials.jacobi_der(n, 1, 1, x)
+    dx = x[1] - x[0]
+    Pnprime_numerical = np.gradient(Pn, dx)
+    ratio = Pnprime / Pnprime_numerical
+    assert abs(ratio-1).max() < 0.1  # 10% relative error
+
 # - higher order routines
 
 def test_sum_and_lstsq():
