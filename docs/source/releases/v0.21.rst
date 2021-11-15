@@ -12,10 +12,21 @@ The polynomials module has gained support for the dickson polynomials of the fir
 * :func:`~prysm.polynomials.dickson2`
 * :func:`~prysm.polynomials.dickson1_sequence`
 
-First derivatives of jacobi polynomials are also now available:
+First derivatives of jacobi polynomials and their descendants are also now available:
 
 * :func:`~prysm.polynomials.jacobi_der`
 * :func:`~prysm.polynomials.jacobi_der_sequence`
-
+* :func:`~prysm.polynomials.cheby1_der`
+* :func:`~prysm.polynomials.cheby1_der_sequence`
+* :func:`~prysm.polynomials.cheby2_der`
+* :func:`~prysm.polynomials.cheby2_der_sequence`
+* :func:`~prysm.polynomials.zernike_der`
+* :func:`~prysm.polynomials.zernike_der_sequence`
+* :func:`~prysm.polynomials.Qbfs_der`
+* :func:`~prysm.polynomials.Qbfs_der_sequence`
+* :func:`~prysm.polynomials.Qcon_der`
+* :func:`~prysm.polynomials.Qcon_der_sequence`
+* :func:`~prysm.polynomials.Q2d_der`
+* :func:`~prysm.polynomials.Q2d_der_sequence`
 
 These are usefor for applications such as raytracing.
