@@ -26,21 +26,21 @@ def zernike_nm(n, m, r, t, norm=True):
 
     Parameters
     ----------
-    n : `int`
+    n : int
         radial order
-    m : `int`
+    m : int
         azimuthal order
-    r : `numpy.ndarray`
+    r : numpy.ndarray
         radial coordinates
-    t : `numpy.ndarray`
+    t : numpy.ndarray
         azimuthal coordinates
-    norm : `bool`, optional
+    norm : bool, optional
         if True, orthonormalize the result (unit RMS)
         else leave orthogonal (zero-to-peak = 1)
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         zernike mode of order n,m at points r,t
 
     """
@@ -67,11 +67,11 @@ def zernike_nm_sequence(nms, r, t, norm=True):
     ----------
     nms : iterable of tuple of int,
         sequence of (n, m); looks like [(1,1), (3,1), ...]
-    r : `numpy.ndarray`
+    r : numpy.ndarray
         radial coordinates
-    t : `numpy.ndarray`
+    t : numpy.ndarray
         azimuthal coordinates
-    norm : `bool`, optional
+    norm : bool, optional
         if True, orthonormalize the result (unit RMS)
         else leave orthogonal (zero-to-peak = 1)
 
@@ -214,12 +214,12 @@ def zernikes_to_magnitude_angle_nmkey(coefs):
 
     Parameters
     ----------
-    coefs : `list` of `tuples`
+    coefs : list of tuples
         a list looking like[(1,2,3),] where (1,2) are the n, m indices and 3 the coefficient
 
     Returns
     -------
-    `dict`
+    dict
         dict keyed by tuples of (n, |m|) with values of (rho, phi) where rho is the magnitudes, and phi the phase
 
     """
@@ -254,12 +254,12 @@ def zernikes_to_magnitude_angle(coefs):
 
     Parameters
     ----------
-    coefs : `list` of `tuples`
+    coefs : list of tuples
         a list looking like[(1,2,3),] where (1,2) are the n, m indices and 3 the coefficient
 
     Returns
     -------
-    `dict`
+    dict
         dict keyed by friendly name strings with values of (rho, phi) where rho is the magnitudes, and phi the phase
 
     """
@@ -339,14 +339,14 @@ def nm_to_name(n, m):
 
     Parameters
     ----------
-    n : `int`
+    n : int
         radial polynomial order
-    m : `int`
+    m : int
         azimuthal polynomial order
 
     Returns
     -------
-    `str`
+    str
         a name, np.g. Piston or Primary Spherical
 
     """
@@ -372,14 +372,14 @@ def top_n(coefs, n=5):
 
     Parameters
     ----------
-    coefs : `dict`
+    coefs : dict
         keys of (n,m), values of magnitudes, e.g. {(3,1): 2} represents 2 of primary coma
-    n : `int`, optional
+    n : int, optional
         identify the top n terms.
 
     Returns
     -------
-    `list`
+    list
         list of tuples (magnitude, index, term)
 
     """
@@ -399,32 +399,32 @@ def barplot(coefs, names=None, orientation='h', buffer=1, zorder=3, number=True,
 
     Parameters
     ----------
-    coefs : `dict`
+    coefs : dict
         with keys of Zn, values of numbers
-    names : `dict`
+    names : dict
         with keys of Zn, values of names (e.g. Primary Coma X)
-    orientation : `str`, {'h', 'v', 'horizontal', 'vertical'}
+    orientation : str, {'h', 'v', 'horizontal', 'vertical'}
         orientation of the plot
-    buffer : `float`, optional
+    buffer : float, optional
         buffer to use around the left and right (or top and bottom) bars
-    zorder : `int`, optional
+    zorder : int, optional
         zorder of the bars.  Use zorder > 3 to put bars in front of gridlines
-    number : `bool`, optional
+    number : bool, optional
         if True, plot numbers along the y=0 line showing indices
-    offset : `float`, optional
+    offset : float, optional
         offset to apply to bars, useful for before/after Zernike breakdowns
-    width : `float`, optional
+    width : float, optional
         width of bars, useful for before/after Zernike breakdowns
-    fig : `matplotlib.figurnp.Figure`
+    fig : matplotlib.figurnp.Figure
         Figure containing the plot
-    ax : `matplotlib.axes.Axis`
+    ax : matplotlib.axes.Axis
         Axis containing the plot
 
     Returns
     -------
-    fig : `matplotlib.figurnp.Figure`
+    fig : matplotlib.figurnp.Figure
         Figure containing the plot
-    ax : `matplotlib.axes.Axis`
+    ax : matplotlib.axes.Axis
         Axis containing the plot
 
     """
@@ -465,30 +465,30 @@ def barplot_magnitudes(magnitudes, orientation='h', sort=False,
 
     Parameters
     ----------
-    magnitudes : `dict`
+    magnitudes : dict
         keys of names, values of magnitudes.  E.g., {'Primary Coma': 1234567}
-    orientation : `str`, {'h', 'v', 'horizontal', 'vertical'}
+    orientation : str, {'h', 'v', 'horizontal', 'vertical'}
         orientation of the plot
-    sort : `bool`, optional
+    sort : bool, optional
         whether to sort the zernikes in descending order
-    buffer : `float`, optional
+    buffer : float, optional
         buffer to use around the left and right (or top and bottom) bars
-    zorder : `int`, optional
+    zorder : int, optional
         zorder of the bars.  Use zorder > 3 to put bars in front of gridlines
-    offset : `float`, optional
+    offset : float, optional
         offset to apply to bars, useful for before/after Zernike breakdowns
-    width : `float`, optional
+    width : float, optional
         width of bars, useful for before/after Zernike breakdowns
-    fig : `matplotlib.figure.Figure`
+    fig : matplotlib.figure.Figure
         Figure containing the plot
-    ax : `matplotlib.axes.Axis`
+    ax : matplotlib.axes.Axis
         Axis containing the plot
 
     Returns
     -------
-    fig : `matplotlib.figure.Figure`
+    fig : matplotlib.figure.Figure
         Figure containing the plot
-    ax : `matplotlib.axes.Axis`
+    ax : matplotlib.axes.Axis
         Axis containing the plot
 
     """
