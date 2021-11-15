@@ -3,7 +3,12 @@
 from prysm.mathops import np
 from prysm.coordinates import optimize_xy_separable
 
-from .jacobi import jacobi, jacobi_sequence, jacobi_der  # NOQA
+from .jacobi import (  # NOQA
+    jacobi,
+    jacobi_sequence,
+    jacobi_der,
+    jacobi_der_sequence
+)
 from .cheby import (  # NOQA
     cheby1, cheby1_sequence,
     cheby2, cheby2_sequence,

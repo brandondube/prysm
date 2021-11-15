@@ -311,6 +311,14 @@ def test_jacobi_der_matches_finite_diff(n):
     ratio = Pnprime / Pnprime_numerical
     assert abs(ratio-1).max() < 0.1  # 10% relative error
 
+
+def test_jacobi_der_sequence_same_as_loop():
+    ns = [0, 1, 2, 3, 4, 5]
+    seq = list(polynomials.jacobi_der_sequence(ns, 0.5, 0.5, X))
+    for elem, n in zip(seq, ns):
+        exp = polynomials.jacobi_der(n, 0.5, 0.5, X)
+        assert np.allclose(exp, elem)
+
 # - higher order routines
 
 def test_sum_and_lstsq():
