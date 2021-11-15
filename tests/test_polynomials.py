@@ -369,7 +369,7 @@ def test_legendre_der_matches_finite_diff(n):
     dx = x[1] - x[0]
     Pnprime_numerical = np.gradient(Pn, dx)
     ratio = Pnprime / Pnprime_numerical
-    assert abs(ratio-1).max() < 0.15  # 15% relative error
+    assert abs(ratio-1).max() < 0.35  # 35% relative error
 
 
 def test_legendre_der_sequence_same_as_loop():

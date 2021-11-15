@@ -66,4 +66,3 @@ def legendre_der_sequence(ns, x):
 
     """
     return jacobi_der_sequence(ns, 0, 0, x)
-
