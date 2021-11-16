@@ -7,18 +7,33 @@ def weight(alpha, beta, x):
     return (1 - x) ** alpha * (1 + x) ** beta
 
 
-def recurrence_ac_startb(n, alpha, beta):
-    """a and c terms of the recurrence relation from Wikipedia, * P_n^(a,b).
+def recurrence_abc(n, alpha, beta):
+    """See A&S online - https://dlmf.nist.gov/18.9
 
-    Also computes partial b term; all components without x
+    Pn = (an-1 x + bn-1) Pn-1 - cn-1 * Pn-2
+
+    This function makes a, b, c for the given n,
+    i.e. to get a(n-1), do recurrence_abc(n-1)
+
     """
-    a = (2 * n) * (n + alpha + beta) * (2 * n + alpha + beta - 2)
-    c = 2 * (n + alpha - 1) * (n + beta - 1) * (2 * n + alpha + beta)
-    b1 = (2 * n + alpha + beta - 1)
-    b2 = (2 * n + alpha + beta)
-    b2 = b2 * (b2 - 2)
-    b3 = alpha ** 2 - beta ** 2
-    return a, c, b1, b2, b3
+    Anum = (2 * n + alpha + beta + 1) * (2 * n + alpha + beta + 2)
+    Aden = 2 * (n + 1) * (n + alpha + beta + 1)
+    A = Anum/Aden
+
+    Bnum = (alpha**2 - beta**2) * (2 * n + alpha + beta + 1)
+    Bden = 2 * (n+1) * (n + alpha + beta + 1) * (2 * n + alpha + beta)
+    B = Bnum / Bden
+
+    Cnum = (n + alpha) * (n + beta) * (2 * n + alpha + beta + 2)
+    Cden = (n + 1) * (n + alpha + beta + 1) * (2 * n + alpha + beta)
+    C = Cnum / Cden
+
+    aplusb = alpha+beta
+    if n == 0 and (aplusb == 0 or aplusb == -1):
+        A = 1/2 * (alpha + beta) + 1
+        B = 1/2 * (alpha - beta)
+
+    return A, B, C
 
 
 def jacobi(n, alpha, beta, x):
@@ -50,17 +65,15 @@ def jacobi(n, alpha, beta, x):
         return term1 + term2 * term3
 
     Pnm1 = alpha + 1 + (alpha + beta + 2) * ((x - 1) / 2)
-    a, c, b1, b2, b3 = recurrence_ac_startb(2, alpha, beta)
-    inva = 1 / a
-    Pn = (b1 * (b2 * x + b3) * Pnm1 - c) * inva  # no Pnm2 because Pnm2 == ones, c*Pnm2 is a noop
+    A, B, C = recurrence_abc(1, alpha, beta)
+    Pn = (A * x + B) * Pnm1 - C  # no C * Pnm2 =because Pnm2 = 1
     if n == 2:
         return Pn
 
     for i in range(3, n+1):
         Pnm2, Pnm1 = Pnm1, Pn
-        a, c, b1, b2, b3 = recurrence_ac_startb(i, alpha, beta)
-        inva = 1 / a
-        Pn = (b1 * (b2 * x + b3) * Pnm1 - c * Pnm2) * inva
+        A, B, C = recurrence_abc(i-1, alpha, beta)
+        Pn = (A * x + B) * Pnm1 - C * Pnm2
 
     return Pn
 
@@ -111,9 +124,8 @@ def jacobi_sequence(ns, alpha, beta, x):
         return
 
     Pnm1 = Pn
-    a, c, b1, b2, b3 = recurrence_ac_startb(2, alpha, beta)
-    inva = 1 / a
-    Pn = (b1 * (b2 * x + b3) * Pnm1 - c) * inva  # no Pnm2 because Pnm2 == ones, c*Pnm2 is a noop
+    A, B, C = recurrence_abc(1, alpha, beta)
+    Pn = (A * x + B) * Pnm1 - C  # no C * Pnm2 =because Pnm2 = 1
     if ns[min_i] == 2:
         yield Pn
         min_i += 1
@@ -124,9 +136,8 @@ def jacobi_sequence(ns, alpha, beta, x):
     max_n = ns[-1]
     for i in range(3, max_n+1):
         Pnm2, Pnm1 = Pnm1, Pn
-        a, c, b1, b2, b3 = recurrence_ac_startb(i, alpha, beta)
-        inva = 1 / a
-        Pn = (b1 * (b2 * x + b3) * Pnm1 - c * Pnm2) * inva
+        A, B, C = recurrence_abc(i-1, alpha, beta)
+        Pn = (A * x + B) * Pnm1 - C * Pnm2
         if ns[min_i] == i:
             yield Pn
             min_i += 1
@@ -228,9 +239,8 @@ def jacobi_der_sequence(ns, alpha, beta, x):
     if min_i == len(ns):
         return
 
-    a, c, b1, b2, b3 = recurrence_ac_startb(2, alphap1, betap1)
-    inva = 1 / a
-    P2 = (b1 * (b2 * x + b3) * P1 - c) * inva  # no Pnm2 because Pnm2 == ones, c*Pnm2 is a noop
+    A, B, C = recurrence_abc(1, alphap1, betap1)
+    P2 = (A * x + B) * P1 - C  # no C * Pnm2 =because Pnm2 = 1
     if ns[min_i] == 3:
         yield P2 * (0.5 * (3 + alpha + beta + 1))
         min_i += 1
@@ -241,14 +251,14 @@ def jacobi_der_sequence(ns, alpha, beta, x):
     # weird look just above P2, need to prepare for lower loop
     # by setting Pnm2 = P1, Pnm1 = P2
     Pnm2 = P1
-    Pnm1 = P2
-    a, c, b1, b2, b3 = recurrence_ac_startb(3, alphap1, betap1)
-    inva = 1 / a
-    P3 = (b1 * (b2 * x + b3) * Pnm1 - c * Pnm2) * inva
-    Pn = P3
+    Pnm1 = P1
+    Pn = P2
+    # A, B, C = recurrence_abc(2, alpha, beta)
+    # P3 = (A * x + B) * P2 - C * P1
+    # Pn = P3
 
     max_n = ns[-1]
-    for i in range(4, max_n+1):
+    for i in range(3, max_n+1):
         Pnm2, Pnm1 = Pnm1, Pn
         if ns[min_i] == i:
             coef = 0.5 * (i + alpha + beta + 1)
@@ -258,6 +268,5 @@ def jacobi_der_sequence(ns, alpha, beta, x):
         if min_i == len(ns):
             return
 
-        a, c, b1, b2, b3 = recurrence_ac_startb(i, alphap1, betap1)
-        inva = 1 / a
-        Pn = (b1 * (b2 * x + b3) * Pnm1 - c * Pnm2) * inva
+        A, B, C = recurrence_abc(i-1, alphap1, betap1)
+        Pn = (A * x + B) * Pnm1 - C * Pnm2
