@@ -1,12 +1,15 @@
 """High performance / recursive jacobi polynomial calculation."""
 from prysm.mathops import np
 
+from functools import lru_cache
+
 
 def weight(alpha, beta, x):
     """The weight function of the jacobi polynomials for a given alpha, beta value."""
     return (1 - x) ** alpha * (1 + x) ** beta
 
 
+@lru_cache(512)
 def recurrence_abc(n, alpha, beta):
     """See A&S online - https://dlmf.nist.gov/18.9
 
