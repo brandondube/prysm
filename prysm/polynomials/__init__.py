@@ -18,6 +18,14 @@ from .cheby import (  # NOQA
     cheby2_sequence,
     cheby2_der,
     cheby2_der_sequence,
+    cheby3,
+    cheby3_sequence,
+    cheby3_der,
+    cheby3_der_sequence,
+    cheby4,
+    cheby4_sequence,
+    cheby4_der,
+    cheby4_der_sequence,
 )
 from .legendre import (  # NOQA
     legendre,

@@ -5,12 +5,16 @@ prysm v0.21
 New Features
 ============
 
-The polynomials module has gained support for the dickson polynomials of the first and second kind:
+The polynomials module has gained support for the dickson polynomials of the first and second kind, and Chebyshev polynomials of the third and Fourth kind:
 
 * :func:`~prysm.polynomials.dickson1`
 * :func:`~prysm.polynomials.dickson1_sequence`
 * :func:`~prysm.polynomials.dickson2`
 * :func:`~prysm.polynomials.dickson1_sequence`
+* :func:`~prysm.polynomials.cheby3`
+* :func:`~prysm.polynomials.cheby3_sequence`
+* :func:`~prysm.polynomials.cheby4`
+* :func:`~prysm.polynomials.cheby4_sequence`
 
 First derivatives of jacobi polynomials and their descendants are also now available:
 
@@ -20,6 +24,10 @@ First derivatives of jacobi polynomials and their descendants are also now avail
 * :func:`~prysm.polynomials.cheby1_der_sequence`
 * :func:`~prysm.polynomials.cheby2_der`
 * :func:`~prysm.polynomials.cheby2_der_sequence`
+* :func:`~prysm.polynomials.cheby3_der`
+* :func:`~prysm.polynomials.cheby3_der_sequence`
+* :func:`~prysm.polynomials.cheby4_der`
+* :func:`~prysm.polynomials.cheby4_der_sequence`
 * :func:`~prysm.polynomials.zernike_der`
 * :func:`~prysm.polynomials.zernike_der_sequence`
 * :func:`~prysm.polynomials.Qbfs_der`
@@ -30,3 +38,5 @@ First derivatives of jacobi polynomials and their descendants are also now avail
 * :func:`~prysm.polynomials.Q2d_der_sequence`
 
 These are usefor for applications such as raytracing.
+
+The performance Jacobi polynomial computations has been increased by 18%.  This cascades to performance of Chebyshev, Legendre, and Zernike polynomials.  The increase comes from replacing an outdated recurrence relation for one expressed in the standard form, which happens to be a bit faster.

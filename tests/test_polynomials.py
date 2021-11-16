@@ -361,6 +361,46 @@ def test_cheby2_der_sequence_same_as_loop():
 
 
 @pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+def test_cheby3_der_matches_finite_diff(n):
+    # need more points for accurate finite diff
+    x = np.linspace(-1, 1, 128)
+    Pn = polynomials.cheby3(n, x)
+    Pnprime = polynomials.cheby3_der(n, x)
+    dx = x[1] - x[0]
+    Pnprime_numerical = np.gradient(Pn, dx)
+    ratio = Pnprime / Pnprime_numerical
+    assert abs(ratio-1).max() < 0.15  # 15% relative error
+
+
+def test_cheby3_der_sequence_same_as_loop():
+    ns = [0, 1, 2, 3, 4, 5]
+    seq = list(polynomials.cheby3_der_sequence(ns, X))
+    for elem, n in zip(seq, ns):
+        exp = polynomials.cheby3_der(n, X)
+        assert np.allclose(exp, elem)
+
+
+@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+def test_cheby4_der_matches_finite_diff(n):
+    # need more points for accurate finite diff
+    x = np.linspace(-1, 1, 128)
+    Pn = polynomials.cheby4(n, x)
+    Pnprime = polynomials.cheby4_der(n, x)
+    dx = x[1] - x[0]
+    Pnprime_numerical = np.gradient(Pn, dx)
+    ratio = Pnprime / Pnprime_numerical
+    assert abs(ratio-1).max() < 0.15  # 15% relative error
+
+
+def test_cheby4_der_sequence_same_as_loop():
+    ns = [0, 1, 2, 3, 4, 5]
+    seq = list(polynomials.cheby4_der_sequence(ns, X))
+    for elem, n in zip(seq, ns):
+        exp = polynomials.cheby4_der(n, X)
+        assert np.allclose(exp, elem)
+
+
+@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
 def test_legendre_der_matches_finite_diff(n):
     # need more points for accurate finite diff
     x = np.linspace(-1, 1, 128)
@@ -379,6 +419,37 @@ def test_legendre_der_sequence_same_as_loop():
         exp = polynomials.legendre_der(n, X)
         assert np.allclose(exp, elem)
 
+
+@pytest.mark.parametrize('n', [1, 2, 3])
+def test_cheby3_functions(n):
+    # no analogous functions in scipy or numpy, so no match someone else
+    # note alpha, beta from A&S, very simple
+    P = polynomials.cheby3(n, X)
+    assert P.any()
+
+
+@pytest.mark.parametrize('n', [1, 2, 3])
+def test_cheby4_functions(n):
+    # no analogous functions in scipy or numpy, so no match someone else
+    # note alpha, beta from A&S, very simple
+    P = polynomials.cheby4(n, X)
+    assert P.any()
+
+
+def test_cheby3_sequence_matches_loop():
+    ns = [1, 2, 3, 4, 5]
+    seq = polynomials.cheby3_sequence(ns, X)
+    loop = [polynomials.cheby3(n, X) for n in ns]
+    for elem, exp in zip(seq, loop):
+        assert np.allclose(elem, exp)
+
+
+def test_cheby4_sequence_matches_loop():
+    ns = [1, 2, 3, 4, 5]
+    seq = polynomials.cheby4_sequence(ns, X)
+    loop = [polynomials.cheby4(n, X) for n in ns]
+    for elem, exp in zip(seq, loop):
+        assert np.allclose(elem, exp)
 
 # - higher order routines
 
