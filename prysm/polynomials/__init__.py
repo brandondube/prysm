@@ -8,6 +8,8 @@ from .jacobi import (  # NOQA
     jacobi_sequence,
     jacobi_der,
     jacobi_der_sequence,
+    jacobi_sum_clenshaw,
+    jacobi_sum_clenshaw_der
 )
 from .cheby import (  # NOQA
     cheby1,

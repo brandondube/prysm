@@ -1,5 +1,6 @@
 """High performance / recursive jacobi polynomial calculation."""
 from prysm.mathops import np
+from prysm.conf import config
 
 from functools import lru_cache
 
@@ -11,7 +12,7 @@ def weight(alpha, beta, x):
 
 @lru_cache(512)
 def recurrence_abc(n, alpha, beta):
-    """See A&S online - https://dlmf.nist.gov/18.9
+    """See A&S online - https://dlmf.nist.gov/18.9 .
 
     Pn = (an-1 x + bn-1) Pn-1 - cn-1 * Pn-2
 
@@ -273,3 +274,125 @@ def jacobi_der_sequence(ns, alpha, beta, x):
 
         A, B, C = recurrence_abc(i-1, alphap1, betap1)
         Pn = (A * x + B) * Pnm1 - C * Pnm2
+
+
+def _initialize_alphas(s, x, alphas, j=0):
+    # j = derivative order
+    if alphas is None:
+        if hasattr(x, 'dtype'):
+            dtype = x.dtype
+        else:
+            dtype = config.precision
+        if hasattr(x, 'shape'):
+            shape = (len(s), *x.shape)
+        elif hasattr(x, '__len__'):
+            shape = (len(s), len(x))
+        else:
+            shape = (len(s),)
+
+        if j != 0:
+            shape = (j+1, *shape)
+
+        alphas = np.empty(shape, dtype=dtype)
+    return alphas
+
+
+def jacobi_sum_clenshaw(s, alpha, beta, x, alphas=None):
+    """Compute a weighted sum of Jacobi polynomials using Clenshaw's method.
+
+    Parameters
+    ----------
+    s : iterable
+        weights in ascending order, beginning with P0, then P1, etc.
+        must be fully dense when iterated
+    alpha : float
+        first Jacobi shape parameter
+    beta : float
+        second Jacobi shape parameter
+    x : numpy.ndarray or float_like
+        coordinates to evaluate the sum at,
+        orthogonal over [-1,1]
+    alphas : numpy.ndarray, optional
+        array to store the alpha sums in, alphas[0] contains the sum and is returned
+        if not None, alphas should be of shape (len(s), *x.shape)
+        see _initialize_alphas if you desire more information
+
+    Returns
+    -------
+    numpy.ndarray
+        weighted sum of Jacobi polynomials
+
+    """
+    # this doesn't match Forbes,
+    # because Forbes uses Pn = (a + b x)Pn-1 - cPn-2
+    # and I use the A&S notation Pn = (a x + b)Pn-1 - cPn-2
+    # so the "a" and "b" below are swapped here
+    # checked to be correct, though...
+    alphas = _initialize_alphas(s, x, alphas)
+    M = len(s) - 1
+    alphas[M] = s[M]
+    a, b, c = recurrence_abc(M-1, alpha, beta)
+    alphas[M-1] = s[M-1] + (a * x + b) * s[M]
+    for n in range(M-2, -1, -1):
+        a, b, _ = recurrence_abc(n, alpha, beta)
+        _, _, c = recurrence_abc(n+1, alpha, beta)
+        alphas[n] = s[n] + (a * x + b) * alphas[n+1] - c * alphas[n+2]
+
+    return alphas[0]
+
+
+def jacobi_sum_clenshaw_der(s, alpha, beta, x, j=1, alphas=None):
+    """Compute a weighted sum of partial derivatives w.r.t. x of Jacobi polynomials using Clenshaw's method.
+
+    Notes
+    -----
+    If the polynomial values and their derivatives are desired, pass
+    alphas instead of leaving it None.  alphas[0,0] will contain the
+    sum of the polynomials, alphas[1,0] the sum of the first derivative,
+    and so on.
+
+    Parameters
+    ----------
+    s : iterable
+        weights in ascending order, beginning with P0, then P1, etc.
+        must be fully dense when iterated
+    alpha : float
+        first Jacobi shape parameter
+    beta : float
+        second Jacobi shape parameter
+    x : numpy.ndarray or float_like
+        coordinates to evaluate the sum at,
+        orthogonal over [-1,1]
+    j : int
+        derivative order to compute
+    alphas : numpy.ndarray, optional
+        array to store the alpha sums in, alphas[0] contains the sum and is returned
+        if not None, alphas should be of shape (j+1, len(s), *x.shape)
+        see _initialize_alphas if you desire more information
+
+    Returns
+    -------
+    numpy.ndarray
+        weighted sum of Jacobi polynomials
+
+    """
+    # alphas is dual indexed by alphas[j][n]
+    # j = derivative
+    # n = order
+    # inner loop over n, outer loop over j
+    alphas = _initialize_alphas(s, x, None, j=j)
+    M = len(s) - 1
+    # seed the first sweep of alpha, for j=0, by side effect
+    jacobi_sum_clenshaw(s, alpha, beta, x, alphas=alphas[0])
+    # now loop over increasing j
+    for jj in range(1, j+1):
+        # more twisted notation - follow Forbes' paper, but our
+        # idea of b and a are swapped
+        a, *_ = recurrence_abc(M-j, alpha, beta)
+        alphas[jj][M-j] = j * a * alphas[jj-1][M-jj+1]
+        for n in range(M-jj-1, -1, -1):
+            a, b, _ = recurrence_abc(n, alpha, beta)
+            _, _, c = recurrence_abc(n+1, alpha, beta)
+            alphas[jj][n] = jj * a * alphas[jj-1][n+1] + (a * x + b) * alphas[jj][n+1] - c * alphas[jj][n+2]
+
+    return alphas[j][0]

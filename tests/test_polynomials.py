@@ -13,6 +13,8 @@ from scipy.special import (
     chebyu as sps_cheby2
 )
 
+from prysm.polynomials.jacobi import jacobi_sum_clenshaw
+
 
 # TODO: add regression tests against scipy.special.eval_legendre etc
 
@@ -418,6 +420,23 @@ def test_legendre_der_sequence_same_as_loop():
     for elem, n in zip(seq, ns):
         exp = polynomials.legendre_der(n, X)
         assert np.allclose(exp, elem)
+
+
+
+def test_clenshaw_matches_standard_way():
+    cs = np.random.rand(5)
+    basis = list(polynomials.jacobi_sequence([0, 1, 2, 3, 4], .5, .5, X))
+    exp = np.dot(cs, basis)
+    clenshaw = polynomials.jacobi_sum_clenshaw(cs, .5, .5, X)
+    assert np.allclose(exp, clenshaw)
+
+
+def test_clenshaw_matches_standard_way_der():
+    cs = np.random.rand(5)
+    basis = list(polynomials.jacobi_der_sequence([0, 1, 2, 3, 4], .5, .5, X))
+    exp = np.dot(cs, basis)
+    clenshaw = polynomials.jacobi_sum_clenshaw_der(cs, .5, .5, X)
+    assert np.allclose(exp, clenshaw)
 
 
 @pytest.mark.parametrize('n', [1, 2, 3])
