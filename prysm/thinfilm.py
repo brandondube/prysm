@@ -9,11 +9,11 @@ def brewsters_angle(n0, n1, deg=True):
 
     Parameters
     ----------
-    n0 : `float`
+    n0 : float
         refractive index on the "left" of the boundary
-    n1 : `float`
+    n1 : float
         refractive index on the "right" of the boundary
-    deg : `bool`, optional
+    deg : bool, optional
         if True, convert output to degrees
 
     """
@@ -29,16 +29,16 @@ def critical_angle(n0, n1, deg=True):
 
     Parameters
     ----------
-    n0 : `float`
+    n0 : float
         index of refraction of the "left" material
-    n1 : `float`
+    n1 : float
         index of refraction of the "right" material
-    deg : `bool`, optional
+    deg : bool, optional
         if true, returns degrees, else radians
 
     Returns
     -------
-    `float`
+    float
         the angle in degrees at which TIR begins to occur
 
     """
@@ -54,18 +54,18 @@ def snell_aor(n0, n1, theta, degrees=True):
 
     Parameters
     ----------
-    n0 : `float`
+    n0 : float
         index of refraction of the "left" material
-    n1 : `float`
+    n1 : float
         index of refraction of the "right" material
-    theta : `float`
+    theta : float
         angle of incidence, in degrees if degrees=True
-    degrees : `bool`, optional
+    degrees : bool, optional
         if True, theta is interpreted as an angle in degrees
 
     Returns
     -------
-    `float`
+    float
         angle of refraction
 
     """
@@ -81,18 +81,18 @@ def fresnel_rs(n0, n1, theta0, theta1):
 
     Parameters
     ----------
-    n0 : `float`
+    n0 : float
         refractive index of the "left" material
-    n1 : `float`
+    n1 : float
         refractive index of the "right" material
-    theta0 : `float`
+    theta0 : float
         angle of incidence, radians
-    theta1 : `float`
+    theta1 : float
         angle of reflection, radians
 
     Returns
     -------
-    `float`
+    float
         the fresnel coefficient "r sub s"
 
     """
@@ -108,18 +108,18 @@ def fresnel_ts(n0, n1, theta0, theta1):
 
     Parameters
     ----------
-    n0 : `float`
+    n0 : float
         refractive index of the "left" material
-    n1 : `float`
+    n1 : float
         refractive index of the "right" material
-    theta0 : `float`
+    theta0 : float
         angle of incidence, radians
-    theta1 : `float`
+    theta1 : float
         angle of refraction, radians
 
     Returns
     -------
-    `float`
+    float
         the fresnel coefficient "t sub s"
 
     """
@@ -135,18 +135,18 @@ def fresnel_rp(n0, n1, theta0, theta1):
 
     Parameters
     ----------
-    n0 : `float`
+    n0 : float
         refractive index of the "left" material
-    n1 : `float`
+    n1 : float
         refractive index of the "right" material
-    theta0 : `float`
+    theta0 : float
         angle of incidence, radians
-    theta1 : `float`
+    theta1 : float
         angle of reflection, radians
 
     Returns
     -------
-    `float`
+    float
         the fresnel coefficient "r sub p"
 
     """
@@ -162,18 +162,18 @@ def fresnel_tp(n0, n1, theta0, theta1):
 
     Parameters
     ----------
-    n0 : `float`
+    n0 : float
         refractive index of the "left" material
-    n1 : `float`
+    n1 : float
         refractive index of the "right" material
-    theta0 : `float`
+    theta0 : float
         angle of incidence, radians
-    theta1 : `float`
+    theta1 : float
         angle of refraction, radians
 
     Returns
     -------
-    `float`
+    float
         the fresnel coefficient "t sub p"
 
     """
@@ -189,18 +189,18 @@ def characteristic_matrix_p(lambda_, d, n, theta):
 
     Parameters
     ----------
-    lambda_ : `float`
+    lambda_ : float
         wavelength of light, microns
-    d : `float`
+    d : float
         thickness of the layer, microns
-    n : `float` or `complex`
+    n : float or complex
         refractive index of the layer
-    theta : `float`
+    theta : float
         angle of incidence, radians
 
     Returns
     -------
-    `numpy.array`
+    numpy.array
         a 2x2 matrix
 
     """
@@ -224,18 +224,18 @@ def characteristic_matrix_s(lambda_, d, n, theta):
 
     Parameters
     ----------
-    lambda_ : `float`
+    lambda_ : float
         wavelength of light, microns
-    d : `float`
+    d : float
         thickness of the layer, microns
-    n : `float` or `complex`
+    n : float or complex
         refractive index of the layer
-    theta : `float`
+    theta : float
         angle of incidence, radians
 
     Returns
     -------
-    `numpy.array`
+    numpy.array
         a 2x2 matrix
 
     """
@@ -259,20 +259,20 @@ def multilayer_matrix_p(n0, theta0, characteristic_matrices, nnp1, theta_np1):
 
     Parameters
     ----------
-    n0 : `float` or `complex`
+    n0 : float or complex
         refractive index of the first medium
-    theta0 : `float`
+    theta0 : float
         angle of incidence on the first medium, radians
-    characteristic_matrices : `iterable` of `numpy.ndarray` each of which of shape 2x2
+    characteristic_matrices : iterable of numpy.ndarray each of which of shape 2x2
         the characteristic matrices of each layer
-    nnp1 : `float` or `complex`
+    nnp1 : float or complex
         refractive index of the final medium
-    theta_np1 : `float`
+    theta_np1 : float
         angle of incidence on final medium, radians
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         2x2 matrix A^s
 
     """
@@ -302,20 +302,20 @@ def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
 
     Parameters
     ----------
-    n0 : `float` or `complex`
+    n0 : float or complex
         refractive index of the first medium
-    theta0 : `float`
+    theta0 : float
         angle of incidence on the first medium, radians
-    characteristic_matrices : `iterable` of `numpy.ndarray` each of which of shape 2x2
+    characteristic_matrices : iterable of numpy.ndarray each of which of shape 2x2
         the characteristic matrices of each layer
-    nnp1 : `float` or `complex`
+    nnp1 : float or complex
         refractive index of the final medium
-    theta_np1 : `float`
+    theta_np1 : float
         angle of incidence on final medium, radians
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         2x2 matrix A^s
 
     """
@@ -340,12 +340,12 @@ def rtot(Amat):
 
     Parameters
     ----------
-    Amat : `numpy.ndarray`
+    Amat : numpy.ndarray
         2x2 array
 
     Returns
     -------
-    `float` or `complex`
+    float or complex
         the value of rtot, either s or p.
 
     """
@@ -357,12 +357,12 @@ def ttot(Amat):
 
     Parameters
     ----------
-    Amat : `numpy.ndarray`
+    Amat : numpy.ndarray
         2x2 array
 
     Returns
     -------
-    `float` or `complex`
+    float or complex
         the value of rtot, either s or p.
 
     """
@@ -376,22 +376,22 @@ def multilayer_stack_rt(polarization, wavelength, stack, aoi=0, assume_vac_ambie
 
     Parameters
     ----------
-    polarization : `str`, {'p', 's'}
+    polarization : str, {'p', 's'}
         the polarization state
-    stack : `Iterable` of `Iterable`
+    stack : Iterable of Iterable
         iterable of tuples, which looks like [(n1, t1), (n2, t2) ...]
         where n is the index and t is the thickness in microns
-    wavelength : `float`
+    wavelength : float
         wavelength of light, microns
-    aoi : `float`, optional
+    aoi : float, optional
         angle of incidence, degrees
-    assume_vac_ambient : `bool`, optional
+    assume_vac_ambient : bool, optional
         if True, prepends an infinitely thick layer of vacuum to the stack
         if False, prepend the ambient index but *NOT* a thickness
 
     Returns
     -------
-    (`float`, `float`)
+    (float, float)
         r, t coefficients
 
     """
