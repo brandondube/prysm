@@ -1,7 +1,8 @@
 """Tools for performing thin film calculations."""
 from functools import reduce
 
-from prysm.mathops import np
+from .mathops import np
+from .conf import config
 
 
 def brewsters_angle(n0, n1, deg=True):
@@ -204,6 +205,8 @@ def characteristic_matrix_p(lambda_, d, n, theta):
         a 2x2 matrix
 
     """
+    # BDD 2021-11-19: supports ND d, n automatically, no changes
+    # d, n as shape (10,10) -> return is (2,2,10,10)
     k = (2 * np.pi * n) / lambda_
     cost = np.cos(theta)
     beta = k * d * cost
@@ -276,6 +279,16 @@ def multilayer_matrix_p(n0, theta0, characteristic_matrices, nnp1, theta_np1):
         2x2 matrix A^s
 
     """
+    # there are a lot of guards in this function that look weird
+    # basically, we may have characteristic metricies for multiple
+    # thicknesses/indices along the first dim (N, 2, 2) instead of (2, 2)
+    # numpy matmul is designed to do "batch" compuations in this case, but
+    # we need to make sure all of our scalars, etc, give arrays of the same
+    # shape.  I.e., matmul(scalar, (3,2,2)) is illegal where dot(scalar, (3,2,2))
+    # was not.  The "noise" in this function is there to take care of those parts
+
+    # there may be some performance left on the table because of the moveaxes
+    # all over the place in this function, I'm not precisely sure.
     cost0 = np.cos(theta0)
     term1 = 1 / (2 * n0 * cost0)
 
@@ -283,16 +296,33 @@ def multilayer_matrix_p(n0, theta0, characteristic_matrices, nnp1, theta_np1):
         [n0, cost0],
         [n0, -cost0]
     ])
+
     if len(characteristic_matrices) > 1:
-        term3 = reduce(np.dot, characteristic_matrices)  # reduce does M1 * M2 * M3 [...]
+        term3 = reduce(np.matmul, characteristic_matrices)  # reduce does M1 * M2 * M3 [...]
     else:
         term3 = characteristic_matrices[0]
 
-    term4 = np.array([
-        [np.cos(theta_np1), 0],
-        [nnp1, 0]
-    ])
-    return reduce(np.dot, (term1, term2, term3, term4))
+    if hasattr(theta_np1, '__len__') and len(theta_np1 > 1):
+        term4 = np.array([
+            [np.cos(theta_np1), np.broadcast_to(0, theta_np1.shape)],
+            [nnp1,              np.broadcast_to(0, theta_np1.shape)]
+        ])
+    else:
+        term4 = np.array([
+            [np.cos(theta_np1), 0],
+            [nnp1,              0]
+        ])
+
+    if term2.ndim > 2:
+        term2 = np.moveaxis(term2, 2, 0)
+        term4 = np.moveaxis(term4, 2, 0)
+
+    if hasattr(term1, '__len__') and len(term1) > 1:
+        term12 = np.tensordot(term2, term1, axes=(0, 0))
+    else:
+        term12 = np.dot(term1, term2)
+
+    return reduce(np.matmul, (term12, term3, term4))
 
 
 def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
@@ -324,14 +354,36 @@ def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
     n0cost0 = n0 * cost0
 
     term2 = np.array([
-        [n0cost0, 1],
-        [n0cost0, -1]
+        [n0cost0, np.broadcast_to(1, n0cost0.shape)],
+        [n0cost0, np.broadcast_to(-1, n0cost0.shape)]
     ])
-    term3 = reduce(np.dot, characteristic_matrices)  # reduce does M1 * M2 * M3 [...]
-    term4 = np.array([
-        [1, 0],
-        [nnp1 * np.cos(theta_np1), 0]
-    ])
+    if len(characteristic_matrices) > 1:
+        term3 = reduce(np.matmul, characteristic_matrices)
+    else:
+        term3 = characteristic_matrices[0]
+
+    if hasattr(theta_np1, '__len__') and len(theta_np1 > 1):
+        term4 = np.array([
+            [np.broadcast_to(1, theta_np1.shape), np.broadcast_to(0, theta_np1.shape)],
+            [nnp1 * np.cos(theta_np1),            np.broadcast_to(0, theta_np1.shape)]
+        ])
+    else:
+        term4 = np.array([
+            [1,                       0],
+            [nnp1 * np.cos(theta_np1), 0]
+        ])
+
+    if term2.ndim > 2:
+        term2 = np.moveaxis(term2, 2, 0)
+        term4 = np.moveaxis(term4, 2, 0)
+
+    if hasattr(term1, '__len__') and len(term1) > 1:
+        term12 = np.tensordot(term2, term1, axes=(0, 0))
+    else:
+        term12 = np.dot(term1, term2)
+
+    return reduce(np.matmul, (term12, term3, term4))
+
     return reduce(np.dot, (term1, term2, term3, term4))
 
 
@@ -349,7 +401,8 @@ def rtot(Amat):
         the value of rtot, either s or p.
 
     """
-    return Amat[1, 0] / Amat[0, 0]
+    # ... to support batch computation
+    return Amat[..., 1, 0] / Amat[..., 0, 0]
 
 
 def ttot(Amat):
@@ -366,21 +419,30 @@ def ttot(Amat):
         the value of rtot, either s or p.
 
     """
-    return 1 / Amat[0, 0]
+    return 1 / Amat[..., 0, 0]
 
 
-def multilayer_stack_rt(polarization, wavelength, stack, aoi=0, assume_vac_ambient=True):
+def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, assume_vac_ambient=True):
     """Compute r and t for a given stack of materials.
 
-    An infinitely thick layer of vacuum is assumed if assume_vac_ambient is True
+    An infinitely thick layer of vacuum is assumed to proceed stack
+    if assume_vac_ambient is True
 
     Parameters
     ----------
     polarization : str, {'p', 's'}
         the polarization state
-    stack : Iterable of Iterable
-        iterable of tuples, which looks like [(n1, t1), (n2, t2) ...]
-        where n is the index and t is the thickness in microns
+    stack : numpy.ndarray
+        array which has final dimensions of [n, t]
+        where n is the index and t is the thickness in microns.
+        i.e., stack[0] is N dimensional index of refraction, and
+              stack[1] is N dimensional thickness
+
+        For example, if stack is of shape (2, 100, 100)
+        then the computation is for a 100x100 spatial arrangement of index
+        and thickness
+
+        iterable of tuples, which looks like [(n1, t1), (n2, t2) ...] also work
     wavelength : float
         wavelength of light, microns
     aoi : float, optional
@@ -398,21 +460,46 @@ def multilayer_stack_rt(polarization, wavelength, stack, aoi=0, assume_vac_ambie
     # digest inputs a little bit
     polarization = polarization.lower()
     aoi = np.radians(aoi)
+    stack = np.array(stack)
+    indices = stack[:, 0, ...]  # : = all layers, ... = keep other dims as present
+    thicknesses = stack[:, 1, ...]
 
-    indices, thicknesses = [], []
-    if assume_vac_ambient:
-        indices.append(1)
+    # input munging:
+    # downstream routines require shape (N, 2, 2) for batched matmul
+    # input shape is (Nlayers, 2, ...more)
+    # we are ultimately going to loop over Nlayers, but we need to flatten
+    # the last dimension(s) and move them to the front
+    # then within this function, because things do not naturally align to the
+    # first axis, there are lots of awkward checks to see if we're multi-dimensional,
+    # and if we are do the same thing but called slightly differently
+    #
+    # there's no way (that I know of) around that
 
-    for index, thickness in stack:
-        indices.append(index)
-        thicknesses.append(thickness)
+    nlayers = len(stack)
+    if indices.ndim > 1:
+        indices = np.moveaxis(indices.reshape((nlayers, -1)), 1, 0)
+        thicknesses = np.moveaxis(thicknesses.reshape((nlayers, -1)), 1, 0)
 
-    # index-based loops are a little unusual for python, but it is the most
-    # clear in this case I think
-    angles = [aoi]
-    for i in range(1, len(thicknesses)):
-        bent = snell_aor(indices[i-1], indices[i], angles[i-1], degrees=False)
-        angles.append(bent)
+    angles = np.empty(thicknesses.shape, dtype=config.precision_complex)
+    # do the first loop by hand to handle ambient vacuum gracefully
+    if angles.ndim > 1:
+        angles[:, 0] = aoi
+        if assume_vac_ambient:
+            result = snell_aor(1, indices[:, 0], aoi, degrees=False)
+            angles[:, 1] = result
+        else:
+            angles[:, 1] = snell_aor(indices[:, 0], indices[:, 1], aoi, degrees=False)
+        for i in range(2, thicknesses.shape[1]):
+            angles[:, i] = snell_aor(indices[:, i-1], indices[:, i], angles[:, i-1], degrees=False)
+    else:
+        angles[0] = aoi
+        if assume_vac_ambient:
+            result = snell_aor(1, indices[0], aoi, degrees=False)
+            angles[1] = result
+        else:
+            angles[1] = snell_aor(indices[0], indices[1], aoi, degrees=False)
+        for i in range(2, len(thicknesses)):
+            angles[i] = snell_aor(indices[i-1], indices[i], angles[i-1], degrees=False)
 
     if polarization == 'p':
         fn1 = characteristic_matrix_p
@@ -423,7 +510,32 @@ def multilayer_stack_rt(polarization, wavelength, stack, aoi=0, assume_vac_ambie
     else:
         raise ValueError("unknown polarization, use p or s")
 
-    Mjs = [fn1(wavelength, d, n, a) for d, n, a in zip(thicknesses, indices[1:], angles[1:])]
-    A = fn2(indices[0], angles[0], Mjs, indices[-1], angles[-1])
+    Mjs = []
+    if angles.ndim > 1:
+        for i in range(angles.shape[1]):
+            Mjs.append(fn1(wavelength, thicknesses[:, i], indices[:, i], angles[:, i]))
+    else:
+        for i in range(len(angles)):
+            Mjs.append(fn1(wavelength, thicknesses[i], indices[i], angles[i]))
 
-    return rtot(A), ttot(A)
+    if Mjs[0].ndim > 2:
+        Mjs = [np.moveaxis(M, 2, 0) for M in Mjs]
+
+    if angles.ndim > 1:
+        if assume_vac_ambient:
+            i1 = np.broadcast_to(1, indices.shape[0])
+            A = fn2(i1, angles[:, 0], Mjs, indices[:, -1], angles[:, -1])
+        else:
+            A = fn2(indices[:, 0], angles[:, 0], Mjs, indices[:, -1], angles[:, -1])
+    else:
+        if assume_vac_ambient:
+            A = fn2(1, angles[0], Mjs, indices[-1], angles[-1])
+        else:
+            A = fn2(indices[0], angles[0], Mjs, indices[-1], angles[-1])
+
+    r = rtot(A)
+    t = ttot(A)
+    if indices.ndim > 1:
+        r = r.reshape(stack.shape[2:])
+        t = t.reshape(stack.shape[2:])
+    return r, t
