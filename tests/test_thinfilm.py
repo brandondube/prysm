@@ -16,7 +16,7 @@ def test_accuracy_of_monolayer_reflectivity_MgF2_on_C7980():
         (n_MgF2, .150),
         (n_C7980, 10_000),
     ]
-    r, _ = thinfilm.multilayer_stack_rt('p', wvl, stack)
+    r, _ = thinfilm.multilayer_stack_rt(stack, wvl, 'p')
     R = abs(r)**2
     assert R == pytest.approx(0.022, abs=0.001)  # 98% transmission
 
@@ -28,7 +28,7 @@ def test_accuracy_of_multilayer_reflectivity_on_C7980():
         (n_CeF3, wvl/4),
         (n_C7980, 10_000),
     ]
-    r, _ = thinfilm.multilayer_stack_rt('s', wvl, stack)
+    r, _ = thinfilm.multilayer_stack_rt(stack, wvl, 's')
     R = abs(r)**2
     assert R == pytest.approx(0.0024, abs=0.0005)  # 99.7% transmission
 
@@ -83,7 +83,7 @@ def test_deepstack_matches_2D_thickness(pol):
         R = abs(r)**2
         looped_Rs.append(R)
 
-    looped_Rs = np.array(looped_Rs).reshape(2,3)
+    looped_Rs = np.array(looped_Rs).reshape(2, 3)
 
     tm = thicknesses_mgf2
     nmgf2 = np.full(tm.shape, n_MgF2)

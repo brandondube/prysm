@@ -40,3 +40,9 @@ First derivatives of jacobi polynomials and their descendants are also now avail
 These are usefor for applications such as raytracing.
 
 The performance Jacobi polynomial computations has been increased by 18%.  This cascades to performance of Chebyshev, Legendre, and Zernike polynomials.  The increase comes from replacing an outdated recurrence relation for one expressed in the standard form, which happens to be a bit faster.
+
+
+Performance Enhancements
+========================
+
+the thinfilm module's multilayer stack function has been vectorized, allowing arrays of thicknesses and indices to be used, instead of single points.  This enables the calculation to be batched over ranges of thicknesses, as e.g. for spatial distributions of thickness or thickness sweeps for design optimization.  For the 54x54 computation of the Roman Coronagraph Instrument's Hybrid Lyot occulter, the computation is 100x faster batched than elementwise.  Use the function in the same way, except when defining your stack instead of having scalar (n, d) for each layer use arbitrarily dimensional arrays.
