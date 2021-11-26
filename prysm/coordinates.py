@@ -303,7 +303,7 @@ def make_rotation_matrix(abg, radians=False):
     # the m = m[:3,:3] crops it to just the rotation matrix
     # unclear if may some day want the Homomorphic matrix,
     # PITA to take it out, so leave it in
-    m = truenp.array([
+    m = truenp.asarray([
         [cosa*cosg - sina*sinb*sing, -cosb*sina, cosa*sing + cosg*sina*sinb, 0],
         [cosg*sina + cosa*sinb*sing,  cosa*cosb, sina*sing - cosa*cosg*sinb, 0],
         [-cosb*sing,                  sinb,      cosb*cosg,                  0],
@@ -313,7 +313,7 @@ def make_rotation_matrix(abg, radians=False):
     # truenp -- make "m" on CPU, no matter what.
     # np.array on last line will move data from numpy to any other "numpy"
     # (like Cupy/GPU)
-    return np.array(m[:3, :3])
+    return np.asarray(m[:3, :3])
 
 
 def apply_rotation_matrix(m, x, y, z=None, points=None, return_z=False):

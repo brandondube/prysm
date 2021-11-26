@@ -219,8 +219,8 @@ def sum_of_2d_modes(modes, weights):
         ndarray of shape (m, n) that is the sum of modes as given
 
     """
-    modes = np.array(modes)
-    weights = np.array(weights).astype(modes.dtype)
+    modes = np.asarray(modes)
+    weights = np.asarray(weights).astype(modes.dtype)
 
     # dot product of the 0th dim of modes and weights => weighted sum
     return np.tensordot(modes, weights, axes=(0, 0))
@@ -288,7 +288,7 @@ def lstsq(modes, data):
     """
     mask = np.isfinite(data)
     data = data[mask]
-    modes = np.array(modes)
+    modes = np.asarray(modes)
     modes = modes.reshape((modes.shape[0], -1))  # flatten second dim
     modes = modes[:, mask.ravel()].T  # transpose moves modes to columns, as needed for least squares fit
     c, *_ = np.linalg.lstsq(modes, data, rcond=None)

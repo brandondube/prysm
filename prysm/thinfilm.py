@@ -214,7 +214,7 @@ def characteristic_matrix_p(lambda_, d, n, theta):
 
     upper_right = -1j * sinb * cost / n
     lower_left = -1j * n * sinb / cost
-    return np.array([
+    return np.asarray([
         [cosb, upper_right],
         [lower_left, cosb]
     ])
@@ -249,7 +249,7 @@ def characteristic_matrix_s(lambda_, d, n, theta):
 
     upper_right = -1j * sinb / (cost * n)
     lower_left = -1j * n * sinb * cost
-    return np.array([
+    return np.asarray([
         [cosb, upper_right],
         [lower_left, cosb]
     ])
@@ -292,7 +292,7 @@ def multilayer_matrix_p(n0, theta0, characteristic_matrices, nnp1, theta_np1):
     cost0 = np.cos(theta0)
     term1 = 1 / (2 * n0 * cost0)
 
-    term2 = np.array([
+    term2 = np.asarray([
         [n0, cost0],
         [n0, -cost0]
     ])
@@ -303,12 +303,12 @@ def multilayer_matrix_p(n0, theta0, characteristic_matrices, nnp1, theta_np1):
         term3 = characteristic_matrices[0]
 
     if hasattr(theta_np1, '__len__') and len(theta_np1 > 1):
-        term4 = np.array([
+        term4 = np.asarray([
             [np.cos(theta_np1), np.broadcast_to(0, theta_np1.shape)],
             [nnp1,              np.broadcast_to(0, theta_np1.shape)]
         ])
     else:
-        term4 = np.array([
+        term4 = np.asarray([
             [np.cos(theta_np1), 0],
             [nnp1,              0]
         ])
@@ -353,7 +353,7 @@ def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
     term1 = 1 / (2 * n0 * cost0)
     n0cost0 = n0 * cost0
 
-    term2 = np.array([
+    term2 = np.asarray([
         [n0cost0, np.broadcast_to(1, n0cost0.shape)],
         [n0cost0, np.broadcast_to(-1, n0cost0.shape)]
     ])
@@ -363,12 +363,12 @@ def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
         term3 = characteristic_matrices[0]
 
     if hasattr(theta_np1, '__len__') and len(theta_np1 > 1):
-        term4 = np.array([
+        term4 = np.asarray([
             [np.broadcast_to(1, theta_np1.shape), np.broadcast_to(0, theta_np1.shape)],
             [nnp1 * np.cos(theta_np1),            np.broadcast_to(0, theta_np1.shape)]
         ])
     else:
-        term4 = np.array([
+        term4 = np.asarray([
             [1,                       0],
             [nnp1 * np.cos(theta_np1), 0]
         ])
@@ -460,7 +460,7 @@ def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, assume_vac_ambie
     # digest inputs a little bit
     polarization = polarization.lower()
     aoi = np.radians(aoi)
-    stack = np.array(stack)
+    stack = np.asarray(stack)
     indices = stack[:, 0, ...]  # : = all layers, ... = keep other dims as present
     thicknesses = stack[:, 1, ...]
 

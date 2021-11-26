@@ -263,10 +263,10 @@ def demosaic_malvar(img, cfa='rggb'):
     # create all of our convolution kernels (FIR filters)
     # division by 8 is to make the kernel sum to 1
     # (preserve energy)
-    kgreen = np.array(kernel_G_at_R_or_B) / 8
-    kgreensameColumn = np.array(kernel_R_at_G_in_RB) / 8
-    kgreensameRow = np.array(kernel_R_at_G_in_BR) / 8
-    kdiagonalRB = np.array(kernel_R_at_B_in_BB) / 8
+    kgreen = np.asarray(kernel_G_at_R_or_B) / 8
+    kgreensameColumn = np.asarray(kernel_R_at_G_in_RB) / 8
+    kgreensameRow = np.asarray(kernel_R_at_G_in_BR) / 8
+    kdiagonalRB = np.asarray(kernel_R_at_B_in_BB) / 8
 
     # there is only one filter for G
     Gest = ndimage.convolve(img, kgreen)
