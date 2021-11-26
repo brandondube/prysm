@@ -293,7 +293,7 @@ def _initialize_alphas(s, x, alphas, j=0):
         if j != 0:
             shape = (j+1, *shape)
 
-        alphas = np.empty(shape, dtype=dtype)
+        alphas = np.zeros(shape, dtype=dtype)
     return alphas
 
 
