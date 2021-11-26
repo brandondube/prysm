@@ -15,10 +15,6 @@ from scipy.special import (
     hermitenorm as sps_He
 )
 
-from prysm.polynomials.jacobi import jacobi_sum_clenshaw
-
-
-# TODO: add regression tests against scipy.special.eval_legendre etc
 
 SAMPLES = 32
 X, Y = np.linspace(-1, 1, SAMPLES), np.linspace(-1, 1, SAMPLES)
@@ -497,19 +493,22 @@ def test_hermite_H_der_sequence_same_as_loop():
 def test_clenshaw_matches_standard_way():
     # pseudorandom numbers
     # this test fails sometimes when random coefs are used?
-    cs = np.asarray([1.234, 3.14, 2.87, -9.876, 12])
+    # cs = np.asarray([1.234, 3.14, 2.87, -9.876, 12])
+    cs = np.random.rand(5)
     basis = list(polynomials.jacobi_sequence([0, 1, 2, 3, 4], .5, .5, X))
     exp = np.dot(cs, basis)
     clenshaw = polynomials.jacobi_sum_clenshaw(cs, .5, .5, X)
-    assert np.allclose(exp, clenshaw)
+    assert np.allclose(exp, clenshaw, atol=1e-8)
 
 
 def test_clenshaw_matches_standard_way_der():
+    # this test fails sometimes when random coefs are used?
+    # cs = np.asarray([1.234, 3.14, 2.87, -9.876, 12])
     cs = np.random.rand(5)
     basis = list(polynomials.jacobi_der_sequence([0, 1, 2, 3, 4], .5, .5, X))
     exp = np.dot(cs, basis)
     clenshaw = polynomials.jacobi_sum_clenshaw_der(cs, .5, .5, X)
-    assert np.allclose(exp, clenshaw)
+    assert np.allclose(exp, clenshaw, atol=1e-8)
 
 
 @pytest.mark.parametrize('n', [1, 2, 3])
