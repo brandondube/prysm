@@ -237,6 +237,7 @@ def test_legendre_sequence_matches_loop():
         assert np.allclose(elem, exp)
 
 
+@pytest.mark.parametrize('n', [0, 1, 2, 3, 4, 5])
 def test_hermite_he_matches_scipy(n):
     prysm_ = polynomials.hermite_He(n, X)
     scipy_ = sps_He(n)(X)
@@ -461,8 +462,8 @@ def test_hermite_He_der_matches_finite_diff(n):
     Pnprime = polynomials.hermite_He_der(n, x)
     dx = x[1] - x[0]
     Pnprime_numerical = np.gradient(Pn, dx)
-    ratio = Pnprime / Pnprime_numerical
-    assert abs(ratio-1).max() < 0.1  # 10%
+    diff = Pnprime - Pnprime_numerical
+    assert abs(diff).max() < 0.35  # 10%
 
 
 def test_hermite_He_der_sequence_same_as_loop():

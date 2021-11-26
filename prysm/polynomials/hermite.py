@@ -129,6 +129,8 @@ def hermite_He_der(n, x):
         d/dx[He_n(x)]
 
     """
+    if n == 0:
+        return np.zeros_like(x)
     return n * hermite_He(n-1, x)
 
 
@@ -317,6 +319,8 @@ def hermite_H_der(n, x):
         d/dx[H_n(x)]
 
     """
+    if n == 0:
+        return np.zeros_like(x)
     return 2 * n * hermite_H(n-1, x)
 
 
