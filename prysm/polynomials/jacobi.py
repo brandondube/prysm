@@ -83,7 +83,7 @@ def jacobi(n, alpha, beta, x):
 
 
 def jacobi_sequence(ns, alpha, beta, x):
-    """Jacobi polynomials of order 0..n_max with weight parameters alpha and beta.
+    """Jacobi polynomials of orders ns with weight parameters alpha and beta.
 
     Parameters
     ----------

@@ -35,6 +35,30 @@ from .legendre import (  # NOQA
     legendre_der,
     legendre_der_sequence,
 )  # NOQA
+from .hermite import (  # NOQA
+    hermite_He,
+    hermite_He_sequence,
+    hermite_He_der,
+    hermite_He_der_sequence,
+    hermite_H,
+    hermite_H_sequence,
+    hermite_H_der,
+    hermite_H_der_sequence,
+)
+from .qpoly import (  # NOQA
+    Qbfs,
+    Qbfs_sequence,
+    Qcon,
+    Qcon_sequence,
+    Q2d,
+    Q2d_sequence,
+)
+from .dickson import (  # NOQA
+    dickson1,
+    dickson1_sequence,
+    dickson2,
+    dickson2_sequence
+)
 from .zernike import (  # NOQA
     zernike_norm,
     zernike_nm,
@@ -51,20 +75,6 @@ from .zernike import (  # NOQA
     barplot as zernike_barplot,
     barplot_magnitudes as zernike_barplot_magnitudes,
     top_n,
-)
-from .qpoly import (  # NOQA
-    Qbfs,
-    Qbfs_sequence,
-    Qcon,
-    Qcon_sequence,
-    Q2d,
-    Q2d_sequence,
-)
-from .dickson import (  # NOQA
-    dickson1,
-    dickson1_sequence,
-    dickson2,
-    dickson2_sequence
 )
 
 

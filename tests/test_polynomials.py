@@ -10,7 +10,9 @@ from scipy.special import (
     jacobi as sps_jac,
     legendre as sps_leg,
     chebyt as sps_cheby1,
-    chebyu as sps_cheby2
+    chebyu as sps_cheby2,
+    hermite as sps_H,
+    hermitenorm as sps_He
 )
 
 from prysm.polynomials.jacobi import jacobi_sum_clenshaw
@@ -235,6 +237,35 @@ def test_legendre_sequence_matches_loop():
         assert np.allclose(elem, exp)
 
 
+def test_hermite_he_matches_scipy(n):
+    prysm_ = polynomials.hermite_He(n, X)
+    scipy_ = sps_He(n)(X)
+    assert np.allclose(prysm_, scipy_)
+
+
+def test_hermite_he_sequence_matches_loop():
+    ns = [1, 2, 3, 4, 5]
+    seq = polynomials.hermite_He_sequence(ns, X)
+    loop = [polynomials.hermite_He(n, X) for n in ns]
+    for elem, exp in zip(seq, loop):
+        assert np.allclose(elem, exp)
+
+
+@pytest.mark.parametrize('n', [0, 1, 2, 3, 4, 5])
+def test_hermite_h_matches_scipy(n):
+    prysm_ = polynomials.hermite_H(n, X)
+    scipy_ = sps_H(n)(X)
+    assert np.allclose(prysm_, scipy_)
+
+
+def test_hermite_h_sequence_matches_loop():
+    ns = [1, 2, 3, 4, 5]
+    seq = polynomials.hermite_H_sequence(ns, X)
+    loop = [polynomials.hermite_H(n, X) for n in ns]
+    for elem, exp in zip(seq, loop):
+        assert np.allclose(elem, exp)
+
+
 @pytest.mark.parametrize('n', [0, 1, 2, 3, 4, 5])
 def test_cheby1_matches_scipy(n):
     prysm_ = polynomials.cheby1(n, X)
@@ -422,6 +453,45 @@ def test_legendre_der_sequence_same_as_loop():
         assert np.allclose(exp, elem)
 
 
+@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+def test_hermite_He_der_matches_finite_diff(n):
+    # need more points for accurate finite diff
+    x = np.linspace(-1, 1, 128)
+    Pn = polynomials.hermite_He(n, x)
+    Pnprime = polynomials.hermite_He_der(n, x)
+    dx = x[1] - x[0]
+    Pnprime_numerical = np.gradient(Pn, dx)
+    ratio = Pnprime / Pnprime_numerical
+    assert abs(ratio-1).max() < 0.1  # 10%
+
+
+def test_hermite_He_der_sequence_same_as_loop():
+    ns = [0, 1, 2, 3, 4, 5]
+    seq = list(polynomials.hermite_He_der_sequence(ns, X))
+    for elem, n in zip(seq, ns):
+        exp = polynomials.hermite_He_der(n, X)
+        assert np.allclose(exp, elem)
+
+
+@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+def test_hermite_H_der_matches_finite_diff(n):
+    # need more points for accurate finite diff
+    x = np.linspace(-1, 1, 128)
+    Pn = polynomials.hermite_H(n, x)
+    Pnprime = polynomials.hermite_H_der(n, x)
+    dx = x[1] - x[0]
+    Pnprime_numerical = np.gradient(Pn, dx)
+    ratio = Pnprime / Pnprime_numerical
+    assert abs(ratio-1).max() < 0.1  # 10%
+
+
+def test_hermite_H_der_sequence_same_as_loop():
+    ns = [0, 1, 2, 3, 4, 5]
+    seq = list(polynomials.hermite_H_der_sequence(ns, X))
+    for elem, n in zip(seq, ns):
+        exp = polynomials.hermite_H_der(n, X)
+        assert np.allclose(exp, elem)
+
 
 def test_clenshaw_matches_standard_way():
     cs = np.random.rand(5)
@@ -469,6 +539,7 @@ def test_cheby4_sequence_matches_loop():
     loop = [polynomials.cheby4(n, X) for n in ns]
     for elem, exp in zip(seq, loop):
         assert np.allclose(elem, exp)
+
 
 # - higher order routines
 

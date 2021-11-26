@@ -5,8 +5,12 @@ prysm v0.21
 New Features
 ============
 
-The polynomials module has gained support for the dickson polynomials of the first and second kind, and Chebyshev polynomials of the third and Fourth kind:
+The polynomials module has gained support for both types of Hermite polynomials, Dickson polynomials of the first and second kind, and Chebyshev polynomials of the third and Fourth kind:
 
+* :func:`~prysm.polynomials.hermite_He`
+* :func:`~prysm.polynomials.hermite_He_sequence`
+* :func:`~prysm.polynomials.hermite_H`
+* :func:`~prysm.polynomials.hermite_H_sequence`
 * :func:`~prysm.polynomials.dickson1`
 * :func:`~prysm.polynomials.dickson1_sequence`
 * :func:`~prysm.polynomials.dickson2`
@@ -16,7 +20,7 @@ The polynomials module has gained support for the dickson polynomials of the fir
 * :func:`~prysm.polynomials.cheby4`
 * :func:`~prysm.polynomials.cheby4_sequence`
 
-First derivatives of jacobi polynomials and their descendants are also now available:
+First derivatives of many types of polynomials and their descendants are also now available:
 
 * :func:`~prysm.polynomials.jacobi_der`
 * :func:`~prysm.polynomials.jacobi_der_sequence`
@@ -37,12 +41,12 @@ First derivatives of jacobi polynomials and their descendants are also now avail
 * :func:`~prysm.polynomials.Q2d_der`
 * :func:`~prysm.polynomials.Q2d_der_sequence`
 
-These are usefor for applications such as raytracing.
-
-The performance Jacobi polynomial computations has been increased by 18%.  This cascades to performance of Chebyshev, Legendre, and Zernike polynomials.  The increase comes from replacing an outdated recurrence relation for one expressed in the standard form, which happens to be a bit faster.
+These are useful for applications such as raytracing.
 
 
 Performance Enhancements
 ========================
 
 the thinfilm module's multilayer stack function has been vectorized, allowing arrays of thicknesses and indices to be used, instead of single points.  This enables the calculation to be batched over ranges of thicknesses, as e.g. for spatial distributions of thickness or thickness sweeps for design optimization.  For the 54x54 computation of the Roman Coronagraph Instrument's Hybrid Lyot occulter, the computation is 100x faster batched than elementwise.  Use the function in the same way, except when defining your stack instead of having scalar (n, d) for each layer use arbitrarily dimensional arrays.
+
+The performance Jacobi polynomial computations has been increased by 18%.  This cascades to performance of Chebyshev, Legendre, and Zernike polynomials.  The increase comes from replacing an outdated recurrence relation for one expressed in the standard form, which happens to be a bit faster.

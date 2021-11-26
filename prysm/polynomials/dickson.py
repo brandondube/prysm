@@ -100,8 +100,8 @@ def dickson1_sequence(ns, alpha, x):
 
     Returns
     -------
-    numpy.ndarray
-        D_n(x)
+    generator of numpy.ndarray
+        equivalent to array of shape (len(ns), len(x))
 
     """
     ns = list(ns)
