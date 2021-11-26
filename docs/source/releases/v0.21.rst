@@ -5,6 +5,8 @@ prysm v0.21
 New Features
 ============
 
+Segmented systems have gained support for highly optimized modal wavefront errors by using :func:`prysm.segmented.CompositeHexagonalAperture.prepare_opd_bases` and :func:`prysm.segmented.CompositeHexagonalAperture.compose_opd`.  On a laptop CPU, it takes less than 3 milliseconds to do an 11 term Zernike expansion of each segment in a JWST-like aperture on a 512x512 array.
+
 The polynomials module has gained support for both types of Hermite polynomials, Dickson polynomials of the first and second kind, and Chebyshev polynomials of the third and Fourth kind:
 
 * :func:`~prysm.polynomials.hermite_He`
@@ -42,6 +44,11 @@ First derivatives of many types of polynomials and their descendants are also no
 * :func:`~prysm.polynomials.Q2d_der_sequence`
 
 These are useful for applications such as raytracing.
+
+Bug Fixes
+=========
+
+:class:`~prysm.segmented.CompositeHexagonalAperture` internal data structures did not exclude the center/0th segment, even if the amplitude mask did.  This has been fixed.
 
 
 Performance Enhancements
