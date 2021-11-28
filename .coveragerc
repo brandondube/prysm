@@ -11,3 +11,4 @@ exclude_lines =
 
     # ignore asserts used to silence pyflakes
     assert
+omit = prysm/experimental/*
