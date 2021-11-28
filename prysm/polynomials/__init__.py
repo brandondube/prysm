@@ -63,6 +63,8 @@ from .zernike import (  # NOQA
     zernike_norm,
     zernike_nm,
     zernike_nm_sequence,
+    zernike_nm_der,
+    zernike_nm_der_sequence,
     zernikes_to_magnitude_angle,
     zernikes_to_magnitude_angle_nmkey,
     zero_separation as zernike_zero_separation,

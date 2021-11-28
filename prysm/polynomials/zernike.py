@@ -4,7 +4,7 @@ from collections import defaultdict
 
 import numpy as truenp
 
-from .jacobi import jacobi, jacobi_sequence
+from .jacobi import jacobi, jacobi_der, jacobi_sequence
 
 from prysm.mathops import np, kronecker, sign, is_odd
 from prysm.util import sort_xy
@@ -147,6 +147,124 @@ def zernike_nm_sequence(nms, r, t, norm=True):
             radialpiece = powers_of_m[absm]
             out = jac * azpiece * radialpiece  # jac already contains the norm
             yield out
+
+
+def zernike_nm_der(n, m, r, t, norm=True):
+    """Derivatives of Zernike polynomial of radial order n, azimuthal order m, w.r.t r and t.
+
+    Parameters
+    ----------
+    n : int
+        radial order
+    m : int
+        azimuthal order
+    r : numpy.ndarray
+        radial coordinates
+    t : numpy.ndarray
+        azimuthal coordinates
+    norm : bool, optional
+        if True, orthonormalize the result (unit RMS)
+        else leave orthogonal (zero-to-peak = 1)
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        dZ/dr, dZ/dt
+
+    """
+    # x = 2 * r ** 2 - 1
+    # R = radial polynomial R_n^m, not dZ/dr
+    # R = P_(n-m)//2^(0,|m|) (x)
+    # = modified jacobi polynomial
+    # dR = 4r R'(x) (chain rule)
+    # => use jacobi_der
+    # if m == 0, dZ = dR
+    # for m != 0, Z = r^|m| * R * cos(mt)
+    # the cosine term has no impact on the radial derivative,
+    # for which we need the product rule:
+    # d/dr(u v) = v(du/dr) + u(dv/dr)
+    #      u    = R, which we already have the derivative of
+    #        v  = r^|m| = r^k
+    #     dv/dr = k r^(k-1)
+    # d/dr(Z)   = r^k * (4r * R'(x)) + R * k r^(k-1)
+    #             ------------------   -------------
+    #                    v du              u dv
+    #
+    # all of that is multiplied by d/dr( cost ) or sint, which is just a "pass-through"
+    # since cost does not depend on r
+    #
+    # in azimuth it's the other way around: regular old Zernike computation,
+    # multiplied by d/dt ( cost )
+    x = 2 * r ** 2 - 1
+    am = abs(m)
+    n_j = (n - am) // 2
+    # dv from above == d/dr(R(2r^2-1))
+    dv = (4*r) * jacobi_der(n_j, 0, am, x)
+    if norm:
+        znorm = zernike_norm(n, m)
+    if m == 0:
+        dr = dv
+        dt = np.zeros_like(dv)
+    else:
+        v = jacobi(n_j, 0, am, x)
+        u = r ** am
+        du = am * r ** (am-1)
+        dr = v * du + u * dv
+        if m < 0:
+            dt = am * np.cos(am*t)
+            dr *= np.sin(am*t)
+        else:
+            dt = -m * np.sin(m*t)
+            dr *= np.cos(m*t)
+
+        # dt = dt * (u * v)
+        # = cost * r^|m| * R
+        # faster to write it as two in-place ops here
+        # (no allocations)
+        dt *= u
+        dt *= v
+
+        # ugly as this is, we skip one multiply
+        # by doing these extra ifs
+        if norm:
+            dt *= znorm
+
+    if norm:
+        dr *= znorm
+
+    return dr, dt
+
+
+def zernike_nm_der_sequence(nms, r, t, norm=True):
+    """Derivatives of Zernike polynomial of radial order n, azimuthal order m, w.r.t r and t.
+
+    Parameters
+    ----------
+    nms : iterable
+        sequence of [(n, m)] radial and azimuthal orders
+    m : int
+        azimuthal order
+    r : numpy.ndarray
+        radial coordinates
+    t : numpy.ndarray
+        azimuthal coordinates
+    norm : bool, optional
+        if True, orthonormalize the result (unit RMS)
+        else leave orthogonal (zero-to-peak = 1)
+
+    Returns
+    -------
+    list
+        length (len(nms)) list of (dZ/dr, dZ/dt)
+
+    """
+    # TODO: actually implement the recurrence relation as in zernike_sequence,
+    # instead of just using a loop for API homogenaeity
+    out = []
+    for n, m in nms:
+        out.append(zernike_nm_der(n, m, r, t, norm=norm))
+
+    return out
 
 
 def nm_to_fringe(n, m):
@@ -383,18 +501,19 @@ def top_n(coefs, n=5):
         list of tuples (magnitude, index, term)
 
     """
-    coefsv = np.array(list(coefs.values()))
+    coefsv = truenp.asarray(list(coefs.values()))
     coefs_work = abs(coefsv)
-    oidxs = np.array(list(coefs.keys()))
-    idxs = np.argpartition(coefs_work, -n)[-n:]  # argpartition does some magic to identify the top n (unsorted)
-    idxs = idxs[np.argsort(coefs_work[idxs])[::-1]]  # use argsort to sort them in ascending order and reverse
+    oidxs = truenp.asarray(list(coefs.keys()))
+    idxs = truenp.argpartition(coefs_work, -n)[-n:]  # argpartition does some magic to identify the top n (unsorted)
+    idxs = idxs[truenp.argsort(coefs_work[idxs])[::-1]]  # use argsort to sort them in ascending order and reverse
     big_terms = coefsv[idxs]  # finally, take the values from the
     names = [nm_to_name(*p) for p in oidxs]
-    names = np.array(names)[idxs]  # p = pair (n,m)
+    names = truenp.asarray(names)[idxs]  # p = pair (n,m)
     return list(zip(big_terms, idxs, names))
 
 
-def barplot(coefs, names=None, orientation='h', buffer=1, zorder=3, number=True, offset=0, width=0.8, fig=None, ax=None):
+def barplot(coefs, names=None, orientation='h', buffer=1, zorder=3, number=True,
+            offset=0, width=0.8, fig=None, ax=None):
     """Create a barplot of coefficients and their names.
 
     Parameters

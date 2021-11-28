@@ -130,6 +130,21 @@ def test_zernike_sequence_same_as_loop(rho, phi):
         assert np.allclose(exp, elem)
 
 
+@pytest.mark.parametrize('norm', [True, False])
+def test_zernike_der_sequence_same_as_loop(norm, rho, phi):
+    nms = [polynomials.noll_to_nm(j) for j in range(0, 12)]
+    loop = []
+    for n, m in nms:
+        loop.append(polynomials.zernike_nm_der(n, m, rho, phi, norm=norm))
+
+    non_loop = polynomials.zernike_nm_der_sequence(nms, rho, phi, norm=norm)
+    for looped, not_looped in zip(loop, non_loop):
+        rl, tl = looped
+        rnl, tnl = not_looped
+        assert np.allclose(rl, rnl)
+        assert np.allclose(tl, tnl)
+
+
 def test_zernike_to_magang_functions():
     # data has piston, tt, power, sph, ast, cma, tre = 7 unique things
     data = [
