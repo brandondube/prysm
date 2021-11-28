@@ -5,9 +5,11 @@
 [![Coverage Status](https://coveralls.io/repos/github/brandondube/prysm/badge.svg?branch=master)](https://coveralls.io/github/brandondube/prysm?branch=master) [![DOI](http://joss.theoj.org/papers/10.21105/joss.01352/status.svg)](https://doi.org/10.21105/joss.01352)
 
 
-Prysm is a python 3.6+ library for numerical optics.  It contains features that are a superset of POPPY or PROPER for physical optics, as well as thin lens, thin film, and detector modeling.  There is also a submodule that can replace the software that comes with an interferometer for data analysis.  On CPU, end-to-end calculation is more than 100x as fast as the above for like-for-like calculations.  On GPU, prysm is more than 1,000x faster than its competition.
+Prysm is a python 3.6+ library for numerical optics.  Its features are a superset of those in both POPPY and PROPER, not limited to physical optics, thin lens, thin film, and detector modeling.  There is also a submodule that can replace the software that comes with an interferometer for data analysis.
 
-The library can be used for everything from forward modeling of optical systems from camera lenses to coronographs to reverse modeling and phase retrieval.  Due to its composable structure, it plays well with others and can be substituted in or out of other code easily.  For a list of features, see the documentation.  Of special note is prysm's interchangeable backend system, which allows the user to freely exchange numpy for cupy, enabling use of a GPU for _all_ computations, or other similar exchanges, such as pytorch for algorithmic differentiation.
+Prysm is believed to be by significant margin the fastest package in the world at what it does.  On CPU, end-to-end calculation is more than 100x as fast as the above for like-for-like calculations.  On GPU, prysm is more than 1,000x faster than its competition.  The [lowfssim](https://github.com/nasa-jpl/lowfssim) model can run at over 2kHz in real-time and is all prysm under the hood.
+
+Prysm can be used for everything from forward modeling of optical systems from camera lenses to coronographs to reverse modeling and phase retrieval.  Due to its composable structure, it plays well with others and can be substituted in or out of other code easily.  Of special note is prysm's interchangeable backend system, which allows the user to freely exchange numpy for cupy, enabling use of a GPU for _all_ computations, or other similar exchanges, such as pytorch for algorithmic differentiation.
 
 ## Installation
 
@@ -25,18 +27,23 @@ Prysm uses numpy for array operations or any compatible library.  To use GPUs, y
 ## Features
 
 ### Propagation
-- Fraunhofer, FFT or Matrix DFT
-- Fresnel
+- Pupil-to-Focus
+- Focus-to-Pupil
+- Free space ("plane to plane" or "angular spectrum")
 
 ### Polynomials
 - Zernike
 - Legendre
-- Chebyshev
+- Chebyshev (1st, 2nd, 3rd, 4th kind)
 - Jacobi
 - 2D-Q, Qbfs, Qcon
 - Hopkins
+- Hermite (Probablist's and Physicist's)
+- Dickson
 - fitting
 - projection
+
+All of these polynomials provide highly optimized GPU-compatible implementations, as well as derivatives.
 
 ### Pupil Masks
 - circles, binary and anti-aliased
@@ -47,8 +54,7 @@ Prysm uses numpy for array operations or any compatible library.  To use GPUs, y
 
 ### Segmented systems
 - parametrized pupil mask generation
-- per-segment errors
-- segment indexing / identification
+- per-segment errors based on any polynomial basis expansion
 
 ### Image Simulation
 - Convolution
@@ -82,7 +88,7 @@ Prysm uses numpy for array operations or any compatible library.  To use GPUs, y
 - Bayer compositing, demosaicing
 
 ### Thin Films
-- r, t parameters
+- r, t parameters, even over spatially varying extent with high performance
 - Brewster's angle
 - Critical Angle
 - Snell's law
@@ -101,9 +107,14 @@ Prysm uses numpy for array operations or any compatible library.  To use GPUs, y
 
 ### Tilted Planes and other surfaces
 
-- forward or reverse projection of surfaces such as those on Deformable Mirrors
+- forward or reverse projection of surfaces
 
-Some features may be missing from this list.
+### Deformable Mirrors
+
+- surface synthesis in or out of beam normal based on arbitrary influence function with arbitrary sampling
+- crosstalk
+- stuck, dead, and tied actuators
+- DM surface misalignment / registration errors
 
 ### Interferometry
 
@@ -128,11 +139,9 @@ Issue tracking, roadmaps, and project planning are done on Zenhub.  Contact Bran
 
 ## Heritage
 
-Organizations or projects using prysm:
-
 - prysm was used to perform phase retrieval used to focus Nav and Hazcam, enhanced engineering cameras used to operate the Mars2020 Perserverence rover.
 
-- prysm is used to build the official model of LOWFS, the Low Order Wavefront Sensing (and Control) system for the Roman coronoagraph instrument.  In this application, it has been used to validate dynamics of a hardware testbed to 35 picometers, or 0.08% of the injected dynamics.  The model runs at over 2kHz, faster than the real-time control system, at the same fidelity used to achieve 35 pm model agreement.
+- prysm is used to build the [official model of LOWFS](https://github.com/nasa-jpl/lowfssim), the Low Order Wavefront Sensing and Control system for the Roman coronoagraph instrument.  In this application, it has been used to validate dynamics of a hardware testbed to 35 picometers, or 0.08% of the injected dynamics.  The model runs at over 2kHz, faster than the real-time control system, at the same fidelity used to achieve 35 pm model agreement in hardware experiments.
 
 - prysm is used by several FFRDCs in the US, as well as their equivalent organizations abroad
 
@@ -142,4 +151,4 @@ Organizations or projects using prysm:
 
 - prysm is used at multiple universities to model optics both in a generic capacity and laboratory systems
 
-There are likely many more.  These are key uses known to the authors.
+- your name here(?)
