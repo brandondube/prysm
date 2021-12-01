@@ -48,12 +48,12 @@ def Qbfs(n, x):
     ----------
     n : int
         polynomial order
-    x : `numpy.array`
+    x : numpy.array
         point(s) at which to evaluate
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         Qbfs_n(x)
 
     """
@@ -65,13 +65,16 @@ def Qbfs(n, x):
     # and scale outputs by Qbfs = r*(1-r) * Q
     # the auxiliary polynomials are the jacobi polynomials with
     # alpha,beta = (-1/2,+1/2),
-    # also known as the asymmetric chebyshev polynomials
+    # also known as the chebyshev polynomials of the third kind, V(x)
 
+    # the first two Qbfs polynomials are
+    # Q_bfs0 = x^2 - x^4
+    # Q_bfs1 = 1/19^.5 * (13 - 16 * x^2) * (x^2 - x^4)
     rho = x ** 2
     # c_Q is the leading term used to convert Qm to Qbfs
     c_Q = rho * (1 - rho)
     if n == 0:
-        return np.ones_like(x) * c_Q
+        return c_Q  # == x^2 - x^4
 
     if n == 1:
         return 1 / np.sqrt(19) * (13 - 16 * rho) * c_Q
@@ -105,20 +108,285 @@ def Qbfs(n, x):
     # to always happen once)
     return Qn * c_Q  # NOQA
 
+# to do Qn derivative, Qn = [Pn - g Qnm1 - h Qnm2]/f
+# then,                Qn'= [Pn' - g Qnm1' - hQnm2']/f
+# ... this process would be miserable, so we use the change of basis instead
+# Forbes2010 Qbfs Eq. 3.2 to 3.5
+# a_m = Qbfs coefficients
+# b_m = Cheby third kind coefficients
+# b_M = a_M / f_M
+# B_M-1 = (a_M-1 - g_M-1 bM) / f_M-1
+# B_m = (a_m - g_m b_m+1 - h_m b_m+2) / f_m
+# so, general proces... for Qbfs, don't provide derivatives, but provide a way
+# to change basis to cheby third kind, which can then be differentiated.
+
+
+def change_basis_Qbfs_to_Pn(cs):
+    """Perform the change of basis from Qbfs to the auxiliary polynomial Pn.
+
+    The auxiliary polynomial is defined in A.4 of oe-18-19-19700 and is the
+    shifted Chebyshev polynomials of the third kind.
+
+    Qbfs polynomials u^2(1-u^2)Qbfs_n(u^2) can be expressed as u^2(1-u^2)Pn(u^2)
+    u in Forbes' parlance is the normalized radial coordinate, so given points r
+    in the range [0,1], use this function and then polynomials.cheby3(n, r*r).
+    The u^2 (1 - u^2) is baked into the Qbfs function and will need to be applied
+    by the caller for Cheby3.
+
+    Parameters
+    ----------
+    cs : iterable
+        sequence of polynomial coefficients, from order n=0..len(cs)-1
+
+    Returns
+    -------
+    numpy.ndarray
+        array of same type as cs holding the coefficients that represent the
+        same surface as a sum of shifted Chebyshev polynomials of the third kind
+
+
+    """
+    if hasattr(cs, 'dtype'):
+        # array, initialize as array
+        bs = np.empty_like(cs)
+    else:
+        # iterable input
+        bs = np.empty(len(cs), dtype=config.precision)
+
+    M = len(bs)-1
+    fM = f_qbfs(M)
+    bs[M] = cs[M]/fM
+    g = g_qbfs(M-1)
+    f = f_qbfs(M-1)
+    bs[M-1] = (cs[M-1] - g * bs[M])/f
+    for i in range(M-2, -1, -1):
+        g = g_qbfs(i)
+        h = h_qbfs(i)
+        f = f_qbfs(i)
+        bs[i] = (cs[i] - g * bs[i+1] - h*bs[i+2])/f
+
+    return bs
+
+
+
+def clenshaw_qbfs(cs, u, alphas=None):
+    """Use Clenshaw's method to compute a Qbfs surface from its coefficients.
+
+    Parameters
+    ----------
+    cs : iterable of float
+        coefficients for a Qbfs surface, from order 0..len(cs)-1
+    u : numpy.ndarray
+        radial coordinate(s) to evaluate, notionally in the range [0,1]
+        the variable u from oe-18-19-19700
+    alphas : numpy.ndarray, optional
+        array to store the alpha sums in,
+        the surface is u^2(1-u^2) * (2 * (alphas[0]+alphas[1])
+        if not None, alphas should be of shape (len(s), *x.shape)
+        see _initialize_alphas if you desire more information
+
+    Returns
+    -------
+    numpy.ndarray
+        Qbfs surface, the quantity u^2(1-u^2) S(u^2) from Eq. (3.13)
+        note: excludes the division by phi, since c and rho are unknown
+
+    """
+    x = u * u
+    bs = change_basis_Qbfs_to_Pn(cs)
+    # alphas = np.zeros((len(cs), len(u)), dtype=u.dtype)
+    alphas = _initialize_alphas(cs, u, alphas, j=0)
+    M = len(bs)-1
+    prefix = 2 - 4 * x
+    alphas[M] = bs[M]
+    alphas[M-1] = bs[M-1] + prefix * alphas[M]
+    for i in range(M-2, -1, -1):
+        alphas[i] = bs[i] + prefix * alphas[i+1] - alphas[i+2]
+
+    S = 2 * (alphas[0] + alphas[1])
+    return (x * (1 - x)) * S
+
+
+def _initialize_alphas(cs, x, alphas, j=0):
+    # j = derivative order
+    if alphas is None:
+        if hasattr(x, 'dtype'):
+            dtype = x.dtype
+        else:
+            dtype = config.precision
+        if hasattr(x, 'shape'):
+            shape = (len(cs), *x.shape)
+        elif hasattr(x, '__len__'):
+            shape = (len(cs), len(x))
+        else:
+            shape = (len(cs),)
+
+        if j != 0:
+            shape = (j+1, *shape)
+
+        alphas = np.zeros(shape, dtype=dtype)
+    return alphas
+
+
+def clenshaw_qbfs_der(cs, u, j=1, alphas=None):
+    """Use Clenshaw's method to compute Nth order derivatives of a Qbfs surface.
+
+    This function does not really compute the surface derivative.  It computes
+    S^j from Eq. 3.12.  Because the product rule must be applied, some
+    combination of S^j, S^j-1, .. S^0 are needed to really compute the surface
+    derivative.
+
+    For the first two derivatives, the necessary calculation is:
+    rho = un-normalized radial coordinate
+    u = rho/rho_max (rho_max being the normalization radius)
+    phi = sqrt(1 - c^2 rho^2)
+    if z(rho) is the surface, then
+    z(rho) = [c rho^2 / (1 + phi)] + u^2(1 - u^2)/phi * S(u^2)
+    z'(rho) = [c rho / phi] + (u[1+phi^2 - u^2(1+3phi^2)])/(rho_max phi^3) S(u^2) + 2u^3(1-u^2)/(rho_max phi) S'(u^2)
+    z''(rho) = ... very long expression I am not willing to type out, see Eq. 3.15
+    Note: S^j is simply 2 * (alphas[j][0] + alphas[j][1]) for any j (including 0)
+
+    See compute_zprime_Qbfs for this calculation integrated
+
+    Parameters
+    ----------
+    cs : iterable of float
+        coefficients for a Qbfs surface, from order 0..len(cs)-1
+    u : numpy.ndarray
+        radial coordinate(s) to evaluate, notionally in the range [0,1]
+        the variable u from oe-18-19-19700
+    j : int
+        derivative order
+    alphas : numpy.ndarray, optional
+        array to store the alpha sums in,
+        if x = u * u, then
+        S   = (x * (1 - x)) * 2 * (alphas[0][0] + alphas[0][1])
+        S'  = ... .. the same, but alphas[1][0] and alphas[1][1]
+        S'' = ... ... ... ... ... ... [2][0] ... ... ..[1][1]
+        etc
+
+        if not None, alphas should be of shape (j+1, len(cs), *x.shape)
+        see _initialize_alphas if you desire more information
+
+    Returns
+    -------
+    numpy.ndarray
+        the alphas array
+
+    """
+    # not-so-TODO: a little optimization room here, since we compute u*u multiple
+    # times and what-not.  The flags to disable that would be really confusing
+    # to users, though.
+    x = u * u
+    M = len(cs) - 1
+    prefix = 2 - 4 * x
+    alphas = _initialize_alphas(cs, u, alphas, j=j)
+    # seed with j=0 (S, not its derivative)
+    clenshaw_qbfs(cs, u, alphas[0])
+    for jj in range(1, j+1):
+        alphas[jj][M-j] = -4 * jj * alphas[jj-1][M-jj+1]
+        for n in range(M-2, -1, -1):
+            alphas[jj][n] = prefix * alphas[jj][n+1] - alphas[jj][n+2] - 4 * jj * alphas[jj-1][n+1]
+
+    return alphas
+
+
+def compute_z_zprime_Qbfs(coefs, rho, rho_max, u, c):
+    """Compute the surface sag and first radial derivative of a Qbfs surface.
+
+    from Eq. 3.13 and 3.14 of oe-18-19-19700.
+
+    Parameters
+    ----------
+    coefs : iterable
+        surface coefficients for Q0..QN, N=len(coefs)-1
+    rho : numpy.ndarray
+        unnormalized radial coordinates
+    rho_max : numpy.ndarray
+        normalization radius
+    u : numpy.ndarray
+        normalized radial coordinates (rho/rho_max)
+    c : float
+        best fit sphere curvature
+
+    """
+    # clenshaw does its own u^2
+    alphas = clenshaw_qbfs_der(coefs, u, j=1)
+    S = 2 * (alphas[0][0] + alphas[0][1])
+    Sprime = 2 * (alphas[1][0] + alphas[1][1])
+    rhosq = rho ** 2
+    usq = u ** 2
+    phi = np.sqrt(1 - c ** 2 * rhosq)
+    term1 = (c * rhosq) / (1 + phi)
+
+    num = usq * (1 - usq)
+    den = phi
+    term2 = num / den * S
+    z = term1 + term2
+
+    term1 = c * rho / phi
+
+    phisq = phi * phi
+    phicub = phi * phi * phi
+    num = u * (1 + phisq - usq * (1 + 3 * phisq))
+    den = rho_max * phicub
+    term2 = num / den * S
+
+    #         u^3
+    num = 2 * usq * u * (1 - usq)
+    den = rho_max * phi
+    term3 = num / den * Sprime
+
+    zprime = term1 + term2 + term3
+    return z, zprime
+
+
+def _auxpoly_qbfs_sequence(ns, x):
+    """Auxiliary polynomials to the Qbfs polynomials, same interface as rest of polys."""
+    ns = list(ns)
+    min_i = 0
+    P0 = 2 * np.ones_like(x)
+    P1 = 6 - 8 * x
+    if ns[min_i] == 0:
+        yield P0
+        min_i += 1
+
+    if min_i == len(ns):
+        return
+
+    if ns[min_i] == 1:
+        yield P1
+        min_i += 1
+
+    if min_i == len(ns):
+        return
+
+    prefix = 2 - 4 * x
+    Pnm2, Pnm1 = P0, P1
+    max_n = ns[-1]
+    for nn in range(2, max_n+1):
+        Pn = prefix * Pnm1 - Pnm2
+        if ns[min_i] == nn:
+            yield Pn
+            min_i += 1
+
+        Pnm2, Pnm1 = Pnm1, Pn
+
+
 
 def Qbfs_sequence(ns, x):
     """Qbfs polynomials of orders ns at point(s) x.
 
     Parameters
     ----------
-    ns : `Iterable` of int
+    ns : Iterable of int
         polynomial orders
-    x : `numpy.array`
+    x : numpy.array
         point(s) at which to evaluate
 
     Returns
     -------
-    generator of `numpy.ndarray`
+    generator of numpy.ndarray
         yielding one order of ns at a time
 
     """
@@ -175,12 +443,12 @@ def Qcon(n, x):
     ----------
     n : int
         polynomial order
-    x : `numpy.array`
+    x : numpy.array
         point(s) at which to evaluate
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         Qcon_n(x)
 
     Notes
@@ -206,14 +474,14 @@ def Qcon_sequence(ns, x):
 
     Parameters
     ----------
-    ns : `Iterable` of int
+    ns : Iterable of int
         polynomial orders
-    x : `numpy.array`
+    x : numpy.array
         point(s) at which to evaluate
 
     Returns
     -------
-    generator of `numpy.ndarray`
+    generator of numpy.ndarray
         yielding one order of ns at a time
 
     """
@@ -231,14 +499,14 @@ def abc_q2d(n, m):
 
     Parameters
     ----------
-    n : `int`
+    n : int
         radial order
-    m : `int`
+    m : int
         azimuthal order
 
     Returns
     -------
-    `float`, `float`, `float`
+    float, float, float
         A, B, C
 
     """
@@ -267,14 +535,14 @@ def G_q2d(n, m):
 
     Parameters
     ----------
-    n : `int`
+    n : int
         radial order
-    m : `int`
+    m : int
         azimuthal order
 
     Returns
     -------
-    `float`
+    float
         G
 
     """
@@ -307,14 +575,14 @@ def F_q2d(n, m):
 
     Parameters
     ----------
-    n : `int`
+    n : int
         radial order
-    m : `int`
+    m : int
         azimuthal order
 
     Returns
     -------
-    `float`
+    float
         F
 
     """
@@ -348,14 +616,14 @@ def g_q2d(n, m):
 
     Parameters
     ----------
-    n : `int`
+    n : int
         radial order less one (n - 1)
-    m : `int`
+    m : int
         azimuthal order
 
     Returns
     -------
-    `float`
+    float
         g
 
     """
@@ -368,14 +636,14 @@ def f_q2d(n, m):
 
     Parameters
     ----------
-    n : `int`
+    n : int
         radial order
-    m : `int`
+    m : int
         azimuthal order
 
     Returns
     -------
-    `float`
+    float
         f
 
     """
@@ -390,18 +658,18 @@ def Q2d(n, m, r, t):
 
     Parameters
     ----------
-    n : `int`
+    n : int
         radial polynomial order
-    m : `int`
+    m : int
         azimuthal polynomial order
-    r : `numpy.ndarray`
+    r : numpy.ndarray
         radial coordinate, slope orthogonal in [0,1]
-    t : `numpy.ndarray`
+    t : numpy.ndarray
         azimuthal coordinate, radians
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         array containing Q2d_n^m(r,t)
         the leading coefficient u^m or u^2 (1 - u^2) and sines/cosines
         are included in the return
@@ -500,11 +768,11 @@ def Q2d_sequence(nms, r, t):
 
     Parameters
     ----------
-    nms : iterable of `tuple`
+    nms : iterable of tuple
         (n,m) for each desired term
-    r : `numpy.ndarray`
+    r : numpy.ndarray
         radial coordinates
-    t : `numpy.ndarray`
+    t : numpy.ndarray
         azimuthal coordinates
 
     Returns
