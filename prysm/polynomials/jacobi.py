@@ -20,22 +20,23 @@ def recurrence_abc(n, alpha, beta):
     i.e. to get a(n-1), do recurrence_abc(n-1)
 
     """
-    Anum = (2 * n + alpha + beta + 1) * (2 * n + alpha + beta + 2)
-    Aden = 2 * (n + 1) * (n + alpha + beta + 1)
-    A = Anum/Aden
-
-    Bnum = (alpha**2 - beta**2) * (2 * n + alpha + beta + 1)
-    Bden = 2 * (n+1) * (n + alpha + beta + 1) * (2 * n + alpha + beta)
-    B = Bnum / Bden
-
-    Cnum = (n + alpha) * (n + beta) * (2 * n + alpha + beta + 2)
-    Cden = (n + 1) * (n + alpha + beta + 1) * (2 * n + alpha + beta)
-    C = Cnum / Cden
-
     aplusb = alpha+beta
     if n == 0 and (aplusb == 0 or aplusb == -1):
         A = 1/2 * (alpha + beta) + 1
         B = 1/2 * (alpha - beta)
+        C = 1
+    else:
+        Anum = (2 * n + alpha + beta + 1) * (2 * n + alpha + beta + 2)
+        Aden = 2 * (n + 1) * (n + alpha + beta + 1)
+        A = Anum/Aden
+
+        Bnum = (alpha**2 - beta**2) * (2 * n + alpha + beta + 1)
+        Bden = 2 * (n+1) * (n + alpha + beta + 1) * (2 * n + alpha + beta)
+        B = Bnum / Bden
+
+        Cnum = (n + alpha) * (n + beta) * (2 * n + alpha + beta + 2)
+        Cden = (n + 1) * (n + alpha + beta + 1) * (2 * n + alpha + beta)
+        C = Cnum / Cden
 
     return A, B, C
 
@@ -366,14 +367,18 @@ def jacobi_sum_clenshaw_der(s, alpha, beta, x, j=1, alphas=None):
     j : int
         derivative order to compute
     alphas : numpy.ndarray, optional
-        array to store the alpha sums in, alphas[0] contains the sum and is returned
+        array to store the alpha sums in,
+        alphas[n] is the nth order derivative alpha terms
+        with n=0 being the non-derivative terms.
+
+        for a given n, the value of alphas[0] is the nth derivative of the surface sum
         if not None, alphas should be of shape (j+1, len(s), *x.shape)
         see _initialize_alphas if you desire more information
 
     Returns
     -------
     numpy.ndarray
-        weighted sum of Jacobi polynomials
+        alphas array, see alphas parameter documentation for meaning
 
     """
     # alphas is dual indexed by alphas[j][n]
@@ -388,11 +393,11 @@ def jacobi_sum_clenshaw_der(s, alpha, beta, x, j=1, alphas=None):
     for jj in range(1, j+1):
         # more twisted notation - follow Forbes' paper, but our
         # idea of b and a are swapped
-        a, *_ = recurrence_abc(M-j, alpha, beta)
-        alphas[jj][M-j] = j * a * alphas[jj-1][M-jj+1]
+        a, *_ = recurrence_abc(M-jj, alpha, beta)
+        alphas[jj][M-jj] = j * a * alphas[jj-1][M-jj+1]
         for n in range(M-jj-1, -1, -1):
             a, b, _ = recurrence_abc(n, alpha, beta)
             _, _, c = recurrence_abc(n+1, alpha, beta)
             alphas[jj][n] = jj * a * alphas[jj-1][n+1] + (a * x + b) * alphas[jj][n+1] - c * alphas[jj][n+2]
 
-    return alphas[j][0]
+    return alphas

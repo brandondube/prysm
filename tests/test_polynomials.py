@@ -515,12 +515,22 @@ def test_clenshaw_matches_standard_way():
     assert np.allclose(exp, clenshaw, atol=1e-8)
 
 
-def test_clenshaw_matches_standard_way_der():
+@pytest.mark.parametrize('a, b', [
+    [0, 0],
+    [0, 1],
+    [1, 0],
+    [-.5, -.5],
+    [-.5, .5],
+    [.5, .5],
+    [0, 4]
+])
+def test_clenshaw_matches_standard_way_der(a, b):
     # this test fails sometimes when random coefs are used?
-    cs = np.random.rand(5)
-    basis = list(polynomials.jacobi_der_sequence([0, 1, 2, 3, 4], .5, .5, X))
+    cs = np.random.rand(7)
+    basis = list(polynomials.jacobi_der_sequence([0, 1, 2, 3, 4, 5, 6], a, b, X))
     exp = np.dot(cs, basis)
-    clenshaw = polynomials.jacobi_sum_clenshaw_der(cs, .5, .5, X)
+    clenshaw = polynomials.jacobi_sum_clenshaw_der(cs, a, b, X)
+    clenshaw = clenshaw[1][0]
     assert np.allclose(exp, clenshaw, atol=1e-8)
 
 
