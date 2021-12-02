@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from scipy import special
 
-from .jacobi import jacobi, jacobi_sequence
+from .jacobi import jacobi, jacobi_sequence, jacobi_sum_clenshaw_der
 
 from prysm.mathops import np, kronecker, gamma, sign
 from prysm.conf import config
@@ -286,6 +286,8 @@ def clenshaw_qbfs_der(cs, u, j=1, alphas=None):
     for jj in range(1, j+1):
         alphas[jj][M-j] = -4 * jj * alphas[jj-1][M-jj+1]
         for n in range(M-2, -1, -1):
+            # this is hideous, and just expresses:
+            # for the jth derivative, alpha_n is 2 - 4x * a_n+1 - a_n+2 - 4 j a_n+1^j-1
             alphas[jj][n] = prefix * alphas[jj][n+1] - alphas[jj][n+2] - 4 * jj * alphas[jj-1][n+1]
 
     return alphas
@@ -346,36 +348,54 @@ def compute_z_zprime_Qbfs(coefs, rho, rho_max, u, c):
     return z, zprime
 
 
-def _auxpoly_qbfs_sequence(ns, x):
-    """Auxiliary polynomials to the Qbfs polynomials, same interface as rest of polys."""
-    ns = list(ns)
-    min_i = 0
-    P0 = 2 * np.ones_like(x)
-    P1 = 6 - 8 * x
-    if ns[min_i] == 0:
-        yield P0
-        min_i += 1
+def compute_z_zprime_Qcon(coefs, rho_max, u):
+    """Compute the surface sag and first radial derivative of a Qcon surface.
 
-    if min_i == len(ns):
-        return
+    Requires composition with raytracing.sphere_sag for actual surface sag,
+    this is only the aspheric cap.
 
-    if ns[min_i] == 1:
-        yield P1
-        min_i += 1
+    from Eq. 5.3 and 5.3 of oe-18-13-13851.
 
-    if min_i == len(ns):
-        return
+    Parameters
+    ----------
+    coefs : iterable
+        surface coefficients for Q0..QN, N=len(coefs)-1
+    rho_max : float
+        maximum radial coordinate
+        use rho_max=1 if not interested in a "real surface" of a given diameter
+        and only interested in the normalized world.
+    u : numpy.ndarray
+        normalized radial coordinates (rho/rho_max)
 
-    prefix = 2 - 4 * x
-    Pnm2, Pnm1 = P0, P1
-    max_n = ns[-1]
-    for nn in range(2, max_n+1):
-        Pn = prefix * Pnm1 - Pnm2
-        if ns[min_i] == nn:
-            yield Pn
-            min_i += 1
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        surface sag, surface sag derivative
 
-        Pnm2, Pnm1 = Pnm1, Pn
+    """
+    usq = u * u
+    u3 = usq * u
+    u4 = usq * usq
+    u5 = usq * u3
+    x = 2 * usq - 1
+    alphas = jacobi_sum_clenshaw_der(coefs, 0, 4, x=x, j=1)
+    S = alphas[0][0]
+    Sprime = alphas[1][0]
+
+    z = u4 * S
+
+    # Forbes' paper is wrong, or I am just "cheating" with Jacobis in a way
+    # that is slightly different.
+    # Forbes has u^4 S(u^2), and says use a connection to Z_m=4 to do it.
+    # I don't do that, and go straight to the Jacobis
+    # but the change of variables is different.
+    # u is the normalized radial variable,
+    # u^2 is the argument, but the change-of-variables for the Jacobi polynomials
+    # is 2x-1, so the chain rule works out differently.
+    term1 = 4 * u3 * S
+    term2 = 4 * u5 * Sprime
+    zprime = term1 + term2
+    return z, zprime
 
 
 def Qbfs_sequence(ns, x):
