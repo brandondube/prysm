@@ -8,6 +8,7 @@ from scipy import special
 from .jacobi import jacobi, jacobi_sequence
 
 from prysm.mathops import np, kronecker, gamma, sign
+from prysm.conf import config
 
 
 @lru_cache(1000)
@@ -168,7 +169,6 @@ def change_basis_Qbfs_to_Pn(cs):
     return bs
 
 
-
 def clenshaw_qbfs(cs, u, alphas=None):
     """Use Clenshaw's method to compute a Qbfs surface from its coefficients.
 
@@ -294,6 +294,9 @@ def clenshaw_qbfs_der(cs, u, j=1, alphas=None):
 def compute_z_zprime_Qbfs(coefs, rho, rho_max, u, c):
     """Compute the surface sag and first radial derivative of a Qbfs surface.
 
+    Requires composition with raytracing.sphere_sag for actual surface sag,
+    this is only the aspheric cap.
+
     from Eq. 3.13 and 3.14 of oe-18-19-19700.
 
     Parameters
@@ -308,6 +311,12 @@ def compute_z_zprime_Qbfs(coefs, rho, rho_max, u, c):
         normalized radial coordinates (rho/rho_max)
     c : float
         best fit sphere curvature
+        use c=0 for a flat base surface
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        surface sag, surface sag derivative
 
     """
     # clenshaw does its own u^2
@@ -317,14 +326,10 @@ def compute_z_zprime_Qbfs(coefs, rho, rho_max, u, c):
     rhosq = rho ** 2
     usq = u ** 2
     phi = np.sqrt(1 - c ** 2 * rhosq)
-    term1 = (c * rhosq) / (1 + phi)
 
     num = usq * (1 - usq)
     den = phi
-    term2 = num / den * S
-    z = term1 + term2
-
-    term1 = c * rho / phi
+    z = num / den * S
 
     phisq = phi * phi
     phicub = phi * phi * phi
@@ -337,7 +342,7 @@ def compute_z_zprime_Qbfs(coefs, rho, rho_max, u, c):
     den = rho_max * phi
     term3 = num / den * Sprime
 
-    zprime = term1 + term2 + term3
+    zprime = term2 + term3
     return z, zprime
 
 
@@ -371,7 +376,6 @@ def _auxpoly_qbfs_sequence(ns, x):
             min_i += 1
 
         Pnm2, Pnm1 = Pnm1, Pn
-
 
 
 def Qbfs_sequence(ns, x):
