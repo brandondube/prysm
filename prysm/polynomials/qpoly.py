@@ -1116,6 +1116,9 @@ def compute_z_zprime_Q2d(cm0, ams, bms, u, t):
         # alloc pressure inside this func; need care since len of any coef vector
         # may be unequal
 
+        if len(a_coef) == 0:
+            continue
+
         # can't use "as" => as keyword
         Na = len(a_coef) - 1
         Nb = len(b_coef) - 1
@@ -1165,3 +1168,84 @@ def compute_z_zprime_Q2d(cm0, ams, bms, u, t):
         dt += m * um * (-Sa * sint + Sb * cost)
 
     return z, dr, dt
+
+
+def Q2d_nm_c_to_a_b(nms, coefs):
+    """Re-structure Q2D coefficients to the form needed by compute_z_zprime_Q2d.
+
+    Parameters
+    ----------
+    nms : iterable
+        sequence of [(n1, m1), (n2, m2), ...]
+        negative m encodes "sine term" while positive m encodes "cosine term"
+    coefs : iterable
+        same length as nms, coefficients for mode n_m
+
+    Returns
+    -------
+    list, list, list
+        list 1 is cms, the "Qbfs" coefficients (m=0)
+        list 2 is the "a" coefficients (cosine terms)
+        list 3 is the "b" coefficients (sine terms)
+
+        lists 2 and 3 are lists-of-lists and begin from m=1 to m=M, containing
+        an empty list if that order was not present in the input
+
+    """
+    def factory():
+        return []
+
+    def expand_and_copy(cs, N):
+        cs2 = [None] * (N+1)
+        for i, cc in enumerate(cs):
+            cs2[i] = cc
+
+        return cs2
+
+    cms = []
+    ac = defaultdict(factory)  # start with dicts, will go to lists later
+    bc = defaultdict(factory)
+    # given arbitrary n, m, c which may be sparse
+    # => go to dense, ordered arrays
+
+    for (n, m), c in zip(nms, coefs):
+        if m == 0:
+            if len(cms) < n+1:
+                cms = expand_and_copy(cms, n)
+
+            cms[n] = c
+        elif m > 0:
+            if len(ac[m]) < n+1:
+                ac[m] = expand_and_copy(ac[m], n)
+
+            ac[m][n] = c
+        else:
+            m = -m
+            if len(bc[m]) < n+1:
+                bc[m] = expand_and_copy(bc[m], n)
+
+            bc[m][n] = c
+
+    for i, c in enumerate(cms):
+        if c is None:
+            cms[i] = 0
+
+    for k in ac:
+        for i, c in enumerate(ac[k]):
+            if ac[k][i] is None:
+                ac[k][i] = 0
+
+    for k in bc:
+        for i, c in enumerate(bc[k]):
+            if bc[k][i] is None:
+                bc[k][i] = 0
+
+    max_m_a = max(list(ac.keys()))
+    max_m_b = max(list(bc.keys()))
+    max_m = max(max_m_a, max_m_b)
+    ac_ret = []
+    bc_ret = []
+    for i in range(1, max_m+1):
+        ac_ret.append(ac[i])
+        bc_ret.append(bc[i])
+    return cms, ac_ret, bc_ret
