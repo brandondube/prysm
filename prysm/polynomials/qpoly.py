@@ -334,12 +334,12 @@ def compute_z_zprime_Qbfs(coefs, rho, rho_max, u, c):
     z = num / den * S
 
     phisq = phi * phi
-    phicub = phi * phi * phi
+    phicub = phisq * phi
     num = u * (1 + phisq - usq * (1 + 3 * phisq))
     den = rho_max * phicub
     term2 = num / den * S
 
-    #         u^3
+    #            u^3
     num = 2 * usq * u * (1 - usq)
     den = rho_max * phi
     term3 = num / den * Sprime
@@ -914,3 +914,294 @@ def Q2d_sequence(nms, r, t):
             yield sequences[abs(m)][n] * prefix
         else:
             yield sequences[0][n]
+
+
+def change_of_basis_Q2d_to_Pnm(cns, m):
+    """Perform the change of basis from Q_n^m to the auxiliary polynomial P_n^m.
+
+    The auxiliary polynomial is defined in A.1 of oe-20-3-2483 and is the
+    an unconventional variant of Jacobi polynomials.
+
+    For terms where m=0, see change_basis_Qbfs_to_Pn.  This function only concerns
+    those terms within the sum u^m a_n^m cos(mt) + b_n^m sin(mt) Q_n^m(u^2) sum
+
+    Parameters
+    ----------
+    cns : iterable
+        sequence of polynomial coefficients, from order n=0..len(cs)-1 and a given
+        m (not |m|, but m, i.e. either "-2" or "+2" but not both)
+    m : int
+        azimuthal order
+
+    Returns
+    -------
+    numpy.ndarray
+        array of same type as cs holding the coefficients that represent the
+        same surface as a sum of shifted Chebyshev polynomials of the third kind
+
+
+    """
+    if m < 0:
+        m = -m
+
+    cs = cns
+    if hasattr(cs, 'dtype'):
+        # array, initialize as array
+        ds = np.empty_like(cs)
+    else:
+        # iterable input
+        ds = np.empty(len(cs), dtype=config.precision)
+
+    N = len(cs) - 1
+    ds[N] = cs[N] / f_q2d(N, m)
+    for n in range(N-1, -1, -1):
+        ds[n] = (cs[n] - g_q2d(n, m) * ds[n+1]) / f_q2d(n, m)
+
+    return ds
+
+
+@lru_cache(4000)
+def abc_q2d_clenshaw(n, m):
+    """Special twist on A.3 for B.7."""
+    if n == 0:
+        A = 2
+        B = -1
+        _, _, C = abc_q2d(0, m)
+        return A, B, C
+    if n == 1:
+        A = -4/3
+        B = -8/3
+        C = -11/3
+        return A, B, C
+    if n == 2:
+        A, B, _ = abc_q2d(2, m)
+        C = 0
+        return A, B, C
+    if m > 1 and n == 0:
+        A = 2 * m - 1
+        B = 2 * (1 - m)
+        _, _, C = abc_q2d(0, m)
+        return A, B, C
+
+    return abc_q2d(n, m)
+
+
+def clenshaw_q2d(cns, m, u, alphas=None):
+    """Use Clenshaw's method to compute the alpha sums for a piece of a Q2D surface.
+
+    Parameters
+    ----------
+    cns : iterable of float
+        coefficients for a Qbfs surface, from order 0..len(cs)-1
+    m : int
+        azimuthal order for the cns
+    u : numpy.ndarray
+        radial coordinate(s) to evaluate, notionally in the range [0,1]
+        the variable u from oe-18-19-19700
+    alphas : numpy.ndarray, optional
+        array to store the alpha sums in,
+        the surface is u^2(1-u^2) * (2 * (alphas[0]+alphas[1])
+        if not None, alphas should be of shape (len(s), *x.shape)
+        see _initialize_alphas if you desire more information
+
+    Returns
+    -------
+    alphas
+        array containing components to compute the surface sag
+        sum(cn Qn) = .5 alphas[0] - 2/5 alphas[3], if m=1 and N>2,
+                     .5 alphas[0], otherwise
+
+    """
+    x = u * u
+    ds = change_of_basis_Q2d_to_Pnm(cns, m)
+    alphas = _initialize_alphas(ds, u, alphas, j=0)
+    N = len(ds) - 1
+    alphas[N] = ds[N]
+    A, B, _ = abc_q2d_clenshaw(N-1, m)
+    # do not swap A, B vs the paper - used them consistent to Forbes previously
+    alphas[N-1] = ds[N-1] + (A + B * x) * alphas[N]
+    for n in range(N-2, -1, -1):
+        A, B, _ = abc_q2d_clenshaw(n, m)
+        _, _, C = abc_q2d_clenshaw(n+1, m)
+        alphas[n] = ds[n] + (A + B * x) * alphas[n+1] - C * alphas[n+2]
+
+    return alphas
+
+
+def clenshaw_q2d_der(cns, m, u, j=1, alphas=None):
+    """Use Clenshaw's method to compute Nth order derivatives of a Q2D surface.
+
+    This function is to be consumed by the other parts of prysm, and simply
+    does the "alphas" computations (B.10) and adjacent Eqns
+
+    See compute_zprime_Q2D for this calculation integrated
+
+    Parameters
+    ----------
+    cns : iterable of float
+        coefficients for a Qbfs surface, from order 0..len(cs)-1
+    m : int
+        azimuthal order
+    u : numpy.ndarray
+        radial coordinate(s) to evaluate, notionally in the range [0,1]
+        the variable u from oe-18-19-19700
+    j : int
+        derivative order
+    alphas : numpy.ndarray, optional
+        array to store the alpha sums in,
+        if not None, alphas should be of shape (j+1, len(cs), *x.shape)
+        see _initialize_alphas if you desire more information
+
+    Returns
+    -------
+    numpy.ndarray
+        the alphas array
+
+    """
+    cs = cns
+    x = u * u
+    N = len(cs) - 1
+    alphas = _initialize_alphas(cs, u, alphas, j=j)
+    # seed with j=0 (S, not its derivative)
+    clenshaw_q2d(cs, m, u, alphas[0])
+    # Eq. B.11, init with alpha_N+2-j = alpha_N+1-j = 0
+    # a^j = j B_n * a_n+1^j+1 + (A_n + B_n x) A_n+1^j - C_n+1 a_n+2^j
+    #
+    for jj in range(1, j+1):
+        _, b, _ = abc_q2d_clenshaw(N-jj, m)
+        alphas[jj][N-jj] = j * b * alphas[jj-1][N-jj+1]
+        for n in range(N-jj-1, -1, -1):
+            a, b, _ = abc_q2d_clenshaw(n, m)
+            _, _, c = abc_q2d_clenshaw(n+1, m)
+            alphas[jj][n] = jj * b * alphas[jj-1][n+1] + (a + b * x) * alphas[jj][n+1] - c * alphas[jj][n+2]
+
+    return alphas
+
+
+def compute_z_zprime_Q2d(cm0, ams, bms, u, t, rho=None, rho_max=1, c=0):
+    """Compute the surface sag and first radial and azimuthal derivative of a Q2D surface.
+
+    Requires composition with raytracing.sphere_sag for actual surface sag,
+    this is only the aspheric cap.
+
+    from Eq. 2.2 and Appendix B of oe-20-3-2483.
+
+    Parameters
+    ----------
+    cm0 : iterable
+        surface coefficients when m=0 (inside curly brace, top line, Eq. B.1)
+        span n=0 .. len(cms)-1 and mus tbe fully dense
+    ams : iterable of iterables
+        ams[0] are the coefficients for the m=1 cosine terms,
+        ams[1] for the m=2 cosines, and so on.  Same order n rules as cm0
+    bms : iterable of iterables
+        same as ams, but for the sine terms
+        ams and bms must be the same length - that is, if an azimuthal order m
+        is presnet in ams, it must be present in bms.  The azimuthal orders
+        need not have equal radial expansions.
+
+        For example, if ams extends to m=3, then bms must reach m=3
+        but, if the ams for m=3 span n=0..5, it is OK for the bms to span n=0..3,
+        or any other value, even just [0].
+    u : numpy.ndarray
+        normalized radial coordinates (rho/rho_max)
+    t : numpy.ndarray
+        azimuthal coordinate, in the range [0, 2pi]
+    rho : numpy.ndarray
+        "absolute" radial coordinates, i.e., not normalized,
+        if none = u and c = 0
+    rho_max : numpy.ndarray
+        normalization radius
+    c : float
+        base surface curvature, made zero (base plane) if rho = None
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray, numpy.ndarray
+        surface sag, radial derivative of sag, azimuthal derivative of sag
+
+    """
+    if rho is None:
+        rho = u
+        rho_max = 1
+        c = 0
+
+    z = np.zeros_like(u)
+    dr = np.zeros_like(u)
+    dt = np.zeros_like(u)
+
+    # this is terrible, need to re-think this
+    zm0, zprimem0 = compute_z_zprime_Qbfs(cm0, rho, rho_max, u, c)
+    z += zm0
+    dr += zprimem0
+
+    # B.1
+    # cos(mt)[sum a^m Q^m(u^2)] + sin(mt)[sum b^m Q^m(u^2)]
+    #        ~~~~~~~~~~~~~~~~~~          ~~~~~~~~~~~~~~~~~~
+    # variables:     Sa                           Sb
+    # => because of am/bm going into Clenshaw's method, cannot
+    # simplify, need to do the recurrence twice
+    # u^m is outside the entire expression, think about that later
+    if rho is None:
+        rho = u
+    usq = u * u
+    m = 0
+    # initialize to zero and incr at the front of the loop
+    # to avoid putting an m += 1 at the bottom (too far from init)
+    for a_coef, b_coef in zip(ams, bms):
+        m += 1
+        # TODO: consider zeroing alphas and re-using it to reduce
+        # alloc pressure inside this func; need care since len of any coef vector
+        # may be unequal
+
+        # can't use "as" => as keyword
+        a_coef = ams[0]
+        b_coef = bms[0]
+        Na = len(a_coef) - 1
+        Nb = len(b_coef) - 1
+        alphas_a = clenshaw_q2d_der(ams[0], m, u)
+        alphas_b = clenshaw_q2d_der(bms[0], m, u)
+        Sa = 0.5 * alphas_a[0][0]
+        Sb = 0.5 * alphas_b[0][0]
+        Sprimea = 0.5 * alphas_a[1][0]
+        Sprimeb = 0.5 * alphas_b[1][0]
+        if m == 1 and Na > 2:
+            Sa -= 2/5 * alphas_a[0][3]
+            # derivative is same, but instead of 0 index, index=j==1
+            Sprimea -= 2/5 * alphas_a[1][3]
+        if m == 1 and Nb > 2:
+            Sb -= 2/5 * alphas_b[0][3]
+            Sprimeb -= 2/5 * alphas_b[1][3]
+
+        um = u ** m
+        cost = np.cos(m*t)
+        sint = np.sin(m*t)
+
+        kernel = cost * Sa + sint * Sb
+        total_sum = um * kernel
+
+        z += total_sum
+
+        # for the derivatives, we have two cases of the product rule:
+        # between "cost" and Sa, and between "sint" and "Sb"
+        # within each of those is a chain rule, just as for Zernike
+        # then there is a final product rule for the outer term
+        # differentiating in this way is just like for the classical asphere
+        # equation; differentiate each power separately
+        # if F(x) = S(x^2), then
+        # d/dx(cos(m * t) * Fx) = 2x F'(x^2) cos(mt)
+        # with u^m in front, taken to its conclusion
+        # F = Sa, G = Sb
+        # d/dx(x^m (cos(m y) F(x^2) + sin(m y) G(x^2))) =
+        # x^(m - 1) (2 x^2 (F'(x^2) cos(m y) + G'(x^2) sin(m y)) + m F(x^2) cos(m y) + m G(x^2) sin(m y))
+        #                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        #                                                                         m x "kernel" above
+        # d/dy(x^m (cos(m y) F(x^2) + sin(m y) G(x^2))) = m x^m (G(x^2) cos(m y) - F(x^2) sin(m y))
+        umm1 = u ** (m-1)
+        twousq = 2 * usq
+        aterm = cost * (twousq * Sprimea + m * Sa)
+        bterm = sint * (twousq * Sprimeb + m * Sb)
+        dr += umm1 * (aterm + bterm)
+        dt += m * um * (-Sa * sint + Sb * cost)
+
+    return z, dr, dt
