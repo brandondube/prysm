@@ -80,3 +80,62 @@ def fix_zero_singularity(arr, x, y, fill='xypoly', order=2):
     projected = np.dot(basis_set[:, c[0], c[1]], coefs)
     arr[zloc] = projected
     return arr
+
+
+def surface_normal_from_cylindrical_derivatives(fp, ft, r, t):
+    """Use polar derivatives to compute Cartesian surface normals.
+
+    Parameters
+    ----------
+    fp : numpy.ndarray
+        derivative of f w.r.t. r
+    ft : numpy.ndarray
+        derivative of f w.r.t. t
+    r : numpy.ndarray
+        radial coordinates
+    t : numpy.ndarray
+        azimuthal coordinates
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        x, y derivatives; will contain a singularity where r=0,
+        see fix_zero_singularity
+
+    """
+    cost = np.cos(t)
+    sint = np.sin(t)
+    x = fp * cost - 1/r * ft * sint
+    y = fp * sint + 1/r * ft * cost
+    return x, y
+
+
+def surface_normal_from_cartesian_derivatives(fx, fy, r, t):
+    """Use Cartesian derivatives to compute polar surface normals.
+
+    Parameters
+    ----------
+    fx : numpy.ndarray
+        derivative of f w.r.t. x
+    fy : numpy.ndarray
+        derivative of f w.r.t. y
+    r : numpy.ndarray
+        radial coordinates
+    t : numpy.ndarray
+        azimuthal coordinates
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        r, t derivatives; will contain a singularity where r=0,
+        see fix_zero_singularity
+
+    """
+    cost = np.cos(t)
+    sint = np.sin(t)
+    onebyr = 1/r
+    r = fx * cost + fy * sint
+    t = fx * -sint / onebyr + fy * cost / onebyr
+#     t = -fx * sint + fx * cost
+#     t = -r * sint * fx + r * cost * fy
+    return r, t
