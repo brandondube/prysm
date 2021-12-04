@@ -1117,12 +1117,10 @@ def compute_z_zprime_Q2d(cm0, ams, bms, u, t):
         # may be unequal
 
         # can't use "as" => as keyword
-        a_coef = ams[0]
-        b_coef = bms[0]
         Na = len(a_coef) - 1
         Nb = len(b_coef) - 1
-        alphas_a = clenshaw_q2d_der(ams[0], m, usq)
-        alphas_b = clenshaw_q2d_der(bms[0], m, usq)
+        alphas_a = clenshaw_q2d_der(a_coef, m, usq)
+        alphas_b = clenshaw_q2d_der(b_coef, m, usq)
         Sa = 0.5 * alphas_a[0][0]
         Sb = 0.5 * alphas_b[0][0]
         Sprimea = 0.5 * alphas_a[1][0]
