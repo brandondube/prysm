@@ -169,44 +169,6 @@ def change_basis_Qbfs_to_Pn(cs):
     return bs
 
 
-def clenshaw_qbfs(cs, u, alphas=None):
-    """Use Clenshaw's method to compute a Qbfs surface from its coefficients.
-
-    Parameters
-    ----------
-    cs : iterable of float
-        coefficients for a Qbfs surface, from order 0..len(cs)-1
-    u : numpy.ndarray
-        radial coordinate(s) to evaluate, notionally in the range [0,1]
-        the variable u from oe-18-19-19700
-    alphas : numpy.ndarray, optional
-        array to store the alpha sums in,
-        the surface is u^2(1-u^2) * (2 * (alphas[0]+alphas[1])
-        if not None, alphas should be of shape (len(s), *x.shape)
-        see _initialize_alphas if you desire more information
-
-    Returns
-    -------
-    numpy.ndarray
-        Qbfs surface, the quantity u^2(1-u^2) S(u^2) from Eq. (3.13)
-        note: excludes the division by phi, since c and rho are unknown
-
-    """
-    x = u * u
-    bs = change_basis_Qbfs_to_Pn(cs)
-    # alphas = np.zeros((len(cs), len(u)), dtype=u.dtype)
-    alphas = _initialize_alphas(cs, u, alphas, j=0)
-    M = len(bs)-1
-    prefix = 2 - 4 * x
-    alphas[M] = bs[M]
-    alphas[M-1] = bs[M-1] + prefix * alphas[M]
-    for i in range(M-2, -1, -1):
-        alphas[i] = bs[i] + prefix * alphas[i+1] - alphas[i+2]
-
-    S = 2 * (alphas[0] + alphas[1])
-    return (x * (1 - x)) * S
-
-
 def _initialize_alphas(cs, x, alphas, j=0):
     # j = derivative order
     if alphas is None:
@@ -228,33 +190,58 @@ def _initialize_alphas(cs, x, alphas, j=0):
     return alphas
 
 
-def clenshaw_qbfs_der(cs, u, j=1, alphas=None):
-    """Use Clenshaw's method to compute Nth order derivatives of a Qbfs surface.
-
-    This function does not really compute the surface derivative.  It computes
-    S^j from Eq. 3.12.  Because the product rule must be applied, some
-    combination of S^j, S^j-1, .. S^0 are needed to really compute the surface
-    derivative.
-
-    For the first two derivatives, the necessary calculation is:
-    rho = un-normalized radial coordinate
-    u = rho/rho_max (rho_max being the normalization radius)
-    phi = sqrt(1 - c^2 rho^2)
-    if z(rho) is the surface, then
-    z(rho) = [c rho^2 / (1 + phi)] + u^2(1 - u^2)/phi * S(u^2)
-    z'(rho) = [c rho / phi] + (u[1+phi^2 - u^2(1+3phi^2)])/(rho_max phi^3) S(u^2) + 2u^3(1-u^2)/(rho_max phi) S'(u^2)
-    z''(rho) = ... very long expression I am not willing to type out, see Eq. 3.15
-    Note: S^j is simply 2 * (alphas[j][0] + alphas[j][1]) for any j (including 0)
-
-    See compute_zprime_Qbfs for this calculation integrated
+def clenshaw_qbfs(cs, usq, alphas=None):
+    """Use Clenshaw's method to compute a Qbfs surface from its coefficients.
 
     Parameters
     ----------
     cs : iterable of float
         coefficients for a Qbfs surface, from order 0..len(cs)-1
-    u : numpy.ndarray
-        radial coordinate(s) to evaluate, notionally in the range [0,1]
-        the variable u from oe-18-19-19700
+    usq : numpy.ndarray
+        radial coordinate(s) to evaluate, squared, notionally in the range [0,1]
+        the variable u^2 from oe-18-19-19700
+    alphas : numpy.ndarray, optional
+        array to store the alpha sums in,
+        the surface is u^2(1-u^2) * (2 * (alphas[0]+alphas[1])
+        if not None, alphas should be of shape (len(s), *x.shape)
+        see _initialize_alphas if you desire more information
+
+    Returns
+    -------
+    numpy.ndarray
+        Qbfs surface, the quantity u^2(1-u^2) S(u^2) from Eq. (3.13)
+        note: excludes the division by phi, since c and rho are unknown
+
+    """
+    x = usq
+    bs = change_basis_Qbfs_to_Pn(cs)
+    # alphas = np.zeros((len(cs), len(u)), dtype=u.dtype)
+    alphas = _initialize_alphas(cs, x, alphas, j=0)
+    M = len(bs)-1
+    prefix = 2 - 4 * x
+    alphas[M] = bs[M]
+    alphas[M-1] = bs[M-1] + prefix * alphas[M]
+    for i in range(M-2, -1, -1):
+        alphas[i] = bs[i] + prefix * alphas[i+1] - alphas[i+2]
+
+    S = 2 * (alphas[0] + alphas[1])
+    return (x * (1 - x)) * S
+
+
+def clenshaw_qbfs_der(cs, usq, j=1, alphas=None):
+    """Use Clenshaw's method to compute Nth order derivatives of a sum of Qbfs polynomials.
+
+    Excludes base sphere and u^2(1-u^2) prefix
+
+    As an end-user, you are likely more interested in compute_zprime_Qbfs.
+
+    Parameters
+    ----------
+    cs : iterable of float
+        coefficients for a Qbfs surface, from order 0..len(cs)-1
+    usq : numpy.ndarray
+        radial coordinate(s) to evaluate, squared, notionally in the range [0,1]
+        the variable u^2 from oe-18-19-19700
     j : int
         derivative order
     alphas : numpy.ndarray, optional
@@ -274,15 +261,12 @@ def clenshaw_qbfs_der(cs, u, j=1, alphas=None):
         the alphas array
 
     """
-    # not-so-TODO: a little optimization room here, since we compute u*u multiple
-    # times and what-not.  The flags to disable that would be really confusing
-    # to users, though.
-    x = u * u
+    x = usq
     M = len(cs) - 1
     prefix = 2 - 4 * x
-    alphas = _initialize_alphas(cs, u, alphas, j=j)
+    alphas = _initialize_alphas(cs, usq, alphas, j=j)
     # seed with j=0 (S, not its derivative)
-    clenshaw_qbfs(cs, u, alphas[0])
+    clenshaw_qbfs(cs, usq, alphas[0])
     for jj in range(1, j+1):
         alphas[jj][M-j] = -4 * jj * alphas[jj-1][M-jj+1]
         for n in range(M-2, -1, -1):
@@ -293,11 +277,15 @@ def clenshaw_qbfs_der(cs, u, j=1, alphas=None):
     return alphas
 
 
-def compute_z_zprime_Qbfs(coefs, rho, rho_max, u, c):
+def product_rule(u, v, du, dv):
+    """The product rule of calculus, d/dx uv = u dv v du."""
+    return u * dv + v * du
+
+
+def compute_z_zprime_Qbfs(coefs, u, usq):
     """Compute the surface sag and first radial derivative of a Qbfs surface.
 
-    Requires composition with raytracing.sphere_sag for actual surface sag,
-    this is only the aspheric cap.
+    Excludes base sphere.
 
     from Eq. 3.13 and 3.14 of oe-18-19-19700.
 
@@ -305,12 +293,10 @@ def compute_z_zprime_Qbfs(coefs, rho, rho_max, u, c):
     ----------
     coefs : iterable
         surface coefficients for Q0..QN, N=len(coefs)-1
-    rho : numpy.ndarray
-        unnormalized radial coordinates
-    rho_max : numpy.ndarray
-        normalization radius
     u : numpy.ndarray
         normalized radial coordinates (rho/rho_max)
+    usq : numpy.ndarray
+        u^2
     c : float
         best fit sphere curvature
         use c=0 for a flat base surface
@@ -318,41 +304,38 @@ def compute_z_zprime_Qbfs(coefs, rho, rho_max, u, c):
     Returns
     -------
     numpy.ndarray, numpy.ndarray
-        surface sag, surface sag derivative
+        S, Sprime in Forbes' parlance
 
     """
     # clenshaw does its own u^2
-    alphas = clenshaw_qbfs_der(coefs, u, j=1)
+    alphas = clenshaw_qbfs_der(coefs, usq, j=1)
     S = 2 * (alphas[0][0] + alphas[0][1])
-    Sprime = 2 * (alphas[1][0] + alphas[1][1])
-    rhosq = rho ** 2
-    usq = u ** 2
-    phi = np.sqrt(1 - c ** 2 * rhosq)
+    # Sprime should be two times the alphas, just like S, but as a performance
+    # optimization, S = sum cn Qn u^2
+    # we're doing d/du, so a prefix of 2u comes in front
+    # and 2*u * (2 * alphas)
+    # = 4*u*alphas
+    # = do two in-place muls on Sprime for speed
+    Sprime = alphas[1][0] + alphas[1][1]
+    Sprime *= 4
+    Sprime *= u
 
-    num = usq * (1 - usq)
-    den = phi
-    z = num / den * S
-
-    phisq = phi * phi
-    phicub = phisq * phi
-    num = u * (1 + phisq - usq * (1 + 3 * phisq))
-    den = rho_max * phicub
-    term2 = num / den * S
-
-    #            u^3
-    num = 2 * usq * u * (1 - usq)
-    den = rho_max * phi
-    term3 = num / den * Sprime
-
-    zprime = term2 + term3
-    return z, zprime
+    prefix = usq * (1 - usq)
+    #                        u3
+    dprefix = 2 * u - 4 * (usq * u)
+    u = prefix
+    du = dprefix
+    v = S
+    dv = Sprime
+    Sprime = product_rule(u, v, du, dv)
+    S *= prefix
+    return S, Sprime
 
 
-def compute_z_zprime_Qcon(coefs, rho_max, u):
+def compute_z_zprime_Qcon(coefs, u, usq):
     """Compute the surface sag and first radial derivative of a Qcon surface.
 
-    Requires composition with raytracing.sphere_sag for actual surface sag,
-    this is only the aspheric cap.
+    Excludes base sphere.
 
     from Eq. 5.3 and 5.3 of oe-18-13-13851.
 
@@ -360,42 +343,35 @@ def compute_z_zprime_Qcon(coefs, rho_max, u):
     ----------
     coefs : iterable
         surface coefficients for Q0..QN, N=len(coefs)-1
-    rho_max : float
-        maximum radial coordinate
-        use rho_max=1 if not interested in a "real surface" of a given diameter
-        and only interested in the normalized world.
     u : numpy.ndarray
         normalized radial coordinates (rho/rho_max)
+    usq : numpy.ndarray
+        u^2
 
     Returns
     -------
     numpy.ndarray, numpy.ndarray
-        surface sag, surface sag derivative
+        S, Sprime in Forbes' parlance
 
     """
-    usq = u * u
-    u3 = usq * u
-    u4 = usq * usq
-    u5 = usq * u3
     x = 2 * usq - 1
     alphas = jacobi_sum_clenshaw_der(coefs, 0, 4, x=x, j=1)
     S = alphas[0][0]
     Sprime = alphas[1][0]
+    Sprime *= 4  # this 4 u is not the same 4u as Qbfs, 4u in Qbfs is a
+    Sprime *= u  # composition of 2*alphas and 2u, this is just der of x=2usq - 1
 
-    z = u4 * S
-
-    # Forbes' paper is wrong, or I am just "cheating" with Jacobis in a way
-    # that is slightly different.
-    # Forbes has u^4 S(u^2), and says use a connection to Z_m=4 to do it.
-    # I don't do that, and go straight to the Jacobis
-    # but the change of variables is different.
-    # u is the normalized radial variable,
-    # u^2 is the argument, but the change-of-variables for the Jacobi polynomials
-    # is 2x-1, so the chain rule works out differently.
-    term1 = 4 * u3 * S
-    term2 = 4 * u5 * Sprime
-    zprime = term1 + term2
-    return z, zprime
+    # u^4
+    prefix = usq * usq
+    # 4u^3
+    dprefix = 4 * (usq * u)
+    u = prefix
+    du = dprefix
+    v = S
+    dv = Sprime
+    Sprime = product_rule(u, v, du, dv)
+    S *= prefix
+    return S, Sprime
 
 
 def Qbfs_sequence(ns, x):
@@ -986,7 +962,7 @@ def abc_q2d_clenshaw(n, m):
     return abc_q2d(n, m)
 
 
-def clenshaw_q2d(cns, m, u, alphas=None):
+def clenshaw_q2d(cns, m, usq, alphas=None):
     """Use Clenshaw's method to compute the alpha sums for a piece of a Q2D surface.
 
     Parameters
@@ -995,9 +971,9 @@ def clenshaw_q2d(cns, m, u, alphas=None):
         coefficients for a Qbfs surface, from order 0..len(cs)-1
     m : int
         azimuthal order for the cns
-    u : numpy.ndarray
-        radial coordinate(s) to evaluate, notionally in the range [0,1]
-        the variable u from oe-18-19-19700
+    usq : numpy.ndarray
+        radial coordinate(s) to evaluate, squared, notionally in the range [0,1]
+        the variable u^2 from oe-18-19-19700
     alphas : numpy.ndarray, optional
         array to store the alpha sums in,
         the surface is u^2(1-u^2) * (2 * (alphas[0]+alphas[1])
@@ -1012,9 +988,9 @@ def clenshaw_q2d(cns, m, u, alphas=None):
                      .5 alphas[0], otherwise
 
     """
-    x = u * u
+    x = usq
     ds = change_of_basis_Q2d_to_Pnm(cns, m)
-    alphas = _initialize_alphas(ds, u, alphas, j=0)
+    alphas = _initialize_alphas(ds, x, alphas, j=0)
     N = len(ds) - 1
     alphas[N] = ds[N]
     A, B, _ = abc_q2d_clenshaw(N-1, m)
@@ -1028,7 +1004,7 @@ def clenshaw_q2d(cns, m, u, alphas=None):
     return alphas
 
 
-def clenshaw_q2d_der(cns, m, u, j=1, alphas=None):
+def clenshaw_q2d_der(cns, m, usq, j=1, alphas=None):
     """Use Clenshaw's method to compute Nth order derivatives of a Q2D surface.
 
     This function is to be consumed by the other parts of prysm, and simply
@@ -1042,8 +1018,8 @@ def clenshaw_q2d_der(cns, m, u, j=1, alphas=None):
         coefficients for a Qbfs surface, from order 0..len(cs)-1
     m : int
         azimuthal order
-    u : numpy.ndarray
-        radial coordinate(s) to evaluate, notionally in the range [0,1]
+    usq : numpy.ndarray
+        radial coordinate(s) to evaluate, squared, notionally in the range [0,1]
         the variable u from oe-18-19-19700
     j : int
         derivative order
@@ -1059,11 +1035,11 @@ def clenshaw_q2d_der(cns, m, u, j=1, alphas=None):
 
     """
     cs = cns
-    x = u * u
+    x = usq
     N = len(cs) - 1
-    alphas = _initialize_alphas(cs, u, alphas, j=j)
+    alphas = _initialize_alphas(cs, x, alphas, j=j)
     # seed with j=0 (S, not its derivative)
-    clenshaw_q2d(cs, m, u, alphas[0])
+    clenshaw_q2d(cs, m, x, alphas[0])
     # Eq. B.11, init with alpha_N+2-j = alpha_N+1-j = 0
     # a^j = j B_n * a_n+1^j+1 + (A_n + B_n x) A_n+1^j - C_n+1 a_n+2^j
     #
@@ -1078,11 +1054,10 @@ def clenshaw_q2d_der(cns, m, u, j=1, alphas=None):
     return alphas
 
 
-def compute_z_zprime_Q2d(cm0, ams, bms, u, t, rho=None, rho_max=1, c=0):
+def compute_z_zprime_Q2d(cm0, ams, bms, u, t):
     """Compute the surface sag and first radial and azimuthal derivative of a Q2D surface.
 
-    Requires composition with raytracing.sphere_sag for actual surface sag,
-    this is only the aspheric cap.
+    Excludes base sphere.
 
     from Eq. 2.2 and Appendix B of oe-20-3-2483.
 
@@ -1107,13 +1082,6 @@ def compute_z_zprime_Q2d(cm0, ams, bms, u, t, rho=None, rho_max=1, c=0):
         normalized radial coordinates (rho/rho_max)
     t : numpy.ndarray
         azimuthal coordinate, in the range [0, 2pi]
-    rho : numpy.ndarray
-        "absolute" radial coordinates, i.e., not normalized,
-        if none = u and c = 0
-    rho_max : numpy.ndarray
-        normalization radius
-    c : float
-        base surface curvature, made zero (base plane) if rho = None
 
     Returns
     -------
@@ -1121,19 +1089,16 @@ def compute_z_zprime_Q2d(cm0, ams, bms, u, t, rho=None, rho_max=1, c=0):
         surface sag, radial derivative of sag, azimuthal derivative of sag
 
     """
-    if rho is None:
-        rho = u
-        rho_max = 1
-        c = 0
-
+    usq = u * u
     z = np.zeros_like(u)
     dr = np.zeros_like(u)
     dt = np.zeros_like(u)
 
     # this is terrible, need to re-think this
-    zm0, zprimem0 = compute_z_zprime_Qbfs(cm0, rho, rho_max, u, c)
-    z += zm0
-    dr += zprimem0
+    if cm0 is not None and len(cm0) > 0:
+        zm0, zprimem0 = compute_z_zprime_Qbfs(cm0, u, usq)
+        z += zm0
+        dr += zprimem0
 
     # B.1
     # cos(mt)[sum a^m Q^m(u^2)] + sin(mt)[sum b^m Q^m(u^2)]
@@ -1142,9 +1107,6 @@ def compute_z_zprime_Q2d(cm0, ams, bms, u, t, rho=None, rho_max=1, c=0):
     # => because of am/bm going into Clenshaw's method, cannot
     # simplify, need to do the recurrence twice
     # u^m is outside the entire expression, think about that later
-    if rho is None:
-        rho = u
-    usq = u * u
     m = 0
     # initialize to zero and incr at the front of the loop
     # to avoid putting an m += 1 at the bottom (too far from init)
@@ -1159,8 +1121,8 @@ def compute_z_zprime_Q2d(cm0, ams, bms, u, t, rho=None, rho_max=1, c=0):
         b_coef = bms[0]
         Na = len(a_coef) - 1
         Nb = len(b_coef) - 1
-        alphas_a = clenshaw_q2d_der(ams[0], m, u)
-        alphas_b = clenshaw_q2d_der(bms[0], m, u)
+        alphas_a = clenshaw_q2d_der(ams[0], m, usq)
+        alphas_b = clenshaw_q2d_der(bms[0], m, usq)
         Sa = 0.5 * alphas_a[0][0]
         Sb = 0.5 * alphas_b[0][0]
         Sprimea = 0.5 * alphas_a[1][0]
