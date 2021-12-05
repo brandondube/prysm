@@ -77,10 +77,12 @@ def test_2d_Q(nm, rho, phi):
     assert sag.any()
 
 
-def test_2d_Q_sequence_functions(rho, phi):
+def test_2d_Q_sequence_same_as_loop(rho, phi):
     nms = [polynomials.noll_to_nm(i) for i in range(1, 11)]
     modes = list(polynomials.Q2d_sequence(nms, rho, phi))
-    assert len(modes) == len(nms)
+    iterated = [polynomials.Q2d(n, m, rho, phi) for n, m in nms]
+    for m, i in zip(modes, iterated):
+        assert np.allclose(m, i)
 
 
 # - zernike

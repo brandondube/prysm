@@ -706,7 +706,7 @@ def Q2d(n, m, r, t):
         m = abs(m)
 
     P0 = 1/2
-    if m == 1 and n == 1:
+    if m == 1:
         P1 = 1 - x/2
     else:
         P1 = (m - .5) + (1 - m) * x
