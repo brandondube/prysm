@@ -157,6 +157,9 @@ def change_basis_Qbfs_to_Pn(cs):
     M = len(bs)-1
     fM = f_qbfs(M)
     bs[M] = cs[M]/fM
+    if M == 0:
+        return bs
+
     g = g_qbfs(M-1)
     f = f_qbfs(M-1)
     bs[M-1] = (cs[M-1] - g * bs[M])/f
@@ -403,9 +406,15 @@ def Qbfs_sequence(ns, x):
         yield np.ones_like(x) * c_Q
         min_i += 1
 
+    if min_i == len(ns):
+        return
+
     if ns[min_i] == 1:
         yield 1 / np.sqrt(19) * (13 - 16 * rho) * c_Q
         min_i += 1
+
+    if min_i == len(ns):
+        return
 
     # c is the leading term of the recurrence relation for P
     c = 2 - 4 * rho
@@ -434,6 +443,9 @@ def Qbfs_sequence(ns, x):
         if ns[min_i] == nn:
             yield Qn * c_Q
             min_i += 1
+
+        if min_i == len(ns):
+            return
 
 
 def Qcon(n, x):
@@ -939,10 +951,20 @@ def change_of_basis_Q2d_to_Pnm(cns, m):
 @lru_cache(4000)
 def abc_q2d_clenshaw(n, m):
     """Special twist on A.3 for B.7."""
+    if m > 1 and n == 0:
+        A = 2 * m - 1
+        B = 2 * (1 - m)
+        C = 0  # C is actually undefined, but the usage elsewhere
+        # assumes one can always get A, B, C for given (n, m)
+        # i.e., the usage is
+        # A, B, _ = abc_q2d_clenshaw(n, m)
+        # _, _, C = abc_q2d_clenshaw(n+1, m)
+        return A, B, C
     if n == 0:
         A = 2
         B = -1
-        _, _, C = abc_q2d(0, m)
+        C = 0
+        # _, _, C = abc_q2d(0, m)
         return A, B, C
     if n == 1:
         A = -4/3
@@ -952,11 +974,6 @@ def abc_q2d_clenshaw(n, m):
     if n == 2:
         A, B, _ = abc_q2d(2, m)
         C = 0
-        return A, B, C
-    if m > 1 and n == 0:
-        A = 2 * m - 1
-        B = 2 * (1 - m)
-        _, _, C = abc_q2d(0, m)
         return A, B, C
 
     return abc_q2d(n, m)
@@ -1112,6 +1129,8 @@ def compute_z_zprime_Q2d(cm0, ams, bms, u, t):
     # to avoid putting an m += 1 at the bottom (too far from init)
     for a_coef, b_coef in zip(ams, bms):
         m += 1
+        print(m, a_coef)
+        print(m, b_coef)
         # TODO: consider zeroing alphas and re-using it to reduce
         # alloc pressure inside this func; need care since len of any coef vector
         # may be unequal
