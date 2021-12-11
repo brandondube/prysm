@@ -371,7 +371,7 @@ def off_axis_conic_sigma(c, kappa, r, t, dx, dy=0):
 
 
 def off_axis_conic_sigma_der(c, kappa, r, t, dx, dy=0):
-    """Lowercase sigma (direction cosine projection term) for an off-axis conic.
+    """derivatives of 1/off_axis_conic_sigma.
 
     See Eq. (5.2) of oe-20-3-2483.
 
@@ -410,36 +410,36 @@ def off_axis_conic_sigma_der(c, kappa, r, t, dx, dy=0):
         # I accept the evil in writing this the way I have
         # to deduplicate the computation
         ddt_oblique_ = r*(-s)*sint
-        ddt_oblique = 2 * ddt_oblique_
     else:
         s = dy
         oblique_term = 2 * s * r * sint
         ddr_oblique = 2 * r + 2 * s * sint
         ddt_oblique_ = r*s*cost
-        ddt_oblique = 2 * ddt_oblique_
 
     aggregate_term = r * r + oblique_term + s * s
     csq = c * c
     # d/dr first
     phi_kernel = (1 - kappa) * csq * aggregate_term
     phi = np.sqrt(1 - phi_kernel)
-    notquitephi = np.sqrt(1 + kappa * csq * aggregate_term)
-    num = csq * ddr_oblique * phi
-    den = 2 * (1 - csq * kappa * aggregate_term) ** (3/2)
+    notquitephi_kernel = kappa * csq * aggregate_term
+    notquitephi = np.sqrt(1 + notquitephi_kernel)
+
+    num = csq * (1 - kappa) * ddr_oblique * notquitephi
+    den = 2 * (1 - phi_kernel) ** (3/2)
     term1 = num / den
 
-    num = csq * (1 - kappa) * ddr_oblique
-    den = 2 * phi * notquitephi  # slight difference in writing (2*phi*phi)
+    num = csq * kappa * ddr_oblique
+    den = 2 * phi * notquitephi
     term2 = num / den
-    dr = term1 - term2
+    dr = term1 + term2
 
     # d/dt
-    num = csq * (1 - kappa) * ddt_oblique_
-    den = phi * notquitephi
+    num = csq * (1-kappa) * ddt_oblique_ * notquitephi
+    den = (1 - phi_kernel) ** (3/2)  # phi^3?
     term1 = num/den
 
-    num = csq * kappa * ddt_oblique_ * phi
-    den = (csq * kappa * aggregate_term + 1) ** (3/2)
+    num = csq * kappa * ddt_oblique_
+    den = phi * notquitephi
     term2 = num / den
     dt = term1 + term2  # minus in writing, but sine/cosine
     # dt *= kappa
@@ -500,28 +500,14 @@ def Q2d_and_der(cm0, ams, bms, x, y, normalization_radius, c, k, dx=0, dy=0):
 
     # Eq. 5.1/5.2
     sigma = off_axis_conic_sigma(c, k, r, t, dx, dy)
+    sigma = 1 / sigma
     sigmaprimer, sigmaprimet = off_axis_conic_sigma_der(c, k, r, t, dx, dy)
 
-    # u = 1/phi
-    # du = d/dr(1/phi)
-    # v = q
-    # dv = (q der)
-
-    # print('zt')
-    # print(zprimet)
     zprimer /= normalization_radius
     zprimer2 = product_rule(sigma, z, sigmaprimer, zprimer)
-    # zprimet2 = zprimet
     zprimet2 = product_rule(sigma, z, sigmaprimet, zprimet)
-    # print('zt2')
-    # print(zprimet2)
-    # zprimet2 = zprimet
-    # don't need to adjust azimuthal derivative
     z *= sigma
-    # zprimet *= sigma
     z += base_sag
     zprimer2 += base_primer
     zprimet2 += base_primet
-    # print('zt2+bt')
-    # print(zprimet2)
     return z, zprimer2, zprimet2
