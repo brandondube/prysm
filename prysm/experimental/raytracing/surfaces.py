@@ -442,7 +442,6 @@ def off_axis_conic_sigma_der(c, kappa, r, t, dx, dy=0):
     den = phi * notquitephi
     term2 = num / den
     dt = term1 + term2  # minus in writing, but sine/cosine
-    # dt *= kappa
     return dr, dt
 
 
