@@ -1,11 +1,13 @@
-"""Spencer & Murty's general ray-tracing algorithm."""
-
-from functools import partial
-
+"""Spencer & Murty's General Ray-Trace algorithm."""
 from prysm.mathops import np
-from prysm import coordinates
 
-from . import surfaces as s
+from .surfaces import (
+    STYPE_REFLECT,
+    STYPE_REFRACT,
+    STYPE_STOP,
+    STYPE_SPACE,
+)
+
 
 SURFACE_INTERSECTION_DEFAULT_EPS = 1e-14
 SURFACE_INTERSECTION_DEFAULT_MAXITER = 100
@@ -42,25 +44,20 @@ def newton_raphson_solve_s(P1, S, F, Fprime, s1=0,
     """
     P1 = np.asarray(P1)
     S = np.asarray(S)
-    k, l, m = S
     sj = s1
     for j in range(maxiter):
-        # Pj = position = (X,Y,Z)
         Pj = sj * S + P1
         Xj, Yj, Zj = Pj
         Fj = Zj - F(Xj, Yj)
         r = Fprime(Xj, Yj)
-#         Fxj, Fyj, *_ = r
         Fpj = np.dot(r, S)
-#         Fpj = Fxj * k + Fyj * l + m
         sjp1 = sj - Fj / Fpj
 
         delta = abs(sjp1 - sj)
         sj = sjp1
-#         print(f'iteration {j}, s={sj:.3f}, F={Fj:.3f}, Fp={Fpj:.3f}, z={Zj:.3f}')
         if delta < eps:
             break
-    # should this break..return, or explode if maxiter reached?
+    # TODO: handle non-convergence
     return Pj, r
 
 
@@ -112,6 +109,8 @@ def transform_to_local_coords(XYZ, P, S, R=None):
         "world" coordinates [X,Y,Z]
     P : numpy.ndarray of shape (3,)
         point defining the origin of the local coordinate frame, [X0,Y0,Z0]
+    S : numpy.ndarray
+        (k,l,m) incident direction cosines
     R : numpy.ndarray of shape (3,3)
         rotation matrix to apply, if the surface is tilted
 
@@ -198,133 +197,13 @@ def reflect(S, r):
         Sprime, a length 3 vector containing the exitant direction
 
     """
-    # TODO: wasteful to compute a twice and futz with r twice
-    if len(r) == 2:
-        r = np.array([*r, 1])
+    # TODO: can we avoid the rnorm calculation here?
     rnorm = (r*r).sum()
     # paragraph above Eq. 45, mu=1
     # and see that definition of a including
     # mu=1 does not require multiply by mu (1)
-    a = np.dot(S, r) / rnorm
-#     print('refl, a=', a)
-    oblique_normal = -2 * a * r
-#     print('prior to reflection, S=', S)
-#     print('after reflection, S=', S-oblique_normal)
-    return S - oblique_normal
-
-
-STYPE_REFLECT = -1
-STYPE_REFRACT = -2
-STYPE_NOOP    = -3  # NOQA
-STYPE_SPACE   = -4  # NOQA
-STYPE_STOP    = -4  # NOQA
-
-
-def cartesian_conic_sag(x, y, c, k):
-    rsq = x * x + y * y
-    num = c * rsq
-    den = 1 + np.sqrt(1 - k * c * c * rsq)
-    return num/den
-
-
-def cartesian_conic_der(x, y, c, k):
-    rsq = x * x + y * y
-    E = c / np.sqrt(1 - k * c * c * rsq)
-    return -x * E, -y * E
-
-
-def _ensure_P_vec(P):
-    if not hasattr(P, '__iter__') or len(P) != 3:
-        P = np.array([0, 0, P])
-
-    return P
-
-
-def surface_normal_from_cylindrical_derivatives(fp, ft, r, t):
-    cost = np.cos(t)
-    sint = np.sin(t)
-    x = fp * cost - 1/r * ft * sint
-    y = fp * sint + 1/r * ft * cost
-    return x, y
-
-
-class Surface:
-    """Representation of a surface for purposes of raytracing."""
-    def __init__(self, typ, P, n, F, Fp, R=None):
-        """Create a new surface for raytracing.
-
-        Parameters
-        ----------
-        typ : int, {STYPE_REFLECT, STYPE_REFRACT, STYPE_NOOP}
-            the type of surface (reflection, refraction, no ray bend)
-        P : numpy.ndarray
-            global surface position, [X,Y,Z]
-        n : callable n(wvl) -> refractive index
-            a function which returns the index of refraction at the given wavelength
-        F : callable of signature F(x,y) -> z
-            a function  which returns the surface sag at point x, y
-        Fprime : callable of signature F'(x,y) -> Fx, Fy
-            a function  which returns the cartesian derivatives of the sag at point x, y
-        R : numpy.ndarray
-            rotation matrix, may be None
-
-        """
-        self.typ = typ
-        self.P = P
-        self.n = n
-        self.F = F
-        self.Fp = Fp
-        self.R = R
-
-    def sag(self, x, y):
-        return self.F(x, y)
-
-    def normal(self, x, y):
-        Fx, Fy = self.Fp(x, y)
-        Fz = np.ones_like(Fx)
-        return np.array([Fx, Fy, Fz])
-
-    @classmethod
-    def conic(cls, c, k, typ, P, n, R=None):
-        P = _ensure_P_vec(P)
-        F = partial(cartesian_conic_sag, c=c, k=k)
-        Fp = partial(cartesian_conic_der, c=c, k=k)
-        return cls(typ=typ, P=P, n=n, F=F, Fp=Fp, R=R)
-
-    @classmethod
-    def conic2(cls, c, k, typ, P, n, R=None):
-        P = _ensure_P_vec(P)
-
-        def F(x, y):
-            r, t = coordinates.cart_to_polar(x, y)
-            rsq = r * r
-            z = s.conic_sag(c, k, rsq)
-            return z
-
-        def Fp(x, y):
-            r, t = coordinates.cart_to_polar(x, y)
-#             rsq = r * r
-            dr = s.conic_sag_der(c, k, r)
-            dx, dy = surface_normal_from_cylindrical_derivatives(dr, 0, r, t)
-            return -dx, -dy
-
-        return cls(typ=typ, P=P, n=n, F=F, Fp=Fp, R=R)
-
-    @classmethod
-    def sphere(cls, c, typ, P, n, R=None):
-        """Spherical surface."""
-        return cls.conic(c=c, k=0, typ=typ, P=P, n=n, R=R)
-
-    @classmethod
-    def noop(cls, P):
-        """No-Op."""
-        P = _ensure_P_vec(P)
-        return cls(typ=STYPE_NOOP, P=P, n=None, F=None, Fp=None, R=None)
-
-    @classmethod
-    def space(cls, t):
-        """Empty space."""
-        return cls(typ=STYPE_SPACE, P=t, n=None, F=None, Fp=None, R=None)
+    cosI = np.dot(S, r) / rnorm
+    return S - 2 * cosI * r
 
 
 def raytrace(surfaces, P, S, wvl, n_ambient=1):
@@ -382,12 +261,7 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
         # for space surfaces, simply propagate the rays
         if surf.typ == STYPE_SPACE:
             Sjp1 = Sj
-            q = surf.P  # we want Z to advance by q, and
-            # ? * S = q
-            # ? = q/S
-            s = q / Sj[2]
-            s = surf.P  # solving for s gave something artistically interesting but is not what we want
-            Pjp1 = Pj + np.dot(s, Sj)
+            Pjp1 = Pj + np.dot(surf.P, Sj)  # P is separation along the ray (~= surface sep)
             P_hist.append(Pjp1)
             S_hist.append(Sjp1)
             Pj, Sj = Pjp1, Sjp1

@@ -1,8 +1,146 @@
-"""Spherical surfaces."""
+"""Surface types and calculus."""
 
 from prysm.mathops import np
-from prysm.coordinates import cart_to_polar
+from prysm.coordinates import cart_to_polar, make_rotation_matrix
 from prysm.polynomials.qpoly import compute_z_zprime_Q2d
+from prysm.polynomials import hermite_He_sequence, lstsq, mode_1d_to_2d
+
+
+def find_zero_indices_2d(x, y, tol=1e-8):
+    """Find the (y,x) indices into x and y where x==y==0."""
+    # assuming we're FFT-centered, we will never do the ifs
+    # this probably blows up if zero is not in the array
+    lookup = tuple(s//2 for s in x.shape)
+    x0 = x[lookup]
+    if x0 > tol:
+        lookup2 = (lookup[0], lookup[1]+1)
+        x1 = x[lookup2]
+        dx = x1-x0
+        shift_samples = (x0 / dx)
+        lookup = (lookup[0], lookup[1]+shift_samples)
+    y0 = y[lookup]
+    if y0 > tol:
+        lookup2 = (lookup[0]+1, lookup[1])
+        y1 = x[lookup2]
+        dy = y1-y0
+        shift_samples = (y0 / dy)
+        lookup = (lookup[0]+shift_samples, lookup[1])
+
+    return lookup
+
+
+def fix_zero_singularity(arr, x, y, fill='xypoly', order=2):
+    """Fix a singularity at the origin of arr by polynomial interpolation.
+
+    Parameters
+    ----------
+    arr : numpy.ndarray
+        array of dimension 2 to modify at the origin (x==y==0)
+    x : numpy.ndarray
+        array of dimension 2 of X coordinates
+    y : numpy.ndarray
+        array of dimension 2 of Y coordinates
+    fill : str, optional, {'xypoly'}
+        how to fill.  Not used/hard-coded to X/Y polynomials, but made an arg
+        today in case it may be added future for backwards compatibility
+    order : int
+        polynomial order to fit
+
+    Returns
+    -------
+    numpy.ndarray
+        arr (modified in-place)
+
+    """
+    zloc = find_zero_indices_2d(x, y)
+    min_y = zloc[0]-order
+    max_y = zloc[0]+order+1
+    min_x = zloc[1]-order
+    max_x = zloc[1]+order+1
+    # newaxis schenanigans to get broadcasting right without
+    # meshgrid
+    ypts = np.arange(min_y, max_y)[:, np.newaxis]
+    xpts = np.arange(min_x, max_x)[np.newaxis, :]
+    window = arr[ypts, xpts].copy()
+    c = [s//2 for s in window.shape]
+    window[c] = np.nan
+    # no longer need xpts, ypts
+    # really don't care about fp64 vs fp32 (very small arrays)
+    xpts = xpts.astype(float)
+    ypts = ypts.astype(float)
+    # use Hermite polynomials as
+    # XY polynomial-like basis orthogonal
+    # over the infinite plane
+    # H0 = 0
+    # H1 = x
+    # H2 = x^2 - 1, and so on
+    ns = np.arange(order+1)
+    xbasis = hermite_He_sequence(ns, xpts)
+    ybasis = hermite_He_sequence(ns, ypts)
+    xbasis = [mode_1d_to_2d(mode, xpts, ypts, 'x') for mode in xbasis]
+    ybasis = [mode_1d_to_2d(mode, xpts, ypts, 'y') for mode in ybasis]
+    basis_set = np.asarray([*xbasis, *ybasis])
+    coefs = lstsq(basis_set, window)
+    projected = np.dot(basis_set[:, c[0], c[1]], coefs)
+    arr[zloc] = projected
+    return arr
+
+
+def surface_normal_from_cylindrical_derivatives(fp, ft, r, t):
+    """Use polar derivatives to compute Cartesian surface normals.
+
+    Parameters
+    ----------
+    fp : numpy.ndarray
+        derivative of f w.r.t. r
+    ft : numpy.ndarray
+        derivative of f w.r.t. t
+    r : numpy.ndarray
+        radial coordinates
+    t : numpy.ndarray
+        azimuthal coordinates
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        x, y derivatives; will contain a singularity where r=0,
+        see fix_zero_singularity
+
+    """
+    cost = np.cos(t)
+    sint = np.sin(t)
+    x = fp * cost - 1/r * ft * sint
+    y = fp * sint + 1/r * ft * cost
+    return x, y
+
+
+def surface_normal_from_cartesian_derivatives(fx, fy, r, t):
+    """Use Cartesian derivatives to compute polar surface normals.
+
+    Parameters
+    ----------
+    fx : numpy.ndarray
+        derivative of f w.r.t. x
+    fy : numpy.ndarray
+        derivative of f w.r.t. y
+    r : numpy.ndarray
+        radial coordinates
+    t : numpy.ndarray
+        azimuthal coordinates
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        r, t derivatives; will contain a singularity where r=0,
+        see fix_zero_singularity
+
+    """
+    cost = np.cos(t)
+    sint = np.sin(t)
+    onebyr = 1/r
+    r = fx * cost + fy * sint
+    t = fx * -sint / onebyr + fy * cost / onebyr
+    return r, t
 
 
 def product_rule(u, v, du, dv):
@@ -31,7 +169,7 @@ def phi_spheroid(c, k, rhosq):
 
     """
     csq = c * c
-    return np.sqrt(1 - (1 - k) * csq * rhosq)
+    return np.sqrt(1 - (1 + k) * csq * rhosq)
 
 
 def der_direction_cosine_spheroid(c, k, rho, rhosq=None, phi=None):
@@ -53,6 +191,11 @@ def der_direction_cosine_spheroid(c, k, rho, rhosq=None, phi=None):
     rhosq : numpy.ndarray
         squared radial coordinate (non-normalized)
         rho ** 2 if None
+    phi : numpy.ndarray, optional
+        (1 - c^2 r^2)^.5
+        computed if not provided
+        many surface types utilize phi; its computation can be
+        de-duplicated by passing the optional argument
 
     Returns
     -------
@@ -166,7 +309,7 @@ def conic_sag(c, kappa, rhosq, phi=None):
     """
     if phi is None:
         csq = c * c
-        phi = np.sqrt(1 - (1-kappa) * csq * rhosq)
+        phi = np.sqrt(1 - (1+kappa) * csq * rhosq)
 
     return (c * rhosq) / (1 + phi)
 
@@ -179,7 +322,7 @@ def conic_sag_der(c, kappa, rho, phi=None):
     c : float
         surface curvature
     kappa : float
-        conic constant
+        conic constant, 0=sphere, 1=parabola, etc
     rho : numpy.ndarray
         radial coordinate
         e.g. for a 15 mm half-diameter optic,
@@ -201,13 +344,13 @@ def conic_sag_der(c, kappa, rho, phi=None):
     if phi is None:
         csq = c ** 2
         rhosq = rho * rho
-        phi = np.sqrt(1 - (1-kappa) * csq * rhosq)
+        phi = np.sqrt(1 - (1+kappa) * csq * rhosq)
 
     return (c * rho) / phi
 
 
 def off_axis_conic_sag(c, kappa, r, t, dx, dy=0):
-    """Sag of an off-axis conicoid
+    """Sag of an off-axis conicoid.
 
     Parameters
     ----------
@@ -245,8 +388,7 @@ def off_axis_conic_sag(c, kappa, r, t, dx, dy=0):
     aggregate_term = r * r + oblique_term + s * s
     num = c * aggregate_term
     csq = c * c
-    # typo in paper; 1+k => 1-k
-    den = 1 + np.sqrt(1 - (1 - kappa) * csq * aggregate_term)
+    den = 1 + np.sqrt(1 - (1 + kappa) * csq * aggregate_term)
     return num / den
 
 
@@ -301,14 +443,14 @@ def off_axis_conic_der(c, kappa, r, t, dx, dy=0):
     c3 = csq * c
     # d/dr first
     num = c * ddr_oblique
-    phi_kernel = (1 - kappa) * csq * aggregate_term
+    phi_kernel = (1 + kappa) * csq * aggregate_term
     phi = np.sqrt(1 - phi_kernel)
     phip1 = 1 + phi
     phip1sq = phip1 * phip1
     den = phip1
     term1 = num / den
 
-    num = c3 * (1-kappa)*ddr_oblique * aggregate_term
+    num = c3 * (1+kappa)*ddr_oblique * aggregate_term
     den = (2 * phi) * phip1sq
     term2 = num / den
     dr = term1 + term2
@@ -318,7 +460,7 @@ def off_axis_conic_der(c, kappa, r, t, dx, dy=0):
     den = phip1
     term1 = num / den
 
-    num = c3 * (1-kappa) * ddt_oblique_ * aggregate_term
+    num = c3 * (1+kappa) * ddt_oblique_ * aggregate_term
     den = phi * phip1sq
     term2 = num / den
     dt = term1 + term2
@@ -327,7 +469,7 @@ def off_axis_conic_der(c, kappa, r, t, dx, dy=0):
 
 
 def off_axis_conic_sigma(c, kappa, r, t, dx, dy=0):
-    """sigma (direction cosine projection term) for an off-axis conic.
+    """Lowercase sigma (direction cosine projection term) for an off-axis conic.
 
     See Eq. (5.2) of oe-20-3-2483.
 
@@ -365,13 +507,13 @@ def off_axis_conic_sigma(c, kappa, r, t, dx, dy=0):
 
     aggregate_term = r * r + oblique_term + s * s
     csq = c * c
-    num = np.sqrt(1 - (1-kappa) * csq * aggregate_term)
-    den = np.sqrt(1 + kappa * csq * aggregate_term)  # flipped sign, 1-kappa
+    num = np.sqrt(1 - (1+kappa) * csq * aggregate_term)
+    den = np.sqrt(1 - kappa * csq * aggregate_term)  # flipped sign, 1-kappa
     return num / den
 
 
 def off_axis_conic_sigma_der(c, kappa, r, t, dx, dy=0):
-    """derivatives of 1/off_axis_conic_sigma.
+    """Derivatives of 1/off_axis_conic_sigma.
 
     See Eq. (5.2) of oe-20-3-2483.
 
@@ -419,12 +561,12 @@ def off_axis_conic_sigma_der(c, kappa, r, t, dx, dy=0):
     aggregate_term = r * r + oblique_term + s * s
     csq = c * c
     # d/dr first
-    phi_kernel = (1 - kappa) * csq * aggregate_term
+    phi_kernel = (1 + kappa) * csq * aggregate_term
     phi = np.sqrt(1 - phi_kernel)
     notquitephi_kernel = kappa * csq * aggregate_term
     notquitephi = np.sqrt(1 + notquitephi_kernel)
 
-    num = csq * (1 - kappa) * ddr_oblique * notquitephi
+    num = csq * (1 + kappa) * ddr_oblique * notquitephi
     den = 2 * (1 - phi_kernel) ** (3/2)
     term1 = num / den
 
@@ -434,7 +576,7 @@ def off_axis_conic_sigma_der(c, kappa, r, t, dx, dy=0):
     dr = term1 + term2
 
     # d/dt
-    num = csq * (1-kappa) * ddt_oblique_ * notquitephi
+    num = csq * (1+kappa) * ddt_oblique_ * notquitephi
     den = (1 - phi_kernel) ** (3/2)  # phi^3?
     term1 = num/den
 
@@ -510,3 +652,211 @@ def Q2d_and_der(cm0, ams, bms, x, y, normalization_radius, c, k, dx=0, dy=0):
     zprimer2 += base_primer
     zprimet2 += base_primet
     return z, zprimer2, zprimet2
+
+
+def _ensure_P_vec(P):
+    if not hasattr(P, '__iter__') or len(P) != 3:
+        P = np.array([0, 0, P])
+
+    return P
+
+
+def _none_or_rotmat(R):
+    if R is None:
+        return None
+    if type(R) in (list, tuple):
+        R = make_rotation_matrix(R)
+
+    return R
+
+
+STYPE_REFLECT = -1
+STYPE_REFRACT = -2
+STYPE_NOOP =    -3  # NOQA
+STYPE_SPACE =   -4  # NOQA
+STYPE_STOP =    -5  # NOQA
+
+
+class Surface:
+    """A surface for raytracing."""
+    def __init__(self, typ, P, n, F, Fp, R=None):
+        """Create a new surface for raytracing.
+
+        Parameters
+        ----------
+        typ : int, {STYPE_REFLECT, STYPE_REFRACT, STYPE_NOOP}
+            the type of surface (reflection, refraction, no ray bend)
+        P : numpy.ndarray
+            global surface position, [X,Y,Z]
+        n : callable n(wvl) -> refractive index
+            a function which returns the index of refraction at the given wavelength
+        F : callable of signature F(x,y) -> z
+            a function  which returns the surface sag at point x, y
+        Fp : callable of signature F'(x,y) -> Fx, Fy
+            a function  which returns the cartesian derivatives of the sag at point x, y
+        R : numpy.ndarray
+            rotation matrix, may be None
+
+        """
+        self.typ = typ
+        self.P = P
+        self.n = n
+        self.F = F
+        self.Fp = Fp
+        self.R = R
+
+    def sag(self, x, y):
+        """Sag of the surface at the point (x,y).
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            x coordinate, non-normalized
+        y : numpy.ndarray
+            y coordinate, non-normalized
+
+        Returns
+        -------
+        numpy.ndarray
+            surface sag in Z
+
+        """
+        return self.F(x, y)
+
+    def normal(self, x, y):
+        """Normal vector {Nx, Ny, Nz} to the surface at point (x,y).
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            x coordinates, non-normalized
+        y : numpy.ndarray
+            y coordinates, non-normalized
+
+        Returns
+        -------
+        numpy.ndarray, numpy.ndarray, numpy.ndarray
+            Nx, Ny, Nz
+
+        """
+        Fx, Fy = self.Fp(x, y)
+        Fz = np.ones_like(Fx)
+        return Fx, Fy, Fz
+
+    @classmethod
+    def conic(cls, c, k, typ, P, n=None, R=None):
+        """Conic surface type.
+
+        Parameters
+        ----------
+        c : float
+            vertex curvature
+        k : float
+            conic constant
+            -1 = parabola
+            0 = sphere
+            < - 1 = hyperbola
+            > - 1 = ellipse
+        typ : int, STYPE
+            what type of surface (refract or reflect)
+        P : float or numpy.ndarray
+            global position of the surface; if a scalar interpreted as the z position
+        n : callable of signature n(wvl) -> real index
+            a function which returns the (real) refractive index as a function
+            of wavelength in microns
+        R : numpy.ndarray or tuple(3)
+            a 3x3 ndarray rotation matrix, or tuple which contains the (a,b,g)
+            tait-bryant angles in degrees.
+            See coordinates.make_rotation_matrix for more information.
+            The common y tilt that produces field angles in optical design
+            programs is a nonzero b.
+
+        Returns
+        -------
+        Surface
+            a conic surface
+
+        """
+        P = _ensure_P_vec(P)
+        R = _none_or_rotmat(R)
+
+        def F(x, y):
+            # TODO: significantly cheaper without t?
+            r, _ = cart_to_polar(x, y)
+            rsq = r * r
+            z = conic_sag(c, k, rsq)
+            return z
+
+        def Fp(x, y):
+            r, t = cart_to_polar(x, y)
+            dr = conic_sag_der(c, k, r)
+            dx, dy = surface_normal_from_cylindrical_derivatives(dr, 0, r, t)
+            return -dx, -dy
+
+        return cls(typ=typ, P=P, n=n, F=F, Fp=Fp, R=R)
+
+    @classmethod
+    def stop(cls, P, n, R=None):
+        """A plane normal to its local Z axis.
+
+        The name of this will change in the future, likely to "plane."
+
+        Parameters
+        ----------
+        P : float or numpy.ndarray
+            global position of the surface; if a scalar interpreted as the z position
+        n : callable of signature n(wvl) -> real index
+            a function which returns the (real) refractive index as a function
+            of wavelength in microns
+        R : numpy.ndarray or tuple(3)
+            a 3x3 ndarray rotation matrix, or tuple which contains the (a,b,g)
+            tait-bryant angles in degrees.
+            See coordinates.make_rotation_matrix for more information.
+            The common y tilt that produces field angles in optical design
+            programs is a nonzero b.
+
+        Returns
+        -------
+        Surface
+            a stop
+
+        """
+
+        def F(x, y):
+            return 0
+
+        def Fp(x, y):
+            return 0, 0
+
+        return cls(typ=STYPE_STOP, P=P, n=n, F=F, Fp=Fp, R=R)
+
+    @classmethod
+    def sphere(cls, c, typ, P, n, R=None):
+        """A spherical surface.
+
+        Parameters
+        ----------
+        c : float
+            vertex curvature
+        typ : int, STYPE
+            what type of surface (refract or reflect)
+        P : float or numpy.ndarray
+            global position of the surface; if a scalar interpreted as the z position
+        n : callable of signature n(wvl) -> real index
+            a function which returns the (real) refractive index as a function
+            of wavelength in microns
+        R : numpy.ndarray or tuple(3)
+            a 3x3 ndarray rotation matrix, or tuple which contains the (a,b,g)
+            tait-bryant angles in degrees.
+            See coordinates.make_rotation_matrix for more information.
+            The common y tilt that produces field angles in optical design
+            programs is a nonzero b.
+
+        Returns
+        -------
+        Surface
+            a spherical surface
+
+        """
+        # TODO: cheaper implementation without conic
+        return cls.conic(c=c, k=0, typ=typ, P=P, n=n, R=R)
