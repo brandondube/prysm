@@ -122,8 +122,23 @@ def transform_to_local_coords(XYZ, P, S, R=None):
     """
     XYZ2 = XYZ - P
     if R is not None:
-        XYZ2 = np.matmul(R, XYZ2)
-        S = np.matmul(R, S)
+        XYZ2 = np.atleast_2d(XYZ2)
+        nrays = XYZ2.shape[0]
+        # to support batch vs non-batch,
+        # XYZ2 calculation works the regardless of whether XYZ2 is (N,3) and P is (3,)
+        # the matmul needs to see as many copies of R as there are are coordinates,
+        # so we view R (3,3) -> (1,3,3) -> (N,3,3)
+        # likewise, if XYZ2 is now (N,3), we need to add another size one dimension
+        # to make it into a stack of column vectors, as far as matmul is concerned
+        # the ellipsis is a different way to write [:,:, newaxis] or vice-versa
+        # it means "keep all unspecified dimensions"
+        XYZ2 = XYZ2[..., np.newaxis]
+        # 3, 3 hardcoded -> rotation matrix is always 3x3
+        R = np.broadcast_to(R[np.newaxis, ...], (nrays, 3, 3))
+        # the squeezes are because the output will be (N,3,1)
+        # which will break downstream algebra
+        XYZ2 = np.matmul(R, XYZ2).squeeze(-1)
+        S = np.matmul(R, XYZ2).squeeze(-1)
 
     return XYZ2, S
 
@@ -197,12 +212,26 @@ def reflect(S, r):
         Sprime, a length 3 vector containing the exitant direction
 
     """
-    # TODO: can we avoid the rnorm calculation here?
-    rnorm = (r*r).sum()
+    # at least 2D turns (3,) -> (1,3) where 1 = batch reflect count
+    # this allows us to use the same code for vector operations on many
+    # S, r or on one S, r
+    S, r = np.atleast_2d(S, r)
+    rnorm = np.sum(r*r, axis=1)
+
     # paragraph above Eq. 45, mu=1
     # and see that definition of a including
     # mu=1 does not require multiply by mu (1)
-    cosI = np.dot(S, r) / rnorm
+    # equivalent code for single ray: cosI = np.dot(S, r) / rnorm
+    cosI = np.sum(S*r, axis=1) / rnorm
+
+    # another trick, cosI scales each vector, we need to give cosI proper dimensionality
+    # since it is 1D and r is 2D
+    # (2,) -> (2,1)
+    # where 2 = number of parallel rays being traced
+    cosI = cosI[:, np.newaxis]
+    # return will be (2, 3) where 2 = number of parallel rays
+    # other operations in the ray-trace procedure would view the array up to 2D
+    # even if it were 1D, so we do not squeeze here
     return S - 2 * cosI * r
 
 
