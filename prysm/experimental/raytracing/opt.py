@@ -6,7 +6,7 @@ from . import raygen, spencer_and_murty
 
 
 def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
-    """Modify prescription by inserting a stop surface at the end which is located at the paraxial image location.
+    """Find the location of the paraxial image.
 
     The location is found via raytracing and not third-order calculations.
 
