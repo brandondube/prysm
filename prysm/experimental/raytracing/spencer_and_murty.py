@@ -13,7 +13,7 @@ SURFACE_INTERSECTION_DEFAULT_EPS = 1e-14
 SURFACE_INTERSECTION_DEFAULT_MAXITER = 100
 
 
-def newton_raphson_solve_s(P1, S, F, Fprime, s1=0,
+def newton_raphson_solve_s(P1, S, F, Fprime, s1=0.0,
                            eps=SURFACE_INTERSECTION_DEFAULT_EPS,
                            maxiter=SURFACE_INTERSECTION_DEFAULT_MAXITER):
     """Use Newton-Raphson iteration to solve for intersection between a ray and surface.
@@ -42,23 +42,60 @@ def newton_raphson_solve_s(P1, S, F, Fprime, s1=0,
         final position of the ray intersection, and the surface normal at that point
 
     """
-    P1 = np.asarray(P1)
-    S = np.asarray(S)
-    sj = s1
+    # need one sj for each ray, but sj likely starts as a scalar
+    # so, make sure it's at least 1D, then broadcast it to the number of rays
+    # finally, add a size 1 final dim to make multiply broadcast rules happy
+    nrays = P1.shape[0]
+    sj = np.atleast_1d(s1)
+    sj = np.broadcast_to(sj, (nrays,)).copy()  # copy is needed to make writeable
+    sj = sj.astype(np.float64)
+    # the Pj and r to be returned; we keep these three data structures around
+    # so they can be adjusted within the loop
+    Pj_out = np.empty_like(P1)
+    r_out = np.empty((nrays, 3), dtype=P1.dtype)
+    mask = np.arange(nrays)
     for j in range(maxiter):
-        Pj = sj * S + P1
-        Xj, Yj, Zj = Pj
+        sj_mask = sj[mask]
+        sj_bcast = sj_mask[:, np.newaxis]
+        Pj = P1[mask] + sj_bcast * S[mask]
+        Xj = Pj[..., 0]
+        Yj = Pj[..., 1]
+        Zj = Pj[..., 2]
         Fj = Zj - F(Xj, Yj)
         r = Fprime(Xj, Yj)
-        Fpj = np.dot(r, S)
-        sjp1 = sj - Fj / Fpj
+        r = r.swapaxes(0, 1)
+        # shape of r prior to swap axis is (3, *Xj.shape)
+        # Xj is guaranteed to be single dimensional
+        # => swap axes of r to move the (Fx,Fy,Fz) dimension
+        # to the end, then "dot" things
+        # r*S.sum(axis=1) == np.dot(r,S)
+        Fpj = (r * S).sum(axis=1)
 
-        delta = abs(sjp1 - sj)
-        sj = sjp1
-        if delta < eps:
-            break
+        sjp1 = sj_mask - Fj / Fpj
+
+        delta = abs(sjp1 - sj_mask)
+
+        # the final piece of the pie, the iterations will not end
+        # for all rays at once, we need a way to end each ray independently
+        # solution: keep an index array, which is which elements of Pj and r
+        # are being worked on, initialized to all rays
+        # modify the index array by masking on delta < eps and assign into
+        # Pj and r based on that
+        rays_which_converged = delta < eps
+        insert_mask = mask[rays_which_converged]
+        if insert_mask.size != 0:
+            Pj_out[insert_mask] = Pj
+            r_out[insert_mask] = r
+            # update the mask for the next iter to only those rays which
+            # did not converge
+            mask = mask[~rays_which_converged]
+            if mask.shape[0] == 0:
+                break  # all rays converged
+
+        sj[mask] = sjp1
+
     # TODO: handle non-convergence
-    return Pj, r
+    return Pj_out, r_out
 
 
 def intersect(P0, S, F, Fprime, s1=0,
@@ -90,12 +127,17 @@ def intersect(P0, S, F, Fprime, s1=0,
         final position of the ray intersection, and the surface normal at that point
 
     """
+    # batch support -- ellipsis skip any early dimensions, then replace
+    # dot with a multiply
+    P0, S = np.atleast_2d(P0, S)
     # go to z=0
-    Z0 = P0[2]
-    m = S[2]
+    Z0 = P0[..., 2]
+    m = S[..., 2]
     s0 = -Z0/m
     # Eq. 7, in vector form (extra computation on Z is cheaper than breaking apart P and S)
-    P1 = P0 + np.dot(s0, S)
+    # the newaxis on s0 turns (N,) -> (N,1) so that multiply's broadcast rules work
+    P1 = P0 + s0[:, np.newaxis] * S
+    # P1 is (N,3)
     # then use newton's method to find and go to the intersection
     return newton_raphson_solve_s(P1, S, F, Fprime, s1, eps, maxiter)
 
