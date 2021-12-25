@@ -57,7 +57,8 @@ def newton_raphson_solve_s(P1, S, F, Fprime, s1=0.0,
     for j in range(maxiter):
         sj_mask = sj[mask]
         sj_bcast = sj_mask[:, np.newaxis]
-        Pj = P1[mask] + sj_bcast * S[mask]
+        S_mask = S[mask]
+        Pj = P1[mask] + sj_bcast * S_mask
         Xj = Pj[..., 0]
         Yj = Pj[..., 1]
         Zj = Pj[..., 2]
@@ -69,7 +70,7 @@ def newton_raphson_solve_s(P1, S, F, Fprime, s1=0.0,
         # => swap axes of r to move the (Fx,Fy,Fz) dimension
         # to the end, then "dot" things
         # r*S.sum(axis=1) == np.dot(r,S)
-        Fpj = (r * S).sum(axis=1)
+        Fpj = (r * S_mask).sum(axis=1)
 
         sjp1 = sj_mask - Fj / Fpj
 
@@ -82,17 +83,16 @@ def newton_raphson_solve_s(P1, S, F, Fprime, s1=0.0,
         # modify the index array by masking on delta < eps and assign into
         # Pj and r based on that
         rays_which_converged = delta < eps
+        sj[mask] = sjp1
         insert_mask = mask[rays_which_converged]
         if insert_mask.size != 0:
-            Pj_out[insert_mask] = Pj
-            r_out[insert_mask] = r
+            Pj_out[insert_mask] = Pj[rays_which_converged]
+            r_out[insert_mask] = r[rays_which_converged]
             # update the mask for the next iter to only those rays which
             # did not converge
             mask = mask[~rays_which_converged]
             if mask.shape[0] == 0:
                 break  # all rays converged
-
-        sj[mask] = sjp1
 
     # TODO: handle non-convergence
     return Pj_out, r_out
