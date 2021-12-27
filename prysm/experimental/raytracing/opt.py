@@ -29,6 +29,9 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
         entrance pupil diameter, if na=0 and epd=0 an error will be generated.
     wvl : float
         wavelength of light, microns
+    consider : str, {'x', 'y', 'xy'}
+        which ray directions to consider in performing the solve, defaults to
+        both X and Y.
 
     Returns
     -------
@@ -47,19 +50,34 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
         all_rays = raygen.concat_rayfans(rayfanx, rayfany)
         ps, ss = all_rays
         phist, shist = spencer_and_murty.raytrace(prescription, ps, ss, wvl)
-        # now solve for intersection with the optical axis,
-        # this code copy-pasted from s&m.py:intersect with modification to
-        # solve for x=0/y=0
-        P0 = phist[-1]
+        # now solve for intersection between the X rays,
+
+        # P for the each ray
+        P = phist[-1]
+        Px1 = P[0]
+        Px2 = P[1]
+        Py1 = P[2]
+        Py2 = P[3]
+
+        # S for each ray
         S = shist[-1]
-        X0 = P0[:2, 0]
-        Y0 = P0[2:, 1]
-        k = S[:2, 0]  # k, the direction cosine ("x")
-        l = S[2:, 1]  # NOQA l direction cosine ("y")
-        s0x = -X0/k
-        s0y = -Y0/l
-        s0xm = s0x.mean()
-        s0ym = s0y.mean()
-        avg_s0 = sum([s0xm, s0ym])/2
-        P = P0[0] + avg_s0 * S[0]  # 0 = the first ray, no need to do an avg raytrace
+        Sx1 = S[0]
+        Sx2 = S[1]
+        Sy1 = S[2]
+        Sy2 = S[3]
+
+        # now use a least squares solution to find the "s" length along the ray directions
+        # Ax = y
+        # Ax and Ay are for the X and Y fans, not "Ax" which is A@x
+        Ax = np.stack([Sx1, -Sx2], axis=1)
+        yx = Px2 - Px1
+        sx = np.linalg.pinv(Ax) @ yx
+
+        Ay = np.stack([Sy1, -Sy2], axis=1)
+        yy = Py2 - Py1
+        sy = np.linalg.pinv(Ay) @ yy
+        s = np.array([*sx, *sy])
+        # fast-forward all the rays and take the average position
+        P_out = P + s[:, np.newaxis] * S
+        return P_out.mean(axis=0)
         return P
