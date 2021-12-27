@@ -318,18 +318,21 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
         position history and direction cosine history
 
     """
-    P_hist = [P]
-    S_hist = [S]
+    jj = len(surfaces)
+    P_hist = np.empty((jj+1, *P.shape), dtype=P.dtype)
+    S_hist = np.empty((jj+1, *S.shape), dtype=P.dtype)
     Pj = P
     Sj = S
+    P_hist[0] = P
+    S_hist[0] = S
     nj = n_ambient
-    for surf in surfaces:
+    for j, surf in enumerate(surfaces):
         # for space surfaces, simply propagate the rays
         if surf.typ == STYPE_SPACE:
             Sjp1 = Sj
             Pjp1 = Pj + np.dot(surf.P, Sj)  # P is separation along the ray (~= surface sep)
-            P_hist.append(Pjp1)
-            S_hist.append(Sjp1)
+            P_hist[j+1] = Pjp1
+            S_hist[j+1] = Sjp1
             Pj, Sj = Pjp1, Sjp1
             continue
 
@@ -352,8 +355,8 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
             # transformation matrix has inverse which is its transpose
             Rt = surf.R.T
         Pjp1, Sjp1 = transform_to_local_coords(Pj, -surf.P, Sjp1, Rt)
-        P_hist.append(Pjp1)
-        S_hist.append(Sjp1)
+        P_hist[j+1] = Pjp1
+        S_hist[j+1] = Sjp1
         Pj, Sj = Pjp1, Sjp1
 
     return P_hist, S_hist
