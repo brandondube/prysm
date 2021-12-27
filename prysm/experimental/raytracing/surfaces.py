@@ -679,7 +679,7 @@ STYPE_STOP =    -5  # NOQA
 
 class Surface:
     """A surface for raytracing."""
-    def __init__(self, typ, P, n, F, Fp, R=None):
+    def __init__(self, typ, P, n, F, Fp, R=None, params=None, bounding=None):
         """Create a new surface for raytracing.
 
         Parameters
@@ -696,6 +696,12 @@ class Surface:
             a function  which returns the cartesian derivatives of the sag at point x, y
         R : numpy.ndarray
             rotation matrix, may be None
+        params : dict, optional
+            surface type specific parameters
+        bounding : dict, optional
+            bounding geometry description
+            at the moment, outer_radius and inner_radius are the only values
+            which are used for anything.  More will be added in the future
 
         """
         self.typ = typ
@@ -704,6 +710,8 @@ class Surface:
         self.F = F
         self.Fp = Fp
         self.R = R
+        self.params = params
+        self.bounding = bounding
 
     def sag(self, x, y):
         """Sag of the surface at the point (x,y).
@@ -744,8 +752,11 @@ class Surface:
         return np.stack([Fx, Fy, Fz], axis=1)
 
     @classmethod
-    def conic(cls, c, k, typ, P, n=None, R=None):
+    def conic(cls, c, k, typ, P, n=None, R=None, bounding=None):
         """Conic surface type.
+
+        for documentation on typ, P, N, R, and bounding see the docstring for
+        Surface.__init__
 
         Parameters
         ----------
@@ -757,19 +768,6 @@ class Surface:
             0 = sphere
             < - 1 = hyperbola
             > - 1 = ellipse
-        typ : int, STYPE
-            what type of surface (refract or reflect)
-        P : float or numpy.ndarray
-            global position of the surface; if a scalar interpreted as the z position
-        n : callable of signature n(wvl) -> real index
-            a function which returns the (real) refractive index as a function
-            of wavelength in microns
-        R : numpy.ndarray or tuple(3)
-            a 3x3 ndarray rotation matrix, or tuple which contains the (a,b,g)
-            tait-bryant angles in degrees.
-            See coordinates.make_rotation_matrix for more information.
-            The common y tilt that produces field angles in optical design
-            programs is a nonzero b.
 
         Returns
         -------
@@ -779,41 +777,84 @@ class Surface:
         """
         P = _ensure_P_vec(P)
         R = _none_or_rotmat(R)
+        params = dict()
+        params['c'] = c
+        params['k'] = k
 
         def F(x, y):
             # TODO: significantly cheaper without t?
             r, _ = cart_to_polar(x, y, vec_to_grid=False)
             rsq = r * r
-            z = conic_sag(c, k, rsq)
+            z = conic_sag(params['c'], params['k'], rsq)
             return z
 
         def Fp(x, y):
             r, t = cart_to_polar(x, y, vec_to_grid=False)
-            dr = conic_sag_der(c, k, r)
+            dr = conic_sag_der(params['c'], params['k'], r)
             dx, dy = surface_normal_from_cylindrical_derivatives(dr, 0, r, t)
             return -dx, -dy
 
-        return cls(typ=typ, P=P, n=n, F=F, Fp=Fp, R=R)
+        return cls(typ=typ, P=P, n=n, F=F, Fp=Fp, R=R, params=params, bounding=bounding)
 
     @classmethod
-    def stop(cls, P, n, R=None):
-        """A plane normal to its local Z axis.
+    def off_axis_conic(cls, c, k, typ, P, dy, dx=0, n=None, R=None, bounding=None):
+        """Off-axis conic surface type.
 
-        The name of this will change in the future, likely to "plane."
+        for documentation on typ, P, N, R, and bounding see the docstring for
+        Surface.__init__
 
         Parameters
         ----------
-        P : float or numpy.ndarray
-            global position of the surface; if a scalar interpreted as the z position
-        n : callable of signature n(wvl) -> real index
-            a function which returns the (real) refractive index as a function
-            of wavelength in microns
-        R : numpy.ndarray or tuple(3)
-            a 3x3 ndarray rotation matrix, or tuple which contains the (a,b,g)
-            tait-bryant angles in degrees.
-            See coordinates.make_rotation_matrix for more information.
-            The common y tilt that produces field angles in optical design
-            programs is a nonzero b.
+        c : float
+            vertex curvature
+        k : float
+            conic constant
+            -1 = parabola
+            0 = sphere
+            < - 1 = hyperbola
+            > - 1 = ellipse
+        dy : float
+            off-axis distance in y
+        dx : float
+            off-axis distance in x
+
+        Returns
+        -------
+        Surface
+            a conic surface
+
+        """
+        P = _ensure_P_vec(P)
+        R = _none_or_rotmat(R)
+        params = dict()
+        params['c'] = c
+        params['k'] = k
+        params['dx'] = dx
+        params['dy'] = dy
+
+        def F(x, y):
+            r, t = cart_to_polar(x, y, vec_to_grid=False)
+            c, k, dx, dy = params['c'], params['k'], params['dx'], params['dy']
+            z = off_axis_conic_sag(c, k, r, t, dx=dx, dy=dy)
+            return z
+
+        def Fp(x, y):
+            r, t = cart_to_polar(x, y, vec_to_grid=False)
+            c, k, dx, dy = params['c'], params['k'], params['dx'], params['dy']
+            dr, dt = off_axis_conic_der(c, k, r, t, dx=dx, dy=dy)
+            ddx, ddy = surface_normal_from_cylindrical_derivatives(dr, dt, r, t)
+            return -ddx, -ddy
+
+        return cls(typ=typ, P=P, n=n, F=F, Fp=Fp, R=R, params=params, bounding=bounding)
+
+    @classmethod
+    def stop(cls, P, n, R=None, bounding=None):
+        """A plane normal to its local Z axis.
+
+        for documentation on typ, P, N, R, and bounding see the docstring for
+        Surface.__init__
+
+        The name of this will change in the future, likely to "plane."
 
         Returns
         -------
@@ -828,29 +869,19 @@ class Surface:
         def Fp(x, y):
             return np.zeros_like(x), np.zeros_like(y)
 
-        return cls(typ=STYPE_STOP, P=P, n=n, F=F, Fp=Fp, R=R)
+        return cls(typ=STYPE_STOP, P=P, n=n, F=F, Fp=Fp, R=R, bounding=bounding)
 
     @classmethod
-    def sphere(cls, c, typ, P, n, R=None):
+    def sphere(cls, c, typ, P, n, R=None, bounding=None):
         """A spherical surface.
+
+        for documentation on typ, P, N, R, and bounding see the docstring for
+        Surface.__init__
 
         Parameters
         ----------
         c : float
             vertex curvature
-        typ : int, STYPE
-            what type of surface (refract or reflect)
-        P : float or numpy.ndarray
-            global position of the surface; if a scalar interpreted as the z position
-        n : callable of signature n(wvl) -> real index
-            a function which returns the (real) refractive index as a function
-            of wavelength in microns
-        R : numpy.ndarray or tuple(3)
-            a 3x3 ndarray rotation matrix, or tuple which contains the (a,b,g)
-            tait-bryant angles in degrees.
-            See coordinates.make_rotation_matrix for more information.
-            The common y tilt that produces field angles in optical design
-            programs is a nonzero b.
 
         Returns
         -------
@@ -859,4 +890,4 @@ class Surface:
 
         """
         # TODO: cheaper implementation without conic
-        return cls.conic(c=c, k=0, typ=typ, P=P, n=n, R=R)
+        return cls.conic(c=c, k=0, typ=typ, P=P, n=n, R=R, bounding=bounding)
