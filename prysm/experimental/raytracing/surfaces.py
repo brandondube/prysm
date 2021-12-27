@@ -741,7 +741,7 @@ class Surface:
         """
         Fx, Fy = self.Fp(x, y)
         Fz = np.ones_like(Fx)
-        return Fx, Fy, Fz
+        return np.stack([Fx, Fy, Fz], axis=1)
 
     @classmethod
     def conic(cls, c, k, typ, P, n=None, R=None):
@@ -782,13 +782,13 @@ class Surface:
 
         def F(x, y):
             # TODO: significantly cheaper without t?
-            r, _ = cart_to_polar(x, y)
+            r, _ = cart_to_polar(x, y, vec_to_grid=False)
             rsq = r * r
             z = conic_sag(c, k, rsq)
             return z
 
         def Fp(x, y):
-            r, t = cart_to_polar(x, y)
+            r, t = cart_to_polar(x, y, vec_to_grid=False)
             dr = conic_sag_der(c, k, r)
             dx, dy = surface_normal_from_cylindrical_derivatives(dr, 0, r, t)
             return -dx, -dy
@@ -823,10 +823,10 @@ class Surface:
         """
 
         def F(x, y):
-            return 0
+            return np.zeros_like(x)
 
         def Fp(x, y):
-            return 0, 0
+            return np.zeros_like(x), np.zeros_like(y)
 
         return cls(typ=STYPE_STOP, P=P, n=n, F=F, Fp=Fp, R=R)
 

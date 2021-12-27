@@ -64,11 +64,6 @@ def newton_raphson_solve_s(P1, S, F, Fprime, s1=0.0,
         Zj = Pj[..., 2]
         Fj = Zj - F(Xj, Yj)
         r = Fprime(Xj, Yj)
-        r = r.swapaxes(0, 1)
-        # shape of r prior to swap axis is (3, *Xj.shape)
-        # Xj is guaranteed to be single dimensional
-        # => swap axes of r to move the (Fx,Fy,Fz) dimension
-        # to the end, then "dot" things
         # r*S.sum(axis=1) == np.dot(r,S)
         Fpj = (r * S_mask).sum(axis=1)
 
