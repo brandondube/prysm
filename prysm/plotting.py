@@ -8,22 +8,22 @@ def share_fig_ax(fig=None, ax=None, numax=1, sharex=False, sharey=False):
 
     Parameters
     ----------
-    fig : `matplotlib.figure.Figure`, optional
+    fig : matplotlib.figure.Figure, optional
         figure
-    ax : `matplotlib.axes.Axis`
+    ax : matplotlib.axes.Axis
         axis or array of axes
-    numax : `int`
+    numax : int
         number of axes in the desired figure, 1 for most plots, 3 for plot_fourier_chain
-    sharex : `bool`, optional
+    sharex : bool, optional
         whether to share the x axis
-    sharey : `bool`, optional
+    sharey : bool, optional
         whether to share the y axis
 
     Returns
     -------
-    `matplotlib.figure.Figure`
+    matplotlib.figure.Figure
         A figure object
-    `matplotlib.axes.Axis`
+    matplotlib.axes.Axis
         An axis object
 
     """
@@ -44,34 +44,34 @@ def add_psd_model(psd, fig=None, ax=None, invert_x=False,
 
     Parameters
     ----------
-    psd : `prysm.interferogram.PSD`
+    psd : prysm.interferogram.PSD
         a PSD object
-    fig : `matplotlib.figure.Figure`
+    fig : matplotlib.figure.Figure
         Figure containing the plot
-    ax : `matplotlib.axes.Axis`
+    ax : matplotlib.axes.Axis
         Axis containing the plot
-    invert_x : `bool`, optional
+    invert_x : bool, optional
         if True, plot with x axis of spatial period
-    lw : `float`, optional
+    lw : float, optional
         line width
-    ls : `str`, optional
+    ls : str, optional
         line style
-    color : `str`, optional
+    color : str, optional
         something matplotlib understands as a color
-    alpha : `float`, optional
+    alpha : float, optional
         alpha (transparency) parameter for matplotlib
-    zorder : `int`, optional
+    zorder : int, optional
         z order (height in the stack)
-    psd_fcn : `callable`, optional
+    psd_fcn : callable, optional
         a callable function.  If None, inferred between ab_psd and abc_psd based on if c is in psd_fcn_kwargs
     **psd_fcn_kwargs
         keyword arguments arguments passed to psd_fcn after the spatial frequency variable
 
     Returns
     -------
-    fig : `matplotlib.figure.Figure`
+    fig : matplotlib.figure.Figure
         Figure containing the plot
-    ax : `matplotlib.axes.Axis`
+    ax : matplotlib.axes.Axis
         Axis containing the plot
 
     """
