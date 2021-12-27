@@ -1,8 +1,11 @@
 """Minor optimization routines."""
 
+from typing import final
 from prysm.mathops import np
 
 from . import raygen, spencer_and_murty
+
+from scipy import optimize
 
 
 def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
@@ -81,3 +84,44 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
         P_out = P + s[:, np.newaxis] * S
         return P_out.mean(axis=0)
         return P
+
+
+def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan)):
+    """Aim a ray such that it encounters the jth surface at target.
+
+    Parameters
+    ----------
+    P : numpy.ndarray
+        shape (3,), a single ray's initial positions
+    S : numpy.ndarray
+        shape (3,) a single ray's initial direction cosines
+    prescription : iterable
+        sequence of surfaces in the prescription
+    j : int
+        the surface index in prescription at which the ray should hit (target)
+    wvl : float
+        wavelength of light to use in ray aiming, microns
+    target : iterable of length 3
+        the position at which the ray should intersect the target surface
+        NaNs indicate to ignore that position in aiming
+
+    Returns
+    -------
+    numpy.ndarray
+        deltas to P which result in ray intersection
+
+    """
+    P = np.asarray(P).copy()
+    S = np.asarray(S).copy()
+    target = np.asarray(target)
+    trace_path = prescription[:j+1]
+
+    def optfcn(x):
+        P[:2] = x
+        phist, _ = spencer_and_murty.raytrace(trace_path, P, S, wvl)
+        final_position = phist[-1]
+        euclidean_dist = (final_position - target)**2
+        euclidean_dist = np.nansum(euclidean_dist)/3  # /3 = div by number of axes
+        return euclidean_dist
+
+    return optimize.minimize(optfcn, np.zeros(2), method='L-BFGS-B')
