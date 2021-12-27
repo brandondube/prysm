@@ -1,6 +1,6 @@
 """Minor optimization routines."""
 
-from typing import final
+from prysm.conf import config
 from prysm.mathops import np
 
 from . import raygen, spencer_and_murty
@@ -86,7 +86,7 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
         return P
 
 
-def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan)):
+def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan), debug=False):
     """Aim a ray such that it encounters the jth surface at target.
 
     Parameters
@@ -104,6 +104,9 @@ def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan)):
     target : iterable of length 3
         the position at which the ray should intersect the target surface
         NaNs indicate to ignore that position in aiming
+    debug : bool, optional
+        if True, returns the (ray-aiming) optimization result as well as the
+        adjustment P
 
     Returns
     -------
@@ -111,8 +114,8 @@ def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan)):
         deltas to P which result in ray intersection
 
     """
-    P = np.asarray(P).copy()
-    S = np.asarray(S).copy()
+    P = np.asarray(P).astype(config.precision).copy()
+    S = np.asarray(S).astype(config.precision).copy()
     target = np.asarray(target)
     trace_path = prescription[:j+1]
 
@@ -124,4 +127,10 @@ def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan)):
         euclidean_dist = np.nansum(euclidean_dist)/3  # /3 = div by number of axes
         return euclidean_dist
 
-    return optimize.minimize(optfcn, np.zeros(2), method='L-BFGS-B')
+    res = optimize.minimize(optfcn, np.zeros(2), method='L-BFGS-B')
+    P[:] = 0
+    P[:2] = res.x
+    if debug:
+        return P, res
+    else:
+        return P
