@@ -1,4 +1,6 @@
 """Spencer & Murty's General Ray-Trace algorithm."""
+from numpy.core.umath_tests import inner1d
+
 from prysm.mathops import np
 
 from .surfaces import (
@@ -11,6 +13,18 @@ from .surfaces import (
 
 SURFACE_INTERSECTION_DEFAULT_EPS = 1e-14
 SURFACE_INTERSECTION_DEFAULT_MAXITER = 100
+
+
+def _multi_dot(a, b):
+    """dot product between a and b along the last (batch) dimension
+
+    Implementation will change over time to track the fastest way to do this
+    with numpy.
+    """
+    # return np.einsum('ij,ij->i', a, b)
+    # return np.matmul(a[:,None,:], b[:,:,None])
+    # return np.sum(a*b, axis=1)
+    return inner1d(a, b)
 
 
 def newton_raphson_solve_s(P1, S, F, Fprime, s1=0.0,
@@ -209,7 +223,7 @@ def refract(n, nprime, S, r, gamma1=None, eps=1e-14, maxiter=100):
     mu = n/nprime
     musq = mu * mu
     # r*S.sum(axis=1) == np.dot(r,S)
-    cosI = np.sum(r*S, axis=1)
+    cosI = _multi_dot(r, S)
     cosIsq = cosI * cosI
     # the inline newaxis-es are terrible for readability, but serve a performance purpose
     # broadcast the square root to 2D, so that fewer very expensive sqrt ops are done
@@ -240,13 +254,13 @@ def reflect(S, r):
     # this allows us to use the same code for vector operations on many
     # S, r or on one S, r
     S, r = np.atleast_2d(S, r)
-    rnorm = np.sum(r*r, axis=1)
+    rnorm = _multi_dot(r, r)
 
     # paragraph above Eq. 45, mu=1
     # and see that definition of a including
     # mu=1 does not require multiply by mu (1)
     # equivalent code for single ray: cosI = np.dot(S, r) / rnorm
-    cosI = np.sum(S*r, axis=1) / rnorm
+    cosI = _multi_dot(S, r) / rnorm
 
     # another trick, cosI scales each vector, we need to give cosI proper dimensionality
     # since it is 1D and r is 2D
