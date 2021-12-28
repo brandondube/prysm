@@ -7,7 +7,7 @@ from .surfaces import STYPE_REFLECT, STYPE_REFRACT
 import numpy as np  # always numpy, matplotlib only understands numpy
 
 
-def plot_rays(phist, lw=1, c='r', alpha=1, zorder=3, x='z', y='y', fig=None, ax=None):
+def plot_rays(phist, lw=1, ls='-', c='r', alpha=1, zorder=4, x='z', y='y', fig=None, ax=None):
     """Plot rays in 2D.
 
     Parameters
@@ -17,6 +17,8 @@ def plot_rays(phist, lw=1, c='r', alpha=1, zorder=3, x='z', y='y', fig=None, ax=
         iterable of arrays of length 3 (X,Y,Z)
     lw : float, optional
         linewidth
+    ls : str, optional
+        line style
     c : color
         anything matplotlib interprets as a color, strings, 3-tuples, 4-tuples, ...
     alpha : float
@@ -55,7 +57,7 @@ def plot_rays(phist, lw=1, c='r', alpha=1, zorder=3, x='z', y='y', fig=None, ax=
     y = y.lower()
     x = sieve[x]
     y = sieve[y]
-    ax.plot(x, y, c=c, lw=lw, alpha=alpha, zorder=zorder)
+    ax.plot(x, y, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
     return fig, ax
 
 
@@ -97,7 +99,7 @@ def _gather_inputs_for_surface_sag(surf, phist, j, points, y):
 
 
 def plot_optics(prescription, phist, mirror_backing=None, points=100,
-                lw=1, c='k', alpha=1, zorder=4,
+                lw=1, ls='-', c='k', alpha=1, zorder=3,
                 x='z', y='y', fig=None, ax=None):
     """Draw the optics of a prescription.
 
@@ -114,6 +116,8 @@ def plot_optics(prescription, phist, mirror_backing=None, points=100,
         the number of points used in making the curve for the surface
     lw : float, optional
         linewidth
+    ls : str, optional
+        line style
     c : color, optional
         anything matplotlib interprets as a color, strings, 3-tuples, 4-tuples, ...
     alpha : float, optional
@@ -157,7 +161,7 @@ def plot_optics(prescription, phist, mirror_backing=None, points=100,
             sag += z
             sag[mask] = np.nan
             # TODO: mirror backing
-            ax.plot(sag, ploty, c=c, lw=lw, alpha=alpha, zorder=zorder)
+            ax.plot(sag, ploty, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
         elif surf.typ == STYPE_REFRACT:
             if (j + 1) == jj:
                 raise ValueError('cant draw a prescription that terminates on a refracting surface')
@@ -185,12 +189,12 @@ def plot_optics(prescription, phist, mirror_backing=None, points=100,
             # surface's points, so that matplotlib doesn't draw an X through the lens
             xx = [*sag, *sag2[::-1], first_x]
             yy = [*ploty, *ploty2[::-1], first_y]
-            ax.plot(xx, yy, c=c, lw=lw, alpha=alpha, zorder=zorder)
+            ax.plot(xx, yy, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
 
     return fig, ax
 
 
-def plot_transverse_ray_aberration(phist, lw=1, c='r', alpha=1, zorder=3, axis='y', fig=None, ax=None):
+def plot_transverse_ray_aberration(phist, lw=1, ls='-', c='r', alpha=1, zorder=4, axis='y', fig=None, ax=None):
     """Plot the transverse ray aberration for a single ray fan.
 
     Parameters
@@ -200,6 +204,8 @@ def plot_transverse_ray_aberration(phist, lw=1, c='r', alpha=1, zorder=3, axis='
         iterable of arrays of length 3 (X,Y,Z)
     lw : float, optional
         linewidth
+    ls : str, optional
+        line style
     c : color
         anything matplotlib interprets as a color, strings, 3-tuples, 4-tuples, ...
     alpha : float
@@ -232,11 +238,11 @@ def plot_transverse_ray_aberration(phist, lw=1, c='r', alpha=1, zorder=3, axis='
     axis = sieve[axis]
     input_rays = ph[0, ..., axis]
     output_rays = ph[-1, ..., axis]
-    ax.plot(input_rays, output_rays, c=c, lw=lw, alpha=alpha, zorder=zorder)
+    ax.plot(input_rays, output_rays, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
     return fig, ax
 
 
-def plot_wave_aberration(phist, lw=1, c='r', alpha=1, zorder=3, axis='y', fig=None, ax=None):
+def plot_wave_aberration(phist, lw=1, ls='-', c='r', alpha=1, zorder=4, axis='y', fig=None, ax=None):
     """Plot the transverse ray aberration for a single ray fan.
 
     Parameters
@@ -246,6 +252,8 @@ def plot_wave_aberration(phist, lw=1, c='r', alpha=1, zorder=3, axis='y', fig=No
         iterable of arrays of length 3 (X,Y,Z)
     lw : float, optional
         linewidth
+    ls : str, optional
+        line style
     c : color
         anything matplotlib interprets as a color, strings, 3-tuples, 4-tuples, ...
     alpha : float
@@ -269,14 +277,53 @@ def plot_wave_aberration(phist, lw=1, c='r', alpha=1, zorder=3, axis='y', fig=No
     """
     fig, ax = share_fig_ax(fig, ax)
 
-    ph = np.asarray(phist)
     sieve = {
         'x': 0,
         'y': 1,
     }
     axis = axis.lower()
     axis = sieve[axis]
-    input_rays = ph[0, ..., axis]
-    output_rays = ph[-1, ..., axis]
+    input_rays = phist[0, ..., axis]
+    output_rays = phist[-1, ..., axis]
     ax.plot(input_rays, output_rays, c=c, lw=lw, alpha=alpha, zorder=zorder)
+    return fig, ax
+
+
+def plot_spot_diagram(phist, marker='+', c='k', alpha=1, zorder=4, s=None, fig=None, ax=None):
+    """Plot a spot diagram from a ray trace.
+
+    Parameters
+    ----------
+    phist : list or numpy.ndarray
+        the first return from spencer_and_murty.raytrace,
+        iterable of arrays of length 3 (X,Y,Z)
+    marker : str, optional
+        marker style
+    c : color
+        anything matplotlib interprets as a color, strings, 3-tuples, 4-tuples, ...
+    alpha : float
+        opacity of the rays, 1=fully opaque, 0=fully transparent
+    zorder : int
+        stack order in the plot, higher z orders are on top of lower z orders
+    s : float
+        marker size or variable used for marker size
+    axis : str, {'x', 'y'}
+        which ray position to plot, x or y
+    fig : matplotlib.figure.Figure
+        A figure object
+    ax : matplotlib.axes.Axis
+        An axis object
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        A figure object
+    matplotlib.axes.Axis
+        An axis object
+
+    """
+    fig, ax = share_fig_ax(fig, ax)
+    x = phist[-1, ..., 0]
+    y = phist[-1, ..., 1]
+    ax.scatter(x, y, c=c, s=s, marker=marker, alpha=alpha, zorder=zorder)
     return fig, ax
