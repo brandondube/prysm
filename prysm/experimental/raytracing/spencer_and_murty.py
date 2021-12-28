@@ -208,29 +208,16 @@ def refract(n, nprime, S, r, gamma1=None, eps=1e-14, maxiter=100):
     """
     mu = n/nprime
     musq = mu * mu
-    if len(r) == 2:
-        r = np.array([*r, 1])
-    rnorm = (r*r).sum()
-
-    a = mu * np.dot(S, r) / rnorm
-    b = (musq - 1) / rnorm
-    if gamma1 is None:
-        gamma1 = -b/(2*a)
-
-    gammaj = gamma1
-    for j in range(maxiter):
-        # V(gamma)     = Gamma^2 + 2aGamma + b
-        # V(gamma_n+1) = 2(Gamman + a)
-        # Gamma_n+1 = (Gamman^2 - b)/(2*(Gamman + a))
-        gammajp1 = (gammaj * gammaj - b)/(2*(gammaj + a))
-        delta = abs(gammajp1 - gammaj)
-        gammaj = gammajp1
-        if delta < eps:
-            break
-
-    # now S' = mu * S + Gamma * r
-    Sprime = mu * S + gammaj * r
-    return Sprime
+    # r*S.sum(axis=1) == np.dot(r,S)
+    cosI = np.sum(r*S, axis=1)
+    cosIsq = cosI * cosI
+    # the inline newaxis-es are terrible for readability, but serve a performance purpose
+    # broadcast the square root to 2D, so that fewer very expensive sqrt ops are done
+    # then, in the second term, broadcast cosI for compatability with S and r
+    # since it is needed there
+    first_term = np.sqrt(1 - musq * (1 - cosIsq))[:, np.newaxis] * r
+    second_term = mu * (S - cosI[:, np.newaxis] * r)
+    return first_term + second_term
 
 
 def reflect(S, r):
