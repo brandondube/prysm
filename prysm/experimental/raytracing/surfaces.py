@@ -658,7 +658,7 @@ def _ensure_P_vec(P):
     if not hasattr(P, '__iter__') or len(P) != 3:
         P = np.array([0, 0, P])
 
-    return P
+    return np.asarray(P)
 
 
 def _none_or_rotmat(R):
@@ -862,7 +862,8 @@ class Surface:
             a stop
 
         """
-
+        P = _ensure_P_vec(P)
+        R = _none_or_rotmat(R)
         def F(x, y):
             return np.zeros_like(x)
 
