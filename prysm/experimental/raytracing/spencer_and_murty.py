@@ -198,6 +198,35 @@ def intersect(P0, S, F, Fprime, s1=0,
     return newton_raphson_solve_s(P1, S, F, Fprime, s1, eps, maxiter)
 
 
+def transform_to_global_coords(XYZ, P, S, R=None):
+    """Transform the coordiantes XYZ from local coordinates about P back to global coordinates.
+
+    Parameters
+    ----------
+    XYZ : numpy.ndarray
+        "world" coordinates [X,Y,Z]
+    P : numpy.ndarray of shape (3,)
+        point defining the origin of the local coordinate frame, [X0,Y0,Z0]
+    S : numpy.ndarray
+        (k,l,m) incident direction cosines
+    R : numpy.ndarray of shape (3,3)
+        rotation matrix to apply, if the surface is tilted
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        rotated XYZ coordinates, rotated direction cosines
+
+    """
+    if R is not None:
+        XYZ, S = np.atleast_2d(XYZ, S)
+        XYZ = np.matmul(R, XYZ[..., np.newaxis]).squeeze(-1)
+        S = np.matmul(R, S[..., np.newaxis]).squeeze(-1)
+
+    XYZ = XYZ + P
+    return XYZ, S
+
+
 def transform_to_local_coords(XYZ, P, S, R=None):
     """Transform the coordinates XYZ to local coordinates about P, plausibly rotated by R.
 
@@ -220,28 +249,17 @@ def transform_to_local_coords(XYZ, P, S, R=None):
     """
     XYZ2 = XYZ - P
     if R is not None:
-        XYZ2 = np.atleast_2d(XYZ2)
-        nrays = XYZ2.shape[0]
-        # to support batch vs non-batch,
-        # XYZ2 calculation works the regardless of whether XYZ2 is (N,3) and P is (3,)
-        # the matmul needs to see as many copies of R as there are are coordinates,
-        # so we view R (3,3) -> (1,3,3) -> (N,3,3)
-        # likewise, if XYZ2 is now (N,3), we need to add another size one dimension
-        # to make it into a stack of column vectors, as far as matmul is concerned
-        # the ellipsis is a different way to write [:,:, newaxis] or vice-versa
-        # it means "keep all unspecified dimensions"
-        XYZ2 = XYZ2[..., np.newaxis]
-        # 3, 3 hardcoded -> rotation matrix is always 3x3
-        R = np.broadcast_to(R[np.newaxis, ...], (nrays, 3, 3))
-        # the squeezes are because the output will be (N,3,1)
-        # which will break downstream algebra
-        XYZ2 = np.matmul(R, XYZ2).squeeze(-1)
-        S = np.matmul(R, XYZ2).squeeze(-1)
+        XYZ2, S = np.atleast_2d(XYZ2, S)
+        # in regular matmul, 3x3 @ (3,) has a 1 appended to the dimension
+        # of the second array to make it into a column vector
+        # for batch compatability, we do that manually
+        XYZ2 = np.matmul(R, XYZ2[..., np.newaxis]).squeeze(-1)
+        S = np.matmul(R, S[..., np.newaxis]).squeeze(-1)
 
     return XYZ2, S
 
 
-def refract(n, nprime, S, r, gamma1=None, eps=1e-14, maxiter=100):
+def refract(n, nprime, S, r):
     """Use Newton-Raphson iteration to solve Snell's law for the exitant direction cosines.
 
     Parameters
@@ -254,12 +272,6 @@ def refract(n, nprime, S, r, gamma1=None, eps=1e-14, maxiter=100):
         length 3 vector containing the input direction cosines
     r : numpy.ndarray
         length 3 vector containing the surface normals (Fx, Fy, 1)
-    gamma1 : float
-        guess for gamma, if none -b/2a as in Eq. 44
-    eps : float
-        tolerance for convergence of Newton's method
-    maxiter : int
-        maximum number of iterations to allow
 
     Returns
     -------
@@ -402,7 +414,7 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
         else:
             # transformation matrix has inverse which is its transpose
             Rt = surf.R.T
-        Pjp1, Sjp1 = transform_to_local_coords(Pj, -surf.P, Sjp1, Rt)
+        Pjp1, Sjp1 = transform_to_global_coords(Pj, surf.P, Sjp1, Rt)
         P_hist[j+1] = Pjp1
         S_hist[j+1] = Sjp1
         Pj, Sj = Pjp1, Sjp1
