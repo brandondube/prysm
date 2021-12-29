@@ -260,7 +260,7 @@ def make_rotation_matrix(abg, radians=False):
 
     For more information, see Wikipedia
     https://en.wikipedia.org/wiki/Euler_angles#Tait%E2%80%93Bryan_angles
-    The "Tait-Bryan angles" X1Y2Z3 entry is the rotation matrix
+    The "Tait-Bryan angles" Z1X2Y3 entry is the rotation matrix
     used in this function.
 
 
