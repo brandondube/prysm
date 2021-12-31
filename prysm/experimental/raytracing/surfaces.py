@@ -1,6 +1,7 @@
 """Surface types and calculus."""
 
 from prysm.mathops import np
+from prysm.conf import config
 from prysm.coordinates import cart_to_polar, make_rotation_matrix
 from prysm.polynomials.qpoly import compute_z_zprime_Q2d
 from prysm.polynomials import hermite_He_sequence, lstsq, mode_1d_to_2d
@@ -655,8 +656,13 @@ def Q2d_and_der(cm0, ams, bms, x, y, normalization_radius, c, k, dx=0, dy=0):
 
 
 def _ensure_P_vec(P):
-    if not hasattr(P, '__iter__') or len(P) != 3:
+    if not hasattr(P, '__iter__'):
         P = np.array([0, 0, P])
+    else:
+        # iterable
+        P2 = np.zeros(3, dtype=config.precision)
+        P2[-len(P):] = P
+        P = P2
 
     return np.asarray(P)
 
@@ -670,11 +676,30 @@ def _none_or_rotmat(R):
     return R
 
 
+def _map_stype(typ):
+    if isinstance(typ, int):
+        return typ
+
+    typ = typ.lower()
+    if typ in ('refl', 'reflect'):
+        return STYPE_REFLECT
+
+    if typ in ('refr', 'refract'):
+        return STYPE_REFRACT
+
+    if typ in ('eval'):
+        return STYPE_EVAL
+
+
+def _validate_n_and_typ(n, typ):
+    if typ == STYPE_REFRACT and n is None:
+        raise ValueError('refractive surfaces must have a refractive index function, not None')
+    return
+
+
 STYPE_REFLECT = -1
 STYPE_REFRACT = -2
-STYPE_NOOP =    -3  # NOQA
-STYPE_SPACE =   -4  # NOQA
-STYPE_STOP =    -5  # NOQA
+STYPE_EVAL =    -3  # NOQA
 
 
 class Surface:
@@ -684,7 +709,9 @@ class Surface:
 
         Parameters
         ----------
-        typ : int, {STYPE_REFLECT, STYPE_REFRACT, STYPE_NOOP}
+        typ : int or str
+            if an int, must be one of the STYPE constants
+            if a str, must be something in the set {'refl', 'reflect', 'refr', 'refract', 'eval'}
             the type of surface (reflection, refraction, no ray bend)
         P : numpy.ndarray
             global surface position, [X,Y,Z]
@@ -704,6 +731,11 @@ class Surface:
             which are used for anything.  More will be added in the future
 
         """
+        typ = _map_stype(typ)
+        P = _ensure_P_vec(P)
+        R = _none_or_rotmat(R)
+        _validate_n_and_typ(n, typ)
+
         self.typ = typ
         self.P = P
         self.n = n
@@ -775,8 +807,6 @@ class Surface:
             a conic surface
 
         """
-        P = _ensure_P_vec(P)
-        R = _none_or_rotmat(R)
         params = dict()
         params['c'] = c
         params['k'] = k
@@ -824,8 +854,6 @@ class Surface:
             a conic surface
 
         """
-        P = _ensure_P_vec(P)
-        R = _none_or_rotmat(R)
         params = dict()
         params['c'] = c
         params['k'] = k
@@ -848,7 +876,7 @@ class Surface:
         return cls(typ=typ, P=P, n=n, F=F, Fp=Fp, R=R, params=params, bounding=bounding)
 
     @classmethod
-    def stop(cls, P, n, R=None, bounding=None):
+    def plane(cls, typ, P, n=None, R=None, bounding=None):
         """A plane normal to its local Z axis.
 
         for documentation on typ, P, N, R, and bounding see the docstring for
@@ -862,8 +890,6 @@ class Surface:
             a stop
 
         """
-        P = _ensure_P_vec(P)
-        R = _none_or_rotmat(R)
 
         def F(x, y):
             return np.zeros_like(x)
@@ -871,7 +897,7 @@ class Surface:
         def Fp(x, y):
             return np.zeros_like(x), np.zeros_like(y)
 
-        return cls(typ=STYPE_STOP, P=P, n=n, F=F, Fp=Fp, R=R, bounding=bounding)
+        return cls(typ=typ, P=P, n=n, F=F, Fp=Fp, R=R, bounding=bounding)
 
     @classmethod
     def sphere(cls, c, typ, P, n, R=None, bounding=None):
