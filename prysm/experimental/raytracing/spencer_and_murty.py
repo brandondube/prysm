@@ -9,8 +9,6 @@ from prysm.mathops import np
 from .surfaces import (
     STYPE_REFLECT,
     STYPE_REFRACT,
-    STYPE_STOP,
-    STYPE_SPACE,
 )
 
 
@@ -428,15 +426,6 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
     S_hist[0] = S
     nj = n_ambient
     for j, surf in enumerate(surfaces):
-        # for space surfaces, simply propagate the rays
-        if surf.typ == STYPE_SPACE:
-            Sjp1 = Sj
-            Pjp1 = Pj + np.dot(surf.P, Sj)  # P is separation along the ray (~= surface sep)
-            P_hist[j+1] = Pjp1
-            S_hist[j+1] = Sjp1
-            Pj, Sj = Pjp1, Sjp1
-            continue
-
         # I - transform from global to local coordinates
         P0, Sj = transform_to_local_coords(Pj, surf.P, Sj, surf.R)
         # II - find ray intersection
@@ -448,6 +437,10 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
             nprime = surf.n(wvl)
             Sjp1 = refract(nj, nprime, Sj, r)
             nj = nprime
+        else:
+            # other surface types do not bend rays
+            Sjp1 = Sj
+            Pjp1 = Pj
 
         # IV - back to world coordinates
         if surf.R is None:
