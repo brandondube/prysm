@@ -864,6 +864,7 @@ class Surface:
         """
         P = _ensure_P_vec(P)
         R = _none_or_rotmat(R)
+
         def F(x, y):
             return np.zeros_like(x)
 
