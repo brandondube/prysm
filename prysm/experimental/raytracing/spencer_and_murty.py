@@ -417,6 +417,8 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
     IV  -> transform_to_global_coords
 
     """
+    P = np.asarray(P)
+    S = np.asarray(S)
     jj = len(surfaces)
     P_hist = np.empty((jj+1, *P.shape), dtype=P.dtype)
     S_hist = np.empty((jj+1, *S.shape), dtype=P.dtype)
