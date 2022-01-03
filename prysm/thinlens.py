@@ -8,15 +8,15 @@ def object_to_image_dist(efl, object_distance):
 
     Parameters
     ----------
-    efl : `float`
+    efl : float
         focal length of the lens
-    object_distance : `float` or `numpy.ndarray`
+    object_distance : float or numpy.ndarray
         distance from the object to the front principal plane of the lens,
         negative for an object to the left of the lens
 
     Returns
     -------
-    `float`
+    float
         image distance.  Distance from rear principal plane (assumed to be in
         contact with front principal plane) to image.
 
@@ -35,9 +35,9 @@ def image_to_object_dist(efl, image_distance):
 
     Parameters
     ----------
-    efl : `float`
+    efl : float
         focal length of the lens
-    image_distance : `float` or `numpy.ndarray`
+    image_distance : float or numpy.ndarray
         distance from the object to the front principal plane of the lens,
         positive for an object in front of a lens of positive focal length.
 
@@ -56,14 +56,14 @@ def image_dist_epd_to_na(image_distance, epd):
 
     Parameters
     ----------
-    image_distance : `float`
+    image_distance : float
         distance from the image to the entrance pupil
-    epd : `float`
+    epd : float
         diameter of the entrance pupil
 
     Returns
     -------
-    `float`
+    float
         numerical aperture.  The NA of the system.
 
     """
@@ -77,14 +77,14 @@ def image_dist_epd_to_fno(image_distance, epd):
 
     Parameters
     ----------
-    image_distance : `float`
+    image_distance : float
         distance from the image to the entrance pupil
-    epd : `float`
+    epd : float
         diameter of the entrance pupil
 
     Returns
     -------
-    `float`
+    float
         fno.  The working f/# of the system.
 
     """
@@ -97,12 +97,12 @@ def fno_to_na(fno):
 
     Parameters
     ----------
-    fno : `float`
+    fno : float
         focal ratio
 
     Returns
     -------
-    `float`
+    float
         NA.  The NA of the system.
 
     """
@@ -114,12 +114,12 @@ def na_to_fno(na):
 
     Parameters
     ----------
-    na : `float`
+    na : float
         numerical aperture
 
     Returns
     -------
-    `float`
+    float
         fno.  The f/# of the system.
 
     """
@@ -131,14 +131,14 @@ def object_dist_to_mag(efl, object_dist):
 
     Parameters
     ----------
-    efl : `float`
+    efl : float
         focal length of the lens
-    object_dist : `float`
+    object_dist : float
         object distance
 
     Returns
     -------
-    `float`
+    float
         linear magnification.  Also known as the lateral magnification
 
     """
@@ -150,14 +150,14 @@ def mag_to_object_dist(efl, mag):
 
     Parameters
     ----------
-    efl : `float`
+    efl : float
         focal length of the lens
-    mag : `float`
+    mag : float
         signed magnification
 
     Returns
     -------
-    `float`
+    float
         object distance
 
     """
@@ -169,12 +169,12 @@ def linear_to_long_mag(lateral_mag):
 
     Parameters
     ----------
-    lateral_mag : `float`
+    lateral_mag : float
         linear magnification, from thin lens formulas
 
     Returns
     -------
-    `float`
+    float
         longitudinal magnification
 
     """
@@ -186,16 +186,16 @@ def mag_to_fno(mag, infinite_fno, pupil_mag=1):
 
     Parameters
     ----------
-    mag : `float` or `numpy.ndarray`
+    mag : float or numpy.ndarray
         linear or lateral magnification
-    infinite_fno : `float`
+    infinite_fno : float
         f/# as defined by EFL/EPD
-    pupil_mag : `float`
+    pupil_mag : float
         pupil magnification
 
     Returns
     -------
-    `float`
+    float
         working f/number
 
     """
@@ -207,16 +207,16 @@ def defocus_to_image_displacement(W020, fno, wavelength=None):
 
     Parameters
     ----------
-    W020 : `float` or `numpy.ndarray`
+    W020 : float or numpy.ndarray
         wavefront defocus, units of waves if wavelength != None, else units of length
-    fno : `float`
+    fno : float
         f/# of the lens or system
-    wavelength : `float`, optional
+    wavelength : float, optional
         wavelength of light, if None W020 takes units of length
 
     Returns
     -------
-    `float`
+    float
         image displacement.  Motion of image in um caused by defocus OPD
 
     """
@@ -231,16 +231,16 @@ def image_displacement_to_defocus(dz, fno, wavelength=None):
 
     Parameters
     ----------
-    dz : `float` or `numpy.ndarray`
+    dz : float or numpy.ndarray
         displacement of the image
-    fno : `float`
+    fno : float
         f/# of the lens or system
-    wavelength : `float`, optional
+    wavelength : float, optional
         wavelength of light, if None return has units the same as dz, else waves
 
     Returns
     -------
-    `float`
+    float
         wavefront defocus, waves if Wavelength != None, else same units as dz
 
     """
@@ -255,17 +255,17 @@ def twolens_efl(efl1, efl2, separation):
 
     Parameters
     ----------
-    efl1 : `float`
+    efl1 : float
         EFL of the first lens
-    efl2 : `float`
+    efl2 : float
         EFL of the second lens
 
-    separation : `float`
+    separation : float
         separation of the two lenses
 
     Returns
     -------
-    `float`
+    float
         focal length of the two lens system
 
     """
@@ -279,17 +279,17 @@ def twolens_bfl(efl1, efl2, separation):
 
     Parameters
     ----------
-    efl1 : `float`
+    efl1 : float
         EFL of the first lens
-    efl2 : `float`
+    efl2 : float
         EFL of the second lens
 
-    separation : `float`
+    separation : float
         separation of the two lenses.
 
     Returns
     -------
-    `float`
+    float
         back focal length of the two lens system.
 
     """
