@@ -85,7 +85,7 @@ def _multi_dot(a, b):
     # return inner1d(a, b)
 
 
-def newton_raphson_solve_s(P1, S, F, Fprime, s1=0.0,
+def newton_raphson_solve_s(P1, S, FFp, s1=0.0,
                            eps=None,
                            maxiter=SURFACE_INTERSECTION_DEFAULT_MAXITER):
     """Use Newton-Raphson iteration to solve for intersection between a ray and surface.
@@ -99,10 +99,9 @@ def newton_raphson_solve_s(P1, S, F, Fprime, s1=0.0,
     S : numpy.ndarray
         shape (3,) or (N,3), any float dtype
         (k,l,m) incident direction cosines
-    F : callable of signature F(x,y) -> z
-        a function  which returns the surface sag at point x, y
-    Fprime : callable of signature F'(x,y) -> Fx, Fy
-        a function  which returns the cartesian derivatives of the sag at point x, y
+    FFp : callable of signature F(x,y) -> z, [Nx, Ny, Nz]
+        a function which returns the surface sag at point x, y as well as
+        the X, Y, Z partial derivatives at that point
     s1 : float
         initial guess for the length along the ray from (X1, Y1, 0) to reach the surface
     eps : float
@@ -138,8 +137,8 @@ def newton_raphson_solve_s(P1, S, F, Fprime, s1=0.0,
         Xj = Pj[..., 0]
         Yj = Pj[..., 1]
         Zj = Pj[..., 2]
-        Fj = Zj - F(Xj, Yj)
-        r = Fprime(Xj, Yj)
+        sagj, r = FFp(Xj, Yj)
+        Fj = Zj - sagj
         Fpj = _multi_dot(S_mask, r)
         sjp1 = sj_mask - Fj / Fpj
 
@@ -167,7 +166,7 @@ def newton_raphson_solve_s(P1, S, F, Fprime, s1=0.0,
     return Pj_out, r_out
 
 
-def intersect(P0, S, F, Fprime, s1=0,
+def intersect(P0, S, FFp, s1=0,
               eps=None,
               maxiter=SURFACE_INTERSECTION_DEFAULT_MAXITER):
     """Find the intersection of a ray and a surface.
@@ -181,12 +180,9 @@ def intersect(P0, S, F, Fprime, s1=0,
     S : numpy.ndarray
         shape (3,) or (N,3), any float dtype
         (k,l,m) incident direction cosines
-    F : callable of signature F(x,y) -> z
-        a function  which returns the surface sag at point x, y
-        must behave correctly on both scalar and vector inputs
-    Fprime : callable of signature F'(x,y) -> Fx, Fy
-        a function  which returns the cartesian derivatives of the sag at point x, y
-        must behave correctly on both scalar and vector inputs
+    FFp : callable of signature F(x,y) -> z, [Nx, Ny, Nz]
+        a function which returns the surface sag at point x, y as well as
+        the X, Y, Z partial derivatives at that point
     s1 : float
         initial guess for the length along the ray from (X1, Y1, 0) to reach the surface
     eps : float
@@ -213,7 +209,7 @@ def intersect(P0, S, F, Fprime, s1=0,
     P1 = P0 + s0[:, np.newaxis] * S
     # P1 is (N,3)
     # then use newton's method to find and go to the intersection
-    return newton_raphson_solve_s(P1, S, F, Fprime, s1, eps, maxiter)
+    return newton_raphson_solve_s(P1, S, FFp, s1, eps, maxiter)
 
 
 def transform_to_global_coords(XYZ, P, S, R=None):
@@ -429,7 +425,7 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
         # I - transform from global to local coordinates
         P0, Sj = transform_to_local_coords(Pj, surf.P, Sj, surf.R)
         # II - find ray intersection
-        Pj, r = intersect(P0, Sj, surf.sag, surf.normal)
+        Pj, r = intersect(P0, Sj, surf.sag_normal)
         # III - reflection or refraction
         if surf.typ == STYPE_REFLECT:
             Sjp1 = reflect(Sj, r)

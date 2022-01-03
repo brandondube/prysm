@@ -704,7 +704,7 @@ STYPE_EVAL =    -3  # NOQA
 
 class Surface:
     """A surface for raytracing."""
-    def __init__(self, typ, P, n, F, Fp, R=None, params=None, bounding=None):
+    def __init__(self, typ, P, n, FFp, R=None, params=None, bounding=None):
         """Create a new surface for raytracing.
 
         Parameters
@@ -717,10 +717,9 @@ class Surface:
             global surface position, [X,Y,Z]
         n : callable n(wvl) -> refractive index
             a function which returns the index of refraction at the given wavelength
-        F : callable of signature F(x,y) -> z
-            a function  which returns the surface sag at point x, y
-        Fp : callable of signature F'(x,y) -> Fx, Fy
-            a function  which returns the cartesian derivatives of the sag at point x, y
+        FFp : callable of signature F(x,y) -> z, [Nx, Ny]
+            a function which returns the surface sag at point x, y as well as
+            the X and Y partial derivatives at that point
         R : numpy.ndarray
             rotation matrix, may be None
         params : dict, optional
@@ -739,14 +738,13 @@ class Surface:
         self.typ = typ
         self.P = P
         self.n = n
-        self.F = F
-        self.Fp = Fp
+        self.FFp = FFp
         self.R = R
         self.params = params
         self.bounding = bounding
 
-    def sag(self, x, y):
-        """Sag of the surface at the point (x,y).
+    def sag_normal(self, x, y):
+        """Sag z and normal [Fx, Fy, Fz] of the surface at the point (x,y).
 
         Parameters
         ----------
@@ -761,27 +759,14 @@ class Surface:
             surface sag in Z
 
         """
-        return self.F(x, y)
-
-    def normal(self, x, y):
-        """Normal vector {Nx, Ny, Nz} to the surface at point (x,y).
-
-        Parameters
-        ----------
-        x : numpy.ndarray
-            x coordinates, non-normalized
-        y : numpy.ndarray
-            y coordinates, non-normalized
-
-        Returns
-        -------
-        numpy.ndarray, numpy.ndarray, numpy.ndarray
-            Nx, Ny, Nz
-
-        """
-        Fx, Fy = self.Fp(x, y)
-        Fz = np.ones_like(Fx)
-        return np.stack([Fx, Fy, Fz], axis=1)
+        z, Fx, Fy = self.FFp(x, y)
+        # faster than ones
+        Fz = np.array([1.], dtype=config.precision)
+        Fz = np.broadcast_to(Fz, Fx.shape)
+        # F(X,Y,Z) = 0 = Z - F(x,Y)
+        # d/dx, d/dy have leading - term, dz = 1 always
+        der = np.stack([-Fx, -Fy, Fz], axis=1)
+        return z, der
 
     @classmethod
     def conic(cls, c, k, typ, P, n=None, R=None, bounding=None):
@@ -811,20 +796,16 @@ class Surface:
         params['c'] = c
         params['k'] = k
 
-        def F(x, y):
+        def FFp(x, y):
             # TODO: significantly cheaper without t?
-            r, _ = cart_to_polar(x, y, vec_to_grid=False)
+            r, t = cart_to_polar(x, y, vec_to_grid=False)
             rsq = r * r
             z = conic_sag(params['c'], params['k'], rsq)
-            return z
-
-        def Fp(x, y):
-            r, t = cart_to_polar(x, y, vec_to_grid=False)
             dr = conic_sag_der(params['c'], params['k'], r)
             dx, dy = surface_normal_from_cylindrical_derivatives(dr, 0, r, t)
-            return -dx, -dy
+            return z, dx, dy
 
-        return cls(typ=typ, P=P, n=n, F=F, Fp=Fp, R=R, params=params, bounding=bounding)
+        return cls(typ=typ, P=P, n=n, FFp=FFp, R=R, params=params, bounding=bounding)
 
     @classmethod
     def off_axis_conic(cls, c, k, typ, P, dy, dx=0, n=None, R=None, bounding=None):
@@ -860,20 +841,15 @@ class Surface:
         params['dx'] = dx
         params['dy'] = dy
 
-        def F(x, y):
+        def FFp(x, y):
             r, t = cart_to_polar(x, y, vec_to_grid=False)
             c, k, dx, dy = params['c'], params['k'], params['dx'], params['dy']
             z = off_axis_conic_sag(c, k, r, t, dx=dx, dy=dy)
-            return z
-
-        def Fp(x, y):
-            r, t = cart_to_polar(x, y, vec_to_grid=False)
-            c, k, dx, dy = params['c'], params['k'], params['dx'], params['dy']
             dr, dt = off_axis_conic_der(c, k, r, t, dx=dx, dy=dy)
             ddx, ddy = surface_normal_from_cylindrical_derivatives(dr, dt, r, t)
-            return -ddx, -ddy
+            return z, ddx, ddy
 
-        return cls(typ=typ, P=P, n=n, F=F, Fp=Fp, R=R, params=params, bounding=bounding)
+        return cls(typ=typ, P=P, n=n, FFp=FFp, R=R, params=params, bounding=bounding)
 
     @classmethod
     def plane(cls, typ, P, n=None, R=None, bounding=None):
@@ -891,13 +867,12 @@ class Surface:
 
         """
 
-        def F(x, y):
-            return np.zeros_like(x)
+        def FFp(x, y):
+            zero = np.array([0.], dtype=x.dtype)
+            zero_up = np.broadcast_to(zero, x.shape)
+            return zero_up, zero_up, zero_up
 
-        def Fp(x, y):
-            return np.zeros_like(x), np.zeros_like(y)
-
-        return cls(typ=typ, P=P, n=n, F=F, Fp=Fp, R=R, bounding=bounding)
+        return cls(typ=typ, P=P, n=n, FFp=FFp, R=R, bounding=bounding)
 
     @classmethod
     def sphere(cls, c, typ, P, n, R=None, bounding=None):
