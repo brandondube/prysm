@@ -18,11 +18,13 @@ SURFACE_INTERSECTION_DEFAULT_MAXITER = 100
 def _sanitize_eps(eps, dtype):
     if eps is None:
         try:
-            # 10x eps being hard-coded is a little not great, but user can
+            # 100x eps being hard-coded is a little not great, but user can
             # defeat with their own eps.  An editable module variable requires
             # globals() to be retrieved, which is icky.  Don't want to thread
             # a control for "fctr" all the way to the top for this.
-            return np.finfo(dtype).eps * 10
+            # note: some rays dead stall in fp64 at 7.105427357601002e-15
+            # 100*eps ~= 2e-14
+            return np.finfo(dtype).eps * 100
         except:  # NOQA - cannot predict error type in numpy-like libs
             return 1e-14
 
@@ -144,13 +146,11 @@ def newton_raphson_solve_s(P1, S, FFp, s1=0.0,
 
         delta = abs(sjp1 - sj_mask)
 
-        # the final piece of the pie, the iterations will not end
-        # for all rays at once, we need a way to end each ray independently
-        # solution: keep an index array, which is which elements of Pj and r
-        # are being worked on, initialized to all rays
-        # modify the index array by masking on delta < eps and assign into
-        # Pj and r based on that
-        rays_which_converged = delta < eps
+        # this block of code stops computation on rays which have converged,
+        # while allowing those which have not yet converged to progress,
+        # over "time," the iterations of Newton-Raphson will speed up, in terms
+        # of wall clock time.
+        rays_which_converged = (delta < eps)
         sj[mask] = sjp1
         insert_mask = mask[rays_which_converged]
         if insert_mask.size != 0:
@@ -159,10 +159,13 @@ def newton_raphson_solve_s(P1, S, FFp, s1=0.0,
             # update the mask for the next iter to only those rays which
             # did not converge
             mask = mask[~rays_which_converged]
-            if mask.shape[0] == 0:
+            if mask.size == 0:
                 break  # all rays converged
 
-    # TODO: handle non-convergence
+    # # NaN out rays which failed to converge
+    if mask.size > 0:
+        Pj_out[mask] = np.nan
+        r_out[mask] = np.nan
     return Pj_out, r_out
 
 
