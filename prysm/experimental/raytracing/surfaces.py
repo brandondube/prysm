@@ -657,14 +657,14 @@ def Q2d_and_der(cm0, ams, bms, x, y, normalization_radius, c, k, dx=0, dy=0):
 
 def _ensure_P_vec(P):
     if not hasattr(P, '__iter__'):
-        P = np.array([0, 0, P])
+        P = np.array([0, 0, P], dtype=config.precision)
     else:
         # iterable
         P2 = np.zeros(3, dtype=config.precision)
         P2[-len(P):] = P
         P = P2
 
-    return np.asarray(P)
+    return np.asarray(P).astype(config.precision)
 
 
 def _none_or_rotmat(R):
