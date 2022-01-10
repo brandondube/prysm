@@ -8,6 +8,46 @@ from . import raygen, spencer_and_murty
 from scipy import optimize
 
 
+def _intersect_lines(P1, S1, P2, S2):
+    """Find the slerp along the line (P1, S1) that results in intersection with
+    the line (P2, S2).
+
+    P = position, array shape (3,)
+    S = direction cosines, array shape (3,)
+
+    pair of two lines only.
+    """
+    # solution via linear algebra
+    Ax = np.stack([S1, -S2], axis=1)
+    y = P2 - P1
+    return np.linalg.pinv(Ax) @ y
+
+
+def _establish_axis(P1, P2):
+    """Given two points, establish an axis between them.
+
+    Parameters
+    ----------
+    P1 : numpy.ndarray
+        shape (3,), any float dtype
+        first point
+    P2 : numpy.ndarray
+        shape (3,), any float dtype
+        second point
+
+    Returns
+    -------
+    numpy.ndarray, numpy.ndarray
+        P1 (same exact PyObject) and direction cosine from P1 -> P2
+
+    """
+    diff = P2 - P1
+    euclidean_distance = np.sqrt(diff ** 2).sum()
+    num = diff
+    den = euclidean_distance
+    return num / den
+
+
 def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
     """Find the location of the paraxial image.
 
@@ -69,21 +109,13 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
         Sy1 = S[2]
         Sy2 = S[3]
 
-        # now use a least squares solution to find the "s" length along the ray directions
-        # Ax = y
-        # Ax and Ay are for the X and Y fans, not "Ax" which is A@x
-        Ax = np.stack([Sx1, -Sx2], axis=1)
-        yx = Px2 - Px1
-        sx = np.linalg.pinv(Ax) @ yx
-
-        Ay = np.stack([Sy1, -Sy2], axis=1)
-        yy = Py2 - Py1
-        sy = np.linalg.pinv(Ay) @ yy
+        # find the distance along line 1 which results in intersection with line 2
+        sx = _intersect_lines(Px1, Sx1, Px2, Sx2)
+        sy = _intersect_lines(Py1, Sy1, Py2, Sy2)
         s = np.array([*sx, *sy])
         # fast-forward all the rays and take the average position
         P_out = P + s[:, np.newaxis] * S
         return P_out.mean(axis=0)
-        return P
 
 
 def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan), debug=False):
