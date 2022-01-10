@@ -166,3 +166,75 @@ def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan), debug=False):
         return P, res
     else:
         return P
+
+
+def locate_ep(P_chief, S_chief, P_obj, P_s1):
+    """Locate the entrance pupil of a system.
+
+    Note, for a co-axial system P_obj[0] and [1] should be 0, and the same
+    is true for P_s1[0] and [1].
+
+    This function,
+    1) establishes the axis between the object and the first surface of the system
+    2) finds the intersection of the chief ray and that axis
+
+    Parameters
+    ----------
+    P_chief : numpy.ndarray
+        starting position of the chief ray, at the object plane
+    S_chief : numpy.ndarray
+        starting direction cosine of the chief ray
+    P_obj : iterable
+        the position of the object
+
+    P_s1 : iterable
+        the position of the first surface of the prescription.
+        Not the point of intersection for the chief ray, pres[0].P
+
+
+    Returns
+    -------
+    numpy.ndarray
+        position of the entrance pupil (X,Y,Z)
+
+    """
+    S_axis = _establish_axis(P_obj, P_s1)
+    s = _intersect_lines(P_chief, S_chief, P_s1, S_axis)
+    # s is the slerp for each ray, we just want to go from S1
+    return P_s1 + s[1] * S_axis
+
+
+def locate_xp(P_chief, S_chief, P_img, P_sk):
+    """Locate the exit pupil of a system.
+
+    Note, for a co-axial system P_img[0] and [1] should be 0, and the same
+    is true for P_sk[0] and [1].
+
+    This function,
+    1) establishes the axis between the object and the first surface of the system
+    2) finds the intersection of the chief ray and that axis
+
+    Parameters
+    ----------
+    P_chief : numpy.ndarray
+        final position of the chief ray, at the image plane
+    S_chief : numpy.ndarray
+        final direction cosine of the chief ray
+    P_img : iterable
+        the position of the object
+
+    P_sk : iterable
+        the position of the first surface of the prescription.
+        Not the point of intersection for the chief ray, pres[0].P
+
+
+    Returns
+    -------
+    numpy.ndarray
+        position of the entrance pupil (X,Y,Z)
+
+    """
+    S_axis = _establish_axis(P_img, P_sk)
+    s = _intersect_lines(P_chief, S_chief, P_sk, S_axis)
+    # s is the slerp for each ray, we just want to go from S1
+    return P_sk + s[1] * S_axis
