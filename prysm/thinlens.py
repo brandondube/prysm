@@ -250,6 +250,34 @@ def image_displacement_to_defocus(dz, fno, wavelength=None):
         return dz / (8 * fno ** 2)
 
 
+def singlet_efl(c1, c2, t, n, n_ambient=1.):
+    """EFL of a singlet.
+
+    Parameters
+    ----------
+    c1 : float
+        curvature of S1
+    c2 : float
+        curvature of S2
+    t : float
+        vertex-to-vertex thickness
+    n : float
+        refractive index
+    n_ambient: float
+        refractive index of the ambient medium ("air")
+
+    Returns
+    -------
+    float
+        EFL
+
+    """
+    phi1 = (n - n_ambient) * c1
+    phi2 = (n_ambient - n) * c2
+    phi = phi1 + phi2 - t/n_ambient * phi1*phi2
+    return 1/phi
+
+
 def twolens_efl(efl1, efl2, separation):
     """Use thick lens equations to compute the focal length for two elements separated by some distance.
 
