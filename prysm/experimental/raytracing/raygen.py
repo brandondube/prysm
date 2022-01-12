@@ -126,10 +126,11 @@ def generate_collimated_ray_fan(nrays, maxr, z=0, minr=None, azimuth=90,
         "P" and "S" variables, positions and direction cosines of the rays
 
     """
+    dtype = config.precision
     distribution = distribution.lower()
     if minr is None:
         minr = -maxr
-    S = np.array([0, 0, 1])
+    S = np.array([0, 0, 1], dtype=dtype)
     R = make_rotation_matrix((0, yangle, -xangle))
     S = np.matmul(R, S)
     # need to see a copy of S for each ray, -> add empty dim and broadcast
@@ -138,12 +139,14 @@ def generate_collimated_ray_fan(nrays, maxr, z=0, minr=None, azimuth=90,
 
     # now generate the radial part of P
     if distribution == 'uniform':
-        r = np.linspace(minr, maxr, nrays)
+        r = np.linspace(minr, maxr, nrays, dtype=dtype)
     elif distribution == 'random':
-        r = np.random.uniform(low=minr, high=maxr, size=nrays)
+        r = np.random.uniform(low=minr, high=maxr, size=nrays).astype(dtype)
 
-    t = np.broadcast_to(np.radians(azimuth), r.shape)
+    t = np.asarray(np.radians(azimuth), dtype=dtype)
+    t = np.broadcast_to(t, r.shape)
     x, y = polar_to_cart(r, t)
+    z = np.array(z, dtype=x.dtype)
     z = np.broadcast_to(z, x.shape)
     xyz = np.stack([x, y, z], axis=1)
     return xyz, S

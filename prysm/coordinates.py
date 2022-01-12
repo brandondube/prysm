@@ -285,7 +285,7 @@ def make_rotation_matrix(abg, radians=False):
     ABG[:len(abg)] = abg
     abg = ABG
     if not radians:
-        abg = np.radians(abg)
+        abg = truenp.radians(abg)
 
     # would be more efficient to call cos and sine once, but
     # the computation of these variables will be a vanishingly
@@ -308,7 +308,7 @@ def make_rotation_matrix(abg, radians=False):
         [cosg*sina + cosa*sinb*sing,  cosa*cosb, sina*sing - cosa*cosg*sinb, 0],
         [-cosb*sing,                  sinb,      cosb*cosg,                  0],
         [0,                           0,         0,                          1],
-    ])
+    ], dtype=config.precision)
     # bit of a weird dance with truenp/np here
     # truenp -- make "m" on CPU, no matter what.
     # np.array on last line will move data from numpy to any other "numpy"
