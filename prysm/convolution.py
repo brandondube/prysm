@@ -11,14 +11,14 @@ def conv(obj, psf):
 
     Parameters
     ----------
-    obj : `numpy.ndarray`
+    obj : numpy.ndarray
         array representing the object, of shape (M, N)
-    psf : `numpy.ndarray`
+    psf : numpy.ndarray
         array representing the psf, of shape (M, N)
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         ndarray after undergoing convolution
 
     """
@@ -31,31 +31,35 @@ def conv(obj, psf):
     return i
 
 
-def apply_transfer_functions(obj, dx, *tfs, fx=None, fy=None, ft=None, fr=None):
+def apply_transfer_functions(obj, dx, *tfs, fx=None, fy=None, ft=None, fr=None, shift=False):
     """Blur an object by N transfer functions.
 
     Parameters
     ----------
-    obj : `numpy.ndarray`
+    obj : numpy.ndarray
         array representing the object, of shape (M, N)
-    dx : `float`
+    dx : float
         sample spacing of the object.  Ignored if fx, etc are defined.
-    tfs : sequence of `callable`s, or arrays
-        transfer functions.  If an array, should be fftshifted with the origin
-        in the center of the array.  If a callable, should be  functions which
+    tfs : sequence of callables, or arrays
+        transfer functions.
+        If a callable, should be  functions which
         take arguments of any of fx, fy, ft, fr.  Use functools partial or
         class methods to curry other parameters
-    fx, fy, ft, fr : `numpy.ndarray`
+    fx, fy, ft, fr : numpy.ndarray
         arrays defining the frequency domain, of shape (M, N)
             cartesian X frequency
             cartesian Y frequency
             azimuthal frequency
             radial frequency
         The latter two are simply the atan2 of the former two.
+    shift : bool, optional
+        if True, fx, fy, ft, fr are assumed to have the origin in the center
+        of the array, and tfs are expected to be consistent with that.
+        If False, the origin is assumed to be the [0,0]th sample of fr, fx, fy.
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         image after being blurred by each transfer function
 
     """
@@ -66,7 +70,10 @@ def apply_transfer_functions(obj, dx, *tfs, fx=None, fy=None, ft=None, fr=None):
     fr, ft = cart_to_polar(fx, fy)
 
     o = obj
-    O = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(o)))  # NOQA
+    if shift:
+        O = np.fft.ifftshift(np.fft.fft2(o))  # NOQA
+    else:
+        O = np.fft.fft2(o)  # NOQA
 
     for tf in tfs:
         if callable(tf):
@@ -86,5 +93,7 @@ def apply_transfer_functions(obj, dx, *tfs, fx=None, fy=None, ft=None, fr=None):
 
         O = O * tf  # NOQA
 
-    i = np.fft.fftshift(np.fft.ifft2(O)).real
+    # no if shift on this side, [i]fft will always place the origin at [0,0]
+    # real inside shift - 2x faster to shift real than to shift complex
+    i = np.fft.ifftshift(np.fft.ifft2(O).real)
     return i
