@@ -8,6 +8,8 @@ import calendar
 import shutil
 import warnings
 
+from pathlib import Path
+
 import numpy as truenp
 
 from .conf import config
@@ -1375,3 +1377,113 @@ def read_sigfit_rigidbody(file):
             'dR': dR
         }
     return out
+
+
+def _find_nth(string, substring, n):
+    start = string.find(substring)
+    l = len(substring)  # NOQA
+    while start >= 0 and n > 1:
+        start = string.find(substring, start+l)
+        n -= 1
+    return start
+
+
+def read_codev_gridint(file):
+    """Read a Code V INT file containing grid data.
+
+    Parameters
+    ----------
+    file : str or path_like
+    """
+    txt = Path(file).expanduser().read_text()
+    # feed-forward information that prevents us from doing a whole-text search:
+    # the manual specifies that each record must be <= 80 characters, so we
+    # can look at 80 character chunks and test for apostrophies
+    # this will break for microscopic int files, say 8x8.  I accept the bug
+    end = 80
+    while True:
+        l = len(txt)  # NOQA - l short
+        if l < end:
+            end = l
+        # it may strictly speaking be faster to compare txt[0] to !, but oh well
+        i = txt[:end].find('!')
+        if i < 0:  # no more comments
+            break
+
+        # we are in a comment, find the newline and skip over that line
+        i = txt.find('\n', i)  # starting from i is a very mild performance improvement
+        if i < 0:
+            raise ValueError('CV INT file header corrupted - no new line found after !')
+        # skip forward
+        txt = txt[i+1:]
+
+    # now on the title line, look for the newline
+    end = txt.find('\n')
+    if end < 0:
+        raise ValueError('CV INT file header corrupted - no new line found after title')
+
+    title = txt[:end]
+
+    # now on the header line, split that off
+    txt = txt[end+1:]
+    end = txt.find('\n')
+    hdr = txt[:end]
+
+    # parsing the header,
+    # it is made up of Code V three-letter acronyms and their values
+    # a limited parser here of the ones we know how to deal with
+    params = hdr.split()  # some tokens are specifiers while others are values
+    i = 0
+    l = len(params)  # NOQA
+    wvl, nda = None, None
+    while i < l:
+        if params[i].upper() == 'WVL':
+            wvl = float(params[i+1])  # Code V uses microns for this unit, OK
+            i += 2
+            continue
+        if params[i].upper() == 'SSZ':
+            ssz = float(params[i+1])  # integers per wavelength of OPD/surface deformation
+            i += 2
+            continue
+        if params[i].upper() == 'NDA':
+            nda = int(params[i+1])
+            i += 2
+            continue
+        if params[i].upper() == 'GRD':
+            m = int(params[i+1])
+            n = int(params[i+2])
+            i += 3
+            continue
+        if params[i].upper() == 'SUR':
+            meaning = 'surface error'
+            i += 1
+            continue
+        if params[i].upper() == 'WFR':
+            meaning = 'wavefront error'
+            i += 1
+            continue
+
+        raise ValueError(f'parsing CV INT header: token {params[i]} not understood')
+
+    if wvl is None:
+        raise ValueError('CV INT header did not contain WVL')
+
+    if nda is None:
+        raise ValueError('CV INT (GRID) header did not contain NDA')
+
+    if m is None or n is None:
+        raise ValueError('CV INT header did not contain GRD, only grid INT files are supported')
+
+    main_data = txt[end+1:]
+    a = np.fromstring(main_data, sep=' ', dtype=np.int64)
+    mask = a == nda
+    # div by ssz converts to wvl, div by wvl to um, *1000 to nm
+    a = a.astype(config.precision) * (1000/wvl/ssz)
+    a[mask] = np.nan
+    a = a.reshape((m, n))
+    meta = {
+        'title': title,
+        'wavelength': wvl,
+        'data meaning': meaning,
+    }
+    return a, meta
