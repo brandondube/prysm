@@ -10,17 +10,17 @@ def slit(x, y, width_x, width_y=None):
 
     Parameters
     ----------
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x coordinates, 1D or 2D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y coordinates, 1D or 2D
-    width_x : `float`
+    width_x : float
         the half-width of the slit in x, diameter will be 2x width_x.
         produces a line along the y axis, use None to not do so
-    width_y : `float`
+    width_y : float
         the half-height of the slit in y, diameter will be 2x width_y.
         produces a line along the y axis, use None to not do so
-    orientation : `string`, {'Horizontal', 'Vertical', 'Crossed', 'Both'}
+    orientation : string, {'Horizontal', 'Vertical', 'Crossed', 'Both'}
         the orientation of the slit; Crossed and Both produce the same results
 
     Notes
@@ -46,18 +46,18 @@ def slit_ft(width_x, width_y, fx, fy):
 
     Parameters
     ----------
-    width_x : `float`
+    width_x : float
         x width of the slit, pass zero if the slit only has width in y
-    width_y : `float`
+    width_y : float
         y width of the slit, pass zero if the slit only has width in x
-    fx : `numpy.ndarray`
+    fx : numpy.ndarray
         sample points in x frequency axis
-    fy : `numpy.ndarray`
+    fy : numpy.ndarray
         sample points in y frequency axis
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         2D array containing the analytic fourier transform
 
     """
@@ -75,14 +75,14 @@ def pinhole(radius, rho):
 
     Parameters
     ----------
-    radius : `float`
+    radius : float
         radius of the pinhole
-    rho : `numpy.ndarray`
+    rho : numpy.ndarray
         radial coordinates
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         2D array containing the pinhole
 
     """
@@ -94,14 +94,14 @@ def pinhole_ft(radius, fr):
 
     Parameters
     ----------
-    radius : `float`
+    radius : float
         radius of the pinhole
-    fr : `numpy.ndarray`
+    fr : numpy.ndarray
         radial spatial frequency
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         2D array containing the analytic fourier transform
 
     """
@@ -114,26 +114,26 @@ def siemensstar(r, t, spokes, oradius=0.9, iradius=0, background='black', contra
 
     Parameters
     ----------
-    r : `numpy.ndarray`
+    r : numpy.ndarray
         radial coordinates, 2D
-    t : `numpy.ndarray`
+    t : numpy.ndarray
         azimuthal coordinates, 2D
-    spokes : `int`
+    spokes : int
         number of spokes in the star
-    oradius : `float`
+    oradius : float
         outer radius of the star
-    iradius : `float`
+    iradius : float
         inner radius of the star
-    background : `str`, optional, {'black', 'white'}
+    background : str, optional, {'black', 'white'}
         background color
-    contrast : `float`, optional
+    contrast : float, optional
         contrast of the star, 1 = perfect black/white
-    sinusoidal : `bool`, optional
+    sinusoidal : bool, optional
         if True, generates a sinusoidal Siemen' star, else, generates a bar/block siemen's star
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         2D array of the same shape as r, t which is in the range [0,1]
 
     """
@@ -168,22 +168,22 @@ def tiltedsquare(x, y, angle=4, radius=0.5, contrast=0.9, background='white'):
 
     Parameters
     ----------
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x coordinates, 2D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y coordinates, 2D
-    angle : `float`
+    angle : float
         counter-clockwise angle of the square from x, degrees
-    radius : `float`
+    radius : float
         radius of the square
-    contrast : `float`
+    contrast : float
         contrast of the square
-    background: `str`, optional, {'white', 'black'}
+    background: str, optional, {'white', 'black'}
         whether to paint a white square on a black background or vice-versa
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         ndarray containing the rasterized square
 
     """
@@ -211,15 +211,15 @@ def slantededge(x, y, angle=4, contrast=0.9, crossed=False):
 
     Parameters
     ----------
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x coordinates, 2D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y coordinates, 2D
-    angle : `float`
+    angle : float
         angle of the edge to the cartesian y axis
-    contrast : `float`
+    contrast : float
         contrast of the edge
-    crossed : `bool`, optional
+    crossed : bool, optional
         if True, draw crossed edges instead of just one
 
     """

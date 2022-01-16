@@ -31,22 +31,22 @@ def estimate_size(data, metric, dx=None, x=None, y=None, criteria='last'):
 
     Parameters
     ----------
-    data : `numpy.ndarray`
+    data : numpy.ndarray
         f(x,y), 2D
-    metric : `str` or `float`, {'fwhm', '1/e', '1/e^2', float()}
+    metric : str or float, {'fwhm', '1/e', '1/e^2', float()}
         what metric to apply
-    dx : `float`
+    dx : float
         inter-sample spacing, if x and y != None, they supercede this parameter
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x coordinates, 2D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y coordinates, 2D
-    criteria : `str`, optional, {'first', 'last'}
+    criteria : str, optional, {'first', 'last'}
         whether to use the first or last occurence of <metric>
 
     Returns
     -------
-    `float`
+    float
         the radial coordinate at which on average the function reaches <metric>
 
     Raises
@@ -96,21 +96,21 @@ def fwhm(data, dx=None, x=None, y=None, criteria='last'):
 
     Parameters
     ----------
-    data : `numpy.ndarray`
+    data : numpy.ndarray
         f(x,y), 2D
-    dx : `float`
+    dx : float
         inter-sample spacing, if x and y != None, they supercede this parameter
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x coordinates, 2D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y coordinates, 2D
-    criteria : `str`, optional, {'first', 'last'}
+    criteria : str, optional, {'first', 'last'}
         whether to use the first or last occurence of <metric>
 
 
     Returns
     -------
-    `float`
+    float
         the FWHM
 
     """
@@ -123,21 +123,21 @@ def one_over_e(data, dx=None, x=None, y=None, criteria='last'):
 
     Parameters
     ----------
-    data : `numpy.ndarray`
+    data : numpy.ndarray
         f(x,y), 2D
-    dx : `float`
+    dx : float
         inter-sample spacing, if x and y != None, they supercede this parameter
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x coordinates, 2D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y coordinates, 2D
-    criteria : `str`, optional, {'first', 'last'}
+    criteria : str, optional, {'first', 'last'}
         whether to use the first or last occurence of <metric>
 
 
     Returns
     -------
-    `float`
+    float
         the FWHM
 
     """
@@ -150,21 +150,21 @@ def one_over_e_sq(data, dx=None, x=None, y=None, criteria='last'):
 
     Parameters
     ----------
-    data : `numpy.ndarray`
+    data : numpy.ndarray
         f(x,y), 2D
-    dx : `float`
+    dx : float
         inter-sample spacing, if x and y != None, they supercede this parameter
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x coordinates, 2D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y coordinates, 2D
-    criteria : `str`, optional, {'first', 'last'}
+    criteria : str, optional, {'first', 'last'}
         whether to use the first or last occurence of <metric>
 
 
     Returns
     -------
-    `float`
+    float
         the FWHM
 
     """
@@ -177,19 +177,19 @@ def centroid(data, dx=None, unit='spatial'):
 
     Parameters
     ----------
-    data : `numpy.ndarray`
+    data : numpy.ndarray
         data to centroid
-    dx : `float`
+    dx : float
         sample spacing, may be None if unit != spatial
-    unit : `str`, {'spatial', 'pixels'}
+    unit : str, {'spatial', 'pixels'}
         unit to return the centroid in.
         If pixels, corner indexed.  If spatial, center indexed.
 
     Returns
     -------
-    `int`, `int`
+    int, int
         if unit == pixels, indices into the array
-    `float`, `float`
+    float, float
         if unit == spatial, referenced to the origin
 
     """
@@ -209,14 +209,14 @@ def autocrop(data, px):
 
     Parameters
     ----------
-    data : `numpy.ndarray`
+    data : numpy.ndarray
         data to crop into
-    px : `int`
+    px : int
         window full width, samples
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         cropped data
 
     """
@@ -235,16 +235,16 @@ def airydisk(unit_r, fno, wavelength):
 
     Parameters
     ----------
-    unit_r : `numpy.ndarray`
+    unit_r : numpy.ndarray
         ndarray with units of um
-    fno : `float`
+    fno : float
         F/# of the system
-    wavelength : `float`
+    wavelength : float
         wavelength of light, um
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         ndarray containing the airy pattern
 
     """
@@ -257,16 +257,16 @@ def airydisk_ft(r, fno, wavelength):
 
     Parameters
     ----------
-    r : `numpy.ndarray`
+    r : numpy.ndarray
         radial spatial frequency, if wvl has units of um, then r has units of 1/um
-    fno : `float`
+    fno : float
         f number of the system, dimensionless
-    wavelength : `float`
+    wavelength : float
         wavelength of light, notionally units of um
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         ndarray of same shape as r
 
     """
@@ -284,11 +284,11 @@ def encircled_energy(psf, dx, radius):
 
     Parameters
     ----------
-    psf : `numpy.ndarray`
+    psf : numpy.ndarray
         2D array containing PSF data
-    dx : `float`
+    dx : float
         sample spacing of psf
-    radius : `float` or iterable
+    radius : float or iterable
         radius or radii to evaluate encircled energy at
 
     Returns
@@ -327,20 +327,20 @@ def _encircled_energy_core(mtf_data, radius, nu_p, dx, dy):
 
     Parameters
     ----------
-    mtf_data : `numpy.ndarray`
+    mtf_data : numpy.ndarray
         unaliased MTF data
-    radius : `float`
+    radius : float
         radius of "detector"
-    nu_p : `numpy.ndarray`
+    nu_p : numpy.ndarray
         radial spatial frequencies
-    dx : `float`
+    dx : float
         x frequency delta
-    dy : `float`
+    dy : float
         y frequency delta
 
     Returns
     -------
-    `float`
+    float
         encircled energy for given radius
 
     """
@@ -354,16 +354,16 @@ def _analytical_encircled_energy(fno, wavelength, points):
 
     Parameters
     ----------
-    fno : `float`
+    fno : float
         F/#
-    wavelength : `float`
+    wavelength : float
         wavelength of light
-    points : `numpy.ndarray`
+    points : numpy.ndarray
         radii of "detector"
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         encircled energy values
 
     """

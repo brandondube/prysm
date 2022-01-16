@@ -28,12 +28,12 @@ def jinc(r):
 
     Parameters
     ----------
-    r : `number`
+    r : number
         radial distance
 
     Returns
     -------
-    `float`
+    float
         the value of j1(x)/x for x != 0, 0.5 at 0
 
     """
@@ -55,12 +55,12 @@ def is_odd(int):
 
     Parameters
     ----------
-    int : `int`
+    int : int
         an integer
 
     Returns
     -------
-    `bool`
+    bool
         true if odd, False if even
 
     """
@@ -72,12 +72,12 @@ def is_power_of_2(value):
 
     Parameters
     ----------
-    value : `number`
+    value : number
         value to check
 
     Returns
     -------
-    `bool`
+    bool
         true if the value is a power of two, False if the value is no
 
     Notes

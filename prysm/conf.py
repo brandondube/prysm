@@ -12,23 +12,23 @@ class Config(object):
                  zorder=3,
                  alpha=1,
                  interpolation='lanczos'):
-        """Create a new `Config` object.
+        """Create a new Config object.
 
         Parameters
         ----------
-        precision : `int`
+        precision : int
             32 or 64, number of bits of precision
-        phase_cmap : `str`
+        phase_cmap : str
             colormap used for plotting optical phases
-        image_cmap : `str`
+        image_cmap : str
             colormap used for plotting greyscale images
-        lw : `float`
+        lw : float
             linewidth
-        zorder : `int`, optional
+        zorder : int, optional
             zorder used for graphics made with matplotlib
-        alpha : `float`
+        alpha : float
             transparency of lines (1=opaque) for graphics made with matplotlib
-        interpolation : `str`
+        interpolation : str
             interpolation type for 2D plots
 
         """
@@ -47,7 +47,7 @@ class Config(object):
 
         Returns
         -------
-        `object` : `numpy.float32` or `numpy.float64`
+        object : numpy.float32 or numpy.float64
             precision used
 
         """
@@ -59,7 +59,7 @@ class Config(object):
 
         Returns
         -------
-        `object` : `numpy.complex64` or `numpy.complex128`
+        object : numpy.complex64 or numpy.complex128
             precision used for complex arrays
 
         """
@@ -71,7 +71,7 @@ class Config(object):
 
         Parameters
         ----------
-        precision : `int`, {32, 64}
+        precision : int, {32, 64}
             what precision to use; either 32 or 64 bits
 
         Raises

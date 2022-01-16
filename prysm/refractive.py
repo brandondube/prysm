@@ -7,16 +7,16 @@ def cauchy(wvl, A, *args):
 
     Parameters
     ----------
-    wvl : `number`
+    wvl : number
         wavelength of light, microns
-    A : `number`
+    A : number
         the first term in Cauchy's equation
-    args : `number`
+    args : number
         B, C, ... terms in Cauchy's equation
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         array of refractive indices of the same shape as wvl
 
     """
@@ -39,16 +39,16 @@ def sellmeier(wvl, A, B):
 
     Parameters
     ----------
-    wvl : `numpy.ndarray`
+    wvl : numpy.ndarray
         wavelengths, microns
-    A : `Iterable`
+    A : Iterable
         sequence of "A" coefficients
-    B : `Iterable`
+    B : Iterable
         sequence of "B" coefficients
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         refractive index
 
     """
