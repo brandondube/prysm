@@ -8,6 +8,8 @@ import calendar
 import shutil
 import warnings
 
+from pathlib import Path
+
 import numpy as truenp
 
 from .conf import config
@@ -38,14 +40,14 @@ def is_mtfvfvf_file(file):
 
     Parameters
     ----------
-    file : `str` or path_like or file_like
+    file : str or path_like or file_like
         file to read from, if string of file body, must provide filename
 
     Returns
     -------
-    boolean : `bool`
+    boolean : bool
         if the file is an MTFvFvF file
-    data : `str`
+    data : str
         contents of the file
 
     """
@@ -61,14 +63,14 @@ def read_trioptics_mtfvfvf(file, filename=None):
 
     Parameters
     ----------
-    file : `str` or path_like or file_like
+    file : str or path_like or file_like
         file to read from, if string of file body, must provide filename
-    filename : `str`, optional
+    filename : str, optional
         name of file; used to select tan/sag if file is given as contents
 
     Returns
     -------
-    `MTFvFvF`
+    MTFvFvF
         MTF vs Field vs Focus object
 
     """
@@ -114,14 +116,14 @@ def read_trioptics_mtf_vs_field(file, metadata=False):
 
     Parameters
     ----------
-    file : `str` or path_like or file_like
+    file : str or path_like or file_like
         contents of a file, path_like to the file, or file object
-    metadata : `bool`
+    metadata : bool
         whether to also extract and return metadata
 
     Returns
     -------
-    `dict`
+    dict
         dictionary with keys of freq, field, tan, sag
 
     """
@@ -134,14 +136,14 @@ def read_trioptics_mtf_vs_field_mtflab_v4(file, metadata=False):
 
     Parameters
     ----------
-    file : `str` or path_like or file_like
+    file : str or path_like or file_like
         contents of a file, path_like to the file, or file object
-    metadata : `bool`
+    metadata : bool
         whether to also extract and return metadata
 
     Returns
     -------
-    `dict`
+    dict
         dictionary with keys of freq, field, tan, sag
 
     """
@@ -187,14 +189,14 @@ def read_trioptics_mtf_vs_field_mtflab_v5(file_contents, metadata=False):
 
     Parameters
     ----------
-    file_contents : `str` or path_like or file_like
+    file_contents : str or path_like or file_like
         contents of a file, path_like to the file, or file object
-    metadata : `bool`
+    metadata : bool
         whether to also extract and return metadata
 
     Returns
     -------
-    `dict`
+    dict
         dictionary with keys of freq, field, tan, sag
 
     """
@@ -261,17 +263,17 @@ def read_trioptics_mtf(file, metadata=False):
 
     Parameters
     ----------
-    file : `str` or path_like or file_like
+    file : str or path_like or file_like
         contents of a file, path_like to the file, or file object
-    metadata : `bool`
+    metadata : bool
         whether to also extract and return metadata
 
     Returns
     -------
-    `dict`
+    dict
         dictionary with keys focus, freq, tan, sag
         if metadata=True, also has keys in the return of
-        `io.parse_trioptics_metadata`.
+        io.parse_trioptics_metadata.
 
     """
     data = read_file_stream_or_path(file)
@@ -322,12 +324,12 @@ def parse_trioptics_metadata(file_contents):
 
     Parameters
     ----------
-    file_contents : `str`
+    file_contents : str
         contents of a .mht file.
 
     Returns
     -------
-    `dict`
+    dict
         dictionary with keys:
             - operator
             - time
@@ -351,12 +353,12 @@ def parse_trioptics_metadata_mtflab_v4(file_contents):
 
     Parameters
     ----------
-    file_contents : `str`
+    file_contents : str
         contents of a .mht file.
 
     Returns
     -------
-    `dict`
+    dict
         dictionary with keys:
             - operator
             - time
@@ -423,12 +425,12 @@ def parse_trioptics_metadata_mtflab_v5(file_contents):
 
     Parameters
     ----------
-    file_contents : `str`
+    file_contents : str
         contents of a .mht file.
 
     Returns
     -------
-    `dict`
+    dict
         dictionary with keys:
             - operator
             - time
@@ -495,14 +497,14 @@ def identify_trioptics_measurement_type(file):
 
     Parameters
     ----------
-    file : `str` or path_like or file_like
+    file : str or path_like or file_like
         contents of a file, path_like to the file, or file object
 
     Returns
     -------
-    program : `str`
+    program : str
         measurement type
-    data : `str`
+    data : str
         contents of the file
 
     """
@@ -526,16 +528,16 @@ def read_any_trioptics_mht(file, metadata=False):
 
     Parameters
     ----------
-    file : `str` or path_like or file_like
+    file : str or path_like or file_like
         contents of a file, path_like to the file, or file object
-    metadata : `bool`
+    metadata : bool
         whether to also extract and return metadata
 
     Returns
     -------
-    `dict`
+    dict
         dictionary with appropriate keys.  If metadata=True, also has keys in
-        the return of `io.parse_trioptics_metadata`.
+        the return of io.parse_trioptics_metadata.
 
     """
     type_, data = identify_trioptics_measurement_type(file)
@@ -551,16 +553,16 @@ def read_mtfmapper_sfr_single(file, pixel_pitch=None):
 
     Parameters
     ----------
-    file : `str` or path_like or file_like
+    file : str or path_like or file_like
         contents of a file, path_like to the file, or file object
-    pixel_pitch : `float`
+    pixel_pitch : float
         center-to-center pixel spacing, in microns
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         spatial_frequencies
-    `numpy.ndarray`
+    numpy.ndarray
         mtf
 
     """
@@ -585,7 +587,7 @@ def read_zygo_datx(file):
 
     Returns
     -------
-    `dict`
+    dict
         dictionary with keys phase, intensity, meta
 
     Raises
@@ -689,12 +691,12 @@ def read_zygo_dat(file, multi_intensity_action='first'):
     ----------
     file : path_like
         path to a file
-    multi_intensity_action : `str`, {'avg', 'first', 'last'}
+    multi_intensity_action : str, {'avg', 'first', 'last'}
         action to take when handling multiple intensitiy frames, only avg is valid at this time
 
     Returns
     -------
-    `dict`
+    dict
         dictionary with keys: phase, intensity, meta
 
     """
@@ -738,12 +740,12 @@ def read_zygo_metadata(file_contents):
 
     Parameters
     ----------
-    file_contents : `bytes`
+    file_contents : bytes
         binary file contents
 
     Returns
     -------
-    `dict`
+    dict
         dictionary with a shitload of keys for all of Zygo's metadata.
 
     """
@@ -1178,15 +1180,15 @@ def write_zygo_ascii(file, phase, dx, wavelength=0.6328, intensity=None):
 
     Parameters
     ----------
-    file : `str`
+    file : str
         filename
-    phase : `numpy.ndarray`
+    phase : numpy.ndarray
         array of phase values
-    dx : `numpy.ndarray`
+    dx : numpy.ndarray
         inter-sample spacing, mm
-    wavelength : `float`, optional
+    wavelength : float, optional
         wavelength of light, um
-    intensity : `numpy.ndarray`, optional
+    intensity : numpy.ndarray, optional
         intensity data
 
     """
@@ -1269,12 +1271,12 @@ def read_sigfit_zernikes(file):
 
     Parameters
     ----------
-    file : `str` or Path_like
+    file : str or Path_like
         path to a file
 
     Returns
     -------
-    `dict` with keys of surface IDs, which have values of dicts with keys of:
+    dict with keys of surface IDs, which have values of dicts with keys of:
         - type | Noll ("Zemax Standard") or Fringe Zernikes
         - normed | if True, the terms are orthonormalized and have unit standard deviation, else unit amplitude
         - wavelength | wavelength of light in microns
@@ -1342,12 +1344,12 @@ def read_sigfit_rigidbody(file):
 
     Parameters
     ----------
-    file : `str` or path_like
+    file : str or path_like
         location of a sigfit sum1.csv file
 
     Returns
     -------
-    `dict` with keys of surface IDs, which have values of dicts with keys of dx, dy, dz, rx, ry, rz, dR
+    dict with keys of surface IDs, which have values of dicts with keys of dx, dy, dz, rx, ry, rz, dR
         all values in mm
 
     """
@@ -1375,3 +1377,113 @@ def read_sigfit_rigidbody(file):
             'dR': dR
         }
     return out
+
+
+def _find_nth(string, substring, n):
+    start = string.find(substring)
+    l = len(substring)  # NOQA
+    while start >= 0 and n > 1:
+        start = string.find(substring, start+l)
+        n -= 1
+    return start
+
+
+def read_codev_gridint(file):
+    """Read a Code V INT file containing grid data.
+
+    Parameters
+    ----------
+    file : str or path_like
+    """
+    txt = Path(file).expanduser().read_text()
+    # feed-forward information that prevents us from doing a whole-text search:
+    # the manual specifies that each record must be <= 80 characters, so we
+    # can look at 80 character chunks and test for apostrophies
+    # this will break for microscopic int files, say 8x8.  I accept the bug
+    end = 80
+    while True:
+        l = len(txt)  # NOQA - l short
+        if l < end:
+            end = l
+        # it may strictly speaking be faster to compare txt[0] to !, but oh well
+        i = txt[:end].find('!')
+        if i < 0:  # no more comments
+            break
+
+        # we are in a comment, find the newline and skip over that line
+        i = txt.find('\n', i)  # starting from i is a very mild performance improvement
+        if i < 0:
+            raise ValueError('CV INT file header corrupted - no new line found after !')
+        # skip forward
+        txt = txt[i+1:]
+
+    # now on the title line, look for the newline
+    end = txt.find('\n')
+    if end < 0:
+        raise ValueError('CV INT file header corrupted - no new line found after title')
+
+    title = txt[:end]
+
+    # now on the header line, split that off
+    txt = txt[end+1:]
+    end = txt.find('\n')
+    hdr = txt[:end]
+
+    # parsing the header,
+    # it is made up of Code V three-letter acronyms and their values
+    # a limited parser here of the ones we know how to deal with
+    params = hdr.split()  # some tokens are specifiers while others are values
+    i = 0
+    l = len(params)  # NOQA
+    wvl, nda = None, None
+    while i < l:
+        if params[i].upper() == 'WVL':
+            wvl = float(params[i+1])  # Code V uses microns for this unit, OK
+            i += 2
+            continue
+        if params[i].upper() == 'SSZ':
+            ssz = float(params[i+1])  # integers per wavelength of OPD/surface deformation
+            i += 2
+            continue
+        if params[i].upper() == 'NDA':
+            nda = int(params[i+1])
+            i += 2
+            continue
+        if params[i].upper() == 'GRD':
+            m = int(params[i+1])
+            n = int(params[i+2])
+            i += 3
+            continue
+        if params[i].upper() == 'SUR':
+            meaning = 'surface error'
+            i += 1
+            continue
+        if params[i].upper() == 'WFR':
+            meaning = 'wavefront error'
+            i += 1
+            continue
+
+        raise ValueError(f'parsing CV INT header: token {params[i]} not understood')
+
+    if wvl is None:
+        raise ValueError('CV INT header did not contain WVL')
+
+    if nda is None:
+        raise ValueError('CV INT (GRID) header did not contain NDA')
+
+    if m is None or n is None:
+        raise ValueError('CV INT header did not contain GRD, only grid INT files are supported')
+
+    main_data = txt[end+1:]
+    a = np.fromstring(main_data, sep=' ', dtype=np.int64)
+    mask = a == nda
+    # div by ssz converts to wvl, div by wvl to um, *1000 to nm
+    a = a.astype(config.precision) * (1000/wvl/ssz)
+    a[mask] = np.nan
+    a = a.reshape((m, n))
+    meta = {
+        'title': title,
+        'wavelength': wvl,
+        'data meaning': meaning,
+    }
+    return a, meta

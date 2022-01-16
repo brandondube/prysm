@@ -50,6 +50,14 @@ How-Tos
     how-tos/index.rst
 
 
+Explanations (deep dives)
+-------------------------
+
+.. toctree::
+    :maxdepth: 2
+
+    explanation/index.rst
+
 API Reference
 -------------
 

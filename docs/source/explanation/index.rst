@@ -7,3 +7,4 @@ Explanations
 
     how-prysm-works.ipynb
     Ins-and-Outs-of-Polynomials.ipynb
+    Deformable Mirrors.ipynb
