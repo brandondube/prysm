@@ -10,10 +10,8 @@ from prysm.convolution import apply_transfer_functions
 from prysm.coordinates import (
     make_rotation_matrix,
     apply_rotation_matrix,
-    optimize_xy_separable,
     xyXY_to_pixels,
     regularize,
-
 )
 
 
@@ -35,11 +33,11 @@ def prepare_actuator_lattice(shape, dx, Nact, sep, mask, dtype):
     if mask is None:
         mask = np.ones(Nact, dtype=bool)
 
-    actuators = np.ones(Nact, dtype=dtype)
+    actuators = np.zeros(Nact, dtype=dtype)
 
     cy, cx = [s//2 for s in shape]
     Nactx, Nacty = Nact
-    skip_samples_x, skip_samples_y = [int(s/dx) for s in sep]
+    skip_samples_x, skip_samples_y = sep
     # python trick; floor division (//) rounds to negative inf, not zero
     # because FFT grid alignment biases things to the left, if Nact is odd
     # we want more on the negative side;
@@ -71,7 +69,7 @@ def prepare_actuator_lattice(shape, dx, Nact, sep, mask, dtype):
 
 class DM:
     """A DM whose actuators fill a rectangular region on a perfect grid, and have the same influence function."""
-    def __init__(self, x, y, ifn, Nact=(50, 50), sep=(0.4, 0.4), shift=(0, 0), rot=(0, 10, 0), upsample=1, spline_order=3, mask=None):
+    def __init__(self, x, y, ifn, Nact=50, sep=10, shift=(0, 0), rot=(0, 10, 0), upsample=1, spline_order=3, mask=None):
         """Create a new DM model.
 
         This model is based on convolution of a 'poke lattice' with the influence
@@ -102,10 +100,10 @@ class DM:
             be the same shape as (x,y).  Assumed centered on N//2th sample of x,y.
             Assumed to be well-conditioned to take a Fourier transform of
             (i.e., reaches zero prior to the edge of the array)
-        Nact : tuple of int, length 2
+        Nact : int or tuple of int, length 2
             (X, Y) actuator counts
-        sep : tuple of int, length 2
-            (X, Y) actuator separation / pitch
+        sep : int or tuple of int, length 2
+            (X, Y) actuator separation, samples of influence function
         shift : tuple of float, length 2
             (X, Y) shift of the actuator grid to (x, y).  Positive numbers
             describe (rightward, shifts
@@ -132,6 +130,11 @@ class DM:
             actuators; 1=keep, 0=suppress
 
         """
+        if isinstance(Nact, int):
+            Nact = (Nact, Nact)
+        if isinstance(sep, int):
+            sep = (sep, sep)
+
         dx = x[0, 1] - x[0, 0]
 
         # stash inputs and some computed values on self
@@ -161,6 +164,7 @@ class DM:
         rotmat = make_rotation_matrix(rot)
         XY = apply_rotation_matrix(rotmat, x, y)
         XY2 = xyXY_to_pixels((x, y), XY)
+        # XY2 = xyXY_to_pixels(XY, (x, y))
         self.XY = XY
         self.XY2 = XY2
 
