@@ -1,4 +1,4 @@
-"""A base point spread function interfacnp."""
+"""Evaluation routines for point spread functions."""
 import numbers
 from prysm.fttools import fftrange
 
