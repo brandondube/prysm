@@ -9,12 +9,12 @@ def mean(array):
 
     Parameters
     ----------
-    array : `numpy.ndarray`
+    array : numpy.ndarray
         array of values
 
     Returns
     -------
-    `float`
+    float
         mean value
 
     """
@@ -27,12 +27,12 @@ def pv(array):
 
     Parameters
     ----------
-    array : `numpy.ndarray`
+    array : numpy.ndarray
         array of values
 
     Returns
     -------
-    `float`
+    float
         PV of the array
 
     """
@@ -45,12 +45,12 @@ def rms(array):
 
     Parameters
     ----------
-    array : `numpy.ndarray`
+    array : numpy.ndarray
         array of values
 
     Returns
     -------
-    `float`
+    float
         RMS of the array
 
     """
@@ -63,12 +63,12 @@ def Sa(array):
 
     Parameters
     ----------
-    array: `numpy.ndarray`
+    array: numpy.ndarray
         array of values
 
     Returns
     -------
-    `float`
+    float
         Ra of the array
 
     """
@@ -83,12 +83,12 @@ def std(array):
 
     Parameters
     ----------
-    array: `numpy.ndarray`
+    array: numpy.ndarray
         array of values
 
     Returns
     -------
-    `float`
+    float
         std of the array
 
     """
@@ -102,14 +102,14 @@ def ecdf(x):
 
     Parameters
     ----------
-    x : `iterable`
+    x : iterable
         Data
 
     Returns
     -------
-    xs : `numpy.ndarray`
+    xs : numpy.ndarray
         sorted data
-    ys : `numpy.ndarray`
+    ys : numpy.ndarray
         cumulative distribution function of the data
 
     """
@@ -123,9 +123,9 @@ def sort_xy(x, y):
 
     Parameters
     ----------
-    x : `iterable`
+    x : iterable
         a list, numpy ndarray, or other iterable to sort by
-    y : `iterable`
+    y : iterable
         a list, numpy ndarray, or other iterable that is y=f(x)
 
     Returns

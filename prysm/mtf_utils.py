@@ -11,15 +11,15 @@ class MTFvFvF(object):
 
     Attributes
     ----------
-    azimuth : `str`
+    azimuth : str
         Azimuth associated with the data
-    data : `numpy.ndarray`
+    data : numpy.ndarray
         3D array of data in shape (focus, field, freq)
-    field : `numpy.ndarray`
+    field : numpy.ndarray
         array of fields associated with the field axis of data
-    focus : `numpy.ndarray`
+    focus : numpy.ndarray
         array of focus associated with the focus axis of data
-    freq : `numpy.ndarray`
+    freq : numpy.ndarray
         array of frequencies associated with the frequency axis of data
 
     """
@@ -28,15 +28,15 @@ class MTFvFvF(object):
 
         Parameters
         ----------
-        data : `numpy.ndarray`
+        data : numpy.ndarray
             3D array in the shape (focus,field,freq)
-        focus : `iterable`
+        focus : iterable
             1D set of the column units, in microns
-        field : `iterable`
+        field : iterable
             1D set of the row units, in any units
-        freq : `iterable`
+        freq : iterable
             1D set of the z axis units, in cy/mm
-        azimuth : `string` or `float`
+        azimuth : string or float
             azimuth this data cube is associated with
 
         """
@@ -51,24 +51,24 @@ class MTFvFvF(object):
 
         Parameters
         ----------
-        freq : `float`
+        freq : float
             frequency to plot, will be rounded to the closest value present in the self.freq iterable
-        symmetric : `bool`
+        symmetric : bool
             make the plot symmetric by mirroring it about the x-axis origin
-        contours : `bool`
+        contours : bool
             plot contours
-        interp_method : `string`
+        interp_method : string
             interpolation method used for the plot
-        fig : `matplotlib.figure.Figure`, optional:
+        fig : matplotlib.figure.Figure, optional:
             Figure to plot inside
-        ax : `matplotlib.axes.Axis`, optional:
+        ax : matplotlib.axes.Axis, optional:
             Axis to plot inside
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : matplotlib.figure.Figure
             figure containing the plot
-        axis : `matplotlib.axes.Axis`
+        axis : matplotlib.axes.Axis
             axis containing the plot
 
         """
@@ -109,22 +109,22 @@ class MTFvFvF(object):
 
         Parameters
         ----------
-        field : `float`
+        field : float
             which field point to plot, in same units as self.field
-        freqs : `iterable`
+        freqs : iterable
             frequencies to plot, will be rounded to the closest values present in the self.freq iterable
-        _range : `float`
+        _range : float
             +/- focus range to plot, symmetric
-        fig : `matplotlib.figure.Figure`, optional
+        fig : matplotlib.figure.Figure, optional
             Figure to plot inside
-        ax : `matplotlib.axes.Axis`
+        ax : matplotlib.axes.Axis
             Axis to plot inside
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`, optional
+        fig : matplotlib.figure.Figure, optional
             figure containing the plot
-        axis : `matplotlib.axes.Axis`
+        axis : matplotlib.axes.Axis
             axis containing the plot
 
         """
@@ -154,15 +154,15 @@ class MTFvFvF(object):
 
         Parameters
         ----------
-        algorithm : `str`
+        algorithm : str
             algorithm to use to trace focus, currently only supports '0.5', see
             notes for a description of this technique
 
         Returns
         -------
-        field : `numpy.ndarray`
+        field : numpy.ndarray
             array of field values, mm
-        focus : `numpy.ndarray`
+        focus : numpy.ndarray
             array of focus values, microns
 
         Notes
@@ -278,14 +278,14 @@ class MTFvFvF(object):
 
         Parameters
         ----------
-        df : `pandas.DataFrame`
+        df : pandas.DataFrame
             a dataframe with columns Focus, Field, Freq, Azimuth, MTF
 
         Returns
         -------
-        t_cube : `MTFvFvF`
+        t_cube : MTFvFvF
             tangential MTFvFvF
-        s_cube : `MTFvFvF`
+        s_cube : MTFvFvF
             sagittal MTFvFvF
 
         """
@@ -317,7 +317,7 @@ class MTFvFvF(object):
 
         Returns
         -------
-        `MTFvFvF`
+        MTFvFvF
             new MTFvFvF object
 
         """
@@ -329,18 +329,18 @@ def plot_mtf_vs_field(data_dict, fig=None, ax=None, labels=('MTF', 'Freq [lp/mm]
 
     Parameters
     ----------
-    data_dict : `dict`
+    data_dict : dict
         dictionary with keys tan, sag, fields, freq
-    fig : `matplotlib.figure.Figure`, optional
+    fig : matplotlib.figure.Figure, optional
         figure containing the plot
-    axis : `matplotlib.axes.Axis`
+    axis : matplotlib.axes.Axis
         axis containing the plot
 
     Returns
     -------
-    fig : `matplotlib.figure.Figure`, optional
+    fig : matplotlib.figure.Figure, optional
         figure containing the plot
-    axis : `matplotlib.axes.Axis`
+    axis : matplotlib.axes.Axis
         axis containing the plot
 
     """

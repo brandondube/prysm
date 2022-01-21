@@ -13,14 +13,14 @@ def fix_interp_pair(x, y):
 
     Parameters
     ----------
-    x : `float` or `Iterable`
+    x : float or Iterable
         x data
-    y : `float` or `Iterable`
+    y : float or Iterable
         y data
 
     Returns
     -------
-    `Iterable`, `Iterable`
+    Iterable, Iterable
         x, y
 
     """
@@ -47,11 +47,11 @@ class RichData:
 
         Parameters
         ----------
-        data : `numpy.ndarray`
+        data : numpy.ndarray
             2D array containing the z data
-        dx : `float`
+        dx : float
             inter-sample spacing, mm
-        wavelength : float`
+        wavelength : float
             wavelength of light, um
 
         Returns
@@ -146,16 +146,16 @@ class RichData:
         return copy.deepcopy(self)
 
     def slices(self, twosided=None):
-        """Create a `Slices` instance from this instance.
+        """Create a Slices instance from this instance.
 
         Parameters
         ----------
-        twosided : `bool`, optional
+        twosided : bool, optional
             if None, copied from self._default_twosided
 
         Returns
         -------
-        `Slices`
+        Slices
             a Slices object
 
         """
@@ -173,7 +173,7 @@ class RichData:
 
         Returns
         -------
-        `scipy.interpolate.RegularGridInterpolator`
+        scipy.interpolate.RegularGridInterpolator
             interpolator instance.
 
         """
@@ -191,9 +191,9 @@ class RichData:
 
         Returns
         -------
-        self.interpf_x : `scipy.interpolate.interp1d`
+        self.interpf_x : scipy.interpolate.interp1d
             x interpolator
-        self.interpf_y : `scipy.interpolate.interp1d`
+        self.interpf_y : scipy.interpolate.interp1d
             y interpolator
 
         """
@@ -219,7 +219,7 @@ class RichData:
 
         Returns
         -------
-        `numpy.ndarray`
+        numpy.ndarray
             data at the given points
 
         """
@@ -241,7 +241,7 @@ class RichData:
 
         Returns
         -------
-        `numpy.ndarray`
+        numpy.ndarray
             data at the given points
 
         """
@@ -255,12 +255,12 @@ class RichData:
 
         Parameters
         ----------
-        x : `number` or `numpy.ndarray`
+        x : number or numpy.ndarray
             x coordinate(s) to return
 
         Returns
         -------
-        `numpy.ndarray`
+        numpy.ndarray
             ndarray of values
 
         """
@@ -272,12 +272,12 @@ class RichData:
 
         Parameters
         ----------
-        y : `number` or `numpy.ndarray`
+        y : number or numpy.ndarray
             y coordinate(s) to return
 
         Returns
         -------
-        `numpy.ndarray`
+        numpy.ndarray
             ndarray of values
 
         """
@@ -292,39 +292,39 @@ class RichData:
 
         Parameters
         ----------
-        xlim : `float` or iterable, optional
+        xlim : float or iterable, optional
             x axis limits.  If not iterable, symmetric version of the single value
-        ylim : `float` or iterable, optional
+        ylim : float or iterable, optional
             y axis limits.  If None and xlim is not None, copied from xlim.
             If not iterable, symmetric version of the single value.
         clim : iterable, optional
             clim passed directly to matplotlib.
             If None, looked up on self._default_clim.
-        cmap : `str`, optional
+        cmap : str, optional
             colormap to use, passed directly to matplotlib if not None.
             If None, looks up the default cmap for self._data_type on config
-        log : `bool`, optional
+        log : bool, optional
             if True, plot on a log color scale
-        power : `float`, optional
+        power : float, optional
             if not 1, plot on a power stretched color scale
-        interpolation : `str`, optional
+        interpolation : str, optional
             interpolation method to use, passed directly to matplotlib
-        show_colorbar : `bool`, optional
+        show_colorbar : bool, optional
             if True, draws the colorbar
-        colorbar_label : `str`, optional
+        colorbar_label : str, optional
             label for the colorbar
-        axis_labels : `iterable` of `str`,
+        axis_labels : iterable of str,
             (x, y) axis labels.  If None, not drawn
-        fig : `matplotlib.figure.Figure`
+        fig : matplotlib.figure.Figure
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`
+        ax : matplotlib.axes.Axis
             Axis containing the plot
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : matplotlib.figure.Figure
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`
+        ax : matplotlib.axes.Axis
             Axis containing the plot
 
         """
@@ -381,13 +381,13 @@ class Slices:
 
         Parameters
         ----------
-        data : `numpy.ndarray`
+        data : numpy.ndarray
             2D array of data
-        x : `numpy.ndarray`
+        x : numpy.ndarray
             1D array of x points
-        y : `numpy.ndarray`
+        y : numpy.ndarray
             1D array of y points
-        twosided : `bool`, optional
+        twosided : bool, optional
             if True, plot slices from (-ext, ext), else from (0,ext)
 
         """
@@ -413,9 +413,9 @@ class Slices:
 
         Returns
         -------
-        x : `numpy.ndarray`
+        x : numpy.ndarray
             coordinates
-        slice : `numpy.ndarray`
+        slice : numpy.ndarray
             values of the data array at these coordinates
 
         """
@@ -430,9 +430,9 @@ class Slices:
 
         Returns
         -------
-        y : `numpy.ndarray`
+        y : numpy.ndarray
             coordinates
-        slice : `numpy.ndarray`
+        slice : numpy.ndarray
             values of the data array at these coordinates
 
         """
@@ -447,9 +447,9 @@ class Slices:
 
         Returns
         -------
-        rho : `numpy.ndarray`
+        rho : numpy.ndarray
             coordinates
-        slice : `numpy.ndarray`
+        slice : numpy.ndarray
             values of the data array at these coordinates
 
         """
@@ -462,9 +462,9 @@ class Slices:
 
         Returns
         -------
-        rho : `numpy.ndarray`
+        rho : numpy.ndarray
             coordinates
-        slice : `numpy.ndarray`
+        slice : numpy.ndarray
             values of the data array at these coordinates
 
         """
@@ -477,9 +477,9 @@ class Slices:
 
         Returns
         -------
-        rho : `numpy.ndarray`
+        rho : numpy.ndarray
             coordinates
-        slice : `numpy.ndarray`
+        slice : numpy.ndarray
             values of the data array at these coordinates
 
         """
@@ -492,9 +492,9 @@ class Slices:
 
         Returns
         -------
-        rho : `numpy.ndarray`
+        rho : numpy.ndarray
             coordinates
-        slice : `numpy.ndarray`
+        slice : numpy.ndarray
             values of the data array at these coordinates
 
         """
@@ -507,9 +507,9 @@ class Slices:
 
         Returns
         -------
-        rho : `numpy.ndarray`
+        rho : numpy.ndarray
             coordinates
-        slice : `numpy.ndarray`
+        slice : numpy.ndarray
             values of the data array at these coordinates
 
         """
@@ -523,9 +523,9 @@ class Slices:
 
         Returns
         -------
-        rho : `numpy.ndarray`
+        rho : numpy.ndarray
             coordinates
-        slice : `numpy.ndarray`
+        slice : numpy.ndarray
             values of the data array at these coordinates
 
         """
@@ -538,9 +538,9 @@ class Slices:
 
         Returns
         -------
-        rho : `numpy.ndarray`
+        rho : numpy.ndarray
             coordinates
-        slice : `numpy.ndarray`
+        slice : numpy.ndarray
             values of the data array at these coordinates
 
         """
@@ -556,44 +556,44 @@ class Slices:
 
         Parameters
         ----------
-        slices : `str` or `Iterable`
+        slices : str or Iterable
             if a string, plots a single slice.  Else, plots several slices.
-        lw : `float` or `Iterable`, optional
+        lw : float or Iterable, optional
             line width to use for the slice(s).
             If a single value, used for all slice(s).
             If iterable, used pairwise with the slices
-        alpha : `float` or `Iterable`, optional
+        alpha : float or Iterable, optional
             alpha (transparency) to use for the slice(s).
             If a single value, used for all slice(s).
             If iterable, used pairwise with the slices
-        zorder : `int` or `Iterable`, optional
+        zorder : int or Iterable, optional
             zorder (stack height) to use for the slice(s).
             If a single value, used for all slice(s).
             If iterable, used pairwise with the slices
-        invert_x : `bool`, optional
+        invert_x : bool, optional
             if True, flip x (i.e., Freq => Period or vice-versa)
-        xlim : `tuple`, optional
+        xlim : tuple, optional
             x axis limits
-        xscale : `str`, {'linear', 'log'}, optional
+        xscale : str, {'linear', 'log'}, optional
             scale used for the x axis
-        ylim : `tuple`, optional
+        ylim : tuple, optional
             y axis limits
-        yscale : `str`, {'linear', 'log'}, optional
+        yscale : str, {'linear', 'log'}, optional
             scale used for the y axis
-        show_legend : `bool`, optional
+        show_legend : bool, optional
             if True, show the legend
-        axis_labels : `iterable` of `str`,
+        axis_labels : iterable of str,
             (x, y) axis labels.  If None, not drawn
-        fig : `matplotlib.figure.Figure`
+        fig : matplotlib.figure.Figure
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`
+        ax : matplotlib.axes.Axis
             Axis containing the plot
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`
+        fig : matplotlib.figure.Figure
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`
+        ax : matplotlib.axes.Axis
             Axis containing the plot
 
         """

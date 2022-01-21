@@ -14,24 +14,24 @@ class Detector:
 
         Parameters
         ----------
-        dark_current : `float`
+        dark_current : float
             e-/sec, charge accumulated with no light reaching the sensor.
-        read_noise : `float`
+        read_noise : float
             e-, random gaussian noise associated with readout
-        bias : `float`
+        bias : float
             e-, uniform value added to readout to avoid negative numbers
-        fwc : `float`
+        fwc : float
             e-, maximum number of electrons that can be held by one pixel
-        conversion_gain : `float`
+        conversion_gain : float
             e-/DN gain converting e- to DN,
-        bits : `int`
+        bits : int
             number of bits for the ADC, multiples of 2 in 8..16 are contemporary
-        exposure_time : `float`
+        exposure_time : float
             exposure time, seconds
-        prnu : `numpy.ndarray`, optional
+        prnu : numpy.ndarray, optional
             relative pixel response nonuiformity, a fixed map that the
             input field is multiplied by.  ones_like is perfectly uniform.
-        dcnu : `numpy.ndarray`, optional
+        dcnu : numpy.ndarray, optional
             dark current nonuniformity, a fixed map that the dark current
             is multiplied by.  ones_like is perfectly uniform.
 
@@ -51,17 +51,17 @@ class Detector:
 
         Parameters
         ----------
-        aerial_img : `numpy.ndarray`
+        aerial_img : numpy.ndarray
             aerial image, with units of e-/sec.  Should include any QE as part
             of its Z scaling
-        frames : `int`
+        frames : int
             number of images to expose, > 1 is functionally equivalent to
             calling with frames=1 in a loop, but the random values are all drawn
             at once which can much improve performance in GPU-based modeling.
 
         Returns
         -------
-        `numpy.ndarray`
+        numpy.ndarray
             of shape (frames, *aerial_img.shape), if frames=1 the first dim
             is squeezed, and output shape is same as input shape.
             dtype=uint8 if nbits <= 8, else uint16 for <= 16, etc
@@ -117,18 +117,18 @@ def olpf_ft(fx, fy, width_x, width_y):
 
     Parameters
     ----------
-    fx : `numpy.ndarray`
+    fx : numpy.ndarray
         x spatial frequency, in cycles per micron
-    fy : `numpy.ndarray`
+    fy : numpy.ndarray
         y spatial frequency, in cycles per micron
-    width_x : `float`
+    width_x : float
         x diameter of the pixel, in microns
-    width_y : `float`
+    width_y : float
         y diameter of the pixel, in microns
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         FT of the OLPF
 
     """
@@ -140,18 +140,18 @@ def pixel_ft(fx, fy, width_x, width_y):
 
     Parameters
     ----------
-    fx : `numpy.ndarray`
+    fx : numpy.ndarray
         x spatial frequency, in cycles per micron
-    fy : `numpy.ndarray`
+    fy : numpy.ndarray
         y spatial frequency, in cycles per micron
-    width_x : `float`
+    width_x : float
         x diameter of the pixel, in microns
-    width_y : `float`
+    width_y : float
         y diameter of the pixel, in microns
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         FT of the pixel
 
     """
@@ -163,18 +163,18 @@ def pixel(x, y, width_x, width_y):
 
     Parameters
     ----------
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x coordinates
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y coordinates
-    width_x : `float`
+    width_x : float
         x diameter of the pixel, in microns
-    width_y : `float`
+    width_y : float
         y diameter of the pixel, in microns
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         spatial representation of the pixel
 
     """
@@ -188,17 +188,17 @@ def bindown(array, factor, mode='avg'):
 
     Parameters
     ----------
-    array : `numpy.ndarray`
+    array : numpy.ndarray
         array of values
-    factor : `int` or sequence of `int`
+    factor : int or sequence of int
         binning factor.  If an integer, broadcast to each axis of array,
         else unique factors may be used for each axis.
-    mode : `str`, {'avg', 'sum'}
+    mode : str, {'avg', 'sum'}
         sum or avg, how to adjust the output signal
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         ndarray binned by given number of samples
 
     Notes
@@ -243,17 +243,17 @@ def tile(array, factor, scaling='sum'):
 
     Parameters
     ----------
-    array : `numpy.ndarray`
+    array : numpy.ndarray
         array of values
-    factor : `int` or sequence of `int`
+    factor : int or sequence of int
         binning factor.  If an integer, broadcast to each axis of array,
         else unique factors may be used for each axis.
-    scaling : `str`, {'avg', 'sum'}
+    scaling : str, {'avg', 'sum'}
         sum or avg, how to adjust the output signal
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         ndarray binned by given number of samples
 
     Notes

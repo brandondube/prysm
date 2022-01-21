@@ -41,16 +41,16 @@ def fit_plane(x, y, z):
 
     Parameters
     ----------
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         2D array of x (axis 1) values
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         2D array of y (axis 0) values
-    z : `numpy.ndarray`
+    z : numpy.ndarray
         2D array of z values
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         array representation of plane
 
     """
@@ -71,12 +71,12 @@ def fit_sphere(z):
 
     Parameters
     ----------
-    z : `numpy.ndarray`
+    z : numpy.ndarray
         2D array of data
 
     Returns
     -------
-    `numpy.ndarray`, `numpy.ndarray`
+    numpy.ndarray, numpy.ndarray
         mask, sphere
 
     """
@@ -98,14 +98,14 @@ def make_window(signal, dx, which=None, alpha=4):
 
     Parameters
     ----------
-    signal : `numpy.ndarray`
+    signal : numpy.ndarray
         signal or phase data
-    dx : `float`
+    dx : float
         spacing of samples in the input data
-    which : `str,` {'welch', 'hann', None}, optional
+    which : str, {'welch', 'hann', None}, optional
         which window to producnp.  If auto, attempts to guess the appropriate
         window based on the input signal
-    alpha : `float`, optional
+    alpha : float, optional
         alpha value for welch window
 
     Notes
@@ -116,7 +116,7 @@ def make_window(signal, dx, which=None, alpha=4):
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         window array
 
     """
@@ -161,20 +161,20 @@ def psd(height, dx, window=None):
 
     Parameters
     ----------
-    height : `numpy.ndarray`
+    height : numpy.ndarray
         height or phase data
-    dx : `float`
+    dx : float
         spacing of samples in the input data
     window : {'welch', 'hann'} or ndarray, optional
         window to apply to the data.  May be a name or a window already computed
 
     Returns
     -------
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         ordinate x frequency axis
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         ordinate y frequency axis
-    psd : `numpy.ndarray`
+    psd : numpy.ndarray
         power spectral density
 
     Notes
@@ -203,22 +203,22 @@ def bandlimited_rms(r, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
 
     Parameters
     ----------
-    r : `numpy.ndarray`
+    r : numpy.ndarray
         radial spatial frequencies
-    psd : `numpy.ndarray`
+    psd : numpy.ndarray
         power spectral density
-    wllow : `float`
+    wllow : float
         short spatial scale
-    wlhigh : `float`
+    wlhigh : float
         long spatial scale
-    flow : `float`
+    flow : float
         low frequency
-    fhigh : `float`
+    fhigh : float
         high frequency
 
     Returns
     -------
-    `float`
+    float
         band-limited RMS value
 
     """
@@ -274,14 +274,14 @@ def window_2d_welch(r, alpha=8):
 
     Parameters
     ----------
-    r : `numpy.ndarray`
+    r : numpy.ndarray
         radial coordinate
-    alpha : `float`
+    alpha : float
         alpha (edge roll) parameter
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         window
 
     """
@@ -295,18 +295,18 @@ def abc_psd(nu, a, b, c):
 
     Parameters
     ----------
-    nu : `numpy.ndarray` or `float`
+    nu : numpy.ndarray or float
         spatial frequency
-    a : `float`
+    a : float
         a coefficient
-    b : `float`
+    b : float
         b coefficient
-    c : `float`
+    c : float
         c coefficient
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         value of PSD model
 
     """
@@ -318,16 +318,16 @@ def ab_psd(nu, a, b):
 
     Parameters
     ----------
-    nu : `numpy.ndarray` or `float`
+    nu : numpy.ndarray or float
         spatial frequency
-    a : `float`
+    a : float
         a coefficient
-    b : `float`
+    b : float
         b coefficient
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         value of PSD model
 
     """
@@ -339,11 +339,11 @@ def synthesize_surface_from_psd(psd, nu_x, nu_y):
 
     Parameters
     ----------
-    psd : `numpy.ndarray`
+    psd : numpy.ndarray
         PSD data, units nm²/(cy/mm)²
-    nu_x : `numpy.ndarray`
+    nu_x : numpy.ndarray
         x spatial frequency, cy/mm
-    nu_y : `numpy.ndarray`
+    nu_y : numpy.ndarray
         y spatial frequency, cy_mm
 
     """
@@ -377,15 +377,15 @@ def render_synthetic_surface(size, samples, rms=None, mask=None, psd_fcn=abc_psd
 
     Parameters
     ----------
-    size : `float`
+    size : float
         diameter of the output surface, mm
-    samples : `int`
+    samples : int
         number of samples across the output surface
-    rms : `float`, optional
+    rms : float, optional
         desired RMS value of the output, if rms=None, no normalization is done
-    mask : `numpy.ndarray`, optional
+    mask : numpy.ndarray, optional
         mask defining the pupil aperture
-    psd_fcn : `callable`
+    psd_fcn : callable
         function used to generate the PSD
     **psd_fcn_kwargs:
         keyword arguments passed to psd_fcn in addition to nu
@@ -396,11 +396,11 @@ def render_synthetic_surface(size, samples, rms=None, mask=None, psd_fcn=abc_psd
 
     Returns
     -------
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x coordinates, mm
-    y: `numpy.ndarray`
+    y: numpy.ndarray
         y coordinates, mm
-    z : `numpy.ndarray`
+    z : numpy.ndarray
         height data, nm
 
     """
@@ -436,23 +436,23 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
 
     Parameters
     ----------
-    f : `numpy.ndarray`
+    f : numpy.ndarray
         spatial frequency, cy/length
-    psd : `numpy.ndarray`
+    psd : numpy.ndarray
         1D PSD, units of height^2 / (cy/length)^2
     callable : callable, optional
         a callable object that takes parameters of (frequency, *); all other parameters will be fit
-    guess : `iterable`
+    guess : iterable
         parameters of callable to seed optimization with
-    return_ : `str`, optional, {'coefficients', 'optres'}
+    return_ : str, optional, {'coefficients', 'optres'}
         what to return; either return the coefficients (optres.x) or the optimization result (optres)
 
     Returns
     -------
     optres
-        `scipy.optimization.OptimizationResult`
+        scipy.optimization.OptimizationResult
     coefficients
-        `numpy.ndarray` of coefficients
+        numpy.ndarray of coefficients
 
     """
     sig = inspect.signature(callable)
@@ -513,22 +513,22 @@ def designfilt2d(r, dx, fc, typ='lowpass'):
 
     Parameters
     ----------
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x coordinates for the data to be filtered, units of length (mm, m, etc)
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y coordinates for the data to be filtered, units of length (mm, m, etc)
-    fl : `float`
+    fl : float
         lower critical frequency for a high pass, bandpass, or band reject filter
-    fh : `float`
+    fh : float
         upper critical frequency for a low pass, bandpass, or band reject filter
-    typ : `str`, {'lowpass' , 'lp', 'highpass', 'hp', 'bandpass', 'bp', 'bandreject', 'br'}
+    typ : str, {'lowpass' , 'lp', 'highpass', 'hp', 'bandpass', 'bp', 'bandreject', 'br'}
         what type of filter.  Can use two-letter shorthands.
-    N : `tuple` of `int` of length 2
+    N : tuple of int of length 2
         number of samples per axis to use.  If N=None, N=x.shape
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         2D array containing the infinite impulse response, h.
         Convolution of the data with this "PSF" will produce
         the desired spectral filtering
@@ -583,15 +583,15 @@ def make_random_subaperture_mask(shape, mask):
 
     Parameters
     ----------
-    shape : `tuple`
+    shape : tuple
         length two tuple, containing (m, n) of the returned mask
-    mask : `numpy.ndarray`
+    mask : numpy.ndarray
         mask to apply for sub-apertures
 
     Returns
     -------
-    `numpy.ndarray`
-        an array that can be used to mask `ary`.  Use as:
+    numpy.ndarray
+        an array that can be used to mask ary.  Use as:
         ary[ret == 0] = np.nan
 
     """
@@ -619,16 +619,16 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        phase : `numpy.ndarray`
+        phase : numpy.ndarray
             phase values, units of nm
-        dx : `float`
+        dx : float
             sample spacing in mm; if zero the data has no lateral calibration
             (xy scale only "px", not mm)
-        wavelength : `float`
+        wavelength : float
             wavelength of light, microns
-        intensity : `numpy.ndarray`, optional
+        intensity : numpy.ndarray, optional
             intensity array from interferometer camera
-        meta : `dict`
+        meta : dict
             dictionary of any metadata.  if a wavelength or Wavelength key is
             present, this will also be stored in self.wavelength and is assumed
             to have units of meters (Zygo convention)
@@ -692,7 +692,7 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        normalization_radius : `float`
+        normalization_radius : float
             radius used to normalize the radial coordinate during Zernike computation.
             If None, the data array is assumed square and the radius is automatically
             chosen to be the radius of the array.
@@ -746,12 +746,12 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        _with : `float`, optional
+        _with : float, optional
             value to fill with
 
         Returns
         -------
-        `Interferogram`
+        Interferogram
             self
 
         """
@@ -829,7 +829,7 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        mask : `numpy.ndarray`
+        mask : numpy.ndarray
             binary ndarray indicating pixels to keep (True) and discard (False)
 
         Returns
@@ -855,13 +855,13 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        plate_scale : `float`
+        plate_scale : float
             center-to-center sample spacing of pixels, in (unit)s.
 
         Returns
         -------
         self
-            modified `Interferogram` instancnp.
+            modified Interferogram instancnp.
 
         """
         self.strip_latcal()
@@ -880,12 +880,12 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        value : `int`
+        value : int
             how many samples to pad the data with
 
         Returns
         -------
-        `Interferogram`
+        Interferogram
             self
 
         """
@@ -909,7 +909,7 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        nsigma : `float`
+        nsigma : float
             number of standard deviations to keep
 
         Returns
@@ -927,7 +927,7 @@ class Interferogram(RichData):
 
         Returns
         -------
-        `RichData`
+        RichData
             RichData class instance with x, y, data attributes
 
         """
@@ -945,10 +945,10 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        fc : `float` or length 2 tuple
+        fc : float or length 2 tuple
             scalar critical frequency for the filter for either low or highpass
             (lower, upper) critical frequencies for bandpass and bandreject filters
-        typ : `str`, {'lp', 'hp', 'bp', 'br', 'lowpass', 'highpass', 'bandpass', 'bandreject'}
+        typ : str, {'lp', 'hp', 'bp', 'br', 'lowpass', 'highpass', 'bandpass', 'bandreject'}
             what type of filter to apply
 
         """
@@ -963,18 +963,18 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        wllow : `float`
+        wllow : float
             short spatial scale
-        wlhigh : `float`
+        wlhigh : float
             long spatial scale
-        flow : `float`
+        flow : float
             low frequency
-        fhigh : `float`
+        fhigh : float
             high frequency
 
         Returns
         -------
-        `float`
+        float
             band-limited RMS valunp.
 
         """
@@ -988,14 +988,14 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        wavelength : `float`
+        wavelength : float
             wavelength of light in microns
-        incident_angle : `float` or `numpy.ndarray`
+        incident_angle : float or numpy.ndarray
             incident angle(s) of light
 
         Returns
         -------
-        `float` or `numpy.ndarray`
+        float or numpy.ndarray
             TIS
 
         """
@@ -1010,24 +1010,24 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        visibility : `float`
+        visibility : float
             Visibility of the interferogram
-        passes : `float`
+        passes : float
             Number of passes (double-pass, quadra-pass, etc.)
-        tilt_waves : `tuple`
+        tilt_waves : tuple
             (x,y) waves of tilt to use for the interferogram
-        interpolation : `str`, optional
+        interpolation : str, optional
             interpolation method, passed directly to matplotlib
-        fig : `matplotlib.figure.Figure`, optional
+        fig : matplotlib.figure.Figure, optional
             Figure to draw plot in
-        ax : `matplotlib.axes.Axis`
+        ax : matplotlib.axes.Axis
             Axis to draw plot in
 
         Returns
         -------
-        fig : `matplotlib.figure.Figure`, optional
+        fig : matplotlib.figure.Figure, optional
             Figure containing the plot
-        ax : `matplotlib.axes.Axis`, optional:
+        ax : matplotlib.axes.Axis, optional:
             Axis containing the plot
 
         """
@@ -1056,7 +1056,7 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        file : Path_like, `str`, or File_like
+        file : Path_like, str, or File_like
             where to save to
 
         """
@@ -1084,13 +1084,13 @@ class Interferogram(RichData):
         path : path_like
             path to a zygo dat file
         multi_intensity_action : str, optional
-            see `io.read_zygo_dat`
-        scale : `str`, optional, {'um', 'mm'}
+            see io.read_zygo_dat
+        scale : str, optional, {'um', 'mm'}
             what xy scale to label the data with, microns or mm
 
         Returns
         -------
-        `Interferogram`
+        Interferogram
             new Interferogram instance
 
         """
@@ -1115,15 +1115,15 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        size : `float`
+        size : float
             diameter of the output surface, mm
-        samples : `int`
+        samples : int
             number of samples across the output surface
-        rms : `float`
+        rms : float
             desired RMS value of the output, if rms=None, no normalization is done
-        mask : `str`, optional
+        mask : str, optional
             mask defining the clear aperture
-        psd_fcn : `callable`
+        psd_fcn : callable
             function used to generate the PSD
         **psd_fcn_kwargs:
             keyword arguments passed to psd_fcn in addition to nu
@@ -1134,7 +1134,7 @@ class Interferogram(RichData):
 
         Returns
         -------
-        `Interferogram`
+        Interferogram
             new interferogram instance
 
         """

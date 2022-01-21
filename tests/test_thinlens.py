@@ -107,3 +107,10 @@ def test_twolens_efl_general(twolens_params):
 def test_twolens_bfl_general(twolens_params):
     efl1, efl2, t = twolens_params
     assert thinlens.twolens_bfl(efl1, efl2, t)
+
+
+def test_singlet_efl():
+    R = 200
+    c = 1/R
+    efl = thinlens.singlet_efl(c, -c, 0, 1.55)
+    assert efl == pytest.approx(181.8181818181818)

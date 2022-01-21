@@ -15,14 +15,14 @@ def focus(wavefunction, Q):
 
     Parameters
     ----------
-    wavefunction : `numpy.ndarray`
+    wavefunction : numpy.ndarray
         the pupil wavefunction
-    Q : `float`
+    Q : float
         oversampling / padding factor
 
     Returns
     -------
-    psf : `numpy.ndarray`
+    psf : numpy.ndarray
         point spread function
 
     """
@@ -40,14 +40,14 @@ def unfocus(wavefunction, Q):
 
     Parameters
     ----------
-    wavefunction : `numpy.ndarray`
+    wavefunction : numpy.ndarray
         the pupil wavefunction
-    Q : `float`
+    Q : float
         oversampling / padding factor
 
     Returns
     -------
-    pupil : `numpy.ndarray`
+    pupil : numpy.ndarray
         field in the pupil plane
 
     """
@@ -65,22 +65,22 @@ def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
 
     Parameters
     ----------
-    wavefunction : `numpy.ndarray`
+    wavefunction : numpy.ndarray
         the pupil wavefunction
-    input_dx : `float`
+    input_dx : float
         spacing between samples in the pupil plane, millimeters
-    prop_dist : `float`
+    prop_dist : float
         propagation distance along the z distance
-    wavelength : `float`
+    wavelength : float
         wavelength of light
-    output_dx : `float`
+    output_dx : float
         sample spacing in the output plane, microns
-    output_samples : `int`
+    output_samples : int
         number of samples in the square output array
 
     Returns
     -------
-    data : `numpy.ndarray`
+    data : numpy.ndarray
         2D array of data
 
     """
@@ -99,26 +99,26 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
 
     Parameters
     ----------
-    wavefunction : `numpy.ndarray`
+    wavefunction : numpy.ndarray
         the image plane wavefunction
-    input_dx : `float`
+    input_dx : float
         spacing between samples in the pupil plane, millimeters
-    prop_dist : `float`
+    prop_dist : float
         propagation distance along the z distance
-    wavelength : `float`
+    wavelength : float
         wavelength of light
-    output_dx : `float`
+    output_dx : float
         sample spacing in the output plane, microns
-    output_samples : `int`
+    output_samples : int
         number of samples in the square output array
 
     Returns
     -------
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x axis unit, 1D ndarray
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y axis unit, 1D ndarray
-    data : `numpy.ndarray`
+    data : numpy.ndarray
         2D array of data
 
     """
@@ -144,18 +144,18 @@ def Q_for_sampling(input_diameter, prop_dist, wavelength, output_dx):
 
     Parameters
     ----------
-    input_diameter : `float`
+    input_diameter : float
         diameter of the input array in millimeters
-    prop_dist : `float`
+    prop_dist : float
         propagation distance along the z distance, millimeters
-    wavelength : `float`
+    wavelength : float
         wavelength of light, microns
-    output_dx : `float`
+    output_dx : float
         sampling in the output plane, microns
 
     Returns
     -------
-    `float`
+    float
         requesite Q
 
     """
@@ -168,18 +168,18 @@ def pupil_sample_to_psf_sample(pupil_sample, samples, wavelength, efl):
 
     Parameters
     ----------
-    pupil_sample : `float`
+    pupil_sample : float
         sample spacing in the pupil plane
-    samples : `int`
+    samples : int
         number of samples present in both planes (must be equal)
-    wavelength : `float`
+    wavelength : float
         wavelength of light, in microns
-    efl : `float`
+    efl : float
         effective focal length of the optical system in mm
 
     Returns
     -------
-    `float`
+    float
         the sample spacing in the PSF plane
 
     """
@@ -191,18 +191,18 @@ def psf_sample_to_pupil_sample(psf_sample, samples, wavelength, efl):
 
     Parameters
     ----------
-    psf_sample : `float`
+    psf_sample : float
         sample spacing in the PSF plane
-    samples : `int`
+    samples : int
         number of samples present in both planes (must be equal)
-    wavelength : `float`
+    wavelength : float
         wavelength of light, in microns
-    efl : `float`
+    efl : float
         effective focal length of the optical system in mm
 
     Returns
     -------
-    `float`
+    float
         the sample spacing in the pupil plane
 
     """
@@ -218,16 +218,16 @@ def fresnel_number(a, L, lambda_):
 
     Parameters
     ----------
-    a : `float`
+    a : float
         characteristic size ("radius") of an aperture
-    L : `float`
+    L : float
         distance of observation
-    lambda_ : `float`
+    lambda_ : float
         wavelength of light, same units as a
 
     Returns
     -------
-    `float`
+    float
         the fresnel number for these parameters
 
     """
@@ -239,14 +239,14 @@ def talbot_distance(a, lambda_):
 
     Parameters
     ----------
-    a : `float`
+    a : float
         period of the grating, units of microns
-    lambda_ : `float`
+    lambda_ : float
         wavleength of light, units of microns
 
     Returns
     -------
-    `float`
+    float
         talbot distance, units of microns
 
     """
@@ -260,23 +260,23 @@ def angular_spectrum(field, wvl, dx, z, Q=2, tf=None):
 
     Parameters
     ----------
-    field : `numpy.ndarray`
+    field : numpy.ndarray
         2D array of complex electric field values
-    wvl : `float`
+    wvl : float
         wavelength of light, microns
-    z : `float`
+    z : float
         propagation distance, units of millimeters
-    dx : `float`
+    dx : float
         cartesian sample spacing, units of millimeters
-    Q : `float`
+    Q : float
         sampling factor used.  Q>=2 for Nyquist sampling of incoherent fields
-    tf : `numpy.ndarray`
+    tf : numpy.ndarray
         if not None, clobbers all other arguments
         transfer function for the propagation
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         2D ndarray of the output field, complex
 
     """
@@ -302,18 +302,18 @@ def angular_spectrum_transfer_function(samples, wvl, dx, z):
 
     Parameters
     ----------
-    samples : `int` or `tuple`
+    samples : int or tuple
         (y,x) or (r,c) samples in the output array
-    wvl : `float`
+    wvl : float
         wavelength of light, microns
-    dx : `float`
+    dx : float
         intersample spacing, mm
-    z : `float`
+    z : float
         propagation distance, mm
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         ndarray of shape samples containing the complex valued transfer function
         such that X = fft2(x); xhat = ifft2(X*tf) is signal x after free space propagation
 
@@ -337,13 +337,13 @@ class Wavefront:
 
         Parameters
         ----------
-        cmplx_field : `numpy.ndarray`
+        cmplx_field : numpy.ndarray
             complex-valued array with both amplitude and phase error
-        wavelength : `float`
+        wavelength : float
             wavelength of light, microns
-        dx : `float`
+        dx : float
             inter-sample spacing, mm (space=pupil) or um (space=psf)
-        space : `str`, {'pupil', 'psf'}
+        space : str, {'pupil', 'psf'}
             what sort of space the field occupies
 
         """
@@ -358,14 +358,14 @@ class Wavefront:
 
         Parameters
         ----------
-        amplitude : `numpy.ndarray`
+        amplitude : numpy.ndarray
             array containing the amplitude
-        phase : `numpy.ndarray`, optional
+        phase : numpy.ndarray, optional
             array containing the optical path error with units of nm
             if None, assumed zero
-        wavelength : `float`
+        wavelength : float
             wavelength of light with units of microns
-        dx : `float`
+        dx : float
             sample spacing with units of mm
 
         """
@@ -469,17 +469,17 @@ class Wavefront:
 
         Parameters
         ----------
-        dz : `float`
+        dz : float
             inter-plane distance, millimeters
-        Q : `float`
+        Q : float
             padding factor.  Q=1 does no padding, Q=2 pads 1024 to 2048.
-        tf : `numpy.ndarray`
+        tf : numpy.ndarray
             if not None, clobbers all other arguments
             transfer function for the propagation
 
         Returns
         -------
-        `Wavefront`
+        Wavefront
             the wavefront at the new plane
 
         """
@@ -501,16 +501,16 @@ class Wavefront:
 
         Parameters
         ----------
-        efl : `float`
+        efl : float
             focusing distance, millimeters
-        Q : `float`
+        Q : float
             padding factor.  Q=1 does no padding, Q=2 pads 1024 to 2048.
             To avoid aliasng, the array must be padded such that Q is at least 2
             this may happen organically if your data does not span the array.
 
         Returns
         -------
-        `Wavefront`
+        Wavefront
             the wavefront at the focal plane
 
         """
@@ -529,16 +529,16 @@ class Wavefront:
 
         Parameters
         ----------
-        efl : `float`
+        efl : float
             un-focusing distance, millimeters
-        Q : `float`
+        Q : float
             padding factor.  Q=1 does no padding, Q=2 pads 1024 to 2048.
             To avoid aliasng, the array must be padded such that Q is at least 2
             this may happen organically if your data does not span the array.
 
         Returns
         -------
-        `Wavefront`
+        Wavefront
             the wavefront at the pupil plane
 
         """
@@ -557,17 +557,17 @@ class Wavefront:
 
         Parameters
         ----------
-        efl : `float`
+        efl : float
             focusing distance, millimeters
-        dx : `float`
+        dx : float
             output sample spacing, microns
-        samples : `int`
+        samples : int
             number of samples in the output plane.  If int, interpreted as square
             else interpreted as (x,y), which is the reverse of numpy's (y, x) row major ordering
 
         Returns
         -------
-        `Wavefront`
+        Wavefront
             the wavefront at the psf plane
 
         """
@@ -594,17 +594,17 @@ class Wavefront:
 
         Parameters
         ----------
-        efl : `float`
+        efl : float
             un-focusing distance, millimeters
-        dx : `float`
+        dx : float
             output sample spacing, millimeters
-        samples : `int`
+        samples : int
             number of samples in the output plane.  If int, interpreted as square
             else interpreted as (x,y), which is the reverse of numpy's (y, x) row major ordering
 
         Returns
         -------
-        `Wavefront`
+        Wavefront
             wavefront at the pupil plane
 
         """

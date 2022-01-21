@@ -22,10 +22,10 @@ def mtf_from_psf(psf, dx=None):
 
     Parameters
     ----------
-    psf : `prysm.RichData` or `numpy.ndarray`
+    psf : prysm.RichData or numpy.ndarray
         object with data property having 2D data containing the psf,
         or the array itself
-    dx : `float`
+    dx : float
         sample spacing of the data
 
     Returns
@@ -46,10 +46,10 @@ def ptf_from_psf(psf, dx=None):
 
     Parameters
     ----------
-    psf : `prysm.RichData` or `numpy.ndarray`
+    psf : prysm.RichData or numpy.ndarray
         object with data property having 2D data containing the psf,
         or the array itself
-    dx : `float`
+    dx : float
         sample spacing of the data
 
     Returns
@@ -73,9 +73,9 @@ def otf_from_psf(psf, dx=None):
 
     Parameters
     ----------
-    psf : `numpy.ndarray`
+    psf : numpy.ndarray
         2D data containing the psf
-    dx : `float`
+    dx : float
         sample spacing of the data
 
     Returns
@@ -97,24 +97,24 @@ def diffraction_limited_mtf(fno, wavelength, frequencies=None, samples=128):
 
     Parameters
     ----------
-    fno : `float`
+    fno : float
         f/# of the lens.
-    wavelength : `float`
+    wavelength : float
         wavelength of light, in microns.
-    frequencies : `numpy.ndarray`
+    frequencies : numpy.ndarray
         spatial frequencies of interest, in cy/mm if frequencies are given, samples is ignored.
-    samples : `int`
+    samples : int
         number of points in the output array, if frequencies not given.
 
     Returns
     -------
     if frequencies not given:
-        frequencies : `numpy.ndarray`
+        frequencies : numpy.ndarray
             array of ordinate data
-        mtf : `numpy.ndarray`
+        mtf : numpy.ndarray
             array of coordinate data
     else:
-        mtf : `numpy.ndarray`
+        mtf : numpy.ndarray
             array of MTF data
 
     Notes
@@ -147,12 +147,12 @@ def _difflim_mtf_core(normalized_frequency):
 
     Parameters
     ----------
-    normalized_frequency : `numpy.ndarray`
+    normalized_frequency : numpy.ndarray
         normalized frequency; function is defined over [0, and takes a value of 0 for [1,
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         The diffraction MTF function at a given normalized spatial frequency
 
     """
@@ -166,22 +166,22 @@ def longexposure_otf(nu, Cn, z, f, lambdabar, h_z_by_r=2.91):
 
     Parameters
     ----------
-    nu : `numpy.ndarray`
+    nu : numpy.ndarray
         spatial frequencies, cy/mm
-    Cn: `float`
+    Cn: float
         atmospheric structure constant of refractive index, ranges ~ 10^-13 - 10^-17
-    z : `float`
+    z : float
         propagation distance through atmosphere, m
-    f : `float`
+    f : float
         effective focal length of the optical system, mm
-    lambdabar : `float`
+    lambdabar : float
         mean wavelength, microns
-    h_z_by_r : `float`, optional
+    h_z_by_r : float, optional
         constant for h[z/r] -- see Eq. 8.5-37 & 8.5-38 in Statistical Optics, J. Goodman, 2nd ed.
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         the OTF
 
     """
@@ -203,14 +203,14 @@ def komogorov(r, r0):
 
     Parameters
     ----------
-    r : `numpy.ndarray`
+    r : numpy.ndarray
         r, radial frequency parameter (object space)
-    r0 : `float`
+    r0 : float
         Fried parameter
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
 
     """
     return 6.88 * (r/r0) ** (5/3)
@@ -221,16 +221,16 @@ def estimate_Cn(P=1013, T=273.15, Ct=1e-4):
 
     Parameters
     ----------
-    P : `float`
+    P : float
         atmospheric pressure in hPa
-    T : `float`
+    T : float
         temperature in Kelvin
-    Ct : `float`
+    Ct : float
         atmospheric struction constant of temperature, typically 10^-5 - 10^-2 near the surface
 
     Returns
     -------
-    `float`
+    float
         Cn
 
     """

@@ -16,21 +16,21 @@ def pad2d(array, Q=2, value=0, mode='constant', out_shape=None):
 
     Parameters
     ----------
-    array : `numpy.ndarray`
+    array : numpy.ndarray
         source array
-    Q : `float`, optional
+    Q : float, optional
         oversampling factor; ratio of input to output array widths
-    value : `float`, optioanl
+    value : float, optioanl
         value with which to pad the array
-    mode : `str`, optional
+    mode : str, optional
         mode, passed directly to np.pad
-    out_shape : `tuple`
+    out_shape : tuple
         output shape for the array.  Overrides Q if given.
         in_shape * Q ~= out_shape (up to integer rounding)
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         padded array, may share memory with input array
 
     Notes
@@ -80,9 +80,9 @@ def crop_center(img, out_shape):
 
     Parameters
     ----------
-    img : `numpy.ndarray`
+    img : numpy.ndarray
         ndarray of shape (m, n)
-    out_shape : `int` or `iterable` of int
+    out_shape : int or iterable of int
         shape to crop out, either a scalar or pair of values
 
     """
@@ -100,17 +100,17 @@ def forward_ft_unit(dx, samples, shift=True):
 
     Parameters
     ----------
-    dx : `float`
+    dx : float
         center-to-center spacing of samples in an array
-    samples : `int`
+    samples : int
         number of samples in the data
-    shift : `bool`, optional
+    shift : bool, optional
         whether to shift the output.  If True, first element is a negative freq
         if False, first element is 0 freq.
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         array of sample frequencies in the output of an fft
 
     """
@@ -149,20 +149,20 @@ class MatrixDFTExecutor:
 
         Parameters
         ----------
-        ary : `numpy.ndarray`
+        ary : numpy.ndarray
             an array, 2D, real or complex.  Not fftshifted.
-        Q : `float`
+        Q : float
             oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
-        samples : `int` or `Iterable`
+        samples : int or Iterable
             number of samples in the output plane.
             If an int, used for both dimensions.  If an iterable, used for each dim
-        shift : `float`, optional
+        shift : float, optional
             shift of the output domain, as a frequency.  Same broadcast
             rules apply as with samples.
 
         Returns
         -------
-        `numpy.ndarray`
+        numpy.ndarray
             2D array containing the shifted transform.
             Equivalent to ifftshift(fft2(fftshift(ary))) modulo output
             sampling/grid differences
@@ -181,20 +181,20 @@ class MatrixDFTExecutor:
 
         Parameters
         ----------
-        ary : `numpy.ndarray`
+        ary : numpy.ndarray
             an array, 2D, real or complex.  Not fftshifted.
-        Q : `float`
+        Q : float
             oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
-        samples : `int` or `Iterable`
+        samples : int or Iterable
             number of samples in the output plane.
             If an int, used for both dimensions.  If an iterable, used for each dim
-        shift : `float`, optional
+        shift : float, optional
             shift of the output domain, as a frequency.  Same broadcast
             rules apply as with samples.
 
         Returns
         -------
-        `numpy.ndarray`
+        numpy.ndarray
             2D array containing the shifted transform.
             Equivalent to ifftshift(ifft2(fftshift(ary))) modulo output
             sampling/grid differences

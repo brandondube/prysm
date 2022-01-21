@@ -13,18 +13,18 @@ def gaussian(sigma, x, y, center=(0, 0)):
 
     Parameters
     ----------
-    sigma : `float`
+    sigma : float
         width parameter of the gaussian, expressed in the same units as x and y
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x spatial coordinates, 2D or 1D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y spatial coordinates, 2D or 1D
-    center : `tuple` of `float`
+    center : tuple of float
         center of the gaussian, (x,y)
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         mask with gaussian shape
 
     """
@@ -41,23 +41,23 @@ def rectangle(width, x, y, height=None, angle=0):
 
     Parameters
     ----------
-    width : `float`
+    width : float
         diameter of the rectangle, relative to the width of the array.
         width=1 fills the horizontal extent when angle=0
-    height : `float`
+    height : float
         diameter of the rectangle, relative to the height of the array.
         height=1 fills the vertical extent when angle=0.
         If None, inherited from width to make a square
-    angle : `float`
+    angle : float
         angle
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x spatial coordinates, 2D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y spatial coordinates, 2D
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         array with the rectangle painted at 1 and the background at 0
 
     """
@@ -85,20 +85,20 @@ def rotated_ellipse(width_major, width_minor, x, y, major_axis_angle=0):
 
     Parameters
     ----------
-    width_major : `float`
+    width_major : float
         width of the ellipse in its major axis
-    width_minor : `float`
+    width_minor : float
         width of the ellipse in its minor axis
-    major_axis_angle : `float`
+    major_axis_angle : float
         angle of the major axis w.r.t. the x axis, degrees
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x spatial coordinates, 2D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y spatial coordinates, 2D
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         An ndarray of shape (samples,samples) of value 0 outside the ellipse and value 1 inside the ellipse
 
     Notes
@@ -145,16 +145,16 @@ def square(x, y):
 
     Parameters
     ----------
-    samples : `int`, optional
+    samples : int, optional
         number of samples in the square output array
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x spatial coordinates, 2D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y spatial coordinates, 2D
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         binary ndarray representation of the mask
 
     """
@@ -166,16 +166,16 @@ def truecircle(radius, rho):
 
     Parameters
     ----------
-    samples : `int`, optional
+    samples : int, optional
         number of samples in the square output array
-    radius : `float`, optional
+    radius : float, optional
         radius of the shape in the square output array.  radius=1 will fill the
-    rho : `numpy.ndarray`
+    rho : numpy.ndarray
         radial coordinate, 2D
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         nonbinary ndarray representation of the mask
 
     Notes
@@ -198,15 +198,15 @@ def circle(radius, rho):
 
     Parameters
     ----------
-    radius : `float`
+    radius : float
         radius of the circle, same units as rho.  The return is 1 inside the
         radius and 0 outside
-    rho : `numpy.ndarray`
+    rho : numpy.ndarray
         2D array of radial coordinates
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         binary ndarray representation of the mask
 
     """
@@ -218,22 +218,22 @@ def regular_polygon(sides, radius, x, y, center=(0, 0), rotation=0):
 
     Parameters
     ----------
-    sides : `int`
+    sides : int
         number of sides to the polygon
-    radius : `float`, optional
+    radius : float, optional
         radius of the regular polygon.  For R=1, will fill the x and y extent
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x spatial coordinates, 2D or 1D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y spatial coordinates, 2D or 1D
-    center : `tuple` of `float`
+    center : tuple of float
         center of the gaussian, (x,y)
-    rotation : `float`
+    rotation : float
         rotation of the polygon, degrees
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         mask for regular polygon with radius equal to the array radius
 
     """
@@ -246,16 +246,16 @@ def _generate_mask(vertices, x, y):
 
     Parameters
     ----------
-    vertices : `iterable`
+    vertices : iterable
         ensemble of vertice (x,y) coordinates, in array units
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x spatial coordinates, 2D or 1D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y spatial coordinates, 2D or 1D
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         polygon mask
 
     """
@@ -283,18 +283,18 @@ def _generate_vertices(sides, radius=1, center=(0, 0), rotation=0):
 
     Parameters
     ----------
-    sides : `int`
+    sides : int
         number of sides to the polygon
-    radius : `float`
+    radius : float
         radius of the polygon
-    center : `tuple`
+    center : tuple
         center of the vertices, (x,y)
-    rotation : `float`
+    rotation : float
         rotation of the vertices, degrees
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         array with first column X points, second column Y points
 
     """
@@ -315,23 +315,23 @@ def spider(vanes, width, x, y, rotation=0, center=(0, 0)):
 
     Parameters
     ----------
-    vanes : `int`
+    vanes : int
         number of spider vanes
-    width : `float`
+    width : float
         width of the vanes in array units, i.e. a width=1/128 spider with
         arydiam=1 and samples=128 will be 1 pixel wide
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         x spatial coordinates, 2D or 1D
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         y spatial coordinates, 2D or 1D
-    rotation : `float`, optional
+    rotation : float, optional
         rotational offset of the vanes, clockwise
-    center : `tuple` of `float`
+    center : tuple of float
         point from which the vanes emanate, (x,y)
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         array, 0 inside the spider and 1 outside
 
     """
@@ -370,18 +370,18 @@ def offset_circle(radius, x, y, center):
 
     Parameters
     ----------
-    radius : `float`
+    radius : float
         radius of the circle, same units as x and y
-    x : `numpy.ndarray`
+    x : numpy.ndarray
         array of x coordinates
-    y : `numpy.ndarray`
+    y : numpy.ndarray
         array of y coordinates
-    center : `tuple`
+    center : tuple
         tuple of (x, y) centers
 
     Returns
     -------
-    `numpy.ndarray`
+    numpy.ndarray
         ndarray containing the boolean mask
 
     """
