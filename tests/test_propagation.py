@@ -3,7 +3,7 @@ import pytest
 
 import numpy as np
 
-from prysm import propagation
+from prysm import propagation, coordinates, geometry, polynomials
 from prysm.wavelengths import HeNe
 
 
@@ -98,3 +98,35 @@ def test_precomputed_angular_spectrum_functions():
     tf = propagation.angular_spectrum_transfer_function(2, wf.wavelength, wf.dx, 1)
     wf2 = wf.free_space(tf=tf)
     assert wf2
+
+
+def test_thinlens_hopkins_agree():
+    # F/10 beam
+    x, y = coordinates.make_xy_grid(128, diameter=10)
+    dx = x[0, 1] - x[0, 0]
+    r = np.hypot(x, y)
+    amp = geometry.circle(5, r)
+    phs = polynomials.hopkins(0, 2, 0, r/5, 0, 1) * (1.975347661 * HeNe * 1000)  # 1000, nm to um
+    wf = propagation.Wavefront.from_amp_and_phase(amp, phs, HeNe, dx)
+
+    # easy case is to choose thin lens efl = 10,000
+    # which will result in an overall focal length of 99.0 mm
+    # solve defocus delta z relation, then 1000 = 8 * .6328 * 100 * x
+    #                                  x = 1000 / 8 / .6328 / 100
+    #                                    = 1.975347661
+    psf = wf.focus(efl=100, Q=2).intensity
+
+    no_phs_wf = propagation.Wavefront.from_amp_and_phase(amp, None, HeNe, dx)
+    # bea
+    tl = propagation.Wavefront.thin_lens(10_000, HeNe, x, y)
+    wf = no_phs_wf * tl
+    psf2 = wf.focus(efl=100, Q=2).intensity
+
+    # lo and behold all ye who read this test, the lies of physical optics modeling
+    # did the beam propagate 100, or 99 millimeters?
+    # is the PSF we're looking at in the z=100 plane, or the z=99 plane?
+    # the answer is simply a matter of interpretation,
+    # if the phase screen for the thin lens is in your mind as a way of going
+    # to z=99, then we are in the z=99 plane.
+    # if the lens is really there, we are in the z=100 plane.
+    assert np.allclose(psf.data, psf2.data, rtol=1e-5)

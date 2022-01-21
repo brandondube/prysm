@@ -376,6 +376,54 @@ class Wavefront:
             P = amplitude
         return cls(P, wavelength, dx)
 
+    @classmethod
+    def thin_lens(cls, f, wavelength, x, y):
+        """Create a thin lens, used in focusing beams.
+
+        Users are encouraged to not use thin lens + free space propagation to
+        take beams to their focus.  In nearly all cases, a different propagation
+        scheme is significantly more computational efficient.  For example,
+        just using the wf.focus() method.  If you have access to the (unwrapped)
+        phase, it is also cheaper to compute the quadratic phase you want and
+        add that before wf.from_amp_and_phase) instead of multiplying by a thin
+        lens.
+
+        Parameters
+        ----------
+        f : float
+            focal length of the lens, millimeters
+        wavelength : float
+            wavelength of light, microns
+        x : numpy.ndarray
+            x coordinates that define the space of the lens, mm
+        y : numpy.ndarray
+            y coordinates that define the space of the beam, mm
+
+        Returns
+        -------
+        Wavefront
+            a wavefront object having quadratic phase which, when multiplied
+            by another wavefront acts as a thin lens
+
+        """
+        # the kernel is simply
+        #
+        # 2pi i  r^2
+        # ----- -----
+        #  wvl   2f
+        #
+        # for dimensional reduction to be unitless, wvl, r, f all need the same
+        # units, so scale wvl
+        w = wavelength / 1e3  # um -> mm
+        term1 = 1j * 2 * np.pi / w
+
+        rsq = x * x + y * y
+        term2 = rsq / (2 * f)
+
+        cmplx_screen = np.exp(term1 * term2)
+        dx = float(x[0, 1] - x[0, 0])  # float conversion for CuPy support
+        return cls(cmplx_field=cmplx_screen, wavelength=wavelength, dx=dx, space='pupil')
+
     @property
     def intensity(self):
         """Intensity, abs(w)^2."""
