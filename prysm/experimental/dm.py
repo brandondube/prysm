@@ -4,7 +4,7 @@ import warnings
 
 import numpy as truenp
 
-from prysm.mathops import np, ndimage
+from prysm.mathops import np, ndimage, fft
 from prysm.fttools import forward_ft_unit
 from prysm.convolution import apply_transfer_functions
 from prysm.coordinates import (
@@ -140,7 +140,8 @@ class DM:
         # stash inputs and some computed values on self
         self.x = x
         self.y = y
-        self.Ifn = np.fft.fft2(ifn)
+        self.ifn = ifn
+        self.Ifn = fft.fft2(ifn)
         self.Nact = Nact
         self.sep = sep
         self.shift = shift
@@ -164,7 +165,6 @@ class DM:
         rotmat = make_rotation_matrix(rot)
         XY = apply_rotation_matrix(rotmat, x, y)
         XY2 = xyXY_to_pixels((x, y), XY)
-        # XY2 = xyXY_to_pixels(XY, (x, y))
         self.XY = XY
         self.XY2 = XY2
 
@@ -183,9 +183,9 @@ class DM:
             Yramp = np.broadcast_to(Yramp, shpy).T
             self.Xramp = Xramp
             self.Yramp = Yramp
-            self.tfs = [self.Ifn, self.Xramp, self.Yramp]
+            self.tf = self.Ifn * self.Xramp * self.Yramp
         else:
-            self.tfs = [self.Ifn]
+            self.tf = self.Ifn
 
     def render(self, wfe=True, out=None):
         """Render the DM's surface figure or wavefront error.
@@ -228,7 +228,7 @@ class DM:
         self.poke_arr[self.iyy, self.ixx] = self.actuators_work
 
         # self.dx is unused inside apply tf, but :shrug:
-        sfe = apply_transfer_functions(self.poke_arr, self.dx, *self.tfs)
+        sfe = apply_transfer_functions(self.poke_arr, self.dx, self.tf)
         warped = regularize(xy=None, XY=self.XY, z=sfe, XY2=self.XY2)
         if wfe:
             warped *= (2*self.obliquity)
