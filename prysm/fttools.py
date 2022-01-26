@@ -11,6 +11,22 @@ def fftrange(n, dtype=None):
     return np.arange(-n//2, -n//2+n, dtype=dtype)
 
 
+def _next_power_of_2(n):
+    # 2 ** k == 1 << k
+    return 1 << math.ceil(math.log2(n))
+
+
+def next_fast_len(n):
+    """The next fast FFT size.
+
+    Defaults to powers of two if the FFT backend does not provide a function of the same name.
+    """
+    try:
+        return fft.next_fast_len(n)
+    except:  # NOQA -- cannot predict arbitrary library error types
+        return _next_power_of_2(n)
+
+
 def pad2d(array, Q=2, value=0, mode='constant', out_shape=None):
     """Symmetrically pads a 2D array with a value.
 
@@ -216,7 +232,7 @@ class MatrixDFTExecutor:
         if not isinstance(shift, Iterable):
             shift = (shift, shift)
 
-        # this is for dtype stabilization
+        # this is for dtype stabilization with
         Q = float(Q)
 
         key = self._key(Q=Q, ary=ary, samples=samples, shift=shift)
@@ -270,3 +286,191 @@ class MatrixDFTExecutor:
 
 
 mdft = MatrixDFTExecutor()
+
+
+class ChirpZTransformExecutor:
+    """Type which executes Chirp Z Transforms on 2D data, aka zoom FFTs."""
+    def __init__(self):
+        """Create a new Chirp Z Transform Executor."""
+        self.components = {}
+
+    def czt2(self, ary, Q, samples, shift=(0, 0)):
+        """Compute the two dimensional Chirp Z Transform of a matrix.
+
+        Parameters
+        ----------
+        ary : numpy.ndarray
+            an array, 2D, real or complex.  Not fftshifted.
+        Q : float
+            oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
+        samples : int or Iterable
+            number of samples in the output plane.
+            If an int, used for both dimensions.  If an iterable, used for each dim
+        shift : float, optional
+            shift of the output domain, as a number of samples at the output
+            sample rate.  I.e., if ary is 256x256, Q=2, and samples=512, then
+            the output is identical to a padded FFT.  If shift=256, the DC frequency
+            will be at the edge of the array; shift=(-256,256) would produce the
+            same result as a padded FFT without shifts.
+
+        Returns
+        -------
+        numpy.ndarray
+            2D array containing the shifted transform.
+            Equivalent to ifftshift(fft2(fftshift(ary))) modulo output
+            sampling/grid differences
+
+        """
+        if not isinstance(samples, Iterable):
+            samples = (samples, samples)
+
+        if not isinstance(shift, Iterable):
+            shift = (shift, shift)
+
+        if not isinstance(Q, Iterable):
+            Q = (Q, Q)
+
+        dtype = ary.dtype
+
+        m, n = ary.shape
+        M, N = samples
+        alphay = 1/(m*Q[0])
+        alphax = 1/(n*Q[1])
+        # alphay, alphax = Q
+
+        # slightly different notation to Jurling
+        # in Jurling, M = unpadded size of input domain
+        #             R = unpadded size of output domain
+        # we have     m = unpadded size of input domain
+        #             M = unpadded size of output domain
+        # the constraint is >= M+R - 1 -> m+M-1 (and #cols analogs)
+        K = next_fast_len(m+M-1)
+        L = next_fast_len(n+N-1)  # -                    norm = False
+        key = (m, n, M, N, K, L, alphay, alphax, *shift, dtype, False)
+        self._setup_bases(key)
+        # b, H, a are the variables from Jurling (where they have hats)
+        brow, bcol, Hrow, Hcol, arow, acol = self.components[key]
+
+        # in our case, the dense 2D arrays are stored as vectors, which
+        # dramatically reduces static memory usage.
+        # Runtime is very slightly slower.
+
+        # now do the transform, written out just like Jurling
+        gb = ary * bcol
+        gb *= brow  # faster in-place (minutely...)
+
+        # K, L = size; pad if need be internally
+        # benchmarked, and found 256 -> 512 w/ fft2:
+        # pad2d+fft2 = 4.34 ms
+        # fft2 w/ internal padding = 4.2 ms
+        # 1024 -> 2048 = 112, 113 (same order)
+        # --> marginal improvement internal to FFT for small data, who cares
+        # for big; let FFT do it
+        GBhat = fft.fft2(gb, (K, L))
+        GBhat *= Hcol
+        GBhat *= Hrow
+        gxformed = fft.ifft2(GBhat)  # transformed g
+        gxformed = gxformed[:M, :N]
+        gxformed *= acol
+        gxformed *= arow
+        return gxformed
+
+    def iczt2(self, ary, Q, samples, shift=(0, 0)):
+        """Compute the two dimensional inverse Chirp Z Transform of a matrix.
+
+        Parameters
+        ----------
+        ary : numpy.ndarray
+            an array, 2D, real or complex.  Not fftshifted.
+        Q : float
+            oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
+        samples : int or Iterable
+            number of samples in the output plane.
+            If an int, used for both dimensions.  If an iterable, used for each dim
+        shift : float, optional
+            shift of the output domain, as a number of samples at the output
+            sample rate.  I.e., if ary is 256x256, Q=2, and samples=512, then
+            the output is identical to a padded FFT.  If shift=256, the DC frequency
+            will be at the edge of the array; shift=(-256,256) would produce the
+            same result as a padded FFT without shifts.
+
+        Returns
+        -------
+        numpy.ndarray
+            2D array containing the shifted transform.
+            Equivalent to ifftshift(fft2(fftshift(ary))) modulo output
+            sampling/grid differences
+
+        """
+        # notice: chirp z transform is fwd/reverse based only on +i vs -i in the
+        # complex exponents
+        # we can save a whole ton of memory and code dup by just using the
+        # forward transform on the complex conjugate of the input.  Generally
+        # arrays are complex for optics since we want to handle having OPD,
+        # but np.conj copies real inputs, so we optimize for that.
+        if not bool(np.isreal(ary[0, 0])):  # bool for GPU support; cupy will return an array
+            ary = np.conj(ary)
+
+        xformed = self.czt2(ary, Q, samples, shift)
+        xformed *= (1/ary.size)  # same scaling as FFT/iFFT
+        return xformed
+
+    def _setup_bases(self, key):
+        try:
+            # probe the cache to see if the key exists, else generate
+            self.components[key]
+        except KeyError:
+            m, n, M, N, K, L, alphay, alphax, shifty, shiftx, dtype, norm = key
+            Hrow, brow, arow = _prepare_czt_basis(m, M, K, shifty, alphay, dtype, norm)
+            Hcol, bcol, acol = _prepare_czt_basis(n, N, L, shiftx, alphax, dtype, norm)
+            # those are all vectors, now add singleton dimensions for numpy
+            # to broadcast correctly in the following steps
+            brow = brow[:, np.newaxis]
+            Hrow = Hrow[:, np.newaxis]
+            arow = arow[:, np.newaxis]
+            self.components[key] = (brow, bcol, Hrow, Hcol, arow, acol)
+
+    def nbytes(self):
+        """Total size in memory of the cache in bytes."""
+        total = 0
+        for key in self.components:
+            arrays = self.components[key]
+            for array in arrays:
+                total += array.nbytes
+
+        return total
+
+
+def _prepare_czt_basis(N, M, K, shift, alpha, dtype, norm=False):
+    m = fftrange(M, dtype=dtype)
+    if shift != 0:
+        m += shift
+
+    prefix = -1j * np.pi
+    a = np.exp(prefix * m*m * alpha)
+
+    n = fftrange(N, dtype=dtype)
+    b = np.exp(prefix * n*n * alpha)
+    if norm:
+        b *= (1 / np.sqrt(alpha))  # mul cheaper than div; div a single scalar instead of M elements
+
+    # maybe can replace with empty for minor performance gains?
+    h = np.zeros(K, dtype=dtype)
+
+    # need to populate h piecewise, see Jurling2014 48c, 48d
+    start = -((N - M) // 2) + shift
+    j = np.arange(-start, -start+M, dtype=dtype)  # do not need a "-1" because arange is naturally end-exclusive
+    # j is an index variable
+    h[:M] = np.pi * (j * j)
+
+    # check for off-by-1 bug
+    j = np.arange(-start-N+1, -start, dtype=dtype)
+    h[K-N+1:K] = np.pi * (j * j)
+
+    # order matters, scalar * scalar * array avoids operations on whole array over and over again
+    h = np.exp(1j * alpha * h)
+    h[M:K-N+1] = 0
+    H = fft.fft(h)
+    return H, b, a
+
+czt = ChirpZTransformExecutor()  # NOQA
