@@ -2,6 +2,8 @@
 import math
 from collections.abc import Iterable
 
+import numpy as truenp
+
 from .mathops import np, fft
 from .conf import config
 
@@ -25,6 +27,19 @@ def next_fast_len(n):
         return fft.next_fast_len(n)
     except:  # NOQA -- cannot predict arbitrary library error types
         return _next_power_of_2(n)
+
+
+def fftfreq(n, d=1.0):
+    """Fast Fourier Transform frequency vector."""
+    try:
+        return fft.fftfreq(n, d)
+    except:  # NOQA -- cannot predict arbitrary library error types
+        # if the FFT backend does not have fftfreq, use numpy's.  Then, cast
+        # the data to the current numpy backend's data type
+        # for example, if fft = cupy fft and it doesn't have FFTfreq,
+        # use numpy's fftfreq, then turn that into a CuPy array
+        out = truenp.fft.fftfreq(n, d)
+        return np.asarray(out)
 
 
 def pad2d(array, Q=2, value=0, mode='constant', out_shape=None):
