@@ -39,3 +39,19 @@ def test_pad2d_cropcenter_adjoints(shape):
     intermediate = fttools.pad2d(inp, Q=2)
     out = fttools.crop_center(intermediate, inp.shape)
     assert np.allclose(inp, out)
+
+
+@pytest.mark.parametrize('samples', ARRAY_SIZES)
+def test_czt_equiv_to_fft(samples):
+    inp = np.random.rand(samples, samples)
+    fft = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(inp)))
+    czt = fttools.czt.czt2(inp, 1, samples)
+    assert np.allclose(fft, czt)
+
+
+@pytest.mark.parametrize('samples', ARRAY_SIZES)
+def test_czt_reverses_self_(samples):
+    inp = np.random.rand(samples, samples)
+    fwd = fttools.czt.czt2(inp, 1, samples)
+    back = fttools.czt.iczt2(fwd, 1, samples)
+    assert np.allclose(inp, back)

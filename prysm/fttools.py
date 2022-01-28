@@ -445,6 +445,10 @@ class ChirpZTransformExecutor:
             arow = arow[:, np.newaxis]
             self.components[key] = (brow, bcol, Hrow, Hcol, arow, acol)
 
+    def clear(self):
+        """Empty the cache."""
+        self.components = {}
+
     def nbytes(self):
         """Total size in memory of the cache in bytes."""
         total = 0
