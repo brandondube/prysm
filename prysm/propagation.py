@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from .conf import config
 from .mathops import np, fft
 from ._richdata import RichData
-from .fttools import pad2d, mdft
+from .fttools import pad2d, crop_center, mdft
 
 
 def focus(wavefunction, Q):
@@ -433,6 +433,66 @@ class Wavefront:
     def phase(self):
         """Phase, angle(w).  Possibly wrapped for large OPD."""
         return RichData(np.angle(self.data), self.dx, self.wavelength)
+
+    def pad2d(self, Q, value=0, mode='constant', out_shape=None, inplace=True):
+        """Pad the wavefront.
+
+        Parameters
+        ----------
+        array : numpy.ndarray
+            source array
+        Q : float, optional
+            oversampling factor; ratio of input to output array widths
+        value : float, optioanl
+            value with which to pad the array
+        mode : str, optional
+            mode, passed directly to np.pad
+        out_shape : tuple
+            output shape for the array.  Overrides Q if given.
+            in_shape * Q ~= out_shape (up to integer rounding)
+        inplace : bool, optional
+            if True, mutate this wf and return it, else
+            create a new wf with cropped data
+
+        Returns
+        -------
+        Wavefront
+            wavefront with padded data
+
+        """
+        padded = pad2d(self.data, Q=Q, value=value, mode=mode, out_shape=out_shape)
+        if inplace:
+            self.data = padded
+            return self
+
+        out = Wavefront(padded, self.wavelength, self.dx, self.space)
+        return out
+
+    def crop(self, out_shape, inplace=True):
+        """Crop the wavefront to the centermost (out_shape).
+
+        Parameters
+        ----------
+        out_shape : int or tuple of (int, int)
+            the output shape (aka number of pixels) to crop to.
+        inplace : bool, optional
+            if True, mutate this wf and return it, else
+            create a new wf with cropped data
+            if out-of-place, will share memory with self via overlap of data
+
+        Returns
+        -------
+        Wavefront
+            cropped wavefront
+
+        """
+        cropped = crop_center(self.data, out_shape)
+        if inplace:
+            self.data = cropped
+            return self
+
+        out = Wavefront(cropped, self.wavelength, self.dx, self.space)
+        return out
 
     def __numerical_operation__(self, other, op):
         """Apply an operation to this wavefront with another piece of data."""
