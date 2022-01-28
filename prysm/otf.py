@@ -12,7 +12,7 @@ def transform_psf(psf, dx=None):
     if dx is None:
         raise ValueError('dx is None: dx must be provided if psf is an array')
 
-    data = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(psf)))
+    data = fft.fftshift(fft.fft2(fft.ifftshift(psf)))
     df = 1000 / (data.shape[0] * dx)  # cy/um to cy/mm
     return data, df
 

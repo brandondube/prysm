@@ -184,8 +184,8 @@ def psd(height, dx, window=None):
 
     """
     window = make_window(height, dx, window)
-    fft = np.fft.ifftshift(np.fft.fft2(np.fft.fftshift(height * window)))
-    psd = abs(fft)**2  # mag squared first as per GH_FFT
+    ft = fft.ifftshift(fft.fft2(fft.fftshift(height * window)))
+    psd = abs(ft)**2  # mag squared first as per GH_FFT
 
     fs = 1 / dx
     S2 = (window**2).sum()
@@ -349,7 +349,7 @@ def synthesize_surface_from_psd(psd, nu_x, nu_y):
     """
     # generate a random phase to be matched to the PSD
     randnums = np.random.rand(*psd.shape)
-    randfft = np.fft.fft2(randnums)
+    randfft = fft.fft2(randnums)
     phase = np.angle(randfft)
 
     # calculate the output window
@@ -367,7 +367,7 @@ def synthesize_surface_from_psd(psd, nu_x, nu_y):
     signal = np.exp(1j * phase) * np.sqrt(A * psd)
 
     coef = 1 / dx / dy
-    out = np.fft.ifftshift(np.fft.ifft2(np.fft.fftshift(signal))) * coef
+    out = fft.ifftshift(fft.ifft2(fft.fftshift(signal))) * coef
     out = out.real
     return x, y, out
 
@@ -1174,7 +1174,7 @@ class Interferogram(RichData):
 
 
 # def gaussfilt1d(x, fl=None, fh=None, typ='lowpass'):
-#     fft = np.fft
+#     fft = fft
 #     dx = x[1] - x[0]
 #     nu = fft.fftfreq(len(x), dx)
 #     H = abs(nu) <= fh

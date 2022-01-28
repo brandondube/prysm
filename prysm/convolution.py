@@ -1,7 +1,7 @@
 """Recipes for numerical convolution."""
 import inspect
 
-from .mathops import np
+from .mathops import np, fft
 from .coordinates import optimize_xy_separable, cart_to_polar
 from .fttools import forward_ft_unit
 
@@ -25,9 +25,9 @@ def conv(obj, psf):
     # notation:
     o = obj
     h = psf
-    O = np.fft.fft2(np.fft.ifftshift(o))  # NOQA : O ambiguous (not, lowercase => uppercase notation)
-    H = np.fft.fft2(np.fft.ifftshift(h))
-    i = np.fft.fftshift(np.fft.ifft2(O*H)).real  # i = image
+    O = fft.fft2(fft.ifftshift(o))  # NOQA : O ambiguous (not, lowercase => uppercase notation)
+    H = fft.fft2(fft.ifftshift(h))
+    i = fft.fftshift(fft.ifft2(O*H)).real  # i = image
     return i
 
 
@@ -71,9 +71,9 @@ def apply_transfer_functions(obj, dx, *tfs, fx=None, fy=None, ft=None, fr=None, 
 
     o = obj
     if shift:
-        O = np.fft.ifftshift(np.fft.fft2(o))  # NOQA
+        O = fft.ifftshift(fft.fft2(o))  # NOQA
     else:
-        O = np.fft.fft2(o)  # NOQA
+        O = fft.fft2(o)  # NOQA
 
     for tf in tfs:
         if callable(tf):
@@ -95,5 +95,5 @@ def apply_transfer_functions(obj, dx, *tfs, fx=None, fy=None, ft=None, fr=None, 
 
     # no if shift on this side, [i]fft will always place the origin at [0,0]
     # real inside shift - 2x faster to shift real than to shift complex
-    i = np.fft.ifftshift(np.fft.ifft2(O).real)
+    i = fft.ifftshift(fft.ifft2(O).real)
     return i
