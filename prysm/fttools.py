@@ -175,7 +175,7 @@ class MatrixDFTExecutor:
 
         return (Q, ary.shape, samples, shift)
 
-    def dft2(self, ary, Q, samples, shift=None):
+    def dft2(self, ary, Q, samples, shift=(0, 0)):
         """Compute the two dimensional Discrete Fourier Transform of a matrix.
 
         Parameters
@@ -207,7 +207,7 @@ class MatrixDFTExecutor:
 
         return out
 
-    def idft2(self, ary, Q, samples, shift=None):
+    def idft2(self, ary, Q, samples, shift=(0, 0)):
         """Compute the two dimensional inverse Discrete Fourier Transform of a matrix.
 
         Parameters
@@ -264,10 +264,12 @@ class MatrixDFTExecutor:
             X, Y, U, V = (fftrange(n, dtype=config.precision) for n in (m, n, M, N))
 
             # do not even perform an op if shift is nothing
-            if shift[0] is not None:
+            if shift[0] != 0:
                 Y -= shift[0]
-                X -= shift[1]
                 V -= shift[0]
+
+            if shift[1] != 0:
+                X -= shift[1]
                 U -= shift[1]
 
             nm = n*m
