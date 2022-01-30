@@ -1,5 +1,5 @@
 """MTF/PTF/OTF calculations."""
-from .mathops import np
+from .mathops import np, fft
 from ._richdata import RichData
 
 
