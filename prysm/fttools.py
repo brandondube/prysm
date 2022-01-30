@@ -444,6 +444,10 @@ class ChirpZTransformExecutor:
             Hrow = Hrow[:, np.newaxis]
             arow = arow[:, np.newaxis]
             self.components[key] = (brow, bcol, Hrow, Hcol, arow, acol)
+            # benchmarked a version which turns these into 2D arrays at this step,
+            # instead of doing two multiplies in the main czt function.
+            # it is about 2% faster to compute the products up front here, in
+            # exchange for squaring the memory use -> leave the caches as vectors
 
     def clear(self):
         """Empty the cache."""
