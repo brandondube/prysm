@@ -359,7 +359,7 @@ class RichData:
             norm = PowerNorm(power)
 
         im = ax.imshow(data,
-                       extent=[x.min(), x.max(), y.min(), y.max()],
+                       extent=[x.min(), x.max(), y.max(), y.min()],
                        cmap=cmap,
                        clim=clim,
                        norm=norm,
