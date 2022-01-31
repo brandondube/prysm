@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from .conf import config
 from .mathops import np, fft
 from ._richdata import RichData
-from .fttools import pad2d, crop_center, mdft
+from .fttools import pad2d, crop_center, mdft, czt
 
 
 def focus(wavefunction, Q):
@@ -60,7 +60,8 @@ def unfocus(wavefunction, Q):
 
 
 def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
-                         wavelength, output_dx, output_samples):
+                         wavelength, output_dx, output_samples,
+                         shift=(0, 0), method='mdft'):
     """Propagate a pupil function to the PSF plane with fixed sampling.
 
     Parameters
@@ -77,6 +78,12 @@ def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
         sample spacing in the output plane, microns
     output_samples : int
         number of samples in the square output array
+    shift : tuple of float
+        shift in (X, Y), same units as output_dx
+    method : str, {'mdft', 'czt'}
+        how to propagate the field, matrix DFT or Chirp Z transform
+        CZT is usually faster single-threaded and has less memory consumption
+        MDFT is usually faster multi-threaded and has more memory consumption
 
     Returns
     -------
@@ -90,11 +97,18 @@ def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
                        wavelength=wavelength,
                        output_dx=output_dx)
 
-    return mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples)
+    if shift[0] != 0 or shift[1] != 0:
+        shift = (shift[0]/output_dx, shift[1]/output_dx)
+
+    if method == 'mdft':
+        return mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+    elif method == 'czt':
+        return czt.czt2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
 
 
 def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
-                           wavelength, output_dx, output_samples):
+                           wavelength, output_dx, output_samples,
+                           shift=(0, 0), method='mdft'):
     """Propagate an image plane field to the pupil plane with fixed sampling.
 
     Parameters
@@ -111,6 +125,12 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
         sample spacing in the output plane, microns
     output_samples : int
         number of samples in the square output array
+    shift : tuple of float
+        shift in (X, Y), same units as output_dx
+    method : str, {'mdft', 'czt'}
+        how to propagate the field, matrix DFT or Chirp Z transform
+        CZT is usually faster single-threaded and has less memory consumption
+        MDFT is usually faster multi-threaded and has more memory consumption
 
     Returns
     -------
@@ -135,8 +155,14 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
                        output_dx=input_dx)  # not a typo
 
     Q /= wavefunction.shape[0] / output_samples[0]
-    field = mdft.idft2(ary=wavefunction, Q=Q, samples=output_samples)
-    return field
+
+    if shift[0] != 0 or shift[1] != 0:
+        shift = (shift[0]/output_dx, shift[1]/output_dx)
+
+    if method == 'mdft':
+        return mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+    elif method == 'czt':
+        return czt.czt2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
 
 
 def Q_for_sampling(input_diameter, prop_dist, wavelength, output_dx):
@@ -610,7 +636,7 @@ class Wavefront:
 
         return Wavefront(data, self.wavelength, dx, space='pupil')
 
-    def focus_fixed_sampling(self, efl, dx, samples):
+    def focus_fixed_sampling(self, efl, dx, samples, shift=(0, 0), method='mdft'):
         """Perform a "pupil" to "psf" propagation with fixed output sampling.
 
         Uses matrix triple product DFTs to specify the grid directly.
@@ -624,6 +650,12 @@ class Wavefront:
         samples : int
             number of samples in the output plane.  If int, interpreted as square
             else interpreted as (x,y), which is the reverse of numpy's (y, x) row major ordering
+        shift : tuple of float
+            shift in (X, Y), same units as output_dx
+        method : str, {'mdft', 'czt'}
+            how to propagate the field, matrix DFT or Chirp Z transform
+            CZT is usually faster single-threaded and has less memory consumption
+            MDFT is usually faster multi-threaded and has more memory consumption
 
         Returns
         -------
@@ -643,11 +675,13 @@ class Wavefront:
             prop_dist=efl,
             wavelength=self.wavelength,
             output_dx=dx,
-            output_samples=samples)
+            output_samples=samples,
+            shift=shift,
+            method=method)
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='psf')
 
-    def unfocus_fixed_sampling(self, efl, dx, samples):
+    def unfocus_fixed_sampling(self, efl, dx, samples, shift=(0, 0), method='mdft'):
         """Perform a "psf" to "pupil" propagation with fixed output sampling.
 
         Uses matrix triple product DFTs to specify the grid directly.
@@ -661,6 +695,12 @@ class Wavefront:
         samples : int
             number of samples in the output plane.  If int, interpreted as square
             else interpreted as (x,y), which is the reverse of numpy's (y, x) row major ordering
+        shift : tuple of float
+            shift in (X, Y), same units as output_dx
+        method : str, {'mdft', 'czt'}
+            how to propagate the field, matrix DFT or Chirp Z transform
+            CZT is usually faster single-threaded and has less memory consumption
+            MDFT is usually faster multi-threaded and has more memory consumption
 
         Returns
         -------
@@ -680,6 +720,8 @@ class Wavefront:
             prop_dist=efl,
             wavelength=self.wavelength,
             output_dx=dx,
-            output_samples=samples)
+            output_samples=samples,
+            shift=shift,
+            method=method)
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')

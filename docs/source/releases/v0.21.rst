@@ -10,13 +10,19 @@ In preparation for a V1.0 based upon v0.20 / v0.21, a new experimental sub-modul
 New Features
 ============
 
-Raytracing has been implemented using Spencer & Murty's icionic method.  Tracing multiple rays in parallel is supported, as are surfaced based on all of the polynomials implemented in prysm (sphere, conic, even asphere, Zernike, Qbfs, Qcon, Q2D, Hermite, Legendre, Chebyshev, ...).  Individual rays trace at a rate of about 5,000 ray-surfaces per second on a laptop CPU.  Roughly 2.5 million ray-surfaces per second are acheived on a laptop CPU with batched calculations and low complexity surfaces (conics, spheres).  More complex surface geometries, e.g. Q polynomials are slower.  Batch raytracing on GPU traces several billion ray-surfaces per second, exceeding the performance of Zemax and Code V.  There is no support for optimization, either now or planned.  Basic analysis routines are included -- spot diagrams, transverse ray aberrations, as well as paraxial image solves.  2D raytrace plots are supported.  The raytracing module will be expanded in the future and integration between it and the physical optics routines will be performed, enabling hybrid modeling with both rays and waves.
-
 Deformable Mirrors have been implemented, and feature a superset of the features found in other packages while also being about 2x faster than PROPER on CPU, and 70x faster on GPU.  See `the DM deep-dive <../explanation/Deformable Mirrors>`.
 
 Segmented systems have gained support for highly optimized modal wavefront errors by using :func:`prysm.segmented.CompositeHexagonalAperture.prepare_opd_bases` and :func:`prysm.segmented.CompositeHexagonalAperture.compose_opd`.  On a laptop CPU, it takes less than 3 milliseconds to do an 11 term Zernike expansion of each segment in a JWST-like aperture on a 512x512 array.  On a GPU, it takes less than 13 milliseconds to do an 11 term expansion of each segment in a LUVOIR-A like aperture on a 2048x2048 array.  See `the segmented system deep-dive <../explanation/Segmented Systems>`.
 
 The propagation module has gained :func:`~prysm.propagation.Wavefront.thin_lens`, used to model thin lenses.  The longstanding :func:`~prysm.thinlens.defocus_to_image_displacement` and :func:`~prysm.thinlens.image_displacement_to_defocus` functions can be used to determine the focal length of a thin lens to produce a desired effect, or the effect of a thin lens.
+
+Chirp Z transforms have been implemented as an alternative to matrix DFTs.  The :code:`method` keyword arguments to :func:`~prysm.propagation.Wavefront.focus_fixed_sampling` and :func:`~prysm.propagation.Wavefront.unfocus_fixed_sampling` allow the user to select freely between MDFTs and CZTs.  Constrained to a single thread, CZTs are faster than matrix DFTs for moderately large array sizes.  Not subject to this constraint, CZTs will usually be slower by about 3-4x.  Both matrix DFTs and CZTs keep an FFT wisdom-like cache.  The CZT cache only holds vectors, and for N x N sized arrays is a factor of N smaller (100s to 1000s of times, typically).
+
+Fixed sampling propagations now expose the shift argument, which was previously available only through direct use of the fttools functions which perform the Fourier computations.
+
+The :class:`~prysm.propagation.Wavefront` type now has pad2d and crop methods, which provide more fluent access to the functions by the same name from the fttools package.
+
+Raytracing has been implemented using Spencer & Murty's icionic method.  Tracing multiple rays in parallel is supported, as are surfaced based on all of the polynomials implemented in prysm (sphere, conic, even asphere, Zernike, Qbfs, Qcon, Q2D, Hermite, Legendre, Chebyshev, ...).  Individual rays trace at a rate of about 5,000 ray-surfaces per second on a laptop CPU.  Roughly 2.5 million ray-surfaces per second are acheived on a laptop CPU with batched calculations and low complexity surfaces (conics, spheres).  More complex surface geometries, e.g. Q polynomials are slower.  Batch raytracing on GPU traces several billion ray-surfaces per second, exceeding the performance of Zemax and Code V.  There is no support for optimization, either now or planned.  Basic analysis routines are included -- spot diagrams, transverse ray aberrations, as well as paraxial image solves.  2D raytrace plots are supported.  The raytracing module will be expanded in the future and integration between it and the physical optics routines will be performed, enabling hybrid modeling with both rays and waves.
 
 The polynomials module has gained support for both types of Hermite polynomials, Dickson polynomials of the first and second kind, and Chebyshev polynomials of the third and Fourth kind:
 
@@ -61,6 +67,7 @@ Bug Fixes
 
 :class:`~prysm.segmented.CompositeHexagonalAperture` internal data structures did not exclude the center/0th segment, even if the amplitude mask did.  This has been fixed.
 
+The matrix DFT shift argument was reversed between implementation and docstring.  The order is now (X,Y) which means axis (1,0).  Previously the order was (Y, X) and axis order (0, 1).
 
 Performance Enhancements
 ========================
