@@ -264,13 +264,13 @@ class MatrixDFTExecutor:
             X, Y, U, V = (fftrange(n, dtype=config.precision) for n in (m, n, M, N))
 
             # do not even perform an op if shift is nothing
-            if shift[0] != 0:
-                Y -= shift[0]
-                V -= shift[0]
-
             if shift[1] != 0:
-                X -= shift[1]
-                U -= shift[1]
+                Y -= shift[1]
+                V -= shift[1]
+
+            if shift[0] != 0:
+                X -= shift[0]
+                U -= shift[0]
 
             nm = n*m
             NM = N*M
@@ -438,8 +438,8 @@ class ChirpZTransformExecutor:
             self.components[key]
         except KeyError:
             m, n, M, N, K, L, alphay, alphax, shifty, shiftx, dtype, norm = key
-            Hrow, brow, arow = _prepare_czt_basis(m, M, K, shifty, alphay, dtype, norm)
-            Hcol, bcol, acol = _prepare_czt_basis(n, N, L, shiftx, alphax, dtype, norm)
+            Hrow, brow, arow = _prepare_czt_basis(m, M, K, shiftx, alphax, dtype, norm)
+            Hcol, bcol, acol = _prepare_czt_basis(n, N, L, shifty, alphay, dtype, norm)
             # those are all vectors, now add singleton dimensions for numpy
             # to broadcast correctly in the following steps
             brow = brow[:, np.newaxis]
