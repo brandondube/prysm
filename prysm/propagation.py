@@ -160,9 +160,9 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
         shift = (shift[0]/output_dx, shift[1]/output_dx)
 
     if method == 'mdft':
-        return mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+        return mdft.idft2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
     elif method == 'czt':
-        return czt.czt2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+        return czt.iczt2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
 
 
 def Q_for_sampling(input_diameter, prop_dist, wavelength, output_dx):
