@@ -145,12 +145,66 @@ def forward_ft_unit(dx, samples, shift=True):
         array of sample frequencies in the output of an fft
 
     """
-    unit = fft.fftfreq(samples, dx)
+    unit = fftfreq(samples, dx)
 
     if shift:
         return fft.fftshift(unit)
     else:
         return unit
+
+
+def fourier_resample(f, zoom):
+    """Resample f via Fourier methods (truncated sinc interpolation).
+
+    Parameters
+    ----------
+    f : numpy.ndarray
+        ndim 2 ndarray, floating point dtype
+    zoom : float
+        zoom factor to apply
+        out.shape == f.shape*zoom
+
+    Returns
+    -------
+    numpy.ndarray
+        zoomed f
+
+    Notes
+    -----
+    Assumes F is (reasonably) bandlimited
+
+    Energy will be deleted, not aliased, if zoom results in the output domain
+    being smaller than the Fourier support of f
+
+    """
+    # performance: not pre-shifting f introduces a linear phase term to the FFT
+    # but we do the opposite "mistake" on the way out and they cancel.
+    if zoom == 1:
+        return f
+
+    m, n = f.shape
+    M = int(m*zoom)
+    N = int(n*zoom)
+
+    F = fft.fftshift(fft.fft2(fft.ifftshift(f)))
+    fprime = mdft.idft2(F, zoom, (M, N)).real
+    fprime *= (fprime.size/f.size)
+    return fprime
+    # the below code is not commented out but is unreachable, it is an
+    # alternative way, however it will produce a rounding error in the scaling
+    # when m*zoom is not an integer
+    F = fft.fftshift(fft.fft2(fft.ifftshift(f)))
+    if zoom < 1:
+        F = crop_center(F, (M, N))
+    else:
+        F = pad2d(F, out_shape=(M, N), value=0, mode='constant')
+
+    # ifftshift divides by m*n
+    # the scaling is wrong by the ratio F.size/f.size ~= zoom^2 (integer rounding)
+    # real before shift, cheaper to shift f64 than c128
+    fprime = fft.fftshift(fft.ifft2(fft.ifftshift(F)).real)
+    fprime *= (F.size/f.size)
+    return fprime
 
 
 class MatrixDFTExecutor:
