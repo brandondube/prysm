@@ -4,8 +4,8 @@ import warnings
 
 import numpy as truenp
 
-from prysm.mathops import np, ndimage, fft
-from prysm.fttools import forward_ft_unit
+from prysm.mathops import np, fft
+from prysm.fttools import forward_ft_unit, fourier_resample
 from prysm.convolution import apply_transfer_functions
 from prysm.coordinates import (
     make_rotation_matrix,
@@ -69,7 +69,7 @@ def prepare_actuator_lattice(shape, dx, Nact, sep, mask, dtype):
 
 class DM:
     """A DM whose actuators fill a rectangular region on a perfect grid, and have the same influence function."""
-    def __init__(self, x, y, ifn, Nact=50, sep=10, shift=(0, 0), rot=(0, 10, 0), upsample=1, spline_order=3, mask=None):
+    def __init__(self, x, y, ifn, Nact=50, sep=10, shift=(0, 0), rot=(0, 10, 0), upsample=1, mask=None):
         """Create a new DM model.
 
         This model is based on convolution of a 'poke lattice' with the influence
@@ -122,9 +122,6 @@ class DM:
             by this code to verify as such.  Aliasing-defeating features of the
             resampler are disabled, as they reduce accuracy for bandlimited
             inputs.
-        spline_order : int
-            Bezier spline order used when resampling the data, if upsample != 1
-            1 = linear splines, 3 = cubic, etc.  Passed directly as scipy.ndimage.zoom(order=spline_order)
         mask : numpy.ndarray
             boolean ndarray of shape Nact used to suppress/delete/exclude
             actuators; 1=keep, 0=suppress
@@ -149,7 +146,6 @@ class DM:
         self.obliquity = truenp.cos(truenp.radians(truenp.linalg.norm(rot)))
         self.rot = rot
         self.upsample = upsample
-        self.spline_order = spline_order
 
         # prepare the poke array and supplimentary integer arrays needed to
         # copy it into the working array
@@ -162,11 +158,14 @@ class DM:
         self.iyy = out['iyy']
 
         # rotation data
-        rotmat = make_rotation_matrix(rot)
-        XY = apply_rotation_matrix(rotmat, x, y)
+        self.rotmat = make_rotation_matrix(rot)
+        XY = apply_rotation_matrix(self.rotmat, x, y)
         XY2 = xyXY_to_pixels((x, y), XY)
         self.XY = XY
         self.XY2 = XY2
+        self.needs_rot = True
+        if np.allclose(rot, [0, 0, 0]):
+            self.needs_rot = False
 
         # shift data
         if shift[0] != 0 or shift[1] != 0:
@@ -229,12 +228,15 @@ class DM:
 
         # self.dx is unused inside apply tf, but :shrug:
         sfe = apply_transfer_functions(self.poke_arr, self.dx, self.tf)
-        warped = regularize(xy=None, XY=self.XY, z=sfe, XY2=self.XY2)
+        if self.needs_rot:
+            warped = regularize(xy=None, XY=self.XY, z=sfe, XY2=self.XY2)
+        else:
+            warped = sfe
         if wfe:
             warped *= (2*self.obliquity)
 
         if self.upsample != 1:
-            warped = ndimage.zoom(warped, zoom=self.upsample, order=self.spline_order, output=out)
+            warped = fourier_resample(warped, self.upsample)
         else:
             if out is not None:
                 warnings.warn('prysm/DM: out was not None when upsample=1.  A wasteful extra copy was performed which reduces performance.')
