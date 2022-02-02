@@ -1,7 +1,7 @@
 """Recipes for numerical convolution."""
 import inspect
 
-from .mathops import np, fft
+from .mathops import fft
 from .coordinates import optimize_xy_separable, cart_to_polar
 from .fttools import forward_ft_unit
 
@@ -95,5 +95,5 @@ def apply_transfer_functions(obj, dx, *tfs, fx=None, fy=None, ft=None, fr=None, 
 
     # no if shift on this side, [i]fft will always place the origin at [0,0]
     # real inside shift - 2x faster to shift real than to shift complex
-    i = fft.ifftshift(fft.ifft2(O).real)
+    i = fft.fftshift(fft.ifft2(O).real)
     return i
