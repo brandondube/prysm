@@ -31,7 +31,7 @@ def conv(obj, psf):
     return i
 
 
-def apply_transfer_functions(obj, dx, *tfs, fx=None, fy=None, ft=None, fr=None, shift=False):
+def apply_transfer_functions(obj, dx, tfs, fx=None, fy=None, ft=None, fr=None, shift=False):
     """Blur an object by N transfer functions.
 
     Parameters
@@ -63,11 +63,12 @@ def apply_transfer_functions(obj, dx, *tfs, fx=None, fy=None, ft=None, fr=None, 
         image after being blurred by each transfer function
 
     """
-    if fx is None:
-        fy, fx = [forward_ft_unit(dx, n) for n in obj.shape]
+    if any(callable(tf) for tf in tfs):
+        if fx is None:
+            fy, fx = [forward_ft_unit(dx, n) for n in obj.shape]
 
-    fx, fy = optimize_xy_separable(fx, fy)
-    fr, ft = cart_to_polar(fx, fy)
+        fx, fy = optimize_xy_separable(fx, fy)
+        fr, ft = cart_to_polar(fx, fy)
 
     o = obj
     if shift:
