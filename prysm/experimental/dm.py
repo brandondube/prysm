@@ -8,6 +8,7 @@ from prysm.mathops import np, ndimage, fft
 from prysm.fttools import forward_ft_unit
 from prysm.convolution import apply_transfer_functions
 from prysm.coordinates import (
+    make_xy_grid,
     make_rotation_matrix,
     apply_rotation_matrix,
     xyXY_to_pixels,
@@ -15,7 +16,7 @@ from prysm.coordinates import (
 )
 
 
-def prepare_actuator_lattice(shape, dx, Nact, sep, mask, dtype):
+def prepare_actuator_lattice(shape, Nact, sep, mask, dtype):
     """Prepare a lattice of actuators.
 
     Usage guide:
@@ -69,7 +70,7 @@ def prepare_actuator_lattice(shape, dx, Nact, sep, mask, dtype):
 
 class DM:
     """A DM whose actuators fill a rectangular region on a perfect grid, and have the same influence function."""
-    def __init__(self, x, y, ifn, Nact=50, sep=10, shift=(0, 0), rot=(0, 10, 0), upsample=1, spline_order=3, mask=None):
+    def __init__(self, ifn, Nact=50, sep=10, shift=(0, 0), rot=(0, 0, 0), upsample=1, spline_order=3, mask=None):
         """Create a new DM model.
 
         This model is based on convolution of a 'poke lattice' with the influence
@@ -79,52 +80,30 @@ class DM:
                 centered on the sample which would contain the DC frequency bin
                 after an FFT.
             2.  The rotation is applied in the same sampling as ifn
-            3.  Shift is applied using a Fourier method and not subject to
-                quantization (given that ifn is band-limited as given)
-            4.  The resampling from x.shape to (x.shape * upsample)
-                is done after rotation (this is slightly non-optimal, as the
-                foreshortening due to rotation can make the data non-bandlimited.
-                However, in general DM models tend to be extremely oversampled
-                and, and the angles shallow.  The user would need to pass two
-                pairs of x,y arrays at two separate resolutions with the more
-                accurate design choice (before rotation)).
+            3.  Shifts and resizing are applied using a Fourier method and not
+                subject to quantization
 
         Parameters
         ----------
-        x : numpy.ndarray
-            x coordinates at the DM surface; 2D
-        y : numpy.ndarray
-            y coordinates at the DM surface; 2D
         ifn : numpy.ndarray
             influence function; assumes the same for all actuators and must
-            be the same shape as (x,y).  Assumed centered on N//2th sample of x,y.
-            Assumed to be well-conditioned to take a Fourier transform of
-            (i.e., reaches zero prior to the edge of the array)
+            be the same shape as (x,y).  Assumed centered on N//2th sample of x, y.
+            Assumed to be well-conditioned for use in convolution, i.e.
+            compact compared to the array holding it
         Nact : int or tuple of int, length 2
             (X, Y) actuator counts
         sep : int or tuple of int, length 2
             (X, Y) actuator separation, samples of influence function
         shift : tuple of float, length 2
-            (X, Y) shift of the actuator grid to (x, y).  Positive numbers
-            describe (rightward, shifts
+            (X, Y) shift of the actuator grid to (x, y), units of x influence
+            function sampling.  E.g., influence function on 0.1 mm grid, shift=1
+            = 0.1 mm shift.  Positive numbers describe (rightward, downward)
+            shifts in image coordinates (origin lower left).
         rot : tuple of int, length <= 3
             (Z, Y, X) rotations; see coordinates.make_rotation_matrix
         upsample : float
             upsampling factor used in determining output resolution, if it is different
             to the resolution of ifn.
-            For example, suppose sep=0.4 (400 um), and the sampling of ifn is
-            dx = 40 um, 10 samples per poke.  Then a 512x512 array spans a 20.48
-            millimeter diameter.  If you wish to span that 20.48 millimeter
-            diameter with 256 samples, upsample=0.5 will do so.
-            The user must take care to ensure the rendered surface is band-limited
-            at the output resolution.  If ifn is at least critically sampled,
-            then upsample > 1 will always be band limited.  No checks are done
-            by this code to verify as such.  Aliasing-defeating features of the
-            resampler are disabled, as they reduce accuracy for bandlimited
-            inputs.
-        spline_order : int
-            Bezier spline order used when resampling the data, if upsample != 1
-            1 = linear splines, 3 = cubic, etc.  Passed directly as scipy.ndimage.zoom(order=spline_order)
         mask : numpy.ndarray
             boolean ndarray of shape Nact used to suppress/delete/exclude
             actuators; 1=keep, 0=suppress
@@ -135,17 +114,14 @@ class DM:
         if isinstance(sep, int):
             sep = (sep, sep)
 
-        dx = x[0, 1] - x[0, 0]
+        x, y = make_xy_grid(ifn.shape, dx=1)
 
         # stash inputs and some computed values on self
-        self.x = x
-        self.y = y
         self.ifn = ifn
         self.Ifn = fft.fft2(ifn)
         self.Nact = Nact
         self.sep = sep
         self.shift = shift
-        self.dx = dx
         self.obliquity = truenp.cos(truenp.radians(truenp.linalg.norm(rot)))
         self.rot = rot
         self.upsample = upsample
@@ -153,7 +129,7 @@ class DM:
 
         # prepare the poke array and supplimentary integer arrays needed to
         # copy it into the working array
-        out = prepare_actuator_lattice(ifn.shape, dx, Nact, sep, mask, dtype=x.dtype)
+        out = prepare_actuator_lattice(ifn.shape, Nact, sep, mask, dtype=x.dtype)
         self.mask = out['mask']
         self.actuators = out['actuators']
         self.actuators_work = np.zeros_like(self.actuators)
@@ -174,7 +150,7 @@ class DM:
             # make 2pi/px phase ramps in 1D (much faster)
             # then broadcast them to 2D when they're used as transfer functions
             # in a Fourier convolution
-            Y, X = [forward_ft_unit(dx, s, shift=False) for s in x.shape]
+            Y, X = [forward_ft_unit(1, s, shift=False) for s in x.shape]
             Xramp = np.exp(X * (-2j * np.pi * shift[0]))
             Yramp = np.exp(Y * (-2j * np.pi * shift[1]))
             shpx = x.shape
@@ -183,9 +159,9 @@ class DM:
             Yramp = np.broadcast_to(Yramp, shpy).T
             self.Xramp = Xramp
             self.Yramp = Yramp
-            self.tf = self.Ifn * self.Xramp * self.Yramp
+            self.tf = [self.Ifn * self.Xramp * self.Yramp]
         else:
-            self.tf = self.Ifn
+            self.tf = [self.Ifn]
 
     def render(self, wfe=True, out=None):
         """Render the DM's surface figure or wavefront error.
@@ -228,7 +204,7 @@ class DM:
         self.poke_arr[self.iyy, self.ixx] = self.actuators_work
 
         # self.dx is unused inside apply tf, but :shrug:
-        sfe = apply_transfer_functions(self.poke_arr, self.dx, self.tf)
+        sfe = apply_transfer_functions(self.poke_arr, None, self.tf)
         warped = regularize(xy=None, XY=self.XY, z=sfe, XY2=self.XY2)
         if wfe:
             warped *= (2*self.obliquity)
