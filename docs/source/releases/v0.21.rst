@@ -10,9 +10,9 @@ In preparation for a V1.0 based upon v0.20 / v0.21, a new experimental sub-modul
 New Features
 ============
 
-Deformable Mirrors have been implemented, and feature a superset of the features found in other packages while also being about 2x faster than PROPER on CPU, and 70x faster on GPU.  See `the DM deep-dive <../explanation/Deformable Mirrors>`.
+Deformable Mirrors have been implemented, and feature a superset of the features found in other packages while also being about 2x faster than PROPER on CPU, and 70x faster on GPU.  See :doc:`the DM deep-dive <../explanation/Deformable Mirrors>`.
 
-Segmented systems have gained support for highly optimized modal wavefront errors by using :func:`prysm.segmented.CompositeHexagonalAperture.prepare_opd_bases` and :func:`prysm.segmented.CompositeHexagonalAperture.compose_opd`.  On a laptop CPU, it takes less than 3 milliseconds to do an 11 term Zernike expansion of each segment in a JWST-like aperture on a 512x512 array.  On a GPU, it takes less than 13 milliseconds to do an 11 term expansion of each segment in a LUVOIR-A like aperture on a 2048x2048 array.  See `the segmented system deep-dive <../explanation/Segmented Systems>`.
+Segmented systems have gained support for highly optimized modal wavefront errors by using :func:`prysm.segmented.CompositeHexagonalAperture.prepare_opd_bases` and :func:`prysm.segmented.CompositeHexagonalAperture.compose_opd`.  On a laptop CPU, it takes less than 3 milliseconds to do an 11 term Zernike expansion of each segment in a JWST-like aperture on a 512x512 array.  On a GPU, it takes less than 13 milliseconds to do an 11 term expansion of each segment in a LUVOIR-A like aperture on a 2048x2048 array.  See :doc:`the segmented system deep-dive <../explanation/Segmented Systems>`.
 
 The propagation module has gained :func:`~prysm.propagation.Wavefront.thin_lens`, used to model thin lenses.  The longstanding :func:`~prysm.thinlens.defocus_to_image_displacement` and :func:`~prysm.thinlens.image_displacement_to_defocus` functions can be used to determine the focal length of a thin lens to produce a desired effect, or the effect of a thin lens.
 
