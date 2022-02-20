@@ -19,5 +19,5 @@ def test_apply_tf_functions():
     sm = partial(degredations.smear_ft, width=1, angle=123)
     ji = partial(degredations.jitter_ft, scale=1)
     a = np.random.rand(100, 100)
-    aprime = convolution.apply_transfer_functions(a, 1, sm, ji)
+    aprime = convolution.apply_transfer_functions(a, 1, [sm, ji])
     assert aprime.shape == a.shape
