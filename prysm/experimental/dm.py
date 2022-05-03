@@ -4,7 +4,7 @@ import warnings
 
 import numpy as truenp
 
-from prysm.mathops import np, fft
+from prysm.mathops import np, fft, is_odd
 from prysm.fttools import forward_ft_unit, fourier_resample
 from prysm.convolution import apply_transfer_functions
 from prysm.coordinates import (
@@ -43,10 +43,17 @@ def prepare_actuator_lattice(shape, Nact, sep, mask, dtype):
     # because FFT grid alignment biases things to the left, if Nact is odd
     # we want more on the negative side;
     # this will make that so
-    neg_extreme_x = cx + -Nactx//2 * skip_samples_x
-    neg_extreme_y = cy + -Nacty//2 * skip_samples_y
-    pos_extreme_x = cx + Nactx//2 * skip_samples_x
-    pos_extreme_y = cy + Nacty//2 * skip_samples_y
+    offx = 0
+    offy = 0
+    if not is_odd(Nactx):
+        offx = skip_samples_x // 2
+    if not is_odd(Nacty):
+        offy = skip_samples_y // 2
+
+    neg_extreme_x = cx + -Nactx//2 * skip_samples_x + offx
+    neg_extreme_y = cy + -Nacty//2 * skip_samples_y + offy
+    pos_extreme_x = cx + Nactx//2 * skip_samples_x + offx
+    pos_extreme_y = cy + Nacty//2 * skip_samples_y + offy
 
     # ix = np.arange(neg_extreme_x, pos_extreme_x+skip_samples_x, skip_samples_x)
     # iy = np.arange(neg_extreme_y, pos_extreme_y+skip_samples_y, skip_samples_y)
@@ -70,7 +77,7 @@ def prepare_actuator_lattice(shape, Nact, sep, mask, dtype):
 
 class DM:
     """A DM whose actuators fill a rectangular region on a perfect grid, and have the same influence function."""
-    def __init__(self, ifn, Nact=50, sep=10, shift=(0, 0), rot=(0, 0, 0), upsample=1, spline_order=3, mask=None):
+    def __init__(self, ifn, Nact=50, sep=10, shift=(0, 0), rot=(0, 0, 0), upsample=1, mask=None, project_centering='fft'):
         """Create a new DM model.
 
         This model is based on convolution of a 'poke lattice' with the influence
@@ -107,6 +114,10 @@ class DM:
         mask : numpy.ndarray
             boolean ndarray of shape Nact used to suppress/delete/exclude
             actuators; 1=keep, 0=suppress
+        project_centering : str, {'fft', 'interpixel'}
+            how to deal with centering when projecting the surface into the beam normal
+            fft = the N/2 th sample, rounded to the right, defines the origin.
+            interpixel = the N/2 th sample, without rounding, defines the origin
 
         """
         if isinstance(Nact, int):
@@ -114,7 +125,12 @@ class DM:
         if isinstance(sep, int):
             sep = (sep, sep)
 
-        x, y = make_xy_grid(ifn.shape, dx=1)
+        s = ifn.shape
+        self.x, self.y = make_xy_grid(s, dx=1)
+        if project_centering.lower() == 'interpixel' and not is_odd(s[1]):
+            self.x += 0.5
+        if project_centering.lower() == 'interpixel' and not is_odd(s[0]):
+            self.y += 0.5
 
         # stash inputs and some computed values on self
         self.ifn = ifn
@@ -128,7 +144,7 @@ class DM:
 
         # prepare the poke array and supplimentary integer arrays needed to
         # copy it into the working array
-        out = prepare_actuator_lattice(ifn.shape, Nact, sep, mask, dtype=x.dtype)
+        out = prepare_actuator_lattice(ifn.shape, Nact, sep, mask, dtype=self.x.dtype)
         self.mask = out['mask']
         self.actuators = out['actuators']
         self.actuators_work = np.zeros_like(self.actuators)
@@ -138,8 +154,8 @@ class DM:
 
         # rotation data
         self.rotmat = make_rotation_matrix(rot)
-        XY = apply_rotation_matrix(self.rotmat, x, y)
-        XY2 = xyXY_to_pixels((x, y), XY)
+        XY = apply_rotation_matrix(self.rotmat, self.x, self.y)
+        XY2 = xyXY_to_pixels(XY, (self.x, self.y))
         self.XY = XY
         self.XY2 = XY2
         self.needs_rot = True
@@ -152,11 +168,11 @@ class DM:
             # make 2pi/px phase ramps in 1D (much faster)
             # then broadcast them to 2D when they're used as transfer functions
             # in a Fourier convolution
-            Y, X = [forward_ft_unit(1, s, shift=False) for s in x.shape]
+            Y, X = [forward_ft_unit(1, s, shift=False) for s in self.x.shape]
             Xramp = np.exp(X * (-2j * np.pi * shift[0]))
             Yramp = np.exp(Y * (-2j * np.pi * shift[1]))
-            shpx = x.shape
-            shpy = tuple(reversed(x.shape))
+            shpx = self.x.shape
+            shpy = tuple(reversed(self.x.shape))
             Xramp = np.broadcast_to(Xramp, shpx)
             Yramp = np.broadcast_to(Yramp, shpy).T
             self.Xramp = Xramp
@@ -206,7 +222,7 @@ class DM:
         self.poke_arr[self.iyy, self.ixx] = self.actuators_work
 
         # self.dx is unused inside apply tf, but :shrug:
-        sfe = apply_transfer_functions(self.poke_arr, None, self.tf)
+        sfe = apply_transfer_functions(self.poke_arr, None, self.tf, shift=False)
         if self.needs_rot:
             warped = regularize(xy=None, XY=self.XY, z=sfe, XY2=self.XY2)
         else:
