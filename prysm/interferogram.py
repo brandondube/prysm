@@ -254,19 +254,26 @@ def bandlimited_rms(r, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
     work = psd.copy()
     work[r < flow] = 0
     work[r > fhigh] = 0
-    # tuple => list for editable copy => tuple for valid slice type
-    c = tuple(s//2 for s in work.shape)
-    c2 = list(c)
-    c2[0] = c2[0] - 1
-    c2 = tuple(c2)
-    pt1 = r[c]
-    pt2 = r[c2]
+    if r.ndim == 2:
+        c = tuple(s//2 for s in work.shape)
+        c2 = list(c)
+        c2[0] = c2[0] - 1
+        c2 = tuple(c2)
+        pt1 = r[c]
+        pt2 = r[c2]
+    else:
+        c = r.shape[0]//2
+        pt1 = r[c]
+        pt2 = r[c-1]
     # prysm doesn't enforce the user to be "top left" or "lower left" origin,
     # abs makes sure we do things right no matter what
     dx = abs(pt2 - pt1)
-    first = np.trapz(work, dx=dx, axis=0)
-    second = np.trapz(first, dx=dx, axis=0)
-    return np.sqrt(second)
+    reduced = np.trapz(work, dx=dx, axis=0)
+
+    if r.ndim == 2:
+        reduced = np.trapz(reduced, dx=dx, axis=0)
+
+    return np.sqrt(reduced)
 
 
 def window_2d_welch(r, alpha=8):
