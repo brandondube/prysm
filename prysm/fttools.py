@@ -88,7 +88,11 @@ def pad2d(array, Q=2, value=0, mode='constant', out_shape=None):
             pad_shape.append(lcl)
 
         if mode == 'constant':
-            slcs = tuple((slice(p[0], -p[1]) for p in pad_shape))
+            # TODO: clean this garbage up, the code here shouldn't be completely
+            # non common mode the way it is
+
+            dbytwo = [math.ceil(d/2) for d in shape_diff]
+            slcs = tuple((slice(d, d+s) for d, s in zip(dbytwo, in_shape)))
             out = np.zeros(out_shape, dtype=array.dtype)
             if value != 0:
                 out += value
