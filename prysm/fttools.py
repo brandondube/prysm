@@ -4,13 +4,14 @@ from collections.abc import Iterable
 
 import numpy as truenp
 
-from .mathops import np, fft
+from .mathops import np, fft, is_odd
 from .conf import config
 
 
 def fftrange(n, dtype=None):
     """FFT-aligned coordinate grid for n samples."""
-    return np.arange(-n//2, -n//2+n, dtype=dtype)
+    # return np.arange(-n//2, -n//2+n, dtype=dtype)
+    return np.arange(-(n//2), -(n//2)+n, dtype=dtype)
 
 
 def _next_power_of_2(n):
