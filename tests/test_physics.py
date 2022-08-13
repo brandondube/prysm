@@ -25,8 +25,9 @@ def test_diffprop_matches_airydisk(efl, epd, wvl):
     x, y = make_xy_grid(128, diameter=epd)
     r, t = cart_to_polar(x, y)
     amp = circle(epd/2, r)
-    wf = Wavefront.from_amp_and_phase(amp/amp.sum(), None, wvl, x[0, 1] - x[0, 0])
-    psf = wf.focus(efl, Q=3)
+    wf = Wavefront.from_amp_and_phase(amp.astype(float), None, wvl, x[0, 1] - x[0, 0]).pad2d(Q=3)
+    wf.data *= 3*np.sqrt(amp.size)/amp.sum()
+    psf = wf.focus(efl, Q=1)
     s = psf.intensity.slices()
     u_, sx = s.x
     u_, sy = s.y

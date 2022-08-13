@@ -33,7 +33,7 @@ def focus(wavefunction, Q):
     else:
         padded_wavefront = wavefunction
 
-    impulse_response = fft.fftshift(fft.fft2(fft.ifftshift(padded_wavefront)))
+    impulse_response = fft.fftshift(fft.fft2(fft.ifftshift(padded_wavefront), norm='ortho'))
     return impulse_response
 
 
@@ -58,7 +58,7 @@ def unfocus(wavefunction, Q):
     else:
         padded_wavefront = wavefunction
 
-    return fft.fftshift(fft.ifft2(fft.ifftshift(padded_wavefront)))
+    return fft.fftshift(fft.ifft2(fft.ifftshift(padded_wavefront), norm='ortho'))
 
 
 def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
@@ -168,6 +168,7 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
     elif method == 'czt':
         out = czt.iczt2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
 
+    out *= Q
     return out
 
 
@@ -274,7 +275,7 @@ def talbot_distance(a, lambda_):
     a : float
         period of the grating, units of microns
     lambda_ : float
-        wavleength of light, units of microns
+        wavelength of light, units of microns
 
     Returns
     -------
@@ -315,16 +316,10 @@ def angular_spectrum(field, wvl, dx, z, Q=2, tf=None):
     if tf is not None:
         return fft.ifft2(fft.fft2(field) * tf)
 
-    # match all the units
-    wvl = wvl / 1e3  # um -> mm
     if Q != 1:
         field = pad2d(field, Q=Q)
 
-    ky, kx = (fft.fftfreq(s, dx).astype(config.precision) for s in field.shape)
-    ky = np.broadcast_to(ky, field.shape).swapaxes(0, 1)
-    kx = np.broadcast_to(kx, field.shape)
-
-    transfer_function = np.exp(-1j * np.pi * wvl * z * (kx**2 + ky**2))
+    transfer_function = angular_spectrum_transfer_function(field.shape, wvl, dx, z)
     forward = fft.fft2(field)
     return fft.ifft2(forward*transfer_function)
 
@@ -358,7 +353,7 @@ def angular_spectrum_transfer_function(samples, wvl, dx, z):
     ky = np.broadcast_to(ky, samples).swapaxes(0, 1)
     kx = np.broadcast_to(kx, samples)
 
-    return np.exp(-1j * np.pi * wvl * z * (kx**2 + ky**2))
+    return np.exp(-1j * np.pi * wvl * z * (kx*kx + ky*ky))
 
 
 class Wavefront:

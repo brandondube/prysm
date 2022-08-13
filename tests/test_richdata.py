@@ -108,8 +108,8 @@ def test_slices_does_not_alter_twosided():
     slc = rd.slices(twosided=True)
     _, y = slc.y
     _, x = slc.x
-    assert (y == data[:, 6]).all()
-    assert (x == data[6, :]).all()
+    assert (y == data[:, 5]).all()
+    assert (x == data[5, :]).all()
 
 
 def test_slices_various_interped_profiles_function():
