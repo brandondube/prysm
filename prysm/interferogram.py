@@ -310,7 +310,7 @@ def abc_psd(nu, a, b, c):
         value of PSD model
 
     """
-    return a / (1 + (nu/b)**2)**(c/2)
+    return a / (1 + (nu/b)**c)
 
 
 def ab_psd(nu, a, b):
