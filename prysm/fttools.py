@@ -426,7 +426,7 @@ class ChirpZTransformExecutor:
         # the constraint is >= M+R - 1 -> m+M-1 (and #cols analogs)
         K = next_fast_len(m+M-1)
         L = next_fast_len(n+N-1)  # -                    norm = False
-        key = (m, n, M, N, K, L, alphay, alphax, *shift, dtype, False)
+        key = (m, n, M, N, K, L, alphay, alphax, *shift, dtype, True)
         self._setup_bases(key)
         # b, H, a are the variables from Jurling (where they have hats)
         brow, bcol, Hrow, Hcol, arow, acol = self.components[key]
@@ -538,8 +538,6 @@ def _prepare_czt_basis(N, M, K, shift, alpha, dtype, norm=False):
 
     n = fftrange(N, dtype=dtype)
     b = np.exp(prefix * n*n * alpha)
-    if norm:
-        b *= (1 / np.sqrt(alpha))  # mul cheaper than div; div a single scalar instead of M elements
 
     # maybe can replace with empty for minor performance gains?
     h = np.zeros(K, dtype=dtype)
@@ -558,6 +556,8 @@ def _prepare_czt_basis(N, M, K, shift, alpha, dtype, norm=False):
     h = np.exp(1j * alpha * h)
     h[M:K-N+1] = 0
     H = fft.fft(h)
+    if norm:
+        b *= (alpha / np.sqrt(alpha))  # mul cheaper than div; div a single scalar instead of M elements
     return H, b, a
 
 
