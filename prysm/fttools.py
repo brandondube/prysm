@@ -4,7 +4,7 @@ from collections.abc import Iterable
 
 import numpy as truenp
 
-from .mathops import np, fft, is_odd
+from .mathops import np, fft
 from .conf import config
 
 
