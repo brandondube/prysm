@@ -15,7 +15,7 @@ ARRAY_SIZES_FOR_PAD = (8, 9, 12)
 @pytest.mark.parametrize('samples', ARRAY_SIZES)
 def test_mtp_equivalent_to_fft(samples):
     inp = np.random.rand(samples, samples)
-    fft = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(inp)))
+    fft = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(inp), norm='ortho'))
     mtp = fttools.mdft.dft2(inp, 1, samples)
     assert np.allclose(fft, mtp)
 
@@ -44,7 +44,7 @@ def test_pad2d_cropcenter_adjoints(shape):
 @pytest.mark.parametrize('samples', ARRAY_SIZES)
 def test_czt_equiv_to_fft(samples):
     inp = np.random.rand(samples, samples)
-    fft = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(inp)))
+    fft = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(inp), norm='ortho'))
     czt = fttools.czt.czt2(inp, 1, samples)
     assert np.allclose(fft, czt)
 
