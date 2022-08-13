@@ -6,3 +6,4 @@ ipykernel
 nbsphinx==0.8.9
 scikit-image==0.19.3
 imageio==2.21.1
+matplotlib==3.5.3
