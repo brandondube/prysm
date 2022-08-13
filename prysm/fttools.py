@@ -10,7 +10,8 @@ from .conf import config
 
 def fftrange(n, dtype=None):
     """FFT-aligned coordinate grid for n samples."""
-    return np.arange(-n//2, -n//2+n, dtype=dtype)
+    # return np.arange(-n//2, -n//2+n, dtype=dtype)
+    return np.arange(-(n//2), -(n//2)+n, dtype=dtype)
 
 
 def _next_power_of_2(n):
@@ -87,7 +88,11 @@ def pad2d(array, Q=2, value=0, mode='constant', out_shape=None):
             pad_shape.append(lcl)
 
         if mode == 'constant':
-            slcs = tuple((slice(p[0], -p[1]) for p in pad_shape))
+            # TODO: clean this garbage up, the code here shouldn't be completely
+            # non common mode the way it is
+
+            dbytwo = [math.ceil(d/2) for d in shape_diff]
+            slcs = tuple((slice(d, d+s) for d, s in zip(dbytwo, in_shape)))
             out = np.zeros(out_shape, dtype=array.dtype)
             if value != 0:
                 out += value
@@ -182,13 +187,18 @@ def fourier_resample(f, zoom):
     if zoom == 1:
         return f
 
+    if isinstance(zoom, (float, int)):
+        zoom = (zoom, zoom)
+    elif not isinstance(zoom, tuple):
+        zoom = tuple(float(zoom) for zoom in zoom)  # float for dtype stabilization: cupy
+
     m, n = f.shape
-    M = int(m*zoom)
-    N = int(n*zoom)
+    M = int(m*zoom[0])
+    N = int(n*zoom[1])
 
     F = fft.fftshift(fft.fft2(fft.ifftshift(f)))
     fprime = mdft.idft2(F, zoom, (M, N)).real
-    fprime *= (fprime.size/f.size)
+    fprime *= (zoom[0]*zoom[1])/(np.sqrt(f.size))
     return fprime
     # the below code is not commented out but is unreachable, it is an
     # alternative way, however it will produce a rounding error in the scaling
@@ -220,7 +230,11 @@ class MatrixDFTExecutor:
 
     def _key(self, ary, Q, samples, shift):
         """Key to X, Y, U, V dicts."""
-        Q = float(Q)
+        if isinstance(Q, (float, int)):
+            Q = (Q, Q)
+        elif not isinstance(Q, tuple):
+            Q = tuple(float(q) for q in Q)  # float for dtype stabilization: cupy
+
         if not isinstance(samples, Iterable):
             samples = (samples, samples)
 
@@ -253,8 +267,8 @@ class MatrixDFTExecutor:
             sampling/grid differences
 
         """
-        self._setup_bases(ary=ary, Q=Q, samples=samples, shift=shift)
         key = self._key(ary=ary, Q=Q, samples=samples, shift=shift)
+        self._setup_bases(key)
         Eout, Ein = self.Eout_fwd[key], self.Ein_fwd[key]
 
         out = Eout @ ary @ Ein
@@ -285,29 +299,27 @@ class MatrixDFTExecutor:
             sampling/grid differences
 
         """
-        self._setup_bases(ary=ary, Q=Q, samples=samples, shift=shift)
         key = self._key(ary=ary, Q=Q, samples=samples, shift=shift)
+        self._setup_bases(key)
+
         Eout, Ein = self.Eout_rev[key], self.Ein_rev[key]
         out = Eout @ ary @ Ein
 
         return out
 
-    def _setup_bases(self, ary, Q, samples, shift):
+    def _setup_bases(self, key):
         """Set up the basis matricies for given sampling parameters."""
         # broadcast sampling and shifts
-        if not isinstance(samples, Iterable):
-            samples = (samples, samples)
 
-        if not isinstance(shift, Iterable):
-            shift = (shift, shift)
+        Q, shp, samples, shift = key
 
-        # this is for dtype stabilization with
-        Q = float(Q)
-
-        key = self._key(Q=Q, ary=ary, samples=samples, shift=shift)
-
-        n, m = ary.shape
-        N, M = samples
+        Qn, Qm = Q
+        # conversion here to Soummer's notation
+        # still have N, M for dimensionality but
+        # use lowercase m for "zoom" factor...
+        mn, mm = 1 / Qn, 1 / Qm
+        Na, Ma = shp
+        Nb, Mb = samples
 
         try:
             # assume all arrays for the input are made together
@@ -315,7 +327,7 @@ class MatrixDFTExecutor:
         except KeyError:
             # X is the second dimension in C (numpy) array ordering convention
 
-            X, Y, U, V = (fftrange(n, dtype=config.precision) for n in (m, n, M, N))
+            X, Y, U, V = (fftrange(n, dtype=config.precision) for n in (Ma, Na, Mb, Nb))
 
             # do not even perform an op if shift is nothing
             if shift[1] != 0:
@@ -326,14 +338,14 @@ class MatrixDFTExecutor:
                 X -= shift[0]
                 U -= shift[0]
 
-            nm = n*m
-            NM = N*M
-            r = NM/nm
-            a = 1 / Q
-            Eout_fwd = np.exp(-1j * 2 * np.pi * a / n * np.outer(Y, V).T)
-            Ein_fwd = np.exp(-1j * 2 * np.pi * a / m * np.outer(X, U))
-            Eout_rev = np.exp(1j * 2 * np.pi * a / n * np.outer(Y, V).T) * (1/r)
-            Ein_rev = np.exp(1j * 2 * np.pi * a / m * np.outer(X, U)) * (1/nm)
+            Eout_fwd = np.exp(-2j * np.pi / Na * mn * np.outer(Y, V).T)
+            Ein_fwd = np.exp(-2j * np.pi / Ma * mm * np.outer(X, U))
+            Eout_rev = np.exp(2j * np.pi / Na * mn * np.outer(Y, V).T)
+            Ein_rev = np.exp(2j * np.pi / Ma * mm * np.outer(X, U))
+            Ein_fwd *= (1/(Na*Qn))
+            Ein_rev *= (1/(Nb*Qm))
+            # scaling = np.sqrt(dx * dy * dxi * deta) / (wvl * fn)
+            # observe
             self.Ein_fwd[key] = Ein_fwd
             self.Eout_fwd[key] = Eout_fwd
             self.Eout_rev[key] = Eout_rev
@@ -354,9 +366,6 @@ class MatrixDFTExecutor:
                 total += dict_[key].nbytes
 
         return total
-
-
-mdft = MatrixDFTExecutor()
 
 
 class ChirpZTransformExecutor:
@@ -417,7 +426,7 @@ class ChirpZTransformExecutor:
         # the constraint is >= M+R - 1 -> m+M-1 (and #cols analogs)
         K = next_fast_len(m+M-1)
         L = next_fast_len(n+N-1)  # -                    norm = False
-        key = (m, n, M, N, K, L, alphay, alphax, *shift, dtype, False)
+        key = (m, n, M, N, K, L, alphay, alphax, *shift, dtype, True)
         self._setup_bases(key)
         # b, H, a are the variables from Jurling (where they have hats)
         brow, bcol, Hrow, Hcol, arow, acol = self.components[key]
@@ -479,11 +488,10 @@ class ChirpZTransformExecutor:
         # forward transform on the complex conjugate of the input.  Generally
         # arrays are complex for optics since we want to handle having OPD,
         # but np.conj copies real inputs, so we optimize for that.
-        if not bool(np.isreal(ary[0, 0])):  # bool for GPU support; cupy will return an array
+        if np.iscomplexobj(ary):
             ary = np.conj(ary)
 
         xformed = self.czt2(ary, Q, samples, shift)
-        xformed *= (1/ary.size)  # same scaling as FFT/iFFT
         return xformed
 
     def _setup_bases(self, key):
@@ -530,8 +538,6 @@ def _prepare_czt_basis(N, M, K, shift, alpha, dtype, norm=False):
 
     n = fftrange(N, dtype=dtype)
     b = np.exp(prefix * n*n * alpha)
-    if norm:
-        b *= (1 / np.sqrt(alpha))  # mul cheaper than div; div a single scalar instead of M elements
 
     # maybe can replace with empty for minor performance gains?
     h = np.zeros(K, dtype=dtype)
@@ -550,6 +556,10 @@ def _prepare_czt_basis(N, M, K, shift, alpha, dtype, norm=False):
     h = np.exp(1j * alpha * h)
     h[M:K-N+1] = 0
     H = fft.fft(h)
+    if norm:
+        b *= (alpha / np.sqrt(alpha))  # mul cheaper than div; div a single scalar instead of M elements
     return H, b, a
 
+
+mdft = MatrixDFTExecutor()  # NOQA
 czt = ChirpZTransformExecutor()  # NOQA

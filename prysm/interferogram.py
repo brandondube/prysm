@@ -317,7 +317,7 @@ def abc_psd(nu, a, b, c):
         value of PSD model
 
     """
-    return a / (1 + (nu/b)**2)**(c/2)
+    return a / (1 + (nu/b)**c)
 
 
 def ab_psd(nu, a, b):
@@ -520,18 +520,15 @@ def designfilt2d(r, dx, fc, typ='lowpass'):
 
     Parameters
     ----------
-    x : numpy.ndarray
-        x coordinates for the data to be filtered, units of length (mm, m, etc)
-    y : numpy.ndarray
-        y coordinates for the data to be filtered, units of length (mm, m, etc)
-    fl : float
-        lower critical frequency for a high pass, bandpass, or band reject filter
-    fh : float
-        upper critical frequency for a low pass, bandpass, or band reject filter
+    r : numpy.ndarray
+        radial coordinates of data to be filtered
+    dx : float
+        sample spacing of r
+    fc : float or tuple of 2 floats
+        corner frequency of the filter if low or high pass, lower and upper
+        frequencies for band pass and reject filters
     typ : str, {'lowpass' , 'lp', 'highpass', 'hp', 'bandpass', 'bp', 'bandreject', 'br'}
         what type of filter.  Can use two-letter shorthands.
-    N : tuple of int of length 2
-        number of samples per axis to use.  If N=None, N=x.shape
 
     Returns
     -------
@@ -1012,7 +1009,7 @@ class Interferogram(RichData):
         kernel *= self.bandlimited_rms(upper_limit, None) / wavelength
         return 1 - np.exp(-kernel**2)
 
-    def interferogram(self, visibility=1, passes=2, tilt_waves=(0,0), interpolation=None, fig=None, ax=None):
+    def interferogram(self, visibility=1, passes=2, tilt_waves=(0, 0), interpolation=None, fig=None, ax=None):
         """Create a picture of fringes.
 
         Parameters

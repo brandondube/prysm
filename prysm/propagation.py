@@ -1,6 +1,8 @@
 """Numerical optical propagation."""
+import copy
 import numbers
 import operator
+import warnings
 from collections.abc import Iterable
 
 
@@ -101,9 +103,11 @@ def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
         shift = (shift[0]/output_dx, shift[1]/output_dx)
 
     if method == 'mdft':
-        return mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+        out = mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
     elif method == 'czt':
-        return czt.czt2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+        out = czt.czt2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+
+    return out
 
 
 def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
@@ -160,9 +164,11 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
         shift = (shift[0]/output_dx, shift[1]/output_dx)
 
     if method == 'mdft':
-        return mdft.idft2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+        out = mdft.idft2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
     elif method == 'czt':
-        return czt.iczt2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+        out = czt.iczt2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+
+    return out
 
 
 def Q_for_sampling(input_diameter, prop_dist, wavelength, output_dx):
@@ -460,6 +466,10 @@ class Wavefront:
         """Phase, angle(w).  Possibly wrapped for large OPD."""
         return RichData(np.angle(self.data), self.dx, self.wavelength)
 
+    def copy(self):
+        """Return a (deep) copy of this instance."""
+        return copy.deepcopy(self)
+
     def pad2d(self, Q, value=0, mode='constant', out_shape=None, inplace=True):
         """Pad the wavefront.
 
@@ -725,3 +735,137 @@ class Wavefront:
             method=method)
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')
+
+    def to_fpm_and_back(self, efl, fpm, fpm_dx=None, method='mdft', return_more=False):
+        """Propagate to a focal plane mask, apply it, and return.
+
+        This routine handles normalization properly for the user.
+
+        To invoke babinet's principle, simply use to_fpm_and_back(fpm=1 - fpm).
+
+        Parameters
+        ----------
+        efl : float
+            focal length for the propagation
+        fpm : Wavefront or numpy.ndarray
+            the focal plane mask
+        fpm_dx : float
+            sampling increment in the focal plane,  microns;
+            do not need to pass if fpm is a Wavefront
+        method : str, {'mdft', 'czt'}
+            how to propagate the field, matrix DFT or Chirp Z transform
+            CZT is usually faster single-threaded and has less memory consumption
+            MDFT is usually faster multi-threaded and has more memory consumption
+        return_more : bool
+            if True, return (new_wavefront, field_at_fpm, field_after_fpm)
+            else return new_wavefront
+
+        Returns
+        -------
+        Wavefront, Wavefront, Wavefront
+            new wavefront, [field at fpm, field after fpm]
+
+        """
+        if isinstance(fpm, Wavefront):
+            fpm_samples = fpm.data.shape
+            fpm_dx = fpm.dx
+        else:
+            if fpm_dx is None:
+                raise ValueError('fpm was not a Wavefront and fpm_dx was None')
+
+            fpm_samples = fpm.shape
+
+        input_samples = self.data.shape
+        input_diameters = [self.dx * s for s in input_samples]
+        Q_forward = [Q_for_sampling(d, efl, self.wavelength, fpm_dx) for d in input_diameters]
+        # soummer notation: use m, which would be 0.5 for a 2x zoom
+        # BDD notation: Q, would be 2 for a 2x zoom
+        m_forward = [1/q for q in Q_forward]
+        m_reverse = [b/a*m for a, b, m in zip(input_samples, fpm_samples, m_forward)]
+        Q_reverse = [1/m for m in m_reverse]
+
+        # prop forward
+        kwargs = dict(ary=self.data, Q=Q_forward, samples=fpm_samples, shift=(0, 0))
+        if method == 'mdft':
+            field_at_fpm = mdft.idft2(**kwargs)
+        elif method == 'czt':
+            field_at_fpm = czt.iczt2(**kwargs)
+
+        field_after_fpm = field_at_fpm * fpm
+
+        kwargs = dict(ary=field_after_fpm.data, Q=Q_reverse, samples=input_samples, shift=(0, 0))
+        if method == 'mdft':
+            field_at_next_pupil = mdft.idft2(**kwargs)
+        elif method == 'czt':
+            field_at_next_pupil = czt.iczt2(**kwargs)
+
+        # scaling
+        # TODO: make this handle anamorphic transforms properly
+        if Q_forward[0] != Q_forward[1]:
+            warnings.warn(f'Forward propagation had Q {Q_forward} which was not uniform between axes, scaling is off')
+        if input_samples[0] != input_samples[1]:
+            warnings.warn(f'Forward propagation had input shape {input_samples} which was not uniform between axes, scaling is off')
+        if fpm_samples[0] != fpm_samples[1]:
+            warnings.warn(f'Forward propagation had fpm shape {fpm_samples} which was not uniform between axes, scaling is off')
+        # Q_reverse is calculated from Q_forward; if one is consistent the other is
+
+        out = Wavefront(field_at_next_pupil, self.wavelength, self.dx, self.space)
+        if return_more:
+            return out, field_at_fpm, Wavefront(field_after_fpm, self.wavelength, fpm_dx, 'psf')
+
+        return out
+
+    def babinet(self, efl, lyot, fpm, fpm_dx=None, method='mdft', return_more=False):
+        """Propagate through a Lyot-style coronagraph using Babinet's principle.
+
+        This routine handles normalization properly for the user.
+
+        To invoke babinet's principle, simply use to_fpm_and_back(fpm=1 - fpm).
+
+        Parameters
+        ----------
+        efl : float
+            focal length for the propagation
+        lyot : Wavefront or numpy.ndarray
+            the Lyot stop; if None, equivalent to ones_like(self.data)
+        fpm : Wavefront or numpy.ndarray
+            1 - fpm
+            one minus the focal plane mask (see Soummer et al 2007)
+        fpm_dx : float
+            sampling increment in the focal plane,  microns;
+            do not need to pass if fpm is a Wavefront
+        method : str, {'mdft', 'czt'}
+            how to propagate the field, matrix DFT or Chirp Z transform
+            CZT is usually faster single-threaded and has less memory consumption
+            MDFT is usually faster multi-threaded and has more memory consumption
+        return_more : bool
+            if True, return each plane in the propagation
+            else return new_wavefront
+
+        Returns
+        -------
+        Wavefront, Wavefront, Wavefront, Wavefront
+            field after lyot, [field at fpm, field after fpm, field at lyot]
+
+        """
+        if return_more:
+            field, field_at_fpm, field_after_fpm = \
+                self.to_fpm_and_back(efl=efl, fpm=fpm, fpm_dx=fpm_dx, method=method,
+                                     return_more=return_more)
+        else:
+            field = self.to_fpm_and_back(efl=efl, fpm=fpm, fpm_dx=fpm_dx, method=method,
+                                         return_more=return_more)
+        # DOI: 10.1117/1.JATIS.7.1.019002
+        # Eq. 26 with some minor differences in naming
+        field_at_lyot = self.data - field.data
+        if lyot is not None:
+            field_after_lyot = lyot * field_at_lyot
+        else:
+            field_after_lyot = field_at_lyot
+
+        field_at_lyot = Wavefront(field_at_lyot, self.wavelength, self.dx, self.space)
+        field_after_lyot = Wavefront(field_after_lyot, self.wavelength, self.dx, self.space)
+
+        if return_more:
+            return field_after_lyot, field_at_fpm, field_after_fpm, field_at_lyot
+        return field_after_lyot
