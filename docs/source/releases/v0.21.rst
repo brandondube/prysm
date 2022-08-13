@@ -16,6 +16,8 @@ Segmented systems have gained support for highly optimized modal wavefront error
 
 The propagation module has gained :func:`~prysm.propagation.Wavefront.thin_lens`, used to model thin lenses.  The longstanding :func:`~prysm.thinlens.defocus_to_image_displacement` and :func:`~prysm.thinlens.image_displacement_to_defocus` functions can be used to determine the focal length of a thin lens to produce a desired effect, or the effect of a thin lens.
 
+The propagation module has also gained :func:`~prysm.propagation.Wavefront.to_fpm_and_back` and :func:`~prysm.propagation.Wavefront.babinet` to make writing sequences of propagations through Lyot-like coronagraphs less verbose.
+
 Chirp Z transforms have been implemented as an alternative to matrix DFTs.  The :code:`method` keyword arguments to :func:`~prysm.propagation.Wavefront.focus_fixed_sampling` and :func:`~prysm.propagation.Wavefront.unfocus_fixed_sampling` allow the user to select freely between MDFTs and CZTs.  Constrained to a single thread, CZTs are faster than matrix DFTs for moderately large array sizes.  Not subject to this constraint, CZTs will usually be slower by about 3-4x.  Both matrix DFTs and CZTs keep an FFT wisdom-like cache.  The CZT cache only holds vectors, and for N x N sized arrays is a factor of N smaller (100s to 1000s of times, typically).
 
 Fixed sampling propagations now expose the shift argument, which was previously available only through direct use of the fttools functions which perform the Fourier computations.
@@ -60,7 +62,7 @@ First derivatives of many types of polynomials and their descendants are also no
 * :func:`~prysm.polynomials.Q2d_der`
 * :func:`~prysm.polynomials.Q2d_der_sequence`
 
-These are useful for applications such as raytracing.
+These are used by the raytracing module to calculate surface normals in a closed-form way, free of finite differences or other approximations.
 
 Bug Fixes
 =========
