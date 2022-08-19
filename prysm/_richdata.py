@@ -286,7 +286,8 @@ class RichData:
 
     def plot2d(self, xlim=None, ylim=None, clim=None, cmap=None,
                log=False, power=1, interpolation=None,
-               show_colorbar=True, colorbar_label=None, axis_labels=(None, None),
+               show_colorbar=True, colorbar_label=None, extend='both',
+               axis_labels=(None, None),
                fig=None, ax=None):
         """Plot data in 2D.
 
@@ -313,6 +314,9 @@ class RichData:
             if True, draws the colorbar
         colorbar_label : str, optional
             label for the colorbar
+        extend : str
+            which colorbar limit to extend, see
+            https://matplotlib.org/stable/tutorials/colors/colorbar_only.html
         axis_labels : iterable of str,
             (x, y) axis labels.  If None, not drawn
         fig : matplotlib.figure.Figure
@@ -366,7 +370,7 @@ class RichData:
                        interpolation=interpolation)
 
         if show_colorbar:
-            fig.colorbar(im, label=colorbar_label, ax=ax, fraction=0.046)
+            fig.colorbar(im, label=colorbar_label, ax=ax, fraction=0.046, extend=extend)
 
         xlab, ylab = axis_labels
         ax.set(xlabel=xlab, xlim=xlim, ylabel=ylab, ylim=ylim)
