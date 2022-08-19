@@ -553,6 +553,12 @@ class Wavefront:
         """Divide this wavefront by something compatible."""
         return self.__numerical_operation__(other, 'truediv')
 
+    def __add__(self, other):
+        return self.__numerical_operation__(other, 'add')
+
+    def __sub__(self, other):
+        return self.__numerical_operation__(other, 'sub')
+
     def free_space(self, dz=np.nan, Q=1, tf=None):
         """Perform a plane-to-plane free space propagation.
 
