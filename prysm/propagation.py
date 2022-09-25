@@ -350,10 +350,12 @@ def angular_spectrum_transfer_function(samples, wvl, dx, z):
 
     wvl = wvl / 1e3
     ky, kx = (fft.fftfreq(s, dx).astype(config.precision) for s in samples)
-    ky = np.broadcast_to(ky, samples).swapaxes(0, 1)
-    kx = np.broadcast_to(kx, samples)
+    kxx = kx * kx
+    kyy = ky * ky
+    kyy = np.broadcast_to(ky, samples).swapaxes(0, 1)
+    kxx = np.broadcast_to(kx, samples)
 
-    return np.exp(-1j * np.pi * wvl * z * (kx*kx + ky*ky))
+    return np.exp(-1j * np.pi * wvl * z * (kxx + kyy))
 
 
 class Wavefront:
