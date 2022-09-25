@@ -34,6 +34,9 @@ def optimize_xy_separable(x, y):
         # second indexing converts y to a broadcasted column vector
         x = x[0, :]
         y = y[:, 0][:, np.newaxis]
+    else:
+        x = x.reshape(1, -1)
+        y = y.reshape(-1, 1)
 
     return x, y
 

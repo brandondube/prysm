@@ -69,6 +69,8 @@ def rectangle(width, x, y, height=None, angle=0):
             p_adj = np.radians(angle)
             p += p_adj
             x, y = polar_to_cart(r, p)
+    else:
+        x, y = optimize_xy_separable(x, y)
 
     if height is None:
         height = width
