@@ -310,7 +310,7 @@ def _generate_vertices(sides, radius=1, center=(0, 0), rotation=0):
     return truenp.asarray(pts)
 
 
-def spider(vanes, width, x, y, rotation=0, center=(0, 0)):
+def spider(vanes, width, x, y, rotation=0, center=(0, 0), rotation_is_rad=False):
     """Generate the mask for a spider.
 
     Parameters
@@ -336,12 +336,13 @@ def spider(vanes, width, x, y, rotation=0, center=(0, 0)):
 
     """
     # generate the basic grid
-    width /= 2
+    width = width / 2
     x0, y0 = center
     r, p = cart_to_polar(x-x0, y-y0)
 
     if rotation != 0:
-        rotation = np.radians(rotation)
+        if not rotation_is_rad:
+            rotation = np.radians(rotation)
         p = p - rotation
 
     # compute some constants

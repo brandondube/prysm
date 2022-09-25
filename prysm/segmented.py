@@ -1,12 +1,15 @@
 """Tools for working with segmented systems."""
+import math
 import inspect
+from multiprocessing.sharedctypes import Value
+import numbers
 from collections import namedtuple
 
 import numpy as truenp
 
 from .mathops import np
-from .geometry import regular_polygon
-from .coordinates import cart_to_polar
+from .geometry import regular_polygon, circle, spider
+from .coordinates import cart_to_polar, polar_to_cart
 from .polynomials import sum_of_2d_modes
 
 FLAT_TO_FLAT_TO_VERTEX_TO_VERTEX = 2 / truenp.sqrt(3)
@@ -93,11 +96,14 @@ def hex_ring(radius):
 
 
 def _local_window(cy, cx, center, dx, samples_per_seg, x, y):
-    offset_x = cx + int(center[0]/dx) - samples_per_seg
-    offset_y = cy + int(center[1]/dx) - samples_per_seg
+    if isinstance(samples_per_seg, int):
+        samples_per_seg = (samples_per_seg, samples_per_seg)
 
-    upper_x = offset_x + (2*samples_per_seg)
-    upper_y = offset_y + (2*samples_per_seg)
+    offset_x = cx + int(center[0]/dx) - samples_per_seg[0]
+    offset_y = cy + int(center[1]/dx) - samples_per_seg[1]
+
+    upper_x = offset_x + (2*samples_per_seg[0])
+    upper_y = offset_y + (2*samples_per_seg[1])
 
     # clamp the offsets
     if offset_x < 0:
@@ -150,7 +156,6 @@ class CompositeHexagonalAperture:
 
         """
         (
-            self.vtov,
             self.all_centers,
             self.windows,
             self.local_coords,
@@ -162,7 +167,7 @@ class CompositeHexagonalAperture:
 
         self.x = x
         self.y = y
-        self.segmentd_diameter = segment_diameter
+        self.segment_diameter = segment_diameter
         self.segment_separation = segment_separation
         self.segment_angle = segment_angle
         self.exclude = exclude
@@ -314,7 +319,7 @@ def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x
     cy = int(np.ceil(y.shape[0]/2))
     center_segment_window = _local_window(cy, cx, (0, 0), dx, samples_per_seg, x, y)
 
-    mask = np.zeros(x.shape, dtype=np.bool)
+    mask = np.zeros(x.shape, dtype=bool)
 
     segment_id = 0
     xx = x[center_segment_window]
@@ -365,3 +370,374 @@ def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x
         segment_id = ids[-1]
 
     return segment_vtov, all_centers, windows, local_coords, local_masks, segment_ids, mask
+
+
+class CompositeKeystoneAperture:
+    """Composite apertures with keystone shaped segments."""
+    def __init__(self, x, y, center_circle_diameter, segment_gap,
+                 rings, ring_radius, segments_per_ring, rotation_per_ring=None):
+        """Create a new CompositeKeystoneAperture.
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            array of x sample positions, of shape (m, n)
+        y : numpy.ndarray
+            array of y sample positions, of shape (m, n)
+        center_circle_diameter : float
+            diameter of the circular supersegment at the center of the aperture
+        segment_gap : float
+            segment gap, same units as x and y; has the sense of the full gap,
+            not the radius of the gap
+        rings : int
+            number of rings in the aperture
+        ring_radius : float or Iterable
+            the radius of each ring, i.e. (OD-ID).  Can be an iterable for
+            variable radius of each ring
+        segments_per_ring : int or Iterable
+            number of segments in a given ring.  Can be an iterable for variable
+            segment count in each ring
+        rotation_per_ring : float or Iterable, optional
+            the rotation of each ring.  Rotation is used to avoid alignment
+            of segment gaps into radial lines, when fractal segment divisions
+            are used.
+
+            For example, two rings with [8, 16] segments per ring will produce
+            a gap in the second ring aligned to the gap in the previous ring.
+
+            None for this argument will shift/rotate/phase the second ring
+            by (360/16)=22.5 degrees so that the gaps do not align
+
+        """
+        (
+            block,
+            self.all_centers,
+            self.windows,
+            self.local_coords,
+            self.local_masks,
+            self.segment_ids,
+            self.amp
+         ) = _composite_keystone_aperture(center_circle_diameter, segment_gap,
+                                          x, y, rings, ring_radius,
+                                          segments_per_ring, rotation_per_ring)
+        (
+            self.center_xx,
+            self.center_yy,
+            self.center_rr,
+            self.center_tt,
+            self.center_mask,
+            self.center_win
+        ) = block
+
+        self.x = x
+        self.y = y
+        self.center_circle_diameter = center_circle_diameter
+        self.segment_gap = segment_gap
+        self.rings = rings
+        self.ring_radius = ring_radius
+        self.segments_per_ring = segments_per_ring
+        self.rotation_per_ring = rotation_per_ring
+
+    def prepare_opd_bases(self, center_basis, center_orders,
+                          segment_basis, segment_orders,
+                          center_basis_kwargs=None, segment_basis_kwargs=None):
+        if center_basis_kwargs is None:
+            center_basis_kwargs = {}
+
+        if segment_basis_kwargs is None:
+            segment_basis_kwargs = {}
+
+        bases = []
+        grids = []
+
+        # take care of the center first
+        sig = inspect.signature(center_basis)
+        params = sig.params
+        if 'r' in params and 't' in params:
+            nr = self.center_circle_diameter/2
+            rr = self.center_rr
+            tt = self.center_tt
+            basis = list(center_basis(center_orders, r=r, t=t, **center_basis_kwargs))
+            basis = np.asarray(basis)
+            grids.append((rr, tt))
+            bases.append(basis)
+
+        # now do each segment
+        sig = inspect.sinature(segment_basis)
+        params = sig.params
+        gridcache = {}
+        polycache = {}
+        if 'r' in params and 't' in params:
+            # some grids may end up being identical to others, so we don't
+            # do the work twice
+            for x, y in self.local_coords:
+                corner = float(x[0, 0])  # for Cupy support
+                key = (corner, *x.shape)
+                if key not in gridcache:
+                    xext = float(x[0, -1] - x[0, 0])
+                    yext = float(y[-1, 0] - y[0, 0])
+                    nr = min(xext, yext) / 2  # /2; diameter -> radius
+                    r, t = cart_to_polar(x, y)
+                    r /= nr
+                    basis = list(segment_basis(segment_orders, r=r, t=t, **segment_basis_kwargs))
+                    basis = np.asarray(basis)
+                    gridcache[key] = r, t
+                    polycache[key] = basis
+                else:
+                    r, t = gridcache[key]
+                    basis = polycache[key]
+
+                grids.append((r, t))
+                bases.append(basis)
+        else:
+            # assume x, y are the kwargs
+            for x, y in self.local_coords:
+                corner = float(x[0, 0])  # for Cupy support
+                key = (corner, *x.shape)
+                if key not in gridcache:
+                    xext = float(x[0, -1] - x[0, 0])
+                    yext = float(y[-1, 0] - y[0, 0])
+                    xx = x / (xext/2)
+                    yy = y / (yext/2)
+                    basis = list(segment_basis(segment_orders, r=r, t=t, **segment_basis_kwargs))
+                    basis = np.asarray(basis)
+                    gridcache[key] = xx, yy
+                    polycache[key] = basis
+                else:
+                    xx, yy = gridcache[key]
+                    basis = polycache[key]
+
+                grids.append((xx, yy))
+                bases.append(basis)
+
+        self.opd_bases = bases
+        self.opd_grids = grids
+        return grids, bases
+
+    def compose_opd(self, center_coefs, segment_coefs, out=None):
+        """Compose per-segment optical path errors using the basis from prepare_opd_bases
+
+        Parameters
+        ----------
+        coefs : iterable
+            an iterable of coefficients for each segment present, i.e. excluding
+            those in the exclude list from the constructor
+            if an array, must be of shape (len(self.segment_ids), len(orders))
+            where orders comes from the proceeding call to prepare_opd_bases
+        out : numpy.ndarray
+            array to insert OPD into, allocated if None
+
+        Returns
+        -------
+        numpy.ndarray
+            OPD map of real datatype
+
+        """
+        # add center mask to returns in class constructor
+        # the center basis expansion is done
+        # now just need to add segment expansions
+
+        if out is None:
+            out = np.zeros_like(self.x)
+        tile = sum_of_2d_modes(self.bases[0], center_coefs)
+        out[self.center_win] += (tile*self.center_mask)
+
+        for win, mask, base, c in zip(self.windows, self.local_masks, self.opd_bases, segment_coefs):
+            tile = sum_of_2d_modes(base, c)
+            tile *= mask
+            out[win] += tile
+
+        return out
+
+
+def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
+                                 rings, ring_radius, segments_per_ring,
+                                 rotation_per_ring=None):
+    if isinstance(rotation_per_ring, numbers.Number) or rotation_per_ring is None:
+        rotation_per_ring = [rotation_per_ring] * rings
+
+    if isinstance(ring_radius, numbers.Number):
+        ring_radius = [ring_radius] * rings
+
+    if isinstance(segments_per_ring, numbers.Number):
+        segments_per_ring = [segments_per_ring] * rings
+
+    if isinstance(segment_gap, numbers.Number):
+        segment_gap = [segment_gap] * rings
+
+    center_radius = center_circle_diameter / 2
+
+    local_masks = []
+    local_coords = []
+    segment_ids = []
+    all_centers = []
+    windows = []
+    primary_mask = np.zeros(x.shape, dtype=bool)
+
+    dx = x[0, 1] - x[0, 0]
+    r, t = cart_to_polar(x, y)
+    # t in [-pi,pi]
+    # everything is (much) easier in [0,2pi]
+    # numbers positive means all cases are low<t & hi>t
+    # t += np.pi
+    ccx = int(np.ceil(x.shape[1]/2))
+    ccy = int(np.ceil(y.shape[0]/2))
+
+    center_diameter_samples = math.ceil(center_circle_diameter / dx)
+    win = _local_window(ccy, ccx, (0, 0), dx, center_diameter_samples, x, y)
+    center_xx = x[win]
+    center_yy = y[win]
+    center_rr = r[win]
+    center_tt = t[win]
+    center_mask = circle(center_radius, center_rr)
+    primary_mask[win] = center_mask
+    outer_radius = center_radius
+
+    segment_id = 0
+    iterable = (segments_per_ring, ring_radius, segment_gap, rotation_per_ring)
+    # for ring in range(len(segments_per_ring)):
+    for (nsegments, local_radius, gap, rotation) in zip(*iterable):
+        inner_radius = outer_radius + gap
+        outer_radius = inner_radius + local_radius
+
+        arc_per_seg = 360 / nsegments
+        arc_rad = np.radians(arc_per_seg)
+
+        if rotation is None:
+            rotation = arc_per_seg
+
+        segment_angles = np.arange(nsegments, dtype=float) * arc_per_seg + rotation
+        segment_angles = np.radians(segment_angles)
+
+        for angle in segment_angles:
+            # find the four corners; c = corner
+            lo = angle
+            hi = angle+arc_rad
+            print('before mod, lo, hi', lo, hi)
+            while hi > 2*np.pi:
+                hi = hi - 2*np.pi
+            while lo > 2*np.pi:
+                lo = lo - 2*np.pi
+
+            swapped = False
+            if hi < lo:
+                swapped = True
+                lo, hi = hi, lo
+            print('after mod, lo, hi', lo, hi)
+            # print('-'*80)
+            # print(lo, hi)
+            # print('-'*80)
+
+            c1 = (inner_radius, lo)
+            c2 = (inner_radius, hi)
+            c3 = (outer_radius, lo)
+            c4 = (outer_radius, hi)
+            arr = np.array([c1, c2, c3, c4])
+            rr = arr[:, 0]
+            tt = arr[:, 1]
+            xx, yy = polar_to_cart(rr, tt)
+            minx = min(xx)
+            maxx = max(xx)
+            miny = min(yy)
+            maxy = max(yy)
+            print(f'x: {minx:.2f} to {maxx:.2f}')
+            print(f'y: {miny:.2f} to {maxy:.2f}')
+            rangex = maxx - minx
+            rangey = maxy - miny
+            samples = math.ceil(max((rangex/dx, rangey/dx)))
+            cx = minx + rangex/2
+            cy = miny + rangey/2
+
+            # make the arc
+            center = (cx, cy)
+            window = _local_window(ccy, ccx, center, dx, samples, x, y)
+            rr = r[window]
+            tt = t[window]
+            print('t min max', tt.min(), tt.max())
+            print('-'*80)
+            from matplotlib import pyplot as plt
+            # plt.figure()
+            # im = plt.imshow(tt)
+            # plt.colorbar(im)
+            inner_include = circle(inner_radius, rr)
+            outer_exclude = circle(outer_radius, rr)
+            # if not swapped:
+            #     ang_mask = (tt > lo) & (tt < hi)
+            # else:
+            #     ang_mask = (tt < lo) & (tt > hi)
+            ang_mask = (tt > lo) & (tt < hi)
+            plt.figure()
+            plt.imshow(tt>lo)
+            plt.figure()
+            plt.imshow(tt<hi)
+            plt.figure()
+
+            # print(lo, hi, tt.min(), tt.max())
+            # if (lo < np.pi) and (hi <= np.pi):
+            #     # basic case
+            #     print(lo, hi, 'basic')
+            #     ang_mask = (tt > lo) & (tt < hi)
+            # elif (lo < np.pi) and (hi > np.pi):
+            #     # wrapped around pi
+            #     print(lo, hi, 'single wrap')
+            #     ang_mask = (tt > lo) | (tt < (hi - 2*np.pi))
+            #     # ang_mask |= tt < (hi - 2*np.pi)
+            # elif (lo > np.pi) and (hi > np.pi):
+            #     # need to phase wwrap
+            #     print(lo, hi, 'double wrap')
+            #     part_1 = tt > (lo - 2*np.pi)
+            #     part_2 = tt < (hi - 2*np.pi)
+            #     ang_mask = part_1 & part_2
+            # else:
+            #     print('STUPID')
+            #     print(lo, hi)
+            #     raise ValueError('what the fuck')
+
+            # print(rr.shape, tt.shape, inner_include.shape, outer_exclude.shape, ang_mask.shape)
+            # print(lo, hi)
+            mask = (inner_include ^ outer_exclude) & ang_mask
+            # mask = ang_mask
+            # print(ang_mask.max(), ang_mask.min())
+            primary_mask[window] |= mask
+
+            # below here is the spider, which we don't care about beyond the
+            # mask, and we need to store some stuff
+            segment_ids.append(segment_id)
+            local_masks.append(mask)
+            local_coords.append((xx-cx, yy-cy))
+            all_centers.append(center)
+            windows.append(window)
+            segment_id += 1
+
+            # now make the spider between this arc and the next
+            # want to cut out a local window at the seam
+            # so use c2, c4, which are the "right hand" corners
+            minx = min(xx[1], xx[3])
+            maxx = max(xx[1], xx[3])
+            miny = min(yy[1], yy[3])
+            maxy = max(yy[1], yy[3])
+            rangex = maxx - minx
+            rangey = maxy - miny
+            samples = tuple(math.ceil(v) for v in (rangex/dx + gap/dx, rangey/dx + gap/dx))
+            cx = minx + rangex/2
+            cy = miny + rangey/2
+
+            window = _local_window(ccy, ccx, (cx, cy), dx, samples, x, y)
+            xx = x[window]
+            yy = y[window]
+            rr = r[window]
+            # TODO: this can be optimized with fewer bitwise inversions?
+            rot = hi
+            while rot > (2*np.pi):
+                rot = rot - 2*np.pi
+            spid = ~spider(1, gap, xx, yy, rotation=rot, rotation_is_rad=True)
+
+            low_cut = ~circle(inner_radius, rr)
+            hi_cut = circle(outer_radius, rr)
+            spid &= low_cut
+            spid &= hi_cut
+
+            primary_mask[window] &= ~spid
+
+    return (center_xx, center_yy, center_rr, center_tt, center_mask, win), \
+        all_centers, windows, local_coords, local_masks, segment_ids, primary_mask
