@@ -1,0 +1,27 @@
+**********
+prysm v1.0
+**********
+
+intro paragraph about 1.0
+
+New Features
+============
+
+This release brings the following new major features:
+
+* Forward modeling of Shack Hartmann wavefront sensors
+
+* Compositing and per-segment errors of "keystone" apertures
+
+
+Performance Optimizations
+=========================
+
+* :func:`~prysm.geometry.rectangle` has been optimized when the rotation angle is zero
+
+* :func:`~prysm.propagation.angular_spectrum_transfer_function` has been slightly optimized
+
+Bug Fixes
+=========
+
+* The sign of `:func:~prysm.propagation.Wavefront.thin_lens` was incorrect, requiring a propagation by the negative of the focal length to go to the focus.  The sign has been swapped; (wf * thin_lens(f, ...)).free_space(f) now goes to the focus.
