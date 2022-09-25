@@ -1,5 +1,5 @@
 """Deformable Mirrors."""
-
+import copy
 import warnings
 
 import numpy as truenp
@@ -264,3 +264,6 @@ class DM:
             warped = crop_center(warped, out_shape=self.Nout)
 
         return warped
+
+    def copy(self):
+        return copy.deepcopy(self)
