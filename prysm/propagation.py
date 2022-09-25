@@ -444,7 +444,7 @@ class Wavefront:
         # for dimensional reduction to be unitless, wvl, r, f all need the same
         # units, so scale wvl
         w = wavelength / 1e3  # um -> mm
-        term1 = 1j * 2 * np.pi / w
+        term1 = -1j * 2 * np.pi / w
 
         rsq = x * x + y * y
         term2 = rsq / (2 * f)
