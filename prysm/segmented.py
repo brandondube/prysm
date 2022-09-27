@@ -156,6 +156,7 @@ class CompositeHexagonalAperture:
 
         """
         (
+            self.vtov,
             self.all_centers,
             self.windows,
             self.local_coords,
@@ -452,19 +453,27 @@ class CompositeKeystoneAperture:
 
         # take care of the center first
         sig = inspect.signature(center_basis)
-        params = sig.params
+        params = sig.parameters
         if 'r' in params and 't' in params:
             nr = self.center_circle_diameter/2
-            rr = self.center_rr
+            rr = self.center_rr / nr
             tt = self.center_tt
-            basis = list(center_basis(center_orders, r=r, t=t, **center_basis_kwargs))
+            basis = list(center_basis(center_orders, r=rr, t=tt, **center_basis_kwargs))
+            basis = np.asarray(basis)
+            grids.append((rr, tt))
+            bases.append(basis)
+        else:
+            nr = self.center_circle_diameter/2
+            xx = self.center_xx / nr
+            yy = self.center_yy
+            basis = list(center_basis(center_orders, x=xx, y=yy, **center_basis_kwargs))
             basis = np.asarray(basis)
             grids.append((rr, tt))
             bases.append(basis)
 
         # now do each segment
-        sig = inspect.sinature(segment_basis)
-        params = sig.params
+        sig = inspect.signature(segment_basis)
+        params = sig.parameters
         gridcache = {}
         polycache = {}
         if 'r' in params and 't' in params:
@@ -499,7 +508,7 @@ class CompositeKeystoneAperture:
                     yext = float(y[-1, 0] - y[0, 0])
                     xx = x / (xext/2)
                     yy = y / (yext/2)
-                    basis = list(segment_basis(segment_orders, r=r, t=t, **segment_basis_kwargs))
+                    basis = list(segment_basis(segment_orders, x=xx, y=yy, **segment_basis_kwargs))
                     basis = np.asarray(basis)
                     gridcache[key] = xx, yy
                     polycache[key] = basis
@@ -539,10 +548,10 @@ class CompositeKeystoneAperture:
 
         if out is None:
             out = np.zeros_like(self.x)
-        tile = sum_of_2d_modes(self.bases[0], center_coefs)
+        tile = sum_of_2d_modes(self.opd_bases[0], center_coefs)
         out[self.center_win] += (tile*self.center_mask)
 
-        for win, mask, base, c in zip(self.windows, self.local_masks, self.opd_bases, segment_coefs):
+        for win, mask, base, c in zip(self.windows, self.local_masks, self.opd_bases[1:], segment_coefs):
             tile = sum_of_2d_modes(base, c)
             tile *= mask
             out[win] += tile
@@ -573,6 +582,7 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
     all_centers = []
     windows = []
     primary_mask = np.zeros(x.shape, dtype=bool)
+    all_spiders = np.zeros(x.shape, dtype=bool)
 
     dx = x[0, 1] - x[0, 0]
     r, t = cart_to_polar(x, y)
@@ -607,26 +617,19 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
             rotation = arc_per_seg
 
         segment_angles = np.arange(nsegments, dtype=float) * arc_per_seg + rotation
-        segment_angles = np.radians(segment_angles)
+        segment_angles = np.radians(segment_angles) - np.pi
 
         for angle in segment_angles:
             # find the four corners; c = corner
             lo = angle
             hi = angle+arc_rad
-            print('before mod, lo, hi', lo, hi)
             while hi > 2*np.pi:
                 hi = hi - 2*np.pi
             while lo > 2*np.pi:
                 lo = lo - 2*np.pi
 
-            swapped = False
             if hi < lo:
-                swapped = True
                 lo, hi = hi, lo
-            print('after mod, lo, hi', lo, hi)
-            # print('-'*80)
-            # print(lo, hi)
-            # print('-'*80)
 
             c1 = (inner_radius, lo)
             c2 = (inner_radius, hi)
@@ -640,71 +643,38 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
             maxx = max(xx)
             miny = min(yy)
             maxy = max(yy)
-            print(f'x: {minx:.2f} to {maxx:.2f}')
-            print(f'y: {miny:.2f} to {maxy:.2f}')
             rangex = maxx - minx
             rangey = maxy - miny
-            samples = math.ceil(max((rangex/dx, rangey/dx)))
+            samples = math.ceil(max((rangex/dx, rangey/dx))/2)
             cx = minx + rangex/2
             cy = miny + rangey/2
-
             # make the arc
             center = (cx, cy)
             window = _local_window(ccy, ccx, center, dx, samples, x, y)
+            xxx = x[window]
+            yyy = y[window]
             rr = r[window]
             tt = t[window]
-            print('t min max', tt.min(), tt.max())
-            print('-'*80)
-            from matplotlib import pyplot as plt
-            # plt.figure()
-            # im = plt.imshow(tt)
-            # plt.colorbar(im)
             inner_include = circle(inner_radius, rr)
             outer_exclude = circle(outer_radius, rr)
-            # if not swapped:
-            #     ang_mask = (tt > lo) & (tt < hi)
-            # else:
-            #     ang_mask = (tt < lo) & (tt > hi)
+            arc = (inner_include ^ outer_exclude)
             ang_mask = (tt > lo) & (tt < hi)
-            plt.figure()
-            plt.imshow(tt>lo)
-            plt.figure()
-            plt.imshow(tt<hi)
-            plt.figure()
+            if (lo < np.pi) & (hi > np.pi):
+                ang_mask |= (tt < (hi-2*np.pi))
+            elif (lo >= np.pi) & (hi > np.pi):
+                llo = lo - 2*np.pi
+                lhi = hi - 2*np.pi
+                ang_mask = (tt > llo) & (tt < lhi)
+                lo, hi = llo, lhi
 
-            # print(lo, hi, tt.min(), tt.max())
-            # if (lo < np.pi) and (hi <= np.pi):
-            #     # basic case
-            #     print(lo, hi, 'basic')
-            #     ang_mask = (tt > lo) & (tt < hi)
-            # elif (lo < np.pi) and (hi > np.pi):
-            #     # wrapped around pi
-            #     print(lo, hi, 'single wrap')
-            #     ang_mask = (tt > lo) | (tt < (hi - 2*np.pi))
-            #     # ang_mask |= tt < (hi - 2*np.pi)
-            # elif (lo > np.pi) and (hi > np.pi):
-            #     # need to phase wwrap
-            #     print(lo, hi, 'double wrap')
-            #     part_1 = tt > (lo - 2*np.pi)
-            #     part_2 = tt < (hi - 2*np.pi)
-            #     ang_mask = part_1 & part_2
-            # else:
-            #     print('STUPID')
-            #     print(lo, hi)
-            #     raise ValueError('what the fuck')
-
-            # print(rr.shape, tt.shape, inner_include.shape, outer_exclude.shape, ang_mask.shape)
-            # print(lo, hi)
-            mask = (inner_include ^ outer_exclude) & ang_mask
-            # mask = ang_mask
-            # print(ang_mask.max(), ang_mask.min())
+            mask = arc & ang_mask
             primary_mask[window] |= mask
 
             # below here is the spider, which we don't care about beyond the
             # mask, and we need to store some stuff
             segment_ids.append(segment_id)
             local_masks.append(mask)
-            local_coords.append((xx-cx, yy-cy))
+            local_coords.append((xxx-cx, yyy-cy))
             all_centers.append(center)
             windows.append(window)
             segment_id += 1
@@ -727,17 +697,14 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
             yy = y[window]
             rr = r[window]
             # TODO: this can be optimized with fewer bitwise inversions?
-            rot = hi
-            while rot > (2*np.pi):
-                rot = rot - 2*np.pi
-            spid = ~spider(1, gap, xx, yy, rotation=rot, rotation_is_rad=True)
+            spid = ~spider(1, gap, xx, yy, rotation=hi, rotation_is_rad=True)
 
             low_cut = ~circle(inner_radius, rr)
             hi_cut = circle(outer_radius, rr)
             spid &= low_cut
             spid &= hi_cut
+            all_spiders[window] |= spid
 
-            primary_mask[window] &= ~spid
-
+    primary_mask &= ~all_spiders
     return (center_xx, center_yy, center_rr, center_tt, center_mask, win), \
         all_centers, windows, local_coords, local_masks, segment_ids, primary_mask
