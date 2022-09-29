@@ -31,8 +31,6 @@ def test_unfocus_fft_mdft_equivalent_Wavefront():
     dx = 1
     wf = propagation.Wavefront(dx=dx, cmplx_field=z, wavelength=HeNe, space='psf')
     unfocus_fft = wf.unfocus(Q=2, efl=1)
-    # magic number 4 - a bit unclear, but accounts for non-energy
-    # conserving fft; sf is to satisfy parseval's theorem
     unfocus_mdft = wf.unfocus_fixed_sampling(
         efl=1,
         dx=unfocus_fft.dx,
@@ -117,16 +115,7 @@ def test_thinlens_hopkins_agree():
     psf = wf.focus(efl=100, Q=2).intensity
 
     no_phs_wf = propagation.Wavefront.from_amp_and_phase(amp, None, HeNe, dx)
-    # bea
     tl = propagation.Wavefront.thin_lens(10_000, HeNe, x, y)
     wf = no_phs_wf * tl
     psf2 = wf.focus(efl=100, Q=2).intensity
-
-    # lo and behold all ye who read this test, the lies of physical optics modeling
-    # did the beam propagate 100, or 99 millimeters?
-    # is the PSF we're looking at in the z=100 plane, or the z=99 plane?
-    # the answer is simply a matter of interpretation,
-    # if the phase screen for the thin lens is in your mind as a way of going
-    # to z=99, then we are in the z=99 plane.
-    # if the lens is really there, we are in the z=100 plane.
     assert np.allclose(psf.data, psf2.data, rtol=1e-5)

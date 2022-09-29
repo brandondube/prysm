@@ -1,0 +1,14 @@
+*************
+prysm v0.21.1
+*************
+
+Version 0.21.1 is a minor point release that addresses the following issues:
+
+* Some unit tests related to scaling of matrix DFTs were failing
+* A unit test related to slice centering was failing
+
+There was also an undocumented change introduced in v0.21, which is documented here in the v0.21.1 release notes.
+
+The scaling for matrix DFTs has changed once again, this time to exactly match the scaling described in Soummer et al.  As collateral changes, FFTs now use :code:`norm='unitary'` which scales both forward FFT and inverse FFT by :code:`1/sqrt(N)`.  The change to FFT based propagations is to allow matrix DFTs and FFTs to be equal in terms of scaling.  The :doc:`Radiometric Scaling docs <../how-tos/Radiometrically-Correct-Modeling>` have been updated to reflect the new scaling rules.  This scaling change is likely the last breaking change to the portion of prysm which is outside the experimental folder.
+
+For the large number of new features in the v0.21 series, and no stability policy see the :doc:`v0.20 release notes<./v0.21>`.

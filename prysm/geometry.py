@@ -69,6 +69,8 @@ def rectangle(width, x, y, height=None, angle=0):
             p_adj = np.radians(angle)
             p += p_adj
             x, y = polar_to_cart(r, p)
+    else:
+        x, y = optimize_xy_separable(x, y)
 
     if height is None:
         height = width
@@ -161,7 +163,7 @@ def square(x, y):
     return np.ones_like(x)
 
 
-def truecircle(radius, rho):
+def truecircle(radius, r):
     """Create a "true" circular mask with anti-aliasing.
 
     Parameters
@@ -170,7 +172,7 @@ def truecircle(radius, rho):
         number of samples in the square output array
     radius : float, optional
         radius of the shape in the square output array.  radius=1 will fill the
-    rho : numpy.ndarray
+    r : numpy.ndarray
         radial coordinate, 2D
 
     Returns
@@ -184,24 +186,24 @@ def truecircle(radius, rho):
 
     """
     if radius == 0:
-        return np.zeros_like(rho)
+        return np.zeros_like(r)
     else:
-        samples = rho.shape[0]
+        samples = r.shape[0]
         one_pixel = 2 / samples
         radius_plus = radius + (one_pixel / 2)
-        intermediate = (radius_plus - rho) * (samples / 2)
+        intermediate = (radius_plus - r) * (samples / 2)
         return np.minimum(np.maximum(intermediate, 0), 1)
 
 
-def circle(radius, rho):
+def circle(radius, r):
     """Create a circular mask.
 
     Parameters
     ----------
     radius : float
-        radius of the circle, same units as rho.  The return is 1 inside the
+        radius of the circle, same units as r.  The return is 1 inside the
         radius and 0 outside
-    rho : numpy.ndarray
+    r : numpy.ndarray
         2D array of radial coordinates
 
     Returns
@@ -210,7 +212,7 @@ def circle(radius, rho):
         binary ndarray representation of the mask
 
     """
-    return rho <= radius
+    return r <= radius
 
 
 def regular_polygon(sides, radius, x, y, center=(0, 0), rotation=0):

@@ -679,8 +679,9 @@ def read_zygo_datx(file):
 ZYGO_INVALID_PHASE = 2147483640
 ZYGO_ENC = 'utf-8'  # may be ASCII, cp1252...
 ZYGO_PHASE_RES_FACTORS = {
-    0: 4096,
-    1: 32768,
+    0: 4096,    # 12-bit
+    1: 32768,   # 15-bit
+    2: 131072,  # 17-bit
 }
 
 
@@ -1394,6 +1395,13 @@ def read_codev_gridint(file):
     Parameters
     ----------
     file : str or path_like
+        path to a grid int file
+
+    Returns
+    -------
+    tuple of (ndarray, dict)
+        grid data in array representation, metadata dict
+
     """
     txt = Path(file).expanduser().read_text()
     # feed-forward information that prevents us from doing a whole-text search:

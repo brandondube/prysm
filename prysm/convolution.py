@@ -72,7 +72,7 @@ def apply_transfer_functions(obj, dx, tfs, fx=None, fy=None, ft=None, fr=None, s
 
     o = obj
     if shift:
-        O = fft.ifftshift(fft.fft2(o))  # NOQA
+        O = fft.fftshift(fft.fft2(fft.ifftshift(o)))  # NOQA
     else:
         O = fft.fft2(o)  # NOQA
 
@@ -94,6 +94,8 @@ def apply_transfer_functions(obj, dx, tfs, fx=None, fy=None, ft=None, fr=None, s
 
         O = O * tf  # NOQA
 
+    if shift:
+        return fft.fftshift(fft.ifft2(fft.ifftshift(O))).real
     # no if shift on this side, [i]fft will always place the origin at [0,0]
     # real inside shift - 2x faster to shift real than to shift complex
     i = fft.fftshift(fft.ifft2(O).real)

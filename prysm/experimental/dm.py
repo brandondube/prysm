@@ -1,11 +1,11 @@
 """Deformable Mirrors."""
-
+import copy
 import warnings
 
 import numpy as truenp
 
-from prysm.mathops import np, fft
-from prysm.fttools import forward_ft_unit, fourier_resample
+from prysm.mathops import np, fft, is_odd
+from prysm.fttools import forward_ft_unit, fourier_resample, crop_center, pad2d
 from prysm.convolution import apply_transfer_functions
 from prysm.coordinates import (
     make_xy_grid,
@@ -43,10 +43,17 @@ def prepare_actuator_lattice(shape, Nact, sep, mask, dtype):
     # because FFT grid alignment biases things to the left, if Nact is odd
     # we want more on the negative side;
     # this will make that so
-    neg_extreme_x = cx + -Nactx//2 * skip_samples_x
-    neg_extreme_y = cy + -Nacty//2 * skip_samples_y
-    pos_extreme_x = cx + Nactx//2 * skip_samples_x
-    pos_extreme_y = cy + Nacty//2 * skip_samples_y
+    offx = 0
+    offy = 0
+    if not is_odd(Nactx):
+        offx = skip_samples_x // 2
+    if not is_odd(Nacty):
+        offy = skip_samples_y // 2
+
+    neg_extreme_x = cx + -Nactx//2 * skip_samples_x + offx
+    neg_extreme_y = cy + -Nacty//2 * skip_samples_y + offy
+    pos_extreme_x = cx + Nactx//2 * skip_samples_x + offx
+    pos_extreme_y = cy + Nacty//2 * skip_samples_y + offy
 
     # ix = np.arange(neg_extreme_x, pos_extreme_x+skip_samples_x, skip_samples_x)
     # iy = np.arange(neg_extreme_y, pos_extreme_y+skip_samples_y, skip_samples_y)
@@ -70,7 +77,8 @@ def prepare_actuator_lattice(shape, Nact, sep, mask, dtype):
 
 class DM:
     """A DM whose actuators fill a rectangular region on a perfect grid, and have the same influence function."""
-    def __init__(self, ifn, Nact=50, sep=10, shift=(0, 0), rot=(0, 0, 0), upsample=1, spline_order=3, mask=None):
+    def __init__(self, ifn, Nout, Nact=50, sep=10, shift=(0, 0), rot=(0, 0, 0),
+                 upsample=1, mask=None, project_centering='fft'):
         """Create a new DM model.
 
         This model is based on convolution of a 'poke lattice' with the influence
@@ -90,6 +98,8 @@ class DM:
             be the same shape as (x,y).  Assumed centered on N//2th sample of x, y.
             Assumed to be well-conditioned for use in convolution, i.e.
             compact compared to the array holding it
+        Nout : int or tuple of int, length 2
+            number of samples in the output array; see notes for details
         Nact : int or tuple of int, length 2
             (X, Y) actuator counts
         sep : int or tuple of int, length 2
@@ -107,18 +117,41 @@ class DM:
         mask : numpy.ndarray
             boolean ndarray of shape Nact used to suppress/delete/exclude
             actuators; 1=keep, 0=suppress
+        project_centering : str, {'fft', 'interpixel'}
+            how to deal with centering when projecting the surface into the beam normal
+            fft = the N/2 th sample, rounded to the right, defines the origin.
+            interpixel = the N/2 th sample, without rounding, defines the origin
+
+        Notes
+        -----
+        If ifn is 500x500 and upsample=0.5, then the nominal output array is
+        250x250.  If this is supposed to line up with a pupil embedded in a
+        512x512 array, then the user would have to call pad2d after, which is
+        slightly worse than one stop shop.
+
+        The Nout parameter allows the user to specify Nout=512, and the DM's
+        render method will internally do the zero-pad or crop necessary to
+        achieve the desired array size.
 
         """
+        if isinstance(Nout, int):
+            Nout = (Nout, Nout)
         if isinstance(Nact, int):
             Nact = (Nact, Nact)
         if isinstance(sep, int):
             sep = (sep, sep)
 
-        x, y = make_xy_grid(ifn.shape, dx=1)
+        s = ifn.shape
+        self.x, self.y = make_xy_grid(s, dx=1)
+        if project_centering.lower() == 'interpixel' and not is_odd(s[1]):
+            self.x += 0.5
+        if project_centering.lower() == 'interpixel' and not is_odd(s[0]):
+            self.y += 0.5
 
         # stash inputs and some computed values on self
         self.ifn = ifn
         self.Ifn = fft.fft2(ifn)
+        self.Nout = Nout
         self.Nact = Nact
         self.sep = sep
         self.shift = shift
@@ -128,7 +161,7 @@ class DM:
 
         # prepare the poke array and supplimentary integer arrays needed to
         # copy it into the working array
-        out = prepare_actuator_lattice(ifn.shape, Nact, sep, mask, dtype=x.dtype)
+        out = prepare_actuator_lattice(ifn.shape, Nact, sep, mask, dtype=self.x.dtype)
         self.mask = out['mask']
         self.actuators = out['actuators']
         self.actuators_work = np.zeros_like(self.actuators)
@@ -138,8 +171,8 @@ class DM:
 
         # rotation data
         self.rotmat = make_rotation_matrix(rot)
-        XY = apply_rotation_matrix(self.rotmat, x, y)
-        XY2 = xyXY_to_pixels((x, y), XY)
+        XY = apply_rotation_matrix(self.rotmat, self.x, self.y)
+        XY2 = xyXY_to_pixels(XY, (self.x, self.y))
         self.XY = XY
         self.XY2 = XY2
         self.needs_rot = True
@@ -152,11 +185,11 @@ class DM:
             # make 2pi/px phase ramps in 1D (much faster)
             # then broadcast them to 2D when they're used as transfer functions
             # in a Fourier convolution
-            Y, X = [forward_ft_unit(1, s, shift=False) for s in x.shape]
+            Y, X = [forward_ft_unit(1, s, shift=False) for s in self.x.shape]
             Xramp = np.exp(X * (-2j * np.pi * shift[0]))
             Yramp = np.exp(Y * (-2j * np.pi * shift[1]))
-            shpx = x.shape
-            shpy = tuple(reversed(x.shape))
+            shpx = self.x.shape
+            shpy = tuple(reversed(self.x.shape))
             Xramp = np.broadcast_to(Xramp, shpx)
             Yramp = np.broadcast_to(Yramp, shpy).T
             self.Xramp = Xramp
@@ -165,7 +198,20 @@ class DM:
         else:
             self.tf = [self.Ifn]
 
-    def render(self, wfe=True, out=None):
+    def update(self, actuators):
+        # semantics for update:
+        # the mask is non-none, then actuators is a 1D vector of the same size
+        # as the nonzero elements of the mask
+        #
+        # or mask is None, and actuators is 2D
+        if self.mask is not None:
+            self.actuators[self.mask] = actuators
+        else:
+            self.actuators[:] = actuators[:]
+
+        return
+
+    def render(self, wfe=True):
         """Render the DM's surface figure or wavefront error.
 
         Parameters
@@ -174,11 +220,6 @@ class DM:
             if True, converts the "native" surface figure error into
             reflected wavefront error, by multiplying by 2 times the obliquity.
             obliquity is the cosine of the rotation vector.
-        out : numpy.ndarray
-            output array to place the output in,
-            if None, a new output array is allocated.
-            If not None and self.upsample == 1, an extra copy will be performed
-            and a warning emitted
 
         Returns
         -------
@@ -202,11 +243,10 @@ class DM:
         # changes over the life of this instance, the user may be surprised
         # OTOH, it may be a "feature" that stuck actuators, etc, may be
         # adjusted in this way rather elegantly
-        self.actuators_work[self.mask] = self.actuators[self.mask]
-        self.poke_arr[self.iyy, self.ixx] = self.actuators_work
+        self.poke_arr[self.iyy, self.ixx] = self.actuators
 
         # self.dx is unused inside apply tf, but :shrug:
-        sfe = apply_transfer_functions(self.poke_arr, None, self.tf)
+        sfe = apply_transfer_functions(self.poke_arr, None, self.tf, shift=False)
         if self.needs_rot:
             warped = regularize(xy=None, XY=self.XY, z=sfe, XY2=self.XY2)
         else:
@@ -216,9 +256,14 @@ class DM:
 
         if self.upsample != 1:
             warped = fourier_resample(warped, self.upsample)
-        else:
-            if out is not None:
-                warnings.warn('prysm/DM: out was not None when upsample=1.  A wasteful extra copy was performed which reduces performance.')
-                out[:] = warped[:]  # copy all elements
-                warped = out
+
+        if warped.shape[0] < self.Nout[0]:
+            # need to pad
+            warped = pad2d(warped, out_shape=self.Nout)
+        elif warped.shape[0] > self.Nout[1]:
+            warped = crop_center(warped, out_shape=self.Nout)
+
         return warped
+
+    def copy(self):
+        return copy.deepcopy(self)

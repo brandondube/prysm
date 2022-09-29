@@ -1,12 +1,19 @@
 """Numerical optical propagation."""
+import copy
 import numbers
+import inspect
 import operator
+import warnings
+from math import ceil
 from collections.abc import Iterable
 
-
 from .conf import config
+from .util import is_odd
 from .mathops import np, fft
 from ._richdata import RichData
+from .geometry import rectangle
+from .segmented import _local_window
+from .coordinates import make_xy_grid
 from .fttools import pad2d, crop_center, mdft, czt
 
 
@@ -31,7 +38,7 @@ def focus(wavefunction, Q):
     else:
         padded_wavefront = wavefunction
 
-    impulse_response = fft.fftshift(fft.fft2(fft.ifftshift(padded_wavefront)))
+    impulse_response = fft.fftshift(fft.fft2(fft.ifftshift(padded_wavefront), norm='ortho'))
     return impulse_response
 
 
@@ -56,7 +63,7 @@ def unfocus(wavefunction, Q):
     else:
         padded_wavefront = wavefunction
 
-    return fft.fftshift(fft.ifft2(fft.ifftshift(padded_wavefront)))
+    return fft.fftshift(fft.ifft2(fft.ifftshift(padded_wavefront), norm='ortho'))
 
 
 def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
@@ -101,9 +108,11 @@ def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
         shift = (shift[0]/output_dx, shift[1]/output_dx)
 
     if method == 'mdft':
-        return mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+        out = mdft.dft2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
     elif method == 'czt':
-        return czt.czt2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+        out = czt.czt2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+
+    return out
 
 
 def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
@@ -160,9 +169,12 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
         shift = (shift[0]/output_dx, shift[1]/output_dx)
 
     if method == 'mdft':
-        return mdft.idft2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+        out = mdft.idft2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
     elif method == 'czt':
-        return czt.iczt2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+        out = czt.iczt2(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+
+    out *= Q
+    return out
 
 
 def Q_for_sampling(input_diameter, prop_dist, wavelength, output_dx):
@@ -268,7 +280,7 @@ def talbot_distance(a, lambda_):
     a : float
         period of the grating, units of microns
     lambda_ : float
-        wavleength of light, units of microns
+        wavelength of light, units of microns
 
     Returns
     -------
@@ -309,16 +321,10 @@ def angular_spectrum(field, wvl, dx, z, Q=2, tf=None):
     if tf is not None:
         return fft.ifft2(fft.fft2(field) * tf)
 
-    # match all the units
-    wvl = wvl / 1e3  # um -> mm
     if Q != 1:
         field = pad2d(field, Q=Q)
 
-    ky, kx = (fft.fftfreq(s, dx).astype(config.precision) for s in field.shape)
-    ky = np.broadcast_to(ky, field.shape).swapaxes(0, 1)
-    kx = np.broadcast_to(kx, field.shape)
-
-    transfer_function = np.exp(-1j * np.pi * wvl * z * (kx**2 + ky**2))
+    transfer_function = angular_spectrum_transfer_function(field.shape, wvl, dx, z)
     forward = fft.fft2(field)
     return fft.ifft2(forward*transfer_function)
 
@@ -349,10 +355,12 @@ def angular_spectrum_transfer_function(samples, wvl, dx, z):
 
     wvl = wvl / 1e3
     ky, kx = (fft.fftfreq(s, dx).astype(config.precision) for s in samples)
-    ky = np.broadcast_to(ky, samples).swapaxes(0, 1)
-    kx = np.broadcast_to(kx, samples)
+    kxx = kx * kx
+    kyy = ky * ky
+    kyy = np.broadcast_to(ky, samples).swapaxes(0, 1)
+    kxx = np.broadcast_to(kx, samples)
 
-    return np.exp(-1j * np.pi * wvl * z * (kx**2 + ky**2))
+    return np.exp(-1j * np.pi * wvl * z * (kxx + kyy))
 
 
 class Wavefront:
@@ -441,7 +449,7 @@ class Wavefront:
         # for dimensional reduction to be unitless, wvl, r, f all need the same
         # units, so scale wvl
         w = wavelength / 1e3  # um -> mm
-        term1 = 1j * 2 * np.pi / w
+        term1 = -1j * 2 * np.pi / w
 
         rsq = x * x + y * y
         term2 = rsq / (2 * f)
@@ -449,6 +457,112 @@ class Wavefront:
         cmplx_screen = np.exp(term1 * term2)
         dx = float(x[0, 1] - x[0, 0])  # float conversion for CuPy support
         return cls(cmplx_field=cmplx_screen, wavelength=wavelength, dx=dx, space='pupil')
+
+    @classmethod
+    def shack_hartmann(pitch, n, efl, wavelength, x, y,
+                       aperture=rectangle, aperture_kwargs=None,
+                       shift=False):
+        """Create the complex screen for a shack hartmann lenslet array.
+
+        Parameters
+        ----------
+        pitch : float
+            lenslet pitch, mm
+        n : int or tuple of (int, int)
+            number of lenslets
+        efl : float
+            focal length of each lenslet, mm
+        wavelength : float
+            wavelength of light, microns
+        x : numpy.ndarray
+            x coordinates that define the space of the lens, mm
+        y : numpy.ndarray
+            y coordinates that define the space of the beam, mm
+        aperture : callable, optional
+            the aperture can either be:
+            f(lenslet_semidiameter, x=x, y=y, **kwargs)
+            or
+            f(lenslet_semidiameter, r=r, **kwargs)
+            typically,  it will be either prysm.geometry.circle or prysm.geometry.rectangle
+        aperture_kwargs : dict, optional
+            the keyword arguments for the aperture function, if any
+        shift : bool, optional
+            if True, shift the lenslet array by half a pitch in the +x/+y
+            directions
+
+        Returns
+        -------
+        numpy.ndarray
+            complex ndarray, such that:
+            wf2 = wf * shack_hartmann_complex_screen(... efl=efl)
+            wf3 = wf2.free_space(efl=efl)
+            wf3 represents the complex E-field at the detector, you are likely
+                interested in wf3.intensity
+
+        Notes
+        -----
+        There are many subtle constraints when simulating Shack-Hartmann sensors:
+        1) there must be enough samples across a lenslet to avoid aliasing the phase screen
+            i.e., (2pi i / wvl)(r^2 / 2f) evolves slowly; implying that somewhat larger
+            F/# lenslets are easier to sample well, or relatively large arrays are required.
+            For low-order aberrations at the input in moderate amplitudes, >= 32 samples per
+            lenslet is OK, although 64 to 128 or more samples per lenslet should be used for
+            beams containing high order aberrations in any meaningful quantity.  For a 64x64
+            lenslet array, the lower bound of 32 samples per lenslet = 2048 array
+        2) there must be dense enough sampling in the output plane to well sample each point
+        spready function, i.e. dx <= (lambda*fno_lenslet)/2
+        3) the F/# of the lenslet must be _small_ enough that the lenslets' point spread
+        functions only minimally overlap
+
+        """
+        if not hasattr(n, '__iter__'):
+            n = (n, n)
+
+        if aperture_kwargs is None:
+            aperture_kwargs = {}
+
+        sig = inspect.signature(aperture)
+        params = sig.parameters
+        callxy = 'x' in params and 'y' in params
+
+        dx = x[0, 1] - x[0, 0]
+        samples_per_lenslet = int(pitch / dx + 1)  # ensure safe rounding
+
+        xc, yc = make_xy_grid(n, dx=pitch, grid=False)
+        if shift:
+            if not is_odd(n[0]):
+                # even number of lenslets, FFT-aligned make_xy_grid needs positive shift
+                xc += (pitch/2)
+            if not is_odd(n[1]):
+                yc += (pitch/2)
+
+        cx = ceil(x.shape[1]/2)
+        cy = ceil(y.shape[0]/2)
+        lenslet_rsq = (pitch/2)**2
+        total_phase = np.zeros_like(x)
+
+        # naming convention:
+        # c = center
+        # i,j look indices
+        # xx, yy = lenslet center (floating point, not samples)
+        # rsq = r^2
+        # l = local (local coordinate frame, inside the lenslet window)
+        for j, yy in enumerate(yc):
+            for i, xx in enumerate(xc):
+                win = _local_window(cy, cx, (xx, yy), dx, samples_per_lenslet, x, y)
+                lx = x[win] - xx
+                ly = y[win] - yy
+                rsq = lx * lx + ly * ly
+                phase = rsq / (2*efl)
+                if callxy:
+                    phase *= aperture(pitch/2, x=lx, y=ly, **aperture_kwargs)
+                else:
+                    phase *= aperture(lenslet_rsq, r=rsq, **aperture_kwargs)
+
+                total_phase[win] += phase
+
+        prefix = -1j * 2 * np.pi/(wavelength/1e3)
+        return np.exp(prefix*total_phase)
 
     @property
     def intensity(self):
@@ -459,6 +573,10 @@ class Wavefront:
     def phase(self):
         """Phase, angle(w).  Possibly wrapped for large OPD."""
         return RichData(np.angle(self.data), self.dx, self.wavelength)
+
+    def copy(self):
+        """Return a (deep) copy of this instance."""
+        return copy.deepcopy(self)
 
     def pad2d(self, Q, value=0, mode='constant', out_shape=None, inplace=True):
         """Pad the wavefront.
@@ -547,6 +665,12 @@ class Wavefront:
     def __truediv__(self, other):
         """Divide this wavefront by something compatible."""
         return self.__numerical_operation__(other, 'truediv')
+
+    def __add__(self, other):
+        return self.__numerical_operation__(other, 'add')
+
+    def __sub__(self, other):
+        return self.__numerical_operation__(other, 'sub')
 
     def free_space(self, dz=np.nan, Q=1, tf=None):
         """Perform a plane-to-plane free space propagation.
@@ -725,3 +849,138 @@ class Wavefront:
             method=method)
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')
+
+    def to_fpm_and_back(self, efl, fpm, fpm_dx=None, method='mdft', return_more=False):
+        """Propagate to a focal plane mask, apply it, and return.
+
+        This routine handles normalization properly for the user.
+
+        To invoke babinet's principle, simply use to_fpm_and_back(fpm=1 - fpm).
+
+        Parameters
+        ----------
+        efl : float
+            focal length for the propagation
+        fpm : Wavefront or numpy.ndarray
+            the focal plane mask
+        fpm_dx : float
+            sampling increment in the focal plane,  microns;
+            do not need to pass if fpm is a Wavefront
+        method : str, {'mdft', 'czt'}
+            how to propagate the field, matrix DFT or Chirp Z transform
+            CZT is usually faster single-threaded and has less memory consumption
+            MDFT is usually faster multi-threaded and has more memory consumption
+        return_more : bool
+            if True, return (new_wavefront, field_at_fpm, field_after_fpm)
+            else return new_wavefront
+
+        Returns
+        -------
+        Wavefront, Wavefront, Wavefront
+            new wavefront, [field at fpm, field after fpm]
+
+        """
+        if isinstance(fpm, Wavefront):
+            fpm_samples = fpm.data.shape
+            fpm_dx = fpm.dx
+        else:
+            if fpm_dx is None:
+                raise ValueError('fpm was not a Wavefront and fpm_dx was None')
+
+            fpm_samples = fpm.shape
+
+        input_samples = self.data.shape
+        input_diameters = [self.dx * s for s in input_samples]
+        Q_forward = [Q_for_sampling(d, efl, self.wavelength, fpm_dx) for d in input_diameters]
+        # soummer notation: use m, which would be 0.5 for a 2x zoom
+        # BDD notation: Q, would be 2 for a 2x zoom
+        m_forward = [1/q for q in Q_forward]
+        m_reverse = [b/a*m for a, b, m in zip(input_samples, fpm_samples, m_forward)]
+        Q_reverse = [1/m for m in m_reverse]
+
+        # prop forward
+        kwargs = dict(ary=self.data, Q=Q_forward, samples=fpm_samples, shift=(0, 0))
+        if method == 'mdft':
+            field_at_fpm = mdft.idft2(**kwargs)
+        elif method == 'czt':
+            field_at_fpm = czt.iczt2(**kwargs)
+
+        field_after_fpm = field_at_fpm * fpm
+
+        kwargs = dict(ary=field_after_fpm.data, Q=Q_reverse, samples=input_samples, shift=(0, 0))
+        if method == 'mdft':
+            field_at_next_pupil = mdft.idft2(**kwargs)
+        elif method == 'czt':
+            field_at_next_pupil = czt.iczt2(**kwargs)
+
+        # scaling
+        # TODO: make this handle anamorphic transforms properly
+        if Q_forward[0] != Q_forward[1]:
+            warnings.warn(f'Forward propagation had Q {Q_forward} which was not uniform between axes, scaling is off')
+        if input_samples[0] != input_samples[1]:
+            warnings.warn(f'Forward propagation had input shape {input_samples} which was not uniform between axes, scaling is off')
+        if fpm_samples[0] != fpm_samples[1]:
+            warnings.warn(f'Forward propagation had fpm shape {fpm_samples} which was not uniform between axes, scaling is off')
+        # Q_reverse is calculated from Q_forward; if one is consistent the other is
+
+        # field_at_next_pupil = np.flipud(field_at_next_pupil)
+        out = Wavefront(field_at_next_pupil, self.wavelength, self.dx, self.space)
+        if return_more:
+            return out, field_at_fpm, Wavefront(field_after_fpm, self.wavelength, fpm_dx, 'psf')
+
+        return out
+
+    def babinet(self, efl, lyot, fpm, fpm_dx=None, method='mdft', return_more=False):
+        """Propagate through a Lyot-style coronagraph using Babinet's principle.
+
+        This routine handles normalization properly for the user.
+
+        To invoke babinet's principle, simply use to_fpm_and_back(fpm=1 - fpm).
+
+        Parameters
+        ----------
+        efl : float
+            focal length for the propagation
+        lyot : Wavefront or numpy.ndarray
+            the Lyot stop; if None, equivalent to ones_like(self.data)
+        fpm : Wavefront or numpy.ndarray
+            1 - fpm
+            one minus the focal plane mask (see Soummer et al 2007)
+        fpm_dx : float
+            sampling increment in the focal plane,  microns;
+            do not need to pass if fpm is a Wavefront
+        method : str, {'mdft', 'czt'}
+            how to propagate the field, matrix DFT or Chirp Z transform
+            CZT is usually faster single-threaded and has less memory consumption
+            MDFT is usually faster multi-threaded and has more memory consumption
+        return_more : bool
+            if True, return each plane in the propagation
+            else return new_wavefront
+
+        Returns
+        -------
+        Wavefront, Wavefront, Wavefront, Wavefront
+            field after lyot, [field at fpm, field after fpm, field at lyot]
+
+        """
+        if return_more:
+            field, field_at_fpm, field_after_fpm = \
+                self.to_fpm_and_back(efl=efl, fpm=fpm, fpm_dx=fpm_dx, method=method,
+                                     return_more=return_more)
+        else:
+            field = self.to_fpm_and_back(efl=efl, fpm=fpm, fpm_dx=fpm_dx, method=method,
+                                         return_more=return_more)
+        # DOI: 10.1117/1.JATIS.7.1.019002
+        # Eq. 26 with some minor differences in naming
+        field_at_lyot = self.data - field.data
+        if lyot is not None:
+            field_after_lyot = lyot * field_at_lyot
+        else:
+            field_after_lyot = field_at_lyot
+
+        field_at_lyot = Wavefront(field_at_lyot, self.wavelength, self.dx, self.space)
+        field_after_lyot = Wavefront(field_after_lyot, self.wavelength, self.dx, self.space)
+
+        if return_more:
+            return field_after_lyot, field_at_fpm, field_after_fpm, field_at_lyot
+        return field_after_lyot
