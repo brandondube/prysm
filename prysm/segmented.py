@@ -1,7 +1,6 @@
 """Tools for working with segmented systems."""
 import math
 import inspect
-from multiprocessing.sharedctypes import Value
 import numbers
 from collections import namedtuple
 
@@ -269,7 +268,7 @@ class CompositeHexagonalAperture:
         return grids, bases
 
     def compose_opd(self, coefs, out=None):
-        """Compose per-segment optical path errors using the basis from prepare_opd_bases
+        """Compose per-segment optical path errors using the basis from prepare_opd_bases.
 
         Parameters
         ----------
@@ -410,25 +409,32 @@ class CompositeKeystoneAperture:
             by (360/16)=22.5 degrees so that the gaps do not align
 
         """
-        (
-            block,
-            self.all_centers,
-            self.windows,
-            self.local_coords,
-            self.local_masks,
-            self.segment_ids,
-            self.amp
-         ) = _composite_keystone_aperture(center_circle_diameter, segment_gap,
-                                          x, y, rings, ring_radius,
-                                          segments_per_ring, rotation_per_ring)
-        (
-            self.center_xx,
-            self.center_yy,
-            self.center_rr,
-            self.center_tt,
-            self.center_mask,
-            self.center_win
-        ) = block
+        pak = _composite_keystone_aperture(center_circle_diameter, segment_gap,
+                                           x, y, rings, ring_radius,
+                                           segments_per_ring, rotation_per_ring)
+
+        cs = pak['center_segment']
+        ks = pak['keystones']
+        self.center_xx = cs['x']
+        self.center_yy = cs['y']
+        self.center_rr = cs['r']
+        self.center_tt = cs['t']
+        self.center_mask = cs['mask']
+        self.center_window = cs['window']
+
+        self.segment_centers = ks['centers']
+        self.segment_corners = ks['corners']
+        self.segment_ids_ods = ks['ids_ods']
+        self.segment_windows = ks['windows']
+        self.segment_grids = ks['local_xy']
+        self.segment_masks = ks['masks']
+        self.segment_rotations = ks['rotations']
+        self.segment_ledges = ks['left_edges']
+        self.segment_redges = ks['right_edges']
+        self.segment_radial_diameters = ks['radial_diameters']
+        self.segment_ids = ks['ids']
+
+        self.amp = pak['amplitude_mask']
 
         self.x = x
         self.y = y
@@ -441,7 +447,8 @@ class CompositeKeystoneAperture:
 
     def prepare_opd_bases(self, center_basis, center_orders,
                           segment_basis, segment_orders,
-                          center_basis_kwargs=None, segment_basis_kwargs=None):
+                          center_basis_kwargs=None, segment_basis_kwargs=None,
+                          rotate_xyaxes=False):
         if center_basis_kwargs is None:
             center_basis_kwargs = {}
 
@@ -474,47 +481,87 @@ class CompositeKeystoneAperture:
         # now do each segment
         sig = inspect.signature(segment_basis)
         params = sig.parameters
-        gridcache = {}
-        polycache = {}
         if 'r' in params and 't' in params:
             # some grids may end up being identical to others, so we don't
             # do the work twice
-            for x, y in self.local_coords:
-                corner = float(x[0, 0])  # for Cupy support
-                key = (corner, *x.shape)
-                if key not in gridcache:
-                    xext = float(x[0, -1] - x[0, 0])
-                    yext = float(y[-1, 0] - y[0, 0])
-                    nr = min(xext, yext) / 2  # /2; diameter -> radius
-                    r, t = cart_to_polar(x, y)
-                    r /= nr
-                    basis = list(segment_basis(segment_orders, r=r, t=t, **segment_basis_kwargs))
-                    basis = np.asarray(basis)
-                    gridcache[key] = r, t
-                    polycache[key] = basis
-                else:
-                    r, t = gridcache[key]
-                    basis = polycache[key]
-
+            for x, y in self.segment_grids:
+                xext = float(x[0, -1] - x[0, 0])
+                yext = float(y[-1, 0] - y[0, 0])
+                nr = min(xext, yext) / 2  # /2; diameter -> radius
+                r, t = cart_to_polar(x, y)
+                r /= nr
+                basis = list(segment_basis(segment_orders, r=r, t=t, **segment_basis_kwargs))
+                basis = np.asarray(basis)
                 grids.append((r, t))
                 bases.append(basis)
         else:
             # assume x, y are the kwargs
-            for x, y in self.local_coords:
-                corner = float(x[0, 0])  # for Cupy support
-                key = (corner, *x.shape)
-                if key not in gridcache:
-                    xext = float(x[0, -1] - x[0, 0])
-                    yext = float(y[-1, 0] - y[0, 0])
+            for i, (x, y) in enumerate(self.segment_grids):
+                if rotate_xyaxes:
+                    r, t = cart_to_polar(x, y)
+                    t_offset = self.segment_rotations[i]
+                    t -= t_offset
+                    x, y = polar_to_cart(r, t)
+
+                    # x is the compact axis of the segment,
+                    # y is the long axis
+                    # x is normalized by the gap between od and id
+                    # y is normalized by the gap metween the midpoints
+                    # of the radial edges
+                    # BDD: old strategy, use the edges to figure out extent
+                    # ledge = self.segment_ledges[i]
+                    # redge = self.segment_redges[i]
+                    # rl, tl = cart_to_polar(*ledge, vec_to_grid=False)
+                    # rr, tr = cart_to_polar(*redge, vec_to_grid=False)
+                    # tl -= t_offset
+                    # tr -= t_offset
+                    # xledge, yledge = polar_to_cart(rl, tl)
+                    # xredge, yredge = polar_to_cart(rr, tr)
+                    # yd = yredge - yledge
+
+                    # xnorm = self.segment_radial_diameters[i]/2
+                    # x /= xnorm
+                    # y /= (yd/2)
+                    # xx, yy = x, y
+
+                    # now new strategy:
+                    # use the corners and seams to define things
+                    # first move into the local frame via rotation
+                    xcorner, ycorner = self.segment_corners[i]
+                    xcenter, ycenter = self.segment_ids_ods[i]
+                    rcorner, tcorner = cart_to_polar(xcorner, ycorner, vec_to_grid=False)
+                    rcenter, tcenter = cart_to_polar(xcenter, ycenter, vec_to_grid=False)
+                    tcorner -= t_offset
+                    tcenter -= t_offset
+                    xcorner, ycorner = polar_to_cart(rcorner, tcorner)
+                    xcenter, ycenter = polar_to_cart(rcenter, tcenter)
+
+                    # now find the min and max of everything
+                    # slight complexity in the X normalization
+                    # the center of the normalization
+                    xmax = xcenter.max()
+                    xmin = xcenter.min()
+                    ymin = ycorner.min()
+                    ymax = ycorner.max()
+                    xnorm = (xmax-xmin)/2 + (xmin - xcorner.min())
+                    ynorm = (ymax-ymin)/2
+                    # print(f'xmax={xmax:.2f}, xmin={xmin:.2f}, xnorm={xnorm:.2f}')
+                    x /= xnorm
+                    y /= ynorm
+                    xx = x
+                    yy = y
+                else:
+                    raise ValueError('must rotate xy axes')
+
+                    # xext = float(x[0, -1] - x[0, 0])
+                    # yext = float(y[-1, 0] - y[0, 0])
+                    xext = x.max() - x.min()
+                    yext = y.max() - y.min()
                     xx = x / (xext/2)
                     yy = y / (yext/2)
-                    basis = list(segment_basis(segment_orders, x=xx, y=yy, **segment_basis_kwargs))
-                    basis = np.asarray(basis)
-                    gridcache[key] = xx, yy
-                    polycache[key] = basis
-                else:
-                    xx, yy = gridcache[key]
-                    basis = polycache[key]
+
+                basis = list(segment_basis(segment_orders, x=xx, y=yy, **segment_basis_kwargs))
+                basis = np.asarray(basis)
 
                 grids.append((xx, yy))
                 bases.append(basis)
@@ -524,7 +571,7 @@ class CompositeKeystoneAperture:
         return grids, bases
 
     def compose_opd(self, center_coefs, segment_coefs, out=None):
-        """Compose per-segment optical path errors using the basis from prepare_opd_bases
+        """Compose per-segment optical path errors using the basis from prepare_opd_bases.
 
         Parameters
         ----------
@@ -549,9 +596,9 @@ class CompositeKeystoneAperture:
         if out is None:
             out = np.zeros_like(self.x)
         tile = sum_of_2d_modes(self.opd_bases[0], center_coefs)
-        out[self.center_win] += (tile*self.center_mask)
+        out[self.center_window] += (tile*self.center_mask)
 
-        for win, mask, base, c in zip(self.windows, self.local_masks, self.opd_bases[1:], segment_coefs):
+        for win, mask, base, c in zip(self.segment_windows, self.segment_masks, self.opd_bases[1:], segment_coefs):
             tile = sum_of_2d_modes(base, c)
             tile *= mask
             out[win] += tile
@@ -562,6 +609,28 @@ class CompositeKeystoneAperture:
 def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
                                  rings, ring_radius, segments_per_ring,
                                  rotation_per_ring=None):
+    # one of the things this function returns are the "edges" of a segment
+    #
+    # consider the ASCII art,
+    #
+    #              ___-------___
+    #         __---      |      ---__
+    #     _--            |           --_
+    #    \               |              \
+    #      \             |             /
+    #        \           |           /
+    #          \*        |        */
+    #            \       |       /
+    #              \     |     /
+    #                \   |   /
+    #                  \ | /
+
+    # the edges are the two positions indicated by asterisks;
+    # they are the radial midpoints (od+id)/2, at the azimuthal extrema of the
+    # segment
+    #
+    # the function also returns the center, which is the radial and azimuthal
+    # midpoint of the segment
     if isinstance(rotation_per_ring, numbers.Number) or rotation_per_ring is None:
         rotation_per_ring = [rotation_per_ring] * rings
 
@@ -581,8 +650,14 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
     segment_ids = []
     all_centers = []
     windows = []
+    center_angles = []
+    left_edges = []
+    right_edges = []
+    radial_diameters = []
     primary_mask = np.zeros(x.shape, dtype=bool)
     all_spiders = np.zeros(x.shape, dtype=bool)
+    corners = []
+    idods = []
 
     dx = x[0, 1] - x[0, 0]
     r, t = cart_to_polar(x, y)
@@ -631,6 +706,9 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
             if hi < lo:
                 lo, hi = hi, lo
 
+            mid = lo + arc_rad / 2
+            center_angles.append(mid)
+
             c1 = (inner_radius, lo)
             c2 = (inner_radius, hi)
             c3 = (outer_radius, lo)
@@ -646,9 +724,14 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
             rangex = maxx - minx
             rangey = maxy - miny
             samples = math.ceil(max((rangex/dx, rangey/dx))/2)
+            samples = [math.ceil(v/dx/2) for v in (rangex, rangey)]
             cx = minx + rangex/2
             cy = miny + rangey/2
-            # make the arc
+
+            # now knowing where the center of the array is, crop out
+            # the window and compute the arc
+            # this center is the center of the window, which is not the same
+            # as the center of the segment
             center = (cx, cy)
             window = _local_window(ccy, ccx, center, dx, samples, x, y)
             xxx = x[window]
@@ -670,13 +753,30 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
             mask = arc & ang_mask
             primary_mask[window] |= mask
 
+            # now compute the edges and center coordinate of the segment
+            # for OPD expansions later
+            mid_r = (inner_radius+outer_radius)/2
+            mid_t = mid
+            center = polar_to_cart(mid_r, mid_t)
+            ledge = polar_to_cart(mid_r, lo)
+            redge = polar_to_cart(mid_r, hi)
+            cid = polar_to_cart(inner_radius, mid)
+            cod = polar_to_cart(outer_radius, mid)
+            xxc = [cid[0], cod[0]]
+            yyc = [cid[1], cod[1]]
+
             # below here is the spider, which we don't care about beyond the
             # mask, and we need to store some stuff
             segment_ids.append(segment_id)
             local_masks.append(mask)
-            local_coords.append((xxx-cx, yyy-cy))
+            local_coords.append((xxx-center[0], yyy-center[1]))
             all_centers.append(center)
             windows.append(window)
+            left_edges.append(ledge)
+            right_edges.append(redge)
+            radial_diameters.append(outer_radius-inner_radius)
+            idods.append((xxc, yyc))
+            corners.append((xx, yy))
             segment_id += 1
 
             # now make the spider between this arc and the next
@@ -706,5 +806,27 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
             all_spiders[window] |= spid
 
     primary_mask &= ~all_spiders
-    return (center_xx, center_yy, center_rr, center_tt, center_mask, win), \
-        all_centers, windows, local_coords, local_masks, segment_ids, primary_mask
+    return {
+        'center_segment': {
+            'x': center_xx,
+            'y': center_yy,
+            'r': center_rr,
+            't': center_tt,
+            'mask': center_mask,
+            'window': win,
+        },
+        'keystones': {
+            'centers': all_centers,
+            'corners': corners,
+            'ids_ods': idods,
+            'windows': windows,
+            'local_xy': local_coords,
+            'masks': local_masks,
+            'rotations': center_angles,
+            'left_edges': left_edges,
+            'right_edges': right_edges,
+            'radial_diameters': radial_diameters,
+            'ids': segment_ids,
+        },
+        'amplitude_mask': primary_mask,
+    }
