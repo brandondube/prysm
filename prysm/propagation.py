@@ -8,8 +8,7 @@ from math import ceil
 from collections.abc import Iterable
 
 from .conf import config
-from .util import is_odd
-from .mathops import np, fft
+from .mathops import np, fft, is_odd
 from ._richdata import RichData
 from .geometry import rectangle
 from .segmented import _local_window
