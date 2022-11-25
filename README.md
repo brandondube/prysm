@@ -30,6 +30,8 @@ Prysm uses numpy for array operations or any compatible library.  To use GPUs, y
 - Pupil-to-Focus
 - Focus-to-Pupil
 - Free space ("plane to plane" or "angular spectrum")
+- FFTs, Matrix DFTs, Chirp C Transforms
+- Thin Lens Phase Screens
 
 ### Polynomials
 - Zernike
@@ -112,8 +114,6 @@ All of these polynomials provide highly optimized GPU-compatible implementations
 ### Deformable Mirrors
 
 - surface synthesis in or out of beam normal based on arbitrary influence function with arbitrary sampling
-- crosstalk
-- stuck, dead, and tied actuators
 - DM surface misalignment / registration errors
 
 ### Interferometry
