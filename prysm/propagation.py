@@ -573,6 +573,16 @@ class Wavefront:
         """Phase, angle(w).  Possibly wrapped for large OPD."""
         return RichData(np.angle(self.data), self.dx, self.wavelength)
 
+    @property
+    def real(self):
+        """re(w)."""
+        return RichData(np.real(self.data), self.dx, self.wavelength)
+
+    @property
+    def imag(self):
+        """re(w)."""
+        return RichData(np.imag(self.data), self.dx, self.wavelength)
+
     def copy(self):
         """Return a (deep) copy of this instance."""
         return copy.deepcopy(self)
