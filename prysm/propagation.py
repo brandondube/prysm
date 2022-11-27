@@ -859,7 +859,7 @@ class Wavefront:
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')
 
-    def to_fpm_and_back(self, efl, fpm, fpm_dx=None, method='mdft', return_more=False):
+    def to_fpm_and_back(self, efl, fpm, fpm_dx=None, method='mdft', shift=(0, 0), return_more=False):
         """Propagate to a focal plane mask, apply it, and return.
 
         This routine handles normalization properly for the user.
@@ -879,6 +879,9 @@ class Wavefront:
             how to propagate the field, matrix DFT or Chirp Z transform
             CZT is usually faster single-threaded and has less memory consumption
             MDFT is usually faster multi-threaded and has more memory consumption
+        shift : tuple of float
+            shift in the image plane to go to the FPM
+            appropriate shift will be computed returning to the pupil
         return_more : bool
             if True, return (new_wavefront, field_at_fpm, field_after_fpm)
             else return new_wavefront
@@ -906,9 +909,10 @@ class Wavefront:
         m_forward = [1/q for q in Q_forward]
         m_reverse = [b/a*m for a, b, m in zip(input_samples, fpm_samples, m_forward)]
         Q_reverse = [1/m for m in m_reverse]
+        shift_forward = tuple(s/fpm_dx for s in shift)
 
         # prop forward
-        kwargs = dict(ary=self.data, Q=Q_forward, samples=fpm_samples, shift=(0, 0))
+        kwargs = dict(ary=self.data, Q=Q_forward, samples=fpm_samples, shift=shift_forward)
         if method == 'mdft':
             field_at_fpm = mdft.idft2(**kwargs)
         elif method == 'czt':
@@ -916,7 +920,8 @@ class Wavefront:
 
         field_after_fpm = field_at_fpm * fpm
 
-        kwargs = dict(ary=field_after_fpm.data, Q=Q_reverse, samples=input_samples, shift=(0, 0))
+        shift_reverse = tuple(-s for s, q in zip(shift_forward, Q_forward))
+        kwargs = dict(ary=field_after_fpm.data, Q=Q_reverse, samples=input_samples, shift=shift_reverse)
         if method == 'mdft':
             field_at_next_pupil = mdft.idft2(**kwargs)
         elif method == 'czt':
@@ -966,6 +971,25 @@ class Wavefront:
             if True, return each plane in the propagation
             else return new_wavefront
 
+        Notes
+        -----
+        if the substrate's reflectivity or transmissivity is not unity, and/or
+        the mask's density is not infinity, babinet's principle works as follows:
+
+        suppose we're modeling a Lyot focal plane mask;
+        rr = radial coordinates of the image plane, in lambda/d units
+        mask = rr < 5  # 1 inside FPM, 0 outside (babinet-style)
+
+        now create some scalars for background transmission and mask transmission
+
+        tau = 0.9 # background
+        tmask = 0.1 # mask
+
+        mask = tau - tau*mask + rmask*mask
+
+        the mask variable now contains 0.9 outside the spot, and 0.1 inside
+
+
         Returns
         -------
         Wavefront, Wavefront, Wavefront, Wavefront
@@ -981,7 +1005,7 @@ class Wavefront:
                                          return_more=return_more)
         # DOI: 10.1117/1.JATIS.7.1.019002
         # Eq. 26 with some minor differences in naming
-        field_at_lyot = self.data - field.data
+        field_at_lyot = self.data - np.rot90(field.data, k=2)
         if lyot is not None:
             field_after_lyot = lyot * field_at_lyot
         else:
