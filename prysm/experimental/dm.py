@@ -169,12 +169,17 @@ class DM:
         self.ixx = out['ixx']
         self.iyy = out['iyy']
 
-        # rotation data
+        # rotation data; XY/XY2 = for render(); suffix back for gradient backprop
         self.rotmat = make_rotation_matrix(rot)
         XY = apply_rotation_matrix(self.rotmat, self.x, self.y)
         XY2 = xyXY_to_pixels(XY, (self.x, self.y))
+        XYback = apply_rotation_matrix(self.rotmat.T, self.x, self.y)
+        XY2back = xyXY_to_pixels(XYback, (self.x, self.y))
+
         self.XY = XY
         self.XY2 = XY2
+        self.XYback = XYback
+        self.XY2back = XY2back
         self.needs_rot = True
         if np.allclose(rot, [0, 0, 0]):
             self.needs_rot = False
@@ -197,6 +202,11 @@ class DM:
             self.tf = [self.Ifn * self.Xramp * self.Yramp]
         else:
             self.tf = [self.Ifn]
+
+
+    def copy(self):
+        return copy.deepcopy(self)
+
 
     def update(self, actuators):
         # semantics for update:
@@ -257,6 +267,8 @@ class DM:
         if self.upsample != 1:
             warped = fourier_resample(warped, self.upsample)
 
+        self.Nintermediate = warped.shape
+
         if warped.shape[0] < self.Nout[0]:
             # need to pad
             warped = pad2d(warped, out_shape=self.Nout)
@@ -265,5 +277,59 @@ class DM:
 
         return warped
 
-    def copy(self):
-        return copy.deepcopy(self)
+    def render_backprop(self, protograd, wfe=True):
+        """Gradient backpropagation for render().
+
+        Parameters
+        ----------
+        protograd : numpy.ndarray
+            "prototype gradient"
+            the array holding the work-in-progress towards the gradient.
+            For example, in a problem fitting actuator commands to a surface,
+            you might have:
+
+            render() returns a 512x512 array, for 48x48 actuators.
+            y contains a 512x512 array of target surface heights
+
+            The euclidean distance between the two as a cost function:
+            cost = np.sum(abs(render() - y)**2)
+
+            Then the first step in computing the gradient is
+            diff = 2 * (render() - y)
+
+            and you would call
+            dm.render_backprop(diff)
+        wfe : bool, optional
+            if True, the return is scaled as for a wavefront error instead
+            of surface figure error
+
+        Returns
+        -------
+        numpy.ndarray
+            analytic gradient, shape Nact x Nact
+
+        Notes
+        -----
+        Not compatible with complex valued protograd
+
+        """
+        """Gradient backpropagation for self.render."""
+        if protograd.shape[0] > self.Nintermediate[0]:
+            # forward padded, we need to crop
+            protograd = crop_center(protograd, out_shape=self.Nintermediate)
+        elif protograd.shape[0] < self.Nintermediate[0]:
+            # forward cropped, we need to pad
+            protograd = pad2d(protograd, out_shape=self.Nintermediate)
+
+        if self.upsample != 1:
+            protograd = fourier_resample(protograd, 1/self.upsample)
+
+        if wfe:
+            protograd *= (2*self.obliquity)
+
+        if self.needs_rot:
+            # inverse projection
+            protograd = regularize(xy=None, XY=self.XYback, z=protograd, XY2=self.XY2back)
+
+        in_actuator_space = apply_transfer_functions(protograd, None, np.conj(self.tf), shift=False)
+        return in_actuator_space[self.iyy, self.ixx]
