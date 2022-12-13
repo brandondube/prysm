@@ -30,7 +30,7 @@ def slit(x, y, width_x, width_y=None):
 
     """
     x, y = optimize_xy_separable(x, y)
-    mask = np.zeros((y.size, x.size), dtype=np.bool)
+    mask = np.zeros((y.size, x.size), dtype=bool)
     if width_x is not None:
         wx = width_x / 2
         mask |= abs(x) <= wx
