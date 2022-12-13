@@ -848,6 +848,7 @@ class Interferogram(RichData):
     def strip_latcal(self):
         """Strip the lateral calibration and revert to pixels."""
         self.y, self.x = (np.arange(s, dtype=config.precision) for s in self.shape)
+        self.dx = 1
         self._latcaled = False
         return self
 

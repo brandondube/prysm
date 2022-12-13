@@ -24,35 +24,35 @@ def sample_i_mutate():
 
 
 def test_dropout_is_correct(sample_i):
-    assert pytest.approx(sample_i.dropout_percentage, 21.67, abs=1e-2)
+    assert 25.73 == pytest.approx(sample_i.dropout_percentage, abs=1e-2)
 
 
 def test_pv_is_correct(sample_i):
-    assert pytest.approx(sample_i.pv, 96.8079, abs=1e-3)
+    assert 330.7 == pytest.approx(sample_i.pv, abs=1e-2)
 
 
 def test_rms_is_correct(sample_i):
-    assert pytest.approx(sample_i.rms, 17.736, abs=1e-3)
+    assert 44.591 == pytest.approx(sample_i.rms, abs=1e-2)
 
 
 def test_std_is_correct(sample_i):
-    assert pytest.approx(sample_i.std, 15.696, abs=1e-3)
+    assert 44.591 == pytest.approx(sample_i.std, abs=1e-2)
 
 
 def test_pvr_is_correct(sample_i):
-    assert pytest.approx(sample_i.pvr(24), 316.537, abs=1e-3)
+    assert 294.293 == pytest.approx(sample_i.pvr(24), abs=1e-2)
 
 
 def test_sa_is_correct(sample_i):
-    assert pytest.approx(sample_i.Sa, 29.552, abs=1e3)
+    assert 29.552 == pytest.approx(sample_i.Sa, abs=1e3)
 
 
 def test_strehl_is_correct(sample_i):
-    assert pytest.approx(sample_i.strehl, 0.938, abs=1e3)
+    assert 0.938 == pytest.approx(sample_i.strehl, abs=1e3)
 
 
 def test_bandlimited_rms_is_correct(sample_i_mutate):
-    assert pytest.approx(sample_i_mutate.bandlimited_rms(1, 10), 10.6, abs=1e-3)
+    assert 11.524 == pytest.approx(sample_i_mutate.bandlimited_rms(1, 10), abs=1e-3)
 
 
 def test_spike_clip_functions(sample_i_mutate):
@@ -80,9 +80,9 @@ def test_doublecrop_has_no_effect(sample_i_mutate):
 def test_descale_latcal_ok(sample_i_mutate):
     plate_scale = sample_i_mutate.dx
     sample_i_mutate.strip_latcal()
-    assert pytest.approx(sample_i_mutate.dx, 1, abs=1e-8)
+    assert 1 == pytest.approx(sample_i_mutate.dx, abs=1e-8)
     sample_i_mutate.latcal(plate_scale)
-    assert pytest.approx(plate_scale, sample_i_mutate.dx, abs=1e-8)
+    assert plate_scale == pytest.approx(sample_i_mutate.dx, abs=1e-8)
 
 
 def test_make_window_passes_array():

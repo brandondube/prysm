@@ -100,7 +100,7 @@ def test_precomputed_angular_spectrum_functions():
 
 def test_thinlens_hopkins_agree():
     # F/10 beam
-    x, y = coordinates.make_xy_grid(128, diameter=10)
+    x, y = coordinates.make_xy_grid(128, diameter=11)
     dx = x[0, 1] - x[0, 0]
     r = np.hypot(x, y)
     amp = geometry.circle(5, r)

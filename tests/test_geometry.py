@@ -1,4 +1,6 @@
 """Tests for basic geometry."""
+import math
+
 import pytest
 
 import numpy as np
@@ -48,22 +50,24 @@ def test_rotated_ellipse(maj, min, majang):
 
 def test_circle_correct_area():
     x, y = coordinates.make_xy_grid(256, diameter=2)
+    dx = x[0, 1] - x[0, 0]
+    r_samples = 100
+    r_circle = dx*r_samples
     r, _ = coordinates.cart_to_polar(x, y)
-    mask = geometry.circle(1, r)
-    expected_area_of_circle = x.size * 3.14
-    # sum is integer quantized, binary mask, allow one half quanta of error
-    assert pytest.approx(mask.sum(), expected_area_of_circle, abs=0.5)
+    mask = geometry.circle(r_circle, r)
+    expected_area_of_circle = r_samples*r_samples * math.pi
+    assert mask.sum() == pytest.approx(expected_area_of_circle, abs=3)
 
 
 def test_truecircle_correct_area():
-    # this test is identical to the test for circle.  The tested accuracy is
-    # 10x finer since this mask shader is not integer quantized
     x, y = coordinates.make_xy_grid(256, diameter=2)
+    dx = x[0, 1] - x[0, 0]
+    r_samples = 100
+    r_circle = dx*r_samples
     r, _ = coordinates.cart_to_polar(x, y)
-    mask = geometry.truecircle(1, r)
-    expected_area_of_circle = x.size * 3.14
-    # sum is integer quantized, binary mask, allow one half quanta of error
-    assert pytest.approx(mask.sum(), expected_area_of_circle, abs=0.05)
+    mask = geometry.truecircle(r_circle, r)
+    expected_area_of_circle = r_samples*r_samples * math.pi
+    assert mask.sum() == pytest.approx(expected_area_of_circle, abs=1.5)
 
 
 @pytest.mark.parametrize('vanes', [2, 3, 5, 6, 10])

@@ -27,7 +27,7 @@ def tpsf_dense():
 
 
 def test_airydisk_aft_origin():
-    assert pytest.approx(psf.airydisk_ft(0, 3.14, 2.718), 1)
+    assert 1 == pytest.approx(psf.airydisk_ft(0, 3.14, 2.718))
 
 
 def test_size_estimation_accurate(tpsf_dense):
