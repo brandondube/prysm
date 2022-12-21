@@ -14,11 +14,50 @@ class BackendShim:
 
         return getattr(self._srcmodule, key)
 
+_np = np
+_ndimage = ndimage
+_special = special
+_fft = fft
+_interpolate = interpolate
 np = BackendShim(np)
 ndimage = BackendShim(ndimage)
 special = BackendShim(special)
 fft = BackendShim(fft)
 interpolate = BackendShim(interpolate)
+
+
+def set_backend_to_cupy():
+    """Convenience method to automatically configure prysm's backend to cupy."""
+    global np
+    global ndimage
+    global special
+    global fft
+    global interpolate
+
+    import cupy as cp
+    from cupyx.scipy import (
+        fft as cpfft,
+        ndimage as cpndimage,
+        special as cpspecial,
+        interpolate as cpinterpolate,
+    )
+
+    np._srcmodule = cp
+    fft._srcmodule = cpfft
+    ndimage._srcmodule = cpndimage
+    special._srcmodule = cpspecial
+    interpolate._srcmodule = cpinterpolate
+    return
+
+
+def set_backend_to_defaults():
+    """Convenience method to restore prysm's default backend options."""
+    np._srcmodule = _np
+    fft._srcmodule = _fft
+    ndimage._srcmodule = _ndimage
+    special._srcmodule = _special
+    interpolate._srcmodule = interpolate
+    return
 
 
 def jinc(r):
