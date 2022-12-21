@@ -1471,6 +1471,12 @@ def read_codev_gridint(file):
             i += 1
             continue
 
+        if params[i].upper() == 'NNB':
+            # NNB tells Code V to use nearest neighbor interpolation
+            # we do not care about instructions Code V has for itself
+            i += 1
+            continue
+
         raise ValueError(f'parsing CV INT header: token {params[i]} not understood')
 
     if wvl is None:
