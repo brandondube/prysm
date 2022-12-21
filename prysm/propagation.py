@@ -580,7 +580,7 @@ class Wavefront:
 
     @property
     def imag(self):
-        """re(w)."""
+        """im(w)."""
         return RichData(np.imag(self.data), self.dx, self.wavelength)
 
     def copy(self):
