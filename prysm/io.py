@@ -1501,3 +1501,132 @@ def read_codev_gridint(file):
         'data meaning': meaning,
     }
     return a, meta
+
+
+def read_codev_psf(fn, sep=','):
+    r"""Read a Code V PSF output.
+
+    Parameters
+    ----------
+    fn : str or path_like
+        path to a file containing the buffer dump
+    sep : str
+        buffer separator used, typically either ',' or '\t'
+
+    Returns
+    -------
+    float
+        sample spacing in microns
+    numpy.ndarray
+        PSF data from Code V
+
+    """
+    with open(fn, 'r') as f:
+        total_lines_skipped = 0
+        line = '\n'
+        # skip blank lines at top
+        while line == '\n':
+            line = f.readline()
+            total_lines_skipped += 1
+
+        line = line.strip()
+        assert line == 'PSF data:', 'dat file must begin with a line, "PSF data:"'
+
+        # find the grid spacing
+        while not line.startswith('Grid spacing:'):
+            line = f.readline().lstrip()
+            total_lines_skipped += 1
+
+        tmp = line.split(',')
+        v = float(tmp[1])
+        unit = tmp[2].strip()
+        if unit != 'MM.':
+            if unit != 'IN.':
+                raise ValueError(f'expected unit to be other mm or in, got {unit}')
+            in_to_mm = 25.4
+            v *= in_to_mm
+
+        dx = v*1e3 # mm -> um
+
+        # find the array size
+        while not line.startswith('Array Size:'):
+            line = f.readline().lstrip()
+            total_lines_skipped += 1
+
+        array_dim = int(line.split(',')[1])
+
+    arr = np.genfromtxt(fn, skip_header=total_lines_skipped, delimiter=sep)
+    assert arr.shape == (array_dim, array_dim), 'array size must match header'
+    return dx, arr
+
+
+def read_codev_bsp_(fn, sep=','):
+    r"""Read a Code V BSP output.
+
+    Parameters
+    ----------
+    fn : str or path_like
+        path to a file containing the buffer dump
+    sep : str
+        buffer separator used, typically either ',' or '\t'
+
+    Returns
+    -------
+    float
+        X sample spacing in microns
+    float
+        Y sample spacing in microns
+    numpy.ndarray
+        BSP data from Code V
+
+    """
+    with open(fn, 'r') as f:
+        total_lines_skipped = 0
+        line = '\n'
+        # skip blank lines at top
+        while line == '\n':
+            line = f.readline()
+            total_lines_skipped += 1
+
+        line = line.strip()
+        assert line == 'BSP data:', 'dat file must begin with a line, "BSP data:"'
+
+        # find the offset
+        while not line.startswith('Offset of grid center'):
+            line = f.readline().lstrip()
+            total_lines_skipped += 1
+
+        tmp = line.split(':')[1] # chop off the english
+        # tmp ~= :  (,0.00025,-0.00025,)
+        # less the :
+        # now chop on ,
+        tmp = tmp.split(',')[1:-1] # drop trailing ( and )
+        xyoffset = [float(v) for v in tmp]
+        # find the grid spacing
+        while not line.startswith('Grid spacing:'):
+            line = f.readline().lstrip()
+            total_lines_skipped += 1
+
+        tmp = line.split(',')
+        v = float(tmp[1])  # X
+        unit = tmp[2].strip()
+        v2 = float(tmp[3])  # Y
+        if unit != 'mm':
+            if unit != 'in':
+                raise ValueError(f'expected unit to be other mm or in, got {unit}')
+            in_to_mm = 25.4
+            v *= in_to_mm
+            v2 *= in_to_mm
+
+        dx = v * 1e3  # mm -> um
+        dy = v2 * 1e3
+
+        while not line.startswith('Array Size:'):
+            line = f.readline().lstrip()
+            total_lines_skipped += 1
+
+        array_dim = tuple(int(v) for v in line.split(',')[1:])
+
+    arr = np.genfromtxt(fn, skip_header=total_lines_skipped, delimiter=sep)
+    assert arr.shape == array_dim, 'array size must match header'
+    return (dx, dy), xyoffset, arr
