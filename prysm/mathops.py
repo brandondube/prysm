@@ -1,4 +1,6 @@
 """A submodule which allows the user to swap out the backend for mathematics."""
+import warnings
+
 import numpy as np
 from scipy import ndimage, interpolate, special, fft
 
@@ -28,12 +30,6 @@ interpolate = BackendShim(interpolate)
 
 def set_backend_to_cupy():
     """Convenience method to automatically configure prysm's backend to cupy."""
-    global np
-    global ndimage
-    global special
-    global fft
-    global interpolate
-
     import cupy as cp
     from cupyx.scipy import (
         fft as cpfft,
@@ -57,6 +53,16 @@ def set_backend_to_defaults():
     ndimage._srcmodule = _ndimage
     special._srcmodule = _special
     interpolate._srcmodule = interpolate
+    return
+
+
+
+def set_backend_to_pytorch():
+    import pytorch as torch
+    np._srcmodule = torch
+    fft._srcmodule = torch.fft
+    special._srcmodule = torch.special
+    warnings.warn('set_backend_to_pytorch: only np, fft, special remapped; ndimage, interpolate do not have known torch equivalents.')
     return
 
 
