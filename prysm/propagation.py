@@ -875,14 +875,14 @@ class Wavefront:
         fpm_dx : float
             sampling increment in the focal plane,  microns;
             do not need to pass if fpm is a Wavefront
-        method : str, {'mdft', 'czt'}
+        method : str, {'mdft', 'czt'}, optional
             how to propagate the field, matrix DFT or Chirp Z transform
             CZT is usually faster single-threaded and has less memory consumption
             MDFT is usually faster multi-threaded and has more memory consumption
-        shift : tuple of float
+        shift : tuple of float, optional
             shift in the image plane to go to the FPM
             appropriate shift will be computed returning to the pupil
-        return_more : bool
+        return_more : bool, optional
             if True, return (new_wavefront, field_at_fpm, field_after_fpm)
             else return new_wavefront
 
@@ -914,14 +914,14 @@ class Wavefront:
         # prop forward
         kwargs = dict(ary=self.data, Q=Q_forward, samples=fpm_samples, shift=shift_forward)
         if method == 'mdft':
-            field_at_fpm = mdft.idft2(**kwargs)
+            field_at_fpm = mdft.dft2(**kwargs)
         elif method == 'czt':
-            field_at_fpm = czt.iczt2(**kwargs)
+            field_at_fpm = czt.czt2(**kwargs)
 
         field_after_fpm = field_at_fpm * fpm
 
         shift_reverse = tuple(-s for s, q in zip(shift_forward, Q_forward))
-        kwargs = dict(ary=field_after_fpm.data, Q=Q_reverse, samples=input_samples, shift=shift_reverse)
+        kwargs = dict(ary=field_after_fpm, Q=Q_reverse, samples=input_samples, shift=shift_reverse)
         if method == 'mdft':
             field_at_next_pupil = mdft.idft2(**kwargs)
         elif method == 'czt':
@@ -937,7 +937,6 @@ class Wavefront:
             warnings.warn(f'Forward propagation had fpm shape {fpm_samples} which was not uniform between axes, scaling is off')
         # Q_reverse is calculated from Q_forward; if one is consistent the other is
 
-        # field_at_next_pupil = np.flipud(field_at_next_pupil)
         out = Wavefront(field_at_next_pupil, self.wavelength, self.dx, self.space)
         if return_more:
             return out, field_at_fpm, Wavefront(field_after_fpm, self.wavelength, fpm_dx, 'psf')
@@ -948,8 +947,6 @@ class Wavefront:
         """Propagate through a Lyot-style coronagraph using Babinet's principle.
 
         This routine handles normalization properly for the user.
-
-        To invoke babinet's principle, simply use to_fpm_and_back(fpm=1 - fpm).
 
         Parameters
         ----------
@@ -996,6 +993,7 @@ class Wavefront:
             field after lyot, [field at fpm, field after fpm, field at lyot]
 
         """
+        fpm = 1 - fpm
         if return_more:
             field, field_at_fpm, field_after_fpm = \
                 self.to_fpm_and_back(efl=efl, fpm=fpm, fpm_dx=fpm_dx, method=method,
@@ -1005,7 +1003,14 @@ class Wavefront:
                                          return_more=return_more)
         # DOI: 10.1117/1.JATIS.7.1.019002
         # Eq. 26 with some minor differences in naming
-        field_at_lyot = self.data - np.rot90(field.data, k=2)
+        # field_at_lyot = self.data - np.rot90(field.data, k=2)
+        if not is_odd(field.data.shape[0]):
+            coresub = np.roll(field.data, -1, axis=0)
+        else:
+            coresub = field.data
+
+        field_at_lyot = self.data - np.flipud(coresub)
+
         if lyot is not None:
             field_after_lyot = lyot * field_at_lyot
         else:
