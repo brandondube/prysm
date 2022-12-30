@@ -2,16 +2,43 @@
 prysm v1.0
 **********
 
-intro paragraph about 1.0
+After nearly a decade in development, version 1.0 of prysm has finally been released.  With the release of v1, compatibility is guaranteed; there will not be breaking changes to the API until version 2.  New features will be supported through the 1.x release series.
+
+This release brings a number of new features for modeling specific types of wavefront sensors, and alternate segmentation geometry in segmented telescopes.  At the same time, `dygdug <https://github.com/brandondube/dygdug>`_ has been created as an external module of prysm dedicated to coronagraphy, similar to the experimental submodule.  dygdug is not being released as 1.0 and will likely go through years of breaking changes to improve the ergonomics and performance of the API.  A significant aspect of dygdug will be the full support for algorithmic differentiation of the models and tools for performing advanced gradient-based optimization of coronagraphs, both to design nominal solutions and perform wavefront control of real systems.  For the highest performance, the differentiation has been done by hand.
+
 
 New Features
 ============
 
-This release brings the following new major features:
+* Compositing and per-segment errors of "keystone" apertures
 
 * Forward modeling of Shack Hartmann wavefront sensors
 
-* Compositing and per-segment errors of "keystone" apertures
+* Forward modeling of Phase Shifting Point Diffraction Interferometers, aka Medecki interferometers.
+
+* Deformable Mirror enhancements
+
+* * :func:`copy()` method to clone a DM, when e.g. the two DMs in a system are the same
+
+* * new Nout parameter that controls the amount of padding or cropping of the natural model resolution is done.  The behavior here is similar to PROPER.
+
+* * the forward model of the DM is now differentiable.  :func:`~prysm.experiemntal.dm.render_backprop` performs gradient backpropagation through :func:`~prysm.experimental.dm.render`.
+
+* Propagation / Wavefront enhancements
+
+* * new .real property, returning a Richdata to support wf.real.plot2d(), etc.
+
+* * new .imag property, same as .real
+
+* * :func:`~prysm.propagation.to_fpm_and_back` now takes a :code:`shift` argument, allowing off-axis propagation without adding wavefront tilt.
+
+* the :code:`plot2d`` method of RichData now has an :code:`extend` keyword argument, which controls the extension of the colorbar beyond the color limits.
+
+* :func:`prysm.io.read_codev_psf` to load PSF output from Code V
+
+* :func:`prysm.io.read_codev_bsp` to load BSP data from Code V.
+
+* :func:`prysm.mathops.set_backend_to_cupy`, :func:`~prysm.mathops.set_backend_to_pytorch` and :func:`~prysm.mathops.set_backend_to_defaults` convenience routines to set the backend to cupy (GPU), or the defaults (numpy/scipy).  Note that other numpy/scipy-like APIs can also be used, and these are simply convenience functions; there is no special support for either library beyond these simple functions.
 
 
 Performance Optimizations
@@ -25,3 +52,10 @@ Bug Fixes
 =========
 
 * The sign of `:func:~prysm.propagation.Wavefront.thin_lens` was incorrect, requiring a propagation by the negative of the focal length to go to the focus.  The sign has been swapped; (wf * thin_lens(f, ...)).free_space(f) now goes to the focus.
+
+* An orientation flip was missing in :func:`~prysm.propagation.Wavefront.babinet`, this has been corrected.
+
+Breaking Changes
+================
+
+Within the geometry module, all functions now use homogeneous names of x, y, r, and t for arguments.  The :func:`~prysm.geometry.circle` and :func:`~prysm.geometry.truecircle` routines have had some of their arguments renamed.
