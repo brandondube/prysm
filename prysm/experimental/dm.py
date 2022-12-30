@@ -55,11 +55,6 @@ def prepare_actuator_lattice(shape, Nact, sep, mask, dtype):
     pos_extreme_x = cx + Nactx//2 * skip_samples_x + offx
     pos_extreme_y = cy + Nacty//2 * skip_samples_y + offy
 
-    # ix = np.arange(neg_extreme_x, pos_extreme_x+skip_samples_x, skip_samples_x)
-    # iy = np.arange(neg_extreme_y, pos_extreme_y+skip_samples_y, skip_samples_y)
-    # ixx, iyy = np.meshgrid(ix, iy)
-    # ixx = ixx[mask]
-    # iyy = iyy[mask]
     ix = slice(neg_extreme_x, pos_extreme_x, skip_samples_x)
     iy = slice(neg_extreme_y, pos_extreme_y, skip_samples_y)
     ixx = ix
@@ -322,14 +317,17 @@ class DM:
             protograd = pad2d(protograd, out_shape=self.Nintermediate)
 
         if self.upsample != 1:
-            protograd = fourier_resample(protograd, 1/self.upsample)
+            upsample = self.ifn.shape[0]/protograd.shape[0]
+            protograd = fourier_resample(protograd, upsample)
 
         if wfe:
             protograd *= (2*self.obliquity)
 
+        # return protograd
         if self.needs_rot:
             # inverse projection
             protograd = regularize(xy=None, XY=self.XYback, z=protograd, XY2=self.XY2back)
 
+        # return protograd
         in_actuator_space = apply_transfer_functions(protograd, None, np.conj(self.tf), shift=False)
         return in_actuator_space[self.iyy, self.ixx]
