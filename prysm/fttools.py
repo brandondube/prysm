@@ -223,12 +223,10 @@ class MatrixDFTExecutor:
     def __init__(self):
         """Create a new MatrixDFTExecutor instance."""
         # Eq. (10-11) page 8 from R. Soumer (2007) oe-15--24-15935
-        self.Ein_fwd = {}
-        self.Eout_fwd = {}
-        self.Ein_rev = {}
-        self.Eout_rev = {}
+        self.Ein = {}
+        self.Eout = {}
 
-    def _key(self, ary, Q, samples, shift):
+    def _key(self, ary, Q, samples, shift, fwd):
         """Key to X, Y, U, V dicts."""
         if isinstance(Q, (float, int)):
             Q = (Q, Q)
@@ -241,7 +239,7 @@ class MatrixDFTExecutor:
         if not isinstance(shift, Iterable):
             shift = (shift, shift)
 
-        return (Q, ary.shape, samples, shift)
+        return (Q, ary.shape, samples, shift, fwd)
 
     def dft2(self, ary, Q, samples, shift=(0, 0)):
         """Compute the two dimensional Discrete Fourier Transform of a matrix.
@@ -267,9 +265,9 @@ class MatrixDFTExecutor:
             sampling/grid differences
 
         """
-        key = self._key(ary=ary, Q=Q, samples=samples, shift=shift)
+        key = self._key(ary=ary, Q=Q, samples=samples, shift=shift, fwd=True)
         self._setup_bases(key)
-        Eout, Ein = self.Eout_fwd[key], self.Ein_fwd[key]
+        Eout, Ein = self.Eout[key], self.Ein[key]
 
         out = Eout @ ary @ Ein
 
@@ -299,10 +297,10 @@ class MatrixDFTExecutor:
             sampling/grid differences
 
         """
-        key = self._key(ary=ary, Q=Q, samples=samples, shift=shift)
+        key = self._key(ary=ary, Q=Q, samples=samples, shift=shift, fwd=False)
         self._setup_bases(key)
 
-        Eout, Ein = self.Eout_rev[key], self.Ein_rev[key]
+        Eout, Ein = self.Eout[key], self.Ein[key]
         out = Eout @ ary @ Ein
 
         return out
@@ -311,7 +309,7 @@ class MatrixDFTExecutor:
         """Set up the basis matricies for given sampling parameters."""
         # broadcast sampling and shifts
 
-        Q, shp, samples, shift = key
+        Q, shp, samples, shift, fwd = key
 
         Qn, Qm = Q
         # conversion here to Soummer's notation
@@ -323,7 +321,7 @@ class MatrixDFTExecutor:
 
         try:
             # assume all arrays for the input are made together
-            self.Ein_fwd[key]
+            self.Ein[key]
         except KeyError:
             # X is the second dimension in C (numpy) array ordering convention
 
@@ -338,30 +336,31 @@ class MatrixDFTExecutor:
                 X -= shift[0]
                 U -= shift[0]
 
-            Eout_fwd = np.exp(-2j * np.pi / Na * mn * np.outer(Y, V).T)
-            Ein_fwd = np.exp(-2j * np.pi / Ma * mm * np.outer(X, U))
-            Eout_rev = np.exp(2j * np.pi / Na * mn * np.outer(Y, V).T)
-            Ein_rev = np.exp(2j * np.pi / Ma * mm * np.outer(X, U))
-            Ein_fwd *= (1/(Na*Qn))
-            Ein_rev *= (1/(Nb*Qm))
-            # scaling = np.sqrt(dx * dy * dxi * deta) / (wvl * fn)
-            # observe
-            self.Ein_fwd[key] = Ein_fwd
-            self.Eout_fwd[key] = Eout_fwd
-            self.Eout_rev[key] = Eout_rev
-            self.Ein_rev[key] = Ein_rev
+            if fwd:
+                Eout = np.exp(-2j * np.pi / Na * mn * np.outer(Y, V).T)
+                Ein = np.exp(-2j * np.pi / Ma * mm * np.outer(X, U))
+            else:
+                Eout = np.exp(2j * np.pi / Na * mn * np.outer(Y, V).T)
+                Ein = np.exp(2j * np.pi / Ma * mm * np.outer(X, U))
+
+            alphay = 1/(Na*Qn)
+            alphax = 1/(Ma*Qm)
+            normy = alphay / truenp.sqrt(alphay)
+            normx = alphax / truenp.sqrt(alphax)
+            Ein *= normy
+            Eout *= normx
+            self.Ein[key] = Ein
+            self.Eout[key] = Eout
 
     def clear(self):
         """Empty the internal caches to release memory."""
-        self.Ein_fwd = {}
-        self.Eout_fwd = {}
-        self.Ein_rev = {}
-        self.Eout_rev = {}
+        self.Ein = {}
+        self.Eout = {}
 
     def nbytes(self):
         """Total size in memory of the cache in bytes."""
         total = 0
-        for dict_ in (self.Ein_fwd, self.Eout_fwd, self.Ein_rev, self.Eout_rev):
+        for dict_ in (self.Ein, self.Eout):
             for key in dict_:
                 total += dict_[key].nbytes
 
@@ -490,7 +489,6 @@ class ChirpZTransformExecutor:
         # but np.conj copies real inputs, so we optimize for that.
         if np.iscomplexobj(ary):
             ary = np.conj(ary)
-
         xformed = self.czt2(ary, Q, samples, shift)
         return xformed
 
