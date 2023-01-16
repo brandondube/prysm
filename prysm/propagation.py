@@ -940,6 +940,8 @@ class Wavefront:
 
         out = Wavefront(field_at_next_pupil, self.wavelength, self.dx, self.space)
         if return_more:
+            if not isinstance(field_at_fpm, Wavefront):
+                field_at_fpm = Wavefront(field_at_fpm, out.wavelength, fpm_dx, 'psf')
             return out, field_at_fpm, Wavefront(field_after_fpm, self.wavelength, fpm_dx, 'psf')
 
         return out
