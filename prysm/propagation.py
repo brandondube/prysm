@@ -920,7 +920,8 @@ class Wavefront:
 
         field_after_fpm = field_at_fpm * fpm
 
-        shift_reverse = tuple(-s for s, q in zip(shift_forward, Q_forward))
+        # shift_reverse = tuple(-s for s, q in zip(shift_forward, Q_forward))
+        shift_reverse = shift_forward
         kwargs = dict(ary=field_after_fpm, Q=Q_reverse, samples=input_samples, shift=shift_reverse)
         if method == 'mdft':
             field_at_next_pupil = mdft.idft2(**kwargs)
