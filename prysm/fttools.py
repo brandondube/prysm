@@ -226,22 +226,25 @@ class MatrixDFTExecutor:
         self.Ein = {}
         self.Eout = {}
 
-    def _key(self, ary, Q, samples, shift, fwd):
+    def _key(self, samples_in, Q, samples_out, shift, fwd):
         """Key to X, Y, U, V dicts."""
         if isinstance(Q, (float, int)):
             Q = (Q, Q)
         elif not isinstance(Q, tuple):
             Q = tuple(float(q) for q in Q)  # float for dtype stabilization: cupy
 
-        if not isinstance(samples, Iterable):
-            samples = (samples, samples)
+        if not isinstance(samples_in, Iterable):
+            samples_in = (samples_in, samples_in)
+
+        if not isinstance(samples_out, Iterable):
+            samples_out = (samples_out, samples_out)
 
         if not isinstance(shift, Iterable):
             shift = (shift, shift)
 
-        return (Q, ary.shape, samples, shift, fwd)
+        return (Q, samples_in, samples_out, shift, fwd)
 
-    def dft2(self, ary, Q, samples, shift=(0, 0)):
+    def dft2(self, ary, Q, samples_out, shift=(0, 0)):
         """Compute the two dimensional Discrete Fourier Transform of a matrix.
 
         Parameters
@@ -250,7 +253,7 @@ class MatrixDFTExecutor:
             an array, 2D, real or complex.  Not fftshifted.
         Q : float
             oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
-        samples : int or Iterable
+        samples_out : int or Iterable
             number of samples in the output plane.
             If an int, used for both dimensions.  If an iterable, used for each dim
         shift : float, optional
@@ -265,7 +268,7 @@ class MatrixDFTExecutor:
             sampling/grid differences
 
         """
-        key = self._key(ary=ary, Q=Q, samples=samples, shift=shift, fwd=True)
+        key = self._key(samples_in=ary.shape, Q=Q, samples_out=samples_out, shift=shift, fwd=True)
         self._setup_bases(key)
         Eout, Ein = self.Eout[key], self.Ein[key]
 
@@ -273,7 +276,33 @@ class MatrixDFTExecutor:
 
         return out
 
-    def idft2(self, ary, Q, samples, shift=(0, 0)):
+    def dft2_backprop(self, fbar, Q, samples_in, shift=(0,0)):
+        """Gradient backpropagation for dft2.
+
+        Parameters
+        ----------
+        fbar : numpy.ndarray
+            the array from the previous gradient calculation step
+        ary : numpy.ndarray
+            the array used in the forward computation
+        Q : float
+            oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
+        samples : int or Iterable
+            number of samples in the output plane.
+            If an int, used for both dimensions.  If an iterable, used for each dim
+        shift : float, optional
+            shift of the output domain, as a frequency.  Same broadcast
+            rules apply as with samples.
+        """
+        key = self._key(samples_in=samples_in, Q=Q, samples_out=fbar.shape, shift=shift, fwd=True)
+        self._setup_bases(key)
+        Eout, Ein = self.Eout[key], self.Ein[key]
+        Eout_conj_t = Eout.T.conj()
+        Ein_conj_t = Ein.T.conj()
+        out = Eout_conj_t @ (fbar @ Ein_conj_t)
+        return out
+
+    def idft2(self, ary, Q, samples_out, shift=(0, 0)):
         """Compute the two dimensional inverse Discrete Fourier Transform of a matrix.
 
         Parameters
@@ -282,7 +311,7 @@ class MatrixDFTExecutor:
             an array, 2D, real or complex.  Not fftshifted.
         Q : float
             oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
-        samples : int or Iterable
+        samples_out : int or Iterable
             number of samples in the output plane.
             If an int, used for both dimensions.  If an iterable, used for each dim
         shift : float, optional
@@ -297,12 +326,36 @@ class MatrixDFTExecutor:
             sampling/grid differences
 
         """
-        key = self._key(ary=ary, Q=Q, samples=samples, shift=shift, fwd=False)
+        key = self._key(samples_in=ary.shape, Q=Q, samples_out=samples_out, shift=shift, fwd=False)
         self._setup_bases(key)
 
         Eout, Ein = self.Eout[key], self.Ein[key]
         out = Eout @ ary @ Ein
 
+        return out
+
+    def idft2_backprop(self, fbar, Q, samples_in, shift=(0,0)):
+        """Gradient backpropagation for idft2.
+
+        Parameters
+        ----------
+        fbar : numpy.ndarray
+            the array from the previous gradient calculation step
+        Q : float
+            oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
+        samples_in : int or Iterable
+            number of samples in the input plane.
+            If an int, used for both dimensions.  If an iterable, used for each dim
+        shift : float, optional
+            shift of the output domain, as a frequency.  Same broadcast
+            rules apply as with samples.
+        """
+        key = self._key(samples_in=samples_in, Q=Q, samples_out=fbar.shape, shift=shift, fwd=False)
+        self._setup_bases(key)
+        Eout, Ein = self.Eout[key], self.Ein[key]
+        Eout_conj_t = Eout.T.conj()
+        Ein_conj_t = Ein.T.conj()
+        out = Eout_conj_t @ (fbar @ Ein_conj_t)
         return out
 
     def _setup_bases(self, key):
