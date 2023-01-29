@@ -108,14 +108,6 @@ def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
     if shift[0] != 0 or shift[1] != 0:
         shift = (shift[0]/output_dx, shift[1]/output_dx)
 
-    # print('-'*80)
-    # print('focus fixed sampling')
-    # print('input (pupil) samples', wavefunction.shape)
-    # print('input (pupil) dx', input_dx)
-    # print('output (fpm) samples', output_samples)
-    # print('output (fpm) dx', output_dx)
-    # print('Q fwd', Q)
-
     if method == 'mdft':
         out = mdft.dft2(ary=wavefunction, Q=Q, samples_out=output_samples, shift=shift)
     elif method == 'czt':
@@ -166,14 +158,6 @@ def focus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
                        output_dx=output_dx)
     if shift[0] != 0 or shift[1] != 0:
         shift = (shift[0]/output_dx, shift[1]/output_dx)
-
-    # print('-'*80)
-    # print('focus fixed sampling backprop')
-    # print('input (pupil) samples', output_samples)
-    # print('input (pupil) dx', input_dx)
-    # print('output (fpm) samples', wavefunction.shape)
-    # print('output (fpm) dx', output_dx)
-    # print('Q fwd', Q)
 
     if method == 'mdft':
         out = mdft.dft2_backprop(wavefunction, Q, samples_in=output_samples, shift=shift)
@@ -981,15 +965,6 @@ class Wavefront:
         Q_reverse = [1/m for m in m_reverse]
         shift_forward = tuple(s/fpm_dx for s in shift)
 
-        # print('-'*80)
-        # print('to fpm and back')
-        # print('input (pupil) samples', input_samples)
-        # print('input (pupil) dx', self.dx)
-        # print('output (fpm) samples', fpm_samples)
-        # print('output (fpm) dx', fpm_dx)
-        # print('Q fwd', Q_forward)
-        # print('Q rev', Q_reverse)
-
         # prop forward
         kwargs = dict(ary=self.data, Q=Q_forward, samples_out=fpm_samples, shift=shift_forward)
         if method == 'mdft':
@@ -1080,16 +1055,6 @@ class Wavefront:
         m_reverse = [b/a*m for a, b, m in zip(input_samples, fpm_samples, m_forward)]
         Q_reverse = [1/m for m in m_reverse]
         shift_forward = tuple(s/fpm_dx for s in shift)
-
-        # print('-'*80)
-        # print('to fpm and back backprop')
-        # print('input (pupil) samples', input_samples)
-        # print('input (pupil) dx', self.dx)
-        # print('output (fpm) samples', fpm_samples)
-        # print('output (fpm) dx', fpm_dx)
-        # print('Q fwd', Q_forward)
-        # print('Q rev', Q_reverse)
-
 
         kwargs = dict(fbar=self.data, Q=Q_reverse, samples_in=fpm_samples, shift=shift_forward)
         if method == 'mdft':
