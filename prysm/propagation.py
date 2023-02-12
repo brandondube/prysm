@@ -1058,16 +1058,16 @@ class Wavefront:
 
         kwargs = dict(fbar=self.data, Q=Q_reverse, samples_in=fpm_samples, shift=shift_forward)
         if method == 'mdft':
-            field_at_fpm = mdft.idft2_backprop(**kwargs)
+            Ebbar = -(mdft.idft2_backprop(**kwargs))
         elif method == 'czt':
             raise ValueError('CZT backprop not yet implemented')
             field_at_fpm = czt.czt2_backprop(**kwargs)
 
-        field_after_fpm = field_at_fpm * fpm
+        intermediate = Ebbar * fpm
 
-        kwargs = dict(fbar=field_after_fpm, Q=Q_forward, samples_in=input_samples, shift=shift_forward)
+        kwargs = dict(fbar=intermediate, Q=Q_forward, samples_in=input_samples, shift=shift_forward)
         if method == 'mdft':
-            field_at_next_pupil = mdft.dft2_backprop(**kwargs)
+            Eabar = mdft.dft2_backprop(**kwargs)
         elif method == 'czt':
             raise ValueError('CZT backprop not yet implemented')
             field_at_next_pupil = czt.iczt2(**kwargs)
@@ -1082,11 +1082,11 @@ class Wavefront:
             warnings.warn(f'Forward propagation had fpm shape {fpm_samples} which was not uniform between axes, scaling is off')
         # Q_reverse is calculated from Q_forward; if one is consistent the other is
 
-        out = Wavefront(field_at_next_pupil, self.wavelength, self.dx, self.space)
+        out = Wavefront(Eabar, self.wavelength, self.dx, self.space)
         if return_more:
-            if not isinstance(field_at_fpm, Wavefront):
-                field_at_fpm = Wavefront(field_at_fpm, out.wavelength, fpm_dx, 'psf')
-            return out, field_at_fpm, Wavefront(field_after_fpm, self.wavelength, fpm_dx, 'psf')
+            if not isinstance(Ebbar, Wavefront):
+                Ebbar = Wavefront(Ebbar, out.wavelength, fpm_dx, 'psf')
+            return out, Ebbar, Wavefront(intermediate, self.wavelength, fpm_dx, 'psf')
 
         return out
 
@@ -1214,5 +1214,13 @@ class Wavefront:
         else:
             cbar = dbar
 
-        cbar = Wavefront(cbar, self.wavelength, self.dx, self.space)
-        return cbar.to_fpm_and_back_backprop(efl=efl, fpm=fpm, fpm_dx=fpm_dx, method=method)
+        # minus from Ebefore minus Eafter fpm
+        cbarW = Wavefront(cbar, self.wavelength, self.dx, self.space)
+        abar = cbarW.to_fpm_and_back_backprop(efl=efl, fpm=fpm, fpm_dx=fpm_dx, method=method)
+
+        if not is_odd(cbar.shape[0]):
+            cbarflip = np.flipud(np.roll(cbar, -1, axis=0))
+
+        abar.data += cbarflip
+        return abar
+        # return cbarflip + abar
