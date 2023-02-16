@@ -98,7 +98,7 @@ def fresnel_rs(n0, n1, theta0, theta1):
 
     """
     num = n0 * np.cos(theta0) - n1 * np.cos(theta1)
-    den = n1 * np.cos(theta0) + n1 * np.cos(theta1)
+    den = n0 * np.cos(theta0) + n1 * np.cos(theta1)
     return num / den
 
 
