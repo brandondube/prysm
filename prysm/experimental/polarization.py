@@ -1,10 +1,9 @@
 "Jones and Mueller Calculus"
-
-import numpy as np
+from prysm.mathops import np
+from prysm.conf import config
 
 def _empty_jones(shape=None):
-
-    """returns an empty array to populate with jones matrix elements
+    """Returns an empty array to populate with jones matrix elements.
 
     Parameters
     ----------
@@ -20,19 +19,18 @@ def _empty_jones(shape=None):
 
     if shape is None:
 
-        shape = [2,2]
+        shape = (2,2)
 
     else:
 
-        shape.append(2)
-        shape.append(2)
+        shape = (*shape,2,2)
 
-    return np.zeros(shape,dtype='complex128')
+    return np.zeros(shape,dtype=config.precision_complex)
 
 
 def jones_rotation_matrix(theta,shape=None):
-    """a rotation matrix for rotating the coordinate system transverse to propagation.
-    source: https://en.wikipedia.org/wiki/Rotation_matrix
+    """A rotation matrix for rotating the coordinate system transverse to propagation.
+    source: https://en.wikipedia.org/wiki/Rotation_matrix.
 
     Parameters
     ----------
@@ -50,16 +48,17 @@ def jones_rotation_matrix(theta,shape=None):
     """
 
     jones = _empty_jones(shape=shape)
-    jones[...,0,0] = np.cos(theta)
-    jones[...,0,1] = np.sin(theta)
-    jones[...,1,0] = -np.sin(theta)
-    jones[...,1,1] = np.cos(theta)
+    cost = np.cos(theta)
+    sint = np.sin(theta)
+    jones[...,0,0] = cost
+    jones[...,0,1] = sint
+    jones[...,1,0] = -sint
+    jones[...,1,1] = cost
 
     return jones
 
 def linear_retarder(retardance,theta=0,shape=None):
-
-    """generates a homogenous linear retarder jones matrix
+    """Generates a homogenous linear retarder jones matrix.
 
     Parameters
     ----------
@@ -93,8 +92,7 @@ def linear_retarder(retardance,theta=0,shape=None):
     return retarder
 
 def linear_diattenuator(alpha,theta=0,shape=None):
-
-    """generates a homogenous linear diattenuator jones matrix
+    """Generates a homogenous linear diattenuator jones matrix.
 
     Parameters
     ----------
@@ -127,7 +125,7 @@ def linear_diattenuator(alpha,theta=0,shape=None):
     return diattenuator
 
 def half_wave_plate(theta=0,shape=None):
-    """Make a half wave plate jones matrix. Just a wrapper for linear_retarder
+    """Make a half wave plate jones matrix. Just a wrapper for linear_retarder.
 
     Parameters
     ----------
@@ -146,8 +144,7 @@ def half_wave_plate(theta=0,shape=None):
     return linear_retarder(np.pi,theta=theta,shape=shape)
 
 def quarter_wave_plate(theta=0,shape=None):
-
-    """Make a quarter wave plate jones matrix. Just a wrapper for linear_retarder
+    """Make a quarter wave plate jones matrix. Just a wrapper for linear_retarder.
 
     Parameters
     ----------
@@ -166,8 +163,7 @@ def quarter_wave_plate(theta=0,shape=None):
     return linear_retarder(np.pi/2,theta=theta,shape=shape)
 
 def linear_polarizer(theta=0,shape=None):
-
-    """Make a linear polarizer jones matrix. Just a wrapper for linear_diattenuator
+    """Make a linear polarizer jones matrix. Just a wrapper for linear_diattenuator.
 
     Returns
     -------
@@ -187,8 +183,7 @@ def linear_polarizer(theta=0,shape=None):
     return linear_diattenuator(0,theta=theta,shape=shape)
 
 def jones_to_mueller(jones):
-
-    """Construct a Mueller Matrix given a Jones Matrix. From Chipman, Lam, and Young Eq (6.99)
+    """Construct a Mueller Matrix given a Jones Matrix. From Chipman, Lam, and Young Eq (6.99).
 
     Parameters
     ----------
@@ -212,8 +207,7 @@ def jones_to_mueller(jones):
     return M
 
 def pauli_spin_matrix(index,shape=None):
-
-    """generates a pauli spin matrix used for Jones matrix data reduction. From CLY Eq 6.108
+    """Generates a pauli spin matrix used for Jones matrix data reduction. From CLY Eq 6.108.
 
     Parameters
     ----------
@@ -234,6 +228,8 @@ def pauli_spin_matrix(index,shape=None):
 
     jones = _empty_jones(shape=shape)
 
+    assert index in (0,1,2,3), f"index should be 0,1,2, or 3. Got {index}"
+
     if index == 0:
         jones[...,0,0] = 1
         jones[...,1,1] = 1
@@ -250,14 +246,10 @@ def pauli_spin_matrix(index,shape=None):
         jones[...,0,1] = -1j
         jones[...,1,0] = 1j
 
-    else:
-        assert f"index should be 0,1,2, or 3. Got {index}"
-
     return jones
 
 def pauli_coefficients(jones):
-
-    """compute the pauli coefficients of a jones matrix
+    """Compute the pauli coefficients of a jones matrix.
 
     Parameters
     ----------
