@@ -1560,8 +1560,8 @@ def read_codev_psf(fn, sep=','):
     return dx, arr
 
 
-def read_codev_bsp_(fn, sep=','):
-    r"""Read a Code V BSP output.
+def read_codev_bsp(fn, sep=','):
+    """Read a Code V BSP output.
 
     Parameters
     ----------
