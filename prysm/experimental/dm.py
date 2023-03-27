@@ -1,6 +1,5 @@
 """Deformable Mirrors."""
 import copy
-import warnings
 
 import numpy as truenp
 
@@ -10,9 +9,8 @@ from prysm.convolution import apply_transfer_functions
 from prysm.coordinates import (
     make_xy_grid,
     make_rotation_matrix,
-    apply_rotation_matrix,
-    xyXY_to_pixels,
-    regularize,
+    make_3D_rotation_affine,
+    warp
 )
 
 
@@ -165,16 +163,12 @@ class DM:
         self.iyy = out['iyy']
 
         # rotation data; XY/XY2 = for render(); suffix back for gradient backprop
-        self.rotmat = make_rotation_matrix(rot)
-        XY = apply_rotation_matrix(self.rotmat, self.x, self.y)
-        XY2 = xyXY_to_pixels(XY, (self.x, self.y))
-        XYback = apply_rotation_matrix(self.rotmat.T, self.x, self.y)
-        XY2back = xyXY_to_pixels(XYback, (self.x, self.y))
-
-        self.XY = XY
-        self.XY2 = XY2
-        self.XYback = XYback
-        self.XY2back = XY2back
+        rotmat = make_rotation_matrix(rot)
+        # condition rotation to be an affine transform
+        self.rotmat = make_3D_rotation_affine(np.linalg.inv(rotmat))
+        self.invrotmat = make_3D_rotation_affine(rotmat)
+        points = np.stack((self.x.ravel(), self.y.ravel()), axis=1)
+        self.projx, self.projy = np.tensordot(self.invrotmat, points, axes=(1, 1))
         self.needs_rot = True
         if np.allclose(rot, [0, 0, 0]):
             self.needs_rot = False
@@ -198,10 +192,8 @@ class DM:
         else:
             self.tf = [self.Ifn]
 
-
     def copy(self):
         return copy.deepcopy(self)
-
 
     def update(self, actuators):
         # semantics for update:
@@ -253,7 +245,7 @@ class DM:
         # self.dx is unused inside apply tf, but :shrug:
         sfe = apply_transfer_functions(self.poke_arr, None, self.tf, shift=False)
         if self.needs_rot:
-            warped = regularize(xy=None, XY=self.XY, z=sfe, XY2=self.XY2)
+            warped = warp(sfe, self.projx, self.projy)
         else:
             warped = sfe
         if wfe:
@@ -326,7 +318,8 @@ class DM:
         # return protograd
         if self.needs_rot:
             # inverse projection
-            protograd = regularize(xy=None, XY=self.XYback, z=protograd, XY2=self.XY2back)
+            # TODO: this is wrong
+            protograd = warp(protograd, self.projx, self.projy)
 
         # return protograd
         in_actuator_space = apply_transfer_functions(protograd, None, np.conj(self.tf), shift=False)

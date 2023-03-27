@@ -290,26 +290,21 @@ def make_rotation_matrix(abg, radians=False):
     if not radians:
         abg = truenp.radians(abg)
 
-    # would be more efficient to call cos and sine once, but
-    # the computation of these variables will be a vanishingly
-    # small faction of total runtime for this function if
-    # x, y, z are of "reasonable" size
-
     alpha, beta, gamma = abg
-    cosa = truenp.cos(alpha)
-    cosb = truenp.cos(beta)
-    cosg = truenp.cos(gamma)
-    sina = truenp.sin(alpha)
-    sinb = truenp.sin(beta)
-    sing = truenp.sin(gamma)
-    # originally wrote this as a Homomorphic matrix
-    # the m = m[:3,:3] crops it to just the rotation matrix
-    # unclear if may some day want the Homomorphic matrix,
-    # PITA to take it out, so leave it in
+    cos1 = truenp.cos(alpha)
+    cos2 = truenp.cos(beta)
+    cos3 = truenp.cos(gamma)
+    sin1 = truenp.sin(alpha)
+    sin2 = truenp.sin(beta)
+    sin3 = truenp.sin(gamma)
+    # # originally wrote this as a Homomorphic matrix
+    # # the m = m[:3,:3] crops it to just the rotation matrix
+    # # unclear if may some day want the Homomorphic matrix,
+    # # PITA to take it out, so leave it in
     m = truenp.asarray([
-        [cosa*cosg - sina*sinb*sing, -cosb*sina, cosa*sing + cosg*sina*sinb, 0],
-        [cosg*sina + cosa*sinb*sing,  cosa*cosb, sina*sing - cosa*cosg*sinb, 0],
-        [-cosb*sing,                  sinb,      cosb*cosg,                  0],
+        [cos1*cos3 - sin1*sin2*sin3, -cos2*sin1, cos1*sin3 + cos3*sin1*sin2, 0],
+        [cos3*sin1 + cos1*sin2*sin3,  cos1*cos2, sin1*sin3 - cos1*cos3*sin2, 0],
+        [-cos2*sin3,                  sin2,      cos2*cos3,                  0],
         [0,                           0,         0,                          1],
     ], dtype=config.precision)
     # bit of a weird dance with truenp/np here
@@ -317,15 +312,41 @@ def make_rotation_matrix(abg, radians=False):
     # np.array on last line will move data from numpy to any other "numpy"
     # (like Cupy/GPU)
     return np.asarray(m[:3, :3])
+    # Rx = truenp.asarray([
+    #     [1,    0,  0   ],  # NOQA
+    #     [0, cos1, -sin1],
+    #     [0, sin1,  cos1]
+    # ])
+    # Ry = truenp.asarray([
+    #     [cos2,  0, sin2],
+    #     [    0, 1,    0],  # NOQA
+    #     [-sin2, 0, cos2],
+    # ])
+    # Rz = truenp.asarray([
+    #     [cos3, -sin3, 0],
+    #     [sin3,  cos3, 0],
+    #     [0,        0, 1],
+    # ])
+    # m = Rz@Ry@Rx
+    # return m
 
 
-def apply_rotation_matrix(m, x, y, z=None, points=None, return_z=False):
-    """Rotate the coordinates (x,y,[z]) about the origin by angles (α,β,γ).
+def make_translation_matrix(tx, ty):
+    m = truenp.asarray([
+        [1, 0, tx],
+        [0, 1, ty],
+        [0, 0, 1],
+    ], dtype=config.precision)
+    return np.asarray(m)
+
+
+def apply_transformation_matrix(m, x, y, z=None, points=None, return_z=False):
+    """Apply the coordinate transformation m to the coordinates (x,y,[z]).
 
     Parameters
     ----------
     m : numpy.ndarray, optional
-        rotation matrix; see make_rotation_matrix
+        transormation matrix; see make_rotation_matrix, make_translation_matrix
     x : numpy.ndarray
         N dimensional array of x coordinates
     y : numpy.ndarray
@@ -336,7 +357,7 @@ def apply_rotation_matrix(m, x, y, z=None, points=None, return_z=False):
     points : numpy.ndarray, optional
         array of dimension [x.size, 3] containing [x,y,z]
         points will be made by stacking x,y,z if not given.
-        passing points directly if this is the native storage
+        passin3 points directly if this is the native storage
         of your coordinates can improve performance.
     return_z : bool, optional
         if True, returns array of shape [3, x.shape]
@@ -362,87 +383,25 @@ def apply_rotation_matrix(m, x, y, z=None, points=None, return_z=False):
         return out[:2, ...]
 
 
-def xyXY_to_pixels(xy, XY):
-    """Given input points xy and warped points XY, compute pixel indices.
+def make_3D_rotation_affine(m):
+    """Convert a 3D rotation matrix to an affine transform.
 
-    Lists or tuples work for xy and XY, as do 3D arrays.
+    Assumes the rotation is viewed from the birdseye perspective, aka directly
+    overhead.
 
     Parameters
     ----------
-    xy : numpy.ndarray
-        ndarray of shape (2, m, n)
-        with [x, y] on the first dimension
-        represents the input coordinates
-        implicitly rectilinear
-    XY : numpy.ndarray
-        ndarray of shape (2, m, n)
-        with [x, y] on the first dimension
-        represents the input coordinates
-        not necessarily rectilinear
+    m : numpy.ndarray
+        3x3 rotation matrix
 
     Returns
     -------
     numpy.ndarray
-        ndarray of shape (2, m, n) with XY linearly projected
-        into pixels
+        2x2 affine transform matrix
 
     """
-    xy = np.array(xy)
-    XY = np.array(XY)
-    # map coordinates says [0,0] is the upper left corner
-    # need to adjust XYZ by xyz origin and sample spacing
-    # d = delta; o = origin
-    x, y = xy
-    ox = x[0, 0]
-    oy = y[0, 0]
-    dx = x[0, 1] - ox
-    dy = y[1, 0] - oy
-    XY2 = XY.copy()
-    X, Y = XY2
-    X -= ox
-    Y -= oy
-    X /= dx
-    Y /= dy
-    # ::-1 = reverse X,Y
-    # ... = leave other axes as-is
-    XY2 = XY2[::-1, ...]
-    return XY2
+    return m[:2, :2]
 
 
-def regularize(xy, XY, z, XY2=None):
-    """Regularize the coordinates XY relative to the frame xy.
-
-    This function is used in conjunction with rotate to project
-    surface figure errors onto tilted planes or other geometries.
-
-    Parameters
-    ----------
-    xy : numpy.ndarray
-        ndarray of shape (2, m, n)
-        with [x, y] on the first dimension
-        represents the input coordinates
-        implicitly rectilinear
-    XY : numpy.ndarray
-        ndarray of shape (2, m, n)
-        with [x, y] on the first dimension
-        represents the input coordinates
-        not necessarily rectilinear
-    z : numpy.ndarray
-        ndarray of shape (m, n)
-        flat data to warp
-    XY2 : numpy.ndarray, optional
-        ndarray of shape (2, m, n)
-        XY, after output from xyXY_to_pixels
-        compute XY2 once and pass many times
-        to optimize models
-
-    Returns
-    -------
-    Z : numpy.ndarray
-        z which exists on the grid XY, looked up at the points xy
-
-    """
-    if XY2 is None:
-        XY2 = xyXY_to_pixels(xy, XY)
-
-    return ndimage.map_coordinates(z, XY2)
+def warp(img, xnew, ynew):
+    return ndimage.map_coordinates(img, xnew, ynew)
