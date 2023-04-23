@@ -9,11 +9,9 @@ from prysm.fttools import forward_ft_unit, fourier_resample, crop_center, pad2d
 from prysm.convolution import apply_transfer_functions
 from prysm.coordinates import (
     warp,
-    make_xy_grid,
     apply_homography,
     make_rotation_matrix,
     drop_z_3d_transformation,
-    pack_xy_to_homographic_points,
     make_homomorphic_translation_matrix,
     promote_3d_transformation_to_homography,
 )
