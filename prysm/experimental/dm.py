@@ -3,18 +3,23 @@ import copy
 
 import numpy as truenp
 
+from prysm.conf import config
 from prysm.mathops import np, fft, is_odd
 from prysm.fttools import forward_ft_unit, fourier_resample, crop_center, pad2d
 from prysm.convolution import apply_transfer_functions
 from prysm.coordinates import (
+    warp,
     make_xy_grid,
+    apply_homography,
     make_rotation_matrix,
-    make_3D_rotation_affine,
-    warp
+    drop_z_3d_transformation,
+    pack_xy_to_homographic_points,
+    make_homomorphic_translation_matrix,
+    promote_3d_transformation_to_homography,
 )
 
 
-def prepare_actuator_lattice(shape, Nact, sep, mask, dtype):
+def prepare_actuator_lattice(shape, Nact, sep, dtype):
     """Prepare a lattice of actuators.
 
     Usage guide:
@@ -29,9 +34,6 @@ def prepare_actuator_lattice(shape, Nact, sep, mask, dtype):
 
     assign poke_arr[iyy, ixx] = actuators[mask] in the next step
     """
-    if mask is None:
-        mask = np.ones(Nact, dtype=bool)
-
     actuators = np.zeros(Nact, dtype=dtype)
 
     cy, cx = [s//2 for s in shape]
@@ -60,7 +62,6 @@ def prepare_actuator_lattice(shape, Nact, sep, mask, dtype):
 
     poke_arr = np.zeros(shape, dtype=dtype)
     return {
-        'mask': mask,
         'actuators': actuators,
         'poke_arr': poke_arr,
         'ixx': ixx,
@@ -68,10 +69,30 @@ def prepare_actuator_lattice(shape, Nact, sep, mask, dtype):
     }
 
 
+def prepare_fwd_reverse_projection_coordinates(shape, rot):
+    # 1. make the matrix that describes the rigid body transformation
+    # 2. make the coordinate grid (in "pixels") for the data
+    # 3. project the coordinates "forward" (for forward_model())
+    # 4. project the coordinates "backwards" (for backprop)
+    R = make_rotation_matrix(rot)
+    oy, ox = [(s-1)/2 for s in shape]
+    y, x = [np.arange(s, dtype=config.precision) for s in shape]
+    y, x = np.meshgrid(y, x)
+    Tin = make_homomorphic_translation_matrix(-ox, -oy)
+    Tout = make_homomorphic_translation_matrix(ox, oy)
+    R = promote_3d_transformation_to_homography(R)
+    Mfwd = Tout@(R@Tin)
+    Mfwd = drop_z_3d_transformation(Mfwd)
+    Mifwd = np.linalg.inv(Mfwd)
+    xfwd, yfwd = apply_homography(Mifwd, x, y)
+    xrev, yrev = apply_homography(Mfwd, x, y)
+    return (xfwd, yfwd), (xrev, yrev)
+
+
 class DM:
     """A DM whose actuators fill a rectangular region on a perfect grid, and have the same influence function."""
     def __init__(self, ifn, Nout, Nact=50, sep=10, shift=(0, 0), rot=(0, 0, 0),
-                 upsample=1, mask=None, project_centering='fft'):
+                 upsample=1, project_centering='fft'):
         """Create a new DM model.
 
         This model is based on convolution of a 'poke lattice' with the influence
@@ -107,9 +128,6 @@ class DM:
         upsample : float
             upsampling factor used in determining output resolution, if it is different
             to the resolution of ifn.
-        mask : numpy.ndarray
-            boolean ndarray of shape Nact used to suppress/delete/exclude
-            actuators; 1=keep, 0=suppress
         project_centering : str, {'fft', 'interpixel'}
             how to deal with centering when projecting the surface into the beam normal
             fft = the N/2 th sample, rounded to the right, defines the origin.
@@ -135,11 +153,6 @@ class DM:
             sep = (sep, sep)
 
         s = ifn.shape
-        self.x, self.y = make_xy_grid(s, dx=1)
-        if project_centering.lower() == 'interpixel' and not is_odd(s[1]):
-            self.x += 0.5
-        if project_centering.lower() == 'interpixel' and not is_odd(s[0]):
-            self.y += 0.5
 
         # stash inputs and some computed values on self
         self.ifn = ifn
@@ -154,24 +167,24 @@ class DM:
 
         # prepare the poke array and supplimentary integer arrays needed to
         # copy it into the working array
-        out = prepare_actuator_lattice(ifn.shape, Nact, sep, mask, dtype=self.x.dtype)
-        self.mask = out['mask']
+        out = prepare_actuator_lattice(ifn.shape, Nact, sep, dtype=ifn.dtype)
         self.actuators = out['actuators']
         self.actuators_work = np.zeros_like(self.actuators)
         self.poke_arr = out['poke_arr']
         self.ixx = out['ixx']
         self.iyy = out['iyy']
 
-        # rotation data; XY/XY2 = for render(); suffix back for gradient backprop
-        rotmat = make_rotation_matrix(rot)
-        # condition rotation to be an affine transform
-        self.rotmat = make_3D_rotation_affine(np.linalg.inv(rotmat))
-        self.invrotmat = make_3D_rotation_affine(rotmat)
-        points = np.stack((self.x.ravel(), self.y.ravel()), axis=1)
-        self.projx, self.projy = np.tensordot(self.invrotmat, points, axes=(1, 1))
         self.needs_rot = True
         if np.allclose(rot, [0, 0, 0]):
             self.needs_rot = False
+            self.projx = None
+            self.projy = None
+            self.invprojx = None
+            self.invprojy = None
+        else:
+            fwd, rev = prepare_fwd_reverse_projection_coordinates(s, rot)
+            self.projx, self.projy = fwd
+            self.invprojx, self.invprojy = rev
 
         # shift data
         if shift[0] != 0 or shift[1] != 0:
@@ -179,11 +192,11 @@ class DM:
             # make 2pi/px phase ramps in 1D (much faster)
             # then broadcast them to 2D when they're used as transfer functions
             # in a Fourier convolution
-            Y, X = [forward_ft_unit(1, s, shift=False) for s in self.x.shape]
+            Y, X = [forward_ft_unit(1, s, shift=False) for s in s]
             Xramp = np.exp(X * (-2j * np.pi * shift[0]))
             Yramp = np.exp(Y * (-2j * np.pi * shift[1]))
-            shpx = self.x.shape
-            shpy = tuple(reversed(self.x.shape))
+            shpx = s
+            shpy = tuple(reversed(s))
             Xramp = np.broadcast_to(Xramp, shpx)
             Yramp = np.broadcast_to(Yramp, shpy).T
             self.Xramp = Xramp
@@ -201,11 +214,7 @@ class DM:
         # as the nonzero elements of the mask
         #
         # or mask is None, and actuators is 2D
-        if self.mask is not None:
-            self.actuators[self.mask] = actuators
-        else:
-            self.actuators[:] = actuators[:]
-
+        self.actuators[:] = actuators[:]
         return
 
     def render(self, wfe=True):
@@ -317,9 +326,7 @@ class DM:
 
         # return protograd
         if self.needs_rot:
-            # inverse projection
-            # TODO: this is wrong
-            protograd = warp(protograd, self.projx, self.projy)
+            protograd = warp(protograd, self.invprojx, self.invprojy)
 
         # return protograd
         in_actuator_space = apply_transfer_functions(protograd, None, np.conj(self.tf), shift=False)
