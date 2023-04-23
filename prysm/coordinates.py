@@ -383,58 +383,6 @@ def apply_homography(M, x, y):
     return xp, yp
 
 
-def apply_transformation_matrix(M, points, homography=False):
-    """Apply transformation M to points.
-
-    Parameters
-    ----------
-    M : numpy.ndarray
-        transformation matrix; can be 2x2, 3x3, or 4x4
-        if 2x2, a simple 2D transformation and homography must be false
-        if 3x3, either (x, y, z) if homography=False,
-                    or (x, y, w) if homography=True
-        if 4x4, (x, y, z, w) and homography must be true
-    points : numpy.ndarray
-        (N,2) or (N,3) or (N,4) shaped ndarray whose columns are those described
-        in the docstring for M
-    homography : bool, optional
-        if true, the transformation is a homography.  If true, returns
-        (x,y) if input has 3 dimensions or (x,y,z) if input has four, after
-        dividing by the w coordinate
-        else returns the same number of dimensions as the input
-
-    Returns
-    -------
-    (numpy.ndarray x N)
-        N Ndarrays, as described in the docstring for homography
-
-    """
-    ndim = M.shape[0]
-    if ndim == 2 and homography:
-        raise ValueError('M was of ndim 2 and homography was true, nonsensical input')
-    elif ndim == 4 and not homography:
-        raise ValueError("M was of ndim 4 and homography was false, are you a time traveler?")
-
-    out = np.dot(M, points.T)
-    x = out[0]
-    y = out[1]
-    if ndim == 2 or (ndim == 3 and not homography):
-        return out  # out unpacks to x, y, [z optional]
-    if ndim == 3 and homography:
-        w = out[2]
-        x /= w
-        y /= w
-        return x, y
-    # now we know ndim==4 and homography
-
-    z = out[2]
-    w = out[3]
-    x /= w
-    y /= w
-    z /= w
-    return x, y, z
-
-
 def solve_for_planar_homography(src, dst):
     """Find the planar homography that transforms src -> dst.
 
@@ -457,39 +405,13 @@ def solve_for_planar_homography(src, dst):
     A = np.zeros((2*N, 9), dtype=config.precision)
     for i in range(N):
         # A[i]   = [-x1,    -y1,    -1, 0, 0, 0, x2x1,        x2y1,        x2   ]
-        A[2*i]   = [-x1[i], -y1[i], -1, 0, 0, 0, x2[i]*x1[i], x2[i]*y1[i], x2[i]]
+        A[2*i]   = [-x1[i], -y1[i], -1, 0, 0, 0, x2[i]*x1[i], x2[i]*y1[i], x2[i]]  # NOQA
         # A[i+1] = [0, 0, 0, -x1,    -y1,    -1, y2x1,        y2y1,        y2   ]
         A[2*i+1] = [0, 0, 0, -x1[i], -y1[i], -1, y2[i]*x1[i], y2[i]*y1[i], y2[i]]
 
     ATA = A.T@A
     U, sigma, Vt = np.linalg.svd(ATA)
     return Vt[-1].reshape((3, 3))
-
-
-def find_homography_to_invert_transformation(M, image_size):
-    if isinstance(image_size, int):
-        image_size = (image_size, image_size)
-
-    x, y = [np.arange(s) for s in image_size]
-    x, y = np.meshgrid(y, x)
-    # the size and position of the square that gets projected does not really
-    # matter, but this is a square that fills half the array, which is
-    # aesthetically pleasing
-    c = [s/2 for s in image_size]
-    w = [s/4 for s in image_size]
-
-    corners = np.array([
-        [c[0]-w[0], c[1]+w[1], 0, 1],  # top left
-        [c[0]+w[0], c[1]+w[1], 0, 1],  # top right
-        [c[0]+w[0], c[1]-w[1], 0, 1],  # lower right
-        [c[0]-w[0], c[1]-w[1], 0, 1]   # lower left
-    ], dtype=float)
-
-    projected = np.dot(M, corners.T)
-    pt1 = corners[:, :2]
-    pt2 = projected[:2, :].T
-    H = solve_for_planar_homography(pt1, pt2)
-    return H
 
 
 def warp(img, xnew, ynew):
