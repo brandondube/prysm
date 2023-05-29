@@ -1,7 +1,6 @@
 """Various polynomials of optics."""
 
 from prysm.mathops import np
-from prysm.coordinates import optimize_xy_separable
 
 from .jacobi import (  # NOQA
     jacobi,
@@ -59,6 +58,13 @@ from .dickson import (  # NOQA
     dickson2,
     dickson2_sequence
 )
+from .xy import (  # NOQA
+    j_to_xy,
+    xy_polynomial,
+    xy_polynomial_sequence,
+    generalized_xy_polynomial_sequence,
+)
+
 from .zernike import (  # NOQA
     zernike_norm,
     zernike_nm,
@@ -78,130 +84,6 @@ from .zernike import (  # NOQA
     barplot_magnitudes as zernike_barplot_magnitudes,
     top_n,
 )
-
-
-def separable_2d_sequence(ns, ms, x, y, fx, fy=None, greedy=True):
-    """Sequence of separable (x,y) orthogonal polynomials.
-
-    Parameters
-    ----------
-    ns : Iterable of int
-        sequence of orders to evaluate in the X dimension
-    ms : Iterable of int
-        sequence of orders to evaluate in the Y dimension
-    x : numpy.ndarray
-        array of shape (m, n) or (n,) containing the X points
-    y : numpy.ndarray
-        array of shape (m, n) or (m,) containing the Y points
-    fx : callable
-        function which returns a generator or other sequence
-        of modes, given args (ns, x)
-    fy : callable, optional
-        function which returns a generator or other sequence
-        of modes, given args (ns, x);
-        y equivalent of fx, fx is used if None
-    greedy : bool, optional
-        if True, consumes any generators returned by fx or fy and
-        returns lists.
-
-    Returns
-    -------
-    Iterable, Iterable
-        sequence of x modes (1D) and y modes (1D)
-
-    """
-    if fy is None:
-        fy = fx
-
-    x, y = optimize_xy_separable(x, y)
-    modes_x = fx(ns, x)
-    modes_y = fy(ms, y)
-    if greedy:
-        modes_x = list(modes_x)
-        modes_y = list(modes_y)
-
-    return modes_x, modes_y
-
-
-def mode_1d_to_2d(mode, x, y, which='x'):
-    """Expand a 1D representation of a mode to 2D.
-
-    Notes
-    -----
-    You likely only want to use this function for plotting or similar, it is
-    much faster to use sum_of_xy_modes to produce 2D surfaces described by
-    a sum of modes which are separable in x and y.
-
-    Parameters
-    ----------
-    mode : numpy.ndarray
-        mode, representing a separable mode in X, Y along {which} axis
-    x : numpy.ndarray
-        x dimension, either 1D or 2D
-    y : numpy.ndarray
-        y dimension, either 1D or 2D
-    which : str, {'x', 'y'}
-        which dimension the mode is produced along
-
-    Returns
-    -------
-    numpy.ndarray
-        2D version of the mode
-
-    """
-    x, y = optimize_xy_separable(x, y)
-    out = np.broadcast_to(mode, (y.size, x.size))
-    return out
-
-
-def sum_of_xy_modes(modesx, modesy, x, y, weightsx=None, weightsy=None):
-    """Weighted sum of separable x and y modes projected over the 2D aperture.
-
-    Parameters
-    ----------
-    modesx : iterable
-        sequence of x modes
-    modesy : iterable
-        sequence of y modes
-    x : numpy.ndarray
-        x points
-    y : numpy.ndarray
-        y points
-    weightsx : iterable, optional
-        weights to apply to modesx.  If None, [1]*len(modesx)
-    weightsy : iterable, optional
-        weights to apply to modesy.  If None, [1]*len(modesy)
-
-    Returns
-    -------
-    numpy.ndarray
-        modes summed over the 2D aperture
-
-    """
-    x, y = optimize_xy_separable(x, y)
-
-    if weightsx is None:
-        weightsx = [1]*len(modesx)
-    if weightsy is None:
-        weightsy = [1]*len(modesy)
-
-    # apply the weights to the modes
-    modesx = [m*w for m, w in zip(modesx, weightsx)]
-    modesy = [m*w for m, w in zip(modesy, weightsy)]
-
-    # sum the separable bases in 1D
-    sum_x = np.zeros_like(x)
-    sum_y = np.zeros_like(y)
-    for m in modesx:
-        sum_x += m
-    for m in modesy:
-        sum_y += m
-
-    # broadcast to 2D and return
-    shape = (y.size, x.size)
-    sum_x = np.broadcast_to(sum_x, shape)
-    sum_y = np.broadcast_to(sum_y, shape)
-    return sum_x + sum_y
 
 
 def sum_of_2d_modes(modes, weights):

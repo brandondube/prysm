@@ -181,6 +181,8 @@ class RichData:
         y = self.y
         x = x[0]
         y = y[..., 0]
+        x = np.ascontiguousarray(x)
+        y = np.ascontiguousarray(y)
         if self.interpf_2d is None:
             self.interpf_2d = interpolate.RegularGridInterpolator((y, x), self.data)
 
@@ -201,6 +203,10 @@ class RichData:
         if self.interpf_x is None or self.interpf_y is None:
             ux, x = slc.x
             uy, y = slc.y
+            ux = np.ascontiguousarray(ux)
+            uy = np.ascontiguousarray(uy)
+            x = np.ascontiguousarray(x)
+            y = np.ascontiguousarray(y)
 
             self.interpf_x = interpolate.interp1d(ux, x)
             self.interpf_y = interpolate.interp1d(uy, y)

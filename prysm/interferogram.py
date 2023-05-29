@@ -19,9 +19,8 @@ from .coordinates import (
     cart_to_polar,
     broadcast_1d_to_2d,
     make_xy_grid,
-    optimize_xy_separable
 )
-from prysm.polynomials import lstsq, mode_1d_to_2d
+from prysm.polynomials import lstsq
 from .util import mean, rms, pv, Sa, std  # NOQA
 from .wavelengths import HeNe
 from .plotting import share_fig_ax
@@ -54,15 +53,8 @@ def fit_plane(x, y, z):
         array representation of plane
 
     """
-    xx, yy = optimize_xy_separable(x, y)
-
-    mode1 = xx
-    mode2 = yy
-    mode1 = mode_1d_to_2d(mode1, x, y, 'x')
-    mode2 = mode_1d_to_2d(mode2, x, y, 'y')
-
-    coefs = lstsq([mode1, mode2], z)
-    plane_fit = coefs[0] * mode1 + coefs[1] * mode2
+    coefs = lstsq([x, y], z)
+    plane_fit = coefs[0] * x + coefs[1] * y
     return plane_fit
 
 

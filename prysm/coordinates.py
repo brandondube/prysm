@@ -156,6 +156,16 @@ def uniform_cart_to_polar(x, y, data):
     # map points to x, y and make a grid for the original samples
     xv, yv = polar_to_cart(rv, pv)
 
+    data = np.ascontiguousarray(data)
+
+    if not x.flags.owndata:
+        x = x.copy()
+        x.setflags(write=True)
+
+    if not y.flags.owndata:
+        y = y.copy()
+        y.setflags(write=True)
+
     # interpolate the function onto the new points
     f = interpolate.RegularGridInterpolator((y, x), data, bounds_error=False, fill_value=0)
     return rho, phi, f((yv, xv), method='linear')

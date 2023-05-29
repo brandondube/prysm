@@ -16,6 +16,20 @@ New Features
 
 * Forward modeling of Phase Shifting Point Diffraction Interferometers, aka Medecki interferometers.
 
+* Forward modeling of Self-Referenced Interferometers, which use a pinhole to generate the reference wave using light from the input port.
+
+* Rich XY polynomial capability:
+
+* * :func:`~prysm.polynomials.j_to_xy`
+
+* * :func:`~prysm.polynomials.xy_polynomial`
+
+* * :func:`~prysm.polynomials.xy_polynomial_sequence`
+
+* * :func:`~prysm.polynomials.generalized_xy_polynomial_sequence`
+
+* * The last of these can be used to compute, e.g., "XY" chebyshev polynomials
+
 * Deformable Mirror enhancements
 
 * * :func:`copy()` method to clone a DM, when e.g. the two DMs in a system are the same
@@ -59,3 +73,13 @@ Breaking Changes
 ================
 
 Within the geometry module, all functions now use homogeneous names of x, y, r, and t for arguments.  The :func:`~prysm.geometry.circle` and :func:`~prysm.geometry.truecircle` routines have had some of their arguments renamed.
+
+The following functions have been removed from the polynomials submodule:
+
+* separable_2d_sequence
+
+* mode_1d_to_2d
+
+* sum_of_xy_modes
+
+They assumed strict separability of the two axes, with no cross terms.  This can be acheived by having terms where only m or n is positive in the new XY routines.  In general, suppressing cross terms artificially is not intended and the functions have been removed to avoid confusion.
