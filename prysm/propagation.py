@@ -178,13 +178,13 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
     wavefunction : numpy.ndarray
         the image plane wavefunction
     input_dx : float
-        spacing between samples in the pupil plane, millimeters
+        spacing between samples in the focal plane, microns
     prop_dist : float
-        propagation distance along the z distance
+        propagation distance along the z distance, mm
     wavelength : float
-        wavelength of light
+        wavelength of light, microns
     output_dx : float
-        sample spacing in the output plane, microns
+        sample spacing in the output plane, mm
     output_samples : int
         number of samples in the square output array
     shift : tuple of float
