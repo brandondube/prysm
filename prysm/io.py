@@ -1448,6 +1448,36 @@ def write_codev_gridint(array, filename, comment='', typ='SUR'):
     np.savetxt(filename, array, fmt='%d', delimiter=' ', header=hdr, comments='')
 
 
+def write_codev_zfr_int(coefs, filename, comments='', SUR=True):
+    """Write a Code V INT file of ZFR coefficients.
+
+    Parameters
+    ----------
+    coefs : iterable of float
+        coefficients, counting from Z1
+    filename : file_like
+        where to write to
+    comments : string
+        file header comment(s)
+    SUR : bool, optional
+        if True,  specifies surface figure error
+        if False, specifies reflected wavefront error
+
+    """
+    if SUR:
+        typ = 'SUR'
+    else:
+        typ = 'WFR'
+
+    hdr = comments + '\n' + f'ZFR {len(coefs)} {typ} WVL 1.0 SSZ 1\n'
+    # 1e3; nm->um
+    formatted = ' '.join([f'{v/1e3:g}' for v in coefs])  # g = use "f" or "e" formatting depending on value size
+    with open(filename, 'w') as f:
+        f.write(hdr)
+        f.write(formatted+'\n')
+
+    return
+
 def read_codev_gridint(file):
     """Read a Code V INT file containing grid data.
 
