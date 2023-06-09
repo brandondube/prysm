@@ -1,9 +1,11 @@
 """Functions used to generate various geometrical constructs."""
+import math
+
 import numpy as truenp
 
 from scipy import spatial
 
-# from .conf import config
+from .conf import config
 from .mathops import np
 from .coordinates import cart_to_polar, optimize_xy_separable, polar_to_cart
 
@@ -303,13 +305,10 @@ def _generate_vertices(sides, radius=1, center=(0, 0), rotation=0):
     angle = 2 * truenp.pi / sides
     rotation = truenp.radians(rotation)
     x0, y0 = center
-    pts = []
-    for point in range(sides):
-        x = radius * truenp.sin(point * angle + rotation) + x0
-        y = radius * truenp.cos(point * angle + rotation) + y0
-        pts.append((x, y))
-
-    return truenp.asarray(pts)
+    points = truenp.arange(sides, dtype=config.precision)
+    x = radius * truenp.sin(points * angle + rotation) + x0
+    y = radius * truenp.cos(points * angle + rotation) + y0
+    return truenp.stack((x, y), axis=1)
 
 
 def spider(vanes, width, x, y, rotation=0, center=(0, 0), rotation_is_rad=False):
@@ -395,3 +394,145 @@ def offset_circle(radius, x, y, center):
     # not cart to polar; computing theta is waste work
     r = np.hypot(x, y)
     return circle(radius, r)
+
+
+def _circle_arc(t0, t1, r, N, center=(0, 0)):
+    cx, cy = center
+    span = t1-t0
+    incr = span/N
+    pts = []
+    for j in range(N):
+        theta = t0+(incr*j)
+        x = cx + np.cos(theta) * r
+        y = cy + np.sin(theta) * r
+        pts.append((x, y))
+
+    return pts
+
+
+def _qhull_points_for_rectangle_with_corner_fillets(width, height, cradius, x, y, center=(0, 0), rotation=0):
+    dx = x[0, 1] - x[0, 0]
+    # need circumference/4/dx points on the circle
+    # 4 = quarter-arc
+    # parametric equation of a circle is x=cos(theta)*r, y=sin(theta0*r)
+    C = 2*np.pi*cradius
+    Ncirc = math.ceil(C/4/dx)
+
+    cx, cy = center
+
+    # extremes of the rectangle
+    ledge = -width+cx
+    redge = +width+cx
+    top = height+cy
+    bottom = -height+cy
+
+    all_points = []
+    # the basic gist of this algorithm
+    #
+    #
+    # the rectangle is:
+    # x----------------------------------x
+    # |                                  |
+    # |                                  |
+    # |                                  |
+    # |                                  |
+    # |                                  |
+    # |                                  |
+    # x----------------------------------x
+    # find the point at which we transition from the rectangle to the
+    # circle, and the center of that circle:
+    # x----------------------------------x
+    # |     ^                            |
+    # |     |                            |
+    # | <-  .                            |
+    # |                                  |
+    # |                                  |
+    # |                                  |
+    # x----------------------------------x
+
+    # enumerate the points (last_p_rec, p_circ0, p_circ1, ..p_circN, first_p_rec)
+    # going around clockwise from top left
+    #
+    # give those to Qhull and shade the interior from the simplices
+    all_points = []
+
+    # top left
+    circle_cx = ledge+cradius
+    circle_cy = top-cradius
+    top_left_leading_extreme_rect = (ledge, circle_cy)
+    top_left_trailing_extreme_rect = (circle_cx, top)
+
+    all_points.append(top_left_leading_extreme_rect)
+    all_points += _circle_arc(np.pi, np.pi/2, cradius, Ncirc, center=(circle_cx, circle_cy))
+    all_points.append(top_left_trailing_extreme_rect)
+
+    # top right
+    circle_cx = redge-cradius
+    circle_cy = top-cradius
+    top_right_leading_extreme_rect = (circle_cx, top)
+    top_right_trailing_extreme_rect = (redge, circle_cy)
+
+    all_points.append(top_right_leading_extreme_rect)
+    all_points += _circle_arc(np.pi/2, 0, cradius, Ncirc, center=(circle_cx, circle_cy))
+    all_points.append(top_right_trailing_extreme_rect)
+
+    # bottom right
+    circle_cx = redge-cradius
+    circle_cy = bottom+cradius
+    bottom_right_leading_extreme_rect = (redge, circle_cy)
+    bottom_right_trailing_extreme_rect = (circle_cx, bottom)
+
+    all_points.append(bottom_right_leading_extreme_rect)
+    all_points += _circle_arc(0, -np.pi/2, cradius, Ncirc, center=(circle_cx, circle_cy))
+    all_points.append(bottom_right_trailing_extreme_rect)
+
+    # bottom left
+    circle_cx = ledge+cradius
+    circle_cy = bottom+cradius
+    bottom_right_leading_extreme_rect = (circle_cx, bottom)
+    bottom_right_trailing_extreme_rect = (ledge, circle_cy)
+
+    all_points.append(bottom_right_leading_extreme_rect)
+    all_points += _circle_arc(-np.pi/2, -np.pi, cradius, Ncirc, center=(circle_cx, circle_cy))
+    all_points.append(bottom_right_trailing_extreme_rect)
+
+    return all_points
+
+
+def rectangle_with_corner_fillets(width, height, cradius, x, y, center=(0, 0), rotation=0):
+    """Shade a rectangle with filleted (circular arc) corners.
+
+    Parameters
+    ----------
+    width : float
+        half-width of the rectangle, same units as x and y
+    height : float
+        half-height of the rectangle, same units as x and y
+    cradius : float
+        radius of the corner fillets
+    x : numpy.ndarray
+        x coordinates
+    y : numpy.ndarray
+        y coordinates
+    center : tuple of float
+        (x,y) center of the rectangle
+    rotation : float
+        degrees of rotation **about coordinate grid center**
+
+    Returns
+    -------
+    numpy.ndarray
+        1 inside "squircle", 0 outside
+
+    """
+    points = _qhull_points_for_rectangle_with_corner_fillets(width, height, cradius, x, y, center=center)
+
+    if rotation != 0:
+        r, t = cart_to_polar(x, y)
+        t += truenp.radians(rotation)
+        x, y = polar_to_cart(r, t)
+
+    xxyy = truenp.stack((x, y), axis=2)
+    triangles = spatial.Delaunay(points, qhull_options='QJ Qf')
+    mask = ~(triangles.find_simplex(xxyy) < 0)
+    return mask
