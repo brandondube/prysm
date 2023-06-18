@@ -329,6 +329,8 @@ def spider(vanes, width, x, y, rotation=0, center=(0, 0), rotation_is_rad=False)
         rotational offset of the vanes, clockwise
     center : tuple of float
         point from which the vanes emanate, (x,y)
+    rotation_is_rad : bool, optional
+        if True, the rotation parameter is interpreted to be in radians
 
     Returns
     -------
