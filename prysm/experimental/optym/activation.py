@@ -138,7 +138,7 @@ class GumbelSoftmax:
     def backprop(self, protograd):
         """Adjoint of forward()."""
         # first step, back out the softmax
-        pg = self.smax.reverse(protograd)
+        pg = self.smax.backprop(protograd)
         return pg / self.tau  # dy/dx = dy/dyy, nothing from g
 
 
