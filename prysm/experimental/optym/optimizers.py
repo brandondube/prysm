@@ -307,8 +307,8 @@ class F77LBFGSB:
 
     [2] Richard H. Byrd, Peihuang Lu, and Jorge Nocedal "A Limited-Memory
         Algorithm For Bound-Constrained Optimization"
-
         https://doi.org/10.1137/0916069
+
     [3] Ciyou Zhu, Richard H. Byrd, Peihuang Lu, and Jorge Nocedal "Algorithm 778:
         L-BFGS-B: Fortran subroutines for large-scale bound-constrained optimization"
         https://doi.org/10.1145/279232.279236
