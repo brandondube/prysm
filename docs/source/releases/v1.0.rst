@@ -48,7 +48,7 @@ Cost or loss functions:
 Optimizers:
 
 * :func:`~prysm.experimental.optym.optimizers.GradientDescent`
-* :func:`~prysm.experimental.optym.optimizers.ADAGrad`
+* :func:`~prysm.experimental.optym.optimizers.AdaGrad`
 * :func:`~prysm.experimental.optym.optimizers.RMSProp`
 * :func:`~prysm.experimental.optym.optimizers.ADAM`
 * :func:`~prysm.experimental.optym.optimizers.F77LBFGSB`
@@ -134,7 +134,7 @@ Performance Optimizations
 Bug Fixes
 =========
 
-* The sign of `:func:~prysm.propagation.Wavefront.thin_lens` was incorrect,
+* The sign of :func:`~prysm.propagation.Wavefront.thin_lens` was incorrect,
   requiring a propagation by the negative of the focal length to go to the
   focus.  The sign has been swapped; (wf * thin_lens(f, ...)).free_space(f) now
   goes to the focus.
