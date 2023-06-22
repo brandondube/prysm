@@ -7,12 +7,13 @@ from prysm.mathops import np
 
 
 class GradientDescent:
-    """Gradient Descent optimization routine.
+    r"""Gradient Descent optimization routine.
 
     Gradient Descent travels a constant step size alpha along the negative of
     the gradient on each iteration.  The update is:
 
-    x_(k+1) = x_k - α g_k
+    .. math::
+        x_{k+1} = x_k - α g_k
 
     where g is the gradient vector
 
@@ -57,14 +58,15 @@ class GradientDescent:
 
 
 class AdaGrad:
-    """Adaptive Gradient Descent optimization routine.
+    r"""Adaptive Gradient Descent optimization routine.
 
     Gradient Descent has the same step size for each parameter.  Adagrad self-
     learns a unique step size for each parameter based on accumulation of the
     square of the gradient over the course of optimization.  The update is:
 
-        s_k = s_(k-1) + (g*g)
-        x_(k+1) = x_k - α g_k / sqrt(s_k)
+    .. math::
+        s_k &= s_{k-1} + (g*g) \\
+        x_{k+1} &= x_k - α g_k / \sqrt{s_k \,}
 
     The purpose of the square and square root operations is essentially to destroy
     the sign of g in the denomenator gain.  An alternative may be to simply do
@@ -121,7 +123,7 @@ class AdaGrad:
 
 
 class RMSProp:
-    """RMSProp optimization routine.
+    r"""RMSProp optimization routine.
 
     RMSProp keeps a moving average of the squared gradient of each parameter.
 
@@ -132,8 +134,9 @@ class RMSProp:
 
     The update is:
 
-        s_k = γ * s_(k-1) + (1-γ)*(g*g)
-        x_(k+1) = x_k - α g_k / sqrt(s_k)
+    .. math::
+        s_k &= γ * s_(k-1) + (1-γ)*(g*g) \\
+        x_{k+1} &= x_k - α g_k / \sqrt{s_k \,}
 
     The decay terms gamma form a "moving average" that is squared, with the
     square root in the gain it is a "root mean square."
@@ -190,7 +193,7 @@ class RMSProp:
 
 
 class ADAM:
-    """ADAM optimization routine.
+    r"""ADAM optimization routine.
 
     ADAM, or "Adaptive moment estimation" uses moving average estimates of the
     mean of the gradient and of its "uncentered variance".  This causes the
@@ -200,16 +203,15 @@ class ADAM:
     diverging, if the divergence is not too extreme.
 
     The update is:
-        m = mean
-        v = variance
 
-        m_k = β_1 m_(k-1) + (1-β_1) * g
-        v_k = β_2 v_(k-1) + (1-β_2) * (g*g)
-
-        mhat_k = m_k / (1 - β_1^k)
-        mhat_v = v_k / (1 - β_2^k)
-
-        x_(k+1) = x_k - α * mhat_k / sqrt(vhat_k)
+    .. math::
+        m &\equiv \text{mean} \\
+        v &\equiv \text{variance} \\
+        m_k &= β_1 m_(k-1) + (1-β_1) * g \\
+        v_k &= β_2 v_(k-1) + (1-β_2) * (g*g) \\
+        \hat{m}_k &= m_k / (1 - β_1^k) \\
+        \hat{v}_k &= v_k / (1 - β_2^k) \\
+        x_{k+1} &= x_k - α * \hat{m}_k / \sqrt{\hat{v}_k \,} \\
 
     References
     ----------
