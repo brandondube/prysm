@@ -1,6 +1,7 @@
 """Some differentiable operators."""
 from prysm.mathops import np
 
+
 class SpatialGradient2D:
     """Spatial parital derivatives and backpropagation."""
 
@@ -34,7 +35,7 @@ class SpatialGradient2D:
         out[ind_compute, :] = x[ind_lookahead, :] - x[ind_compute, :]
         return out
 
-    def reverse_y(self, xbar):
+    def backprop_y(self, xbar):
         """Backpropagate through Y spatial gradient of an array."""
         assert xbar.ndim == 2, 'This operator only works on 2D arrays.'
         end = xbar.shape[1]
