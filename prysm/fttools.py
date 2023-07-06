@@ -33,13 +33,13 @@ def next_fast_len(n):
 def fftfreq(n, d=1.0):
     """Fast Fourier Transform frequency vector."""
     try:
-        return fft.fftfreq(n, d)
+        return fft.fftfreq(n, d).astype(config.precision)
     except:  # NOQA -- cannot predict arbitrary library error types
         # if the FFT backend does not have fftfreq, use numpy's.  Then, cast
         # the data to the current numpy backend's data type
         # for example, if fft = cupy fft and it doesn't have FFTfreq,
         # use numpy's fftfreq, then turn that into a CuPy array
-        out = truenp.fft.fftfreq(n, d)
+        out = truenp.fft.fftfreq(n, d).astype(config.precision)
         return np.asarray(out)
 
 
