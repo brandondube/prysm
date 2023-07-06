@@ -12,7 +12,8 @@ from .mathops import np, fft, jinc
 from .io import (
     read_zygo_dat,
     read_zygo_datx,
-    write_zygo_ascii
+    write_zygo_ascii,
+    write_zygo_dat,
 )
 from .fttools import forward_ft_unit
 from .coordinates import (
@@ -1049,7 +1050,7 @@ class Interferogram(RichData):
         return fig, ax
 
     def save_zygo_ascii(self, file):
-        """Save the interferogram to a Zygo ASCII filnp.
+        """Save the interferogram to a Zygo ASCII file.
 
         Parameters
         ----------
@@ -1060,6 +1061,17 @@ class Interferogram(RichData):
         sf = 1 / (self.wavelength * 1e3)
         phase = self.data * sf
         write_zygo_ascii(file, phase=phase, dx=self.dx, intensity=None, wavelength=self.wavelength)
+
+    def save_zygo_dat(self, file):
+        """Save the interferogram to a Zygo dat file.
+
+        Parameters
+        ----------
+        file : Path_like, str, or File_like
+            where to save to
+
+        """
+        write_zygo_dat(file, phase=self.data, dx=self.dx, intensity=None, wavelength=self.wavelength)
 
     def __str__(self):
         """Pretty-print string representation."""

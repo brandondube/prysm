@@ -19,7 +19,11 @@ modeling polarized fields.
 
 This release brings a number of new features for modeling specific types of
 wavefront sensors, and alternate segmentation geometry in segmented telescopes.
-At the same time, `dygdug <https://github.com/brandondube/dygdug>`_ has been
+All optical propagation routines now feature convenient gradient backpropagation
+equivalents for extremely fast optimization of optical models to learn
+parameters, perform phase retrieval, etc.
+
+`dygdug <https://github.com/brandondube/dygdug>`_ has been
 created as an external module of prysm dedicated to coronagraphy, similar to
 the experimental submodule.  dygdug is not being released as 1.0 and will likely
 go through years of breaking changes to improve the ergonomics and performance
@@ -30,9 +34,87 @@ and perform wavefront control of real systems.  For the highest performance, the
 differentiation has been done by hand.
 
 
+New Features
+============
+
+Polynomials
+-----------
+
+Rich XY polynomial capability:
+
+* :func:`~prysm.polynomials.j_to_xy`
+
+* :func:`~prysm.polynomials.xy_polynomial`
+
+* :func:`~prysm.polynomials.xy_polynomial_sequence`
+
+* :func:`~prysm.polynomials.generalized_xy_polynomial_sequence`
+
+The last of these can be used to compute, e.g., "XY" Chebyshev polynomials
+
+
+Propagation
+-----------
+
+* new .real property, returning a Richdata to support wf.real.plot2d(), etc.
+
+* new .imag property, same as .real
+
+* :func:`~prysm.propagation.to_fpm_and_back` now takes a :code:`shift`
+    argument, allowing off-axis propagation without adding wavefront tilt.
+
+* all propagation routines have a :code:`_backprop` twin, which should be used
+  to do gradient backpropagation through optical models
+
+
+Segmented Systems
+-----------------
+
+* Compositing and per-segment errors of "keystone" apertures
+
+Wavefront Sensors and Interferometers
+-------------------------------------
+
+* Forward modeling of Shack Hartmann wavefront sensors
+
+* Forward modeling of Phase Shifting Point Diffraction Interferometers, aka Medecki interferometers.
+
+* Forward modeling of Self-Referenced Interferometers, which use a pinhole to
+  generate the reference wave using light from the input port.
+
+
+i/o
+---
+
+* :func:`prysm.io.read_codev_psf` to load PSF output from Code V
+
+* :func:`prysm.io.read_codev_bsp` to load BSP data from Code V.
+
+* :func:`prysm.io.write_zygo_dat` to write Zygo .dat files.
+
+More convenient backend swaps, misc
+-----------------------------------
+
+* :func:`prysm.mathops.set_backend_to_cupy`,
+  :func:`~prysm.mathops.set_backend_to_pytorch` and
+  :func:`~prysm.mathops.set_backend_to_defaults` convenience routines to set the
+  backend to cupy (GPU), or the defaults (numpy/scipy).  Note that other
+  numpy/scipy-like APIs can also be used, and these are simply convenience
+  functions; there is no special support for either library beyond these simple
+  functions.
+
+* the :code:`plot2d`` method of RichData now has an :code:`extend` keyword
+  argument, which controls the extension of the colorbar beyond the color
+  limits.
+
+Experimental Modules
+====================
 
 x/opytm
-=======
+-------
+
+New module with legos and optimizers to improve convenience when optimizating
+optical models.
 
 Activation functions and discretizers:
 
@@ -59,69 +141,22 @@ Nocedal's Fortran77 code.  All other optimizers have full GPU support and
 support for 32-bit numbers, but F77LBFGSB is CPU-only and double precision only.
 
 x/polarization
-==============
+--------------
 
 Jaren to fill in here
 
-New Features
-============
+x/dm
+----
 
-* Compositing and per-segment errors of "keystone" apertures
 
-* Forward modeling of Shack Hartmann wavefront sensors
+* :func:`copy()` method to clone a DM, when e.g. the two DMs in a system are the same
 
-* Forward modeling of Phase Shifting Point Diffraction Interferometers, aka Medecki interferometers.
-
-* Forward modeling of Self-Referenced Interferometers, which use a pinhole to
-  generate the reference wave using light from the input port.
-
-* Rich XY polynomial capability:
-
-* * :func:`~prysm.polynomials.j_to_xy`
-
-* * :func:`~prysm.polynomials.xy_polynomial`
-
-* * :func:`~prysm.polynomials.xy_polynomial_sequence`
-
-* * :func:`~prysm.polynomials.generalized_xy_polynomial_sequence`
-
-* * The last of these can be used to compute, e.g., "XY" chebyshev polynomials
-
-* Deformable Mirror enhancements
-
-* * :func:`copy()` method to clone a DM, when e.g. the two DMs in a system are the same
-
-* * new Nout parameter that controls the amount of padding or cropping of the
+* new Nout parameter that controls the amount of padding or cropping of the
     natural model resolution is done.  The behavior here is similar to PROPER.
 
-* * the forward model of the DM is now differentiable.
+* the forward model of the DM is now differentiable.
     :func:`~prysm.experiemntal.dm.render_backprop` performs gradient
     backpropagation through :func:`~prysm.experimental.dm.render`.
-
-* Propagation / Wavefront enhancements
-
-* * new .real property, returning a Richdata to support wf.real.plot2d(), etc.
-
-* * new .imag property, same as .real
-
-* * :func:`~prysm.propagation.to_fpm_and_back` now takes a :code:`shift`
-    argument, allowing off-axis propagation without adding wavefront tilt.
-
-* the :code:`plot2d`` method of RichData now has an :code:`extend` keyword
-  argument, which controls the extension of the colorbar beyond the color
-  limits.
-
-* :func:`prysm.io.read_codev_psf` to load PSF output from Code V
-
-* :func:`prysm.io.read_codev_bsp` to load BSP data from Code V.
-
-* :func:`prysm.mathops.set_backend_to_cupy`,
-  :func:`~prysm.mathops.set_backend_to_pytorch` and
-  :func:`~prysm.mathops.set_backend_to_defaults` convenience routines to set the
-  backend to cupy (GPU), or the defaults (numpy/scipy).  Note that other
-  numpy/scipy-like APIs can also be used, and these are simply convenience
-  functions; there is no special support for either library beyond these simple
-  functions.
 
 
 Performance Optimizations
@@ -129,12 +164,18 @@ Performance Optimizations
 
 * :func:`~prysm.geometry.rectangle` has been optimized when the rotation angle is zero
 
-* :func:`~prysm.propagation.angular_spectrum_transfer_function` has been slightly optimized
+* :func:`~prysm.propagation.angular_spectrum_transfer_function` has been
+  slightly optimized
+
+* :func:`~prysm.io.read_zygo_dat` now only performs big/little endian
+  conversions on phase arrays when necessary (little endian systems), which
+  creates a slight performance enhancement for big endian systems, such as apple
+  silicon.
 
 Bug Fixes
 =========
 
-* The sign of `:func:~prysm.propagation.Wavefront.thin_lens` was incorrect,
+* The sign of :func:`~prysm.propagation.Wavefront.thin_lens` was incorrect,
   requiring a propagation by the negative of the focal length to go to the
   focus.  The sign has been swapped; (wf * thin_lens(f, ...)).free_space(f) now
   goes to the focus.
@@ -142,7 +183,7 @@ Bug Fixes
 * An orientation flip was missing in
   :func:`~prysm.propagation.Wavefront.babinet`, this has been corrected.
 
-* `:func:~prysm.otf.mtf_from_psf` as well as the ptf and otf functions used the
+* :func:`~prysm.otf.mtf_from_psf` as well as the ptf and otf functions used the
   wrong pixel as the origin for normalization, when array sizes were odd.  This
   has been fixed.
 
@@ -174,3 +215,8 @@ parametrization has been modified from (mag,ang) to (mag x, mag y).  Pass
 width=0 or height=0 for monodirectional smear.  This also corrects a bug, in
 which only the diagonal elements of the transfer function were corectly
 populated with sinc() when rotation != 0 previously.
+
+:func:`prysm.io.read_zygo_dat` was reworked to improve code reuse with the new
+write function.  In doing so, some of the nesting in the dictionary
+representation of the metadata has become flat or unnested.  The reading of
+phase and intensity is unchanged.
