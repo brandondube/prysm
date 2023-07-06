@@ -139,7 +139,12 @@ Bug Fixes
   focus.  The sign has been swapped; (wf * thin_lens(f, ...)).free_space(f) now
   goes to the focus.
 
-* An orientation flip was missing in :func:`~prysm.propagation.Wavefront.babinet`, this has been corrected.
+* An orientation flip was missing in
+  :func:`~prysm.propagation.Wavefront.babinet`, this has been corrected.
+
+* `:func:~prysm.otf.mtf_from_psf` as well as the ptf and otf functions used the
+  wrong pixel as the origin for normalization, when array sizes were odd.  This
+  has been fixed.
 
 Breaking Changes
 ================
