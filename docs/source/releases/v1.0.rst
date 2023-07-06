@@ -161,3 +161,11 @@ They assumed strict separability of the two axes, with no cross terms.  This can
 be acheived by having terms where only m or n is positive in the new XY
 routines.  In general, suppressing cross terms artificially is not intended and
 the functions have been removed to avoid confusion.
+
+The degredations module has been modernized, and two bugs have been fixed in
+doing so.  The magnitude of jitter now matches more common modern formalisms,
+and is twice as large for the same "scale" parameter has previously.  The smear
+parametrization has been modified from (mag,ang) to (mag x, mag y).  Pass
+width=0 or height=0 for monodirectional smear.  This also corrects a bug, in
+which only the diagonal elements of the transfer function were corectly
+populated with sinc() when rotation != 0 previously.
