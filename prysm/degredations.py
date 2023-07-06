@@ -2,7 +2,6 @@
 
 from .mathops import np
 from .conf import config
-from .coordinates import cart_to_polar, polar_to_cart
 
 
 def smear_ft(fx, fy, width, height):
