@@ -130,7 +130,7 @@ Cost or loss functions:
 Optimizers:
 
 * :func:`~prysm.experimental.optym.optimizers.GradientDescent`
-* :func:`~prysm.experimental.optym.optimizers.ADAGrad`
+* :func:`~prysm.experimental.optym.optimizers.AdaGrad`
 * :func:`~prysm.experimental.optym.optimizers.RMSProp`
 * :func:`~prysm.experimental.optym.optimizers.ADAM`
 * :func:`~prysm.experimental.optym.optimizers.F77LBFGSB`

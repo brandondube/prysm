@@ -31,8 +31,10 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'prysm'
-copyright = '2017-2022, Brandon Dube'
-author = 'Brandon Dube'
+copyright = '2017-2023, the prysm authors'
+author = 'Brandon Dube et al'
+
+autoclass_content = 'both'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
