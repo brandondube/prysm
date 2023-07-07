@@ -192,37 +192,8 @@ def resample_2d(array, sample_pts, query_pts, kind='cubic'):
         array resampled onto query_pts
 
     """
-    interpf = interpolate.interp2d(*sample_pts, array, kind=kind)
-    return interpf(*query_pts)
-
-
-def resample_2d_complex(array, sample_pts, query_pts, kind='linear'):
-    """Resample 2D array to be sampled along queried points.
-
-    Parameters
-    ----------
-    array : numpy.ndarray
-        2D array
-    sample_pts : tuple
-        pair of numpy.ndarray objects that contain the x and y sample locations,
-        each array should be 1D
-    query_pts : tuple
-        points to interpolate onto, also 1D for each array
-    kind : str, {'linear', 'cubic', 'quintic'}
-        kind / order of spline to use
-
-    Returns
-    -------
-    numpy.ndarray
-        array resampled onto query_pts
-
-    """
-    r, c = [resample_2d(a,
-                        sample_pts=sample_pts,
-                        query_pts=query_pts,
-                        kind=kind) for a in (array.real, array.imag)]
-
-    return r + 1j * c
+    interpf = interpolate.RegularGridInterpolator(sample_pts, array, method=kind)
+    return interpf(query_pts)
 
 
 def make_xy_grid(shape, *, dx=0, diameter=0, grid=True):
