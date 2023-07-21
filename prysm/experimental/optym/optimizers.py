@@ -270,6 +270,83 @@ class ADAM:
             yield self.step()
 
 
+class Yogi:
+    r"""YOGI optimization routine.
+
+    YOGI is a modification of ADAM, which replaces the multiplicative update
+    to the exponentially moving averaged estimate of the variance of the gradient
+    with an additive one.  The premise for this is that multiplicative update
+    causes ADAM to forget past gradients too quickly, tailoring it to more
+    localized behavior in the second order momentum term.  The additive update
+    in YOGI essentially makes the second order momentum update over a larger space.
+
+    The update is:
+
+    .. math::
+        m &\equiv \text{mean} \\
+        v &\equiv \text{variance} \\
+        m_k &= β_1 m_(k-1) + (1-β_1) * g \\
+        v_k &= v_(k-1) - (1-β_2) * \text{sign}(v_{k-1) - (g^2))*(g^2) \\
+        x_{k+1} &= x_k - α * m_k / \sqrt{v_k \,} \\
+
+    References
+    ----------
+    [1] Zaheer, Manzil and Reddi, Sashank and Sachan, Devendra and Kale, Satyen and Kumar, Sanjiv. "Adaptive Methods for Nonconvex Optimization"
+        https://papers.nips.cc/paper_files/paper/2018/hash/90365351ccc7437a1309dc64e4db32a3-Abstract.html
+
+    """
+    def __init__(self, fg, x0, alpha, beta1=0.9, beta2=0.999):
+        """Create a new YOGI optimizer.
+
+        Parameters
+        ----------
+        fg : callable
+            a function which returns (f, g) where f is the scalar cost, and
+            g is the vector gradient.
+        x0 : callable
+            the parameter vector immediately prior to optimization
+        alpha : float
+            the step size
+        beta1 : float
+            the decay rate of the first moment (mean of gradient)
+        beta2 : float
+            the decay rate of the second moment (uncentered variance)
+
+        """
+        self.fg = fg
+        self.x0 = x0
+        self.alpha = alpha
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.x = x0.copy()
+        self.m = np.zeros_like(x0)
+        self.v = np.zeros_like(x0)
+        self.eps = np.finfo(x0.dtype).eps
+        self.iter = 0
+
+    def step(self):
+        """Perform one iteration of optimization."""
+        self.iter += 1
+        beta1 = self.beta1
+        beta2 = self.beta2
+        f, g = self.fg(self.x)
+        gsq = g*g
+        # update momentum estimates
+        self.m = beta1*self.m + (1-beta1) * g
+        self.v = self.v - (1-beta2) * np.sign(self.v - gsq)*gsq
+
+        mhat = self.m  # for symmetry to ADAM
+        vhat = np.sqrt(self.v+self.eps)
+
+        self.x -= self.alpha * mhat/(np.sqrt(vhat+self.eps))
+        return self.x, f, g
+
+    def runN(self, N):
+        """Perform N iterations of optimization."""
+        for _ in range(N):
+            yield self.step()
+
+
 class F77LBFGSB:
     """Limited Memory Broyden Fletcher Goldfarb Shannon optimizer, variant B (L-BFGS-B).
 
