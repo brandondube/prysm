@@ -6,6 +6,28 @@ from scipy.optimize import _lbfgsb
 from prysm.mathops import np
 
 
+def runN(optimizer, N):
+    """Perform N iterations of optimization.
+
+    Parameters
+    ----------
+    optimizer : Any
+        any optimizer from this file, or any type which implements
+            def step(self): -> (xk, fk, gk)
+                pass
+    N : int
+        number of iterations to perform
+
+    Returns
+    -------
+    generator
+        yielding (xk, fk, gk) at each iteration
+
+    """
+    for _ in range(N):
+        yield optimizer.step()
+
+
 class GradientDescent:
     r"""Gradient Descent optimization routine.
 
@@ -47,14 +69,10 @@ class GradientDescent:
     def step(self):
         """Perform one iteration of optimization."""
         f, g = self.fg(self.x)
-        self.x -= self.alpha*g
+        x = self.x
+        self.x = x - self.alpha*g
         self.iter += 1
         return self.x, f, g
-
-    def runN(self, N):
-        """Perform N iterations of optimization."""
-        for _ in range(N):
-            yield self.step()
 
 
 class AdaGrad:
@@ -112,14 +130,10 @@ class AdaGrad:
         """Perform one iteration of optimization."""
         f, g = self.fg(self.x)
         self.accumulator += (g*g)
-        self.x -= self.alpha * g / np.sqrt(self.accumulator+self.eps)
+        x = self.x
+        self.x = x - self.alpha * g / np.sqrt(self.accumulator+self.eps)
         self.iter += 1
-        return self.x, f, g
-
-    def runN(self, N):
-        """Perform N iterations of optimization."""
-        for _ in range(N):
-            yield self.step()
+        return x, f, g
 
 
 class RMSProp:
@@ -182,14 +196,10 @@ class RMSProp:
         gamma = self.gamma
         f, g = self.fg(self.x)
         self.accumulator = gamma*self.accumulator + (1-gamma)*(g*g)
-        self.x -= self.alpha * g / np.sqrt(self.accumulator+self.eps)
+        x = self.x
+        self.x = x - self.alpha * g / np.sqrt(self.accumulator+self.eps)
         self.iter += 1
-        return self.x, f, g
-
-    def runN(self, N):
-        """Perform N iterations of optimization."""
-        for _ in range(N):
-            yield self.step()
+        return x, f, g
 
 
 class ADAM:
@@ -261,13 +271,9 @@ class ADAM:
         mhat = self.m / (1 - beta1**self.iter)
         vhat = self.v / (1 - beta2**self.iter)
 
-        self.x -= self.alpha * mhat/(np.sqrt(vhat+self.eps))
-        return self.x, f, g
-
-    def runN(self, N):
-        """Perform N iterations of optimization."""
-        for _ in range(N):
-            yield self.step()
+        x = self.x
+        self.x = x - self.alpha * mhat/(np.sqrt(vhat+self.eps))
+        return x, f, g
 
 
 class Yogi:
@@ -338,13 +344,9 @@ class Yogi:
         mhat = self.m  # for symmetry to ADAM
         vhat = np.sqrt(self.v+self.eps)
 
-        self.x -= self.alpha * mhat/(np.sqrt(vhat+self.eps))
-        return self.x, f, g
-
-    def runN(self, N):
-        """Perform N iterations of optimization."""
-        for _ in range(N):
-            yield self.step()
+        x = self.x
+        self.x = x - self.alpha * mhat/(np.sqrt(vhat+self.eps))
+        return x, f, g
 
 
 class F77LBFGSB:
@@ -509,6 +511,7 @@ class F77LBFGSB:
     def step(self):
         """Perform one iteration of optimization."""
         self.iter += 1  # increment first so that while loop is self-breaking
+        x = self.x.copy()
         while self._nbfgs_updates < self.iter:
             # call F77 mutates all of the class's state
             self._call_fortran()
@@ -533,16 +536,7 @@ class F77LBFGSB:
             if _fortran_major_iter_complete(task):
                 break
 
-        return self.x, self.f, self.g
-
-    def runN(self, N):
-        """Perform N iterations of optimization."""
-        for i in range(N):
-            try:
-                yield self.step()
-            except StopIteration:
-                warnings.warn(f'L-BFGS-B can make no further progress; performed {i}/N iterations')
-                break
+        return x, self.f, self.g
 
     def run_to(self, N):
         """Run the optimizer until its iteration count equals N."""
