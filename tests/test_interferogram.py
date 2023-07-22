@@ -111,7 +111,9 @@ def test_recenter_functions(sample_i_mutate):
 
 
 def test_fit_psd(sample_i_mutate):
-    a, b, c = fit_psd(*sample_i_mutate.psd().slices().azavg)
+    with np.testing.suppress_warnings() as sup:
+        sup.filter(RuntimeWarning)
+        a, b, c = fit_psd(*sample_i_mutate.psd().slices().azavg)
     assert a
     assert b
     assert c

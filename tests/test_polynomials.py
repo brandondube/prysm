@@ -284,8 +284,10 @@ def test_jacobi_weight_correct():
     alpha = -0.5
     beta = -0.5
     x = X
-    res = weight(alpha, beta, x)
-    exp = (1-x)**alpha * (1+x)**beta
+    with np.testing.suppress_warnings() as sup:
+        sup.filter(RuntimeWarning)
+        res = weight(alpha, beta, x)
+        exp = (1-x)**alpha * (1+x)**beta
     assert np.allclose(res, exp)
 
 
@@ -658,17 +660,19 @@ def test_qcon_zzprime_grads():
 
 def test_qcon_zzprime_q2d():
     # decent number of points, so that finite diff isn't awful
-    x, y = coordinates.make_xy_grid(512, diameter=2)
-    r, t = coordinates.cart_to_polar(x, y)
-    coefs_c = np.random.rand(5)
-    coefs_a = np.random.rand(4, 4)
-    coefs_b = np.random.rand(4, 4)
-    z, zprimer, zprimet = polynomials.qpoly.compute_z_zprime_Q2d(coefs_c, coefs_a, coefs_b, r, t)
-    delta = x[0, 1] - x[0, 0]
-    ddy, ddx = np.gradient(z, delta)
-    dx, dy = surface_normal_from_cylindrical_derivatives(zprimer, zprimet, r, t)
-    dx = fix_zero_singularity(dx, x, y)
-    dy = fix_zero_singularity(dy, x, y)
+    with np.testing.suppress_warnings() as sup:
+        sup.filter(RuntimeWarning)
+        x, y = coordinates.make_xy_grid(512, diameter=2)
+        r, t = coordinates.cart_to_polar(x, y)
+        coefs_c = np.random.rand(5)
+        coefs_a = np.random.rand(4, 4)
+        coefs_b = np.random.rand(4, 4)
+        z, zprimer, zprimet = polynomials.qpoly.compute_z_zprime_Q2d(coefs_c, coefs_a, coefs_b, r, t)
+        delta = x[0, 1] - x[0, 0]
+        ddy, ddx = np.gradient(z, delta)
+        dx, dy = surface_normal_from_cylindrical_derivatives(zprimer, zprimet, r, t)
+        dx = fix_zero_singularity(dx, x, y)
+        dy = fix_zero_singularity(dy, x, y)
 
     # apply this mask, otherwise the very large gradients outside the unit disk
     # make things look terrible.
