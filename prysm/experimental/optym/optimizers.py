@@ -347,13 +347,12 @@ class RADAM:
         beta2k = beta2**k
 
         f, g = self.fg(self.x)
+        gsq = g*g
         # update momentum estimates
         self.m = beta1*self.m + (1-beta1) * g
-        self.v = beta2*self.v + (1-beta2) * (g*g)
+        self.v = beta2*self.v + (1-beta2) * (gsq)
         # torch exp_avg_sq.mul_(beta2).addcmul_(grad,grad,value=1-beta2)
         # == v
-
-        mhat = self.m / (1 - beta1**k)
 
         # going to use this many times, local lookup is cheaper
         rhoinf = self.rhoinf
@@ -364,13 +363,95 @@ class RADAM:
             # commented out l exactly as in paper
             # seems to blow up all the time, must be a typo; missing sqrt(v)
             # torch computes vhat same as ADAM, assume that's the typo
+            mhat = self.m / (1 - beta1**k)
             l = np.sqrt(1 - beta2k) / (np.sqrt(self.v)+self.eps)  # NOQA
             num = (rho - 4) * (rho - 2) * rhoinf
             den = (rhoinf - 4) * (rhoinf - 2) * rho
             r = np.sqrt(num/den)
             self.x = x - self.alpha * r * mhat * l
         else:
-            self.x = x - self.alpha * mhat
+            # second deviation from the paper, use a variation on vanilla
+            # gradient descent otherwise
+            # scaling g by its norm makes a unit length step if alpha=1, which
+            # helps avoid divergence.  This only marginally increases the range
+            # of stable values for alpha, but it costs almost nothing.
+            #
+            # alternatively we could make no update at all, but some supervisors
+            # look for x to stop changing, which a non-update would trigger.
+            invgnorm = 1 / np.sqrt(gsq.sum())
+            self.x = x - self.alpha * invgnorm * g
+        return x, f, g
+
+
+class AdaMomentum:
+    r"""AdaMomentum optimization routine.
+
+    AdaMomentum is an algorithm that is extremely similar to Adam, differing
+    only in the calculation of v.  The idea is to reduce teh variance of the
+    correction, which can plausibly improve the generality of found solutions,
+    i.e. enter wider local/global minima.
+
+    The update is:
+
+    .. math::
+        m &\equiv \text{mean} \\
+        v &\equiv \text{variance} \\
+        m_k &= β_1 m_{k-1} + (1-β_1) * g \\
+        v_k &= β_2 v_{k-1} + (1-β_2) * m_k^2 \\
+        \hat{m}_k &= m_k / (1 - β_1^k) \\
+        \hat{v}_k &= v_k / (1 - β_2^k) \\
+        x_{k+1} &= x_k - α * \hat{m}_k / \sqrt{\hat{v}_k \,} \\
+
+    References
+    ----------
+    [1] Wang, Yizhou and Kang, Yue and Qin, Can and Wang, Huan and Xu, Yi and Zhang Yulun and Fu, Yun. "Rethinking Adam: A Twofold Exponential Moving Average Approach"
+        https://arxiv.org/abs/2106.11514
+
+    """
+    def __init__(self, fg, x0, alpha, beta1=0.9, beta2=0.999):
+        """Create a new ADAM optimizer.
+
+        Parameters
+        ----------
+        fg : callable
+            a function which returns (f, g) where f is the scalar cost, and
+            g is the vector gradient.
+        x0 : callable
+            the parameter vector immediately prior to optimization
+        alpha : float
+            the step size
+        beta1 : float
+            the decay rate of the first moment (mean of gradient)
+        beta2 : float
+            the decay rate of the second moment (uncentered variance)
+
+        """
+        self.fg = fg
+        self.x0 = x0
+        self.alpha = alpha
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.x = x0.copy()
+        self.m = np.zeros_like(x0)
+        self.v = np.zeros_like(x0)
+        self.eps = np.finfo(x0.dtype).eps
+        self.iter = 0
+
+    def step(self):
+        """Perform one iteration of optimization."""
+        self.iter += 1
+        beta1 = self.beta1
+        beta2 = self.beta2
+        f, g = self.fg(self.x)
+        # update momentum estimates
+        self.m = beta1*self.m + (1-beta1) * g
+        self.v = beta2*self.v + (1-beta2) * (self.m*self.m) + self.eps
+
+        mhat = self.m / (1 - beta1**self.iter)
+        vhat = self.v / (1 - beta2**self.iter)
+
+        x = self.x
+        self.x = x - self.alpha * mhat/np.sqrt(vhat)
         return x, f, g
 
 
