@@ -131,7 +131,7 @@ class AdaGrad:
         f, g = self.fg(self.x)
         self.accumulator += (g*g)
         x = self.x
-        self.x = x - self.alpha * g / np.sqrt(self.accumulator+self.eps)
+        self.x = x - self.alpha * g / (np.sqrt(self.accumulator)+self.eps)
         self.iter += 1
         return x, f, g
 
@@ -149,7 +149,7 @@ class RMSProp:
     The update is:
 
     .. math::
-        s_k &= γ * s_(k-1) + (1-γ)*(g*g) \\
+        s_k &= γ * s_{k-1} + (1-γ)*(g*g) \\
         x_{k+1} &= x_k - α g_k / \sqrt{s_k \,}
 
     The decay terms gamma form a "moving average" that is squared, with the
@@ -197,7 +197,7 @@ class RMSProp:
         f, g = self.fg(self.x)
         self.accumulator = gamma*self.accumulator + (1-gamma)*(g*g)
         x = self.x
-        self.x = x - self.alpha * g / np.sqrt(self.accumulator+self.eps)
+        self.x = x - self.alpha * g / (np.sqrt(self.accumulator)+self.eps)
         self.iter += 1
         return x, f, g
 
@@ -217,8 +217,8 @@ class ADAM:
     .. math::
         m &\equiv \text{mean} \\
         v &\equiv \text{variance} \\
-        m_k &= β_1 m_(k-1) + (1-β_1) * g \\
-        v_k &= β_2 v_(k-1) + (1-β_2) * (g*g) \\
+        m_k &= β_1 m_{k-1} + (1-β_1) * g \\
+        v_k &= β_2 v_{k-1} + (1-β_2) * (g*g) \\
         \hat{m}_k &= m_k / (1 - β_1^k) \\
         \hat{v}_k &= v_k / (1 - β_2^k) \\
         x_{k+1} &= x_k - α * \hat{m}_k / \sqrt{\hat{v}_k \,} \\
@@ -272,7 +272,105 @@ class ADAM:
         vhat = self.v / (1 - beta2**self.iter)
 
         x = self.x
-        self.x = x - self.alpha * mhat/(np.sqrt(vhat+self.eps))
+        self.x = x - self.alpha * mhat/(np.sqrt(vhat)+self.eps)
+        return x, f, g
+
+
+class RADAM:
+    r"""RADAM optimization routine.
+
+    RADAM or Rectified ADAM is a modification of ADAM, which seeks to remove
+    any need for warmup time with ADAM, and to stabilize the variance estimate
+    or second moment that ADAM uses.  These properties make RADAM more invariant
+    to the choice of hyperparameters, especially alpha, and avoid distorting
+    the trajectory of optimization in early iterations.
+
+    The update is:
+
+    .. math::
+        m &\equiv \text{mean} \\
+        v &\equiv \text{variance} \\
+        \rho_\infty &= \frac{2}{1-β_2} - 1 \\
+        m_k &= β_1 m_{k-1} + (1-β_1) * g \\
+        v_k &= β_2 v_{k-1} + (1-β_2) * (g*g) \\
+        \hat{m}_k &= m_k / (1 - β_1^k) \\
+        \rho_k &= \rho_\infty - \frac{2 k β_2^k}{1-β_2^k} \\
+        \text{if}& \rho_k > 4 \\
+            \qquad l_k &= \sqrt{\frac{1 - β_2^k}{v_k}} \\
+            \qquad r_k &= \sqrt{\frac{(\rho_k - 4)(\rho_k-2)\rho_\infty}{(\rho_\infty-4)(\rho_\infty-2)\rho_t}} \\
+            \qquad x_{k+1} &= x_k - α r_k \hat{m}_k l_k \\
+        \text{else}& \\
+            \qquad x_{k+1} &= x_k - α \hat{m}_k
+
+    References
+    ----------
+    [1] Liu, Liyuan and Jiang, Haoming and He, Pengcheng and Chen, Weizhu and Liu Xiaodong, and Gao, Jianfeng and Han Jiawei. "On the Variance of the Adaptive Learning Rate and Beyond"
+        http://arxiv.org/abs/1412.6980
+
+    """
+    def __init__(self, fg, x0, alpha, beta1=0.9, beta2=0.999):
+        """Create a new RADAM optimizer.
+
+        Parameters
+        ----------
+        fg : callable
+            a function which returns (f, g) where f is the scalar cost, and
+            g is the vector gradient.
+        x0 : callable
+            the parameter vector immediately prior to optimization
+        alpha : float
+            the step size
+        beta1 : float
+            the decay rate of the first moment (mean of gradient)
+        beta2 : float
+            the decay rate of the second moment (uncentered variance)
+
+        """
+        self.fg = fg
+        self.x0 = x0
+        self.alpha = alpha
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.x = x0.copy()
+        self.m = np.zeros_like(x0)
+        self.v = np.zeros_like(x0)
+        self.eps = np.finfo(x0.dtype).eps
+        self.rhoinf = 2 / (1-beta2) - 1
+        self.iter = 0
+
+    def step(self):
+        """Perform one iteration of optimization."""
+        self.iter += 1
+        k = self.iter
+        beta1 = self.beta1
+        beta2 = self.beta2
+        beta2k = beta2**k
+
+        f, g = self.fg(self.x)
+        # update momentum estimates
+        self.m = beta1*self.m + (1-beta1) * g
+        self.v = beta2*self.v + (1-beta2) * (g*g)
+        # torch exp_avg_sq.mul_(beta2).addcmul_(grad,grad,value=1-beta2)
+        # == v
+
+        mhat = self.m / (1 - beta1**k)
+
+        # going to use this many times, local lookup is cheaper
+        rhoinf = self.rhoinf
+        rho = rhoinf - (2*k*beta2k)/(1-beta2k)
+        x = self.x
+        if rho >= 5:  # 5 was 4 in the paper, but PyTorch uses 5, most others too
+            # l = np.sqrt((1-beta2k)/self.v)  # NOQA
+            # commented out l exactly as in paper
+            # seems to blow up all the time, must be a typo; missing sqrt(v)
+            # torch computes vhat same as ADAM, assume that's the typo
+            l = np.sqrt(1 - beta2k) / (np.sqrt(self.v)+self.eps)  # NOQA
+            num = (rho - 4) * (rho - 2) * rhoinf
+            den = (rhoinf - 4) * (rhoinf - 2) * rho
+            r = np.sqrt(num/den)
+            self.x = x - self.alpha * r * mhat * l
+        else:
+            self.x = x - self.alpha * mhat
         return x, f, g
 
 
@@ -284,15 +382,18 @@ class Yogi:
     with an additive one.  The premise for this is that multiplicative update
     causes ADAM to forget past gradients too quickly, tailoring it to more
     localized behavior in the second order momentum term.  The additive update
-    in YOGI essentially makes the second order momentum update over a larger space.
+    in YOGI essentially makes the second order momentum update over a larger
+    space.  This allows Yogi to perform better than ADAM for some non-convex
+    or otherwise tumultuous cost functions, which have many changes in local
+    curvature.
 
     The update is:
 
     .. math::
         m &\equiv \text{mean} \\
         v &\equiv \text{variance} \\
-        m_k &= β_1 m_(k-1) + (1-β_1) * g \\
-        v_k &= v_(k-1) - (1-β_2) * \text{sign}(v_{k-1) - (g^2))*(g^2) \\
+        m_k &= β_1 m_{k-1} + (1-β_1) * g \\
+        v_k &= v_{k-1} - (1-β_2) * \text{sign}(v_{k-1} - (g^2))*(g^2) \\
         x_{k+1} &= x_k - α * m_k / \sqrt{v_k \,} \\
 
     References
@@ -345,7 +446,7 @@ class Yogi:
         vhat = np.sqrt(self.v+self.eps)
 
         x = self.x
-        self.x = x - self.alpha * mhat/(np.sqrt(vhat+self.eps))
+        self.x = x - self.alpha * mhat/(np.sqrt(vhat)+self.eps)
         return x, f, g
 
 
