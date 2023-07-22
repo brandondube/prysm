@@ -133,6 +133,8 @@ Optimizers:
 * :func:`~prysm.experimental.optym.optimizers.AdaGrad`
 * :func:`~prysm.experimental.optym.optimizers.RMSProp`
 * :func:`~prysm.experimental.optym.optimizers.ADAM`
+* :func:`~prysm.experiemntal.optym.optimizers.RADAM`
+* :func:`~prysm.experiemntal.optym.optimizers.Yogi`
 * :func:`~prysm.experimental.optym.optimizers.F77LBFGSB`
 
 Note that while L-BFGS-B is the darling of my heart, it is currently too
