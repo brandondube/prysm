@@ -70,7 +70,7 @@ Experimental Modules
 .. toctree::
     :maxdepth: 3
 
-    api/experimental/index.rst
+    api/x/index.rst
 
 Contributing
 ------------

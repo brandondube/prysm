@@ -2,7 +2,7 @@
 from prysm.mathops import np
 from prysm.conf import config
 
-from prysm.experimental.raytracing.spencer_and_murty import _multi_dot
+from prysm.x.raytracing.spencer_and_murty import _multi_dot
 
 # resources used in deriving softmax reverse()
 # https://eli.thegreenplace.net/2016/the-softmax-function-and-its-derivative/
