@@ -1,4 +1,4 @@
-"""Self-Referenced Michelson Interferometer."""
+"""Self-Referenced Interferometer."""
 
 # Cousin of the point diffraction interferometer
 
@@ -10,7 +10,7 @@ from prysm.geometry import circle
 from .pdi import evaluate_test_ref_arm_matching
 
 
-class SelfReferencedMichelson:
+class SelfReferencedInterferometer:
     def __init__(self, x, y, efl, epd, wavelength,
                  pinhole_diameter=0.25,
                  pinhole_samples=128,

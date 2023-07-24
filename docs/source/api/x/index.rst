@@ -8,6 +8,6 @@ x
    dm
    pdi
    psi
-   srm
+   sri
    polarization
    optym/index.rst
