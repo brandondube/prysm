@@ -441,7 +441,7 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
     psd : numpy.ndarray
         1D PSD, units of height^2 / (cy/length)^2
     callable : callable, optional
-        a callable object that takes parameters of (frequency, *); all other parameters will be fit
+        a callable object that takes parameters of (frequency, args); all other parameters will be fit
     guess : iterable
         parameters of callable to seed optimization with
     return_ : str, optional, {'coefficients', 'optres'}

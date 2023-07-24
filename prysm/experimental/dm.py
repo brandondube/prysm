@@ -18,20 +18,19 @@ from prysm.coordinates import (
 
 
 def prepare_actuator_lattice(shape, Nact, sep, dtype):
-    """Prepare a lattice of actuators.
-
-    Usage guide:
-    returns a dict of
-    {
-        mask; shape Nact
-        actuators; shape Nact
-        poke_arr; shape shape
-        ixx; shape (truthy part of mask)
-        iyy; shape (truthy part of mask)
-    }
-
-    assign poke_arr[iyy, ixx] = actuators[mask] in the next step
-    """
+    # Prepare a lattice of actuators.
+    #
+    # Usage guide:
+    # returns a dict of
+    # {
+    #     mask, shape Nact
+    #     actuators, shape Nact
+    #     poke_arr, shape shape
+    #     ixx, shape (truthy part of mask)
+    #     iyy, shape (truthy part of mask)
+    # }
+    #
+    # assign poke_arr[iyy, ixx] = actuators[mask] in the next step
     actuators = np.zeros(Nact, dtype=dtype)
 
     cy, cx = [s//2 for s in shape]

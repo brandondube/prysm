@@ -45,13 +45,14 @@ def apply_transfer_functions(obj, dx, tfs, fx=None, fy=None, ft=None, fr=None, s
         If a callable, should be  functions which
         take arguments of any of fx, fy, ft, fr.  Use functools partial or
         class methods to curry other parameters
-    fx, fy, ft, fr : numpy.ndarray
-        arrays defining the frequency domain, of shape (M, N)
-            cartesian X frequency
-            cartesian Y frequency
-            azimuthal frequency
-            radial frequency
-        The latter two are simply the atan2 of the former two.
+    fx : numpy.ndarray
+        cartesian X frequency, shape (M, N)
+    fy : numpy.ndarray
+        cartesian X frequency, shape (M, N)
+    fr : numpy.ndarray
+        cartesian radial frequency, shape (M, N)
+    ft : numpy.ndarray
+        cartesian azimuthal frequency, shape (M, N)
     shift : bool, optional
         if True, fx, fy, ft, fr are assumed to have the origin in the center
         of the array, and tfs are expected to be consistent with that.

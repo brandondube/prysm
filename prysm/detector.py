@@ -62,7 +62,7 @@ class Detector:
         Returns
         -------
         numpy.ndarray
-            of shape (frames, *aerial_img.shape), if frames=1 the first dim
+            of shape (frames, aerial_img.shape), if frames=1 the first dim
             is squeezed, and output shape is same as input shape.
             dtype=uint8 if nbits <= 8, else uint16 for <= 16, etc
             not scaled to fill containers, i.e. a 12-bit image will have peak

@@ -238,7 +238,7 @@ def make_rotation_matrix(zyx, radians=False):
 
     Parameters
     ----------
-    abg : tuple of float
+    zyx : tuple of float
         Z, Y, X rotation angles in that order
     radians : bool, optional
         if True, abg are assumed to be radians.  If False, abg are
@@ -303,14 +303,7 @@ def make_homomorphic_translation_matrix(tx=0, ty=0, tz=0):
 def drop_z_3d_transformation(M):
     """Drop the Z entries of a 3D homography.
 
-    Drops the starred row/column of M:
-
-    M = [         ***
-        [ m00 m01 m02 m03 ]
-        [ m10 m11 m12 m13 ]
-    *** [ m20 m21 m22 m23 ] ***
-        [ m30 m31 m32 m33 ]
-    ]             ***
+    Drops the third row and third column of 4D transformation matrix M.
 
     Parameters
     ----------
@@ -345,7 +338,6 @@ def pack_xy_to_homographic_points(x, y):
         3xN array (x, y, w)
 
     """
-
     out = np.empty((3, x.size), dtype=x.dtype)
     out[0, :] = x.ravel()
     out[1, :] = y.ravel()
@@ -378,6 +370,7 @@ def solve_for_planar_homography(src, dst):
     -------
     numpy.ndarray
         3x3 array containing the planar homography such that H * src = dst
+
     """
     x1, y1 = src.T
     N = len(x1)
@@ -396,7 +389,7 @@ def solve_for_planar_homography(src, dst):
 
 
 def warp(img, xnew, ynew):
-    """Warp an image, via "pull" and not "push."
+    """Warp an image, via "pull" and not "push".
 
     Parameters
     ----------
