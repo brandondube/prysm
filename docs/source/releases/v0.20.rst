@@ -5,19 +5,37 @@ prysm v0.20
 Summary
 =======
 
-Version 20 of prysm is the largest breaking release the library has ever had.  Your programs will be more a bit verbose when written in this style, but they will be more clear, contain fewer bugs, and run faster.  This version marks prysm transitioning from an extremely object oriented style to a data oriented style.  The result is that code is more direct, and there is less of it.  Side benefits are that by deferring the caches that used to help keep prysm fast to the user level, the user is in control over their program's memory usage.  A new high level object oriented API may be produced at some point, likely in a separate package.
+Version 20 of prysm is the largest breaking release the library has ever had.
+Your programs will be more a bit verbose when written in this style, but they
+will be more clear, contain fewer bugs, and run faster.  This version marks
+prysm transitioning from an extremely object oriented style to a data oriented
+style.  The result is that code is more direct, and there is less of it.  Side
+benefits are that by deferring the caches that used to help keep prysm fast to
+the user level, the user is in control over their program's memory usage.  A new
+high level object oriented API may be produced at some point, likely in a
+separate package.
 
-This version will produce one more zero point release (0.21) for cleanup after longer experience in this style, after which version 1 will be released.  In addition to the breaking changes, this release brings landmark additions:
+This version will produce one more zero point release (0.21) for cleanup after
+longer experience in this style, after which version 1 will be released.  In
+addition to the breaking changes, this release brings landmark additions:
 
-- 2D-Q polynomials also known as Forbes polynomials, Chebyshev, Legendre, and Hopkins polynomials,
+- 2D-Q polynomials also known as Forbes polynomials, Chebyshev, Legendre, and
+  Hopkins polynomials,
 - Sophistocated, highly optimized tools for segmented apertures.
 - Tilted plane projections for DMs and other oblique elements
 - Realistic detector noise modeling
 - Bayer focal plane routines
 
-As perhaps a motivational comment, the official model of the Low Order Wavefront Sensing and Control (LOWFS/C) system on the Roman Coronagraph Instrument was ported from prysm v0.19 to v0.20, and runs 12x faster on CPU and 6x faster on GPU.  A total of two new lines of code were gained in aggregate.  The port took approximately two person-hours.  The model now runs in 430 microseconds per wavelength through the 7-plane model; over twice faster than the actual realtime WFSC system!
+As perhaps a motivational comment, the official model of the Low Order Wavefront
+Sensing and Control (LOWFS/C) system on the Roman Coronagraph Instrument was
+ported from prysm v0.19 to v0.20, and runs 12x faster on CPU and 6x faster on
+GPU.  A total of two new lines of code were gained in aggregate.  The port took
+approximately two person-hours.  The model now runs in 430 microseconds per
+wavelength through the 7-plane model; over twice faster than the actual realtime
+WFSC system!
 
-The remainder of this page will be divided by logical unit of function, then sub-divided between breaking changes and new features.
+The remainder of this page will be divided by logical unit of function, then
+sub-divided between breaking changes and new features.
 
 
 Changes
@@ -29,21 +47,34 @@ Changes
 bayer
 -----
 
-This is a new submodule, for working with bayer imaging systems.  It provides a complete toolkit for both forward modeling and processing of bayer images, real or synthetic.  The following functions are included:
+This is a new submodule, for working with bayer imaging systems.  It provides a
+complete toolkit for both forward modeling and processing of bayer images, real
+or synthetic.  The following functions are included:
 
-- :func:`~prysm.bayer.wb_prescale` for performing white-balance pre-scaling to mosaiced data in-place.
-- :func:`~prysm.bayer.wb_scale` for performing white-balance scaling to RGB data in-place.
-- :func:`~prysm.bayer.composite_bayer` for compositing dense color plane data into a bayer mosaic.  This function is used to synthesize "raw" bayer imagery in a forward model.
-- :func:`~prysm.bayer.decomposite_bayer` for "sifting" bayer subplanes from a mosaiced image.
-- :func:`~prysm.bayer.recomposite_bayer` the inverse operation of decomposite_bayer, for taking bayer subplanes and re-mosaicing them.  :code:`composite_bayer` works with fully dense data with (m, n) pixels per color plane.  :code:`recomposite_bayer` works with sparse data with (m/2, n/2) pixels per color plane.
-- :func:`~prysm.bayer.demosaic_malvar` for performing Malvar-He-Cutler demosaicing.
+- :func:`~prysm.bayer.wb_prescale` for performing white-balance pre-scaling to
+  mosaiced data in-place.
+- :func:`~prysm.bayer.wb_scale` for performing white-balance scaling to RGB data
+  in-place.
+- :func:`~prysm.bayer.composite_bayer` for compositing dense color plane data
+  into a bayer mosaic.  This function is used to synthesize "raw" bayer imagery
+  in a forward model.
+- :func:`~prysm.bayer.decomposite_bayer` for "sifting" bayer subplanes from a
+  mosaiced image.
+- :func:`~prysm.bayer.recomposite_bayer` the inverse operation of
+  decomposite_bayer, for taking bayer subplanes and re-mosaicing them.
+  :code:`composite_bayer` works with fully dense data with (m, n) pixels per
+  color plane.  :code:`recomposite_bayer` works with sparse data with (m/2, n/2)
+  pixels per color plane.
+- :func:`~prysm.bayer.demosaic_malvar` for performing Malvar-He-Cutler
+  demosaicing.
 
 
 conf
 ----
 
 - All :code:`Labels` related code has been removed.  There is no substitute.
-- Unit munging has been removed; wavelengths are no longer astropy units but are floats with units of microns again.
+- Unit munging has been removed; wavelengths are no longer astropy units but are
+  floats with units of microns again.
 - The following parameters have been removed from :class:`~prysm.config.Config`:
 - - Q
 - - wavelength
@@ -69,7 +100,12 @@ conf
 convolution
 -----------
 
-This module has been substantially rewritten.  Up to version 0.19, a :code:`Convolvable` object was the key to the convolution API, which was capable of forming prototypical FFT based convolution, as well as convolution with various analytic blurs, and convolution of datasets which were not equally sampled.  The API has been significantly simplified and disentangled in this version.
+This module has been substantially rewritten.  Up to version 0.19, a
+:code:`Convolvable` object was the key to the convolution API, which was capable
+of forming prototypical FFT based convolution, as well as convolution with
+various analytic blurs, and convolution of datasets which were not equally
+sampled.  The API has been significantly simplified and disentangled in this
+version.
 
 Breaking:
 
@@ -79,16 +115,25 @@ Breaking:
 The new API is comprised of:
 
 - :func:`~prysm.convolution.conv`, for convolving an object with a PSF.
-- :func:`~prysm.convolution.apply_transfer_functions`, for blurring an object with N transfer functions.
+- :func:`~prysm.convolution.apply_transfer_functions`, for blurring an object
+  with N transfer functions.
 
 
 coordinates
 -----------
 
-- :class:`GridCache` and its variable transformation functions have been deleted.  The functionality is deferred to the user, who can quite naturally write code that reuses grids.
-- :func:`~prysm.coordinates.make_xy_grid` has had its signature changed from :code:`(samples_x, samples_y, radius=1)` to :code:`(shape, *, dx, diameter, grid=True)`.  shape auto-broadcasts to 2D and dx/diameter are keyword only.  grid controls returning vectors or a meshgrid.  :code:`make_xy_grid` is now FFT-aligned (always containing a zero sample).
-- :func:`make_rho_phi_grid` has been removed, combine :func:`make_xy_grid` with :func:`~prysm.coordinates.cart_to_polar`.
-- New warping function suite used to work with non-normal incidence beams (e.g., DMs, OAPs)
+- :class:`GridCache` and its variable transformation functions have been
+  deleted.  The functionality is deferred to the user, who can quite naturally
+  write code that reuses grids.
+- :func:`~prysm.coordinates.make_xy_grid` has had its signature changed from
+  :code:`(samples_x, samples_y, radius=1)` to :code:`(shape, *, dx, diameter,
+  grid=True)`.  shape auto-broadcasts to 2D and dx/diameter are keyword only.
+  grid controls returning vectors or a meshgrid.  :code:`make_xy_grid` is now
+  FFT-aligned (always containing a zero sample).
+- :func:`make_rho_phi_grid` has been removed, combine :func:`make_xy_grid` with
+  :func:`~prysm.coordinates.cart_to_polar`.
+- New warping function suite used to work with non-normal incidence beams (e.g.,
+  DMs, OAPs)
 - - :func:`~prysm.coordinates.make_rotation_matrix`
 - - :func:`~prysm.coordinates.apply_rotation_matrix`
 - - :func:`~prysm.coordinates.regularize`
@@ -97,32 +142,51 @@ coordinates
 degredations
 ------------
 
-- The :class:`Smear` class has been removed, and replaced with :func:`~prysm.degredations.smear_ft`
-- The :class:`Jitter` class has been removed, and replaced with :func:`~prysm.degredations.jitter_ft`
+- The :class:`Smear` class has been removed, and replaced with
+  :func:`~prysm.degredations.smear_ft`
+- The :class:`Jitter` class has been removed, and replaced with
+  :func:`~prysm.degredations.jitter_ft`
 
 
 detector
 --------
 
-- The :class:`~prysm.detector.Detector` class has been reworked, and its purpose changed.  Previously, it existed to impart blur into a system as would be experienced given a particular pixel design.  It now exists to model noise.  Expect no API compatibility between v0.19 and v0.20.
-- The :class:`OLPF` class has been removed, and replaced with :func:`~prysm.detector.olpf_ft`
-- The :class:`PixelAperture` class has been removed, and replaced with :func:`~prysm.detector.pixel_ft`
+- The :class:`~prysm.detector.Detector` class has been reworked, and its purpose
+  changed.  Previously, it existed to impart blur into a system as would be
+  experienced given a particular pixel design.  It now exists to model noise.
+  Expect no API compatibility between v0.19 and v0.20.
+- The :class:`OLPF` class has been removed, and replaced with
+  :func:`~prysm.detector.olpf_ft`
+- The :class:`PixelAperture` class has been removed, and replaced with
+  :func:`~prysm.detector.pixel_ft`
 - :func:`~prysm.detector.bindown_with_units` was removed.
-- :func:`~prysm.detector.bindown` will now error if the array dimensions are not an integer multiple of the binning factor.  It now supports ND data, with possible unique factors per dimension.
-- :func:`~prysm.detector.tile` has been added, which is the adjoint operation to bindown.  It replicates the elements of an array :code:`factor` times, and has the same ND support bindown now does.
+- :func:`~prysm.detector.bindown` will now error if the array dimensions are not
+  an integer multiple of the binning factor.  It now supports ND data, with
+  possible unique factors per dimension.
+- :func:`~prysm.detector.tile` has been added, which is the adjoint operation to
+  bindown.  It replicates the elements of an array :code:`factor` times, and has
+  the same ND support bindown now does.
 
 
 fttools
 -------
 
-- The matrix DFT executor was mildly reworked.  There is no more :code:`norm` option.  The code was modified such that a forward-reverse calculation that goes to *any* domain containing the majority of the spectrum of the signal and returns to the same input domain will be energy conserving automatically.  This means that :code:`idft2(dft2(x)) ~= x`
+- The matrix DFT executor was mildly reworked.  There is no more :code:`norm`
+  option.  The code was modified such that a forward-reverse calculation that
+  goes to *any* domain containing the majority of the spectrum of the signal and
+  returns to the same input domain will be energy conserving automatically.
+  This means that :code:`idft2(dft2(x)) ~= x`
 
 geometry
 --------
 
-The geometry module was rewritten.  The object oriented mask interface and :class:`MaskCache` have been removed.  All functions now take :code:`x, y` or :code:`r, t` args as appropriate, instead of :code:`samples`.  The arguments now all have consistent units.
+The geometry module was rewritten.  The object oriented mask interface and
+:class:`MaskCache` have been removed.  All functions now take :code:`x, y` or
+:code:`r, t` args as appropriate, instead of :code:`samples`.  The arguments now
+all have consistent units.
 
-- Higher side count regular polygon functions have been removed, use :func:`~prysm.geometry.regular_polygon` directly:
+- Higher side count regular polygon functions have been removed, use
+  :func:`~prysm.geometry.regular_polygon` directly:
 - - :func:`~prysm.geometry.heptagon`
 - - :func:`~prysm.geometry.octagon`
 - - :func:`~prysm.geometry.nonagon`
@@ -130,30 +194,50 @@ The geometry module was rewritten.  The object oriented mask interface and :clas
 - - :func:`~prysm.geometry.hendecagon`
 - - :func:`~prysm.geometry.dodecagon`
 - - :func:`~prysm.geometry.trisdecagon`
-- :func:`~prysm.geometry.inverted_circle` was removed, call :code:`~circle(...)` for equivalent output.
+- :func:`~prysm.geometry.inverted_circle` was removed, call :code:`~circle(...)`
+  for equivalent output.
 
 
 io
 --
 
-- :func:`~prysm.io.write_zygo_ascii` no longer takes a :code:`high_phase_res` parameter.  It did not do anything before and has been removed, as it is not likely prysm needs to support ancient version of MetroPro that are incompatible with that convention.
+- :func:`~prysm.io.write_zygo_ascii` no longer takes a :code:`high_phase_res`
+  parameter.  It did not do anything before and has been removed, as it is not
+  likely prysm needs to support ancient version of MetroPro that are
+  incompatible with that convention.
 
-- the dat and datx readers no longer flip the phase and intensity data upside down.  They used to do this due to prysm explicitly having an origin in lower left convention, but v0.20 has no enforced convention for array orientation, and the flipud is an unexpected behavior in this paradigm.
+- the dat and datx readers no longer flip the phase and intensity data upside
+  down.  They used to do this due to prysm explicitly having an origin in lower
+  left convention, but v0.20 has no enforced convention for array orientation,
+  and the flipud is an unexpected behavior in this paradigm.
 
 mathops
 -------
 
-The several quasi-identical classes to shim over numpy and scipy were removed and replaced with a single :class:`~prysm.mathops.BackendShim` type.  The :code:`engine` variable no longer exists.  Users should overwrite :code:`prysm.backend.np._srcmodule`, as well as the same for fft, ndimage, etc.
+The several quasi-identical classes to shim over numpy and scipy were removed
+and replaced with a single :class:`~prysm.mathops.BackendShim` type.  The
+:code:`engine` variable no longer exists.  Users should overwrite
+:code:`prysm.backend.np._srcmodule`, as well as the same for fft, ndimage, etc.
 
 interferogram
 -------------
 
-The interferogram module is largely unchanged.  With the removal of astropy units, the user must manage their own units.  Phase is loaded from dat/datx files in units of nm.
+The interferogram module is largely unchanged.  With the removal of astropy
+units, the user must manage their own units.  Phase is loaded from dat/datx
+files in units of nm.
 
-- :func:`prysm.interferogram.Interferogram.fit_zernikes` was removed, use lstsq from the polynomials submodule with :code:`Interferogram.data, Interferogram.x, Interferogram.y, Interferogram.r, Interferogram.t` directly, minding spatial axis normalization.
-- :func:`prysm.interferogram.Interferogram.remove_piston_tiptilt_power` and :func:`prysm.interferogram.Interferogram.remove_piston_tiptilt` have been removed, call :func:`~prysm.interferogram.Interferogram.remove_piston`, etc, in sequence.
+- :func:`prysm.interferogram.Interferogram.fit_zernikes` was removed, use lstsq
+  from the polynomials submodule with :code:`Interferogram.data,
+  Interferogram.x, Interferogram.y, Interferogram.r, Interferogram.t` directly,
+  minding spatial axis normalization.
+- :func:`prysm.interferogram.Interferogram.remove_piston_tiptilt_power` and
+  :func:`prysm.interferogram.Interferogram.remove_piston_tiptilt` have been
+  removed, call :func:`~prysm.interferogram.Interferogram.remove_piston`, etc,
+  in sequence.
 - :func:`prysm.interferogram.Interferogram.mask` now accepts arrays only.
-- :func:`~prysm.interferogram.Interferogram.filter` has returned to stay and uses a new 2D filter design method behind the scenes.  The out-of-band rejection is approximately 50dB higher for typical sized arrays.
+- :func:`~prysm.interferogram.Interferogram.filter` has returned to stay and
+  uses a new 2D filter design method behind the scenes.  The out-of-band
+  rejection is approximately 50dB higher for typical sized arrays.
 
 jacobi
 ------
@@ -164,12 +248,17 @@ See the new polynomials module.
 objects
 -------
 
-The changes to this module are similar to geometry.  Functions no longer take a samples argument, but take x/y or r,t grids directly.  Objects which have analytic fourier transforms retain functions to compute those.
+The changes to this module are similar to geometry.  Functions no longer take a
+samples argument, but take x/y or r,t grids directly.  Objects which have
+analytic fourier transforms retain functions to compute those.
 
-- :class:`Slit` has been removed, use :func:`~prysm.objects.slit` and :func:`~prysm.objects.slit_ft`
-- :class:`Pinhole` has been removed, use :func:`~prysm.objects.pinhole` and :func:`~prysm.objects.pinhole_ft`
+- :class:`Slit` has been removed, use :func:`~prysm.objects.slit` and
+  :func:`~prysm.objects.slit_ft`
+- :class:`Pinhole` has been removed, use :func:`~prysm.objects.pinhole` and
+  :func:`~prysm.objects.pinhole_ft`
 - :class:`SiemensStar` has been removed, use :func:`~prysm.objects.siemensstar`
-- :class:`TiltedSquare` has been removed, use :func:`~prysm.objects.tiltedsquare`
+- :class:`TiltedSquare` has been removed, use
+  :func:`~prysm.objects.tiltedsquare`
 - :class:`SlantedEdge` has been removed, use :func:`~prysm.objects.slantededge`
 - :class:`Chirp` was removed without replacement
 - :class:`Grating` was removed without replacement
@@ -179,7 +268,11 @@ The changes to this module are similar to geometry.  Functions no longer take a 
 otf
 ---
 
-The OTF module was maed data oriented instead of object oriented, in line with the rest of the changes to prysm in this release.  Note that the three functions below accept both arrays, and :class:`~prysm._richdata.RichData`-like objects with data and dx attributes, and return :class:`~prysm._richdata.RichData` objects.
+The OTF module was maed data oriented instead of object oriented, in line with
+the rest of the changes to prysm in this release.  Note that the three functions
+below accept both arrays, and :class:`~prysm._richdata.RichData`-like objects
+with data and dx attributes, and return :class:`~prysm._richdata.RichData`
+objects.
 
 - :class:`MTF` was removed, use :func:`~prysm.otf.mtf_from_psf`
 - :class:`PTF` was removed, use :func:`~prysm.otf.ptf_from_psf`
@@ -188,16 +281,33 @@ The OTF module was maed data oriented instead of object oriented, in line with t
 polynomials
 -----------
 
-prysm's support of polynomials has been unified under a single package.  The polynomials package is now the fastest known for the supported polynomials, e.g. beating POPPY by more than a factor of 100 on large collections of Zernike polynomials.  This speed introduces mild complexity into the API, which must be appreciated. For a complete tutorial see :doc:`Ins and Outs of Polynomials <../explanation/Ins-and-Outs-of-Polynomials>`.
+prysm's support of polynomials has been unified under a single package.  The
+polynomials package is now the fastest known for the supported polynomials, e.g.
+beating POPPY by more than a factor of 100 on large collections of Zernike
+polynomials.  This speed introduces mild complexity into the API, which must be
+appreciated. For a complete tutorial see :doc:`Ins and Outs of Polynomials
+<../explanation/Ins-and-Outs-of-Polynomials>`.
 
 - :code:`prysm.polynomials/` - top level routines, common to any basis set:
-- - :func:`~prysm.polynomials.lstsq` for least-squares fitting of 2D basis functions to data
-- - :func:`~prysm.polynomials.sum_of_2d_modes` for (weighted) summing 2D modes.  This function does what :code:`zernike_compose` or :code:`zernike_sum` does in other packages, once the user has the basis set in hand.
-- :func:`~prysm.polynomials.sum_of_xy_modes` some polynomial bases, like the Legendre and Chebyshev polynomials, are separable in the x, y dimensions.  This function reflects that, and reduces the time complexity from (m*n) per mode to (m+n) per mode.  This can bring, for example, a 1000x speedup for 1024x1024 arrays.
-- - :func:`~prysm.polynomials.mode_1d_to_2d` for broadcasting a separable 1D mode to a 2D array
-- - :func:`~prysm.polynomials.separable_2d_sequence` for computing a set of separable polynomials, such as the Legendre or Chebyshev polynomials, in 2D, with optimal time complexity.
+- - :func:`~prysm.polynomials.lstsq` for least-squares fitting of 2D basis
+    functions to data
+- - :func:`~prysm.polynomials.sum_of_2d_modes` for (weighted) summing 2D modes.
+    This function does what :code:`zernike_compose` or :code:`zernike_sum` does
+    in other packages, once the user has the basis set in hand.
+- :func:`~prysm.polynomials.sum_of_xy_modes` some polynomial bases, like the
+  Legendre and Chebyshev polynomials, are separable in the x, y dimensions.
+  This function reflects that, and reduces the time complexity from (m*n) per
+  mode to (m+n) per mode.  This can bring, for example, a 1000x speedup for
+  1024x1024 arrays.
+- - :func:`~prysm.polynomials.mode_1d_to_2d` for broadcasting a separable 1D
+    mode to a 2D array
+- - :func:`~prysm.polynomials.separable_2d_sequence` for computing a set of
+    separable polynomials, such as the Legendre or Chebyshev polynomials, in 2D,
+    with optimal time complexity.
 - - :code:`/zernike` for Zernike polynomials.  These functions are all re-exported at the root of :code:`polynomials/`:
-- - - Stand-alone functions for the first few terms have been removed, use zernike_nm with one of the naming convention functions to replace the behavior:
+- - - Stand-alone functions for the first few terms have been removed, use
+      zernike_nm with one of the naming convention functions to replace the
+      behavior:
 - - - - :func:`piston`
 - - - - :func:`tip`
 - - - - :func:`tilt`
@@ -209,63 +319,120 @@ prysm's support of polynomials has been unified under a single package.  The pol
 - - - - :func:`primary_spherical`
 - - - - :func:`primary_trefoil_x`
 - - - - :func:`primary_trefoil_y`
-- - - e.g., :code:`for primary_coma_y`, either :code:`zernike_nm(3, 1, ...)` or :code:`zernike_nm(*zernike_noll_to_nm(7), ...)`
-- - - classes :class:`FringeZernike`, :class:`NollZernike`, :class:`ANSI1TermZernike`, :class:`ANSI2TermZernike` have been removed.  Combine :func:`~prysm.polynomials.zernike.zernike_nm` with one of the naming functions to replace the phase synthesis behavior.
+- - - e.g., :code:`for primary_coma_y`, either :code:`zernike_nm(3, 1, ...)` or
+      :code:`zernike_nm(*zernike_noll_to_nm(7), ...)`
+- - - classes :class:`FringeZernike`, :class:`NollZernike`,
+      :class:`ANSI1TermZernike`, :class:`ANSI2TermZernike` have been removed.
+      Combine :func:`~prysm.polynomials.zernike.zernike_nm` with one of the
+      naming functions to replace the phase synthesis behavior.
 
 
-- - - :func:`~prysm.polynomials.zernike.zernike_norm` for computing the norm of a given Zernike polynomial, given the ANSI order (n, m).
-- - - :func:`~prysm.polynomials.zernike.zero_separation` for computing the minimum zero separation on the domain [0,1] for a Zernike polynomial, given the ANSI order (n, m).
-- - - :func:`~prysm.polynomials.zernike.zernike_nm` for computing a Zernike polynomial, given the ANSI order (n, m).
-- - - :func:`~prysm.polynomials.zernike.zernike_nm_sequence` -- use to compute a series of Zernike polynomials.  Much faster than :func:`~prysm.polynomials.zernike.zernike_nm` in a loop.  Returns a generator, which you may want to exhaust into a list or into a list, then an array.
-- - - :func:`~prysm.polynomials.zernike.nm_to_fringe` for converting ANSI (n, m) indices to FRINGE indices, which begin with Z1 for piston.
-- - - :func:`~prysm.polynomials.zernike.nm_to_ansi_j` for converting ANSI (n, m) indices to ANSI j indices (dual to mono index).
-- - - :func:`~prysm.polynomials.zernike.noll_to_nm` for converting the Noll indexing scheme to ANSI (n, m).
-- - - :func:`~prysm.polynomials.zernike.fringe_to_nm` for converting the FRINGE indexing scheme to ANSI (n, m).
-- - - :func:`~prysm.polynomials.zernike.zernikes_to_magnitude_angle_nmkey` for converting a sequence of :code:`[(n1, m1, coef1), ...]` to a dictionary keyed by :code:`(n, |m|)` with the magnitude and angle as the value.  This basically converts the "Cartesian" Zernike polynomials to a polar representation.
-- - - :func:`~prysm.polynomials.zernike.zernikes_to_magnitude_angle` for doing the same as :code:`zernike_to_magnitude_angle_nmkey`, but with dict keys of the form "Primary Coma" and so on.
-- - - :func:`~prysm.polynomials.zernike.nm_to_name` for converting ANSI (n, m) indices to a friendly name like "Primary Trefoil".
-- - - :func:`~prysm.polynomials.zernike.top_n` for identifying the largest N coefficients in a Zernike series.
-- - - :func:`~prysm.polynomials.zernike.barplot` for making a barplot of Zernike polynomials, based on their mono index (Z1..Zn)
-- - - :func:`~prysm.polynomials.zernike.barplot_magnitudes` for doing the same as :code:`barplot`, but with labels of "Tilt", "Power", and so on.
+- - - :func:`~prysm.polynomials.zernike.zernike_norm` for computing the norm of
+      a given Zernike polynomial, given the ANSI order (n, m).
+- - - :func:`~prysm.polynomials.zernike.zero_separation` for computing the
+      minimum zero separation on the domain [0,1] for a Zernike polynomial,
+      given the ANSI order (n, m).
+- - - :func:`~prysm.polynomials.zernike.zernike_nm` for computing a Zernike
+      polynomial, given the ANSI order (n, m).
+- - - :func:`~prysm.polynomials.zernike.zernike_nm_sequence` -- use to compute a
+      series of Zernike polynomials.  Much faster than
+      :func:`~prysm.polynomials.zernike.zernike_nm` in a loop.  Returns a
+      generator, which you may want to exhaust into a list or into a list, then
+      an array.
+- - - :func:`~prysm.polynomials.zernike.nm_to_fringe` for converting ANSI (n, m)
+      indices to FRINGE indices, which begin with Z1 for piston.
+- - - :func:`~prysm.polynomials.zernike.nm_to_ansi_j` for converting ANSI (n, m)
+      indices to ANSI j indices (dual to mono index).
+- - - :func:`~prysm.polynomials.zernike.noll_to_nm` for converting the Noll
+      indexing scheme to ANSI (n, m).
+- - - :func:`~prysm.polynomials.zernike.fringe_to_nm` for converting the FRINGE
+      indexing scheme to ANSI (n, m).
+- - - :func:`~prysm.polynomials.zernike.zernikes_to_magnitude_angle_nmkey` for
+      converting a sequence of :code:`[(n1, m1, coef1), ...]` to a dictionary
+      keyed by :code:`(n, |m|)` with the magnitude and angle as the value.  This
+      basically converts the "Cartesian" Zernike polynomials to a polar
+      representation.
+- - - :func:`~prysm.polynomials.zernike.zernikes_to_magnitude_angle` for doing
+      the same as :code:`zernike_to_magnitude_angle_nmkey`, but with dict keys
+      of the form "Primary Coma" and so on.
+- - - :func:`~prysm.polynomials.zernike.nm_to_name` for converting ANSI (n, m)
+      indices to a friendly name like "Primary Trefoil".
+- - - :func:`~prysm.polynomials.zernike.top_n` for identifying the largest N
+      coefficients in a Zernike series.
+- - - :func:`~prysm.polynomials.zernike.barplot` for making a barplot of Zernike
+      polynomials, based on their mono index (Z1..Zn)
+- - - :func:`~prysm.polynomials.zernike.barplot_magnitudes` for doing the same
+      as :code:`barplot`, but with labels of "Tilt", "Power", and so on.
 - - :code:`/cheby` for Chebyshev polynomials.  These functions are all re-exported at the root of :code:`polynomials/`:
-- - - :func:`~prysm.polynomials.cheby.cheby1`, the Chebyshev polynomial of the first kind of order n
-- - - :func:`~prysm.polynomials.cheby.cheby2`, the Chebyshev polynomial of the second kind of order n
-- - - :func:`~prysm.polynomials.cheby.cheby1_sequence`, a sequence of Chebyshev polynomials of the first kind of orders ns; much faster than :code:`cheby1` in a loop.
-- - - :func:`~prysm.polynomials.cheby.cheby2_sequence`, a sequence of Chebyshev polynomials of the second kind of orders ns; much faster than :code:`cheby2` in a loop.
+- - - :func:`~prysm.polynomials.cheby.cheby1`, the Chebyshev polynomial of the
+      first kind of order n
+- - - :func:`~prysm.polynomials.cheby.cheby2`, the Chebyshev polynomial of the
+      second kind of order n
+- - - :func:`~prysm.polynomials.cheby.cheby1_sequence`, a sequence of Chebyshev
+      polynomials of the first kind of orders ns; much faster than
+      :code:`cheby1` in a loop.
+- - - :func:`~prysm.polynomials.cheby.cheby2_sequence`, a sequence of Chebyshev
+      polynomials of the second kind of orders ns; much faster than
+      :code:`cheby2` in a loop.
 - - :code:`/legendre` for Legendre polynomials.  These functions are all re-exported at the root of :code:`polynomials/`:
-- - - :func:`~prysm.polynomials.legendre.legendre`, the Legendre polynomial of order n
-- - - :func:`~prysm.polynomials.legendre.legendre_sequence`, a sequence of Legendre polynomials of orders ns; much faster than :code:`legendre` in a loop.
+- - - :func:`~prysm.polynomials.legendre.legendre`, the Legendre polynomial of
+      order n
+- - - :func:`~prysm.polynomials.legendre.legendre_sequence`, a sequence of
+      Legendre polynomials of orders ns; much faster than :code:`legendre` in a
+      loop.
 - - :code:`/jacobi` for Jacobi polynomials.  These functions are all re-exported at the root of :code:`polynomials/`:
-- - - :func:`~prysm.polynomials.jacobi.jacobi`, the Jacobi polynomial of order n with weight parameters alpha and beta
-- - - :func:`~prysm.polynomials.jacobi.jacobi_sequence`, a sequence of Jacobi polynomials of orders ns with weight parameters alpha and beta; much faster than :code:`jacobi` in a loop.
+- - - :func:`~prysm.polynomials.jacobi.jacobi`, the Jacobi polynomial of order n
+      with weight parameters alpha and beta
+- - - :func:`~prysm.polynomials.jacobi.jacobi_sequence`, a sequence of Jacobi
+      polynomials of orders ns with weight parameters alpha and beta; much
+      faster than :code:`jacobi` in a loop.
 - - :code:`/qpoly` for Q (Forbes) polynomials.  These functions are all re-exported at the root of :code:`polynomials/`:
-- - - :func:`~prysm.polynomials.qpoly.Qbfs`, the Q best fit sphere polynomial of order n, at normalized radius x.
-- - - :func:`~prysm.polynomials.qpoly.Qbfs_sequence`, the Q best fit sphere polynomials of orders ns, at normalized radius x.  Much faster than :code:`Qbfs` in a loop.
-- - - :func:`~prysm.polynomials.qpoly.Qcon`, the Q best fit sphere polynomial of order n, at normalized radius x.
-- - - :func:`~prysm.polynomials.qpoly.Qcon_sequence`, the Q conic polynomials of orders ns, at normalized radius x.  Much faster than :code:`Qcon` in a loop.
-- - - :func:`~prysm.polynomials.qpoly.Q2d`, the 2D-Q polynomials of order (n, m).  Note that the API is made the same as Zernike by intent, so the sign of m controls whether it is a cosine (+) or sine (-), not a and b coefficients.
-- - - :func:`~prysm.polynomials.qpoly.Q2d_sequence`, the 2D-Q polynomials of orders [(n1, m1), ...].  Much faster than :code:`Q2d` in a loop.
+- - - :func:`~prysm.polynomials.qpoly.Qbfs`, the Q best fit sphere polynomial of
+      order n, at normalized radius x.
+- - - :func:`~prysm.polynomials.qpoly.Qbfs_sequence`, the Q best fit sphere
+      polynomials of orders ns, at normalized radius x.  Much faster than
+      :code:`Qbfs` in a loop.
+- - - :func:`~prysm.polynomials.qpoly.Qcon`, the Q best fit sphere polynomial of
+      order n, at normalized radius x.
+- - - :func:`~prysm.polynomials.qpoly.Qcon_sequence`, the Q conic polynomials of
+      orders ns, at normalized radius x.  Much faster than :code:`Qcon` in a
+      loop.
+- - - :func:`~prysm.polynomials.qpoly.Q2d`, the 2D-Q polynomials of order (n,
+      m).  Note that the API is made the same as Zernike by intent, so the sign
+      of m controls whether it is a cosine (+) or sine (-), not a and b
+      coefficients.
+- - - :func:`~prysm.polynomials.qpoly.Q2d_sequence`, the 2D-Q polynomials of
+      orders [(n1, m1), ...].  Much faster than :code:`Q2d` in a loop.
 
 
 propagation
 -----------
 
-- :func:`prop_pupil_plane_to_psf_plane` and :func:`prop_pupil_plane_to_psf_plane_units` have been removed, they were deprecated and marked for removal.
+- :func:`prop_pupil_plane_to_psf_plane` and
+  :func:`prop_pupil_plane_to_psf_plane_units` have been removed, they were
+  deprecated and marked for removal.
 - Any argument which was :code:`sample_spacing` is now :code:`dx`.
-- Any :code:`coherent` argument was removed, all routines now explicitly work with fields (see :func:`prysm.propagation.Wavefront.intensity`).
+- Any :code:`coherent` argument was removed, all routines now explicitly work
+  with fields (see :func:`prysm.propagation.Wavefront.intensity`).
 - Any :code:`norm` argument was removed.
-- Units are no longer fed through astropy units, but are mm for pupil plane dimensions, um for image plane dimensions, and nm for OPD.
-- Angular spectrum (free space) propagation now allows the transfer function to be computed once and passed as the :code:`tf` kwarg, accelerating repetitive calculations.
+- Units are no longer fed through astropy units, but are mm for pupil plane
+  dimensions, um for image plane dimensions, and nm for OPD.
+- Angular spectrum (free space) propagation now allows the transfer function to
+  be computed once and passed as the :code:`tf` kwarg, accelerating repetitive
+  calculations.
 - - See also: :code:`~prysm.propagation.angular_spectrum_transfer_function`
-- The :code:`focus_units` and :code:`unfocus_units` functions were removed.  Since prysm largely bookkeeps :code:`dx` now, they are superfluous.
+- The :code:`focus_units` and :code:`unfocus_units` functions were removed.
+  Since prysm largely bookkeeps :code:`dx` now, they are superfluous.
 
 psf
 ---
 
-The PSF module has changed from being a core part of propagation usage to a module purely for computing criteria of PSFs, such as fwhm, centroid, etc.
+The PSF module has changed from being a core part of propagation usage to a
+module purely for computing criteria of PSFs, such as fwhm, centroid, etc.
 
 - :class:`PSF` has been removed
-- all metrics and measurements have moved from being methods of PSF to top-level functions:
+- all metrics and measurements have moved from being methods of PSF to top-level
+  functions:
 - - :func:`~prysm.psf.fwhm`
 - - :func:`~prysm.psf.one_over_e`
 - - :func:`~prysm.psf.one_over_e_sq`
@@ -273,22 +440,38 @@ The PSF module has changed from being a core part of propagation usage to a modu
 - - :func:`~prysm.psf.encircled_energy`
 - - :func:`~prysm.psf.centroid`
 - - :func:`~prysm.psf.autocrop`
-- the Airy Disk can be synthesized with :func:`~prysm.psf.airydisk`, or its transfer function with :func:`~prysm.psf.airydisk_ft`
+- the Airy Disk can be synthesized with :func:`~prysm.psf.airydisk`, or its
+  transfer function with :func:`~prysm.psf.airydisk_ft`
 
 
 pupil
 -----
 
-- this entire submodule has been removed.  To synthesize pupil functions which have given phase and amplitude, combine prysm.geometry with prysm.polynomials or other phase synthesis code.  The function :func:`~prysm.propagation.Wavefront.from_amp_and_phase` largely replicates the behavior of the :code:`Pupil` constructor, with the user generating their own phase and amplitude arrays.
+- this entire submodule has been removed.  To synthesize pupil functions which
+  have given phase and amplitude, combine prysm.geometry with prysm.polynomials
+  or other phase synthesis code.  The function
+  :func:`~prysm.propagation.Wavefront.from_amp_and_phase` largely replicates the
+  behavior of the :code:`Pupil` constructor, with the user generating their own
+  phase and amplitude arrays.
 
 
 segmented
 ---------
 
-This is a new module for working with segmented systems.  It contains routines for rasterizing segmented apertures and for working with per-segment phase errors.  prysm's segmented module is considerably faster than anything else in open source, and is approximately constant time in the number of segments.  For the TMT aperture, it is more than 100x faster to rasterize the amplitude than POPPY.  For more information, see `This post <https://www.retrorefractions.com/blog/massively-faster-segmented/>`_.  The :doc:`Notable Telescope Apertures <../How-tos/Notable-Telescope-Apertures.ipynb>` page also contains example usage.
+This is a new module for working with segmented systems.  It contains routines
+for rasterizing segmented apertures and for working with per-segment phase
+errors.  prysm's segmented module is considerably faster than anything else in
+open source, and is approximately constant time in the number of segments.  For
+the TMT aperture, it is more than 100x faster to rasterize the amplitude than
+POPPY.  For more information, see `This post
+<https://www.retrorefractions.com/blog/massively-faster-segmented/>`_.  The
+:doc:`Notable Telescope Apertures
+<../How-tos/Notable-Telescope-Apertures.ipynb>` page also contains example
+usage.
 
 - :class:`~prysm.segmented.CompositeHexagonalAperture`
-- - rasterizes the pupil upon initialization and prepares local coordinate systems for each segment.
+- - rasterizes the pupil upon initialization and prepares local coordinate
+    systems for each segment.
 
 A future update will bring fast per-segment phase errors with a clean API.
 
@@ -303,13 +486,15 @@ util
 
 This module is likely to move to prysm.stats in a future release.
 
-- :func:`~prysm.mathops.is_odd` and :func:`~prysm.mathops.is_power_of_2` have been moved to the mathops module.
+- :func:`~prysm.mathops.is_odd` and :func:`~prysm.mathops.is_power_of_2` have
+  been moved to the mathops module.
 
 
 wavelengths
 -----------
 
-This data-only module has been changed to contain all quantities in units of microns, now that prysm no longer uses astropy.
+This data-only module has been changed to contain all quantities in units of
+microns, now that prysm no longer uses astropy.
 
 
 zernike

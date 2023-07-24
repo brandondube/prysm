@@ -2,7 +2,8 @@
 prysm v0.19
 ***********
 
-This release focuses on increasing the capability of prysm for multi-plane diffraction modeling and includes other improvements to quality of life.
+This release focuses on increasing the capability of prysm for multi-plane
+diffraction modeling and includes other improvements to quality of life.
 
 New Features
 ============
@@ -10,68 +11,103 @@ New Features
 API Fluency
 ~~~~~~~~~~~
 
-- :meth:`~prysm._richdata.RichData.astype` function for converting between the various object types.  This can be used to dip into another type momentarily for one of its methods, e.g. chaining :code:`p = Pupil() p.astype(Interferogram).crop(...).astype(Pupil)`.
+- :meth:`~prysm._richdata.RichData.astype` function for converting between the
+  various object types.  This can be used to dip into another type momentarily
+  for one of its methods, e.g. chaining :code:`p = Pupil()
+  p.astype(Interferogram).crop(...).astype(Pupil)`.
 
 Propagation
 ~~~~~~~~~~~
-In this release, prysm has gained increased capability for performing propagations outside of the pupil-to-image case.  The API has also been revised for reduced verbosity and better clarity.  The old API is provided with deprecations to ease transition.  A demo showing more than two order of magnitude performance improvement is available :doc:`Polychromatic Propagation in v0.19`.
+In this release, prysm has gained increased capability for performing
+propagations outside of the pupil-to-image case.  The API has also been revised
+for reduced verbosity and better clarity.  The old API is provided with
+deprecations to ease transition.  A demo showing more than two order of
+magnitude performance improvement is available :doc:`Polychromatic Propagation
+in v0.19`.
 
-- :func:`~prysm.propagation.angular_spectrum` for plane-to-plane (i.e free space) propagation via the angular spectrum method
-- :func:`~prysm.propagation.angular_spectrum_transfer_function`, the transfer function of free space
+- :func:`~prysm.propagation.angular_spectrum` for plane-to-plane (i.e free
+  space) propagation via the angular spectrum method
+- :func:`~prysm.propagation.angular_spectrum_transfer_function`, the transfer
+  function of free space
 - :func:`~prysm.propagation.fresnel_number` for computing the Fresnel number
 - :func:`~prysm.propagation.talbot_distance` for computing the Talbot distance
-- :func:`~prysm.propagation.Q_for_sampling` indicates the value of Q (or fλ/D, they are the same thing) for a given sample spacing in the psf plane
-- :func:`~prysm.propagation.focus_fixed_sampling` for using matrix triple product DFTs to propagate to a fixed grid.  This is useful for propagating to detector grids, and for faster polychromatic computations (since the "natural" grid depends on wavelength)
-- :func:`~prysm.propagation.unfocus_fixed_sampling` mimic of focus_fixed_sampling, but from "psf" to "pupil" plane.
+- :func:`~prysm.propagation.Q_for_sampling` indicates the value of Q (or fλ/D,
+  they are the same thing) for a given sample spacing in the psf plane
+- :func:`~prysm.propagation.focus_fixed_sampling` for using matrix triple
+  product DFTs to propagate to a fixed grid.  This is useful for propagating to
+  detector grids, and for faster polychromatic computations (since the "natural"
+  grid depends on wavelength)
+- :func:`~prysm.propagation.unfocus_fixed_sampling` mimic of
+  focus_fixed_sampling, but from "psf" to "pupil" plane.
 
-- the :class:`~prysm.propagation.Wavefront` class has gained new functions for propagating through a system:
+- the :class:`~prysm.propagation.Wavefront` class has gained new functions for
+  propagating through a system:
 - - :meth:`~prysm.propagation.Wavefront.focus` pupil -> psf
 - - :meth:`~prysm.propagation.Wavefront.unfocus` psf -> pupil
-- - :meth:`~prysm.propagation.Wavefront.focus_fixed_sampling` pupil -> psf, fixed grid
-- - :meth:`~prysm.propagation.Wavefront.unfocus_fixed_sampling` psf -> pupil, fixed grid
-- - :meth:`~prysm.propagation.Wavefront.free_space` pupil -> pupil separated by some physical distance
+- - :meth:`~prysm.propagation.Wavefront.focus_fixed_sampling` pupil -> psf,
+    fixed grid
+- - :meth:`~prysm.propagation.Wavefront.unfocus_fixed_sampling` psf -> pupil,
+    fixed grid
+- - :meth:`~prysm.propagation.Wavefront.free_space` pupil -> pupil separated by
+    some physical distance
 
 
 Aliases with deprecation warnings:
 
 - :func:`prop_pupil_plane_to_psf_plane` -> :func:`~prysm.propagation.focus`
-- :func:`prop_pupil_plane_to_psf_plane_units` -> :func:`~prysm.propagation.focus_units`
+- :func:`prop_pupil_plane_to_psf_plane_units` ->
+  :func:`~prysm.propagation.focus_units`
 
 
 Thin Film Calculation and Refractive Indices
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Prysm can now do basic multi-layer thin film calculations and compute a few related values.
+Prysm can now do basic multi-layer thin film calculations and compute a few
+related values.
 
-- :func:`prysm.thinfilm.multilayer_stack_rt` for computing the equivalent Fresnel coefficients for a stack of thin and thick films.
-- :func:`prysm.thinfilm.critical_angle` for computing the minimum angle of incidence for TIR
-- :func:`prysm.thinfilm.brewsters_angle` for computing the angle at which a surface is completely unreflective of p-polarized light
-- :func:`prysm.refractive.cauchy` for computing refractive index based on Cauchy's model
-- :func:`prysm.refractive.sellmeier` for computing refractive index based on the Sellmeier equation
+- :func:`prysm.thinfilm.multilayer_stack_rt` for computing the equivalent
+  Fresnel coefficients for a stack of thin and thick films.
+- :func:`prysm.thinfilm.critical_angle` for computing the minimum angle of
+  incidence for TIR
+- :func:`prysm.thinfilm.brewsters_angle` for computing the angle at which a
+  surface is completely unreflective of p-polarized light
+- :func:`prysm.refractive.cauchy` for computing refractive index based on
+  Cauchy's model
+- :func:`prysm.refractive.sellmeier` for computing refractive index based on the
+  Sellmeier equation
 
 I/O
 ~~~
-Prysm can now parse MTF vs Field files from Trioptics MTF-Lab v5 software.  The previous parser is compatible with v4 and is untouched.
+Prysm can now parse MTF vs Field files from Trioptics MTF-Lab v5 software.  The
+previous parser is compatible with v4 and is untouched.
 
 - :func:`prysm.io.read_trioptics_mtf_vs_field_mtflab_v5`
 - :func:`parse_trioptics_metadata_mtflab_v5`
 
-Note that the existing functions without mtflab_v5 suffixes now issue warnings that their behavior will change in v0.20.  At that time, they will sense whether the file is from v4 or v5 and dispatch appropriately.
+Note that the existing functions without mtflab_v5 suffixes now issue warnings
+that their behavior will change in v0.20.  At that time, they will sense whether
+the file is from v4 or v5 and dispatch appropriately.
 
 Documentation
 ~~~~~~~~~~~~~
 
-The docstrings of the :class:`~prysm.zernike.ZCacheMN` class were expanded.  These should aid developers in understanding the code.
+The docstrings of the :class:`~prysm.zernike.ZCacheMN` class were expanded.
+These should aid developers in understanding the code.
 
 Bug fixes
 =========
 
-- :meth:`~prysm.convolution.Convolvable.save` now flips the array before writing, rendering images in the expected orientation.
-- :meth:`~prysm.psf.PSF.from_pupil` now passes the :code:`incoherent` and :code:`norm` arguments to the propagation engine
-- the :class:`~prysm.pupil.Pupil` constructor no longer ignores the phase parameter
-- the :class:`~prysm.pupil.Pupil` constructor no longer ignores the transmission parameter
+- :meth:`~prysm.convolution.Convolvable.save` now flips the array before
+  writing, rendering images in the expected orientation.
+- :meth:`~prysm.psf.PSF.from_pupil` now passes the :code:`incoherent` and
+  :code:`norm` arguments to the propagation engine
+- the :class:`~prysm.pupil.Pupil` constructor no longer ignores the phase
+  parameter
+- the :class:`~prysm.pupil.Pupil` constructor no longer ignores the transmission
+  parameter
 - :class:`~prysm.propagation.Wavefront` no longer errors on construction
 - :func:`~prysm.zernike.zernikefit` no longer causes a memory leak
-- :func:`~prysm.zernike.n_m_to_fringe` no longer begins counting fringe indices at 0 and does not mis-order azimuthal orders when radial order >14.
+- :func:`~prysm.zernike.n_m_to_fringe` no longer begins counting fringe indices
+  at 0 and does not mis-order azimuthal orders when radial order >14.
 
 Removed Deprecations
 ====================
@@ -82,7 +118,8 @@ Removed Deprecations
 - :attr:`MTF.sag` has been removed and was marked for removal in v0.18
 - :attr:`RichData.slice_x` has been removed and was marked for removal in v0.18
 - :attr:`RichData.slice_y` has been removed and was marked for removal in v0.18
-- the :code:`base` kwarg which controlled whether indices start at 0 or 1 has been removed from the Zernike classes and was marked for removal in v0.19
+- the :code:`base` kwarg which controlled whether indices start at 0 or 1 has
+  been removed from the Zernike classes and was marked for removal in v0.19
 
 Test Coverage
 =============

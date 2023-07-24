@@ -23,14 +23,14 @@ All optical propagation routines now feature convenient gradient backpropagation
 equivalents for extremely fast optimization of optical models to learn
 parameters, perform phase retrieval, etc.
 
-`dygdug <https://github.com/brandondube/dygdug>`_ has been
-created as an external module of prysm dedicated to coronagraphy, similar to
-the experimental submodule.  dygdug is not being released as 1.0 and will likely
-go through years of breaking changes to improve the ergonomics and performance
-of the API.  A significant aspect of dygdug will be the full support for
-algorithmic differentiation of the models and tools for performing advanced
-gradient-based optimization of coronagraphs, both to design nominal solutions
-and perform wavefront control of real systems.  For the highest performance, the
+`dygdug <https://github.com/brandondube/dygdug>`_ has been created as an
+external module of prysm dedicated to coronagraphy, similar to the experimental
+submodule.  dygdug is not being released as 1.0 and will likely go through years
+of breaking changes to improve the ergonomics and performance of the API.  A
+significant aspect of dygdug will be the full support for algorithmic
+differentiation of the models and tools for performing advanced gradient-based
+optimization of coronagraphs, both to design nominal solutions and perform
+wavefront control of real systems.  For the highest performance, the
 differentiation has been done by hand.
 
 
@@ -77,7 +77,8 @@ Wavefront Sensors and Interferometers
 
 * Forward modeling of Shack Hartmann wavefront sensors
 
-* Forward modeling of Phase Shifting Point Diffraction Interferometers, aka Medecki interferometers.
+* Forward modeling of Phase Shifting Point Diffraction Interferometers, aka
+  Medecki interferometers.
 
 * Forward modeling of Self-Referenced Interferometers, which use a pinhole to
   generate the reference wave using light from the input port.
@@ -152,7 +153,8 @@ x/dm
 ----
 
 
-* :func:`copy()` method to clone a DM, when e.g. the two DMs in a system are the same
+* :func:`copy()` method to clone a DM, when e.g. the two DMs in a system are the
+  same
 
 * new Nout parameter that controls the amount of padding or cropping of the
     natural model resolution is done.  The behavior here is similar to PROPER.
@@ -165,7 +167,8 @@ x/dm
 Performance Optimizations
 =========================
 
-* :func:`~prysm.geometry.rectangle` has been optimized when the rotation angle is zero
+* :func:`~prysm.geometry.rectangle` has been optimized when the rotation angle
+  is zero
 
 * :func:`~prysm.propagation.angular_spectrum_transfer_function` has been
   slightly optimized

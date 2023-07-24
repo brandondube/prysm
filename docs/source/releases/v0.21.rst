@@ -5,28 +5,79 @@ prysm v0.21
 New Stability Policy
 ====================
 
-In preparation for a V1.0 based upon v0.20 / v0.21, a new experimental sub-module has been created, which houses code not subject to the same testing or API stability promises as the rest of prysm.  This split is to separate new features which do not have obvious APIs, and so may be broken over and over as prysm historically has been, from those which have matured into an API unlikely to change.
+In preparation for a V1.0 based upon v0.20 / v0.21, a new experimental
+sub-module has been created, which houses code not subject to the same testing
+or API stability promises as the rest of prysm.  This split is to separate new
+features which do not have obvious APIs, and so may be broken over and over as
+prysm historically has been, from those which have matured into an API unlikely
+to change.
 
 New Features
 ============
 
-Deformable Mirrors have been implemented, and feature a superset of the features found in other packages while also being about 2x faster than PROPER on CPU, and 70x faster on GPU.  See :doc:`the DM deep-dive <../explanation/Deformable Mirrors>`.
+Deformable Mirrors have been implemented, and feature a superset of the features
+found in other packages while also being about 2x faster than PROPER on CPU, and
+70x faster on GPU.  See :doc:`the DM deep-dive <../explanation/Deformable
+Mirrors>`.
 
-Segmented systems have gained support for highly optimized modal wavefront errors by using :func:`prysm.segmented.CompositeHexagonalAperture.prepare_opd_bases` and :func:`prysm.segmented.CompositeHexagonalAperture.compose_opd`.  On a laptop CPU, it takes less than 3 milliseconds to do an 11 term Zernike expansion of each segment in a JWST-like aperture on a 512x512 array.  On a GPU, it takes less than 13 milliseconds to do an 11 term expansion of each segment in a LUVOIR-A like aperture on a 2048x2048 array.  See :doc:`the segmented system deep-dive <../explanation/Segmented Systems>`.
+Segmented systems have gained support for highly optimized modal wavefront
+errors by using
+:func:`prysm.segmented.CompositeHexagonalAperture.prepare_opd_bases` and
+:func:`prysm.segmented.CompositeHexagonalAperture.compose_opd`.  On a laptop
+CPU, it takes less than 3 milliseconds to do an 11 term Zernike expansion of
+each segment in a JWST-like aperture on a 512x512 array.  On a GPU, it takes
+less than 13 milliseconds to do an 11 term expansion of each segment in a
+LUVOIR-A like aperture on a 2048x2048 array.  See :doc:`the segmented system
+deep-dive <../explanation/Segmented Systems>`.
 
-The propagation module has gained :func:`~prysm.propagation.Wavefront.thin_lens`, used to model thin lenses.  The longstanding :func:`~prysm.thinlens.defocus_to_image_displacement` and :func:`~prysm.thinlens.image_displacement_to_defocus` functions can be used to determine the focal length of a thin lens to produce a desired effect, or the effect of a thin lens.
+The propagation module has gained
+:func:`~prysm.propagation.Wavefront.thin_lens`, used to model thin lenses.  The
+longstanding :func:`~prysm.thinlens.defocus_to_image_displacement` and
+:func:`~prysm.thinlens.image_displacement_to_defocus` functions can be used to
+determine the focal length of a thin lens to produce a desired effect, or the
+effect of a thin lens.
 
-The propagation module has also gained :func:`~prysm.propagation.Wavefront.to_fpm_and_back` and :func:`~prysm.propagation.Wavefront.babinet` to make writing sequences of propagations through Lyot-like coronagraphs less verbose.
+The propagation module has also gained
+:func:`~prysm.propagation.Wavefront.to_fpm_and_back` and
+:func:`~prysm.propagation.Wavefront.babinet` to make writing sequences of
+propagations through Lyot-like coronagraphs less verbose.
 
-Chirp Z transforms have been implemented as an alternative to matrix DFTs.  The :code:`method` keyword arguments to :func:`~prysm.propagation.Wavefront.focus_fixed_sampling` and :func:`~prysm.propagation.Wavefront.unfocus_fixed_sampling` allow the user to select freely between MDFTs and CZTs.  Constrained to a single thread, CZTs are faster than matrix DFTs for moderately large array sizes.  Not subject to this constraint, CZTs will usually be slower by about 3-4x.  Both matrix DFTs and CZTs keep an FFT wisdom-like cache.  The CZT cache only holds vectors, and for N x N sized arrays is a factor of N smaller (100s to 1000s of times, typically).
+Chirp Z transforms have been implemented as an alternative to matrix DFTs.  The
+:code:`method` keyword arguments to
+:func:`~prysm.propagation.Wavefront.focus_fixed_sampling` and
+:func:`~prysm.propagation.Wavefront.unfocus_fixed_sampling` allow the user to
+select freely between MDFTs and CZTs.  Constrained to a single thread, CZTs are
+faster than matrix DFTs for moderately large array sizes.  Not subject to this
+constraint, CZTs will usually be slower by about 3-4x.  Both matrix DFTs and
+CZTs keep an FFT wisdom-like cache.  The CZT cache only holds vectors, and for N
+x N sized arrays is a factor of N smaller (100s to 1000s of times, typically).
 
-Fixed sampling propagations now expose the shift argument, which was previously available only through direct use of the fttools functions which perform the Fourier computations.
+Fixed sampling propagations now expose the shift argument, which was previously
+available only through direct use of the fttools functions which perform the
+Fourier computations.
 
-The :class:`~prysm.propagation.Wavefront` type now has pad2d and crop methods, which provide more fluent access to the functions by the same name from the fttools package.
+The :class:`~prysm.propagation.Wavefront` type now has pad2d and crop methods,
+which provide more fluent access to the functions by the same name from the
+fttools package.
 
-Raytracing has been implemented using Spencer & Murty's iconic method.  Tracing multiple rays in parallel is supported, as are surfaced based on all of the polynomials implemented in prysm (sphere, conic, even asphere, Zernike, Qbfs, Qcon, Q2D, Hermite, Legendre, Chebyshev, ...).  Individual rays trace at a rate of about 5,000 ray-surfaces per second on a laptop CPU.  Roughly 2.5 million ray-surfaces per second are acheived on a laptop CPU with batched calculations and low complexity surfaces (conics, spheres).  More complex surface geometries, e.g. Q polynomials are slower.  Batch raytracing on GPU traces several billion ray-surfaces per second, exceeding the performance of Zemax and Code V.  There is no support for optimization, either now or planned.  Basic analysis routines are included -- spot diagrams, transverse ray aberrations, as well as paraxial image solves.  2D raytrace plots are supported.  The raytracing module will be expanded in the future and integration between it and the physical optics routines will be performed, enabling hybrid modeling with both rays and waves.
+Raytracing has been implemented using Spencer & Murty's iconic method.  Tracing
+multiple rays in parallel is supported, as are surfaced based on all of the
+polynomials implemented in prysm (sphere, conic, even asphere, Zernike, Qbfs,
+Qcon, Q2D, Hermite, Legendre, Chebyshev, ...).  Individual rays trace at a rate
+of about 5,000 ray-surfaces per second on a laptop CPU.  Roughly 2.5 million
+ray-surfaces per second are acheived on a laptop CPU with batched calculations
+and low complexity surfaces (conics, spheres).  More complex surface geometries,
+e.g. Q polynomials are slower.  Batch raytracing on GPU traces several billion
+ray-surfaces per second, exceeding the performance of Zemax and Code V.  There
+is no support for optimization, either now or planned.  Basic analysis routines
+are included -- spot diagrams, transverse ray aberrations, as well as paraxial
+image solves.  2D raytrace plots are supported.  The raytracing module will be
+expanded in the future and integration between it and the physical optics
+routines will be performed, enabling hybrid modeling with both rays and waves.
 
-The polynomials module has gained support for both types of Hermite polynomials, Dickson polynomials of the first and second kind, and Chebyshev polynomials of the third and Fourth kind:
+The polynomials module has gained support for both types of Hermite polynomials,
+Dickson polynomials of the first and second kind, and Chebyshev polynomials of
+the third and Fourth kind:
 
 * :func:`~prysm.polynomials.hermite_He`
 * :func:`~prysm.polynomials.hermite_He_sequence`
@@ -41,7 +92,8 @@ The polynomials module has gained support for both types of Hermite polynomials,
 * :func:`~prysm.polynomials.cheby4`
 * :func:`~prysm.polynomials.cheby4_sequence`
 
-First derivatives of many types of polynomials and their descendants are also now available:
+First derivatives of many types of polynomials and their descendants are also
+now available:
 
 * :func:`~prysm.polynomials.jacobi_der`
 * :func:`~prysm.polynomials.jacobi_der_sequence`
@@ -62,20 +114,38 @@ First derivatives of many types of polynomials and their descendants are also no
 * :func:`~prysm.polynomials.Q2d_der`
 * :func:`~prysm.polynomials.Q2d_der_sequence`
 
-These are used by the raytracing module to calculate surface normals in a closed-form way, free of finite differences or other approximations.
+These are used by the raytracing module to calculate surface normals in a
+closed-form way, free of finite differences or other approximations.
 
 Bug Fixes
 =========
 
-:class:`~prysm.segmented.CompositeHexagonalAperture` internal data structures did not exclude the center/0th segment, even if the amplitude mask did.  This has been fixed.
+:class:`~prysm.segmented.CompositeHexagonalAperture` internal data structures
+did not exclude the center/0th segment, even if the amplitude mask did.  This
+has been fixed.
 
-The matrix DFT shift argument was reversed between implementation and docstring.  The order is now (X,Y) which means axis (1,0).  Previously the order was (Y, X) and axis order (0, 1).
+The matrix DFT shift argument was reversed between implementation and docstring.
+The order is now (X,Y) which means axis (1,0).  Previously the order was (Y, X)
+and axis order (0, 1).
 
 Performance Enhancements
 ========================
 
-the thinfilm module's multilayer stack function has been vectorized, allowing arrays of thicknesses and indices to be used, instead of single points.  This enables the calculation to be batched over ranges of thicknesses, as e.g. for spatial distributions of thickness or thickness sweeps for design optimization.  For the 54x54 computation of the Roman Coronagraph Instrument's Hybrid Lyot occulter, the computation is 100x faster batched than elementwise.  Use the function in the same way, except when defining your stack instead of having scalar (n, d) for each layer use arbitrarily dimensional arrays.
+the thinfilm module's multilayer stack function has been vectorized, allowing
+arrays of thicknesses and indices to be used, instead of single points.  This
+enables the calculation to be batched over ranges of thicknesses, as e.g. for
+spatial distributions of thickness or thickness sweeps for design optimization.
+For the 54x54 computation of the Roman Coronagraph Instrument's Hybrid Lyot
+occulter, the computation is 100x faster batched than elementwise.  Use the
+function in the same way, except when defining your stack instead of having
+scalar (n, d) for each layer use arbitrarily dimensional arrays.
 
-The performance Jacobi polynomial computations has been increased by 18%.  This cascades to performance of Chebyshev, Legendre, and Zernike polynomials.  The increase comes from replacing an outdated recurrence relation for one expressed in the standard form, which happens to be a bit faster.
+The performance Jacobi polynomial computations has been increased by 18%.  This
+cascades to performance of Chebyshev, Legendre, and Zernike polynomials.  The
+increase comes from replacing an outdated recurrence relation for one expressed
+in the standard form, which happens to be a bit faster.
 
-The convolvable, otf, and interferogram modules now properly utilize the fft backend instead of hard-coding numpy.  This makes the FFT operations roughly the number of cores in your system times faster (say, 5-50x) when utilizing the mkl_fft package as the fft backend.
+The convolvable, otf, and interferogram modules now properly utilize the fft
+backend instead of hard-coding numpy.  This makes the FFT operations roughly the
+number of cores in your system times faster (say, 5-50x) when utilizing the
+mkl_fft package as the fft backend.

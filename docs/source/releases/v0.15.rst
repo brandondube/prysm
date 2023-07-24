@@ -2,47 +2,88 @@
 prysm v0.15
 ***********
 
-Version 0.15 introduces a host of new features and many internal changes that improve the maintainability of the library, users are encouraged to upgrade.
+Version 0.15 introduces a host of new features and many internal changes that
+improve the maintainability of the library, users are encouraged to upgrade.
 
-With version 0.16, a FWHM feature is expected to be added to the PSF class and improvements made to convolution and image simulation code.  The abilities of the :class:`~prysm.detector.Detector` class are likely to be greatly enhanced.  A `SigFit <http://sigmadyne.com/sigfit-software/>`_ parser will be be implemented.
+With version 0.16, a FWHM feature is expected to be added to the PSF class and
+improvements made to convolution and image simulation code.  The abilities of
+the :class:`~prysm.detector.Detector` class are likely to be greatly enhanced.
+A `SigFit <http://sigmadyne.com/sigfit-software/>`_ parser will be be
+implemented.
 
 New Features
 ============
 
-* Surface/Wavefront error synthesis: :mod:`~prysm.interferogram` now contains the :func:`~prysm.interferogram.synthesize_surface_from_psd` core method and :func:`~prysm.interferogram.render_synthetic_surface` and :meth:`~prysm.interferogram.Interferogram.render_from_psd` convenience wrappers for synthesizing surface or wavefront data from PSD curves.  Examples of this technique can be seen in e.g. _E. Sidick Power Spectral Density Specification and Analysis of Large Optical Surfaces_.
+* Surface/Wavefront error synthesis: :mod:`~prysm.interferogram` now contains
+  the :func:`~prysm.interferogram.synthesize_surface_from_psd` core method and
+  :func:`~prysm.interferogram.render_synthetic_surface` and
+  :meth:`~prysm.interferogram.Interferogram.render_from_psd` convenience
+  wrappers for synthesizing surface or wavefront data from PSD curves.  Examples
+  of this technique can be seen in e.g. _E. Sidick Power Spectral Density
+  Specification and Analysis of Large Optical Surfaces_.
 
-* convenience wrapper :meth:`~prysm.interferogram.Interferogram.fit_zernikes` replacing :code:`zernikefit(i.phase, ...)` invocation.
+* convenience wrapper :meth:`~prysm.interferogram.Interferogram.fit_zernikes`
+  replacing :code:`zernikefit(i.phase, ...)` invocation.
 
-* :func:`~prysm.io.write_zygo_ascii` function in :mod:`prysm.io` to write Zygo ASCII files.
+* :func:`~prysm.io.write_zygo_ascii` function in :mod:`prysm.io` to write Zygo
+  ASCII files.
 
-* :meth:`~prysm.interferogram.Interferogram.save_zygo_ascii` to write an interferogram to Zygo ASCII format.
+* :meth:`~prysm.interferogram.Interferogram.save_zygo_ascii` to write an
+  interferogram to Zygo ASCII format.
 
-* :code:`zorder` parameter in line-based plotting functions -- :meth:`prysm._phase.OpticalPhase.plot_slice_xy`, :meth:`prysm.convolution.Convolvable.plot_slice_xy`, :meth:`prysm.interferogram.Interferogram.plot_psd_slices`
+* :code:`zorder` parameter in line-based plotting functions --
+  :meth:`prysm._phase.OpticalPhase.plot_slice_xy`,
+  :meth:`prysm.convolution.Convolvable.plot_slice_xy`,
+  :meth:`prysm.interferogram.Interferogram.plot_psd_slices`
 
-* :code:`mode` argument on :meth:`prysm.interferogram.Interferogram.plot_psd_slices` to switch between x axis units of spatial frequency (:code:`mode='freq'`) or spatial period (:code:`mode='period'`).
+* :code:`mode` argument on
+  :meth:`prysm.interferogram.Interferogram.plot_psd_slices` to switch between x
+  axis units of spatial frequency (:code:`mode='freq'`) or spatial period
+  (:code:`mode='period'`).
 
-* :meth:`prysm.interferogram.Interferogram.psd_slices` and :meth:`prysm.interferogram.Interferogram.plot_psd_slices` methods replacing `psd_xy_avg` method.  Two new inquiries are :code:`azmin` and :code:`azmax` for the azimuthal minimum and azimuthal maximum.
+* :meth:`prysm.interferogram.Interferogram.psd_slices` and
+  :meth:`prysm.interferogram.Interferogram.plot_psd_slices` methods replacing
+  `psd_xy_avg` method.  Two new inquiries are :code:`azmin` and :code:`azmax`
+  for the azimuthal minimum and azimuthal maximum.
 
-* :meth:`prysm.psf.PSF.polychromatic` staticmethod to create polychromatic PSFs from ensembles of monochromatic ones.  This essentially reintroduces the `MultispectralPSF` class's functionality from earlier versions of prysm.
+* :meth:`prysm.psf.PSF.polychromatic` staticmethod to create polychromatic PSFs
+  from ensembles of monochromatic ones.  This essentially reintroduces the
+  `MultispectralPSF` class's functionality from earlier versions of prysm.
 
-* more configuration options.  :data:`~prysm.conf.config` now has parameters for :code:`Q`, :code:`phase_colormap`, :code:`image_colormap`, :code:`lw`, :code:`zorder` for controlling the default values of these parameters throughout the library.
+* more configuration options.  :data:`~prysm.conf.config` now has parameters for
+  :code:`Q`, :code:`phase_colormap`, :code:`image_colormap`, :code:`lw`,
+  :code:`zorder` for controlling the default values of these parameters
+  throughout the library.
 
-* new constants in :mod:`prysm.psf` -- :data:`~prysm.psf.FIRST_AIRY_ZERO`, :data:`~prysm.psf.SECOND_AIRY_ZERO`, AND :data:`~prysm.psf.THIRD_AIRY_ZERO` as well as :data:`~prysm.psf.SECOND_AIRY_ENCIRCLED` AND :data:`~prysm.psf.THIRD_AIRY_ENCIRCLED`.  These concern the zeros of the airy disk and how much of the total energy is contained within.  They are all wrapped in :data:`~prysm.psf.AIRYDATA`, a dictionary with keys of 1,2,3 and values that are length-2 tuples of :code:`(radius, encircled energy)`.
+* new constants in :mod:`prysm.psf` -- :data:`~prysm.psf.FIRST_AIRY_ZERO`,
+  :data:`~prysm.psf.SECOND_AIRY_ZERO`, AND :data:`~prysm.psf.THIRD_AIRY_ZERO` as
+  well as :data:`~prysm.psf.SECOND_AIRY_ENCIRCLED` AND
+  :data:`~prysm.psf.THIRD_AIRY_ENCIRCLED`.  These concern the zeros of the airy
+  disk and how much of the total energy is contained within.  They are all
+  wrapped in :data:`~prysm.psf.AIRYDATA`, a dictionary with keys of 1,2,3 and
+  values that are length-2 tuples of :code:`(radius, encircled energy)`.
 
 Beta Features
 =============
 
-* :func:`prysm.otf.long_exposure_otf` and :func:`prysm.otf.estimate_Cn` for calculating the OTF (MTF) associated with a 'long' exposure through atmospheric turbulence.  Note that while the equations have been implemented, the results have not been checked against published values.  Please provide feedback.
+* :func:`prysm.otf.long_exposure_otf` and :func:`prysm.otf.estimate_Cn` for
+  calculating the OTF (MTF) associated with a 'long' exposure through
+  atmospheric turbulence.  Note that while the equations have been implemented,
+  the results have not been checked against published values.  Please provide
+  feedback.
 
 Improved Packaging
 ==================
 
-* prysm now uses `setup.cfg` and some setuptools tricks.  It now has the :data:`prysm.__version__` attribute and can be more easily scanned by crawlers without executing setup.py.
+* prysm now uses `setup.cfg` and some setuptools tricks.  It now has the
+  :data:`prysm.__version__` attribute and can be more easily scanned by crawlers
+  without executing setup.py.
 
 Improved Documentation
 ======================
 
-* The User's guide and Examples sections of the documentation are now jupyter notebooks and have embedded graphics and output.
+* The User's guide and Examples sections of the documentation are now jupyter
+  notebooks and have embedded graphics and output.
 
 * There are several new examples.
 
@@ -54,7 +95,8 @@ Improved Test Coverage
 Breaking API Changes
 ====================
 
-* :meth:`Interferogram.psd_xy_avg` has been removed, its functionality is now the same as the default for :meth:`Interferogram.psd_slices`
+* :meth:`Interferogram.psd_xy_avg` has been removed, its functionality is now
+  the same as the default for :meth:`Interferogram.psd_slices`
 
 * :meth:`Interferogram.plot_psd_xy_avg` faces the same change for :meth:`Interferogram.plot_psd_slices`.  Note that two calls are now needed to replicate the default behavior:
 
@@ -66,48 +108,76 @@ Breaking API Changes
 
 * :func:`prysm.psf._airydisk` has been renamed to :func:`prysm.psf.airydisk`.
 
-* the :mod:`lens` submodule has been removed.  This eliminates the :class:`Lens` class.
+* the :mod:`lens` submodule has been removed.  This eliminates the :class:`Lens`
+  class.
 
-* the :mod:`seidel` submodule has been removed.  This eliminates the :class:`Seidel` class.
+* the :mod:`seidel` submodule has been removed.  This eliminates the
+  :class:`Seidel` class.
 
-* the :mod:`shackhartmann` submodule has been removed.  This eliminates the :class:`Shackhartmann` class.
+* the :mod:`shackhartmann` submodule has been removed.  This eliminates the
+  :class:`Shackhartmann` class.
 
-* the :mod:`macros` submodule has been removed.  This eliminates the :class:`SystemConfig` namedtuple, the :func:`thrufocus_mtf_from_wavefront` and :func:`thrufocus_mtf_from_wavefront_array` functions.
+* the :mod:`macros` submodule has been removed.  This eliminates the
+  :class:`SystemConfig` namedtuple, the :func:`thrufocus_mtf_from_wavefront` and
+  :func:`thrufocus_mtf_from_wavefront_array` functions.
 
-* :func:`prysm.detector.generate_mtf` has been removed.  This function is redundant with :func:`prysm.detector.pixelaperture_analytic_otf`.
+* :func:`prysm.detector.generate_mtf` has been removed.  This function is
+  redundant with :func:`prysm.detector.pixelaperture_analytic_otf`.
 
-* :meth:`prysm.detector.OLPF.__init__` now defaults to `samples_x=0`, using the analytical representation in the numerical case.
+* :meth:`prysm.detector.OLPF.__init__` now defaults to `samples_x=0`, using the
+  analytical representation in the numerical case.
 
 * The great Zernike refactor of 2019:
 
   - :mod:`prysm.fringezernike` has been folded into :mod:`prysm.zernike`.  Several functions have been renamed:
 
-    + :func:`fit` is now :func:`~prysm.zernike.zernikefit` called as :code:`zernikefit(... map_='fringe')` (or :code:`map_='noll'`)
+    + :func:`fit` is now :func:`~prysm.zernike.zernikefit` called as
+      :code:`zernikefit(... map_='fringe')` (or :code:`map_='noll'`)
 
-    + magnitude/angle and name functions are now part of the :data:`zernikefuncs` dictionary of dictionaries.  Keys are, in order, function type and zernike order.  :func:`fzname` is now accessed most easily as :code:`zernikefuncs['name']['fringe']`.  :func:`fzset_to_magnitude_angle` as :code:`zernikefuncs['magnitude_angle']['fringe']`.  noll is a valid key for the nested dictionary.
+    + magnitude/angle and name functions are now part of the
+      :data:`zernikefuncs` dictionary of dictionaries.  Keys are, in order,
+      function type and zernike order.  :func:`fzname` is now accessed most
+      easily as :code:`zernikefuncs['name']['fringe']`.
+      :func:`fzset_to_magnitude_angle` as
+      :code:`zernikefuncs['magnitude_angle']['fringe']`.  noll is a valid key
+      for the nested dictionary.
 
-    +  :class:`FZCache` and :data:`fzcache` are nwo made redundant by :class:`~prysm.zernike.ZCache` and :data:`~prysm.zernike.zcache`.  The cache takes an index into the :data:`prysm.zernikes.zernikes` list, not a Fringe or Noll index.  Use :data:`prysm.zernikes.maps` to convert Fringe or Noll indices into prysm's zernike catalog.
+    +  :class:`FZCache` and :data:`fzcache` are nwo made redundant by
+       :class:`~prysm.zernike.ZCache` and :data:`~prysm.zernike.zcache`.  The
+       cache takes an index into the :data:`prysm.zernikes.zernikes` list, not a
+       Fringe or Noll index.  Use :data:`prysm.zernikes.maps` to convert Fringe
+       or Noll indices into prysm's zernike catalog.
 
-  - the :class:`StandardZernike` class from :mod:`prysm.standardzernike` has been replaced with :class:`~prysm.zernike.NollZernike` from :mod:`prysm.zernike,` or as imported from the top-level namespace.
+  - the :class:`StandardZernike` class from :mod:`prysm.standardzernike` has
+    been replaced with :class:`~prysm.zernike.NollZernike` from
+    :mod:`prysm.zernike,` or as imported from the top-level namespace.
 
-    + :class:`~prysm.zernike.NollZernike` allows coefficients from 0 to 36 or 1 to 37 and has all features present in :class:`~prysm.zernike.FringeZernike`, unlike the prior :class:`StandardZernike` class.
+    + :class:`~prysm.zernike.NollZernike` allows coefficients from 0 to 36 or 1
+      to 37 and has all features present in
+      :class:`~prysm.zernike.FringeZernike`, unlike the prior
+      :class:`StandardZernike` class.
 
    - :mod:`prysm._zernike` is now :mod:`prysm.zernike`
 
 Under-the-hood Changes
 ======================
 
-* Angles of rotationally invariant terms in Fringe Zernike magnitude sets are now zero.
+* Angles of rotationally invariant terms in Fringe Zernike magnitude sets are
+  now zero.
 
 * use of `isfinite` and `isnan` optimized for internal routines.
 
 Bugfixes
 ========
 
-* `wavelength` is properly captured in :meth:`prysm.pupil.Pupil.from_interferogram`.
+* `wavelength` is properly captured in
+  :meth:`prysm.pupil.Pupil.from_interferogram`.
 
-* :meth:`prysm.convolution.Convolvable.from_file` no longer mangles x and y units.
+* :meth:`prysm.convolution.Convolvable.from_file` no longer mangles x and y
+  units.
 
-* :meth:`prysm.psf.PSF.encircled_energy` has been reworked, improving accuracy by about 2.3%.
+* :meth:`prysm.psf.PSF.encircled_energy` has been reworked, improving accuracy
+  by about 2.3%.
 
-* :attr:`prysm._basicdata.BasicData.center_x` and :attr:`~BasicData.center_y` are now properly computed.  Fixes #2.
+* :attr:`prysm._basicdata.BasicData.center_x` and :attr:`~BasicData.center_y`
+  are now properly computed.  Fixes #2.

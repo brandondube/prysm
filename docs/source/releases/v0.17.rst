@@ -2,33 +2,70 @@
 prysm v0.17
 ***********
 
-As is becoming tradition, this release is not backwards compatible and will break your code base if you do anything with non-default units or MTF data.  The authors apologize for this, and note that we make these changes to improve the maintainability and cleanliness of the library's codebase as it expands.  This release brings a large number of new features in addition to these breaking changes.  A guide for transitioning and a tour of the new features has been prepared: :doc:`Upgrading and a Tour of v0.17`.
+As is becoming tradition, this release is not backwards compatible and will
+break your code base if you do anything with non-default units or MTF data.  The
+authors apologize for this, and note that we make these changes to improve the
+maintainability and cleanliness of the library's codebase as it expands.  This
+release brings a large number of new features in addition to these breaking
+changes.  A guide for transitioning and a tour of the new features has been
+prepared: :doc:`Upgrading and a Tour of v0.17`.
 
 New Features
 ============
 
-Note that this list is in logical order of dependence, not in order of importance.
+Note that this list is in logical order of dependence, not in order of
+importance.
 
-* New :mod:`~prysm.mathops` functions: :func:`~prysm.mathops.gamma`, :func:`~prysm.mathops.kronecker`, and :func:`~prysm.mathops.sign`.
-* :mod:`~prysm.jacobi` submodule for recursive jacobi polynomial computation, key functions are :func:`~prysm.jacobi.jacobi` and :func:`~prysm.jacobi.jacobi_sequence`.
+* New :mod:`~prysm.mathops` functions: :func:`~prysm.mathops.gamma`,
+  :func:`~prysm.mathops.kronecker`, and :func:`~prysm.mathops.sign`.
+* :mod:`~prysm.jacobi` submodule for recursive jacobi polynomial computation,
+  key functions are :func:`~prysm.jacobi.jacobi` and
+  :func:`~prysm.jacobi.jacobi_sequence`.
 * Changes to :mod:`~prysm.zernike`:
-* * Zernike terms can now be generated using recursive Jacobi polynomials instead of explicit expressions:
-* * * performance is on average ~ 2-3x higher than prysm v0.16 when numba is installed
-* * * numba will no longer be used when the explicit functions are removed in v0.18
-* * * there is a new cache :class:`~prysm.zernike.ZCacheMN` which will replace :class:`~prysm.zernike.ZCache` in prysm v0.18, use of :code:`Zcache` is deprecated.  At that time, :code:`ZCacheMN` will be renamed to :code:`ZCache`.
-* * * * Likewise, functions for higher order Zernike polynomials (>trefoil; greater than Fringe index 11) will be removed in v0.18; these are currently deprecated.
-* * * * explicit Zernike functions will no longer bear :code:`norm` or :code:`name` attributes; use the functions enumerated below to acquire these values based on an index.
+* * Zernike terms can now be generated using recursive Jacobi polynomials
+    instead of explicit expressions:
+* * * performance is on average ~ 2-3x higher than prysm v0.16 when numba is
+      installed
+* * * numba will no longer be used when the explicit functions are removed in
+      v0.18
+* * * there is a new cache :class:`~prysm.zernike.ZCacheMN` which will replace
+      :class:`~prysm.zernike.ZCache` in prysm v0.18, use of :code:`Zcache` is
+      deprecated.  At that time, :code:`ZCacheMN` will be renamed to
+      :code:`ZCache`.
+* * * * Likewise, functions for higher order Zernike polynomials (>trefoil;
+        greater than Fringe index 11) will be removed in v0.18; these are
+        currently deprecated.
+* * * * explicit Zernike functions will no longer bear :code:`norm` or
+        :code:`name` attributes; use the functions enumerated below to acquire
+        these values based on an index.
 * * New functions:
-* * * :func:`~prysm.zernike.zernike_norm` to calculate the norm of a Zernike term given its (n, m) radial and azimuthal orders.
-* * * :func:`~prysm.zernike.n_m_to_fringe` to convert (n, m) radial and azimuthal orders to fringe indices.
-* * * :func:`~prysm.zernike.n_m_to_ansi_j` to convert (n, m) radial and azimuthal orders to ANSI single-term indices.
-* * * :func:`~prysm.zernike.ansi_j_to_n_m` to perform the reverse of :code:`n_m_to_ansi_j`.
-* * * :func:`~prysm.zernike.noll_to_n_m` to perform Noll to (n, m) radial and azimuthal indices.
-* * * :func:`~prysm.zernike.zero_separation` to calculate the zero separation, in fractions of 1, for example :code:`1 / zero_separation(4)` returns 16, indicating 16 samples per radius are needed to Nyquist sample the 4th radial order Zernike polynomial (Primary Spherical).
+* * * :func:`~prysm.zernike.zernike_norm` to calculate the norm of a Zernike
+      term given its (n, m) radial and azimuthal orders.
+* * * :func:`~prysm.zernike.n_m_to_fringe` to convert (n, m) radial and
+      azimuthal orders to fringe indices.
+* * * :func:`~prysm.zernike.n_m_to_ansi_j` to convert (n, m) radial and
+      azimuthal orders to ANSI single-term indices.
+* * * :func:`~prysm.zernike.ansi_j_to_n_m` to perform the reverse of
+      :code:`n_m_to_ansi_j`.
+* * * :func:`~prysm.zernike.noll_to_n_m` to perform Noll to (n, m) radial and
+      azimuthal indices.
+* * * :func:`~prysm.zernike.zero_separation` to calculate the zero separation,
+      in fractions of 1, for example :code:`1 / zero_separation(4)` returns 16,
+      indicating 16 samples per radius are needed to Nyquist sample the 4th
+      radial order Zernike polynomial (Primary Spherical).
 * * New classes:
-* * * :class:`~prysm.zernike.ANSI2TermZernike` for ANSI Zernikes with (n, m) indices.  See The 2D-Q note below for how these coefficients are entered.
-* * * :class:`~prysm.zernike.ANSI1TermZernike` for ANSI Zernikes with j (single-term) indices.
-* New submodule :mod:`~prysm.qpoly` for work with Qbfs, Qcon, and 2D-Q polynomials.  The raw functions allow caching to achieve O(N) performance instead of O(n^2).  The cache instances behave like the Zernike cache and allow constant time performance after the initial polynomial generation and storage.  2D-Q terms did not make it into this release, but code with some bugs in it for generating the terms can be found in the qpoly module.  Please help get this code working if this is an area you have knowledge in.  Key user-facing classes:
+* * * :class:`~prysm.zernike.ANSI2TermZernike` for ANSI Zernikes with (n, m)
+      indices.  See The 2D-Q note below for how these coefficients are entered.
+* * * :class:`~prysm.zernike.ANSI1TermZernike` for ANSI Zernikes with j
+      (single-term) indices.
+* New submodule :mod:`~prysm.qpoly` for work with Qbfs, Qcon, and 2D-Q
+  polynomials.  The raw functions allow caching to achieve O(N) performance
+  instead of O(n^2).  The cache instances behave like the Zernike cache and
+  allow constant time performance after the initial polynomial generation and
+  storage.  2D-Q terms did not make it into this release, but code with some
+  bugs in it for generating the terms can be found in the qpoly module.  Please
+  help get this code working if this is an area you have knowledge in.  Key
+  user-facing classes:
 * * Qbfs:
 * * * :class:`~prysm.qpoly.QBFSSag`
 * * * :class:`~prysm.qpoly.QBFSCache`
@@ -37,11 +74,16 @@ Note that this list is in logical order of dependence, not in order of importanc
 * * * :code:`~prysm.qpoly.QCONCache`
 * 1D polynomials (Qbfs and Qcon) take keyword arguments A0..An with no limit.
 * Check the :mod:`~prysm.qpoly` docs for the "raw" functions.
-* :code:`__str__` dunder method for :class:`~prysm.interferogram.Interferogram` objects.
-* :class:`prysm.otf.OTF` and :class:`~prysm.otf.PTF` for Optical Transfer Function and Phase Transfer Function analysis.
+* :code:`__str__` dunder method for :class:`~prysm.interferogram.Interferogram`
+  objects.
+* :class:`prysm.otf.OTF` and :class:`~prysm.otf.PTF` for Optical Transfer
+  Function and Phase Transfer Function analysis.
 * :func:`~prysm.geometry.generate_spider` to generate masks for n-vaned spiders.
 * Slicing rewrite and refactor:
-* * Custom slicing logic has been removed from all classes and is now implemented on the :class:`~prysm._richdata.RichData` class from which nearly every class inherits.  This reduces the amount of prysm-specific vocabulary users must know and improving the cohesion of the class system.
+* * Custom slicing logic has been removed from all classes and is now
+    implemented on the :class:`~prysm._richdata.RichData` class from which
+    nearly every class inherits.  This reduces the amount of prysm-specific
+    vocabulary users must know and improving the cohesion of the class system.
 * * Subclasses now inherit the following:
 * * * :code:`(obj).slices()`
 * * * * :code:`.x`
@@ -53,28 +95,52 @@ Note that this list is in logical order of dependence, not in order of importanc
 * * * * :code:`.azvar`
 * * * * :code:`.azstd`
 * * * * :code:`.azpv`
-* * * :code:`(obj).exact_x` and :code:`.exact_y` for 1D sampling along the Cartesian axes
+* * * :code:`(obj).exact_x` and :code:`.exact_y` for 1D sampling along the
+      Cartesian axes
 * * * :code:`(obj).exact_xy` for 2D sampling on (x, y)
 * * * :code:`(obj).exact_polar` for 2D sampling on (r, p)
 * Units rewrite:
-* * prysm now utilizes / understands `astropy.units <https://docs.astropy.org/en/stable/units/>`_  for all calculations using the object-oriented API.  :class:`BasicData` has become :class:`RichData` with a new :code:`xy_unit` and :code:`z_unit` kwarg.  If this is :code:`None`, the instance will adopt :code:`config.<class>.default_<xy or z>_units`.  These default units mimic the behavior of prysm < 0.17, so users not adjusting units will feel no change.  To use custom units, the :code:`spatial_unit`, and :code:`phase_unit` arguments are no more, and should be generated loosely as follows:  For more information, see the `units documentation <../user_guide/units-and-labels.html>`_.
+* * prysm now utilizes / understands `astropy.units
+    <https://docs.astropy.org/en/stable/units/>`_  for all calculations using
+    the object-oriented API.  :class:`BasicData` has become :class:`RichData`
+    with a new :code:`xy_unit` and :code:`z_unit` kwarg.  If this is
+    :code:`None`, the instance will adopt :code:`config.<class>.default_<xy or
+    z>_units`.  These default units mimic the behavior of prysm < 0.17, so users
+    not adjusting units will feel no change.  To use custom units, the
+    :code:`spatial_unit`, and :code:`phase_unit` arguments are no more, and
+    should be generated loosely as follows:  For more information, see the
+    `units documentation <../user_guide/units-and-labels.html>`_.
 * Labels rewrite:
-* * prysm now has a labels system that mimics the units system.  The constructor works loosely as follows:
+* * prysm now has a labels system that mimics the units system.  The constructor
+    works loosely as follows:
 
 >>> from prysm import Labels,  Pupil
 >>> lab = Labels(xybase='Pupil', z='OPD', xy_additions=['X', 'Y'])
 >>> pu = Pupil(labels=lab)
 
-* * Note that the Pupil class is used only for example, and the labels kwarg is nearly universal.  For more information, see the `labels documentation <../user_guide/units-and-labels.html>`_.
+* * Note that the Pupil class is used only for example, and the labels kwarg is
+    nearly universal.  For more information, see the `labels documentation
+    <../user_guide/units-and-labels.html>`_.
 * Plotting rewrite:
-* * Over time, plotting in prysm has grown fragmented, with minor variations on the same theme throughout the classes.  To reduce the cognitive overhead for users, plotting has been made universal with a single :code:`plot2d` and :code:`(obj).slices().plot` implementaiton.  This means that nearly all prysm classes can be plotted with exactly the same grammar.  This brings many breaking changes, listed in the section below.
-* new functions :meth:`prysm.psf.fwhm`, :meth:`~prysm.psf.one_over_e`, :meth:`~prysm.psf.one_over_e2` for calculating the FWHM, 1/e, and 1/e^2 radii of PSFs.  :meth:`~prysm.psf.estimate_size` for size estimation at an arbitrary irradiance value.
+* * Over time, plotting in prysm has grown fragmented, with minor variations on
+    the same theme throughout the classes.  To reduce the cognitive overhead for
+    users, plotting has been made universal with a single :code:`plot2d` and
+    :code:`(obj).slices().plot` implementaiton.  This means that nearly all
+    prysm classes can be plotted with exactly the same grammar.  This brings
+    many breaking changes, listed in the section below.
+* new functions :meth:`prysm.psf.fwhm`, :meth:`~prysm.psf.one_over_e`,
+  :meth:`~prysm.psf.one_over_e2` for calculating the FWHM, 1/e, and 1/e^2 radii
+  of PSFs.  :meth:`~prysm.psf.estimate_size` for size estimation at an arbitrary
+  irradiance value.
 
 
 New Dependencies
 ================
 
-Prysm now depends on two new libraries.  The former is more or less part of the core scientific stack, and the latter is a small pure-python library with no dependencies.  Astropy is used for units, retry is used to make cleaner cache code.  Pip should install these for you if they are not already installed.
+Prysm now depends on two new libraries.  The former is more or less part of the
+core scientific stack, and the latter is a small pure-python library with no
+dependencies.  Astropy is used for units, retry is used to make cleaner cache
+code.  Pip should install these for you if they are not already installed.
 
 * astropy (install from conda or pypi)
 * retry (install from pypi)
@@ -82,35 +148,81 @@ Prysm now depends on two new libraries.  The former is more or less part of the 
 Breaking changes
 ================
 
-* Slicing and plotting refactoring breaks compatibilty with the prysm <= v0.16 API.
+* Slicing and plotting refactoring breaks compatibilty with the prysm <= v0.16
+  API.
 * * :class:`BasicData`, has become :class:`~prysm._richdata.RichData`.
 * * Universal plotting elimiates or changes the signature of many methods:
-* * * :meth:`prysm.psf.PSF.plot2d` - use the same method name, note that arguments are different.  For the :code:`circle_ee` functionality, use :func:`prysm.plotting.annotate_psf`.
-* * *  :meth:`prysm.psf.PSF.plot_slice_xy`, :meth:`prysm.otf.MTF.plot_slice_xy`, :meth:`prysm.otf.MTF.plot_tan_sag`, :meth:`prysm.otf.MTF.plot_azimuthal_average` - use :meth:`prysm.Slices.plot` accessed as :code:`<obj>.slices().plot()`.
-* * * :meth:`prysm.interferogram.Interferogram.plot_psd_slices` - use :code:`Interferogram.psd().slices().plot()`.  To replicate the power law limits, use :func:`prysm.plotting.add_psd_model`.
-* * * :meth:`prysm.interferogram.Interferogram.plot_psd_2d` - use :code:`Interferogram.psd().plot2d()`.
-* * * default axis limits for PSFs and MTFs are no longer 20 and 200, but are the entire support of the object.
-* * :code:`.slice_x` and :code:`.slice_y` on :class:`~prysm._phase.OpticalPhase`, :class:`~prysm.psf.PSF` and :class:`~prysm.otf.MTF` - use :code:`<obj>.slices().x or <obj>.slices().y`
-* * :attr:`tan` and :attr:`sag` properties deprecated on :class:`~prysm.otf.MTF` instances as well as :meth:`exact_tan` and :meth:`exact_sag`.  Please access via :code:`mtf.slices().x` and :code:`mtf.slices().y` and :meth:`~prysm.otf.MTF.exact_x` and :meth:`~prysm.otf.MTF.exact_y`.  Likewise, for :meth:`mtf.azimuthal_average`, use :code:`mtf.slices().azavg`.  These properties and functions will be removed in prysm v0.18.  The changes to tan and sag are made because it is not guaranteed that the x and y slices of the MTF correspond to tan and sag without more information given about field angles.  This is not something prysm has any knowledge of at this time.
-* * :meth:`prysm.interferogram.Interferogram.psd` now returns a :class:`~prysm.interferogram.PSD` object, which is just a fancy :class:`~prysm._richdata.RichData` instance like any other prysm class.
-* :meth:`prysm.psf.PSF.from_pupil` normalization with :code:`norm=radiometric` has changed to match Born & Wolf.  Results using this kwarg generated with prysm >= 0.17 will not match those for prysm < 0.17 in terms of scaling.  The contents will be otherwise the same.
-* :class:`~prysm.pupil.Pupil` and subclasses no longer take arguments of :code:`mask` and :code:`mask_target`, instead taking :code:`phase_mask` and :code:`transmission`.  This should improve clarity.  Arguments may take a few forms - :code:`<ndarray>`, :code:`<str>`, or :code:`[<str>, <float>]`.  In the ndarray case, the argument is used directly.  Strings are passed to the mask cache with implicit :code:`radius=1`, while in the last case the argument is a tuple or list of the mask shape and radius.
-* :code:`interp_method` parameters on plotting functions have been renamed to :code:`interpolation`.  This mimics matplotlib exactly, as prysm is simply wrapping matplotlib for these methods.
-* :func:`prysm.geometry.triangle` was removed as it throws a Qhull error and cannot be made to work with the underlying implementation of N sided polygons.
-* The optional dependency directives have been installed; triggering pip installs of these dependencies has a deleterious effect on user's conda environments, and the cupy dependency was not always resolved properly (users need cupy-cuda91, for example).
+* * * :meth:`prysm.psf.PSF.plot2d` - use the same method name, note that
+      arguments are different.  For the :code:`circle_ee` functionality, use
+      :func:`prysm.plotting.annotate_psf`.
+* * *  :meth:`prysm.psf.PSF.plot_slice_xy`, :meth:`prysm.otf.MTF.plot_slice_xy`,
+       :meth:`prysm.otf.MTF.plot_tan_sag`,
+       :meth:`prysm.otf.MTF.plot_azimuthal_average` - use
+       :meth:`prysm.Slices.plot` accessed as :code:`<obj>.slices().plot()`.
+* * * :meth:`prysm.interferogram.Interferogram.plot_psd_slices` - use
+      :code:`Interferogram.psd().slices().plot()`.  To replicate the power law
+      limits, use :func:`prysm.plotting.add_psd_model`.
+* * * :meth:`prysm.interferogram.Interferogram.plot_psd_2d` - use
+      :code:`Interferogram.psd().plot2d()`.
+* * * default axis limits for PSFs and MTFs are no longer 20 and 200, but are
+      the entire support of the object.
+* * :code:`.slice_x` and :code:`.slice_y` on
+    :class:`~prysm._phase.OpticalPhase`, :class:`~prysm.psf.PSF` and
+    :class:`~prysm.otf.MTF` - use :code:`<obj>.slices().x or <obj>.slices().y`
+* * :attr:`tan` and :attr:`sag` properties deprecated on :class:`~prysm.otf.MTF`
+    instances as well as :meth:`exact_tan` and :meth:`exact_sag`.  Please access
+    via :code:`mtf.slices().x` and :code:`mtf.slices().y` and
+    :meth:`~prysm.otf.MTF.exact_x` and :meth:`~prysm.otf.MTF.exact_y`.
+    Likewise, for :meth:`mtf.azimuthal_average`, use :code:`mtf.slices().azavg`.
+    These properties and functions will be removed in prysm v0.18.  The changes
+    to tan and sag are made because it is not guaranteed that the x and y slices
+    of the MTF correspond to tan and sag without more information given about
+    field angles.  This is not something prysm has any knowledge of at this
+    time.
+* * :meth:`prysm.interferogram.Interferogram.psd` now returns a
+    :class:`~prysm.interferogram.PSD` object, which is just a fancy
+    :class:`~prysm._richdata.RichData` instance like any other prysm class.
+* :meth:`prysm.psf.PSF.from_pupil` normalization with :code:`norm=radiometric`
+  has changed to match Born & Wolf.  Results using this kwarg generated with
+  prysm >= 0.17 will not match those for prysm < 0.17 in terms of scaling.  The
+  contents will be otherwise the same.
+* :class:`~prysm.pupil.Pupil` and subclasses no longer take arguments of
+  :code:`mask` and :code:`mask_target`, instead taking :code:`phase_mask` and
+  :code:`transmission`.  This should improve clarity.  Arguments may take a few
+  forms - :code:`<ndarray>`, :code:`<str>`, or :code:`[<str>, <float>]`.  In the
+  ndarray case, the argument is used directly.  Strings are passed to the mask
+  cache with implicit :code:`radius=1`, while in the last case the argument is a
+  tuple or list of the mask shape and radius.
+* :code:`interp_method` parameters on plotting functions have been renamed to
+  :code:`interpolation`.  This mimics matplotlib exactly, as prysm is simply
+  wrapping matplotlib for these methods.
+* :func:`prysm.geometry.triangle` was removed as it throws a Qhull error and
+  cannot be made to work with the underlying implementation of N sided polygons.
+* The optional dependency directives have been installed; triggering pip
+  installs of these dependencies has a deleterious effect on user's conda
+  environments, and the cupy dependency was not always resolved properly (users
+  need cupy-cuda91, for example).
 
 Bugfixes
 ========
 
-* Automatic hanning window generation when calculating PSDs has been fixed, and no longer results in an error for nonsquare arrays.
+* Automatic hanning window generation when calculating PSDs has been fixed, and
+  no longer results in an error for nonsquare arrays.
 * An issue where Welch windows may be generated off-center has been fixed.
-* An error/bug when calling :meth:`~prysm.interferogram.Interferogram.crop` requiring 0 pixels of removal on a side has been fixed.
-* :meth:`prysm.objects.pinhole.analytic_ft` no longer includes an errant call to meshgrid that causes out of memory exceptions and incorrect results.
+* An error/bug when calling :meth:`~prysm.interferogram.Interferogram.crop`
+  requiring 0 pixels of removal on a side has been fixed.
+* :meth:`prysm.objects.pinhole.analytic_ft` no longer includes an errant call to
+  meshgrid that causes out of memory exceptions and incorrect results.
 
 
 Under-the-hood Changes
 ======================
 
-* The use of astropy.units has changed the display of PSD units.  While before they would appear as, for example, nm^2 / (cy/mm)^2, they are now reduced by astropy to, for example, nm^2 mm^2.  The two are equivalent and there is no change to the meaning of results.
+* The use of astropy.units has changed the display of PSD units.  While before
+  they would appear as, for example, nm^2 / (cy/mm)^2, they are now reduced by
+  astropy to, for example, nm^2 mm^2.  The two are equivalent and there is no
+  change to the meaning of results.
 
-* prysm no longer optionally depends on numba.  The reimplementation of the Zernike code based on Jacobi polynomials has led to a faster implementation than the previous functions when JIT compiled.
+* prysm no longer optionally depends on numba.  The reimplementation of the
+  Zernike code based on Jacobi polynomials has led to a faster implementation
+  than the previous functions when JIT compiled.
