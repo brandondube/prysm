@@ -5,7 +5,7 @@ import numpy as np
 from prysm import coordinates
 
 from prysm.coordinates import cart_to_polar
-from prysm.experimental.raytracing.surfaces import surface_normal_from_cylindrical_derivatives, fix_zero_singularity
+from prysm.x.raytracing.surfaces import surface_normal_from_cylindrical_derivatives, fix_zero_singularity
 from prysm import polynomials
 
 from scipy.special import (

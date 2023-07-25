@@ -1,5 +1,5 @@
 import numpy as np
-import prysm.experimental.polarization as pol
+import prysm.x.polarization as pol
 
 def test_rotation_matrix():
 
@@ -77,4 +77,3 @@ def test_pauli_spin_matrix():
                                pol.pauli_spin_matrix(1),
                                pol.pauli_spin_matrix(2),
                                pol.pauli_spin_matrix(3)))
-
