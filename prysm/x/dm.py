@@ -203,6 +203,7 @@ class DM:
             self.tf = [self.Ifn]
 
     def copy(self):
+        """Make a (deep) copy of this DM."""
         return copy.deepcopy(self)
 
     def update(self, actuators):

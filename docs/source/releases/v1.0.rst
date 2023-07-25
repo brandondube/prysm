@@ -6,9 +6,9 @@ After nearly a decade in development, version 1.0 of prysm has finally been
 released.  With the release of v1, compatibility is guaranteed; there will not
 be breaking changes to the API until version 2.  New features will be supported
 through the 1.x release series.  Most new features will be introduced under
-:code:`prysm.experimental`, a dedicated arena within the package that is not
+:code:`prysm.x`, a dedicated arena within the package that is not
 required to maintain the afore-promised compatibility guarantees.  The shorthand
-"x/" for experimental is borrowed from the Go programming language.
+"x/" for x is borrowed from the Go programming language.
 
 The first two new modules are :code:`x/opytm`, a package for optimization with
 several cost functions, activation functions, and gradient-based optimizers and
@@ -24,7 +24,7 @@ equivalents for extremely fast optimization of optical models to learn
 parameters, perform phase retrieval, etc.
 
 `dygdug <https://github.com/brandondube/dygdug>`_ has been created as an
-external module of prysm dedicated to coronagraphy, similar to the experimental
+external module of prysm dedicated to coronagraphy, similar to the x
 submodule.  dygdug is not being released as 1.0 and will likely go through years
 of breaking changes to improve the ergonomics and performance of the API.  A
 significant aspect of dygdug will be the full support for algorithmic
@@ -42,13 +42,13 @@ Polynomials
 
 Rich XY polynomial capability:
 
-* :func:`~prysm.polynomials.j_to_xy`
+* :func:`~prysm.polynomials.xy.j_to_xy`
 
-* :func:`~prysm.polynomials.xy_polynomial`
+* :func:`~prysm.polynomials.xy.xy_polynomial`
 
-* :func:`~prysm.polynomials.xy_polynomial_sequence`
+* :func:`~prysm.polynomials.xy.xy_polynomial_sequence`
 
-* :func:`~prysm.polynomials.generalized_xy_polynomial_sequence`
+* :func:`~prysm.polynomials.xy.generalized_xy_polynomial_sequence`
 
 The last of these can be used to compute, e.g., "XY" Chebyshev polynomials
 
@@ -60,8 +60,8 @@ Propagation
 
 * new .imag property, same as .real
 
-* :func:`~prysm.propagation.to_fpm_and_back` now takes a :code:`shift`
-    argument, allowing off-axis propagation without adding wavefront tilt.
+* :func:`~prysm.propagation.Wavefront.to_fpm_and_back` now takes a :code:`shift`
+  argument, allowing off-axis propagation without adding wavefront tilt.
 
 * all propagation routines have a :code:`_backprop` twin, which should be used
   to do gradient backpropagation through optical models
@@ -70,18 +70,22 @@ Propagation
 Segmented Systems
 -----------------
 
-* Compositing and per-segment errors of "keystone" apertures
+* Compositing and per-segment errors of "keystone" apertures via
+  :class:`~prysm.segmented.CompositeKeystoneAperture`
 
 Wavefront Sensors and Interferometers
 -------------------------------------
 
-* Forward modeling of Shack Hartmann wavefront sensors
+* Forward modeling of Shack Hartmann wavefront sensors using
+  :func:`~prysm.x.shack_hartmann.shack_hartmann` and the propagation module
 
 * Forward modeling of Phase Shifting Point Diffraction Interferometers, aka
-  Medecki interferometers.
+  Medecki interferometers using :class:`~prysm.x.pdi.PSPDI` and the routines and
+  consants of x/psi.
 
 * Forward modeling of Self-Referenced Interferometers, which use a pinhole to
-  generate the reference wave using light from the input port.
+  generate the reference wave using light from the input port using
+  :class:`~prysm.x.sri.SelfReferencedInterferometer`.
 
 
 i/o
@@ -104,11 +108,11 @@ More convenient backend swaps, misc
   functions; there is no special support for either library beyond these simple
   functions.
 
-* the :code:`plot2d`` method of RichData now has an :code:`extend` keyword
+* the :func:`~prysm._richdata.RichData.plot2d` method of RichData now has an :code:`extend` keyword
   argument, which controls the extension of the colorbar beyond the color
   limits.
 
-Experimental Modules
+eXperimental Modules
 ====================
 
 x/opytm
@@ -119,25 +123,25 @@ optical models.
 
 Activation functions and discretizers:
 
-* :func:`~prysm.experimental.optym.activation.Softmax`
-* :func:`~prysm.experimental.optym.activation.GumbelSoftmax`
-* :func:`~prysm.experimental.optym.activation.DiscreteEncoder`
+* :func:`~prysm.x.optym.activation.Softmax`
+* :func:`~prysm.x.optym.activation.GumbelSoftmax`
+* :func:`~prysm.x.optym.activation.DiscreteEncoder`
 
 Cost or loss functions:
 
-* :func:`~prysm.experimental.optym.cost.BiasAndGainInvariantError`
-* :func:`~prysm.experimental.optym.cost.LogLikelyhood`
+* :func:`~prysm.x.optym.cost.BiasAndGainInvariantError`
+* :func:`~prysm.x.optym.cost.LogLikelyhood`
 
 Optimizers:
 
-* :func:`~prysm.experimental.optym.optimizers.GradientDescent`
-* :func:`~prysm.experimental.optym.optimizers.AdaGrad`
-* :func:`~prysm.experimental.optym.optimizers.RMSProp`
-* :func:`~prysm.experimental.optym.optimizers.ADAM`
+* :func:`~prysm.x.optym.optimizers.GradientDescent`
+* :func:`~prysm.x.optym.optimizers.AdaGrad`
+* :func:`~prysm.x.optym.optimizers.RMSProp`
+* :func:`~prysm.x.optym.optimizers.ADAM`
 * :func:`~prysm.experiemntal.optym.optimizers.RADAM`
 * :func:`~prysm.experiemntal.optym.optimizers.Yogi`
 * :func:`~prysm.experiemntal.optym.optimizers.AdaMomentum`
-* :func:`~prysm.experimental.optym.optimizers.F77LBFGSB`
+* :func:`~prysm.x.optym.optimizers.F77LBFGSB`
 
 Note that while L-BFGS-B is the darling of my heart, it is currently too
 difficult for mere mortals to implement by hand, so it is a wrapper around
@@ -153,15 +157,15 @@ x/dm
 ----
 
 
-* :func:`copy()` method to clone a DM, when e.g. the two DMs in a system are the
+* :func:`~prysm.x.dm.DM.copy` method to clone a DM, when e.g. the two DMs in a system are the
   same
 
 * new Nout parameter that controls the amount of padding or cropping of the
     natural model resolution is done.  The behavior here is similar to PROPER.
 
 * the forward model of the DM is now differentiable.
-    :func:`~prysm.experiemntal.dm.render_backprop` performs gradient
-    backpropagation through :func:`~prysm.experimental.dm.render`.
+    :func:`~prysm.x.dm.DM.render_backprop` performs gradient
+    backpropagation through :func:`~prysm.x.dm.DM.render`.
 
 
 Performance Optimizations

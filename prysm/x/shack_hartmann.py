@@ -5,8 +5,7 @@ from math import ceil
 from prysm.coordinates import make_xy_grid
 from prysm.segmented import _local_window
 from prysm.geometry import rectangle
-from prysm.util import is_odd
-from prysm.mathops import np
+from prysm.mathops import np, is_odd
 
 
 def shack_hartmann(pitch, n, efl, wavelength, x, y,

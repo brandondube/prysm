@@ -11,10 +11,36 @@ from .pdi import evaluate_test_ref_arm_matching
 
 
 class SelfReferencedInterferometer:
+    """Self-Referenced Interferometer."""
     def __init__(self, x, y, efl, epd, wavelength,
                  pinhole_diameter=0.25,
                  pinhole_samples=128,
                  beamsplitter_RT=(0.8, 0.2)):
+        """Create a new Self-Referenced Interferometer.
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            x coordinates for arrays that will be passed to forward_model
+            not normalized
+        y : numpy.ndarray
+            y coordinates for arrays that will be passed to forward_model
+            not normalized
+        efl : float
+            focal length in the focusing space behind the grating
+        epd : float
+            entrance pupil diameter, mm
+        wavelength : float
+            wavelength of light, um
+        pinhole_diameter : float
+            diameter of the pinhole placed at the m=0 focus
+        pinhole_samples : int
+            number of samples across the pinhole placed at the m=0 focus
+        beamsplitter_RT : tuple of float
+            [R]eference, [T]est arm beamsplitter transmisivities
+            (big R / big T, power).  Needed to balance ref/test beam power.
+
+        """
         self.x = x
         self.y = y
         self.dx = x[0, 1] - x[0, 0]
@@ -40,6 +66,24 @@ class SelfReferencedInterferometer:
         self.test_t = beamsplitter_RT[1]**0.5
 
     def forward_model(self, wave_in, phase_shift=0, debug=False):
+        """Perform a forward model, returning the intensity at the detector plane.
+
+        Parameters
+        ----------
+        wave_in : numpy.ndarray
+            complex wavefunction present at the input to the interferometer
+        phase_shift : float
+            phase shift, modulo 2pi, if any
+        debug : bool
+            if True, returns a dict with the fields in the ref arm, before and
+            after interacting with the interferometer components
+
+        Returns
+        -------
+        prysm._richdata.RichData
+            intensity at the camera
+
+        """
         if not isinstance(wave_in, WF):
             wave_in = WF(wave_in, self.wavelength, self.dx)
 

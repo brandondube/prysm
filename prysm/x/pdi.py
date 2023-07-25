@@ -180,6 +180,24 @@ class PSPDI:
         del xph, yph, rphsq, xt, yt, rtsq
 
     def forward_model(self, wave_in, phase_shift=0, debug=False):
+        """Perform a forward model, returning the intensity at the detector plane.
+
+        Parameters
+        ----------
+        wave_in : numpy.ndarray
+            complex wavefunction present at the input to the interferometer
+        phase_shift : float
+            phase shift, modulo 2pi, if any
+        debug : bool
+            if True, returns a dict with the fields in each arm, before and
+            after interacting with the interferometer components
+
+        Returns
+        -------
+        prysm._richdata.RichData
+            intensity at the camera
+
+        """
         # reference wave
         if phase_shift != 0:
             # user gives value in [0,2pi] which maps 2pi => period
