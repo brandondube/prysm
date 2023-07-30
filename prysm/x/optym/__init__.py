@@ -11,8 +11,13 @@ from .cost import (  # NOQA
 )
 
 from .optimizers import (  # NOQA
+    runN,
     GradientDescent,
     AdaGrad,
-    ADAM,
-    RMSProp
+    RMSProp,
+    AdaMomentum,
+    Adam,
+    RAdam,
+    Yogi,
+    F77LBFGSB,
 )

@@ -137,10 +137,10 @@ Optimizers:
 * :func:`~prysm.x.optym.optimizers.GradientDescent`
 * :func:`~prysm.x.optym.optimizers.AdaGrad`
 * :func:`~prysm.x.optym.optimizers.RMSProp`
-* :func:`~prysm.x.optym.optimizers.ADAM`
-* :func:`~prysm.experiemntal.optym.optimizers.RADAM`
-* :func:`~prysm.experiemntal.optym.optimizers.Yogi`
-* :func:`~prysm.experiemntal.optym.optimizers.AdaMomentum`
+* :func:`~prysm.x.optym.optimizers.Adam`
+* :func:`~prysm.x.optym.optimizers.RAdam`
+* :func:`~prysm.x.optym.optimizers.Yogi`
+* :func:`~prysm.x.optym.optimizers.AdaMomentum`
 * :func:`~prysm.x.optym.optimizers.F77LBFGSB`
 
 Note that while L-BFGS-B is the darling of my heart, it is currently too
@@ -157,15 +157,15 @@ x/dm
 ----
 
 
-* :func:`~prysm.x.dm.DM.copy` method to clone a DM, when e.g. the two DMs in a system are the
-  same
+* :func:`~prysm.x.dm.DM.copy` method to clone a DM, when e.g. the two DMs in a
+  system are the same
 
 * new Nout parameter that controls the amount of padding or cropping of the
-    natural model resolution is done.  The behavior here is similar to PROPER.
+  natural model resolution is done.  The behavior here is similar to PROPER.
 
 * the forward model of the DM is now differentiable.
-    :func:`~prysm.x.dm.DM.render_backprop` performs gradient
-    backpropagation through :func:`~prysm.x.dm.DM.render`.
+  :func:`~prysm.x.dm.DM.render_backprop` performs gradient
+  backpropagation through :func:`~prysm.x.dm.DM.render`.
 
 
 Performance Optimizations
