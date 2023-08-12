@@ -530,6 +530,42 @@ class Wavefront:
         """Return a (deep) copy of this instance."""
         return copy.deepcopy(self)
 
+    def from_amp_and_phase_backprop_phase(self, wf_bar):
+        """Gradient backpropagation through from_amp_and_phase -> phase.
+
+        Parameters
+        ----------
+        wf_bar : Wavefront
+            the gradient backpropagated up to wf
+
+        Returns
+        -------
+        numpy.ndarray
+            gradient backpropagated to the phase of wf_in
+
+        """
+        k = 2 * np.pi / self.wavelength / 1e3  # um -> nm
+        # imag(gbar*g)
+        return k * np.imag(wf_bar.data * np.conj(self.data))
+
+    def intensity_backprop(self, intensity_bar):
+        """Gradient backpropagation through from_amp_and_phase -> phase.
+
+        Parameters
+        ----------
+        intensity_bar : Wavefront
+            the gradient backpropagated up to the intensity step
+
+        Returns
+        -------
+        numpy.ndarray
+            gradient backpropagated to the complex wavefront before
+            intensity was calculated
+
+        """
+        Gbar = 2 * intensity_bar * self.data
+        return Wavefront(Gbar, self.wavelength, self.dx, self.space)
+
     def pad2d(self, Q, value=0, mode='constant', out_shape=None, inplace=True):
         """Pad the wavefront.
 
@@ -758,6 +794,51 @@ class Wavefront:
             method=method)
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='psf')
+
+    def focus_fixed_sampling_backprop(self, efl, dx, samples, shift=(0, 0), method='mdft'):
+        """Perform a "pupil" to "psf" propagation with fixed output sampling.
+
+        Uses matrix triple product DFTs to specify the grid directly.
+
+        Parameters
+        ----------
+        efl : float
+            focusing distance, millimeters
+        dx : float
+            pupil sampling, millimeters
+        samples : int
+            number of samples in the pupil plane.  If int, interpreted as square
+            else interpreted as (x,y), which is the reverse of numpy's (y, x) row major ordering
+        shift : tuple of float
+            shift in (X, Y), same units as output_dx
+        method : str, {'mdft', 'czt'}
+            how to propagate the field, matrix DFT or Chirp Z transform
+            CZT is usually faster single-threaded and has less memory consumption
+            MDFT is usually faster multi-threaded and has more memory consumption
+
+        Returns
+        -------
+        Wavefront
+            the wavefront at the psf plane
+
+        """
+        if self.space != 'psf':
+            raise ValueError('can only backpropagate from a psf to pupil plane')
+
+        if isinstance(samples, int):
+            samples = (samples, samples)
+
+        data = focus_fixed_sampling_backprop(
+            wavefunction=self.data,
+            input_dx=dx,
+            prop_dist=efl,
+            wavelength=self.wavelength,
+            output_dx=self.dx,
+            output_samples=samples,
+            shift=shift,
+            method=method)
+
+        return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')
 
     def unfocus_fixed_sampling(self, efl, dx, samples, shift=(0, 0), method='mdft'):
         """Perform a "psf" to "pupil" propagation with fixed output sampling.

@@ -78,21 +78,36 @@ class BiasAndGainInvariantError:
         return out
 
 
-class LogLikelyhood:
-    def __init__(self):
-        pass
+def mean_square_error(M, D, mask=None):
+    """Mean square error.
 
-    def forward(self, I, D, mask):
-        # I, D, mask for symmetry to bias and gain invariant
-        # internally use y, yhat because that's how the this is usually written
-        y = D
-        yhat = I
+    Parameters
+    ----------
+    M : numpy.ndarray
+        "model data"
+    D : numpy.ndarray
+        "truth data"
+    mask : numpy.ndarray, optional
+        True where M should contribute to the cost, False where it should not
 
-        ylogyhat = y*np.log(yhat)
-        one_minus_y = 1 - y
-        log_one_minus_yhat = np.log(1-yhat)
-        cost = -(ylogyhat + one_minus_y*log_one_minus_yhat).sum()
-        return cost
+    Returns
+    -------
+    float, numpy.ndarray
+        cost, dcost/dM
 
-    def backprop(self):
-        pass
+    """
+    diff = (M-D)
+    if mask is not None:
+        diff = diff[mask]
+
+    alpha = 1 / diff.size
+    cost = (diff*diff).sum() * alpha
+
+    # backprop
+    if mask is not None:
+        grad = np.zeros_like(M)
+        grad[mask] = 2 * alpha * diff
+    else:
+        grad = 2 * alpha * diff
+
+    return cost, grad

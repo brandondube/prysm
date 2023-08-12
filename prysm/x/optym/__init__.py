@@ -7,7 +7,7 @@ from .activation import (  # NOQA
 )
 
 from .cost import (  # NOQA
-    BiasAndGainInvariantError,
+    mean_square_error
 )
 
 from .optimizers import (  # NOQA
