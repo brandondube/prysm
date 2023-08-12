@@ -10,3 +10,4 @@ How-Tos
     Notable-Telescope-Apertures.ipynb
     Advanced-Interferogram-Processing.ipynb
     GPU and Exascale Computing.ipynb
+    Differentiable-Optical-Models.ipynb
