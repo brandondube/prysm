@@ -202,7 +202,7 @@ class RMSProp:
         return x, f, g
 
 
-class ADAM:
+class Adam:
     r"""ADAM optimization routine.
 
     ADAM, or "Adaptive moment estimation" uses moving average estimates of the
@@ -276,7 +276,7 @@ class ADAM:
         return x, f, g
 
 
-class RADAM:
+class RAdam:
     r"""RADAM optimization routine.
 
     RADAM or Rectified ADAM is a modification of ADAM, which seeks to remove
@@ -295,8 +295,8 @@ class RADAM:
         v_k &= β_2 v_{k-1} + (1-β_2) * (g*g) \\
         \hat{m}_k &= m_k / (1 - β_1^k) \\
         \rho_k &= \rho_\infty - \frac{2 k β_2^k}{1-β_2^k} \\
-        \text{if}& \rho_k > 4 \\
-            \qquad l_k &= \sqrt{\frac{1 - β_2^k}{v_k}} \\
+        \text{if}& \rho_k > 5 \\
+            \qquad l_k &= \sqrt{\frac{1 - β_2^k}{\sqrt{v_k}}} \\
             \qquad r_k &= \sqrt{\frac{(\rho_k - 4)(\rho_k-2)\rho_\infty}{(\rho_\infty-4)(\rho_\infty-2)\rho_t}} \\
             \qquad x_{k+1} &= x_k - α r_k \hat{m}_k l_k \\
         \text{else}& \\
@@ -370,16 +370,7 @@ class RADAM:
             r = np.sqrt(num/den)
             self.x = x - self.alpha * r * mhat * l
         else:
-            # second deviation from the paper, use a variation on vanilla
-            # gradient descent otherwise
-            # scaling g by its norm makes a unit length step if alpha=1, which
-            # helps avoid divergence.  This only marginally increases the range
-            # of stable values for alpha, but it costs almost nothing.
-            #
-            # alternatively we could make no update at all, but some supervisors
-            # look for x to stop changing, which a non-update would trigger.
-            invgnorm = 1 / np.sqrt(gsq.sum())
-            self.x = x - self.alpha * invgnorm * g
+            self.x = x - self.alpha * g
         return x, f, g
 
 

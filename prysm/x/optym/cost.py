@@ -3,7 +3,16 @@ import numpy as np
 
 
 class BiasAndGainInvariantError:
+    """Bias and gain invariant error.
+
+    This cost function computes internal least mean squares estimates of the
+    overall bias (DC pedestal) and gain between the signal I and D.  This
+    objective is useful when the overall signal level is ambiguous in phase
+    retrieval type problems, and can significantly help stabilize the
+    optimization process.
+    """
     def __init__(self):
+        """Create a new BiasAndGainInvariantError instance."""
         self.R = None
         self.alpha = None
         self.beta = None
@@ -12,6 +21,23 @@ class BiasAndGainInvariantError:
         self.mask = None
 
     def forward(self, I, D, mask):  # NOQA
+        """Forward cost evaluation.
+
+        Parameters
+        ----------
+        I : numpy.ndarray
+            'intensity' or model data, any float dtype, any shape
+        D : numpy.ndarray
+            'data' or true mesaurement to be matched, any float dtype, any shape
+        mask : numpy.ndarray
+            logical array with elements to keep (True) or exclude (False)
+
+        Returns
+        -------
+        float
+            scalar cost
+
+        """
         # intermediate variables
         I = I[mask]  # NOQA
         D = D[mask]
@@ -37,7 +63,7 @@ class BiasAndGainInvariantError:
         return err
 
     def backprop(self):
-        """Returns Ibar."""
+        """Returns the first step of gradient backpropagation, an array of the same shape as I."""
         R = self.R
         alpha = self.alpha
         beta = self.beta
@@ -46,7 +72,42 @@ class BiasAndGainInvariantError:
         mask = self.mask
 
         out = np.zeros_like(I)
-        I = I[mask]
+        I = I[mask]  # NOQA
         D = D[mask]
         out[mask] = 2*R*alpha*((alpha*I + beta) - D)
         return out
+
+
+def mean_square_error(M, D, mask=None):
+    """Mean square error.
+
+    Parameters
+    ----------
+    M : numpy.ndarray
+        "model data"
+    D : numpy.ndarray
+        "truth data"
+    mask : numpy.ndarray, optional
+        True where M should contribute to the cost, False where it should not
+
+    Returns
+    -------
+    float, numpy.ndarray
+        cost, dcost/dM
+
+    """
+    diff = (M-D)
+    if mask is not None:
+        diff = diff[mask]
+
+    alpha = 1 / diff.size
+    cost = (diff*diff).sum() * alpha
+
+    # backprop
+    if mask is not None:
+        grad = np.zeros_like(M)
+        grad[mask] = 2 * alpha * diff
+    else:
+        grad = 2 * alpha * diff
+
+    return cost, grad

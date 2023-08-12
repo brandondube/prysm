@@ -7,12 +7,17 @@ from .activation import (  # NOQA
 )
 
 from .cost import (  # NOQA
-    BiasAndGainInvariantError,
+    mean_square_error
 )
 
 from .optimizers import (  # NOQA
+    runN,
     GradientDescent,
     AdaGrad,
-    ADAM,
-    RMSProp
+    RMSProp,
+    AdaMomentum,
+    Adam,
+    RAdam,
+    Yogi,
+    F77LBFGSB,
 )
