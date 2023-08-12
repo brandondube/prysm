@@ -110,6 +110,26 @@ def sum_of_2d_modes(modes, weights):
     return np.tensordot(modes, weights, axes=(0, 0))
 
 
+def sum_of_2d_modes_backprop(modes, databar):
+    """Gradient backpropagation through sum_of_2d_modes.
+
+    Parameters
+    ----------
+    modes : iterable
+        sequence of ndarray of shape (k, m, n);
+        a list of length k with elements of shape (m,n) works
+    databar : numpy.ndarray
+        partial gradient backpropated up to the return of sum_of_2d_modes
+
+    Returns
+    -------
+    numpy.ndarry
+        cumulative gradient through to the weights vector given to sum_of_2d_modes
+
+    """
+    return np.tensordot(modes, databar)
+
+
 def hopkins(a, b, c, r, t, H):
     """Hopkins' aberration expansion.
 
