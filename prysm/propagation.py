@@ -405,8 +405,8 @@ def angular_spectrum_transfer_function(samples, wvl, dx, z):
     ky, kx = (fft.fftfreq(s, dx).astype(config.precision) for s in samples)
     kxx = kx * kx
     kyy = ky * ky
-    kyy = np.broadcast_to(ky, samples).swapaxes(0, 1)
-    kxx = np.broadcast_to(kx, samples)
+    kyy = np.broadcast_to(kyy, samples).swapaxes(0, 1)
+    kxx = np.broadcast_to(kxx, samples)
 
     return np.exp(-1j * np.pi * wvl * z * (kxx + kyy))
 
