@@ -2,4 +2,8 @@
 prysm v0.16.1
 *************
 
-This release has reconfigured readthedocs.org settings, preventing build failures from increased memory usage.  It also includes a bugfix to the welch window application for PSD calculations and a new example (defocus and contrast inversion) in the documentation.  This new example and the image based wavefront sensing example are now precompiled to reduce load on the RTD servers.
+This release has reconfigured readthedocs.org settings, preventing build
+failures from increased memory usage.  It also includes a bugfix to the welch
+window application for PSD calculations and a new example (defocus and contrast
+inversion) in the documentation.  This new example and the image based wavefront
+sensing example are now precompiled to reduce load on the RTD servers.

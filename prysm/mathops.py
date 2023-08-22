@@ -58,6 +58,7 @@ def set_backend_to_defaults():
 
 
 def set_backend_to_pytorch():
+    """Convenience method to automatically configure prysm's backend to PyTorch."""
     import pytorch as torch
     np._srcmodule = torch
     fft._srcmodule = torch.fft

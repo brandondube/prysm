@@ -206,7 +206,7 @@ def clenshaw_qbfs(cs, usq, alphas=None):
     alphas : numpy.ndarray, optional
         array to store the alpha sums in,
         the surface is u^2(1-u^2) * (2 * (alphas[0]+alphas[1])
-        if not None, alphas should be of shape (len(s), *x.shape)
+        if not None, alphas should be of shape (len(s), x.shape)
         see _initialize_alphas if you desire more information
 
     Returns

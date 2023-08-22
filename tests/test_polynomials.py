@@ -4,8 +4,8 @@ import pytest
 import numpy as np
 from prysm import coordinates
 
-from prysm.coordinates import cart_to_polar, make_xy_grid
-from prysm.experimental.raytracing.surfaces import surface_normal_from_cylindrical_derivatives, fix_zero_singularity
+from prysm.coordinates import cart_to_polar
+from prysm.x.raytracing.surfaces import surface_normal_from_cylindrical_derivatives, fix_zero_singularity
 from prysm import polynomials
 
 from scipy.special import (
@@ -20,6 +20,7 @@ from scipy.special import (
 
 SAMPLES = 32
 X, Y = np.linspace(-1, 1, SAMPLES), np.linspace(-1, 1, SAMPLES)
+rho, phi = cart_to_polar(X, Y)
 
 
 @pytest.fixture
@@ -34,6 +35,57 @@ def phi():
     return phi
 
 
+# XY poly
+
+xy_poly_truth_table = [  # NOQA
+    [np.nan,  2,  4,  7, 11, 16, 22, 29, 37, 46, 56],  # NOQA
+    [     3,  5,  8, 12, 17, 23, 30, 38, 47, 57],  # NOQA
+    [     6,  9, 13, 18, 24, 31, 39, 48, 58],  # NOQA
+    [    10, 14, 19, 25, 32, 40, 49, 59],  # NOQA
+    [    15, 20, 26, 33, 41, 50, 60],  # NOQA
+    [    21, 27, 34, 42, 51, 61],  # NOQA
+    [    28, 35, 43, 52, 62],  # NOQA
+    [    36, 44, 53, 63],  # NOQA
+    [    45, 54, 64],  # NOQA
+    [    55, 65],  # NOQA
+    [    66],  # NOQA
+]
+
+
+@pytest.mark.parametrize('j', np.arange(2, 67))
+def test_xy_poly_mapping_roundtrip(j):
+    n, m = polynomials.j_to_xy(j)
+    assert xy_poly_truth_table[m][n] == j
+
+
+def test_xy_poly_first_cross_term():
+    m = n = 1
+    xx, yy = np.meshgrid(X, Y)
+    prysm_calc = polynomials.xy_polynomial(m, n, xx, yy)
+    truth = xx * yy
+    assert np.allclose(prysm_calc, truth)
+
+
+def test_xy_poly_later_cross_term():
+    m = 1
+    n = 3
+    xx, yy = np.meshgrid(X, Y)
+    prysm_calc = polynomials.xy_polynomial(m, n, xx, yy)
+    truth = xx * yy**3
+    assert np.allclose(prysm_calc, truth)
+
+
+def test_xy_poly_sequence_cross_terms():
+    mns = [
+        (1, 1),
+        (1, 3),
+    ]
+    xx, yy = np.meshgrid(X, Y)
+    prysm_calc1, prysm_calc2 = polynomials.xy_polynomial_sequence(mns, xx, yy)
+    truth1 = xx * yy
+    truth2 = xx * yy ** 3
+    assert np.allclose(prysm_calc1, truth1)
+    assert np.allclose(prysm_calc2, truth2)
 # - Q poly
 
 
@@ -232,8 +284,10 @@ def test_jacobi_weight_correct():
     alpha = -0.5
     beta = -0.5
     x = X
-    res = weight(alpha, beta, x)
-    exp = (1-x)**alpha * (1+x)**beta
+    with np.testing.suppress_warnings() as sup:
+        sup.filter(RuntimeWarning)
+        res = weight(alpha, beta, x)
+        exp = (1-x)**alpha * (1+x)**beta
     assert np.allclose(res, exp)
 
 
@@ -570,28 +624,6 @@ def test_cheby4_sequence_matches_loop():
         assert np.allclose(elem, exp)
 
 
-# - higher order routines
-
-def test_sum_and_lstsq():
-    x, y = make_xy_grid(100, diameter=2)
-    ns = [0, 1, 2, 3, 4, 5]
-    ms = [1, 2, 3, 4, 5, 6, 7]
-    weights_x = np.random.rand(len(ns))
-    weights_y = np.random.rand(len(ms))
-    # "fun" thing, mix first and second kind chebyshev polynomials
-    mx, my = polynomials.separable_2d_sequence(ns, ms, x, y,
-                                               polynomials.cheby1_sequence,
-                                               polynomials.cheby2_sequence)
-
-    data = polynomials.sum_of_xy_modes(mx, my, x, y, weights_x, weights_y)
-    mx = [polynomials.mode_1d_to_2d(m, x, y, 'x') for m in mx]
-    my = [polynomials.mode_1d_to_2d(m, x, y, 'y') for m in my]
-    modes = mx + my  # concat
-    exp = list(weights_x) + list(weights_y)  # concat
-    coefs = polynomials.lstsq(modes, data)
-    assert np.allclose(coefs, exp)
-
-
 @pytest.mark.parametrize(['a', 'b', 'c'], [
     [1, 1, 1],
     [1, 3, 1],
@@ -628,17 +660,19 @@ def test_qcon_zzprime_grads():
 
 def test_qcon_zzprime_q2d():
     # decent number of points, so that finite diff isn't awful
-    x, y = coordinates.make_xy_grid(512, diameter=2)
-    r, t = coordinates.cart_to_polar(x, y)
-    coefs_c = np.random.rand(5)
-    coefs_a = np.random.rand(4, 4)
-    coefs_b = np.random.rand(4, 4)
-    z, zprimer, zprimet = polynomials.qpoly.compute_z_zprime_Q2d(coefs_c, coefs_a, coefs_b, r, t)
-    delta = x[0, 1] - x[0, 0]
-    ddy, ddx = np.gradient(z, delta)
-    dx, dy = surface_normal_from_cylindrical_derivatives(zprimer, zprimet, r, t)
-    dx = fix_zero_singularity(dx, x, y)
-    dy = fix_zero_singularity(dy, x, y)
+    with np.testing.suppress_warnings() as sup:
+        sup.filter(RuntimeWarning)
+        x, y = coordinates.make_xy_grid(512, diameter=2)
+        r, t = coordinates.cart_to_polar(x, y)
+        coefs_c = np.random.rand(5)
+        coefs_a = np.random.rand(4, 4)
+        coefs_b = np.random.rand(4, 4)
+        z, zprimer, zprimet = polynomials.qpoly.compute_z_zprime_Q2d(coefs_c, coefs_a, coefs_b, r, t)
+        delta = x[0, 1] - x[0, 0]
+        ddy, ddx = np.gradient(z, delta)
+        dx, dy = surface_normal_from_cylindrical_derivatives(zprimer, zprimet, r, t)
+        dx = fix_zero_singularity(dx, x, y)
+        dy = fix_zero_singularity(dy, x, y)
 
     # apply this mask, otherwise the very large gradients outside the unit disk
     # make things look terrible.
@@ -651,4 +685,3 @@ def test_qcon_zzprime_q2d():
     ddy *= mask
     assert np.allclose(dx, ddx, atol=1)
     assert np.allclose(dy, ddy, atol=1)
-

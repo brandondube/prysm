@@ -4,7 +4,7 @@ from numbers import Number
 from collections.abc import Iterable
 
 from .mathops import np, interpolate
-from .coordinates import cart_to_polar, make_xy_grid, uniform_cart_to_polar, polar_to_cart
+from .coordinates import cart_to_polar, make_xy_grid, uniform_cart_to_polar, polar_to_cart, optimize_xy_separable
 from .plotting import share_fig_ax
 
 
@@ -177,10 +177,12 @@ class RichData:
             interpolator instance.
 
         """
-        x = self.x
-        y = self.y
-        x = x[0]
-        y = y[..., 0]
+        x, y = self.x, self.y
+        x, y = optimize_xy_separable(x, y)
+        x = np.ascontiguousarray(x)
+        y = np.ascontiguousarray(y)
+        x = np.squeeze(x)
+        y = np.squeeze(y)
         if self.interpf_2d is None:
             self.interpf_2d = interpolate.RegularGridInterpolator((y, x), self.data)
 
@@ -201,6 +203,10 @@ class RichData:
         if self.interpf_x is None or self.interpf_y is None:
             ux, x = slc.x
             uy, y = slc.y
+            ux = np.ascontiguousarray(ux)
+            uy = np.ascontiguousarray(uy)
+            x = np.ascontiguousarray(x)
+            y = np.ascontiguousarray(y)
 
             self.interpf_x = interpolate.interp1d(ux, x)
             self.interpf_y = interpolate.interp1d(uy, y)

@@ -315,7 +315,7 @@ def jacobi_sum_clenshaw(s, alpha, beta, x, alphas=None):
         orthogonal over [-1,1]
     alphas : numpy.ndarray, optional
         array to store the alpha sums in, alphas[0] contains the sum and is returned
-        if not None, alphas should be of shape (len(s), *x.shape)
+        if not None, alphas should be of shape (len(s), x.shape)
         see _initialize_alphas if you desire more information
 
     Returns

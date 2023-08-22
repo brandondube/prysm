@@ -156,6 +156,16 @@ def uniform_cart_to_polar(x, y, data):
     # map points to x, y and make a grid for the original samples
     xv, yv = polar_to_cart(rv, pv)
 
+    data = np.ascontiguousarray(data)
+
+    if not x.flags.owndata:
+        x = x.copy()
+        x.setflags(write=True)
+
+    if not y.flags.owndata:
+        y = y.copy()
+        y.setflags(write=True)
+
     # interpolate the function onto the new points
     f = interpolate.RegularGridInterpolator((y, x), data, bounds_error=False, fill_value=0)
     return rho, phi, f((yv, xv), method='linear')
@@ -182,37 +192,8 @@ def resample_2d(array, sample_pts, query_pts, kind='cubic'):
         array resampled onto query_pts
 
     """
-    interpf = interpolate.interp2d(*sample_pts, array, kind=kind)
-    return interpf(*query_pts)
-
-
-def resample_2d_complex(array, sample_pts, query_pts, kind='linear'):
-    """Resample 2D array to be sampled along queried points.
-
-    Parameters
-    ----------
-    array : numpy.ndarray
-        2D array
-    sample_pts : tuple
-        pair of numpy.ndarray objects that contain the x and y sample locations,
-        each array should be 1D
-    query_pts : tuple
-        points to interpolate onto, also 1D for each array
-    kind : str, {'linear', 'cubic', 'quintic'}
-        kind / order of spline to use
-
-    Returns
-    -------
-    numpy.ndarray
-        array resampled onto query_pts
-
-    """
-    r, c = [resample_2d(a,
-                        sample_pts=sample_pts,
-                        query_pts=query_pts,
-                        kind=kind) for a in (array.real, array.imag)]
-
-    return r + 1j * c
+    interpf = interpolate.RegularGridInterpolator(sample_pts, array, method=kind)
+    return interpf(query_pts)
 
 
 def make_xy_grid(shape, *, dx=0, diameter=0, grid=True):
@@ -252,28 +233,13 @@ def make_xy_grid(shape, *, dx=0, diameter=0, grid=True):
     return x, y
 
 
-def make_rotation_matrix(abg, radians=False):
+def make_rotation_matrix(zyx, radians=False):
     """Build a rotation matrix.
-
-    The angles are Tait-Bryan angles describing extrinsic rotations about
-    Z, Y, X in that order.
-
-    Note that the return is the location of the input points in the output
-    space
-
-    For more information, see Wikipedia
-    https://en.wikipedia.org/wiki/Euler_angles#Tait%E2%80%93Bryan_angles
-    The "Tait-Bryan angles" Z1X2Y3 entry is the rotation matrix
-    used in this function.
-
 
     Parameters
     ----------
-    abg : tuple of float
-        the Tait-Bryan angles (α,β,γ)
-        units of degrees unless radians=True
-        if len < 3, remaining angles are zero
-        beta produces horizontal compression and gamma vertical
+    zyx : tuple of float
+        Z, Y, X rotation angles in that order
     radians : bool, optional
         if True, abg are assumed to be radians.  If False, abg are
         assumed to be degrees.
@@ -284,124 +250,170 @@ def make_rotation_matrix(abg, radians=False):
         3x3 rotation matrix
 
     """
-    ABG = truenp.zeros(3)
-    ABG[:len(abg)] = abg
-    abg = ABG
+    ZYX = truenp.zeros(3)
+    ZYX[:len(zyx)] = zyx
+    zyx = ZYX
     if not radians:
-        abg = truenp.radians(abg)
+        zyx = truenp.radians(zyx)
 
-    alpha, beta, gamma = abg
+    # alpha, beta, gamma = abg
+    gamma, beta, alpha = zyx
     cos1 = truenp.cos(alpha)
     cos2 = truenp.cos(beta)
     cos3 = truenp.cos(gamma)
     sin1 = truenp.sin(alpha)
     sin2 = truenp.sin(beta)
     sin3 = truenp.sin(gamma)
-    # # originally wrote this as a Homomorphic matrix
-    # # the m = m[:3,:3] crops it to just the rotation matrix
-    # # unclear if may some day want the Homomorphic matrix,
-    # # PITA to take it out, so leave it in
-    m = truenp.asarray([
-        [cos1*cos3 - sin1*sin2*sin3, -cos2*sin1, cos1*sin3 + cos3*sin1*sin2, 0],
-        [cos3*sin1 + cos1*sin2*sin3,  cos1*cos2, sin1*sin3 - cos1*cos3*sin2, 0],
-        [-cos2*sin3,                  sin2,      cos2*cos3,                  0],
-        [0,                           0,         0,                          1],
-    ], dtype=config.precision)
-    # bit of a weird dance with truenp/np here
-    # truenp -- make "m" on CPU, no matter what.
-    # np.array on last line will move data from numpy to any other "numpy"
-    # (like Cupy/GPU)
-    return np.asarray(m[:3, :3])
-    # Rx = truenp.asarray([
-    #     [1,    0,  0   ],  # NOQA
-    #     [0, cos1, -sin1],
-    #     [0, sin1,  cos1]
-    # ])
-    # Ry = truenp.asarray([
-    #     [cos2,  0, sin2],
-    #     [    0, 1,    0],  # NOQA
-    #     [-sin2, 0, cos2],
-    # ])
-    # Rz = truenp.asarray([
-    #     [cos3, -sin3, 0],
-    #     [sin3,  cos3, 0],
-    #     [0,        0, 1],
-    # ])
-    # m = Rz@Ry@Rx
-    # return m
+
+    Rx = truenp.asarray([
+        [1,    0,  0   ],  # NOQA
+        [0, cos1, -sin1],
+        [0, sin1,  cos1]
+    ])
+    Ry = truenp.asarray([
+        [cos2,  0, sin2],
+        [    0, 1,    0],  # NOQA
+        [-sin2, 0, cos2],
+    ])
+    Rz = truenp.asarray([
+        [cos3, -sin3, 0],
+        [sin3,  cos3, 0],
+        [0,        0, 1],
+    ])
+    m = Rz@Ry@Rx
+    return m
 
 
-def make_translation_matrix(tx, ty):
-    m = truenp.asarray([
-        [1, 0, tx],
-        [0, 1, ty],
-        [0, 0, 1],
-    ], dtype=config.precision)
-    return np.asarray(m)
+def promote_3d_transformation_to_homography(M):
+    """Convert a 3D transformation to 4D homography."""
+    out = truenp.zeros((4, 4), dtype=config.precision)
+    out[:3, :3] = M
+    out[3, 3] = 1
+    return out
 
 
-def apply_transformation_matrix(m, x, y, z=None, points=None, return_z=False):
-    """Apply the coordinate transformation m to the coordinates (x,y,[z]).
+def make_homomorphic_translation_matrix(tx=0, ty=0, tz=0):
+    out = np.eye(4, dtype=config.precision)
+    out[0, -1] = tx
+    out[1, -1] = ty
+    out[2, -1] = tz
+    return out
+
+
+def drop_z_3d_transformation(M):
+    """Drop the Z entries of a 3D homography.
+
+    Drops the third row and third column of 4D transformation matrix M.
 
     Parameters
     ----------
-    m : numpy.ndarray, optional
-        transormation matrix; see make_rotation_matrix, make_translation_matrix
+    M : numpy.ndarray
+        4x4 ndarray for (x, y, z, w)
+
+    Returns
+    -------
+    numpy.ndarray
+        3x3 array, (x, y, w)
+
+    """
+    mask = [0, 1, 3]
+    # first bracket: drop output Z row, second bracket: drop input Z column
+    M = M[mask][:, mask]
+    return np.ascontiguousarray(M)  # assume this will get used a million times
+
+
+def pack_xy_to_homographic_points(x, y):
+    """Pack (x, y) vectors into a vector of coordinates in homogeneous form.
+
+    Parameters
+    ----------
     x : numpy.ndarray
-        N dimensional array of x coordinates
+        x points
     y : numpy.ndarray
-        N dimensional array of x coordinates
-    z : numpy.ndarray
-        N dimensional array of z coordinates
-        assumes to be unity if not given
-    points : numpy.ndarray, optional
-        array of dimension [x.size, 3] containing [x,y,z]
-        points will be made by stacking x,y,z if not given.
-        passin3 points directly if this is the native storage
-        of your coordinates can improve performance.
-    return_z : bool, optional
-        if True, returns array of shape [3, x.shape]
-        if False, returns an array of shape [2, x.shape]
-        either return unpacks, such that x, y = rotate(...)
+        y points
 
     Returns
     -------
     numpy.ndarray
-        ndarray with rotated coordinates
+        3xN array (x, y, w)
 
     """
-    if z is None:
-        z = np.ones_like(x)
-
-    if points is None:
-        points = np.stack((x, y, z), axis=2)
-
-    out = np.tensordot(m, points, axes=((1), (2)))
-    if return_z:
-        return out
-    else:
-        return out[:2, ...]
+    out = np.empty((3, x.size), dtype=x.dtype)
+    out[0, :] = x.ravel()
+    out[1, :] = y.ravel()
+    out[2, :] = 1
+    return out
 
 
-def make_3D_rotation_affine(m):
-    """Convert a 3D rotation matrix to an affine transform.
+def apply_homography(M, x, y):
+    points = pack_xy_to_homographic_points(x, y)
+    xp, yp, w = M @ points
+    xp /= w
+    yp /= w
+    if x.ndim > 1:
+        xp = np.reshape(xp, x.shape)
+        yp = np.reshape(yp, x.shape)
+    return xp, yp
 
-    Assumes the rotation is viewed from the birdseye perspective, aka directly
-    overhead.
+
+def solve_for_planar_homography(src, dst):
+    """Find the planar homography that transforms src -> dst.
 
     Parameters
     ----------
-    m : numpy.ndarray
-        3x3 rotation matrix
+    src : numpy.ndarray
+        (N, 2) shaped array
+    dst : numpy.ndarray
+        (N, 2) shaped ndarray
 
     Returns
     -------
     numpy.ndarray
-        2x2 affine transform matrix
+        3x3 array containing the planar homography such that H * src = dst
 
     """
-    return m[:2, :2]
+    x1, y1 = src.T
+    N = len(x1)
+    x2, y2 = dst.T
+    # TODO: sensitive to numerical precision?
+    A = np.zeros((2*N, 9), dtype=config.precision)
+    for i in range(N):
+        # A[i]   = [-x1,    -y1,    -1, 0, 0, 0, x2x1,        x2y1,        x2   ]
+        A[2*i]   = [-x1[i], -y1[i], -1, 0, 0, 0, x2[i]*x1[i], x2[i]*y1[i], x2[i]]  # NOQA
+        # A[i+1] = [0, 0, 0, -x1,    -y1,    -1, y2x1,        y2y1,        y2   ]
+        A[2*i+1] = [0, 0, 0, -x1[i], -y1[i], -1, y2[i]*x1[i], y2[i]*y1[i], y2[i]]
+
+    ATA = A.T@A
+    U, sigma, Vt = np.linalg.svd(ATA)
+    return Vt[-1].reshape((3, 3))
 
 
 def warp(img, xnew, ynew):
-    return ndimage.map_coordinates(img, xnew, ynew)
+    """Warp an image, via "pull" and not "push".
+
+    Parameters
+    ----------
+    img : numpy.ndarray
+        2D ndarray
+    xnew : numpy.ndarray
+        2D array containing x or column coordinates to look up in img
+    ynew : numpy.ndarray
+        2D array containing y or row    coordinates to look up in img
+
+    Returns
+    -------
+    numpy.ndarray
+        "pulled" warped image
+
+    Notes
+    -----
+    The meaning of pull is that the indices of the output array indices
+    are the output image coordinates, in other words xnew/ynew specify
+    the coordinates in img, at which each output pixel is looked up
+
+    this is a dst->src mapping, aka "pull" in common image processing
+    vernacular
+
+    """
+    # user provides us (x, y), we provide scipy (row, col) = (y, x)
+    return ndimage.map_coordinates(img, (ynew, xnew))

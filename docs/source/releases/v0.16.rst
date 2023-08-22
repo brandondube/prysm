@@ -2,26 +2,45 @@
 prysm v0.16
 ***********
 
-This release has been largely focused on updating the internals of prysm and brings relatively new features.  The bulk of the work in this release has been spent on reworking the :mod:`~prysm.mathops` module for a cleaner and more extensible design and on rewriting the guts of the convolutional code.  The result is a slimmer library with cleaner code, faster execution, and higher accuracy results.  Users are encouraged to upgrade, particularly for the enhancements made to image simulations done based on the convolution engine.
+This release has been largely focused on updating the internals of prysm and
+brings relatively new features.  The bulk of the work in this release has been
+spent on reworking the :mod:`~prysm.mathops` module for a cleaner and more
+extensible design and on rewriting the guts of the convolutional code.  The
+result is a slimmer library with cleaner code, faster execution, and higher
+accuracy results.  Users are encouraged to upgrade, particularly for the
+enhancements made to image simulations done based on the convolution engine.
 
 New Features
 ============
 
-* :func:`prysm.coordinates.make_xy_grid` and :func:`~prysm.coordinates.make_rho_phi_grid` now take a :code:`radius` argument.
+* :func:`prysm.coordinates.make_xy_grid` and
+  :func:`~prysm.coordinates.make_rho_phi_grid` now take a :code:`radius`
+  argument.
 
-* :class:`~prysm.objects.TiltedSquare`:code:`.__init__` now takes :code:`radius` and :code:`contrast` arguments.
+* :class:`~prysm.objects.TiltedSquare`:code:`.__init__` now takes :code:`radius`
+  and :code:`contrast` arguments.
 
-* :func:`prysm.io.read_sigfit_zernikes` function to read Zernike coefficients from `SigFit <http://sigmadyne.com/sigfit-software/>`_ :code:`OUTCOF3` files.
+* :func:`prysm.io.read_sigfit_zernikes` function to read Zernike coefficients
+  from `SigFit <http://sigmadyne.com/sigfit-software/>`_ :code:`OUTCOF3` files.
 
-* :func:`prysm.io.read_sigfit_rigidbody` function to read rigid body motion and radius error coefficients from SigFit :code:`SUM2` files.
+* :func:`prysm.io.read_sigfit_rigidbody` function to read rigid body motion and
+  radius error coefficients from SigFit :code:`SUM2` files.
 
-* :meth:`prysm.interferogram.Interferogram.pad` function to pad interferograms; useful for dealing with group delay from spatial filtering.
+* :meth:`prysm.interferogram.Interferogram.pad` function to pad interferograms;
+  useful for dealing with group delay from spatial filtering.
 
-* :func:`~prysm.thinlens.object_to_image_dist` to calculate an object distance given a focal length and image distance.
+* :func:`~prysm.thinlens.object_to_image_dist` to calculate an object distance
+  given a focal length and image distance.
 
-* New :class:`~prysm.convolution.ConvolutionEngine` which allows users to control the execution flow of a convolution, adjust the data in k-space before returning to the spatial domain, and other advanced features.  For more information see the updated User's Guide.  Several bugs have been squashed in the process of making these upgrades.
+* New :class:`~prysm.convolution.ConvolutionEngine` which allows users to
+  control the execution flow of a convolution, adjust the data in k-space before
+  returning to the spatial domain, and other advanced features.  For more
+  information see the updated User's Guide.  Several bugs have been squashed in
+  the process of making these upgrades.
 
-* :mod:`prysm.degredations` for modeling degredations in the image chain.  :class:`~orysm.degredations.Smear` and :class:`~prysm.degredations.Jitter` are its first members.  They are also exported at the top level of the library.
+* :mod:`prysm.degredations` for modeling degredations in the image chain.
+  :class:`~orysm.degredations.Smear` and :class:`~prysm.degredations.Jitter` are
+  its first members.  They are also exported at the top level of the library.
 
 * :class:`~prysm.objects.Chirp` to synthesize chirped frequency targets.
 
@@ -29,41 +48,59 @@ New Features
 
 * :class:`~prysm.objects.GratingArray` to synthesize arrays of gratings.
 
-* the :code:`radius` argument is exposed on :class:`~prysm.objects.SiemensStar`:code:`.__init__`.
+* the :code:`radius` argument is exposed on
+  :class:`~prysm.objects.SiemensStar`:code:`.__init__`.
 
-* :func:`~prysm.interferogram.fit_psd` to fit analytic curves to PSD data.  Note that this function works best when given a reasonable guess; curve fitting extremely high dynamic range signals (such as PSDs) is not very stable.
+* :func:`~prysm.interferogram.fit_psd` to fit analytic curves to PSD data.  Note
+  that this function works best when given a reasonable guess; curve fitting
+  extremely high dynamic range signals (such as PSDs) is not very stable.
 
 Breaking changes
 ================
 
-* the :attr:`unit_x` and :attr:`unit_y` attributes on the BasicData class have been renamed to :attr:`x` and :attr:`y`.  :attr:`unit_x` and :attr:`unit_y` are provided as properties with warnings until v0.17.
+* the :attr:`unit_x` and :attr:`unit_y` attributes on the BasicData class have
+  been renamed to :attr:`x` and :attr:`y`.  :attr:`unit_x` and :attr:`unit_y`
+  are provided as properties with warnings until v0.17.
 
-* :code:`analytic_ft` functions no longer calculate the meshgrid of x and y inputs internally.  This makes output shapes and types consistent with input (i.e., calling :code:`.analytic_ft(0,0)` will return a float instead of a :code:`(1,1)` shape ndarray).  Performance is also improved by removing redundant gridding operations.
+* :code:`analytic_ft` functions no longer calculate the meshgrid of x and y
+  inputs internally.  This makes output shapes and types consistent with input
+  (i.e., calling :code:`.analytic_ft(0,0)` will return a float instead of a
+  :code:`(1,1)` shape ndarray).  Performance is also improved by removing
+  redundant gridding operations.
 
 Bugfixes
 ========
 
-* :meth:`~prysm.convolution.Convolvable.conv` now produces the correct number of output samples in all cases.  Fixes #3.
+* :meth:`~prysm.convolution.Convolvable.conv` now produces the correct number of
+  output samples in all cases.  Fixes #3.
 
 * unit changes have been corrected - prior results were incorrect.
 
-* the :code:`norm` kwarg has improved behavior for Zernike classes, no longer setting :code:`z.normalize = True` when the :code:`norm=False` kwarg is passed.
+* the :code:`norm` kwarg has improved behavior for Zernike classes, no longer
+  setting :code:`z.normalize = True` when the :code:`norm=False` kwarg is
+  passed.
 
-* an error is no longer raised when calling :meth:`prysm.convolution.Convolvable.save` with :code:`nbits=8`.
+* an error is no longer raised when calling
+  :meth:`prysm.convolution.Convolvable.save` with :code:`nbits=8`.
 
-* calls to :meth:`prysm.pupil.Pupil.mask` now properly capture the mask for application to the :code:`fcn` property.
+* calls to :meth:`prysm.pupil.Pupil.mask` now properly capture the mask for
+  application to the :code:`fcn` property.
 
-* units on PSD plots are now properly referenced to spatial and phase units, not nm.  This fix affects axis labels, not data.
+* units on PSD plots are now properly referenced to spatial and phase units, not
+  nm.  This fix affects axis labels, not data.
 
 Under-the-hood Changes
 ======================
 
 * :attr:`prysm.pupil.Pupil.strehl` now uses a more accurate formula.
 
-* the :mod:`prysm.mathops` module has been reworked, and its use throughout the library adjusted in concert with this change.
+* the :mod:`prysm.mathops` module has been reworked, and its use throughout the
+  library adjusted in concert with this change.
 
-* :func:`prysm.propagation.prop_pupil_plane_to_psf_plane` performance has been improved when Q=1.
+* :func:`prysm.propagation.prop_pupil_plane_to_psf_plane` performance has been
+  improved when Q=1.
 
-* some functions have had their conformance with :attr:`prysm.config.precision` improved.
+* some functions have had their conformance with :attr:`prysm.config.precision`
+  improved.
 
 * the performance of :meth:`prysm.detector.OLPF.analytic_ft` has been improved.

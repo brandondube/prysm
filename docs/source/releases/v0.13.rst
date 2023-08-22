@@ -1,8 +1,9 @@
-************
+***********
 prysm v0.13
-************
+***********
 
-This release brings a number of new features and enhancements. Users are encouraged to upgrade from older releases.
+This release brings a number of new features and enhancements. Users are
+encouraged to upgrade from older releases.
 
 
 New Features
@@ -10,26 +11,36 @@ New Features
 
 * :class:`SlantedEdge` object for image simulation
 
-* :meth:`~prysm.convolution.Convolvable.deconv` on the :class:`Convolvable` class to perform Wiener-Hunt deconvolution.
+* :meth:`~prysm.convolution.Convolvable.deconv` on the :class:`Convolvable`
+  class to perform Wiener-Hunt deconvolution.
 
-* convenience properties on :class:`OpticalPhase` (:class:`FringeZernike`, :class:`Interferogram`, ...) and :class:`Convolvable` objects.
+* convenience properties on :class:`OpticalPhase` (:class:`FringeZernike`,
+  :class:`Interferogram`, ...) and :class:`Convolvable` objects.
 
-    - :attr:`shape`, :attr:`diameter_x`, :attr:`diameter_y`, and :attr:`diameter` on the former.
-    - :attr:`shape`, :attr:`support_x`, :attr:`support_y`, and :attr:`support` on the latter.
+    - :attr:`shape`, :attr:`diameter_x`, :attr:`diameter_y`, and
+      :attr:`diameter` on the former.
+    - :attr:`shape`, :attr:`support_x`, :attr:`support_y`, and :attr:`support`
+      on the latter.
 
-* :attr:`std` property for the standard deviation on :class:`OpticalPhase` instances and :attr:`strehl` for the approximate Strehl Ratio on :class:`Pupil` instances.
+* :attr:`std` property for the standard deviation on :class:`OpticalPhase`
+  instances and :attr:`strehl` for the approximate Strehl Ratio on
+  :class:`Pupil` instances.
 
-* band-limited RMS evaluation on :class:`Interferogram` objects based on the 2D PSD
+* band-limited RMS evaluation on :class:`Interferogram` objects based on the 2D
+  PSD
 
-* analytical Fourier transform on the AiryDisk class for faster, more accurate convolutions
+* analytical Fourier transform on the AiryDisk class for faster, more accurate
+  convolutions
 
 * flexible linewidth on many plots
 
 * log scaling on 2D PSF plots
 
-* :attr:`residual` parameter in the :func:`~prysm.fringezernike.fit` function from the :mod:`~prysm.fringezernike` module
+* :attr:`residual` parameter in the :func:`~prysm.fringezernike.fit` function
+  from the :mod:`~prysm.fringezernike` module
 
-* azimuthally averaged MTF via the :meth:`~prysm.otf.MTF.azimuthal_average` method on the :class:`MTF` class
+* azimuthally averaged MTF via the :meth:`~prysm.otf.MTF.azimuthal_average`
+  method on the :class:`MTF` class
 
 * convolvables can now be saved with 16-bit precision
 
@@ -38,15 +49,27 @@ Under-the-hood changes and bug fixes
 ====================================
 
 * :class:`Interferogram` instances no longer cache PSD calculations internally
-* The wavefunction associated with an optical pupil is now a property, :class:`Pupil`.fcn instead of an attribute. It will be calculated on an as-needed basis which eliminates synchronization problems when Pupil instances are modified.
-* :class:`FZCache` and :class:`MCache` for Fringe Zernikes and masks now implement :meth:`__call__`, you can use :code:`mcache(128, 'hexagon')` instead of :code:`mcache.get_mask(128, 'hexagon')` and the equivalent for zcache.
-* importing of Zygo datx files is now more robust.  Files from the NexView NX2 now import properly.
+* The wavefunction associated with an optical pupil is now a property,
+  :class:`Pupil`.fcn instead of an attribute. It will be calculated on an
+  as-needed basis which eliminates synchronization problems when Pupil instances
+  are modified.
+* :class:`FZCache` and :class:`MCache` for Fringe Zernikes and masks now
+  implement :meth:`__call__`, you can use :code:`mcache(128, 'hexagon')` instead
+  of :code:`mcache.get_mask(128, 'hexagon')` and the equivalent for zcache.
+* importing of Zygo datx files is now more robust.  Files from the NexView NX2
+  now import properly.
 * :class:`Convolvable` is now exported at the top level
-* :meth:`prysm.convolution.Convolvable.from_file` no longer errors. Users must now scale the data after importing on their own, e.g. :code:`Convolvable.data /= 255` for an 8 bit per pixel file, or :code:`/= 65535` for a 16-bit file.
+* :meth:`prysm.convolution.Convolvable.from_file` no longer errors. Users must
+  now scale the data after importing on their own, e.g. :code:`Convolvable.data
+  /= 255` for an 8 bit per pixel file, or :code:`/= 65535` for a 16-bit file.
 
 
 Removed Features
 ================
 
-* :meth:`bandreject_filter` has been removed on the :class:`Interferogram` class; the implementation was not well done and the results of low quality.
-* :class:`MultispectralPSF` and :class:`RGBPSF` have been dropped; they have been neglected for a significant amount of time. MultispectralPSF only differed from a PSF in the call to :meth:`__init__`, users can replicate this behavior independently.
+* :meth:`bandreject_filter` has been removed on the :class:`Interferogram`
+  class; the implementation was not well done and the results of low quality.
+* :class:`MultispectralPSF` and :class:`RGBPSF` have been dropped; they have
+  been neglected for a significant amount of time. MultispectralPSF only
+  differed from a PSF in the call to :meth:`__init__`, users can replicate this
+  behavior independently.

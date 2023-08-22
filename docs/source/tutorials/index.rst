@@ -10,3 +10,4 @@ Tutorials
     Double-Slit Experiment.ipynb
     Image Simulation.ipynb
     Lens-MTF-Model.ipynb
+    Optimization-Basics.ipynb

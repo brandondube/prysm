@@ -374,8 +374,9 @@ def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x
 
 class CompositeKeystoneAperture:
     """Composite apertures with keystone shaped segments."""
-    def __init__(self, x, y, center_circle_diameter, segment_gap,
-                 rings, ring_radius, segments_per_ring, rotation_per_ring=None):
+    def __init__(self, x, y, center_circle_diameter,
+                 rings, ring_radius, segments_per_ring, segment_gap,
+                 rotation_per_ring=None):
         """Create a new CompositeKeystoneAperture.
 
         Parameters
@@ -409,9 +410,11 @@ class CompositeKeystoneAperture:
             by (360/16)=22.5 degrees so that the gaps do not align
 
         """
-        pak = _composite_keystone_aperture(center_circle_diameter, segment_gap,
-                                           x, y, rings, ring_radius,
-                                           segments_per_ring, rotation_per_ring)
+        pak = _composite_keystone_aperture(center_circle_diameter=center_circle_diameter,
+                                           segment_gap=segment_gap, x=x, y=y,
+                                           rings=rings, ring_radius=ring_radius,
+                                           segments_per_ring=segments_per_ring,
+                                           rotation_per_ring=rotation_per_ring)
 
         cs = pak['center_segment']
         ks = pak['keystones']

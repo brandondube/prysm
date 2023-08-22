@@ -77,8 +77,8 @@ def zernike_nm_sequence(nms, r, t, norm=True):
 
     Returns
     -------
-    generator
-        yields one mode at a time of nms
+    numpy.ndarray
+        shape (k, n, m), with k = len(nms)
 
     """
     # this function deduplicates all possible work.  It uses a connection
@@ -128,6 +128,8 @@ def zernike_nm_sequence(nms, r, t, norm=True):
         sines[m] = np.sin(m*t)
         cosines[m] = np.cos(m*t)
 
+    out = np.empty((len(nms), *r.shape), dtype=r.dtype)
+    k = 0
     for n, m in nms:
         absm = abs(m)
         nj = (n-absm) // 2
@@ -137,7 +139,8 @@ def zernike_nm_sequence(nms, r, t, norm=True):
 
         if m == 0:
             # rotationally symmetric Zernikes are jacobi
-            yield jac
+            out[k] = jac
+            k += 1
         else:
             if m < 0:
                 azpiece = sines[absm]
@@ -145,8 +148,11 @@ def zernike_nm_sequence(nms, r, t, norm=True):
                 azpiece = cosines[absm]
 
             radialpiece = powers_of_m[absm]
-            out = jac * azpiece * radialpiece  # jac already contains the norm
-            yield out
+            zern = jac * azpiece * radialpiece  # jac already contains the norm
+            out[k] = zern
+            k += 1
+
+    return out
 
 
 def zernike_nm_der(n, m, r, t, norm=True):

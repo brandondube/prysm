@@ -34,7 +34,6 @@ Prysm's backend is runtime interchangeable, you may also install and use `cupy <
 
 Tutorials
 ---------
-
 .. toctree::
     :maxdepth: 2
 
@@ -62,9 +61,16 @@ API Reference
 -------------
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 1
 
     api/index.rst
+
+Experimental Modules
+--------------------
+.. toctree::
+    :maxdepth: 3
+
+    api/x/index.rst
 
 Contributing
 ------------

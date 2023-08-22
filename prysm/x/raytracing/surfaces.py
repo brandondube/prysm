@@ -4,7 +4,7 @@ from prysm.mathops import np
 from prysm.conf import config
 from prysm.coordinates import cart_to_polar, make_rotation_matrix
 from prysm.polynomials.qpoly import compute_z_zprime_Q2d
-from prysm.polynomials import hermite_He_sequence, lstsq, mode_1d_to_2d
+from prysm.polynomials import hermite_He_sequence, lstsq
 
 
 def find_zero_indices_2d(x, y, tol=1e-8):
@@ -78,8 +78,9 @@ def fix_zero_singularity(arr, x, y, fill='xypoly', order=2):
     ns = np.arange(order+1)
     xbasis = hermite_He_sequence(ns, xpts)
     ybasis = hermite_He_sequence(ns, ypts)
-    xbasis = [mode_1d_to_2d(mode, xpts, ypts, 'x') for mode in xbasis]
-    ybasis = [mode_1d_to_2d(mode, xpts, ypts, 'y') for mode in ybasis]
+    # convert 1D modes to 2D for lstsq
+    xbasis = [np.broadcast_to(mode, (ypts.size, xpts.size)) for mode in xbasis]
+    ybasis = [np.broadcast_to(mode, (ypts.size, xpts.size)) for mode in ybasis]
     basis_set = np.asarray([*xbasis, *ybasis])
     coefs = lstsq(basis_set, window)
     projected = np.dot(basis_set[:, c[0], c[1]], coefs)

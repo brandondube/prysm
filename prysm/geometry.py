@@ -1,9 +1,11 @@
 """Functions used to generate various geometrical constructs."""
+import math
+
 import numpy as truenp
 
 from scipy import spatial
 
-# from .conf import config
+from .conf import config
 from .mathops import np
 from .coordinates import cart_to_polar, optimize_xy_separable, polar_to_cart
 
@@ -82,9 +84,6 @@ def rectangle(width, x, y, height=None, angle=0):
 def rotated_ellipse(width_major, width_minor, x, y, major_axis_angle=0):
     """Generate a binary mask for an ellipse, centered at the origin.
 
-    The major axis will notionally extend to the limits of the array, but this
-    will not be the case for rotated cases.
-
     Parameters
     ----------
     width_major : float
@@ -103,32 +102,7 @@ def rotated_ellipse(width_major, width_minor, x, y, major_axis_angle=0):
     numpy.ndarray
         An ndarray of shape (samples,samples) of value 0 outside the ellipse and value 1 inside the ellipse
 
-    Notes
-    -----
-    The formula applied is:
-         ((x-h)cos(A)+(y-k)sin(A))^2      ((x-h)sin(A)+(y-k)cos(A))^2
-        ______________________________ + ______________________________ 1
-                     a^2                               b^2
-
-    where x and y are the x and y dimensions, A is the rotation angle of the
-    major axis, h and k are the centers of the the ellipse, and a and b are
-    the major and minor axis widths.  In this implementation, h=k=0 and the
-    formula simplifies to:
-
-            (x*cos(A)+y*sin(A))^2             (x*sin(A)+y*cos(A))^2
-        ______________________________ + ______________________________ 1
-                     a^2                               b^2
-
-    see SO:
-    https://math.stackexchange.com/questions/426150/what-is-the-general-equation-of-the-ellipse-that-is-not-in-the-origin-and-rotate
-
-    Raises
-    ------
-    ValueError
-        if minor axis width is larger than major axis width
-
     """
-    # TODO: can this be optimized with separable x, y?
     if width_minor > width_major:
         raise ValueError('By definition, major axis must be larger than minor.')
 
@@ -303,13 +277,10 @@ def _generate_vertices(sides, radius=1, center=(0, 0), rotation=0):
     angle = 2 * truenp.pi / sides
     rotation = truenp.radians(rotation)
     x0, y0 = center
-    pts = []
-    for point in range(sides):
-        x = radius * truenp.sin(point * angle + rotation) + x0
-        y = radius * truenp.cos(point * angle + rotation) + y0
-        pts.append((x, y))
-
-    return truenp.asarray(pts)
+    points = truenp.arange(sides, dtype=config.precision)
+    x = radius * truenp.sin(points * angle + rotation) + x0
+    y = radius * truenp.cos(points * angle + rotation) + y0
+    return truenp.stack((x, y), axis=1)
 
 
 def spider(vanes, width, x, y, rotation=0, center=(0, 0), rotation_is_rad=False):
@@ -330,6 +301,8 @@ def spider(vanes, width, x, y, rotation=0, center=(0, 0), rotation_is_rad=False)
         rotational offset of the vanes, clockwise
     center : tuple of float
         point from which the vanes emanate, (x,y)
+    rotation_is_rad : bool, optional
+        if True, the rotation parameter is interpreted to be in radians
 
     Returns
     -------
@@ -395,3 +368,204 @@ def offset_circle(radius, x, y, center):
     # not cart to polar; computing theta is waste work
     r = np.hypot(x, y)
     return circle(radius, r)
+
+
+def _circle_arc(t0, t1, r, N, center=(0, 0)):
+    cx, cy = center
+    span = t1-t0
+    incr = span/N
+    pts = []
+    for j in range(N):
+        theta = t0+(incr*j)
+        x = cx + np.cos(theta) * r
+        y = cy + np.sin(theta) * r
+        pts.append((x, y))
+
+    return pts
+
+
+def _qhull_points_for_rectangle_with_corner_fillets(width, height, cradius, x, y, center=(0, 0), rotation=0):
+    dx = x[0, 1] - x[0, 0]
+    # need circumference/4/dx points on the circle
+    # 4 = quarter-arc
+    # parametric equation of a circle is x=cos(theta)*r, y=sin(theta0*r)
+    C = 2*np.pi*cradius
+    Ncirc = math.ceil(C/4/dx)
+
+    cx, cy = center
+
+    # extremes of the rectangle
+    ledge = -width+cx
+    redge = +width+cx
+    top = height+cy
+    bottom = -height+cy
+
+    all_points = []
+    # the basic gist of this algorithm
+    #
+    #
+    # the rectangle is:
+    # x----------------------------------x
+    # |                                  |
+    # |                                  |
+    # |                                  |
+    # |                                  |
+    # |                                  |
+    # |                                  |
+    # x----------------------------------x
+    # find the point at which we transition from the rectangle to the
+    # circle, and the center of that circle:
+    # x----------------------------------x
+    # |     ^                            |
+    # |     |                            |
+    # | <-  .                            |
+    # |                                  |
+    # |                                  |
+    # |                                  |
+    # x----------------------------------x
+
+    # enumerate the points (last_p_rec, p_circ0, p_circ1, ..p_circN, first_p_rec)
+    # going around clockwise from top left
+    #
+    # give those to Qhull and shade the interior from the simplices
+    all_points = []
+
+    # top left
+    circle_cx = ledge+cradius
+    circle_cy = top-cradius
+    top_left_leading_extreme_rect = (ledge, circle_cy)
+    top_left_trailing_extreme_rect = (circle_cx, top)
+
+    all_points.append(top_left_leading_extreme_rect)
+    all_points += _circle_arc(np.pi, np.pi/2, cradius, Ncirc, center=(circle_cx, circle_cy))
+    all_points.append(top_left_trailing_extreme_rect)
+
+    # top right
+    circle_cx = redge-cradius
+    circle_cy = top-cradius
+    top_right_leading_extreme_rect = (circle_cx, top)
+    top_right_trailing_extreme_rect = (redge, circle_cy)
+
+    all_points.append(top_right_leading_extreme_rect)
+    all_points += _circle_arc(np.pi/2, 0, cradius, Ncirc, center=(circle_cx, circle_cy))
+    all_points.append(top_right_trailing_extreme_rect)
+
+    # bottom right
+    circle_cx = redge-cradius
+    circle_cy = bottom+cradius
+    bottom_right_leading_extreme_rect = (redge, circle_cy)
+    bottom_right_trailing_extreme_rect = (circle_cx, bottom)
+
+    all_points.append(bottom_right_leading_extreme_rect)
+    all_points += _circle_arc(0, -np.pi/2, cradius, Ncirc, center=(circle_cx, circle_cy))
+    all_points.append(bottom_right_trailing_extreme_rect)
+
+    # bottom left
+    circle_cx = ledge+cradius
+    circle_cy = bottom+cradius
+    bottom_right_leading_extreme_rect = (circle_cx, bottom)
+    bottom_right_trailing_extreme_rect = (ledge, circle_cy)
+
+    all_points.append(bottom_right_leading_extreme_rect)
+    all_points += _circle_arc(-np.pi/2, -np.pi, cradius, Ncirc, center=(circle_cx, circle_cy))
+    all_points.append(bottom_right_trailing_extreme_rect)
+
+    return all_points
+
+
+def rectangle_with_corner_fillets(width, height, cradius, x, y, center=(0, 0), rotation=0):
+    """Shade a rectangle with filleted (circular arc) corners.
+
+    Parameters
+    ----------
+    width : float
+        half-width of the rectangle, same units as x and y
+    height : float
+        half-height of the rectangle, same units as x and y
+    cradius : float
+        radius of the corner fillets
+    x : numpy.ndarray
+        x coordinates
+    y : numpy.ndarray
+        y coordinates
+    center : tuple of float
+        (x,y) center of the rectangle
+    rotation : float
+        degrees of rotation **about coordinate grid center**
+
+    Returns
+    -------
+    numpy.ndarray
+        1 inside "squircle", 0 outside
+
+    """
+    points = _qhull_points_for_rectangle_with_corner_fillets(width, height, cradius, x, y, center=center)
+
+    if rotation != 0:
+        r, t = cart_to_polar(x, y)
+        t += truenp.radians(rotation)
+        x, y = polar_to_cart(r, t)
+
+    xxyy = truenp.stack((x, y), axis=2)
+    triangles = spatial.Delaunay(points, qhull_options='QJ Qf')
+    mask = ~(triangles.find_simplex(xxyy) < 0)
+    return mask
+
+
+def chebygauss_quadrature_xy(rings, radius=1, spokes=-1, center=(0, 0)):
+    """Use Chebyshev-Gauss quadrature to sample a polar coordinate grid.
+
+    Parameters
+    ----------
+    rings : int
+        number of rings to use; degree of radial sampling
+    radius : float
+        radius of the grid, process units
+    spokes : int, optional
+        number of spokes if -1, use rings*2 + 1
+    center : tuple
+        (x,y) center point of the grid
+
+    Returns
+    -------
+    numpy.ndarray
+        Chebyshev-Gauss-Lobatto points (x,y)
+
+    """
+    # domain [0,1]
+    # a = 0
+    # b = 1
+    if spokes == -1:
+        spokes = 2*rings + 1
+    n = rings
+    r = []  # r = radial variable
+    for k in range(1, n+1):
+        num = 2*k - 1
+        den = 2 * n
+        term1 = 0.5  # 1/2 (a+b) == 0.5, fixed a,b
+        # prefix to term2 also == term1
+
+        # term2 == term1
+        xk = term1 + term1 * np.cos((num/den) * np.pi)
+        r.append(xk*radius)
+
+    o_x = np.empty(spokes*len(r))
+    o_y = np.empty(spokes*len(r))
+    psi = (5 ** .5 + 1) / 2  # golden ratio
+    lower = 0
+    shift = spokes
+    upper = shift
+    for k, rr in enumerate(r):
+        Delta = 2*np.pi / spokes
+        # arange term = "j"
+        # Greg forbes' theta = (j+k/psi)Delta; Delta = 2pi/J
+        j = np.arange(1, spokes+1, dtype=np.float64)
+        kk = k + 1
+        t = (j + (kk/psi)) * Delta
+        x, y = polar_to_cart(rr, t)
+        o_x[lower:upper] = x
+        o_y[lower:upper] = y
+        upper += shift
+        lower += shift
+
+    return o_x+center[0], o_y+center[1]

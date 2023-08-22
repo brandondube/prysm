@@ -2,46 +2,70 @@
 prysm v0.18
 ***********
 
-This release brings several enhancements related to processing interferoemter data, and completes the update of the Zernike module.  Perhaps as a breath of fresh air, you are likely to experience *zero* breaking changes.  Users are encouraged to upgrade, and remove any error correction logic from their own processing pipelines.
+This release brings several enhancements related to processing interferoemter
+data, and completes the update of the Zernike module.  Perhaps as a breath of
+fresh air, you are likely to experience *zero* breaking changes.  Users are
+encouraged to upgrade, and remove any error correction logic from their own
+processing pipelines.
 
 New Features
 ============
 
-- new function :func:`prysm.geometry.rectangle` for generating rectangular windows
+- new function :func:`prysm.geometry.rectangle` for generating rectangular
+  windows
 - new method :meth:`prysm.psf.PSF.centroid` for computing the centroid of a PSF
-- new method :meth:`prysm.psf.PSF.autowindow` for centering the data on the data of a PSF, based on its centroid
+- new method :meth:`prysm.psf.PSF.autowindow` for centering the data on the data
+  of a PSF, based on its centroid
 
-The Zernike module has completed its overhaul.  This brings the following changes:
+The Zernike module has completed its overhaul.  This brings the following
+changes:
 
 - both Fringe and Noll zernike classes now allow expansion up to arbitrary order
-- the performance of Zernike calculations is improved by 2-3x vs 0.17 when numba was installed.  More than 10x compared to 0.17 without numba.  Numba is now never used, which results in faster imports when it is installed.
+- the performance of Zernike calculations is improved by 2-3x vs 0.17 when numba
+  was installed.  More than 10x compared to 0.17 without numba.  Numba is now
+  never used, which results in faster imports when it is installed.
 - New functions:
-- - :func:`~prysm.zernike.fringe_to_n_m` for converting (arbitrary) Fringe index -> (n,m).  One based.
-- - :func:`~prysm.zernike.n_m_to_name` for retrieving the name from (n, m) orders.
+- - :func:`~prysm.zernike.fringe_to_n_m` for converting (arbitrary) Fringe index
+    -> (n,m).  One based.
+- - :func:`~prysm.zernike.n_m_to_name` for retrieving the name from (n, m)
+    orders.
 
 - New capability:
-- - :func:`~prysm.zernike.zernikefit` can fit from (n,m) indices, and fit isolated terms without fitting all of the lower order ones
+- - :func:`~prysm.zernike.zernikefit` can fit from (n,m) indices, and fit
+    isolated terms without fitting all of the lower order ones
 
-Breaking:
-- the list :code:`prysm.zernike.zernikes` no longer exists
-- the explicit functions such as :func:`~prysm.zernike.primary_spherical` now only include up to primary trefoil.  You must use another method (such as the caches) to access higher order polynomials.
-- all explicit zernike functions no longer have :code:`name` or :code:`norm` attributes.  Use the enumerated new functions above to get the name or norm of a term from its index
-- :code:`prysm.zernike.zcache` no longer exists.  :class:`~prysm.zernike.ZCacheMN` replaces :code:`ZCache`.  In 0.19, :code:`ZCache` will become an alias for :code:`ZCacheMN`.
-- :func:`prysm.zernike.zernikename` is deleted, use :func:`~prysm.zernike.n_m_to_name` and the various xxxx_to_n_m functions in its place.
-- the "base" kwarg to Zernike classes is deprecated and will be removed in 0.19
+Breaking: - the list :code:`prysm.zernike.zernikes` no longer exists - the
+explicit functions such as :func:`~prysm.zernike.primary_spherical` now only
+include up to primary trefoil.  You must use another method (such as the caches)
+to access higher order polynomials. - all explicit zernike functions no longer
+have :code:`name` or :code:`norm` attributes.  Use the enumerated new functions
+above to get the name or norm of a term from its index -
+:code:`prysm.zernike.zcache` no longer exists.  :class:`~prysm.zernike.ZCacheMN`
+replaces :code:`ZCache`.  In 0.19, :code:`ZCache` will become an alias for
+:code:`ZCacheMN`. - :func:`prysm.zernike.zernikename` is deleted, use
+:func:`~prysm.zernike.n_m_to_name` and the various xxxx_to_n_m functions in its
+place. - the "base" kwarg to Zernike classes is deprecated and will be removed
+in 0.19
 
 Bug fixes
 =========
 
-The Zygo datx importer was rewritten.  It now never results in improperly scaled phase.  The :code:`meta` attribute on interferograms from :meth:`~prysm.interferogram.Interferogram.from_zygo_dat` may differ in its keys due to these changes.
+The Zygo datx importer was rewritten.  It now never results in improperly scaled
+phase.  The :code:`meta` attribute on interferograms from
+:meth:`~prysm.interferogram.Interferogram.from_zygo_dat` may differ in its keys
+due to these changes.
 
 Under-the-hood
 ==============
 
-For :class:`OpticalPhase`, the phase attribute is now a property that points to :code:`.data`.  This makes *all* prysm classes have a common location holding their primary data array, improving cohesion.  If you access the phase attribute directly, there is no change in your code or its behavior.
+For :class:`OpticalPhase`, the phase attribute is now a property that points to
+:code:`.data`.  This makes *all* prysm classes have a common location holding
+their primary data array, improving cohesion.  If you access the phase attribute
+directly, there is no change in your code or its behavior.
 
 New Documentation
 =================
 
-- :func:`prysm.geometry.mask_cleaner` now has a docstring.  You probably won't use this function.
+- :func:`prysm.geometry.mask_cleaner` now has a docstring.  You probably won't
+  use this function.
 - :class:`prysm.interferogram.PSD` now has a docstring.

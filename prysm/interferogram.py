@@ -12,16 +12,16 @@ from .mathops import np, fft, jinc
 from .io import (
     read_zygo_dat,
     read_zygo_datx,
-    write_zygo_ascii
+    write_zygo_ascii,
+    write_zygo_dat,
 )
 from .fttools import forward_ft_unit
 from .coordinates import (
     cart_to_polar,
     broadcast_1d_to_2d,
     make_xy_grid,
-    optimize_xy_separable
 )
-from prysm.polynomials import lstsq, mode_1d_to_2d
+from prysm.polynomials import lstsq
 from .util import mean, rms, pv, Sa, std  # NOQA
 from .wavelengths import HeNe
 from .plotting import share_fig_ax
@@ -54,15 +54,8 @@ def fit_plane(x, y, z):
         array representation of plane
 
     """
-    xx, yy = optimize_xy_separable(x, y)
-
-    mode1 = xx
-    mode2 = yy
-    mode1 = mode_1d_to_2d(mode1, x, y, 'x')
-    mode2 = mode_1d_to_2d(mode2, x, y, 'y')
-
-    coefs = lstsq([mode1, mode2], z)
-    plane_fit = coefs[0] * mode1 + coefs[1] * mode2
+    coefs = lstsq([x, y], z)
+    plane_fit = coefs[0] * x + coefs[1] * y
     return plane_fit
 
 
@@ -448,7 +441,7 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
     psd : numpy.ndarray
         1D PSD, units of height^2 / (cy/length)^2
     callable : callable, optional
-        a callable object that takes parameters of (frequency, *); all other parameters will be fit
+        a callable object that takes parameters of (frequency, args); all other parameters will be fit
     guess : iterable
         parameters of callable to seed optimization with
     return_ : str, optional, {'coefficients', 'optres'}
@@ -1057,7 +1050,7 @@ class Interferogram(RichData):
         return fig, ax
 
     def save_zygo_ascii(self, file):
-        """Save the interferogram to a Zygo ASCII filnp.
+        """Save the interferogram to a Zygo ASCII file.
 
         Parameters
         ----------
@@ -1068,6 +1061,17 @@ class Interferogram(RichData):
         sf = 1 / (self.wavelength * 1e3)
         phase = self.data * sf
         write_zygo_ascii(file, phase=phase, dx=self.dx, intensity=None, wavelength=self.wavelength)
+
+    def save_zygo_dat(self, file):
+        """Save the interferogram to a Zygo dat file.
+
+        Parameters
+        ----------
+        file : Path_like, str, or File_like
+            where to save to
+
+        """
+        write_zygo_dat(file, phase=self.data, dx=self.dx, intensity=None, wavelength=self.wavelength)
 
     def __str__(self):
         """Pretty-print string representation."""
