@@ -315,6 +315,8 @@ def multilayer_matrix_p(n0, theta0, characteristic_matrices, nnp1, theta_np1):
 
     if term2.ndim > 2:
         term2 = np.moveaxis(term2, 2, 0)
+
+    if term4.ndim > 2:
         term4 = np.moveaxis(term4, 2, 0)
 
     if hasattr(term1, '__len__') and len(term1) > 1:
@@ -375,6 +377,8 @@ def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
 
     if term2.ndim > 2:
         term2 = np.moveaxis(term2, 2, 0)
+    
+    if term4.ndim > 2:
         term4 = np.moveaxis(term4, 2, 0)
 
     if hasattr(term1, '__len__') and len(term1) > 1:
@@ -481,10 +485,10 @@ def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, ambient_index=1)
     
     # do the first loop by hand to handle ambient vacuum gracefully
     if angles.ndim > 1:
-        for i in range(thicknesses.shape[1]):
+        for i in range(angles.shape[1]):
             angles[:,i] = snell_aor(ambient_index, indices[:,i], aoi, degrees=False)
     else:
-        for i in range(len(thicknesses)):
+        for i in range(len(angles)):
             angles[i] = snell_aor(ambient_index, indices[i], aoi, degrees=False)
 
     if polarization == 'p':
@@ -498,18 +502,17 @@ def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, ambient_index=1)
 
     Mjs = []
     if angles.ndim > 1:
-        for i in range(thicknesses.shape[1]):
+        for i in range(angles.shape[1]):
             Mjs.append(fn1(wavelength, thicknesses[:, i], indices[:, i], angles[:, i]))
     else:
-        for i in range(len(thicknesses)):
+        for i in range(len(angles)):
             Mjs.append(fn1(wavelength, thicknesses[i], indices[i], angles[i]))
 
     if Mjs[0].ndim > 2:
         Mjs = [np.moveaxis(M, 2, 0) for M in Mjs]
 
     if angles.ndim > 1:
-        n0 = np.broadcast_to(ambient_index, indices.shape[0])
-        A = fn2(n0, aoi, Mjs, indices[:, -1], angles[:, -1])
+        A = fn2(ambient_index, aoi, Mjs, indices[:, -1], angles[:, -1])
     else:
         A = fn2(ambient_index, aoi, Mjs, indices[-1], angles[-1])
 
