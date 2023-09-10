@@ -1,8 +1,11 @@
 """Phase Shifting Interferometry."""
+import numpy as truenp
 
 from prysm.mathops import np
+from prysm.polynomials import sum_of_2d_modes
 from prysm._richdata import RichData
 from prysm.fttools import fftrange
+from prysm.conf import config
 
 from skimage.restoration import unwrap_phase as ski_unwrap_phase
 
@@ -17,6 +20,37 @@ ZYGO_THIRTEEN_FRAME_CS = (0, -4, -12, -12, 0, 16, 24, 16, 0, -12, -12, -4, 0)
 SCHWIDER_SHIFTS = fftrange(5) * np.pi/2
 SCHWIDER_SS = (0, 2, 0, -2, 0)
 SCHWIDER_CS = (-1, 0, 2, 0, -1)
+
+# one-time array conversion for dtype lookups in psi acc
+ZYGO_THIRTEEN_FRAME_SS = truenp.asarray(ZYGO_THIRTEEN_FRAME_SS)
+ZYGO_THIRTEEN_FRAME_CS = truenp.asarray(ZYGO_THIRTEEN_FRAME_CS)
+SCHWIDER_SS = truenp.asarray(SCHWIDER_SS)
+SCHWIDER_CS = truenp.asarray(SCHWIDER_CS)
+
+
+def _psi_acc_dtype(gs, ss, cs):
+    # unsigned, or integer
+    kinds = (gs.dtype.kind, ss.dtype.kind, cs.dtype.kind)
+    is_int = all(kind in 'ui' for kind in kinds)
+    # fast path
+    if not is_int:
+        return config.precision
+
+    sz = gs.dtype.itemsize  # bytes per value
+    if sz < 32:
+        return np.int32
+    else:
+        return np.int64
+
+def psi_accumulate(gs, ss, cs):
+    # ss = np.asarray(ss)
+    # cs = np.asarray(cs)
+    # dtype = _psi_acc_dtype(gs)
+    # num = np.zeros(gs[0].shape, dtype=dtype)
+    # den = np.zeros(gs[0].shape, dtype=dtype)
+    num = sum_of_2d_modes(gs, ss)
+    den = sum_of_2d_modes(gs, cs)
+    return num, den
 
 
 def degroot_formalism_psi(gs, ss, cs):
