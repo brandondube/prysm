@@ -285,23 +285,23 @@ def demosaic_malvar(img, cfa='rggb'):
 
     if cfa == 'rggb':
         red[top_left] = img[top_left]
-        red[top_right] = c2[top_right]
-        red[bottom_left] = c1[bottom_left]
+        red[top_right] = c1[top_right]
+        red[bottom_left] = c2[bottom_left]
         red[bottom_right] = c3[bottom_right]
 
         blue[top_left] = c3[top_left]
-        blue[top_right] = c1[top_right]
-        blue[bottom_left] = c2[bottom_left]
+        blue[top_right] = c2[top_right]
+        blue[bottom_left] = c1[bottom_left]
         blue[bottom_right] = img[bottom_right]
     elif cfa == 'bggr':
         blue[top_left] = img[top_left]
-        blue[top_right] = c2[top_right]
-        blue[bottom_left] = c1[bottom_left]
+        blue[top_right] = c1[top_right]
+        blue[bottom_left] = c2[bottom_left]
         blue[bottom_right] = c3[bottom_right]
 
         red[top_left] = c3[top_left]
-        red[top_right] = c1[top_right]
-        red[bottom_left] = c2[bottom_left]
+        red[top_right] = c2[top_right]
+        red[bottom_left] = c1[bottom_left]
         red[bottom_right] = img[bottom_right]
     else:
         raise ErrBadCFA
