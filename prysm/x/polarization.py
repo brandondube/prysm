@@ -2,6 +2,91 @@
 from prysm.mathops import np
 from prysm.conf import config
 
+def _empty_pol_vector(shape=None):
+    """Returns an empty array to populate with jones vector elements.
+
+    Parameters
+    ----------
+    shape : list, optional
+        shape to prepend to the jones vector array. shape = [32,32] returns an array of shape [32,32,2,1]
+        where the matrix is assumed to be in the last indices. Defaults to None, which returns a [2] array.
+
+    Returns
+    -------
+    numpy.ndarray
+        The empty array of specified shape
+    """
+
+    if shape is None:
+        
+        shape = (2)
+
+    else:
+
+        shape = (*shape,2,1)
+
+    return np.zeros(shape, dtype=config.precision_complex)
+
+def linear_pol_vector(angle, degrees=True):
+    """Returns a linearly polarized jones vector at a specified angle
+
+    Parameters
+    ----------
+    angle : float
+        angle that the linear polarization is oriented with respect to the horizontal axis
+    shape : list, optional
+        shape to prepend to the jones vector array. shape = [32,32] returns an array of shape [32,32,2,1]
+        where the matrix is assumed to be in the last indices. Defaults to None, which returns a [2] array.
+
+    Returns
+    -------
+    numpy.ndarray
+        linear jones vector
+    """
+
+    if degrees:
+        angle = angle * np.pi / 180
+
+    cost = np.cos(angle)
+    sint = np.sin(angle)
+
+    if hasattr(angle,'ndim'):
+        pol_vector = _empty_pol_vector(shape=angle.shape)
+        pol_vector[...,0,0] = cost
+        pol_vector[...,1,0] = sint
+    else:
+        pol_vector = _empty_pol_vector(shape=None)
+        pol_vector[0] = cost
+        pol_vector[1] = sint
+
+    return pol_vector
+
+def circular_pol_vector(handedness='left',shape=None):
+    """Returns a circularly polarized jones vector
+
+    Parameters
+    ----------
+    shape : list, optional
+        shape to prepend to the jones vector array. shape = [32,32] returns an array of shape [32,32,2,1]
+        where the matrix is assumed to be in the last indices. Defaults to None, which returns a [2] array.
+
+    Returns
+    -------
+    numpy.ndarray
+        circular jones vector
+    """
+
+    pol_vector = _empty_pol_vector(shape=shape)
+    pol_vector[...,0] = 1/np.sqrt(2)
+    if handedness == 'left':
+        pol_vector[...,1] = 1j/np.sqrt(2)
+    elif handedness == 'right':
+        pol_vector[...,1] = -1j/np.sqrt(2)
+    else:
+        raise ValueError(f"unknown handedness {handedness}, use 'left' or 'right''")
+
+    return pol_vector
+
 
 def _empty_jones(shape=None):
     """Returns an empty array to populate with jones matrix elements.
