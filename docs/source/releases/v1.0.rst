@@ -167,7 +167,7 @@ Jones Matrices:
 * :func:`~prysm.x.polarization.half_wave_plate`
 * :func:`~prysm.x.polarization.quarter_wave_plate`
 
-Conversion to mueller matrices and simple data reduction with pauli spin matrices:
+Conversion to Mueller matrices and simple data reduction with Pauli spin matrices:
 
 * :func:`~prysm.x.polarization.jones_to_mueller`
 * :func:`~prysm.x.polarization.pauli_spin_matrix`
