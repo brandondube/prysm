@@ -542,7 +542,7 @@ class ChirpZTransformExecutor:
         # but np.conj copies real inputs, so we optimize for that.
         if np.iscomplexobj(ary):
             ary = np.conj(ary)
-        xformed = self.czt2(ary, Q, samples, shift)
+        xformed = np.conj(self.czt2(ary, Q, samples, shift))
         return xformed
 
     def _setup_bases(self, key):
