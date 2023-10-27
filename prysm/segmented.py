@@ -699,6 +699,8 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
 
         for angle in segment_angles:
             # find the four corners; c = corner
+            # because keystones are Problematic (TM), the "upper" vertex
+            # may be outside the usual corners
             lo = angle
             hi = angle+arc_rad
             while hi > 2*np.pi:
@@ -712,11 +714,13 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
             mid = lo + arc_rad / 2
             center_angles.append(mid)
 
+            # egg: a pie has five corners
             c1 = (inner_radius, lo)
             c2 = (inner_radius, hi)
             c3 = (outer_radius, lo)
             c4 = (outer_radius, hi)
-            arr = np.array([c1, c2, c3, c4])
+            c5 = (outer_radius, mid)
+            arr = np.array([c1, c2, c3, c4, c5])
             rr = arr[:, 0]
             tt = arr[:, 1]
             xx, yy = polar_to_cart(rr, tt)

@@ -315,6 +315,8 @@ def multilayer_matrix_p(n0, theta0, characteristic_matrices, nnp1, theta_np1):
 
     if term2.ndim > 2:
         term2 = np.moveaxis(term2, 2, 0)
+
+    if term4.ndim > 2:
         term4 = np.moveaxis(term4, 2, 0)
 
     if hasattr(term1, '__len__') and len(term1) > 1:
@@ -375,6 +377,8 @@ def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
 
     if term2.ndim > 2:
         term2 = np.moveaxis(term2, 2, 0)
+    
+    if term4.ndim > 2:
         term4 = np.moveaxis(term4, 2, 0)
 
     if hasattr(term1, '__len__') and len(term1) > 1:
@@ -422,11 +426,8 @@ def ttot(Amat):
     return 1 / Amat[..., 0, 0]
 
 
-def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, assume_vac_ambient=True):
+def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, ambient_index=1):
     """Compute r and t for a given stack of materials.
-
-    An infinitely thick layer of vacuum is assumed to proceed stack
-    if assume_vac_ambient is True
 
     Parameters
     ----------
@@ -447,9 +448,8 @@ def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, assume_vac_ambie
         wavelength of light, microns
     aoi : float, optional
         angle of incidence, degrees
-    assume_vac_ambient : bool, optional
-        if True, prepends an infinitely thick layer of vacuum to the stack
-        if False, prepend the ambient index but *NOT* a thickness
+    ambient_index : float, optional
+        The refractive index the film is immersed in, defaults to 1 (vacuum)
 
     Returns
     -------
@@ -476,30 +476,20 @@ def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, assume_vac_ambie
     # there's no way (that I know of) around that
 
     nlayers = len(stack)
+
     if indices.ndim > 1:
         indices = np.moveaxis(indices.reshape((nlayers, -1)), 1, 0)
         thicknesses = np.moveaxis(thicknesses.reshape((nlayers, -1)), 1, 0)
 
     angles = np.empty(thicknesses.shape, dtype=config.precision_complex)
+    
     # do the first loop by hand to handle ambient vacuum gracefully
     if angles.ndim > 1:
-        angles[:, 0] = aoi
-        if assume_vac_ambient:
-            result = snell_aor(1, indices[:, 0], aoi, degrees=False)
-            angles[:, 1] = result
-        else:
-            angles[:, 1] = snell_aor(indices[:, 0], indices[:, 1], aoi, degrees=False)
-        for i in range(2, thicknesses.shape[1]):
-            angles[:, i] = snell_aor(indices[:, i-1], indices[:, i], angles[:, i-1], degrees=False)
+        for i in range(angles.shape[1]):
+            angles[:,i] = snell_aor(ambient_index, indices[:,i], aoi, degrees=False)
     else:
-        angles[0] = aoi
-        if assume_vac_ambient:
-            result = snell_aor(1, indices[0], aoi, degrees=False)
-            angles[1] = result
-        else:
-            angles[1] = snell_aor(indices[0], indices[1], aoi, degrees=False)
-        for i in range(2, len(thicknesses)):
-            angles[i] = snell_aor(indices[i-1], indices[i], angles[i-1], degrees=False)
+        for i in range(len(angles)):
+            angles[i] = snell_aor(ambient_index, indices[i], aoi, degrees=False)
 
     if polarization == 'p':
         fn1 = characteristic_matrix_p
@@ -522,19 +512,13 @@ def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, assume_vac_ambie
         Mjs = [np.moveaxis(M, 2, 0) for M in Mjs]
 
     if angles.ndim > 1:
-        if assume_vac_ambient:
-            i1 = np.broadcast_to(1, indices.shape[0])
-            A = fn2(i1, angles[:, 0], Mjs, indices[:, -1], angles[:, -1])
-        else:
-            A = fn2(indices[:, 0], angles[:, 0], Mjs, indices[:, -1], angles[:, -1])
+        A = fn2(ambient_index, aoi, Mjs, indices[:, -1], angles[:, -1])
     else:
-        if assume_vac_ambient:
-            A = fn2(1, angles[0], Mjs, indices[-1], angles[-1])
-        else:
-            A = fn2(indices[0], angles[0], Mjs, indices[-1], angles[-1])
+        A = fn2(ambient_index, aoi, Mjs, indices[-1], angles[-1])
 
     r = rtot(A)
     t = ttot(A)
+
     if indices.ndim > 1:
         r = r.reshape(stack.shape[2:])
         t = t.reshape(stack.shape[2:])
