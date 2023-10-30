@@ -107,7 +107,7 @@ def xy_polynomial_sequence(mns, x, y, cartesian_grid=True):
     mns2 = truenp.asarray(mns)
     maxm, maxn = mns2.max(axis=0)
 
-    if cartesian_grid:
+    if cartesian_grid and x.ndim > 1:
         x, y = optimize_xy_separable(x, y)
 
     ms = truenp.arange(0, maxm+1)
