@@ -250,6 +250,47 @@ def image_displacement_to_defocus(dz, fno, wavelength=None):
         return dz / (8 * fno ** 2)
 
 
+def image_shift_to_tilt(dx, fno):
+    """Compute the wavefront tilt associated with an image shift.
+
+    Parameters
+    ----------
+    dx : float or numpy.ndarray
+        translation of the image
+    fno : float
+        f/# of the lens or system
+
+    Returns
+    -------
+    float
+        wavefront tilt W111, same units as dx
+        W111 has a peak-to-valley of 2, and "amplitude" of 1
+        to convert to Z2 or Z3, those have a peak-to-valley of 4, so
+        divide by two for amplitude coefficients, or 4 for RMS coefficients
+
+    """
+    return (dx/fno)*0.5
+
+
+def tilt_to_image_shift(W111, fno):
+    """Compute image shift from wavefront tilt.
+
+    Parameters
+    ----------
+    W111 : float or numpy.ndarray
+        wavefront tilt, unit amplitude (peak-to-valley of 2)
+    fno : float
+        f/# of the lens or system
+
+    Returns
+    -------
+    float
+        image translation, in same units as W111 (e.g., um)
+
+    """
+    return 2*(W111*fno)
+
+
 def singlet_efl(c1, c2, t, n, n_ambient=1.):
     """EFL of a singlet.
 
