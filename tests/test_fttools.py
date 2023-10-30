@@ -55,3 +55,10 @@ def test_czt_reverses_self_(samples):
     fwd = fttools.czt.czt2(inp, 1, samples)
     back = fttools.czt.iczt2(fwd, 1, samples)
     assert np.allclose(inp, back)
+
+@pytest.mark.parametrize('samples', ARRAY_SIZES)
+def test_czt_reverses_self_complex(samples):
+    inp = np.random.rand(samples, samples) + 1.0j * np.random.rand(samples, samples)
+    fwd = fttools.czt.czt2(inp, 1, samples)
+    back = fttools.czt.iczt2(fwd, 1, samples)
+    assert np.allclose(inp, back)
