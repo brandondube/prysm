@@ -1426,7 +1426,7 @@ def read_codev_gridint(file):
     # div by ssz converts to wvl, div by wvl to um, *1000 to nm
     a = a.astype(config.precision) * (1000/wvl/ssz)
     a[mask] = np.nan
-    a = a.reshape((m, n))
+    a = a.reshape((n, m))
     meta = {
         'title': title,
         'wavelength': wvl,
