@@ -1,6 +1,12 @@
 "Jones and Mueller Calculus"
 from prysm.mathops import np
 from prysm.conf import config
+from prysm import propagation
+import functools
+
+
+# supported functions for jones_decorator
+supported_propagation_funcs = ['focus','unfocus','focus_fixed_sampling','unfocus_fixed_sampling','angular_spectrum']
 
 def _empty_pol_vector(shape=None):
     """Returns an empty array to populate with jones vector elements.
@@ -364,3 +370,80 @@ def pauli_coefficients(jones):
     c3 = 1j*(jones[..., 0, 1] - jones[..., 1, 0]) / 2
 
     return c0, c1, c2, c3
+
+
+def jones_adapter(prop_func):
+    """wrapper around prysm.propagation functions to support polarized field propagation
+
+    There isn't anything particularly special about polarized field propagation. We simply 
+    leverage the independence of the 4 "polarized" components of an optical system expressed
+    as a Jones matrix
+
+    J = [
+        [J00,J01],
+        [J10,J11]
+    ]
+
+    The elements of this matrix can be propagated as incoherent wavefronts to express the polarized
+    response of an optical system. All `jones_adapter` does is call a given propagation function
+    4 times, one for each element of the Jones matrix.
+
+    Parameters
+    ----------
+    prop_func : callable
+        propagation function to decorate
+
+    Returns
+    -------
+    callable
+        decorated propagation function
+    """
+
+    @functools.wraps(prop_func)
+    def wrapper(*args,**kwargs):
+
+        
+        # this is a function
+        wavefunction = args[0]
+        if len(args) > 1:
+            other_args = args[1:]
+        else:
+            other_args = ()
+
+        if wavefunction.ndim == 2:
+            # pass through non-jones case
+            return prop_func(*args,**kwargs)
+
+        J00 = wavefunction[...,0,0]
+        J01 = wavefunction[...,0,1]
+        J10 = wavefunction[...,1,0]
+        J11 = wavefunction[...,1,1]
+        tmp = []
+        for E in [J00, J01, J10, J11]:
+            ret = prop_func(E, *other_args, **kwargs)
+            tmp.append(ret)
+        
+        out = np.empty([*ret.shape,2,2],dtype=ret.dtype)
+        out[...,0,0] = tmp[0]
+        out[...,0,1] = tmp[1]
+        out[...,1,0] = tmp[2]
+        out[...,1,1] = tmp[3]
+        
+        return out
+    
+    return wrapper
+
+def make_propagation_polarized(funcs_to_change=supported_propagation_funcs):
+    """apply decorator to supported propagation functions
+
+    Parameters
+    ----------
+    funcs_to_change : list, optional
+        list of propagation functions to add polarized field propagation to, by default supported_propagation_funcs
+    """
+
+    for name,func in vars(propagation).items():
+        if name in funcs_to_change:
+            setattr(propagation, name, jones_adapter(func))
+
+
