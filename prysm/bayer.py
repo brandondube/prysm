@@ -1,15 +1,15 @@
 """Basic operations for bayer data."""
-from .mathops import np, ndimage
+from .mathops import np, ndimage, fft
 
 top_left = (slice(0, None, 2), slice(0, None, 2))
-top_right = (slice(1, None, 2), slice(0, None, 2))
-bottom_left = (slice(0, None, 2), slice(1, None, 2))
+top_right = (slice(0, None, 2), slice(1, None, 2))
+bottom_left = (slice(1, None, 2), slice(0, None, 2))
 bottom_right = (slice(1, None, 2), slice(1, None, 2))
 
 ErrBadCFA = NotImplementedError('only rggb, bggr bayer patterns currently implemented')
 
 
-def wb_prescale(mosaic, wr, wg1, wg2, wb, cfa='rggb'):
+def wb_prescale(mosaic, wr, wg1, wg2, wb, cfa='rggb', safe=False, saturation=None):
     """Apply white-balance prescaling in-place to mosaic.
 
     Parameters
@@ -28,6 +28,28 @@ def wb_prescale(mosaic, wr, wg1, wg2, wb, cfa='rggb'):
         color filter arrangement
 
     """
+    if safe:
+        if saturation is None:
+            raise ValueError('When doing safe WB prescaling, saturation must be not-none')
+
+        if not hasattr(saturation, '__iter__'):
+            # common to all four channels
+            saturation = [saturation]*4
+
+        planes = decomposite_bayer(mosaic, cfa)
+        ratio = 1  # descaling ratio
+        for plane, sat in zip(planes, saturation):
+            mx = plane.max()
+            rat = mx / sat
+            if rat > 1 and rat > ratio:
+                ratio = rat
+
+        wr = wr / ratio
+        wg1 = wg1 / ratio
+        wg2 = wg2 / ratio
+        wb = wb / ratio
+
+        # make sure
     cfa = cfa.lower()
     if cfa == 'rggb':
         mosaic[top_left] *= wr
@@ -43,30 +65,31 @@ def wb_prescale(mosaic, wr, wg1, wg2, wb, cfa='rggb'):
         raise ErrBadCFA
 
 
-def wb_scale(trichromatic, wr, wg, wb):
-    """Apply white balance scaling in-place to trichromatic.
+def wb_postscale(rgb, wr, wg, wb, safe=False, saturation=None):
+    if safe:
+        if saturation is None:
+            raise ValueError('When doing safe WB prescaling, saturation must be not-none')
 
-    Parameters
-    ----------
-    trichromatic : numpy.ndarray
-        ndarray of shape (m, n, 3), a float dtype
-    wr : float
-        red scale factor, out = in * wr
-    wg : float
-        green scale factor, out = in * wg
-    wb : float
-        blue scale factor, out = in * wb
+        if not hasattr(saturation, '__iter__'):
+            # common to all four channels
+            saturation = [saturation]*3
 
-    """
-    # TODO: a tensordot might be faster than this, consider value of possible
-    # speedup vs similarity of interface to wb_prescale and impact of wg almost
-    # always being 1, and thus skippable
-    if wr != 1:
-        trichromatic[..., 0] *= wr
-    if wg != 1:
-        trichromatic[..., 1] *= wg
-    if wb != 1:
-        trichromatic[..., 2] *= wb
+        ratio = 1  # descaling ratio
+        for i in range(2):
+            plane = rgb[..., i]
+            sat = saturation[i]
+            mx = plane.max()
+            rat = mx / sat
+            if rat > 1 and rat > ratio:
+                ratio = rat
+
+        wr = wr / ratio
+        wg = wg / ratio
+        wb = wb / ratio
+
+    rgb[..., 0] *= wr
+    rgb[..., 1] *= wg
+    rgb[..., 2] *= wb
 
 
 def composite_bayer(r, g1, g2, b, cfa='rggb', output=None):
@@ -196,6 +219,65 @@ def recomposite_bayer(r, g1, g2, b, cfa='rggb', output=None):
     return output
 
 
+def demosaic_deinterlace(img, cfa='rggb'):
+    r, g1, g2, b = decomposite_bayer(img, cfa)
+    g = (g1+g2)/2
+    return np.stack([r, g, b], axis=2)
+
+
+def assemble_superresolved(r, g1, g2, b, zoomfactor, cfa='rggb', out=None):
+    """Assemble a trichromatic image from super-resolved color planes.
+
+    Parameters
+    ----------
+    r : numpy.ndarray
+        ndarray of shape (m, n) representing the R bayer color channel
+    g1 : numpy.ndarray
+        ndarray of shape (m, n) representing the G1 bayer color channel
+    g2 : numpy.ndarray
+        ndarray of shape (m, n) representing the G2 bayer color channel
+    b : numpy.ndarray
+        ndarray of shape (m, n) representing the B bayer color channel
+    zoomfactor : float
+        amount of upsampling applied, e.g. 500 => 1500; zoomfactor = 3
+    cfa : str, {'rggb', 'bggr'}
+        color filter arrangement
+    out : numpy.ndarray
+        array to place the output in, shape of (m,n,3)
+        if None, freshly allocated
+
+    Returns
+    -------
+    numpy.ndarray
+        array of shape (m, n, 3) containing the trichromatic image
+    """
+    if cfa == 'rggb':
+        g2_to_g1 = [-zoomfactor, zoomfactor]  # "up and over"
+        r_to_g1 = [-zoomfactor, 0]  # "over"
+        b_to_g1 = [0, zoomfactor]  # "up"
+    else:
+        raise NotImplementedError('assemble_superresolved: only rggb patterns supported at this time')
+
+    if out is None:
+        out = np.empty((*r.shape, 3), dtype=r.dtype)
+
+    R = fft.fft2(r)
+    B = fft.fft2(b)
+    G2 = fft.fft2(g2)
+    Rp = ndimage.fourier_shift(R, r_to_g1)
+    rp = fft.ifft2(Rp).real
+    Bp = ndimage.fourier_shift(B, b_to_g1)
+    bp = fft.ifft2(Bp).real
+    G2p = ndimage.fourier_shift(G2, g2_to_g1)
+    g2p = fft.ifft2(G2p).real
+    gp = (g2p+g1)/2
+
+    out[..., 0] = rp
+    out[..., 1] = gp
+    out[..., 2] = bp
+    return out
+
+
 # Kernels from Malvar et al, fig 2.
 # names derived from the paper,
 # in demosaic_malvar the naming
@@ -235,11 +317,6 @@ kernel_R_at_B_in_BB = [
 ]
 
 
-kernel_B_at_G_BR = kernel_R_at_G_in_RB
-kernel_B_at_G_RB = kernel_R_at_G_in_BR
-kernel_B_at_R_in_RR = kernel_R_at_B_in_BB
-
-
 def demosaic_malvar(img, cfa='rggb'):
     """Demosaic an image using the Malvar algorithm.
 
@@ -263,18 +340,18 @@ def demosaic_malvar(img, cfa='rggb'):
     # create all of our convolution kernels (FIR filters)
     # division by 8 is to make the kernel sum to 1
     # (preserve energy)
-    kgreen = np.asarray(kernel_G_at_R_or_B) / 8
-    kgreensameColumn = np.asarray(kernel_R_at_G_in_RB) / 8
-    kgreensameRow = np.asarray(kernel_R_at_G_in_BR) / 8
-    kdiagonalRB = np.asarray(kernel_R_at_B_in_BB) / 8
+    kgreen = np.array(kernel_G_at_R_or_B) / 8.
+    kgreensameColumn = np.array(kernel_R_at_G_in_RB) / 8.
+    kgreensameRow = np.array(kernel_R_at_G_in_BR) / 8.
+    kdiagonalRB = np.array(kernel_R_at_B_in_BB) / 8.
 
     # there is only one filter for G
     Gest = ndimage.convolve(img, kgreen)
 
     # there are only three unique convolutions remaining
-    c1 = ndimage.convolve(img, kgreensameColumn)
-    c2 = ndimage.convolve(img, kgreensameRow)
-    c3 = ndimage.convolve(img, kdiagonalRB)
+    c1 = ndimage.convolve(img, kgreensameColumn)  # top is 0.5, left is -1
+    c2 = ndimage.convolve(img, kgreensameRow)  # top is -1, left is 0.5
+    c3 = ndimage.convolve(img, kdiagonalRB)  # top is -1.5
 
     red = np.empty_like(img)
     green = Gest
@@ -283,6 +360,7 @@ def demosaic_malvar(img, cfa='rggb'):
     green[top_right] = img[top_right]
     green[bottom_left] = img[bottom_left]
 
+    # could below be np.choose?
     if cfa == 'rggb':
         red[top_left] = img[top_left]
         red[top_right] = c1[top_right]
