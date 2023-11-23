@@ -341,6 +341,12 @@ class RichData:
         data = self.data
         x, y = self.x, self.y
 
+        # CuPy support
+        if hasattr(data, 'get'):
+            data = data.get()
+            x = x.get()
+            y = y.get()
+
         from matplotlib.colors import PowerNorm, LogNorm
         fig, ax = share_fig_ax(fig, ax)
 
