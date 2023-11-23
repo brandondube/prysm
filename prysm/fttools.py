@@ -276,7 +276,7 @@ class MatrixDFTExecutor:
 
         return out
 
-    def dft2_backprop(self, fbar, Q, samples_in, shift=(0,0)):
+    def dft2_backprop(self, fbar, Q, samples_in, shift=(0, 0)):
         """Gradient backpropagation for dft2.
 
         Parameters
@@ -334,7 +334,7 @@ class MatrixDFTExecutor:
 
         return out
 
-    def idft2_backprop(self, fbar, Q, samples_in, shift=(0,0)):
+    def idft2_backprop(self, fbar, Q, samples_in, shift=(0, 0)):
         """Gradient backpropagation for idft2.
 
         Parameters
@@ -426,7 +426,7 @@ class ChirpZTransformExecutor:
         """Create a new Chirp Z Transform Executor."""
         self.components = {}
 
-    def czt2(self, ary, Q, samples, shift=(0, 0)):
+    def czt2(self, ary, Q, samples_out, shift=(0, 0)):
         """Compute the two dimensional Chirp Z Transform of a matrix.
 
         Parameters
@@ -435,7 +435,7 @@ class ChirpZTransformExecutor:
             an array, 2D, real or complex.  Not fftshifted.
         Q : float
             oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
-        samples : int or Iterable
+        samples_out : int or Iterable
             number of samples in the output plane.
             If an int, used for both dimensions.  If an iterable, used for each dim
         shift : float, optional
@@ -453,8 +453,8 @@ class ChirpZTransformExecutor:
             sampling/grid differences
 
         """
-        if not isinstance(samples, Iterable):
-            samples = (samples, samples)
+        if not isinstance(samples_out, Iterable):
+            samples_out = (samples_out, samples_out)
 
         if not isinstance(shift, Iterable):
             shift = (shift, shift)
@@ -465,7 +465,7 @@ class ChirpZTransformExecutor:
         dtype = ary.dtype
 
         m, n = ary.shape
-        M, N = samples
+        M, N = samples_out
         alphay = 1/(m*Q[0])
         alphax = 1/(n*Q[1])
         # alphay, alphax = Q
@@ -507,7 +507,7 @@ class ChirpZTransformExecutor:
         gxformed *= arow
         return gxformed
 
-    def iczt2(self, ary, Q, samples, shift=(0, 0)):
+    def iczt2(self, ary, Q, samples_out, shift=(0, 0)):
         """Compute the two dimensional inverse Chirp Z Transform of a matrix.
 
         Parameters
@@ -542,7 +542,7 @@ class ChirpZTransformExecutor:
         # but np.conj copies real inputs, so we optimize for that.
         if np.iscomplexobj(ary):
             ary = np.conj(ary)
-        xformed = self.czt2(ary, Q, samples, shift)
+        xformed = self.czt2(ary, Q, samples_out, shift)
         return xformed
 
     def _setup_bases(self, key):
@@ -609,6 +609,7 @@ def _prepare_czt_basis(N, M, K, shift, alpha, dtype, norm=False):
     H = fft.fft(h)
     if norm:
         b *= (alpha / np.sqrt(alpha))  # mul cheaper than div; div a single scalar instead of M elements
+
     return H, b, a
 
 
