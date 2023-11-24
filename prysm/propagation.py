@@ -405,10 +405,196 @@ def angular_spectrum_transfer_function(samples, wvl, dx, z):
     ky, kx = (fft.fftfreq(s, dx).astype(config.precision) for s in samples)
     kxx = kx * kx
     kyy = ky * ky
-    kyy = np.broadcast_to(kyy, samples).swapaxes(0, 1)
-    kxx = np.broadcast_to(kxx, samples)
 
-    return np.exp(-1j * np.pi * wvl * z * (kxx + kyy))
+    prefix = -1j*np.pi*wvl*z
+    tfx = np.exp(prefix*kxx)
+    tfy = np.exp(prefix*kyy)
+    return np.outer(tfy, tfx)
+
+
+def to_fpm_and_back(wavefunction, dx, wavelength, efl, fpm, fpm_dx, method='mdft', shift=(0, 0), return_more=False):
+    """Propagate to a focal plane mask, apply it, and return.
+
+    This routine handles normalization properly for the user.
+
+    To invoke babinet's principle, simply use to_fpm_and_back(fpm=1 - fpm).
+
+    Parameters
+    ----------
+    wavefunction : numpy.ndarray
+        complex wave to propagate
+    dx : float
+        inter-sample spacing of wavefunction, mm
+    wavelength : float
+        wavelength of light to propagate at, um
+    efl : float
+        focal length for the propagation
+    fpm : Wavefront or numpy.ndarray
+        the focal plane mask
+    fpm_dx : float
+        sampling increment in the focal plane,  microns;
+        do not need to pass if fpm is a Wavefront
+    method : str, {'mdft', 'czt'}, optional
+        how to propagate the field, matrix DFT or Chirp Z transform
+        CZT is usually faster single-threaded and has less memory consumption
+        MDFT is usually faster multi-threaded and has more memory consumption
+    shift : tuple of float, optional
+        shift in the image plane to go to the FPM
+        appropriate shift will be computed returning to the pupil
+    return_more : bool, optional
+        if True, return (new_wavefront, field_at_fpm, field_after_fpm)
+        else return new_wavefront
+
+    Returns
+    -------
+    Wavefront, Wavefront, Wavefront
+        new wavefront, [field at fpm, field after fpm]
+
+    """
+    if isinstance(fpm, Wavefront):
+        fpm_samples = fpm.data.shape
+        fpm_dx = fpm.dx
+    else:
+        if fpm_dx is None:
+            raise ValueError('fpm was not a Wavefront and fpm_dx was None')
+
+        fpm_samples = fpm.shape
+
+    input_samples = wavefunction.shape
+    input_diameters = [dx * s for s in input_samples]
+    Q_forward = [Q_for_sampling(d, efl, wavelength, fpm_dx) for d in input_diameters]
+    # soummer notation: use m, which would be 0.5 for a 2x zoom
+    # BDD notation: Q, would be 2 for a 2x zoom
+    m_forward = [1/q for q in Q_forward]
+    m_reverse = [b/a*m for a, b, m in zip(input_samples, fpm_samples, m_forward)]
+    Q_reverse = [1/m for m in m_reverse]
+    shift_forward = tuple(s/fpm_dx for s in shift)
+
+    # prop forward
+    kwargs = dict(ary=wavefunction, Q=Q_forward, samples_out=fpm_samples, shift=shift_forward)
+    if method == 'mdft':
+        field_at_fpm = mdft.dft2(**kwargs)
+    elif method == 'czt':
+        field_at_fpm = czt.czt2(**kwargs)
+
+    field_after_fpm = field_at_fpm * fpm
+
+    # shift_reverse = tuple(-s for s, q in zip(shift_forward, Q_forward))
+    shift_reverse = shift_forward
+    kwargs = dict(ary=field_after_fpm, Q=Q_reverse, samples_out=input_samples, shift=shift_reverse)
+    if method == 'mdft':
+        field_at_next_pupil = mdft.idft2(**kwargs)
+    elif method == 'czt':
+        field_at_next_pupil = czt.iczt2(**kwargs)
+
+    # scaling
+    # TODO: make this handle anamorphic transforms properly
+    if Q_forward[0] != Q_forward[1]:
+        warnings.warn(f'Forward propagation had Q {Q_forward} which was not uniform between axes, scaling is off')  # NOQA
+    if input_samples[0] != input_samples[1]:
+        warnings.warn(f'Forward propagation had input shape {input_samples} which was not uniform between axes, scaling is off')  # NOQA
+    if fpm_samples[0] != fpm_samples[1]:
+        warnings.warn(f'Forward propagation had fpm shape {fpm_samples} which was not uniform between axes, scaling is off')  # NOQA
+    # Q_reverse is calculated from Q_forward; if one is consistent the other is
+
+    if return_more:
+        return field_at_next_pupil, field_at_fpm, field_after_fpm
+    return field_at_next_pupil
+
+
+def to_fpm_and_back_backprop(wavefunction, dx, wavelength, efl, fpm, fpm_dx=None,
+                             method='mdft', shift=(0, 0), return_more=False):
+    """Propagate to a focal plane mask, apply it, and return.
+
+    This routine handles normalization properly for the user.
+
+    To invoke babinet's principle, simply use to_fpm_and_back(fpm=1 - fpm).
+
+    Parameters
+    ----------
+    wavefunction : numpy.ndarray
+        backpropagated partial derivative, prior to going through the FPM
+    dx : float
+        inter-sample spacing of wavefunction, mm
+    wavelength : float
+        wavelength of light to propagate at, um
+    efl : float
+        focal length for the propagation
+    fpm : Wavefront or numpy.ndarray
+        the focal plane mask
+    fpm_dx : float
+        sampling increment in the focal plane,  microns;
+        do not need to pass if fpm is a Wavefront
+    method : str, {'mdft', 'czt'}, optional
+        how to propagate the field, matrix DFT or Chirp Z transform
+        CZT is usually faster single-threaded and has less memory consumption
+        MDFT is usually faster multi-threaded and has more memory consumption
+    shift : tuple of float, optional
+        shift in the image plane to go to the FPM
+        appropriate shift will be computed returning to the pupil
+    return_more : bool, optional
+        if True, return (new_wavefront, field_at_fpm, field_after_fpm)
+        else return new_wavefront
+
+    Returns
+    -------
+    Wavefront, Wavefront, Wavefront
+        new wavefront, [field at fpm, field after fpm]
+
+    """
+    if isinstance(fpm, Wavefront):
+        fpm_samples = fpm.data.shape
+        fpm_dx = fpm.dx
+    else:
+        if fpm_dx is None:
+            raise ValueError('fpm was not a Wavefront and fpm_dx was None')
+
+        fpm_samples = fpm.shape
+
+    # do not take complex conjugate of reals (no-op, but numpy still does it)
+    if np.iscomplexobj(fpm.dtype):
+        fpm = fpm.conj()
+
+    input_samples = wavefunction.shape
+    input_diameters = [dx * s for s in input_samples]
+    Q_forward = [Q_for_sampling(d, efl, wavelength, fpm_dx) for d in input_diameters]
+    # soummer notation: use m, which would be 0.5 for a 2x zoom
+    # BDD notation: Q, would be 2 for a 2x zoom
+    m_forward = [1/q for q in Q_forward]
+    m_reverse = [b/a*m for a, b, m in zip(input_samples, fpm_samples, m_forward)]
+    Q_reverse = [1/m for m in m_reverse]
+    shift_forward = tuple(s/fpm_dx for s in shift)
+
+    kwargs = dict(fbar=wavefunction, Q=Q_reverse, samples_in=fpm_samples, shift=shift_forward)
+    if method == 'mdft':
+        Ebbar = -(mdft.idft2_backprop(**kwargs))
+    elif method == 'czt':
+        raise ValueError('CZT backprop not yet implemented')
+        field_at_fpm = czt.czt2_backprop(**kwargs)
+
+    intermediate = Ebbar * fpm
+
+    kwargs = dict(fbar=intermediate, Q=Q_forward, samples_in=input_samples, shift=shift_forward)
+    if method == 'mdft':
+        Eabar = mdft.dft2_backprop(**kwargs)
+    elif method == 'czt':
+        raise ValueError('CZT backprop not yet implemented')
+        field_at_next_pupil = czt.iczt2(**kwargs)
+
+    # scaling
+    # TODO: make this handle anamorphic transforms properly
+    if Q_forward[0] != Q_forward[1]:
+        warnings.warn(f'Forward propagation had Q {Q_forward} which was not uniform between axes, scaling is off')
+    if input_samples[0] != input_samples[1]:
+        warnings.warn(f'Forward propagation had input shape {input_samples} which was not uniform between axes, scaling is off')
+    if fpm_samples[0] != fpm_samples[1]:
+        warnings.warn(f'Forward propagation had fpm shape {fpm_samples} which was not uniform between axes, scaling is off')
+    # Q_reverse is calculated from Q_forward; if one is consistent the other is
+
+    if return_more:
+        return Eabar, Ebbar, intermediate
+    else:
+        return Eabar
 
 
 class Wavefront:
@@ -885,7 +1071,7 @@ class Wavefront:
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')
 
-    def to_fpm_and_back(self, efl, fpm, fpm_dx=None, method='mdft', shift=(0, 0), return_more=False):
+    def to_fpm_and_back(self, efl, fpm, fpm_dx, method='mdft', shift=(0, 0), return_more=False):
         """Propagate to a focal plane mask, apply it, and return.
 
         This routine handles normalization properly for the user.
@@ -918,59 +1104,18 @@ class Wavefront:
             new wavefront, [field at fpm, field after fpm]
 
         """
-        if isinstance(fpm, Wavefront):
-            fpm_samples = fpm.data.shape
-            fpm_dx = fpm.dx
-        else:
-            if fpm_dx is None:
-                raise ValueError('fpm was not a Wavefront and fpm_dx was None')
+        pak = to_fpm_and_back(self.data, dx=self.dx, wavelength=self.wavelength,
+                              efl=efl, fpm=fpm, fpm_dx=fpm_dx, method=method,
+                              shift=shift, return_more=return_more)
 
-            fpm_samples = fpm.shape
-
-        input_samples = self.data.shape
-        input_diameters = [self.dx * s for s in input_samples]
-        Q_forward = [Q_for_sampling(d, efl, self.wavelength, fpm_dx) for d in input_diameters]
-        # soummer notation: use m, which would be 0.5 for a 2x zoom
-        # BDD notation: Q, would be 2 for a 2x zoom
-        m_forward = [1/q for q in Q_forward]
-        m_reverse = [b/a*m for a, b, m in zip(input_samples, fpm_samples, m_forward)]
-        Q_reverse = [1/m for m in m_reverse]
-        shift_forward = tuple(s/fpm_dx for s in shift)
-
-        # prop forward
-        kwargs = dict(ary=self.data, Q=Q_forward, samples_out=fpm_samples, shift=shift_forward)
-        if method == 'mdft':
-            field_at_fpm = mdft.dft2(**kwargs)
-        elif method == 'czt':
-            field_at_fpm = czt.czt2(**kwargs)
-
-        field_after_fpm = field_at_fpm * fpm
-
-        # shift_reverse = tuple(-s for s, q in zip(shift_forward, Q_forward))
-        shift_reverse = shift_forward
-        kwargs = dict(ary=field_after_fpm, Q=Q_reverse, samples_out=input_samples, shift=shift_reverse)
-        if method == 'mdft':
-            field_at_next_pupil = mdft.idft2(**kwargs)
-        elif method == 'czt':
-            field_at_next_pupil = czt.iczt2(**kwargs)
-
-        # scaling
-        # TODO: make this handle anamorphic transforms properly
-        if Q_forward[0] != Q_forward[1]:
-            warnings.warn(f'Forward propagation had Q {Q_forward} which was not uniform between axes, scaling is off')
-        if input_samples[0] != input_samples[1]:
-            warnings.warn(f'Forward propagation had input shape {input_samples} which was not uniform between axes, scaling is off')
-        if fpm_samples[0] != fpm_samples[1]:
-            warnings.warn(f'Forward propagation had fpm shape {fpm_samples} which was not uniform between axes, scaling is off')
-        # Q_reverse is calculated from Q_forward; if one is consistent the other is
-
-        out = Wavefront(field_at_next_pupil, self.wavelength, self.dx, self.space)
         if return_more:
-            if not isinstance(field_at_fpm, Wavefront):
-                field_at_fpm = Wavefront(field_at_fpm, out.wavelength, fpm_dx, 'psf')
-            return out, field_at_fpm, Wavefront(field_after_fpm, self.wavelength, fpm_dx, 'psf')
-
-        return out
+            at_next_pupil, at_fpm, after_fpm = pak
+            at_next_pupil = Wavefront(at_next_pupil, self.wavelength, self.dx, self.space)
+            at_fpm = Wavefront(at_fpm, self.wavelength, fpm_dx, 'psf')
+            after_fpm = Wavefront(after_fpm, self.wavelength, fpm_dx, 'psf')
+            return at_next_pupil, at_fpm, after_fpm
+        else:
+            return Wavefront(pak, self.wavelength, self.dx, self.space)
 
     def to_fpm_and_back_backprop(self, efl, fpm, fpm_dx=None, method='mdft', shift=(0, 0), return_more=False):
         """Propagate to a focal plane mask, apply it, and return.
@@ -1005,62 +1150,18 @@ class Wavefront:
             new wavefront, [field at fpm, field after fpm]
 
         """
-        if isinstance(fpm, Wavefront):
-            fpm_samples = fpm.data.shape
-            fpm_dx = fpm.dx
-        else:
-            if fpm_dx is None:
-                raise ValueError('fpm was not a Wavefront and fpm_dx was None')
-
-            fpm_samples = fpm.shape
-
-        # do not take complex conjugate of reals (no-op, but numpy still does it)
-        if np.iscomplexobj(fpm.dtype):
-            fpm = fpm.conj()
-
-        input_samples = self.data.shape
-        input_diameters = [self.dx * s for s in input_samples]
-        Q_forward = [Q_for_sampling(d, efl, self.wavelength, fpm_dx) for d in input_diameters]
-        # soummer notation: use m, which would be 0.5 for a 2x zoom
-        # BDD notation: Q, would be 2 for a 2x zoom
-        m_forward = [1/q for q in Q_forward]
-        m_reverse = [b/a*m for a, b, m in zip(input_samples, fpm_samples, m_forward)]
-        Q_reverse = [1/m for m in m_reverse]
-        shift_forward = tuple(s/fpm_dx for s in shift)
-
-        kwargs = dict(fbar=self.data, Q=Q_reverse, samples_in=fpm_samples, shift=shift_forward)
-        if method == 'mdft':
-            Ebbar = -(mdft.idft2_backprop(**kwargs))
-        elif method == 'czt':
-            raise ValueError('CZT backprop not yet implemented')
-            field_at_fpm = czt.czt2_backprop(**kwargs)
-
-        intermediate = Ebbar * fpm
-
-        kwargs = dict(fbar=intermediate, Q=Q_forward, samples_in=input_samples, shift=shift_forward)
-        if method == 'mdft':
-            Eabar = mdft.dft2_backprop(**kwargs)
-        elif method == 'czt':
-            raise ValueError('CZT backprop not yet implemented')
-            field_at_next_pupil = czt.iczt2(**kwargs)
-
-        # scaling
-        # TODO: make this handle anamorphic transforms properly
-        if Q_forward[0] != Q_forward[1]:
-            warnings.warn(f'Forward propagation had Q {Q_forward} which was not uniform between axes, scaling is off')
-        if input_samples[0] != input_samples[1]:
-            warnings.warn(f'Forward propagation had input shape {input_samples} which was not uniform between axes, scaling is off')
-        if fpm_samples[0] != fpm_samples[1]:
-            warnings.warn(f'Forward propagation had fpm shape {fpm_samples} which was not uniform between axes, scaling is off')
-        # Q_reverse is calculated from Q_forward; if one is consistent the other is
-
-        out = Wavefront(Eabar, self.wavelength, self.dx, self.space)
+        pak = to_fpm_and_back_backprop(self.data, self.dx, self.wavelength,
+                                       efl=efl, fpm=fpm, fpm_dx=fpm_dx,
+                                       method=method, shift=shift,
+                                       return_more=return_more)
         if return_more:
-            if not isinstance(Ebbar, Wavefront):
-                Ebbar = Wavefront(Ebbar, out.wavelength, fpm_dx, 'psf')
-            return out, Ebbar, Wavefront(intermediate, self.wavelength, fpm_dx, 'psf')
-
-        return out
+            Eabar, Ebbar, intermediate = pak
+            Eabar = Wavefront(Eabar, self.wavelength, self.dx, self.space)
+            Ebbar = Wavefront(Ebbar, self.wavelength, fpm_dx, 'psf')
+            intermediate = Wavefront(intermediate, self.wavelength, fpm_dx, 'psf')
+            return Eabar, Ebbar, intermediate
+        else:
+            return Wavefront(pak, self.wavelength, self.dx, self.space)
 
     def babinet(self, efl, lyot, fpm, fpm_dx=None, method='mdft', return_more=False):
         """Propagate through a Lyot-style coronagraph using Babinet's principle.
