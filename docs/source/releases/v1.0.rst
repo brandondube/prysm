@@ -182,7 +182,28 @@ support for 32-bit numbers, but F77LBFGSB is CPU-only and double precision only.
 x/polarization
 --------------
 
-Jaren to fill in here
+New module with basic jones calculus functions to faciliate modeling of generally polarized fields.
+
+Jones Vectors:
+
+* :func:`~prysm.x.polarization.linear_pol_vector`
+* :func:`~prysm.x.polarization.circular_pol_vector`
+
+Jones Matrices:
+
+* :func:`~prysm.x.polarization.jones_rotation_matrix`
+* :func:`~prysm.x.polarization.linear_retarder`
+* :func:`~prysm.x.polarization.linear_diattenuator`
+* :func:`~prysm.x.polarization.linear_polarizer`
+* :func:`~prysm.x.polarization.half_wave_plate`
+* :func:`~prysm.x.polarization.quarter_wave_plate`
+
+Conversion to Mueller matrices and simple data reduction with Pauli spin matrices:
+
+* :func:`~prysm.x.polarization.jones_to_mueller`
+* :func:`~prysm.x.polarization.pauli_spin_matrix`
+* :func:`~prysm.x.polarization.pauli_coefficients`
+
 
 x/dm
 ----

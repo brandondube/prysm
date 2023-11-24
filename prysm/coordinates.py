@@ -292,6 +292,13 @@ def promote_3d_transformation_to_homography(M):
     return out
 
 
+def promote_affine_transformation_to_homography(Maff):
+    out = truenp.zeros((3, 3), dtype=config.precision)
+    out[:2, :3] = Maff
+    out[3, 3] = 1
+    return out
+
+
 def make_homomorphic_translation_matrix(tx=0, ty=0, tz=0):
     out = np.eye(4, dtype=config.precision)
     out[0, -1] = tx
