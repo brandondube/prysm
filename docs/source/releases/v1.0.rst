@@ -6,7 +6,7 @@ After nearly a decade in development, version 1.0 of prysm has finally been
 released.  With the release of v1, compatibility is guaranteed; there will not
 be breaking changes to the API until version 2.  New features will be supported
 through the 1.x release series.  Most new features will be introduced under
-:code:`prysm.x`, a dedicated arena within the package that is not
+:code:`prysm.x`-perimental, a dedicated arena within the package that is not
 required to maintain the afore-promised compatibility guarantees.  The shorthand
 "x/" for x is borrowed from the Go programming language.
 
@@ -17,7 +17,7 @@ Included is an adapter that generalizes all routines within the propagation
 module to propagation of Jones states, an extremely powerful feature for
 modeling polarized fields.
 
-This release brings a number of new features for modeling specific types of
+This release also brings a number of new features for modeling specific types of
 wavefront sensors, and alternate segmentation geometry in segmented telescopes.
 All optical propagation routines now feature convenient gradient backpropagation
 equivalents for extremely fast optimization of optical models to learn
@@ -56,15 +56,19 @@ The last of these can be used to compute, e.g., "XY" Chebyshev polynomials
 Propagation
 -----------
 
-* new .real property, returning a Richdata to support wf.real.plot2d(), etc.
+* new .real property, returning a Richdata to support wf.real.plot2d(), etc
 
 * new .imag property, same as .real
 
 * :func:`~prysm.propagation.Wavefront.to_fpm_and_back` now takes a :code:`shift`
-  argument, allowing off-axis propagation without adding wavefront tilt.
+  argument, allowing off-axis propagation without adding wavefront tilt
 
 * all propagation routines have a :code:`_backprop` twin, which should be used
   to do gradient backpropagation through optical models
+
+* add and subtract :code:`+` and :code:`-` operators are now defined for
+  :class:`~prysm.propagation.Wavefront` for convenient recombination /
+  superposition of waves, as in interferometers
 
 
 Segmented Systems
@@ -81,11 +85,38 @@ Wavefront Sensors and Interferometers
 
 * Forward modeling of Phase Shifting Point Diffraction Interferometers, aka
   Medecki interferometers using :class:`~prysm.x.pdi.PSPDI` and the routines and
-  consants of x/psi.
+  consants of x/psi
 
 * Forward modeling of Self-Referenced Interferometers, which use a pinhole to
   generate the reference wave using light from the input port using
-  :class:`~prysm.x.sri.SelfReferencedInterferometer`.
+  :class:`~prysm.x.sri.SelfReferencedInterferometer`
+
+* general phase shifting interferometry routines, including novel extensions to
+  measuring complex E-field and direct differential reconstructions without
+  wrapping on large absoluite phases:
+
+* * :func:`~prysm.x.psi.degroot_formalism_psi` for reconstructing phase from a
+    set of PSI measurements.  See also the package-level constants XXX_SHIFTS,
+    XXX_SS, XXX_CS for several sets of s and c and phase shift values
+
+* * :func:`~prysm.x.psi.psi_accumulate` for accumulating the sums of de groot's
+    formalism, an essential intermediate step in full complex E-field
+    reconstruction and differential reconstruction.
+
+* * MORE
+
+bayer
+-----
+
+* :func:`~prysm.bayer.wb_prescale` now has additional :code:`safe` and
+  :code:`saturation` kwargs
+
+* :code:`prysm.bayer.wb_scale` has been replaced by
+  :func:`~prysm.bayer.wb_postscale`
+
+* :func:`~prysm.bayer.demosaic_deinterlate` for deinterlace-style demosaicing,
+  which cuts resolution by a factor of two but imparts no blur or color channel
+  crosstalk.
 
 
 i/o
@@ -171,11 +202,16 @@ x/dm
 Performance Optimizations
 =========================
 
+* :func:`~prysm.propagation.angular_spectrum_transfer_function` has been
+  optimized.  The new runtime is approximately the square root of that of the
+  old.  For example, on a 1024x1024 array, in version 0.21 this function took
+  31 ms on a desktop.  It now takes 4 ms for the same array size and output.
+
 * :func:`~prysm.geometry.rectangle` has been optimized when the rotation angle
   is zero
 
-* :func:`~prysm.propagation.angular_spectrum_transfer_function` has been
-  slightly optimized
+* :func:`~prysm.geometry.rectangle` has been optimized when the coordinates are
+  exactly square/cartesian (not rotated)
 
 * :func:`~prysm.io.read_zygo_dat` now only performs big/little endian
   conversions on phase arrays when necessary (little endian systems), which
