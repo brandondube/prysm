@@ -11,3 +11,4 @@ How-Tos
     Advanced-Interferogram-Processing.ipynb
     GPU and Exascale Computing.ipynb
     Differentiable-Optical-Models.ipynb
+    polarized_propagation.ipynb
