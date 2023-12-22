@@ -2,11 +2,18 @@
 from prysm.mathops import np
 from prysm.conf import config
 from prysm import propagation
+from prysm.coordinates import make_xy_grid,cart_to_polar
 import functools
 
 
 # supported functions for jones_decorator
-supported_propagation_funcs = ['focus','unfocus','focus_fixed_sampling','unfocus_fixed_sampling','angular_spectrum']
+supported_propagation_funcs = ['focus','unfocus','focus_fixed_sampling','angular_spectrum']
+
+
+U = np.array([[1, 0,   0,  1],
+                [1, 0,   0, -1],
+                [0, 1,   1,  0],
+                [0, 1j, -1j, 0]]) / np.sqrt(2)
 
 def _empty_pol_vector(shape=None):
     """Returns an empty array to populate with jones vector elements.
@@ -279,14 +286,93 @@ def linear_polarizer(theta=0, shape=None):
 
     return linear_diattenuator(0, theta=theta, shape=shape)
 
+def vector_vortex_retarder(charge, shape, retardance=np.pi, theta=0):
+    """generate a phase-only spatially-varying vector vortex retarder (VVR)
 
-def jones_to_mueller(jones):
+    This model follows Eq (7) in D. Mawet. et al. (2009)
+    https://opg.optica.org/oe/fulltext.cfm?uri=oe-17-3-1902&id=176231 (open access)
+
+    Parameters
+    ----------
+    charge : float
+        topological charge of the vortex, typically an interger
+    shape : tuple of int
+        shape of the VR array
+    retardance : float
+        phase difference between the ordinary and extraordinary modes, by default np.pi or half a wave
+    theta : float, optional
+        angle in radians to rotate the vortex by, by default 0
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
+    
+    vvr_lhs = _empty_jones(shape=[shape,shape])
+    vvr_rhs = _empty_jones(shape=[shape,shape])
+
+    # create the dimensions
+    x,y = make_xy_grid(shape,diameter=1)
+    r,t = cart_to_polar(x,y)
+    t *= charge
+
+    # precompute retardance
+    cost = np.cos(t)
+    sint = np.sin(t)
+    jcosr = -1j*np.cos(retardance/2)
+    jsinr = np.sin(retardance/2)
+
+    # build jones matrices
+    vvr_lhs[...,0,0] = cost
+    vvr_lhs[...,0,1] = sint
+    vvr_lhs[...,1,0] = sint
+    vvr_lhs[...,1,1] = -cost
+    vvr_lhs *= jsinr
+
+    vvr_rhs[...,0,0] = jcosr
+    vvr_rhs[...,0,0] = jcosr
+
+    vvr = vvr_lhs + vvr_rhs
+
+    vvr = jones_rotation_matrix(-theta) @ vvr @ jones_rotation_matrix(theta)
+
+    return vvr
+
+def broadcast_kron(a,b):
+    """broadcasted kronecker product of two N,M,...,2,2 arrays. Used for jones -> mueller conversion
+    In the unbroadcasted case, this output looks like
+
+    out = [a[0,0]*b,a[0,1]*b]
+          [a[1,0]*b,a[1,1]*b]
+
+    where out is a N,M,...,4,4 array. I wrote this to work for generally shaped kronecker products where the matrix
+    is contained in the last two axes, but it's only tested for the Nx2x2 case
+
+    Parameters
+    ----------
+    a : numpy.ndarray
+        N,M,...,2,2 array used to scale b in kronecker product
+    b : numpy.ndarray
+        N,M,...,2,2 array used to form block matrices in kronecker product
+
+    Returns
+    -------
+    out
+        N,M,...,4,4 array
+    """
+
+    return np.einsum('...ik,...jl',a,b).reshape([*a.shape[:-2],int(a.shape[-2]*b.shape[-2]),int(a.shape[-1]*b.shape[-1])])
+
+def jones_to_mueller(jones, broadcast=True):
     """Construct a Mueller Matrix given a Jones Matrix. From Chipman, Lam, and Young Eq (6.99).
 
     Parameters
     ----------
     jones : ndarray with final dimensions 2x2
         The complex-valued jones matrices to convert into mueller matrices
+    broadcast : bool
+        Whether to use the experimental `broadcast_kron` to compute the conversion in a broadcast fashion, by default True
 
     Returns
     -------
@@ -294,15 +380,13 @@ def jones_to_mueller(jones):
         Mueller matrix
     """
 
-    U = np.array([[1, 0,   0,  1],
-                  [1, 0,   0, -1],
-                  [0, 1,   1,  0],
-                  [0, 1j, -1j, 0]]) / np.sqrt(2)
+    if broadcast:
+        jprod = broadcast_kron(np.conj(jones), jones)
+    else:
+        jprod = np.kron(np.conj(jones), jones)
 
-    jprod = np.kron(np.conj(jones), jones)
     M = np.real(U @ jprod @ np.linalg.inv(U))
     return M
-
 
 def pauli_spin_matrix(index, shape=None):
     """Generates a pauli spin matrix used for Jones matrix data reduction. From CLY Eq 6.108.
