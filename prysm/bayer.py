@@ -66,6 +66,25 @@ def wb_prescale(mosaic, wr, wg1, wg2, wb, cfa='rggb', safe=False, saturation=Non
 
 
 def wb_postscale(rgb, wr, wg, wb, safe=False, saturation=None):
+    """Apply white balance post scaling in place.
+
+    Parameters
+    ----------
+    rgb : numpy.ndarray
+        ndarray of shape (m, n, 3), a float dtype
+    wr : float
+        red white balance gain
+    wg : float
+        green white balance gain
+    wb : float
+        blue white balance gain
+    safe : bool, optional
+        if True, clamps the gain of each color plane independently
+        such that output <= saturation
+    saturation : float, optional
+        saturation level, to be used when safe=True
+
+    """
     if safe:
         if saturation is None:
             raise ValueError('When doing safe WB prescaling, saturation must be not-none')

@@ -39,6 +39,6 @@ def test_wb_prescale_functions(cfa):
     bayer.wb_prescale(data, 1, 2, 3, 4, cfa)
 
 
-def test_wb_scale_functions():
+def test_wb_postscale_functions():
     data = np.random.rand(N, N, 3)
-    bayer.wb_scale(data, 1, 2, 3)
+    bayer.wb_postscale(data, 1, 2, 3)
