@@ -1,25 +1,17 @@
-**********
-prysm v1.0
-**********
+***********
+prysm v0.22
+***********
 
-After nearly a decade in development, version 1.0 of prysm has finally been
-released.  With the release of v1, compatibility is guaranteed; there will not
-be breaking changes to the API until version 2.  New features will be supported
-through the 1.x release series.  Most new features will be introduced under
-:code:`prysm.x`-perimental, a dedicated arena within the package that is not
-required to maintain the afore-promised compatibility guarantees.  The shorthand
-"x/" for x is borrowed from the Go programming language.
+Version 0.22 marks the final version of prysm prior to 1.0, in which
+compatibility and API stability will be guaranteed.  In preparation for this,
+the library has been split into mature code such as coordinates, geometry,
+propagation, or polynomials, and less mature code in code :`prysm.x`-perimental
+(shorthand, x or x/).  The compatibility guarantee of 1.0 will not extend to x.
 
-The first two new modules are :code:`x/opytm`, a package for optimization with
-several cost functions, activation functions, and gradient-based optimizers and
-:code:`x/polarization` for Jones calculus and other polarization calculations.
-Included is an adapter that generalizes all routines within the propagation
-module to propagation of Jones states, an extremely powerful feature for
-modeling polarized fields.
-
-This release also brings a number of new features for modeling specific types of
-wavefront sensors, and alternate segmentation geometry in segmented telescopes.
-All optical propagation routines now feature convenient gradient backpropagation
+The new x/ modules are detailed in the release notes below.  This release
+brings a number of new features for modeling specific types of wavefront
+sensors, and alternate segmentation geometry in segmented telescopes. All
+optical propagation routines now feature convenient gradient backpropagation
 equivalents for extremely fast optimization of optical models to learn
 parameters, perform phase retrieval, etc.
 
@@ -40,7 +32,7 @@ New Features
 Polynomials
 -----------
 
-Rich XY polynomial capability:
+Rich XY polynomial capability has been introduced:
 
 * :func:`~prysm.polynomials.xy.j_to_xy`
 
@@ -52,6 +44,16 @@ Rich XY polynomial capability:
 
 The last of these can be used to compute, e.g., "XY" Chebyshev polynomials
 
+Additionally, Laguerre polynomials have been introduced, which can be used for
+generating Hermite-Gaussian and Laguerre-Gaussian beams:
+
+* :func:`~prysm.polynomials.laguerre`
+
+* :func:`~prysm.polynomials.laguerre_der`
+
+* :func:`~prysm.polynomials.laguerre_sequence`
+
+* :func:`~prysm.polynomials.laguerre_der_sequence`
 
 Propagation
 -----------
@@ -77,42 +79,14 @@ Segmented Systems
 * Compositing and per-segment errors of "keystone" apertures via
   :class:`~prysm.segmented.CompositeKeystoneAperture`
 
-Wavefront Sensors and Interferometers
--------------------------------------
-
-* Forward modeling of Shack Hartmann wavefront sensors using
-  :func:`~prysm.x.shack_hartmann.shack_hartmann` and the propagation module
-
-* Forward modeling of Phase Shifting Point Diffraction Interferometers, aka
-  Medecki interferometers using :class:`~prysm.x.pdi.PSPDI` and the routines and
-  consants of x/psi
-
-* Forward modeling of Self-Referenced Interferometers, which use a pinhole to
-  generate the reference wave using light from the input port using
-  :class:`~prysm.x.sri.SelfReferencedInterferometer`
-
-* general phase shifting interferometry routines, including novel extensions to
-  measuring complex E-field and direct differential reconstructions without
-  wrapping on large absoluite phases:
-
-* * :func:`~prysm.x.psi.degroot_formalism_psi` for reconstructing phase from a
-    set of PSI measurements.  See also the package-level constants XXX_SHIFTS,
-    XXX_SS, XXX_CS for several sets of s and c and phase shift values
-
-* * :func:`~prysm.x.psi.psi_accumulate` for accumulating the sums of de groot's
-    formalism, an essential intermediate step in full complex E-field
-    reconstruction and differential reconstruction.
-
-* * MORE
-
 bayer
 -----
 
-* :func:`~prysm.bayer.wb_prescale` now has additional :code:`safe` and
-  :code:`saturation` kwargs
-
-* :code:`prysm.bayer.wb_scale` has been replaced by
+* :code:`prysm.bayer.wb_scale` has been renamed to
   :func:`~prysm.bayer.wb_postscale`
+
+* :func:`~prysm.bayer.wb_postscale` now has additional :code:`safe` and
+  :code:`saturation` kwargs for colorimetrically correct handling of saturation
 
 * :func:`~prysm.bayer.demosaic_deinterlate` for deinterlace-style demosaicing,
   which cuts resolution by a factor of two but imparts no blur or color channel
@@ -139,31 +113,33 @@ More convenient backend swaps, misc
   functions; there is no special support for either library beyond these simple
   functions.
 
-* the :func:`~prysm._richdata.RichData.plot2d` method of RichData now has an :code:`extend` keyword
-  argument, which controls the extension of the colorbar beyond the color
-  limits.
+* the :func:`~prysm._richdata.RichData.plot2d` method of RichData now has an
+  :code:`extend` keyword argument, which controls the extension of the colorbar
+  beyond the color limits.
+
 
 eXperimental Modules
 ====================
 
+A total of seven new x/ modules have been introduced in this release.  Half of
+them concern modeling different kinds of interferometers or wavefront sensors,
+while the remaining half are general and widely applicable.  The largest of the
+new additions is :code:`x/opytm`, a package for optimization with several cost
+functions, activation functions, and gradient-based optimizers.
+
 x/opytm
 -------
 
-New module with legos and optimizers to improve convenience when optimizating
-optical models.
+The interface of this package is very different to :code:`scipy.optimize` and it
+offers numerous optimizers and building blocks from the machine learning world.
+In addition to API level documentation that describes each of these items in
+detail, a new :doc:`Optimization Basics` tutorial has been created which
+demonstrates how to use the module, as well as a how-to on
+:doc:`Differentiable-Optical-Models` which demonstrates how to use the
+algorithmic differentiation capabilities built into prysm to perform phase
+retrieval with x/optym.
 
-Activation functions and discretizers:
-
-* :func:`~prysm.x.optym.activation.Softmax`
-* :func:`~prysm.x.optym.activation.GumbelSoftmax`
-* :func:`~prysm.x.optym.activation.DiscreteEncoder`
-
-Cost or loss functions:
-
-* :func:`~prysm.x.optym.cost.BiasAndGainInvariantError`
-* :func:`~prysm.x.optym.cost.LogLikelyhood`
-
-Optimizers:
+Optimizers
 
 * :func:`~prysm.x.optym.optimizers.GradientDescent`
 * :func:`~prysm.x.optym.optimizers.AdaGrad`
@@ -174,22 +150,36 @@ Optimizers:
 * :func:`~prysm.x.optym.optimizers.AdaMomentum`
 * :func:`~prysm.x.optym.optimizers.F77LBFGSB`
 
-Note that while L-BFGS-B is the darling of my heart, it is currently too
-difficult for mere mortals to implement by hand, so it is a wrapper around
-Nocedal's Fortran77 code.  All other optimizers have full GPU support and
-support for 32-bit numbers, but F77LBFGSB is CPU-only and double precision only.
+All have full support for GPUs and 32-bit numbers, except for F77LBFGSB which
+is CPU-only and double precision only.
+
+Activation functions and discretizers
+
+* :func:`~prysm.x.optym.activation.Softmax`
+* :func:`~prysm.x.optym.activation.GumbelSoftmax`
+* :func:`~prysm.x.optym.activation.DiscreteEncoder`
+
+Cost or loss functions
+
+* :func:`~prysm.x.optym.cost.BiasAndGainInvariantError`
+* :func:`~prysm.x.optym.cost.LogLikelyhood`
 
 x/polarization
 --------------
 
-New module with basic jones calculus functions to faciliate modeling of generally polarized fields.
+New module for Jones calculus and other polarization calculations. Included is
+an adapter that generalizes all routines within the propagation module to
+propagation of Jones states, an extremely powerful feature for modeling
+polarized fields.
 
-Jones Vectors:
+TODO link to new tutorials/documentation
+
+Jones Vectors
 
 * :func:`~prysm.x.polarization.linear_pol_vector`
 * :func:`~prysm.x.polarization.circular_pol_vector`
 
-Jones Matrices:
+Jones Matrices
 
 * :func:`~prysm.x.polarization.jones_rotation_matrix`
 * :func:`~prysm.x.polarization.linear_retarder`
@@ -198,16 +188,76 @@ Jones Matrices:
 * :func:`~prysm.x.polarization.half_wave_plate`
 * :func:`~prysm.x.polarization.quarter_wave_plate`
 
-Conversion to Mueller matrices and simple data reduction with Pauli spin matrices:
+Conversion to Mueller matrices and simple data reduction with Pauli spin
+matrices:
 
 * :func:`~prysm.x.polarization.jones_to_mueller`
 * :func:`~prysm.x.polarization.pauli_spin_matrix`
 * :func:`~prysm.x.polarization.pauli_coefficients`
 
+x/fibers
+--------
+
+New module with routines to parametrically study cylindrical step index fibers
+and wavesguides.  Contains functions to identify the :math:`LP_{\ell{}m}` modes
+of single and multi-mode fibers as well as evaluate them numerically.  Also
+contains the mode overlap integral used to model coupling of complex E-fields
+into fibers and waveguides.
+
+TODO more
+
+
+x/psi, x/pdi, x/sri, x/shack_hartmann
+-------------------------------------
+
+These four modules are for the modeling of Shack-Hartmann sensors, as well as
+two types of pinhole and/or fiber/waveguide based interferometers.  Extensive
+phase shifting interferometry (PSI) reconstruction capability is included, both
+of wavefront phase as well as complex E-field.  A future release will include
+additional capability for differential reconstruction that is superior to taking
+the difference of two absolute reconstructions, after it has been published.
+
+* Forward modeling of Shack Hartmann wavefront sensors using
+  :func:`~prysm.x.shack_hartmann.shack_hartmann` and the propagation module
+
+* Forward modeling of Phase Shifting Point Diffraction Interferometers, aka
+  Medecki interferometers using :class:`~prysm.x.pdi.PSPDI` and the routines and
+  consants of x/psi
+
+* Forward modeling of Self-Referenced Interferometers (SRIs), which use a
+  pinhole to generate the reference wave using light from the input port using
+  :class:`~prysm.x.sri.PinholeSRI`
+
+* SRIs, which use a single mode fiber or waveguide to generate the reference
+  wave using light from the input port using :class:`~prysm.x.sri.PSRI`
+
+* PSI routines:
+
+* * :func:`~prysm.x.psi.degroot_formalism_psi` for reconstructing phase from a
+    set of PSI measurements.  See also the package-level constants XXX_SHIFTS,
+    XXX_SS, XXX_CS for several sets of s and c and phase shift values
+
+* * :func:`~prysm.x.psi.psi_accumulate` for accumulating the sums of de groot's
+    formalism, an essential intermediate step in full complex E-field
+    reconstruction and differential reconstruction.
+
+* * :func:`~prysm.x.psi.differential_re_im` for direct reconstruction of the
+    change in the real and complex part of the E-field based on two PSI
+    measurements
+
+* * :func:`~prysm.x.psi.differential_amp_phs` which is analagous to the Re and
+    Im function.
+
+Note that when performing differential reconstructions, it may often be useful
+to work with (amp1 - amp0)/amp0, instead of the difference directly.
+Interferometers which have apodization over the pupil will naturally have
+smaller differences in the dimmer regions of the pupil.  If the apodization does
+not change between the two measuements, this division will improve accuracy
+considerably.
+
 
 x/dm
 ----
-
 
 * :func:`~prysm.x.dm.DM.copy` method to clone a DM, when e.g. the two DMs in a
   system are the same
@@ -244,7 +294,7 @@ Bug Fixes
 
 * The sign of :func:`~prysm.propagation.Wavefront.thin_lens` was incorrect,
   requiring a propagation by the negative of the focal length to go to the
-  focus.  The sign has been swapped; (wf * thin_lens(f, ...)).free_space(f) now
+  focus.  The sign has been swapped; :code:`(wf * thin_lens(f, ...)).free_space(f)`` now
   goes to the focus.
 
 * An orientation flip was missing in

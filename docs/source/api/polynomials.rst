@@ -65,3 +65,10 @@ Dicksons
 
 .. automodule:: prysm.polynomials.dickson
     :members:
+
+========
+Laguerre
+========
+
+.. automodule:: prysm.polynomials.laguerre
+    :members:
