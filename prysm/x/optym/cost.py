@@ -2,7 +2,7 @@
 import numpy as np
 
 
-class BiasAndGainInvariantError:
+def bias_and_gain_invariant_error(I, D, mask):  # NOQA
     """Bias and gain invariant error.
 
     This cost function computes internal least mean squares estimates of the
@@ -10,72 +10,57 @@ class BiasAndGainInvariantError:
     objective is useful when the overall signal level is ambiguous in phase
     retrieval type problems, and can significantly help stabilize the
     optimization process.
+
+    See also: mean_square_error
+
+    Parameters
+    ----------
+    I : numpy.ndarray
+        'intensity' or model data, any float dtype, any shape
+    D : numpy.ndarray
+        'data' or true mesaurement to be matched, any float dtype, any shape
+    mask : numpy.ndarray
+        logical array with elements to keep (True) or exclude (False)
+
+    Returns
+    -------
+    float, numpy.ndarray
+        cost, dcost/dI
+
+
     """
-    def __init__(self):
-        """Create a new BiasAndGainInvariantError instance."""
-        self.R = None
-        self.alpha = None
-        self.beta = None
-        self.I = None  # NOQA
-        self.D = None
-        self.mask = None
-
-    def forward(self, I, D, mask):  # NOQA
-        """Forward cost evaluation.
-
-        Parameters
-        ----------
-        I : numpy.ndarray
-            'intensity' or model data, any float dtype, any shape
-        D : numpy.ndarray
-            'data' or true mesaurement to be matched, any float dtype, any shape
-        mask : numpy.ndarray
-            logical array with elements to keep (True) or exclude (False)
-
-        Returns
-        -------
-        float
-            scalar cost
-
-        """
-        # intermediate variables
+    if mask is not None:
+        grad = np.zeros_like(I)
         I = I[mask]  # NOQA
         D = D[mask]
-        Ihat = I - I.mean()  # zero mean
-        Dhat = D - D.mean()
 
-        N = I.size
+    Ihat = I - I.mean()  # zero mean
+    Dhat = D - D.mean()
 
-        num = (Ihat*Dhat).sum()
-        den = (Ihat*Ihat).sum()
-        alpha = num/den
+    N = I.size
 
-        alphaI = alpha*I
+    num = (Ihat*Dhat).sum()
+    den = (Ihat*Ihat).sum()
+    alpha = num/den
 
-        beta = (D-alphaI)/N
+    alphaI = alpha*I
 
-        R = 1/((D*D).sum())
-        raw_err = (alphaI + beta) - D
-        err = R*(raw_err*raw_err).sum()
-        self.R = R
-        self.alpha = alpha
-        self.beta = beta
-        return err
+    beta = (D-alphaI)/N
 
-    def backprop(self):
-        """Returns the first step of gradient backpropagation, an array of the same shape as I."""
-        R = self.R
-        alpha = self.alpha
-        beta = self.beta
-        I = self.I  # NOQA
-        D = self.D
-        mask = self.mask
+    R = 1/((D*D).sum())
+    raw_err = (alphaI + beta) - D
+    err = R*(raw_err*raw_err).sum()
+    # 2 is from raw_err squared
+    # R is multiplied and not part of the differentiation, pass-through
+    # likewise with alpha
+    grad = 2*R*alpha*raw_err
 
-        out = np.zeros_like(I)
-        I = I[mask]  # NOQA
-        D = D[mask]
-        out[mask] = 2*R*alpha*((alpha*I + beta) - D)
-        return out
+    if mask is not None:
+        grad2 = np.zeros(mask.shape, dtype=I.dtype)
+        grad2[mask] = grad
+        grad = grad2
+
+    return err, grad
 
 
 def mean_square_error(M, D, mask=None):
