@@ -2,7 +2,6 @@
 import copy
 import numbers
 import operator
-import warnings
 from collections.abc import Iterable
 
 from .conf import config
@@ -221,7 +220,33 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
     elif method == 'czt':
         out = czt.iczt2(ary=wavefunction, Q=Q, samples_out=output_samples, shift=shift)
 
-    out *= Q
+    return out
+
+
+def unfocus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
+                                    wavelength, output_dx, output_samples,
+                                    shift=(0, 0), method='mdft'):
+    if not isinstance(output_samples, Iterable):
+        output_samples = (output_samples, output_samples)
+
+    dias = [output_dx * s for s in output_samples]
+    dia = max(dias)
+    Q = Q_for_sampling(input_diameter=dia,
+                       prop_dist=prop_dist,
+                       wavelength=wavelength,
+                       output_dx=input_dx)  # not a typo
+
+    Q /= wavefunction.shape[0] / output_samples[0]
+
+    if shift[0] != 0 or shift[1] != 0:
+        shift = (shift[0]/output_dx, shift[1]/output_dx)
+
+    if method == 'mdft':
+        out = mdft.idft2_backprop(wavefunction, Q, samples_=output_samples, shift=shift)
+    elif method == 'czt':
+        raise ValueError('gradient backpropagation not yet implemented for CZT')
+        out = czt.iczt2_backprop(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
+
     return out
 
 
@@ -412,7 +437,7 @@ def angular_spectrum_transfer_function(samples, wvl, dx, z):
     return np.outer(tfy, tfx)
 
 
-def to_fpm_and_back(wavefunction, dx, wavelength, efl, fpm, fpm_dx, method='mdft', shift=(0, 0), return_more=False):
+def to_fpm_and_back(wavefunction, dx, efl, wavelength, fpm, fpm_dx, shift=(0, 0), method='mdft', return_more=False):
     """Propagate to a focal plane mask, apply it, and return.
 
     This routine handles normalization properly for the user.
@@ -425,22 +450,22 @@ def to_fpm_and_back(wavefunction, dx, wavelength, efl, fpm, fpm_dx, method='mdft
         complex wave to propagate
     dx : float
         inter-sample spacing of wavefunction, mm
-    wavelength : float
-        wavelength of light to propagate at, um
     efl : float
         focal length for the propagation
+    wavelength : float
+        wavelength of light to propagate at, um
     fpm : Wavefront or numpy.ndarray
         the focal plane mask
     fpm_dx : float
         sampling increment in the focal plane,  microns;
         do not need to pass if fpm is a Wavefront
+    shift : tuple of float, optional
+        shift in the image plane to go to the FPM
+        appropriate shift will be computed returning to the pupil
     method : str, {'mdft', 'czt'}, optional
         how to propagate the field, matrix DFT or Chirp Z transform
         CZT is usually faster single-threaded and has less memory consumption
         MDFT is usually faster multi-threaded and has more memory consumption
-    shift : tuple of float, optional
-        shift in the image plane to go to the FPM
-        appropriate shift will be computed returning to the pupil
     return_more : bool, optional
         if True, return (new_wavefront, field_at_fpm, field_after_fpm)
         else return new_wavefront
@@ -460,42 +485,11 @@ def to_fpm_and_back(wavefunction, dx, wavelength, efl, fpm, fpm_dx, method='mdft
 
         fpm_samples = fpm.shape
 
-    input_samples = wavefunction.shape
-    input_diameters = [dx * s for s in input_samples]
-    Q_forward = [Q_for_sampling(d, efl, wavelength, fpm_dx) for d in input_diameters]
-    # soummer notation: use m, which would be 0.5 for a 2x zoom
-    # BDD notation: Q, would be 2 for a 2x zoom
-    m_forward = [1/q for q in Q_forward]
-    m_reverse = [b/a*m for a, b, m in zip(input_samples, fpm_samples, m_forward)]
-    Q_reverse = [1/m for m in m_reverse]
-    shift_forward = tuple(s/fpm_dx for s in shift)
-
-    # prop forward
-    kwargs = dict(ary=wavefunction, Q=Q_forward, samples_out=fpm_samples, shift=shift_forward)
-    if method == 'mdft':
-        field_at_fpm = mdft.dft2(**kwargs)
-    elif method == 'czt':
-        field_at_fpm = czt.czt2(**kwargs)
+    field_at_fpm = focus_fixed_sampling(wavefunction, dx, efl, wavelength, fpm_dx, fpm_samples, shift=shift, method=method)  # NOQA
 
     field_after_fpm = field_at_fpm * fpm
 
-    # shift_reverse = tuple(-s for s, q in zip(shift_forward, Q_forward))
-    shift_reverse = shift_forward
-    kwargs = dict(ary=field_after_fpm, Q=Q_reverse, samples_out=input_samples, shift=shift_reverse)
-    if method == 'mdft':
-        field_at_next_pupil = mdft.idft2(**kwargs)
-    elif method == 'czt':
-        field_at_next_pupil = czt.iczt2(**kwargs)
-
-    # scaling
-    # TODO: make this handle anamorphic transforms properly
-    if Q_forward[0] != Q_forward[1]:
-        warnings.warn(f'Forward propagation had Q {Q_forward} which was not uniform between axes, scaling is off')  # NOQA
-    if input_samples[0] != input_samples[1]:
-        warnings.warn(f'Forward propagation had input shape {input_samples} which was not uniform between axes, scaling is off')  # NOQA
-    if fpm_samples[0] != fpm_samples[1]:
-        warnings.warn(f'Forward propagation had fpm shape {fpm_samples} which was not uniform between axes, scaling is off')  # NOQA
-    # Q_reverse is calculated from Q_forward; if one is consistent the other is
+    field_at_next_pupil = unfocus_fixed_sampling(field_after_fpm, fpm_dx, efl, wavelength, dx, wavefunction.shape, shift=shift, method=method)  # NOQA
 
     if return_more:
         return field_at_next_pupil, field_at_fpm, field_after_fpm
@@ -555,42 +549,9 @@ def to_fpm_and_back_backprop(wavefunction, dx, wavelength, efl, fpm, fpm_dx=None
     if np.iscomplexobj(fpm.dtype):
         fpm = fpm.conj()
 
-    input_samples = wavefunction.shape
-    input_diameters = [dx * s for s in input_samples]
-    Q_forward = [Q_for_sampling(d, efl, wavelength, fpm_dx) for d in input_diameters]
-    # soummer notation: use m, which would be 0.5 for a 2x zoom
-    # BDD notation: Q, would be 2 for a 2x zoom
-    m_forward = [1/q for q in Q_forward]
-    m_reverse = [b/a*m for a, b, m in zip(input_samples, fpm_samples, m_forward)]
-    Q_reverse = [1/m for m in m_reverse]
-    shift_forward = tuple(s/fpm_dx for s in shift)
-
-    kwargs = dict(fbar=wavefunction, Q=Q_reverse, samples_in=fpm_samples, shift=shift_forward)
-    if method == 'mdft':
-        Ebbar = -(mdft.idft2_backprop(**kwargs))
-    elif method == 'czt':
-        raise ValueError('CZT backprop not yet implemented')
-        field_at_fpm = czt.czt2_backprop(**kwargs)
-
+    Ebbar = -unfocus_fixed_sampling_backprop(wavefunction, fpm_dx, efl, wavelength, dx, fpm_samples)
     intermediate = Ebbar * fpm
-
-    kwargs = dict(fbar=intermediate, Q=Q_forward, samples_in=input_samples, shift=shift_forward)
-    if method == 'mdft':
-        Eabar = mdft.dft2_backprop(**kwargs)
-    elif method == 'czt':
-        raise ValueError('CZT backprop not yet implemented')
-        field_at_next_pupil = czt.iczt2(**kwargs)
-
-    # scaling
-    # TODO: make this handle anamorphic transforms properly
-    if Q_forward[0] != Q_forward[1]:
-        warnings.warn(f'Forward propagation had Q {Q_forward} which was not uniform between axes, scaling is off')
-    if input_samples[0] != input_samples[1]:
-        warnings.warn(f'Forward propagation had input shape {input_samples} which was not uniform between axes, scaling is off')
-    if fpm_samples[0] != fpm_samples[1]:
-        warnings.warn(f'Forward propagation had fpm shape {fpm_samples} which was not uniform between axes, scaling is off')
-    # Q_reverse is calculated from Q_forward; if one is consistent the other is
-
+    Eabar = focus_fixed_sampling_backprop(intermediate, dx, efl, wavelength, fpm_dx, fpm_samples)
     if return_more:
         return Eabar, Ebbar, intermediate
     else:

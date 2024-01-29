@@ -334,7 +334,7 @@ class MatrixDFTExecutor:
 
         return out
 
-    def idft2_backprop(self, fbar, Q, samples_in, shift=(0, 0)):
+    def idft2_backprop(self, fbar, Q, samples_out, shift=(0, 0)):
         """Gradient backpropagation for idft2.
 
         Parameters
@@ -350,7 +350,7 @@ class MatrixDFTExecutor:
             shift of the output domain, as a frequency.  Same broadcast
             rules apply as with samples.
         """
-        key = self._key(samples_in=samples_in, Q=Q, samples_out=fbar.shape, shift=shift, fwd=False)
+        key = self._key(samples_in=samples_out, Q=Q, samples_out=fbar.shape, shift=shift, fwd=False)
         self._setup_bases(key)
         Eout, Ein = self.Eout[key], self.Ein[key]
         Eout_conj_t = Eout.T.conj()
@@ -398,8 +398,8 @@ class MatrixDFTExecutor:
 
             alphay = 1/(Na*Qn)
             alphax = 1/(Ma*Qm)
-            normy = alphay / truenp.sqrt(alphay)
-            normx = alphax / truenp.sqrt(alphax)
+            normy = np.sqrt(alphay)  # square root for energy, instead of power
+            normx = np.sqrt(alphax)
             Ein *= normy
             Eout *= normx
             self.Ein[key] = Ein
