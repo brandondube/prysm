@@ -96,11 +96,16 @@ bayer
 i/o
 ---
 
+* :func:`prysm.io.write_zygo_dat` to write Zygo .dat files.
+
 * :func:`prysm.io.read_codev_psf` to load PSF output from Code V
 
 * :func:`prysm.io.read_codev_bsp` to load BSP data from Code V.
 
-* :func:`prysm.io.write_zygo_dat` to write Zygo .dat files.
+* :func:`prysm.io.write_codev_gridint` to write Code V grid INT files.
+
+* :func:`prysm.io.write_codev_zfr_int` to write Code V grid Fringe Zernike INT files.
+
 
 More convenient backend swaps, misc
 -----------------------------------
@@ -204,7 +209,17 @@ of single and multi-mode fibers as well as evaluate them numerically.  Also
 contains the mode overlap integral used to model coupling of complex E-fields
 into fibers and waveguides.
 
-TODO more
+The main user-facing routines are:
+
+* :func:`~prysm.x.fibers.numerical_aperture`
+
+* :func:`~prysm.x.fibers.V`
+
+* :func:`~prysm.x.fibers.find_all_modes`
+
+* :func:`~prysm.x.fibers.compute_LP_modes`
+
+* :func:`~prysm.x.fibers.mode_overlap`
 
 
 x/psi, x/pdi, x/sri, x/shack_hartmann
