@@ -226,16 +226,14 @@ def find_all_modes(V):
     # as additional number of points
 
     # LP are "Linearly Polarized" modes, ghatak below eq. 8.12, pg 134
-    npts = int(50 + V**1.5)
+    npts = int(50 + V**2)
     kwargs = dict(V=V, l=0)
     eps = 1e-14  # brentq will find the NaNs at b=0 and b=1 and mistake them for roots
     interval = (0+eps, 1-eps)
     # ::-1 -- reverse the order to be in descending b
     l0_bs = find_all_roots(_ghatak_eq_8_40, kwargs=kwargs, npts_signsearch=npts, interval=interval)[::-1]
     out = {0: l0_bs}
-    # if len(l0_bs) == 1:
-    #     # single-mode
-    #     return out
+
     bs = l0_bs
     ell = 0
     while len(bs) > 0:
