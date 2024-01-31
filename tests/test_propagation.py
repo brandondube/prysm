@@ -36,7 +36,7 @@ def test_unfocus_fft_mdft_equivalent_Wavefront():
         dx=unfocus_fft.dx,
         samples=unfocus_fft.data.shape[1])
 
-    assert np.allclose(unfocus_fft.data, unfocus_mdft.data/2)
+    assert np.allclose(unfocus_fft.data, unfocus_mdft.data)
 
 
 def test_focus_fft_mdft_equivalent_Wavefront():
