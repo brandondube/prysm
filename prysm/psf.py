@@ -231,7 +231,7 @@ def autocrop(data, px):
 
 
 def airydisk(unit_r, fno, wavelength):
-    """Compute the airy disk function over a given spatial distancnp.
+    """Compute the airy disk function over a given spatial distance.
 
     Parameters
     ----------
@@ -248,8 +248,14 @@ def airydisk(unit_r, fno, wavelength):
         ndarray containing the airy pattern
 
     """
+    efield = airydisk_efield(unit_r, fno, wavelength)
+    return abs(efield) ** 2
+
+
+def airydisk_efield(unit_r, fno, wavelength):
+    """The same as airydisk(), returning complex E-field instead."""
     u_eff = unit_r * np.pi / wavelength / fno
-    return abs(2 * jinc(u_eff)) ** 2
+    return 2 * jinc(u_eff)
 
 
 def airydisk_ft(r, fno, wavelength):
