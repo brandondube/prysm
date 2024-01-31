@@ -606,6 +606,24 @@ class Wavefront:
         return cls(P, wavelength, dx)
 
     @classmethod
+    def phase_screen(cls, phase, wavelength, dx):
+        """Create a new complex phase screen.
+
+        Parameters
+        ----------
+        phase : numpy.ndarray
+            phase or optical path error, units of nm
+        wavelength : float
+            wavelength of light with units of microns
+        dx : float
+            sample spacing with units of mm
+
+            """
+        phase_prefix = 1j * 2 * np.pi / wavelength / 1e3  # / 1e3 does nm-to-um for phase on a scalar
+        E = np.exp(phase_prefix*phase)
+        return cls(E, wavelength, dx)
+
+    @classmethod
     def thin_lens(cls, f, wavelength, x, y):
         """Create a thin lens, used in focusing beams.
 
