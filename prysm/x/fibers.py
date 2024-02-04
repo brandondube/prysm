@@ -19,6 +19,9 @@ def critical_angle(n_core, n_clad, deg=True):
         core index
     n_clad : float
         cladding index
+    deg : bool, optional
+        if True, return is in degrees
+        else radians
 
     Returns
     -------
@@ -81,7 +84,7 @@ def V(radius, NA, wavelength):
 
 
 def _ghatak_eq_8_40(b, V, l):  # NOQA
-    """Ghatak's Eq. 8.40
+    """Ghatak's Eq. 8.40.
 
     Returns left hand side minus right hand side.  This function is a boundary
     value problem; when LHS=RHS, the mode in the cladding and the mode in the
@@ -117,7 +120,7 @@ def _ghatak_eq_8_40(b, V, l):  # NOQA
 
     U = V * np.sqrt(1-b)
     W = V * np.sqrt(b)
-    if l >= 1:
+    if l >= 1:  # noqa
         # right looks like it may be a typo in Ghatak?  -W in 8.40, not in 8.41
         # however, fig 8.1 only replicates for -W, and the same for fig 8.4
         left = U * jn(l-1, U) / jn(l, U)
@@ -152,6 +155,9 @@ def find_all_roots(f, args=(), kwargs=None, interval=(0, 1), npts_signsearch=100
         (lower, upper) bound on which to search for roots
     npts_signsearch: int
         number of points used in a coarse search for sign changes in f
+    maxiter : int
+        maximum number of iterations to use when searching for a root on each
+        segment
 
     Returns
     -------
@@ -218,6 +224,7 @@ def find_all_modes(V):
             0: (0.9, 0.6, 0.3)
         }
         would be a three-mode fiber, with no azimuthally variant modes
+
     """
     # heuristic: need more than say 50 points to find all zero crossings
     # if not a single-mode fiber.  _ghatak_eq_8_40 runs quickly, so never try
@@ -304,12 +311,12 @@ def compute_LP_modes(V, mode_dict, a, r, t):
             U = V * np.sqrt(1-b)
             W = V * np.sqrt(b)
             tmp = np.zeros_like(r)
-            if l == 0:
+            if l == 0:  # noqa
                 num_core = j0(U*rnorm[within_core])
                 den_core = j0(U)
                 num_clad = k0(W*rnorm[within_clad])
                 den_clad = k0(W)
-            elif l == 1:
+            elif l == 1:  # noqa
                 num_core = j1(U*rnorm[within_core])
                 den_core = j1(U)
                 num_clad = k1(W*rnorm[within_clad])
@@ -323,7 +330,7 @@ def compute_LP_modes(V, mode_dict, a, r, t):
             tmp[within_core] = num_core/den_core
             tmp[within_clad] = num_clad/den_clad
 
-            if l != 0:
+            if l != 0:  # noqa
                 if l < 0:
                     tmp *= sines[-l]
                 else:
@@ -337,6 +344,7 @@ def compute_LP_modes(V, mode_dict, a, r, t):
 
 
 def marcuse_mfr_from_V(V):
+    """Marcuse' estimate for the mode field radius based on the V-number."""
     # D. Marcuse, “Loss analysis of single-mode fiber splices”, Bell Syst. Tech. J. 56, 703 (1977)
     # https://doi.org/10.1002/j.1538-7305.1977.tb00534.x
 
@@ -344,7 +352,59 @@ def marcuse_mfr_from_V(V):
 
 
 def petermann_mfr_from_V(V):
+    """Petermann's estimate for the mode field radius based on the V-number.
+
+    More accurate than Marcuse
+
+    """
     # TODO: cite
     # accurate to within ~1% from V=1.5 to 2.5
     # see also https://www.rp-photonics.com/mode_radius.html
     return marcuse_mfr_from_V(V) - 0.016 - 1.567 * V ** -7
+
+
+def mode_overlap_integral(E1, E2, E2conj=None, I1sum=None, I2sum=None):
+    r"""Compute the mode overlap integral.
+
+    ..math::
+        \eta = \frac{\left| \int{}E_1^* E_2 \right|^2}{\int I_1 \int I_2}
+
+
+    When repeatedly computing coupling of varying fields into a consistent mode,
+    consider precomputing E2conj and I2sum and passing them as arguments to
+    accelerate computation.
+
+    Parameters
+    ----------
+    E1 : array
+        complex field of mode 1
+    E2 : array
+        complex field of mode 2
+    E2conj : array
+        E2.conj()
+    I1sum : array, optional
+        sum of the intensity of mode 1; I1 = abs(E1)**2; I1sum = I1.sum()
+    I2sum : array, optional
+        sum of the intensity of mode 2; I2 = abs(E2)**2; I2sum = I2.sum()
+
+    Returns
+    -------
+    float
+        eta, coupling efficiency into the mode; bounded between [0,1]
+
+    """
+    if I1sum is None:
+        I1 = abs(E1)
+        I1 *= I1
+        I1sum = I1.sum()
+    if I2sum is None:
+        I2 = abs(E2)
+        I2 *= I2
+        I2sum = I2.sum()
+    if E2conj is None:
+        E2conj = E2.conj()
+
+    cross_intensity = E1 * E2conj
+    num = abs(cross_intensity.sum())**2
+    den = I1sum*I2sum
+    return num/den
