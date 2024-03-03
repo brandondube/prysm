@@ -2,26 +2,38 @@
 from prysm.mathops import np
 
 
-def bias_and_gain_invariant_error(I, D, mask=None):
-    """Bias and gain invariant variant of mean square error.
+def bias_and_gain_invariant_error(I, D, mask):  # NOQA
+    """Bias and gain invariant error.
+
+    This cost function computes internal least mean squares estimates of the
+    overall bias (DC pedestal) and gain between the signal I and D.  This
+    objective is useful when the overall signal level is ambiguous in phase
+    retrieval type problems, and can significantly help stabilize the
+    optimization process.
+
+    See also: mean_square_error
 
     Parameters
     ----------
     I : numpy.ndarray
-        "model data"
+        'intensity' or model data, any float dtype, any shape
     D : numpy.ndarray
-        "truth data"
-    mask : numpy.ndarray, optional
-        True where M should contribute to the cost, False where it should not
+        'data' or true mesaurement to be matched, any float dtype, any shape
+    mask : numpy.ndarray
+        logical array with elements to keep (True) or exclude (False)
 
     Returns
     -------
     float, numpy.ndarray
-        cost, dcost/dM
+        cost, dcost/dI
+
 
     """
-    I = I[mask]  # NOQA
-    D = D[mask]
+    if mask is not None:
+        grad = np.zeros_like(I)
+        I = I[mask]  # NOQA
+        D = D[mask]
+
     Ihat = I - I.mean()  # zero mean
     Dhat = D - D.mean()
 
@@ -38,9 +50,16 @@ def bias_and_gain_invariant_error(I, D, mask=None):
     R = 1/((D*D).sum())
     raw_err = (alphaI + beta) - D
     err = R*(raw_err*raw_err).sum()
+    # 2 is from raw_err squared
+    # R is multiplied and not part of the differentiation, pass-through
+    # likewise with alpha
+    grad = 2*R*alpha*raw_err
 
-    grad = np.zeros_like(I)
-    grad[mask] = 2*R*alpha*raw_err
+    if mask is not None:
+        grad2 = np.zeros(mask.shape, dtype=I.dtype)
+        grad2[mask] = grad
+        grad = grad2
+
     return err, grad
 
 
