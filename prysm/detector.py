@@ -64,6 +64,9 @@ class Detector:
         dcnu : numpy.ndarray, optional
             dark current nonuniformity, a fixed map that the dark current
             is multiplied by.  ones_like is perfectly uniform.
+        lut : numpy.ndarray, optional
+            look-up table of ideal output DN values to output DN values,
+            representing the nonlinearity of the detector
 
         """
         self.dark_current = dark_current
@@ -139,6 +142,9 @@ class Detector:
         output = output.reshape((frames, *aerial_img.shape))
         if frames == 1:
             output = output[0, :, :]
+
+        if self.lut is not None:
+            output = apply_lut(output, self.lut)
 
         return output
 

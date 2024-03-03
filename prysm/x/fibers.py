@@ -341,6 +341,42 @@ def compute_LP_modes(V, mode_dict, a, r, t):
     return out
 
 
+def smf_mode_field(V, a, b, r):
+    """Mode field of a single mode fiber.
+
+    Parameters
+    ----------
+    V : float
+        V-number (see the V function)
+    a : float
+        fiber's core radius, microns
+    b : float
+        propagation constant for the mode
+    r : ndarray
+        radial coordinates, microns
+
+    Returns
+    -------
+        the single mode of the fiber
+
+    """
+    U = V * np.sqrt(1-b)
+    W = V * np.sqrt(b)
+    # inside core
+    rnorm = r*(1/a)  # faster to divide on scalar, mul on vector
+    rinterior = rnorm < 1
+    num = special.j0(U*rnorm[rinterior])
+    den = special.j1(U)
+    out = np.empty_like(r)
+    out[rinterior] = num*(1/den)
+
+    rexterior = ~rinterior
+    num = special.k0(W*rnorm[rexterior])
+    den = special.k1(W)
+    out[rexterior] = num*(1/den)
+    return out
+
+
 def marcuse_mfr_from_V(V):
     """Marcuse' estimate for the mode field radius based on the V-number."""
     # D. Marcuse, “Loss analysis of single-mode fiber splices”, Bell Syst. Tech. J. 56, 703 (1977)
@@ -366,7 +402,6 @@ def mode_overlap_integral(E1, E2, E2conj=None, I1sum=None, I2sum=None):
 
     ..math::
         \eta = \frac{\left| \int{}E_1^* E_2 \right|^2}{\int I_1 \int I_2}
-
 
     When repeatedly computing coupling of varying fields into a consistent mode,
     consider precomputing E2conj and I2sum and passing them as arguments to

@@ -79,7 +79,7 @@ Segmented Systems
 * Compositing and per-segment errors of "keystone" apertures via
   :class:`~prysm.segmented.CompositeKeystoneAperture`
 
-bayer
+Bayer
 -----
 
 * :code:`prysm.bayer.wb_scale` has been renamed to
@@ -106,6 +106,14 @@ i/o
 
 * :func:`prysm.io.write_codev_zfr_int` to write Code V grid Fringe Zernike INT files.
 
+
+Detectors
+---------
+
+new :func:`~prysm.detector.apply_lut` function, and associated kwarg :code:`lut`
+when initializing a :class:`~prysm.detector.Detector` instance.  This adds the
+capability to simulate detector nonlinearity that is homogeneous over the whole
+array.
 
 More convenient backend swaps, misc
 -----------------------------------
@@ -218,6 +226,8 @@ The main user-facing routines are:
 * :func:`~prysm.x.fibers.find_all_modes`
 
 * :func:`~prysm.x.fibers.compute_LP_modes`
+
+* :func:`~prysm.x.fibers.smf_mode_field`
 
 * :func:`~prysm.x.fibers.mode_overlap`
 
