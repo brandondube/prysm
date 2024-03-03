@@ -5,11 +5,41 @@ import itertools
 
 from .mathops import np
 
+def apply_lut(img, lut):
+    """Apply a lookup table to img.
+
+    Parameters
+    ----------
+    img : numpy.ndarray
+        n dimensional array (2D and 3D are both OK) of an unsigned integer dtype
+    lut : numpy.ndarray
+        1 dimensional array whose indices are input values and values are output values
+
+    Returns
+    -------
+    numpy.ndarray
+        ndarray of the same shape as img
+        the output array must not be modified in place, or lut will be modified as well.
+
+    """
+    # take is faster than indexing into the lut on older numpy
+    return np.take(lut, img)
+
 
 class Detector:
-    """Basic model of a detector, no fuss."""
+    """Model of a detector."""
 
-    def __init__(self, dark_current, read_noise, bias, fwc, conversion_gain, bits, exposure_time, prnu=None, dcnu=None):
+    def __init__(self,
+                 dark_current,
+                 read_noise,
+                 bias,
+                 fwc,
+                 conversion_gain,
+                 bits,
+                 exposure_time,
+                 prnu=None,
+                 dcnu=None,
+                 lut=None):
         """Initialize a new camera model.
 
         Parameters
@@ -45,6 +75,7 @@ class Detector:
         self.exposure_time = exposure_time
         self.prnu = prnu
         self.dcnu = dcnu
+        self.lut = lut
 
     def expose(self, aerial_img, frames=1):
         """Form an exposure of an aerial image.
