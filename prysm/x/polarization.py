@@ -538,14 +538,16 @@ def apply_polarization_to_field(field):
     Parameters
     ----------
     field : numpy.ndarray
-        scalar field
+        scalar field of shape M x N
 
     Returns
     -------
     numpy.ndarray
-        jones matrix field
+        jones matrix field of shape M x N x 1 x 1
     """
 
-    return field[..., np.newaxis, np.newaxis]
+    field = field[..., np.newaxis, np.newaxis]
+    
+    return field
 
 
