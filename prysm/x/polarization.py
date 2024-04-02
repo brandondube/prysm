@@ -459,6 +459,13 @@ def pauli_coefficients(jones):
 def jones_adapter(prop_func):
     """wrapper around prysm.propagation functions to support polarized field propagation
 
+    Parameters
+    ----------
+    prop_func : callable
+        propagation function to decorate
+
+    Notes
+    -----
     There isn't anything particularly special about polarized field propagation. We simply 
     leverage the independence of the 4 "polarized" components of an optical system expressed
     as a Jones matrix
@@ -471,11 +478,6 @@ def jones_adapter(prop_func):
     The elements of this matrix can be propagated as incoherent wavefronts to express the polarized
     response of an optical system. All `jones_adapter` does is call a given propagation function
     4 times, one for each element of the Jones matrix.
-
-    Parameters
-    ----------
-    prop_func : callable
-        propagation function to decorate
 
     Returns
     -------
@@ -517,7 +519,7 @@ def jones_adapter(prop_func):
     
     return wrapper
 
-def make_propagation_polarized(funcs_to_change=supported_propagation_funcs):
+def add_jones_propagation(funcs_to_change=supported_propagation_funcs):
     """apply decorator to supported propagation functions
 
     Parameters
@@ -529,5 +531,21 @@ def make_propagation_polarized(funcs_to_change=supported_propagation_funcs):
     for name,func in vars(propagation).items():
         if name in funcs_to_change:
             setattr(propagation, name, jones_adapter(func))
+
+def apply_polarization_to_field(field):
+    """Extends the dimensions of a scalar field to be compatible with jones calculus
+
+    Parameters
+    ----------
+    field : numpy.ndarray
+        scalar field
+
+    Returns
+    -------
+    numpy.ndarray
+        jones matrix field
+    """
+
+    return field[..., np.newaxis, np.newaxis]
 
 
