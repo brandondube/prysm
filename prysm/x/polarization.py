@@ -9,12 +9,6 @@ import functools
 # supported functions for jones_decorator
 supported_propagation_funcs = ['focus','unfocus','focus_fixed_sampling','angular_spectrum']
 
-
-U = np.array([[1, 0,   0,  1],
-                [1, 0,   0, -1],
-                [0, 1,   1,  0],
-                [0, 1j, -1j, 0]]) / np.sqrt(2)
-
 def _empty_pol_vector(shape=None):
     """Returns an empty array to populate with jones vector elements.
 
@@ -286,7 +280,7 @@ def linear_polarizer(theta=0, shape=None):
 
     return linear_diattenuator(0, theta=theta, shape=shape)
 
-def vector_vortex_retarder(charge, shape, retardance=np.pi, theta=0):
+def vector_vortex_retarder(charge, theta, retardance=np.pi, rotate=0):
     """generate a phase-only spatially-varying vector vortex retarder (VVR)
 
     This model follows Eq (7) in D. Mawet. et al. (2009)
@@ -296,50 +290,49 @@ def vector_vortex_retarder(charge, shape, retardance=np.pi, theta=0):
     ----------
     charge : float
         topological charge of the vortex, typically an interger
-    shape : tuple of int
-        shape of the VR array
+    theta : numpy.ndarray
+        angular coordinate grid describing the azimuthal angle of the
+        vortex. This can be created from prysm.coordinates.cart_to_polar
     retardance : float
         phase difference between the ordinary and extraordinary modes, by default np.pi or half a wave
-    theta : float, optional
+    rotate : float, optional
         angle in radians to rotate the vortex by, by default 0
 
     Returns
     -------
-    _type_
-        _description_
+    numpy.ndarray
+        jones matrix of a vector vortex retarder
     """
-    
-    vvr_lhs = _empty_jones(shape=[shape,shape])
-    vvr_rhs = _empty_jones(shape=[shape,shape])
 
-    # create the dimensions
-    x,y = make_xy_grid(shape,diameter=1)
-    r,t = cart_to_polar(x,y)
-    t *= charge
+    # construct empty jones matrices
+    shape = theta.shape
+    vvr_lhs = _empty_jones(shape=shape)
+    vvr_rhs = _empty_jones(shape=shape)
 
     # precompute retardance
-    cost = np.cos(t)
-    sint = np.sin(t)
+    theta *= charge
+    cost = np.cos(theta)
+    sint = np.sin(theta)
     jcosr = -1j*np.cos(retardance/2)
     jsinr = np.sin(retardance/2)
 
     # build jones matrices
-    vvr_lhs[...,0,0] = cost
-    vvr_lhs[...,0,1] = sint
-    vvr_lhs[...,1,0] = sint
-    vvr_lhs[...,1,1] = -cost
+    vvr_lhs[..., 0, 0] = cost
+    vvr_lhs[..., 0, 1] = sint
+    vvr_lhs[..., 1, 0] = sint
+    vvr_lhs[..., 1, 1] = -cost
     vvr_lhs *= jsinr
 
-    vvr_rhs[...,0,0] = jcosr
-    vvr_rhs[...,0,0] = jcosr
+    vvr_rhs[..., 0, 0] = jcosr
+    vvr_rhs[..., 0, 0] = jcosr
 
     vvr = vvr_lhs + vvr_rhs
 
-    vvr = jones_rotation_matrix(-theta) @ vvr @ jones_rotation_matrix(theta)
+    vvr = jones_rotation_matrix(-rotate) @ vvr @ jones_rotation_matrix(rotate)
 
     return vvr
 
-def broadcast_kron(a,b):
+def broadcast_kron(a, b):
     """broadcasted kronecker product of two N,M,...,2,2 arrays. Used for jones -> mueller conversion
     In the unbroadcasted case, this output looks like
 
@@ -379,6 +372,12 @@ def jones_to_mueller(jones, broadcast=True):
     M : np.ndarray
         Mueller matrix
     """
+
+    U = np.array([[1, 0, 0, 1],
+                  [1, 0, 0, -1],
+                  [0, 1, 1, 0],
+                  [0, 1j, -1j, 0]], dtype=config.precision_complex)
+    U /= np.sqrt(2)
 
     if broadcast:
         jprod = broadcast_kron(np.conj(jones), jones)
@@ -487,8 +486,6 @@ def jones_adapter(prop_func):
 
     @functools.wraps(prop_func)
     def wrapper(*args,**kwargs):
-
-        
         # this is a function
         wavefunction = args[0]
         if len(args) > 1:
