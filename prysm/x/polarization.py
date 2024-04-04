@@ -529,22 +529,25 @@ def add_jones_propagation(funcs_to_change=supported_propagation_funcs):
         if name in funcs_to_change:
             setattr(propagation, name, jones_adapter(func))
 
-def apply_polarization_to_field(field):
-    """Extends the dimensions of a scalar field to be compatible with jones calculus
+def apply_polarization_optic(field, pol_optic):
+    """applies a polarization optic represented by a jones matrix to a scalar field
 
     Parameters
     ----------
     field : numpy.ndarray
         scalar field of shape M x N
+    pol_optic : numpy.ndarray
+        jones matrix of shape M x N x 2 x 2
 
     Returns
     -------
     numpy.ndarray
-        jones matrix field of shape M x N x 1 x 1
+        jones matrix of shape M x N x 2 x 2
     """
 
     field = field[..., np.newaxis, np.newaxis]
+    jones = pol_optic * field
     
-    return field
+    return jones
 
 
