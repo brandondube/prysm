@@ -118,7 +118,7 @@ def Qbfs(n, x):
 # b_M = a_M / f_M
 # B_M-1 = (a_M-1 - g_M-1 bM) / f_M-1
 # B_m = (a_m - g_m b_m+1 - h_m b_m+2) / f_m
-# so, general proces... for Qbfs, don't provide derivatives, but provide a way
+# so, general process... for Qbfs, don't provide derivatives, but provide a way
 # to change basis to cheby third kind, which can then be differentiated.
 
 
@@ -389,8 +389,10 @@ def Qbfs_sequence(ns, x):
 
     Returns
     -------
-    generator of numpy.ndarray
-        yielding one order of ns at a time
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
 
     """
     # see the leading comment of Qbfs for some explanation of this code
@@ -398,23 +400,24 @@ def Qbfs_sequence(ns, x):
 
     ns = list(ns)
     min_i = 0
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
 
     rho = x ** 2
     # c_Q is the leading term used to convert Qm to Qbfs
     c_Q = rho * (1 - rho)
     if ns[min_i] == 0:
-        yield np.ones_like(x) * c_Q
+        out[min_i] = c_Q
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     if ns[min_i] == 1:
-        yield 1 / np.sqrt(19) * (13 - 16 * rho) * c_Q
+        out[min_i] = 1 / np.sqrt(19) * (13 - 16 * rho) * c_Q
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     # c is the leading term of the recurrence relation for P
     c = 2 - 4 * rho
@@ -441,11 +444,10 @@ def Qbfs_sequence(ns, x):
         Qnm2 = Qnm1
         Qnm1 = Qn
         if ns[min_i] == nn:
-            yield Qn * c_Q
+            out[min_i] = Qn * c_Q
             min_i += 1
 
-        if min_i == len(ns):
-            return
+    return out
 
 
 def Qcon(n, x):
@@ -493,16 +495,17 @@ def Qcon_sequence(ns, x):
 
     Returns
     -------
-    generator of numpy.ndarray
-        yielding one order of ns at a time
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
 
     """
     xx = x ** 2
     xx = 2 * xx - 1
     x4 = x ** 4
     Pns = jacobi_sequence(ns, 0, 4, xx)
-    for Pn in Pns:
-        yield Pn * x4
+    return Pns * x4
 
 
 @lru_cache(4000)
@@ -789,8 +792,10 @@ def Q2d_sequence(nms, r, t):
 
     Returns
     -------
-    generator
-        yields one term for each element of nms
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
 
     """
     # see Q2d for general sense of this algorithm.
@@ -804,6 +809,7 @@ def Q2d_sequence(nms, r, t):
 
     def factory():
         return 0
+
 
     # maps |m| => N
     m_has_pos = set()
@@ -891,6 +897,8 @@ def Q2d_sequence(nms, r, t):
                 Pnm2, Pnm1 = Pnm1, Pn
                 Qnm1 = Qn
 
+    j = 0
+    out = np.empty((len(nms), *x.shape), dtype=x.dtype)
     for n, m in nms:
         if m != 0:
             if m < 0:
@@ -899,9 +907,13 @@ def Q2d_sequence(nms, r, t):
             else:
                 prefix = cos_scales[m] * u_scales[m]
 
-            yield sequences[abs(m)][n] * prefix
+            out[j] = sequences[abs(m)][n] * prefix
+            j += 1
         else:
-            yield sequences[0][n]
+            out[j] = sequences[0][n]
+            j += 1
+
+    return out
 
 
 def change_of_basis_Q2d_to_Pnm(cns, m):

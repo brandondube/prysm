@@ -1,4 +1,5 @@
 """Chebyshev polynomials."""
+from prysm.mathops import np
 
 from .jacobi import (
     jacobi,
@@ -35,14 +36,18 @@ def cheby1_sequence(ns, x):
     x : numpy.ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
+    Returns
+    -------
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
+
     """
     ns = list(ns)
-    cs = [1/jacobi(n, -.5, -.5, 1) for n in ns]
+    cs = 1/jacobi_sequence(ns, -.5, -.5, np.ones(1, dtype=x.dtype))
     seq = jacobi_sequence(ns, -.5, -.5, x)
-    cntr = 0
-    for elem in seq:
-        yield elem * cs[cntr]
-        cntr += 1
+    return seq*cs
 
 
 def cheby1_der(n, x):
@@ -72,14 +77,18 @@ def cheby1_der_sequence(ns, x):
     x : numpy.ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
+    Returns
+    -------
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
+
     """
     ns = list(ns)
-    cs = [1/jacobi(n, -.5, -.5, 1) for n in ns]
+    cs = 1/jacobi_sequence(ns, -.5, -.5, np.ones(1, dtype=x.dtype))
     seq = jacobi_der_sequence(ns, -.5, -.5, x)
-    cntr = 0
-    for elem in seq:
-        yield elem * cs[cntr]
-        cntr += 1
+    return seq*cs
 
 
 def cheby2(n, x):
@@ -109,15 +118,24 @@ def cheby2_sequence(ns, x):
     x : numpy.ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
-    """
-    ns = list(ns)
-    cs = [(n+1)/jacobi(n, .5, .5, 1) for n in ns]
-    seq = jacobi_sequence(ns, .5, .5, x)
-    cntr = 0
-    for elem in seq:
-        yield elem * cs[cntr]
-        cntr += 1
+    Returns
+    -------
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
 
+    """
+    # gross squeeze -> new axis dance;
+    # seq is (N,M)
+    # cs is (N,)
+    # return of jacobi_sequence is (N,1)
+    # drop the 1 to avoid broadcast to (N,N)
+    # then put back 1 for compatibility on the multiply
+    ns = np.asarray(ns)
+    cs = (ns+1)/np.squeeze(jacobi_sequence(ns, .5, .5, np.ones(1, dtype=x.dtype)))
+    seq = jacobi_sequence(ns, .5, .5, x)
+    return seq*cs[:, np.newaxis]
 
 
 def cheby2_der(n, x):
@@ -147,14 +165,18 @@ def cheby2_der_sequence(ns, x):
     x : numpy.ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
+    Returns
+    -------
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
+
     """
-    ns = list(ns)
-    cs = [(n+1) / jacobi(n, .5, .5, 1) for n in ns]
+    ns = np.asarray(ns)
+    cs = (ns + 1)/np.squeeze(jacobi_sequence(ns, .5, .5, np.ones(1, dtype=x.dtype)))
     seq = jacobi_der_sequence(ns, .5, .5, x)
-    cntr = 0
-    for elem in seq:
-        yield elem * cs[cntr]
-        cntr += 1
+    return seq*cs[:, np.newaxis]
 
 
 def cheby3(n, x):
@@ -184,14 +206,18 @@ def cheby3_sequence(ns, x):
     x : numpy.ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
+    Returns
+    -------
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
+
     """
     ns = list(ns)
-    cs = [1/jacobi(n, -.5, .5, 1) for n in ns]
+    cs = 1/jacobi_sequence(ns, -.5, .5, np.ones(1, dtype=x.dtype))
     seq = jacobi_sequence(ns, -.5, .5, x)
-    cntr = 0
-    for elem in seq:
-        yield elem * cs[cntr]
-        cntr += 1
+    return seq*cs
 
 
 def cheby3_der(n, x):
@@ -221,14 +247,18 @@ def cheby3_der_sequence(ns, x):
     x : numpy.ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
+    Returns
+    -------
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
+
     """
     ns = list(ns)
-    cs = [1/jacobi(n, -.5, .5, 1) for n in ns]
+    cs = 1/jacobi_sequence(ns, -.5, .5, np.ones(1, dtype=x.dtype))
     seq = jacobi_der_sequence(ns, -.5, .5, x)
-    cntr = 0
-    for elem in seq:
-        yield elem * cs[cntr]
-        cntr += 1
+    return seq*cs
 
 
 def cheby4(n, x):
@@ -258,14 +288,18 @@ def cheby4_sequence(ns, x):
     x : numpy.ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
+    Returns
+    -------
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
+
     """
-    ns = list(ns)
-    cs = [(2 * n + 1) / jacobi(n, .5, -.5, 1) for n in ns]
+    ns = np.asarray(ns)
+    cs = (2*ns+1)/np.squeeze(jacobi_sequence(ns, .5, -.5, np.ones(1, dtype=x.dtype)))
     seq = jacobi_sequence(ns, .5, -.5, x)
-    cntr = 0
-    for elem in seq:
-        yield elem * cs[cntr]
-        cntr += 1
+    return seq*cs[:, np.newaxis]
 
 
 def cheby4_der(n, x):
@@ -295,11 +329,15 @@ def cheby4_der_sequence(ns, x):
     x : numpy.ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
+    Returns
+    -------
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
+
     """
-    ns = list(ns)
-    cs = [(2 * n + 1) / jacobi(n, .5, -.5, 1) for n in ns]
+    ns = np.asarray(ns)
+    cs = (2*ns+1)/np.squeeze(jacobi_sequence(ns, .5, -.5, np.ones(1, dtype=x.dtype)))
     seq = jacobi_der_sequence(ns, .5, -.5, x)
-    cntr = 0
-    for elem in seq:
-        yield elem * cs[cntr]
-        cntr += 1
+    return seq*cs[:, np.newaxis]

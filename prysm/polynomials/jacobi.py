@@ -94,49 +94,51 @@ def jacobi_sequence(ns, alpha, beta, x):
         first weight parameter
     beta : float
         second weight parameter
-    x : numpy.ndarray
+    x : ndarray
         x coordinates to evaluate at
 
     Returns
     -------
-    generator
-        equivalent to array of shape (len(ns), len(x))
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
 
     """
-    # three key flavors: return list, return array, or return generator
-    # return generator has most pleasant interface, benchmarked at 68 ns
-    # per yield (315 clocks).  With 32 clocks per element of x, 1% of the
-    # time is spent on yield when x has 1000 elements, or 32x32
-    # => use generator
-    # benchmarked at 4.6 ns/element (256x256), 4.6GHz CPU = 21 clocks
-    # ~4x faster than previous impl (118 ms => 29.8)
+    # previously returned a gnerator; ergonomics were not-good
+    # typical usage woudl be array(list(jacobi_sequence(...))
+    # generator lowers peak memory consumption by allowing caller
+    # to do weighted sums 'inline', but
+    # for example (1024, 1024) x is ~8 megabytes per mode;
+    # need to be in an edge case scenario for it to matter,
+    # just return array for ergonomics
     ns = list(ns)
     min_i = 0
-    Pn = np.ones_like(x)
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
     if ns[min_i] == 0:
-        yield Pn
+        out[min_i] = 1
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     Pn = alpha + 1 + (alpha + beta + 2) * ((x - 1) / 2)
     if ns[min_i] == 1:
-        yield Pn
+        out[min_i] = Pn
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     Pnm1 = Pn
     A, B, C = recurrence_abc(1, alpha, beta)
     Pn = (A * x + B) * Pnm1 - C  # no C * Pnm2 =because Pnm2 = 1
     if ns[min_i] == 2:
-        yield Pn
+        out[min_i] = Pn
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     max_n = ns[-1]
     for i in range(3, max_n+1):
@@ -144,8 +146,10 @@ def jacobi_sequence(ns, alpha, beta, x):
         A, B, C = recurrence_abc(i-1, alpha, beta)
         Pn = (A * x + B) * Pnm1 - C * Pnm2
         if ns[min_i] == i:
-            yield Pn
+            out[min_i] = Pn
             min_i += 1
+
+    return out
 
 
 def jacobi_der(n, alpha, beta, x):
@@ -197,8 +201,10 @@ def jacobi_der_sequence(ns, alpha, beta, x):
 
     Returns
     -------
-    generator
-        equivalent to array of shape (len(ns), len(x))
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
 
     """
     # the body of this function is very similar to that of jacobi_sequence,
@@ -214,20 +220,21 @@ def jacobi_der_sequence(ns, alpha, beta, x):
     # and we modify the arguments to
     ns = list(ns)
     min_i = 0
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
     if ns[min_i] == 0:
         # n=0 is piston, der==0
-        yield np.zeros_like(x)
+        out[min_i] = 0
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     if ns[min_i] == 1:
-        yield np.ones_like(x) * (0.5 * (1 + alpha + beta + 1))
+        out[min_i] = (0.5 * (1 + alpha + beta + 1))
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     # min_n is at least two, which means min n-1 is 1
     # from here below, Pn is P of order i to keep the reader sane, but Pnm1
@@ -238,20 +245,20 @@ def jacobi_der_sequence(ns, alpha, beta, x):
     # in jacobi, because we use Pnm1
     P1 = alphap1 + 1 + (alphap1 + betap1 + 2) * ((x - 1) / 2)
     if ns[min_i] == 2:
-        yield P1 * (0.5 * (2 + alpha + beta + 1))
+        out[min_i] = P1 * (0.5 * (2 + alpha + beta + 1))
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     A, B, C = recurrence_abc(1, alphap1, betap1)
     P2 = (A * x + B) * P1 - C  # no C * Pnm2 =because Pnm2 = 1
     if ns[min_i] == 3:
-        yield P2 * (0.5 * (3 + alpha + beta + 1))
+        out[min_i] = P2 * (0.5 * (3 + alpha + beta + 1))
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     # weird look just above P2, need to prepare for lower loop
     # by setting Pnm2 = P1, Pnm1 = P2
@@ -267,14 +274,16 @@ def jacobi_der_sequence(ns, alpha, beta, x):
         Pnm2, Pnm1 = Pnm1, Pn
         if ns[min_i] == i:
             coef = 0.5 * (i + alpha + beta + 1)
-            yield Pnm1 * coef
+            out[min_i] = Pnm1 * coef
             min_i += 1
 
         if min_i == len(ns):
-            return
+            return out
 
         A, B, C = recurrence_abc(i-1, alphap1, betap1)
         Pn = (A * x + B) * Pnm1 - C * Pnm2
+
+    return out
 
 
 def _initialize_alphas(s, x, alphas, j=0):
