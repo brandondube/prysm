@@ -531,6 +531,7 @@ def add_jones_propagation(funcs_to_change=supported_propagation_funcs):
 
 def apply_polarization_optic(field, pol_optic):
     """applies a polarization optic represented by a jones matrix to a scalar field
+    If field.ndim != 2, this returns the original field
 
     Parameters
     ----------
@@ -545,9 +546,11 @@ def apply_polarization_optic(field, pol_optic):
         jones matrix of shape M x N x 2 x 2
     """
 
-    field = field[..., np.newaxis, np.newaxis]
-    jones = pol_optic * field
+
+    if field.ndim == 2:
+        field = field[..., np.newaxis, np.newaxis]
+        field = pol_optic * field
     
-    return jones
+    return field
 
 
