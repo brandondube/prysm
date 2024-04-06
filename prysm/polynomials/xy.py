@@ -194,7 +194,7 @@ def generalized_xy_polynomial_sequence(mns, x, y, seq_func, seq_func_kwargs=None
     ns = truenp.arange(0, maxn+1)
     if seq_func_kwargs is None:
         seq_func_kwargs = {}
-    # dicksons with alpha=0 are the monomials
+
     x_seq = list(seq_func(ms, x, **seq_func_kwargs))
     y_seq = list(seq_func(ns, x, **seq_func_kwargs))
 

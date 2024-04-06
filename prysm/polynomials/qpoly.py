@@ -601,6 +601,8 @@ def F_q2d(n, m):
         F
 
     """
+    if n == 0 and m == 1:
+        return 0.25
     if n == 0:
         num = m ** 2 * special.factorial2(2 * m - 3)
         den = 2 ** (m + 1) * special.factorial(m - 1)
