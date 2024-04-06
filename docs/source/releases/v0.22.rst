@@ -55,6 +55,14 @@ generating Hermite-Gaussian and Laguerre-Gaussian beams:
 
 * :func:`~prysm.polynomials.laguerre_der_sequence`
 
+All of the :code:`_sequence` polynomial functions have been revised.
+Previously, they returned generators to allow weighted sums of extremely high
+order expansions to be computed in a reduced memory footprint.  This lead to the
+most common usage being `:code:basis = array(list(xxx_sequence()))`.  This
+benefit has been more theoretical than practical.  Now equivalent usage is
+:code:`basis = xxx_sequence()`, which returns the dense array of shape
+:code:`(K,N,M)` directly (K=num modes, (N,M) = spatial dimensionality).
+
 Propagation
 -----------
 
@@ -319,8 +327,8 @@ Bug Fixes
 
 * The sign of :func:`~prysm.propagation.Wavefront.thin_lens` was incorrect,
   requiring a propagation by the negative of the focal length to go to the
-  focus.  The sign has been swapped; :code:`(wf * thin_lens(f, ...)).free_space(f)`` now
-  goes to the focus.
+  focus.  The sign has been swapped; :code:`(wf * thin_lens(f,...)).free_space(f)``
+  now goes to the focus.
 
 * An orientation flip was missing in
   :func:`~prysm.propagation.Wavefront.babinet`, this has been corrected.
@@ -329,8 +337,26 @@ Bug Fixes
   wrong pixel as the origin for normalization, when array sizes were odd.  This
   has been fixed.
 
+* a bug in :code:`scipy.special.factorial2` has been fixed in a recent version.
+  Like all respectable software, prysm depended on that bug.  Q2D polynomials
+  would return NaN for m=1, n=0 (Q-coma) with scipy's bugfix.  This has been
+  corrected within prysm in this version, and Q-coma is no longer destined for NaN.
+
 Breaking Changes
 ================
+
+Numerous features related to MTF benches have been removed.  The code was
+extremely old, had incomplete test coverage, and is rarely used:
+
+* :func:`prysm.io.read_trioptics_mtfvfvf`
+
+* :func:`prysm.io.read_trioptics_mtf_vs_field`
+
+* :func:`prysm.io.read_trioptics_mtf`
+
+* the entire :code:`mtf_utils` module
+
+* sample Trioptics mht and txt files
 
 Within the geometry module, all functions now use homogeneous names of x, y, r,
 and t for arguments.  The :func:`~prysm.geometry.circle` and
