@@ -68,8 +68,10 @@ def hermite_He_sequence(ns, x):
 
     Returns
     -------
-    generator of numpy.ndarray
-        equivalent to array of shape (len(ns), len(x))
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
 
     """
     # this function includes all the optimizations in the hermite_He func,
@@ -80,28 +82,29 @@ def hermite_He_sequence(ns, x):
     # in use here
     ns = list(ns)
     min_i = 0
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
     if ns[min_i] == 0:
-        yield np.ones_like(x)
+        out[min_i] = 1
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     if ns[min_i] == 1:
-        yield x
+        out[min_i] = x
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     P1 = x
     P2 = x * x - 1
     if ns[min_i] == 2:
-        yield P2
+        out[min_i] = P2
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     Pnm2, Pnm1 = P1, P2
     max_n = ns[-1]
@@ -109,8 +112,10 @@ def hermite_He_sequence(ns, x):
         Pn = x * Pnm1 - (nn-1) * Pnm2
         Pnm2, Pnm1 = Pnm1, Pn
         if ns[min_i] == nn:
-            yield Pn
+            out[min_i] = Pn
             min_i += 1
+
+    return out
 
 
 def hermite_He_der(n, x):
@@ -146,8 +151,10 @@ def hermite_He_der_sequence(ns, x):
 
     Returns
     -------
-    generator of numpy.ndarray
-        equivalent to array of shape (len(ns), len(x))
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
 
     """
     # this function includes all the optimizations in the hermite_He func,
@@ -158,38 +165,41 @@ def hermite_He_der_sequence(ns, x):
     # in use here
     ns = list(ns)
     min_i = 0
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
     if ns[min_i] == 0:
-        yield np.zeros_like(x)
+        out[min_i] = 0
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     if ns[min_i] == 1:
-        yield np.ones_like(x)
+        out[min_i] = 1
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     P1 = x
     P2 = x * x - 1
     if ns[min_i] == 2:
-        yield 2 * x
+        out[min_i] = 2 * x
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     Pnm2, Pnm1 = P1, P2
     max_n = ns[-1]
     for nn in range(3, max_n+1):
         Pn = x * Pnm1 - (nn-1) * Pnm2
         if ns[min_i] == nn:
-            yield nn * Pnm1
+            out[min_i] = nn * Pnm1
             min_i += 1
 
         Pnm2, Pnm1 = Pnm1, Pn
+
+    return out
 
 
 def hermite_H(n, x):
@@ -257,8 +267,10 @@ def hermite_H_sequence(ns, x):
 
     Returns
     -------
-    generator of numpy.ndarray
-        equivalent to array of shape (len(ns), len(x))
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
 
     """
     # this function includes all the optimizations in the hermite_He func,
@@ -269,29 +281,30 @@ def hermite_H_sequence(ns, x):
     # in use here
     ns = list(ns)
     min_i = 0
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
     if ns[min_i] == 0:
-        yield np.ones_like(x)
+        out[min_i] = 1
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     x2 = 2 * x
     if ns[min_i] == 1:
-        yield x2
+        out[min_i] = x2
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     P1 = x2
     P2 = 4 * (x * x) - 2
     if ns[min_i] == 2:
-        yield P2
+        out[min_i] = P2
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     Pnm2, Pnm1 = P1, P2
     max_n = ns[-1]
@@ -299,8 +312,10 @@ def hermite_H_sequence(ns, x):
         Pn = x2 * Pnm1 - (2*(nn-1)) * Pnm2
         Pnm2, Pnm1 = Pnm1, Pn
         if ns[min_i] == nn:
-            yield Pn
+            out[min_i] = Pn
             min_i += 1
+
+    return out
 
 
 def hermite_H_der(n, x):
@@ -336,8 +351,10 @@ def hermite_H_der_sequence(ns, x):
 
     Returns
     -------
-    generator of numpy.ndarray
-        equivalent to array of shape (len(ns), len(x))
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
 
     """
     # this function includes all the optimizations in the hermite_He func,
@@ -348,36 +365,39 @@ def hermite_H_der_sequence(ns, x):
     # in use here
     ns = list(ns)
     min_i = 0
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
     if ns[min_i] == 0:
-        yield np.zeros_like(x)
+        out[min_i] = 0
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     if ns[min_i] == 1:
-        yield 2 * np.ones_like(x)
+        out[min_i] = 2
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     x2 = 2 * x
     P1 = x2
     P2 = 4 * (x * x) - 2
     if ns[min_i] == 2:
-        yield 4 * P1
+        out[min_i] = 4 * P1
         min_i += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     Pnm2, Pnm1 = P1, P2
     max_n = ns[-1]
     for nn in range(3, max_n+1):
         Pn = x2 * Pnm1 - (2*(nn-1)) * Pnm2
         if ns[min_i] == nn:
-            yield 2 * nn * Pnm1
+            out[min_i] = 2 * nn * Pnm1
             min_i += 1
 
         Pnm2, Pnm1 = Pnm1, Pn
+
+    return out

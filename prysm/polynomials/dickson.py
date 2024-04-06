@@ -100,24 +100,30 @@ def dickson1_sequence(ns, alpha, x):
 
     Returns
     -------
-    generator of numpy.ndarray
-        equivalent to array of shape (len(ns), len(x))
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
 
     """
     ns = list(ns)
     min_i = 0
-    P0 = np.ones_like(x) * 2
+    j = 0
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
+    P0 = 2
     if ns[min_i] == 0:
-        yield P0
+        out[j] = 2
         min_i += 1
+        j += 1
 
     if min_i == len(ns):
         return
 
     P1 = x
     if ns[min_i] == 1:
-        yield P1
+        out[j] = x
         min_i += 1
+        j += 1
 
     if min_i == len(ns):
         return
@@ -128,8 +134,11 @@ def dickson1_sequence(ns, alpha, x):
         Pn = x * Pnm1 - alpha * Pnm2
         Pnm1, Pnm2 = Pn, Pnm1
         if ns[min_i] == i:
-            yield Pn
+            out[j] = Pn
             min_i += 1
+            j += 1
+
+    return out
 
 
 def dickson2_sequence(ns, alpha, x):
@@ -147,24 +156,30 @@ def dickson2_sequence(ns, alpha, x):
 
     Returns
     -------
-    numpy.ndarray
-        D_n(x)
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
 
     """
     ns = list(ns)
     min_i = 0
-    P0 = np.ones_like(x)
+    j = 0
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
+    P0 = 1
     if ns[min_i] == 0:
-        yield P0
+        out[j] = 1
         min_i += 1
+        j += 1
 
     if min_i == len(ns):
         return
 
     P1 = x
     if ns[min_i] == 1:
-        yield P1
+        out[j] = x
         min_i += 1
+        j += 1
 
     if min_i == len(ns):
         return
@@ -175,5 +190,8 @@ def dickson2_sequence(ns, alpha, x):
         Pn = x * Pnm1 - alpha * Pnm2
         Pnm1, Pnm2 = Pn, Pnm1
         if ns[min_i] == i:
-            yield Pn
+            out[j] = Pn
             min_i += 1
+            j += 1
+
+    return out

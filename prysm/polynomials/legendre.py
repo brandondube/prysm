@@ -15,8 +15,13 @@ def legendre(n, x):
     ----------
     n : int
         order to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
+
+    Returns
+    -------
+    ndarray
+        legendre polynomial evaluated at the given points
 
     """
     return jacobi(n, 0, 0, x)
@@ -34,6 +39,13 @@ def legendre_sequence(ns, x):
     x : numpy.ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
+    Returns
+    -------
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
+
     """
     return jacobi_sequence(ns, 0, 0, x)
 
@@ -47,6 +59,11 @@ def legendre_der(n, x):
         order to evaluate
     x : numpy.ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
+
+    Returns
+    -------
+    numpy.ndarray
+        d/dx of legendre polynomial evaluated at the given points
 
     """
     return jacobi_der(n, 0, 0, x)
@@ -63,6 +80,13 @@ def legendre_der_sequence(ns, x):
         orders to evaluate
     x : numpy.ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
+
+    Returns
+    -------
+    ndarray
+        has shape (len(ns), *x.shape)
+        e.g., for 5 modes and x of dimension 100x100,
+        return has shape (5, 100, 100)
 
     """
     return jacobi_der_sequence(ns, 0, 0, x)

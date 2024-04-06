@@ -260,15 +260,19 @@ def zernike_nm_der_sequence(nms, r, t, norm=True):
 
     Returns
     -------
-    list
-        length (len(nms)) list of (dZ/dr, dZ/dt)
+    ndarray
+        shape of (len(nms), 2, *r.shape)
+        leading dimension is derivative w.r.t each term
+        second dimension is (radial, azimuthal)
+        trailing dimensions match the inputs (r, t) in shape
 
     """
     # TODO: actually implement the recurrence relation as in zernike_sequence,
     # instead of just using a loop for API homogenaeity
-    out = []
-    for n, m in nms:
-        out.append(zernike_nm_der(n, m, r, t, norm=norm))
+    out = np.empty((len(nms), 2, *r.shape), dtype=r.dtype)
+    for j, (n, m) in enumerate(nms):
+        tmp = zernike_nm_der(n, m, r, t, norm=norm)
+        out[j] = tmp
 
     return out
 
