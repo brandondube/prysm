@@ -84,3 +84,6 @@ docs/source/user_guide/foo.png
 # sublime files
 *.sublime-project
 *.sublime-workspace
+
+# how development works
+nb/*
