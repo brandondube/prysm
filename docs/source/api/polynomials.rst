@@ -10,9 +10,9 @@ Common Routines
 .. automodule:: prysm.polynomials
     :members:
 
-========
-Zernikes
-========
+=======
+Zernike
+=======
 
 .. automodule:: prysm.polynomials.zernike
     :members:

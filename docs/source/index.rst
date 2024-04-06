@@ -8,10 +8,10 @@ prysm is an open-source library for physical and first-order modeling of optical
 
 * Do multi-plane diffraction calculations
 * Do image chain or integrated modeling
-* Process data from commercial interferometers, MTF benches, and design/analysis software
+* Process data from commercial interferometers, design/analysis software, and re-export to the same formats
 
 
-This list is not exhaustive, feel free to file a PR to add more to this list!
+This list is not exhaustive, feel free to file a PR to add more!
 
 This documentation is divided into four categories; a series of tutorials that teach step-by-step, a set of how-tos that show individual more advanced usages, a reference guide that includes the API-level documentation, and a set of explanation articles that teach you the core philsophy and design behind this library.  If you're looking for "getting started" - take a look at tutorials!
 
@@ -61,7 +61,7 @@ API Reference
 -------------
 
 .. toctree::
-    :maxdepth: 1
+    :maxdepth: 2
 
     api/index.rst
 
