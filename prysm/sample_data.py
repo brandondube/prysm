@@ -21,9 +21,6 @@ def fetch_if_not_present(local, remote):
 class SampleFiles:
     """Sample files for prysm."""
     dat = 'valid_zygo_dat_file.dat'
-    mtfvfvf = 'valid_sample_MTFvFvF_Sag.txt'
-    mtfvf = 'valid_sample_trioptics_mtf_vs_field.mht'
-    mtf = 'valid_sample_trioptics_mtf.mht'
 
     def __call__(self, dtype_or_filename):
         """Get the path of a sample file."""

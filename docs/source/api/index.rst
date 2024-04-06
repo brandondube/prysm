@@ -17,7 +17,6 @@ API Reference
    interferogram
    io
    mathops
-   mtf_utils
    objects
    otf
    plotting
