@@ -57,14 +57,6 @@ Explanations (deep dives)
 
     explanation/index.rst
 
-API Reference
--------------
-
-.. toctree::
-    :maxdepth: 2
-
-    api/index.rst
-
 Experimental Modules
 --------------------
 .. toctree::
@@ -78,6 +70,14 @@ Contributing
 .. toctree::
 
     contributing.rst
+
+API Reference
+-------------
+
+.. toctree::
+    :maxdepth: 2
+
+    api/index.rst
 
 Release History
 ---------------
