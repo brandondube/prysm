@@ -117,7 +117,7 @@ def dickson1_sequence(ns, alpha, x):
         j += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     P1 = x
     if ns[min_i] == 1:
@@ -126,7 +126,7 @@ def dickson1_sequence(ns, alpha, x):
         j += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     Pnm2 = P0
     Pnm1 = P1
@@ -173,7 +173,7 @@ def dickson2_sequence(ns, alpha, x):
         j += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     P1 = x
     if ns[min_i] == 1:
@@ -182,7 +182,7 @@ def dickson2_sequence(ns, alpha, x):
         j += 1
 
     if min_i == len(ns):
-        return
+        return out
 
     Pnm2 = P0
     Pnm1 = P1
