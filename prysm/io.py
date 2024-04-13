@@ -481,9 +481,14 @@ def write_zygo_dat(file, phase, dx, wavelength=0.6328, intensity=None):
 
     dt = np.dtype(np.int32).newbyteorder('>')
     bufphs = im.astype(dt).tobytes(order='C')
-    with open(file, 'wb') as fid:
-        fid.write(buf)
-        fid.write(bufphs)
+    if not hasattr(file, 'write'):
+        file = open(file, 'wb')
+
+    try:
+        file.write(buf)
+        file.write(bufphs)
+    finally:
+        file.close()
 
     return
 
@@ -737,6 +742,8 @@ def write_codev_gridint(array, filename, comment='', typ='SUR'):
     # roughly symmetric
     mn_valid = np.nanmin(array)
     mx_valid = np.nanmax(array)
+    if abs(mn_valid) < np.finfo(array.dtype).eps or (mn_valid > 0):
+        mn_valid = 1  # means we will always scale based on max valid
     scale_down = -32767 / mn_valid
     scale_up = +32767 / mx_valid
     scale = min(scale_down, scale_up)
