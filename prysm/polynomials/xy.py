@@ -14,6 +14,8 @@ def j_to_xy(j):
     counts from j=2 for x^1 y^0 and j=3 for x^0 y^1 to be consistent with Code V.
 
     """
+    if j < 2:
+        raise ValueError('j must be >= 2')
     if j == 2:
         return 1, 0
     if j == 3:
@@ -153,55 +155,3 @@ def xy_polynomial(m, n, x, y, cartesian_grid=True):
         x, y = optimize_xy_separable(x, y)
 
     return x**m * y**n
-
-
-def generalized_xy_polynomial_sequence(mns, x, y, seq_func, seq_func_kwargs=None, cartesian_grid=True):
-    """Generalized XY sequence.
-
-    Parameters
-    ----------
-    mns : iterable of length 2 vectors
-        sequence [(m1, n1), (m2, n2), ...]
-    x : numpy.ndarray
-        x coordinates
-    y : numpy.ndarray
-        y coordinates
-    seq_func : callable
-        signature seq_func(ns, x, **kwargs) -> list[numpy.ndarray]
-        a function to generate a sequence of polynomials for one of the dimensions
-        for example, cheby1_seq, legendre_seq, hermite_xx_seq, ... from
-        prysm.polynomials all work
-    seq_func_kwargs : dict, optional
-        keyword arguments for seq_func
-    cartesian_grid : bool, optional
-        if True, the input grid is assumed to be cartesian, i.e., x and y
-        axes are aligned to the array dimensions arr[y,x] to accelerate
-        the computation
-
-    Returns
-    -------
-    list
-        list of modes, in the same order as mns
-
-    """
-    mns2 = truenp.asarray(mns)
-    maxm, maxn = mns2.max(axis=0)
-
-    if cartesian_grid:
-        x, y = optimize_xy_separable(x, y)
-
-    ms = truenp.arange(0, maxm+1)
-    ns = truenp.arange(0, maxn+1)
-    if seq_func_kwargs is None:
-        seq_func_kwargs = {}
-
-    x_seq = list(seq_func(ms, x, **seq_func_kwargs))
-    y_seq = list(seq_func(ns, x, **seq_func_kwargs))
-
-    out = []
-    for m, n in mns:
-        xterm = x_seq[m]
-        yterm = y_seq[n]
-        out.append(xterm*yterm)
-
-    return out
