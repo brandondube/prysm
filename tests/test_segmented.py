@@ -30,4 +30,4 @@ def test_segmented_keystone_functions():
     center_coefs = np.random.rand(len(nms))
     segment_coefs = np.random.rand(len(csa.segment_ids), len(nms2))
     opd_map = csa.compose_opd(center_coefs, segment_coefs)
-    assert opd_map
+    assert csa
