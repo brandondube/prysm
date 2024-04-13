@@ -62,7 +62,6 @@ from .xy import (  # NOQA
     j_to_xy,
     xy_polynomial,
     xy_polynomial_sequence,
-    generalized_xy_polynomial_sequence,
 )
 
 from .zernike import (  # NOQA
