@@ -549,7 +549,8 @@ def apply_polarization_optic(field, pol_optic):
 
     if field.ndim == 2:
         field = field[..., np.newaxis, np.newaxis]
-        field = pol_optic * field
+        
+    field = pol_optic * field
     
     return field
 
