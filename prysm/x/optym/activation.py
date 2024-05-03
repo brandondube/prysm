@@ -206,3 +206,110 @@ class DiscreteEncoder:
         # take argmax along dim k, and take that from levels
         indices = np.argmax(encoded, axis=-1)
         return np.take(self.levels, indices)
+    
+
+class Tanh:
+    """Tanh activation function.
+
+    Uses the hyperbolic tangent function f(x) = tanh(x). Constructed to support additional
+    free parameters at initialization, namely:
+    - a : scale the slope of the function
+    - x0 : x-offset of the function, i.e. the origin of the function
+    - y0 : y-offset of the function, i.e. f(x) + y0
+
+    such that f(x, a, x0, y0) = f(a*(x-x0)) + y0
+
+    """
+    def __init__(self, a=1, x0=0, y0=0): 
+       self.a = a
+       self.x0 = x0
+       self.y0 = y0
+   
+    def forward(self, x):
+        x = x-self.x0
+        return (2 / (1 + np.exp(-2 * self.a * x)) - 1 + self.y0)
+    
+    def backprop(self, xbar):
+        fx = self.forward(xbar) - self.y0 # have to subtract offset
+        return self.a*(1 - fx**2) 
+
+
+class Arctan:
+    """Arctan activation function.
+
+    Uses the inverse tangent function f(x) = arctan(x). Constructed to support additional
+    free parameters at initialization, namely:
+    - a : scale the slope of the function
+    - x0 : x-offset of the function, i.e. the origin of the function
+    - y0 : y-offset of the function, i.e. f(x) + y0
+
+    such that f(x, a, x0, y0) = f(a*(x-x0)) + y0
+
+    """
+    def __init__(self, a=1, x0=0, y0=0): 
+       self.a = a
+       self.x0 = x0
+       self.y0 = y0
+   
+    def forward(self, x):
+        x = x - self.x0
+        return np.arctan(self.a * x) + self.y0
+    
+    def backprop(self, xbar):
+        xbar = xbar - self.x0
+        xbar *= self.a
+        return self.a * (1 / (xbar**2 + 1))
+
+
+class Softplus:
+    """Softplus activation function.
+
+    Uses the softplus function f(x) = softplus(x). Used as a continuous approximation
+    to the rectifier function which enforces positivity. Constructed to support additional
+    free parameters at initialization, namely:
+    - a : scale the slope of the function
+    - x0 : x-offset of the function, i.e. the origin of the function
+    - y0 : y-offset of the function, i.e. f(x) + y0
+
+    such that f(x, a, x0, y0) = f(a*(x-x0)) + y0
+
+    """
+    def __init__(self, a=1, x0=0, y0=0): 
+       self.a = a
+       self.x0 = x0
+       self.y0 = y0
+   
+    def forward(self, x):
+        x = x-self.x0
+        arg = 1 + np.exp(self.a * x)
+        return np.log(arg) + self.y0
+    
+    def backprop(self, xbar):
+        xbar = xbar - self.x0
+        return self.a * (1 / (1 + np.exp(-self.a * xbar)))
+    
+
+class Sigmoid:
+    """Sigmoid activation function.
+
+    Uses the inverse tangent function f(x) = sigmoid(x). Constructed to support additional
+    free parameters at initialization, namely:
+    - a : scale the slope of the function
+    - x0 : x-offset of the function, i.e. the origin of the function
+    - y0 : y-offset of the function, i.e. f(x) + y0
+
+    such that f(x, a, x0, y0) = f(a*(x-x0)) + y0
+
+    """
+    def __init__(self, a=1, x0=0, y0=0): 
+       self.a = a
+       self.x0 = x0
+       self.y0 = y0
+   
+    def forward(self, x):
+        x = x - self.x0
+        return (1 / (1 + np.exp(-self.a * x))) + self.y0
+    
+    def backprop(self, xbar):
+        sig = self.forward(xbar) - self.y0
+        return self.a * sig * (1 - sig)
