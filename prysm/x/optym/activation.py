@@ -209,21 +209,23 @@ class DiscreteEncoder:
     
 
 class Tanh:
-    """Tanh activation function.
-
-    Uses the hyperbolic tangent function f(x) = tanh(x). Constructed to support additional
-    free parameters at initialization, namely:
-    - a : scale the slope of the function
-    - x0 : x-offset of the function, i.e. the origin of the function
-    - y0 : y-offset of the function, i.e. f(x) + y0
-
-    such that f(x, a, x0, y0) = f(a*(x-x0)) + y0
-
+    """Tanh(x)
     """
-    def __init__(self, a=1, x0=0, y0=0): 
-       self.a = a
-       self.x0 = x0
-       self.y0 = y0
+    def __init__(self, a=1, x0=0, y0=0):
+        """Activation function Arctan(x)
+
+        Parameters
+        ----------
+        a : float, optional
+            scale for the activation slope, by default 1
+        x0 : float, optional
+            x-offset of the Tanh(x) function, by default 0
+        y0 : float, optional
+            y-offset of the Tanh(x) function, by default 0
+        """
+        self.a = a
+        self.x0 = x0
+        self.y0 = y0
    
     def forward(self, x):
         x = x-self.x0
@@ -235,21 +237,24 @@ class Tanh:
 
 
 class Arctan:
-    """Arctan activation function.
-
-    Uses the inverse tangent function f(x) = arctan(x). Constructed to support additional
-    free parameters at initialization, namely:
-    - a : scale the slope of the function
-    - x0 : x-offset of the function, i.e. the origin of the function
-    - y0 : y-offset of the function, i.e. f(x) + y0
-
-    such that f(x, a, x0, y0) = f(a*(x-x0)) + y0
-
+    """Arctan(x)
     """
-    def __init__(self, a=1, x0=0, y0=0): 
-       self.a = a
-       self.x0 = x0
-       self.y0 = y0
+
+    def __init__(self, a=1, x0=0, y0=0):
+        """Activation function Arctan(x)
+
+        Parameters
+        ----------
+        a : float, optional
+            scale for the activation slope, by default 1
+        x0 : float, optional
+            x-offset of the Arctan(x) function, by default 0
+        y0 : float, optional
+            y-offset of the Arctan(x) function, by default 0
+        """
+        self.a = a
+        self.x0 = x0
+        self.y0 = y0
    
     def forward(self, x):
         x = x - self.x0
@@ -262,22 +267,23 @@ class Arctan:
 
 
 class Softplus:
-    """Softplus activation function.
-
-    Uses the softplus function f(x) = softplus(x). Used as a continuous approximation
-    to the rectifier function which enforces positivity. Constructed to support additional
-    free parameters at initialization, namely:
-    - a : scale the slope of the function
-    - x0 : x-offset of the function, i.e. the origin of the function
-    - y0 : y-offset of the function, i.e. f(x) + y0
-
-    such that f(x, a, x0, y0) = f(a*(x-x0)) + y0
-
+    """Softplus(x)
     """
-    def __init__(self, a=1, x0=0, y0=0): 
-       self.a = a
-       self.x0 = x0
-       self.y0 = y0
+    def __init__(self, a=1, x0=0, y0=0):
+        """Activation function Softplus(x)
+
+        Parameters
+        ----------
+        a : float, optional
+            scale for the activation slope, by default 1
+        x0 : float, optional
+            x-offset of the Softplus(x) function, by default 0
+        y0 : float, optional
+            y-offset of the Softplus(x) function, by default 0
+        """
+        self.a = a
+        self.x0 = x0
+        self.y0 = y0
    
     def forward(self, x):
         x = x-self.x0
@@ -290,21 +296,23 @@ class Softplus:
     
 
 class Sigmoid:
-    """Sigmoid activation function.
-
-    Uses the inverse tangent function f(x) = sigmoid(x). Constructed to support additional
-    free parameters at initialization, namely:
-    - a : scale the slope of the function
-    - x0 : x-offset of the function, i.e. the origin of the function
-    - y0 : y-offset of the function, i.e. f(x) + y0
-
-    such that f(x, a, x0, y0) = f(a*(x-x0)) + y0
-
+    """Sigmoid(x)
     """
     def __init__(self, a=1, x0=0, y0=0): 
-       self.a = a
-       self.x0 = x0
-       self.y0 = y0
+        """Activation function Sigmoid(x)
+
+        Parameters
+        ----------
+        a : float, optional
+            scale for the activation slope, by default 1
+        x0 : float, optional
+            x-offset of the Sigmoid(x) function, by default 0
+        y0 : float, optional
+            y-offset of the Sigmoid(x) function, by default 0
+        """
+        self.a = a
+        self.x0 = x0
+        self.y0 = y0
    
     def forward(self, x):
         x = x - self.x0
