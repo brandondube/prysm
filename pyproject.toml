@@ -1,0 +1,29 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "prysm"
+description = "physical optics integrated modeling, phase retrieval, segmented systems, polynomials and fitting, sequential raytracing..."
+authors = ["Brandon Dube <brandon@retrorefractions.com>"]
+readme = "README.md"
+license = "MIT"
+version = "0.23"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+numpy = "^1.26.4"
+
+[tool.coverage.run]
+source = "prysm"
+
+[tool.coverage.report]
+# Regexes for lines to exclude from consideration
+exclude_lines = [
+    "except ImportError",
+    "assert",
+]
+omit = "prysm/x/*"
+
+[tool.pydocstyle]
+ignore = ["D200", "D203", "D204", "D210", "D213", "D300", "D401", "D416"]

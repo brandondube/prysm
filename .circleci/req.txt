@@ -1,10 +1,10 @@
-numpy>=1.18
-scipy>=1.5
+numpy>=1.26.4
+scipy>=1.13.1
 matplotlib>=3.0
 scikit-image
 imageio
 pandas
 h5py
-pytest==5.4.3
-pytest-cov==2.10.0
+pytest>=7.4.4
+pytest-cov>=4.1.0
 coveralls==2.1.1
