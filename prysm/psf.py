@@ -311,7 +311,7 @@ def encircled_energy(psf, dx, radius):
     from .otf import mtf_from_psf
     # compute MTF from the PSF
     mtf = mtf_from_psf(psf, dx)
-    nx, ny = np.meshgrid(mtf.x, mtf.y)
+    nx, ny = mtf.x, mtf.y
     nu_p = np.sqrt(nx ** 2 + ny ** 2)
     # this is meaninglessly small and will avoid division by 0
     nu_p[nu_p == 0] = 1e-16
