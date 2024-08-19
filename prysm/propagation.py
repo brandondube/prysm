@@ -551,7 +551,7 @@ def to_fpm_and_back_backprop(wavefunction, dx, wavelength, efl, fpm, fpm_dx=None
 
     Ebbar = -unfocus_fixed_sampling_backprop(wavefunction, fpm_dx, efl, wavelength, dx, fpm_samples)
     intermediate = Ebbar * fpm
-    Eabar = focus_fixed_sampling_backprop(intermediate, dx, efl, wavelength, fpm_dx, fpm_samples)
+    Eabar = focus_fixed_sampling_backprop(intermediate, dx, efl, wavelength, fpm_dx, wavefunction.shape)
     if return_more:
         return Eabar, Ebbar, intermediate
     else:
