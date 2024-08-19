@@ -1,4 +1,6 @@
 """Cost functions, aka figures of merit for models."""
+import numbers
+
 from prysm.mathops import np
 
 
@@ -118,7 +120,8 @@ def negative_loglikelihood(y, yhat, mask=None):
     """
     if mask is not None:
         y = y[mask]
-        yhat = yhat[mask]
+        if not isinstance(yhat, numbers.Number): # scalar, don't index
+            yhat = yhat[mask]
 
     sub1 = 1-y
     sub2 = 1-yhat
