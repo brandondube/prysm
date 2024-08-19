@@ -1207,7 +1207,8 @@ class Wavefront:
         else:
             coresub = field.data
 
-        field_at_lyot = self.data - np.flipud(coresub)
+        # field_at_lyot = self.data - np.flipud(coresub)
+        field_at_lyot = self.data - field.data
 
         if lyot is not None:
             field_after_lyot = lyot * field_at_lyot
@@ -1269,9 +1270,10 @@ class Wavefront:
         cbarW = Wavefront(cbar, self.wavelength, self.dx, self.space)
         abar = cbarW.to_fpm_and_back_backprop(efl=efl, fpm=fpm, fpm_dx=fpm_dx, method=method)
 
-        if not is_odd(cbar.shape[0]):
-            cbarflip = np.flipud(np.roll(cbar, -1, axis=0))
+        # if not is_odd(cbar.shape[0]):
+        #     cbarflip = np.flipud(np.roll(cbar, -1, axis=0))
 
-        abar.data += cbarflip
+        # abar.data += cbarflip
+        abar.data += cbar
         return abar
         # return cbarflip + abar
