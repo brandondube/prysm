@@ -330,7 +330,7 @@ class MatrixDFTExecutor:
         self._setup_bases(key)
 
         Eout, Ein = self.Eout[key], self.Ein[key]
-        out = Eout @ ary @ Ein
+        out = Eout @ (ary @ Ein)
 
         return out
 
