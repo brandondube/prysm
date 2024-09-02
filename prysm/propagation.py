@@ -1200,14 +1200,8 @@ class Wavefront:
         else:
             field = self.to_fpm_and_back(efl=efl, fpm=fpm, fpm_dx=fpm_dx, method=method,
                                          return_more=return_more)
-        # DOI: 10.1117/1.JATIS.7.1.019002
-        # Eq. 26 with some minor differences in naming
-        if not is_odd(field.data.shape[0]):
-            coresub = np.roll(field.data, -1, axis=0)
-        else:
-            coresub = field.data
 
-        # field_at_lyot = self.data - np.flipud(coresub)
+
         field_at_lyot = self.data - field.data
 
         if lyot is not None:
@@ -1270,10 +1264,5 @@ class Wavefront:
         cbarW = Wavefront(cbar, self.wavelength, self.dx, self.space)
         abar = cbarW.to_fpm_and_back_backprop(efl=efl, fpm=fpm, fpm_dx=fpm_dx, method=method)
 
-        # if not is_odd(cbar.shape[0]):
-        #     cbarflip = np.flipud(np.roll(cbar, -1, axis=0))
-
-        # abar.data += cbarflip
         abar.data += cbar
         return abar
-        # return cbarflip + abar
