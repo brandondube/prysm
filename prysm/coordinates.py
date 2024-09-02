@@ -280,7 +280,7 @@ def make_rotation_matrix(zyx, radians=False):
         [sin3,  cos3, 0],
         [0,        0, 1],
     ])
-    m = Rz@Ry@Rx
+    m = Rx@Ry@Rz
     return m
 
 

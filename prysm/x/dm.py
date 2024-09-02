@@ -74,7 +74,7 @@ def prepare_fwd_reverse_projection_coordinates(shape, rot):
     R = make_rotation_matrix(rot)
     oy, ox = [(s-1)/2 for s in shape]
     y, x = [np.arange(s, dtype=config.precision) for s in shape]
-    y, x = np.meshgrid(y, x)
+    x, y = np.meshgrid(x, y)
     Tin = make_homomorphic_translation_matrix(-ox, -oy)
     Tout = make_homomorphic_translation_matrix(ox, oy)
     R = promote_3d_transformation_to_homography(R)
