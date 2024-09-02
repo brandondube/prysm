@@ -850,13 +850,13 @@ class Wavefront:
         """
         if np.isnan(dz) and tf is None:
             raise ValueError('dz must be provided if tf is None')
-        out = angular_spectrum(
-            field=self.data,
-            wvl=self.wavelength,
-            dx=self.dx,
-            z=dz,
-            Q=Q,
-            tf=tf)
+        out = angular_spectrum(self.data,
+                               wvl=self.wavelength,
+                               dx=self.dx,
+                               z=dz,
+                               Q=Q,
+                               tf=tf,
+        )
         return Wavefront(out, self.wavelength, self.dx, self.space)
 
     def focus(self, efl, Q=2):
@@ -948,15 +948,15 @@ class Wavefront:
         if isinstance(samples, int):
             samples = (samples, samples)
 
-        data = focus_fixed_sampling(
-            wavefunction=self.data,
-            input_dx=self.dx,
-            prop_dist=efl,
-            wavelength=self.wavelength,
-            output_dx=dx,
-            output_samples=samples,
-            shift=shift,
-            method=method)
+        data = focus_fixed_sampling(self.data,
+                                    input_dx=self.dx,
+                                    prop_dist=efl,
+                                    wavelength=self.wavelength,
+                                    output_dx=dx,
+                                    output_samples=samples,
+                                    shift=shift,
+                                    method=method
+        )
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='psf')
 
@@ -993,15 +993,15 @@ class Wavefront:
         if isinstance(samples, int):
             samples = (samples, samples)
 
-        data = focus_fixed_sampling_backprop(
-            wavefunction=self.data,
-            input_dx=dx,
-            prop_dist=efl,
-            wavelength=self.wavelength,
-            output_dx=self.dx,
-            output_samples=samples,
-            shift=shift,
-            method=method)
+        data = focus_fixed_sampling_backprop(self.data,
+                                             input_dx=dx,
+                                             prop_dist=efl,
+                                             wavelength=self.wavelength,
+                                             output_dx=self.dx,
+                                             output_samples=samples,
+                                             shift=shift,
+                                             method=method
+        )
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')
 
@@ -1038,15 +1038,15 @@ class Wavefront:
         if isinstance(samples, int):
             samples = (samples, samples)
 
-        data = unfocus_fixed_sampling(
-            wavefunction=self.data,
-            input_dx=self.dx,
-            prop_dist=efl,
-            wavelength=self.wavelength,
-            output_dx=dx,
-            output_samples=samples,
-            shift=shift,
-            method=method)
+        data = unfocus_fixed_sampling(self.data,
+                                      input_dx=self.dx,
+                                      prop_dist=efl,
+                                      wavelength=self.wavelength,
+                                      output_dx=dx,
+                                      output_samples=samples,
+                                      shift=shift,
+                                      method=method
+        )
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')
 
