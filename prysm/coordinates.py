@@ -424,3 +424,30 @@ def warp(img, xnew, ynew):
     """
     # user provides us (x, y), we provide scipy (row, col) = (y, x)
     return ndimage.map_coordinates(img, (ynew, xnew))
+
+
+def distort_annular_grid(r, eps):
+    """Distort an annular grid, such that an annulus becomes the unit circle.
+
+    This function is used to distort the grid before computing annular Zernike
+    or other polynomials
+
+    r and eps should be in the range [0,1]
+
+    Parameters
+    ----------
+    r : numpy.ndarray
+        Undistorted grid of normalized radial coordinates
+    eps : float
+        linear obscuration fraction, radius, not diameter;
+        e.g. for a telescope with 20% diameter linear obscuration, eps=0.1
+
+    Returns
+    -------
+    numpy.ndarray
+        distorted r, to be passed to a polynomial function
+
+    """
+    rr = r-eps
+    rr = rr * (1/(1-eps))
+    return rr

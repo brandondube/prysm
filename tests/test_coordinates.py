@@ -102,3 +102,10 @@ def test_plane_warping_pipeline_functions(data_2d):
     xfwd, yfwd = coordinates.apply_homography(Mifwd, x, y)
     zp = coordinates.warp(z, xfwd, yfwd)
     assert zp.any()
+
+
+def test_distort_annular_grid_functions(data_2d):
+    x, y, _ = data_2d
+    r = np.hypot(x, y)
+    rprime = coordinates.distort_annular_grid(r, 0.2)
+    assert rprime.any()
