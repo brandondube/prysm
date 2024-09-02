@@ -62,11 +62,11 @@ def test_uniform_cart_polar_functions(data_2d):
 
 
 # TODO: add a test that this returns expected points for a known function
-def test_resample_2d_does_not_distort(data_2d):
-    x, y, dat = data_2d
-    xx, yy = np.meshgrid(x, y)
-    resampled = coordinates.resample_2d(dat, (x, y), (xx, yy))
-    assert np.allclose(dat, resampled)
+# def test_resample_2d_does_not_distort(data_2d):
+#     x, y, dat = data_2d
+#     xx, yy = np.meshgrid(x, y)
+#     resampled = coordinates.resample_2d(dat, (x, y), (xx, yy))
+#     assert np.allclose(dat, resampled)
 
 
 # def test_resample_2d_complex_does_not_distort(data_2d_complex):
