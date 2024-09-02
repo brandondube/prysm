@@ -648,15 +648,14 @@ class F77LBFGSB:
         self.iter = 0
 
         # try to prevent F77 driver from ever stopping on its own
-        # cannot use NaN or Inf, Fortran comparisons do not work
-        # properly, so pick unreasonably small numbers.
-        # TODO: would a negative number be better here?
-        self.factr = 1e-999
-        self.pgtol = 1e-999
+        # can't use a negative number, or the Fortran code will core dump with
+        # ERROR: FACTR .LT. 0
+        self.factr = 0
+        self.pgtol = 0
 
         # other stuff to be added to the interface later
         self.maxls = 30
-        self.iprint = 1
+        self.iprint = 0
 
     def _call_fortran(self):
         _lbfgsb.setulb(self.m, self.x, self.l, self.u, self.nbd, self.f, self.g,
@@ -709,7 +708,7 @@ class F77LBFGSB:
             if _fortran_major_iter_complete(task):
                 break
 
-        return x, self.f, self.g
+        return x, float(self.f[0]), self.g
 
     def run_to(self, N):
         """Run the optimizer until its iteration count equals N."""
