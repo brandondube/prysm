@@ -570,13 +570,13 @@ def barplot(coefs, names=None, orientation='h', buffer=1, zorder=3, number=True,
         offsetY = drange * 0.01
 
         ax.bar(idxs + offset, coefs, zorder=zorder, width=width)
-        plt.xticks(idxs, names, rotation=90)
+        ax.set_xticks(idxs, names, rotation=90)
         if number:
             for i in idxs:
                 ax.text(i, offsetY, str(i), ha='center')
     else:
         ax.barh(idxs + offset, coefs, zorder=zorder, height=width)
-        plt.yticks(idxs, names)
+        ax.set_yticks(idxs, names)
         if number:
             for i in idxs:
                 ax.text(0, i, str(i), ha='center')
@@ -637,10 +637,10 @@ def barplot_magnitudes(magnitudes, orientation='h', sort=False,
     fig, ax = share_fig_ax(fig, ax)
     if orientation.lower() in ('h', 'horizontal'):
         ax.bar(idxs + offset, mags, zorder=zorder, width=width)
-        plt.xticks(idxs, names, rotation=90)
+        ax.set_xticks(idxs, names, rotation=90)
         ax.set(xlim=lims)
     else:
         ax.barh(idxs + offset, mags, zorder=zorder, height=width)
-        plt.yticks(idxs, names)
+        ax.set_yticks(idxs, names)
         ax.set(ylim=lims)
     return fig, ax
