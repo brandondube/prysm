@@ -204,16 +204,42 @@ def lstsq(modes, data):
     data = data[mask]
     modes = np.asarray(modes)
     modes = modes.reshape((modes.shape[0], -1))  # flatten second dim
-    modes = modes[:, mask.ravel()].T  # transpose moves modes to columns, as needed for least squares fit
+    # transpose moves modes to columns, as needed for least squares fit
+    modes = modes[:, mask.ravel()].T
     c, *_ = np.linalg.lstsq(modes, data, rcond=None)
     return c
 
 
-def orthonormalize(modes, mask):
-    """Orthonormalize modes over the domain of mask.
+def normalize_modes(modes, mask, to='std'):
+    """Scale modes such that they have unit RMS.
 
     Parameters
     ----------
-    modes : iterable
-        """
-    pass
+    modes : ndarray
+        mode shape (m, n) or modes shape (k, m, n) to scale
+    mask : ndarray
+        2D boolean array, True in the interior of the appropriate domain
+    to : str
+        what to normalize modes by, use std for "RMS" or ptp for PV
+
+    Returns
+    -------
+    ndarray
+        scaled modes
+
+    """
+    func = getattr(np, to)
+    if modes.ndim == 2:
+        mode = modes[mask]
+        norm = func(mode)
+
+        # loophole for piston
+        if norm < 1e-9:
+            norm = 1.
+
+        return modes * (1/norm)
+
+    modes_masked = modes[:, mask]
+    norms = func(modes_masked, axis=1)
+    # newaxes for correct numpy broadcast semantics
+    return modes * (1/norms[:, np.newaxis, np.newaxis])
