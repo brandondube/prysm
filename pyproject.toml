@@ -15,8 +15,8 @@ python = "^3.10"
 numpy = "^1.26.4"
 
 [tool.coverage.run]
-source = ["prysm/*"]
-omit = ["prysm/x/*"]
+source = ["prysm/*",]
+omit = ["prysm/x/*",]
 
 [tool.coverage.report]
 # Regexes for lines to exclude from consideration
@@ -24,7 +24,6 @@ exclude_lines = [
     "except ImportError",
     "assert",
 ]
-omit = "prysm/x/*"
 
 [tool.pydocstyle]
 ignore = ["D200", "D203", "D204", "D210", "D213", "D300", "D401", "D416"]

@@ -42,6 +42,6 @@ jobs:
       - run:
           name: Run tests
           # This assumes pytest is installed via the install-package step above
-          command: pytest --cov=prysm tests/
+          command: pytest --cov
       - run:
           command: coveralls
