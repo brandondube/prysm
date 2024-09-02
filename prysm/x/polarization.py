@@ -1,13 +1,20 @@
-"Jones and Mueller Calculus"
+"Jones and Mueller Calculus."
+import functools
+
 from prysm.mathops import np
 from prysm.conf import config
 from prysm import propagation
-from prysm.coordinates import make_xy_grid,cart_to_polar
-import functools
 
 
 # supported functions for jones_decorator
-supported_propagation_funcs = ['focus','unfocus','focus_fixed_sampling','angular_spectrum']
+supported_propagation_funcs = [
+    'focus',
+    'unfocus',
+    'focus_fixed_sampling',
+    'unfocus_fixed_sampling',
+    'angular_spectrum'
+]
+
 
 def _empty_pol_vector(shape=None):
     """Returns an empty array to populate with jones vector elements.
@@ -25,14 +32,15 @@ def _empty_pol_vector(shape=None):
     """
 
     if shape is None:
-        
+
         shape = (2)
 
     else:
 
-        shape = (*shape,2,1)
+        shape = (*shape, 2, 1)
 
     return np.zeros(shape, dtype=config.precision_complex)
+
 
 def linear_pol_vector(angle, degrees=True):
     """Returns a linearly polarized jones vector at a specified angle
@@ -57,10 +65,10 @@ def linear_pol_vector(angle, degrees=True):
     cost = np.cos(angle)
     sint = np.sin(angle)
 
-    if hasattr(angle,'ndim'):
+    if hasattr(angle, 'ndim'):
         pol_vector = _empty_pol_vector(shape=angle.shape)
-        pol_vector[...,0,0] = cost
-        pol_vector[...,1,0] = sint
+        pol_vector[..., 0, 0] = cost
+        pol_vector[..., 1, 0] = sint
     else:
         pol_vector = _empty_pol_vector(shape=None)
         pol_vector[0] = cost
@@ -68,7 +76,8 @@ def linear_pol_vector(angle, degrees=True):
 
     return pol_vector
 
-def circular_pol_vector(handedness='left',shape=None):
+
+def circular_pol_vector(handedness='left', shape=None):
     """Returns a circularly polarized jones vector
 
     Parameters
@@ -84,13 +93,13 @@ def circular_pol_vector(handedness='left',shape=None):
     """
 
     pol_vector = _empty_pol_vector(shape=shape)
-    pol_vector[...,0] = 1/np.sqrt(2)
+    pol_vector[..., 0] = 1/np.sqrt(2)
     if handedness == 'left':
-        pol_vector[...,1] = 1j/np.sqrt(2)
+        pol_vector[..., 1] = 1j/np.sqrt(2)
     elif handedness == 'right':
-        pol_vector[...,1] = -1j/np.sqrt(2)
+        pol_vector[..., 1] = -1j/np.sqrt(2)
     else:
-        raise ValueError(f"unknown handedness {handedness}, use 'left' or 'right''")
+        raise ValueError(f"unknown handedness {handedness}, use 'left' or 'right''")  # NOQA
 
     return pol_vector
 
@@ -181,8 +190,9 @@ def linear_retarder(retardance, theta=0, shape=None):
     jones[..., 0, 0] = 1
     jones[..., 1, 1] = retphasor
 
-    retarder = jones_rotation_matrix(-theta) @ jones @ jones_rotation_matrix(theta)
-
+    derot = jones_rotation_matrix(-theta)
+    rot = jones_rotation_matrix(theta)
+    retarder = derot @ jones @ rot
     return retarder
 
 
@@ -215,8 +225,9 @@ def linear_diattenuator(alpha, theta=0, shape=None):
     jones[..., 0, 0] = 1
     jones[..., 1, 1] = alpha
 
-    diattenuator = jones_rotation_matrix(-theta) @ jones @ jones_rotation_matrix(theta)
-
+    derot = jones_rotation_matrix(-theta)
+    rot = jones_rotation_matrix(theta)
+    diattenuator = derot @ jones @ rot
     return diattenuator
 
 
@@ -280,6 +291,7 @@ def linear_polarizer(theta=0, shape=None):
 
     return linear_diattenuator(0, theta=theta, shape=shape)
 
+
 def vector_vortex_retarder(charge, theta, retardance=np.pi, rotate=0):
     """generate a phase-only spatially-varying vector vortex retarder (VVR)
 
@@ -332,15 +344,20 @@ def vector_vortex_retarder(charge, theta, retardance=np.pi, rotate=0):
 
     return vvr
 
+
 def broadcast_kron(a, b):
-    """broadcasted kronecker product of two N,M,...,2,2 arrays. Used for jones -> mueller conversion
+    """broadcasted kronecker product of two N,M,...,2,2 arrays.
+
+    Used for jones -> mueller conversion.
+
     In the unbroadcasted case, this output looks like
 
     out = [a[0,0]*b,a[0,1]*b]
           [a[1,0]*b,a[1,1]*b]
 
-    where out is a N,M,...,4,4 array. I wrote this to work for generally shaped kronecker products where the matrix
-    is contained in the last two axes, but it's only tested for the Nx2x2 case
+    where out is a N,M,...,4,4 array. This works for generally shaped kronecker
+    products where the matrix is contained in the last two axes, but it's only
+    tested for the Nx2x2 case.
 
     Parameters
     ----------
@@ -354,8 +371,9 @@ def broadcast_kron(a, b):
     out
         N,M,...,4,4 array
     """
+    tmp = np.einsum('...ik,...jl', a, b)
+    return tmp.reshape([*a.shape[:-2], a.shape[-2]*b.shape[-2], a.shape[-1]*b.shape[-1]])
 
-    return np.einsum('...ik,...jl',a,b).reshape([*a.shape[:-2],int(a.shape[-2]*b.shape[-2]),int(a.shape[-1]*b.shape[-1])])
 
 def jones_to_mueller(jones, broadcast=True):
     """Construct a Mueller Matrix given a Jones Matrix. From Chipman, Lam, and Young Eq (6.99).
@@ -386,6 +404,7 @@ def jones_to_mueller(jones, broadcast=True):
 
     M = np.real(U @ jprod @ np.linalg.inv(U))
     return M
+
 
 def pauli_spin_matrix(index, shape=None):
     """Generates a pauli spin matrix used for Jones matrix data reduction. From CLY Eq 6.108.
@@ -465,7 +484,7 @@ def jones_adapter(prop_func):
 
     Notes
     -----
-    There isn't anything particularly special about polarized field propagation. We simply 
+    There isn't anything particularly special about polarized field propagation. We simply
     leverage the independence of the 4 "polarized" components of an optical system expressed
     as a Jones matrix
 
@@ -483,9 +502,8 @@ def jones_adapter(prop_func):
     callable
         decorated propagation function
     """
-
     @functools.wraps(prop_func)
-    def wrapper(*args,**kwargs):
+    def wrapper(*args, **kwargs):
         # this is a function
         wavefunction = args[0]
         if len(args) > 1:
@@ -495,26 +513,27 @@ def jones_adapter(prop_func):
 
         if wavefunction.ndim == 2:
             # pass through non-jones case
-            return prop_func(*args,**kwargs)
+            return prop_func(*args, **kwargs)
 
-        J00 = wavefunction[...,0,0]
-        J01 = wavefunction[...,0,1]
-        J10 = wavefunction[...,1,0]
-        J11 = wavefunction[...,1,1]
+        J00 = wavefunction[..., 0, 0]
+        J01 = wavefunction[..., 0, 1]
+        J10 = wavefunction[..., 1, 0]
+        J11 = wavefunction[..., 1, 1]
         tmp = []
         for E in [J00, J01, J10, J11]:
             ret = prop_func(E, *other_args, **kwargs)
             tmp.append(ret)
-        
-        out = np.empty([*ret.shape,2,2],dtype=ret.dtype)
-        out[...,0,0] = tmp[0]
-        out[...,0,1] = tmp[1]
-        out[...,1,0] = tmp[2]
-        out[...,1,1] = tmp[3]
-        
+
+        out = np.empty([*ret.shape, 2, 2],dtype=ret.dtype)
+        out[..., 0, 0] = tmp[0]
+        out[..., 0, 1] = tmp[1]
+        out[..., 1, 0] = tmp[2]
+        out[..., 1, 1] = tmp[3]
+
         return out
-    
+
     return wrapper
+
 
 def add_jones_propagation(funcs_to_change=supported_propagation_funcs):
     """apply decorator to supported propagation functions
@@ -525,9 +544,10 @@ def add_jones_propagation(funcs_to_change=supported_propagation_funcs):
         list of propagation functions to add polarized field propagation to, by default supported_propagation_funcs
     """
 
-    for name,func in vars(propagation).items():
+    for name, func in vars(propagation).items():
         if name in funcs_to_change:
             setattr(propagation, name, jones_adapter(func))
+
 
 def apply_polarization_optic(field, pol_optic):
     """applies a polarization optic represented by a jones matrix to a scalar field
@@ -549,9 +569,7 @@ def apply_polarization_optic(field, pol_optic):
 
     if field.ndim == 2:
         field = field[..., np.newaxis, np.newaxis]
-        
+
     field = pol_optic * field
-    
+
     return field
-
-
