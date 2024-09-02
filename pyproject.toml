@@ -15,7 +15,8 @@ python = "^3.10"
 numpy = "^1.26.4"
 
 [tool.coverage.run]
-source = "prysm"
+source = ["prysm/*"]
+omit = ["prysm/x/*"]
 
 [tool.coverage.report]
 # Regexes for lines to exclude from consideration
