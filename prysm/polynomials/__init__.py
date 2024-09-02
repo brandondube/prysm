@@ -1,4 +1,5 @@
 """Various polynomials of optics."""
+import warnings
 
 from prysm.mathops import np
 
@@ -102,8 +103,17 @@ def sum_of_2d_modes(modes, weights):
         ndarray of shape (m, n) that is the sum of modes as given
 
     """
-    modes = np.asarray(modes)
-    weights = np.asarray(weights).astype(modes.dtype)
+    if isinstance(modes, (list, tuple)):
+        warnings.warn('sum_of_2d_modes: modes is a list or tuple: for optimal performance, pre convert to array of shape (k, m, n)')
+        modes = np.asarray(modes)
+
+    if isinstance(weights, (list, tuple)):
+        warnings.warn('sum_of_2d_modes weights is a list or tuple: for optimal performance, pre convert to array of shape (k,)')
+        weights = np.asarray(weights)
+
+    if weights.dtype != modes.dtype:
+        warnings.warn("sum_of_2d_modes weights dtype mismatched to modes dtype, converting weights to modes' dtype: use same dtype for optimal speed")
+        weights = weights.astype(modes.dtype)
 
     # dot product of the 0th dim of modes and weights => weighted sum
     return np.tensordot(modes, weights, axes=(0, 0))
@@ -178,7 +188,8 @@ def lstsq(modes, data):
     Parameters
     ----------
     modes : iterable
-        modes to fit; sequence of ndarray of shape (m, n)
+        modes to fit; sequence of ndarray of shape (m, n);
+        array of shape (k, m, n), k=num modes, (m,n) = spatial domain is best
     data : numpy.ndarray
         data to fit, of shape (m, n)
         place NaN values in data for points to ignore
@@ -196,3 +207,13 @@ def lstsq(modes, data):
     modes = modes[:, mask.ravel()].T  # transpose moves modes to columns, as needed for least squares fit
     c, *_ = np.linalg.lstsq(modes, data, rcond=None)
     return c
+
+
+def orthonormalize(modes, mask):
+    """Orthonormalize modes over the domain of mask.
+
+    Parameters
+    ----------
+    modes : iterable
+        """
+    pass
