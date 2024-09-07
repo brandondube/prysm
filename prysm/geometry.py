@@ -197,7 +197,7 @@ def regular_polygon(sides, radius, x, y, center=(0, 0), rotation=0):
     sides : int
         number of sides to the polygon
     radius : float, optional
-        radius of the regular polygon.  For R=1, will fill the x and y extent
+        distance from the origin to a vertex
     x : numpy.ndarray
         x spatial coordinates, 2D or 1D
     y : numpy.ndarray

@@ -5,7 +5,6 @@ from .conf import config
 from .mathops import np, interpolate, ndimage
 from .fttools import fftrange
 
-
 def optimize_xy_separable(x, y):
     """Optimize performance for downstream operations.
 
@@ -448,6 +447,6 @@ def distort_annular_grid(r, eps):
         distorted r, to be passed to a polynomial function
 
     """
-    rr = r-eps
+    rr = r - eps
     rr = rr * (1/(1-eps))
     return rr
