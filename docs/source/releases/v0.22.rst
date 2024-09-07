@@ -40,12 +40,8 @@ Rich XY polynomial capability has been introduced:
 
 * :func:`~prysm.polynomials.xy.xy_polynomial_sequence`
 
-* :func:`~prysm.polynomials.xy.generalized_xy_polynomial_sequence`
-
-The last of these can be used to compute, e.g., "XY" Chebyshev polynomials
-
 Additionally, Laguerre polynomials have been introduced, which can be used for
-generating Hermite-Gaussian and Laguerre-Gaussian beams:
+generating Laguerre-Gaussian beams:
 
 * :func:`~prysm.polynomials.laguerre`
 
@@ -58,7 +54,7 @@ generating Hermite-Gaussian and Laguerre-Gaussian beams:
 All of the :code:`_sequence` polynomial functions have been revised.
 Previously, they returned generators to allow weighted sums of extremely high
 order expansions to be computed in a reduced memory footprint.  This lead to the
-most common usage being `:code:basis = array(list(xxx_sequence()))`.  This
+most common usage being :code:`basis = array(list(xxx_sequence()))`.  This
 benefit has been more theoretical than practical.  Now equivalent usage is
 :code:`basis = xxx_sequence()`, which returns the dense array of shape
 :code:`(K,N,M)` directly (K=num modes, (N,M) = spatial dimensionality).
@@ -66,7 +62,8 @@ benefit has been more theoretical than practical.  Now equivalent usage is
 Propagation
 -----------
 
-* new .real property, returning a Richdata to support wf.real.plot2d(), etc
+* new .real property, returning a Richdata to support wf.real.plot2d() and
+  similar usage
 
 * new .imag property, same as .real
 
@@ -127,12 +124,13 @@ More convenient backend swaps, misc
 -----------------------------------
 
 * :func:`prysm.mathops.set_backend_to_cupy`,
-  :func:`~prysm.mathops.set_backend_to_pytorch` and
-  :func:`~prysm.mathops.set_backend_to_defaults` convenience routines to set the
-  backend to cupy (GPU), or the defaults (numpy/scipy).  Note that other
-  numpy/scipy-like APIs can also be used, and these are simply convenience
-  functions; there is no special support for either library beyond these simple
-  functions.
+  :func:`~prysm.mathops.set_backend_to_pytorch`,
+  :func:`~prysm.mathops.set_fft_backend_to_mkl_fft` and
+  :func:`~prysm.mathops.set_backend_to_defaults`.
+
+Note that other numpy/scipy-like APIs can also be used, and these are simply
+convenience functions; there is no special support for either library beyond
+these simple functions.
 
 * the :func:`~prysm._richdata.RichData.plot2d` method of RichData now has an
   :code:`extend` keyword argument, which controls the extension of the colorbar
@@ -243,9 +241,9 @@ The main user-facing routines are:
 x/psi, x/pdi, x/sri, x/shack_hartmann
 -------------------------------------
 
-These four modules are for the modeling of Shack-Hartmann sensors, as well as
-two types of pinhole and/or fiber/waveguide based interferometers.  Extensive
-phase shifting interferometry (PSI) reconstruction capability is included, both
+These four modules are for the modeling of Shack-Hartmann sensors abd two types
+of pinhole and/or fiber/waveguide based interferometers.  Extensive phase
+shifting interferometry (PSI) reconstruction capability is included, both
 of wavefront phase as well as complex E-field.  A future release will include
 additional capability for differential reconstruction that is superior to taking
 the difference of two absolute reconstructions, after it has been published.
@@ -272,21 +270,21 @@ the difference of two absolute reconstructions, after it has been published.
 
 * * :func:`~prysm.x.psi.psi_accumulate` for accumulating the sums of de groot's
     formalism, an essential intermediate step in full complex E-field
-    reconstruction and differential reconstruction.
+    reconstruction and differential reconstruction
 
 * * :func:`~prysm.x.psi.differential_re_im` for direct reconstruction of the
     change in the real and complex part of the E-field based on two PSI
     measurements
 
 * * :func:`~prysm.x.psi.differential_amp_phs` which is analagous to the Re and
-    Im function.
+    Im function
 
 Note that when performing differential reconstructions, it may often be useful
 to work with (amp1 - amp0)/amp0, instead of the difference directly.
 Interferometers which have apodization over the pupil will naturally have
 smaller differences in the dimmer regions of the pupil.  If the apodization does
 not change between the two measuements, this division will improve accuracy
-considerably.
+considerably
 
 
 x/dm
@@ -296,11 +294,11 @@ x/dm
   system are the same
 
 * new Nout parameter that controls the amount of padding or cropping of the
-  natural model resolution is done.  The behavior here is similar to PROPER.
+  natural model resolution is done.  The behavior here is similar to PROPER
 
 * the forward model of the DM is now differentiable.
   :func:`~prysm.x.dm.DM.render_backprop` performs gradient
-  backpropagation through :func:`~prysm.x.dm.DM.render`.
+  backpropagation through :func:`~prysm.x.dm.DM.render`
 
 
 Performance Optimizations
@@ -309,7 +307,7 @@ Performance Optimizations
 * :func:`~prysm.propagation.angular_spectrum_transfer_function` has been
   optimized.  The new runtime is approximately the square root of that of the
   old.  For example, on a 1024x1024 array, in version 0.21 this function took
-  31 ms on a desktop.  It now takes 4 ms for the same array size and output.
+  31 ms on a desktop.  It now takes 4 ms for the same array size and output
 
 * :func:`~prysm.geometry.rectangle` has been optimized when the rotation angle
   is zero
@@ -320,7 +318,7 @@ Performance Optimizations
 * :func:`~prysm.io.read_zygo_dat` now only performs big/little endian
   conversions on phase arrays when necessary (little endian systems), which
   creates a slight performance enhancement for big endian systems, such as apple
-  silicon.
+  silicon
 
 Bug Fixes
 =========
@@ -328,19 +326,24 @@ Bug Fixes
 * The sign of :func:`~prysm.propagation.Wavefront.thin_lens` was incorrect,
   requiring a propagation by the negative of the focal length to go to the
   focus.  The sign has been swapped; :code:`(wf * thin_lens(f,...)).free_space(f)``
-  now goes to the focus.
-
-* An orientation flip was missing in
-  :func:`~prysm.propagation.Wavefront.babinet`, this has been corrected.
+  now goes to the focus
 
 * :func:`~prysm.otf.mtf_from_psf` as well as the ptf and otf functions used the
   wrong pixel as the origin for normalization, when array sizes were odd.  This
-  has been fixed.
+  has been fixed
 
 * a bug in :code:`scipy.special.factorial2` has been fixed in a recent version.
   Like all respectable software, prysm depended on that bug.  Q2D polynomials
   would return NaN for m=1, n=0 (Q-coma) with scipy's bugfix.  This has been
-  corrected within prysm in this version, and Q-coma is no longer destined for NaN.
+  corrected within prysm in this version, and Q-coma is no longer destined for
+  NaN
+
+* :code:`prysm.polynomials.zernike.barplot` and
+  :code:`~prysm.polynomials.zernike.barplot_magnitudes` now apply axis labels to
+  the correct axis when plotting on a figure with multiple axes
+
+* fixed a bug in :func:`prysm.psf.encircled_energy` where x,y axes were double
+  meshgrided
 
 Breaking Changes
 ================
