@@ -32,13 +32,27 @@ New Features
 Polynomials
 -----------
 
+A breaking change has been made by renaming :code:`xxx_sequence` to
+:code:`_seq`, to be consistent with using :code:`_der` for derivatives.
+
+Utilities to orthogonalize and normalize modes over arbitrary apertures with
+special routines for annular apertures:
+
+* :func:`~prysm.coordinates.distort_annular_grid`
+
+* :func:`~prysm.polynomials.orthogonalize_modes`
+
+* :func:`~prysm.polynomials.normalize_modes`
+
+See :doc:`Ins-and-Outs-of-Polynomials` for usage examples
+
 Rich XY polynomial capability has been introduced:
 
 * :func:`~prysm.polynomials.xy.j_to_xy`
 
 * :func:`~prysm.polynomials.xy.xy_polynomial`
 
-* :func:`~prysm.polynomials.xy.xy_polynomial_sequence`
+* :func:`~prysm.polynomials.xy.xy_polynomial_seq`
 
 Additionally, Laguerre polynomials have been introduced, which can be used for
 generating Laguerre-Gaussian beams:
@@ -47,25 +61,25 @@ generating Laguerre-Gaussian beams:
 
 * :func:`~prysm.polynomials.laguerre_der`
 
-* :func:`~prysm.polynomials.laguerre_sequence`
+* :func:`~prysm.polynomials.laguerre_seq`
 
-* :func:`~prysm.polynomials.laguerre_der_sequence`
+* :func:`~prysm.polynomials.laguerre_der_seq`
 
 All of the :code:`_sequence` polynomial functions have been revised.
 Previously, they returned generators to allow weighted sums of extremely high
-order expansions to be computed in a reduced memory footprint.  This lead to the
+order expansions to be computed in a reduced memory footprint. This lead to the
 most common usage being :code:`basis = array(list(xxx_sequence()))`.  This
 benefit has been more theoretical than practical.  Now equivalent usage is
-:code:`basis = xxx_sequence()`, which returns the dense array of shape
-:code:`(K,N,M)` directly (K=num modes, (N,M) = spatial dimensionality).
+:code:`basis = xxx_seq()`, which returns the dense array of shape :code:`(K,N,M)`
+directly (K=num modes, (N,M) = spatial dimensionality).
 
 Propagation
 -----------
 
-* new .real property, returning a Richdata to support wf.real.plot2d() and
+* new :code:`.real` property, returning a Richdata to support :code:`wf.real.plot2d()` and
   similar usage
 
-* new .imag property, same as .real
+* new :code:`.imag` property, same as :code:`.real`
 
 * :func:`~prysm.propagation.Wavefront.to_fpm_and_back` now takes a :code:`shift`
   argument, allowing off-axis propagation without adding wavefront tilt
@@ -299,6 +313,9 @@ x/dm
 * the forward model of the DM is now differentiable.
   :func:`~prysm.x.dm.DM.render_backprop` performs gradient
   backpropagation through :func:`~prysm.x.dm.DM.render`
+
+* rotation definitions have been changed, and a related bug that would cause a
+  transposition of the DM surface for some rotations fixed.
 
 
 Performance Optimizations

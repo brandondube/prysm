@@ -56,15 +56,59 @@ def set_backend_to_defaults():
     return
 
 
-
 def set_backend_to_pytorch():
     """Convenience method to automatically configure prysm's backend to PyTorch."""
     import pytorch as torch
+
     np._srcmodule = torch
     fft._srcmodule = torch.fft
     special._srcmodule = torch.special
     warnings.warn('set_backend_to_pytorch: only np, fft, special remapped; ndimage, interpolate do not have known torch equivalents.')
     return
+
+
+def set_fft_backend_to_mkl_fft():
+    from mkl_fft import _numpy_fft as mklfft
+
+    fft._srcmodule = mklfft
+    return
+
+
+def array_to_true_numpy(*args):
+    """convert one or more arrays from an alternate backend to numpy.
+
+    Needed for plotting, serialization, etc.
+
+    Does nothing if given an actual numpy array
+
+    Parameters
+    ----------
+    args : any number of arrays, of any dimension and dtype
+
+    Returns
+    -------
+    array, or list of bonefide numpy arrays
+
+    """
+    if len(args) == 0:
+        return
+
+    out = []
+    for arg in args:
+        if isinstance(arg, _np.ndarray):
+            out.append(arg)
+        # cupy
+        if hasattr(arg, 'get'):
+            out.append(arg.get())
+
+        # PyTorch
+        if hasattr(arg, 'numpy'):
+            out.append(arg.numpy(force=True))
+
+    if len(out) == 1:
+        return out[0]
+
+    return out
 
 
 def jinc(r):
