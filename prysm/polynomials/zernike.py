@@ -4,7 +4,7 @@ from collections import defaultdict
 
 import numpy as truenp
 
-from .jacobi import jacobi, jacobi_der, jacobi_sequence
+from .jacobi import jacobi, jacobi_der, jacobi_seq
 
 from prysm.mathops import np, kronecker, sign, is_odd
 from prysm.util import sort_xy
@@ -60,13 +60,13 @@ def zernike_nm(n, m, r, t, norm=True):
     return out
 
 
-def zernike_nm_sequence(nms, r, t, norm=True):
+def zernike_nm_seq(nms, r, t, norm=True):
     """Zernike polynomial of radial order n, azimuthal order m at point r, t.
 
     Parameters
     ----------
     nms : iterable of tuple of int,
-        sequence of (n, m); looks like [(1,1), (3,1), ...]
+        seq of (n, m); looks like [(1,1), (3,1), ...]
     r : numpy.ndarray
         radial coordinates
     t : numpy.ndarray
@@ -100,25 +100,25 @@ def zernike_nm_sequence(nms, r, t, norm=True):
     def factory():
         return 0
 
-    jacobi_sequences_mjn = defaultdict(factory)
-    # jacobi_sequences_mjn is a lookup table from |m| to all orders < max(n_j)
+    jacobi_seqs_mjn = defaultdict(factory)
+    # jacobi_seqs_mjn is a lookup table from |m| to all orders < max(n_j)
     # for each |m|, i.e. 0 .. n_j_max
     for nm, am_ in zip(nms, am):
         n = nm[0]
         nj = (n-am_) // 2
-        if nj > jacobi_sequences_mjn[am_]:
-            jacobi_sequences_mjn[am_] = nj
+        if nj > jacobi_seqs_mjn[am_]:
+            jacobi_seqs_mjn[am_] = nj
 
-    for k in jacobi_sequences_mjn:
-        nj = jacobi_sequences_mjn[k]
-        jacobi_sequences_mjn[k] = truenp.arange(nj+1)
+    for k in jacobi_seqs_mjn:
+        nj = jacobi_seqs_mjn[k]
+        jacobi_seqs_mjn[k] = truenp.arange(nj+1)
 
-    jacobi_sequences = {}
+    jacobi_seqs = {}
 
-    jacobi_sequences_mjn = dict(jacobi_sequences_mjn)
-    for k in jacobi_sequences_mjn:
-        n_jac = jacobi_sequences_mjn[k]
-        jacobi_sequences[k] = list(jacobi_sequence(n_jac, 0, k, x))
+    jacobi_seqs_mjn = dict(jacobi_seqs_mjn)
+    for k in jacobi_seqs_mjn:
+        n_jac = jacobi_seqs_mjn[k]
+        jacobi_seqs[k] = list(jacobi_seq(n_jac, 0, k, x))
 
     powers_of_m = {}
     sines = {}
@@ -133,7 +133,7 @@ def zernike_nm_sequence(nms, r, t, norm=True):
     for n, m in nms:
         absm = abs(m)
         nj = (n-absm) // 2
-        jac = jacobi_sequences[absm][nj]
+        jac = jacobi_seqs[absm][nj]
         if norm:
             jac = jac * zernike_norm(n, m)
 
@@ -241,13 +241,13 @@ def zernike_nm_der(n, m, r, t, norm=True):
     return dr, dt
 
 
-def zernike_nm_der_sequence(nms, r, t, norm=True):
+def zernike_nm_der_seq(nms, r, t, norm=True):
     """Derivatives of Zernike polynomial of radial order n, azimuthal order m, w.r.t r and t.
 
     Parameters
     ----------
     nms : iterable
-        sequence of [(n, m)] radial and azimuthal orders
+        seq of [(n, m)] radial and azimuthal orders
     m : int
         azimuthal order
     r : numpy.ndarray
@@ -267,7 +267,7 @@ def zernike_nm_der_sequence(nms, r, t, norm=True):
         trailing dimensions match the inputs (r, t) in shape
 
     """
-    # TODO: actually implement the recurrence relation as in zernike_sequence,
+    # TODO: actually implement the recurrence relation as in zernike_seq,
     # instead of just using a loop for API homogenaeity
     out = np.empty((len(nms), 2, *r.shape), dtype=r.dtype)
     for j, (n, m) in enumerate(nms):
@@ -564,6 +564,9 @@ def barplot(coefs, names=None, orientation='h', buffer=1, zorder=3, number=True,
     idxs = np.asarray(list(coefs.keys()))
     coefs = coefs2
     lims = (idxs[0] - buffer, idxs[-1] + buffer)
+
+    if names is None:
+        names = [f'{i}' for i in idxs]
     if orientation.lower() in ('h', 'horizontal'):
         vmin, vmax = coefs.min(), coefs.max()
         drange = vmax - vmin

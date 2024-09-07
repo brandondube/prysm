@@ -56,7 +56,7 @@ def hermite_He(n, x):
     return Pn
 
 
-def hermite_He_sequence(ns, x):
+def hermite_He_seq(ns, x):
     """Probabilist's Hermite polynomials He of orders ns at points x.
 
     Parameters
@@ -78,7 +78,7 @@ def hermite_He_sequence(ns, x):
     # but excludes the note comments.  Read that first if you're looking for
     # clarity
 
-    # see also: prysm.polynomials.jacobi.jacobi_sequence for the meta machinery
+    # see also: prysm.polynomials.jacobi.jacobi_seq for the meta machinery
     # in use here
     ns = list(ns)
     min_i = 0
@@ -139,7 +139,7 @@ def hermite_He_der(n, x):
     return n * hermite_He(n-1, x)
 
 
-def hermite_He_der_sequence(ns, x):
+def hermite_He_der_seq(ns, x):
     """First derivative of He_[ns] with respect to x, at points x.
 
     Parameters
@@ -161,7 +161,7 @@ def hermite_He_der_sequence(ns, x):
     # but excludes the note comments.  Read that first if you're looking for
     # clarity
 
-    # see also: prysm.polynomials.jacobi.jacobi_sequence for the meta machinery
+    # see also: prysm.polynomials.jacobi.jacobi_seq for the meta machinery
     # in use here
     ns = list(ns)
     min_i = 0
@@ -255,7 +255,7 @@ def hermite_H(n, x):
     return Pn
 
 
-def hermite_H_sequence(ns, x):
+def hermite_H_seq(ns, x):
     """Physicist's Hermite polynomials H of orders ns at points x.
 
     Parameters
@@ -277,7 +277,7 @@ def hermite_H_sequence(ns, x):
     # but excludes the note comments.  Read that first if you're looking for
     # clarity
 
-    # see also: prysm.polynomials.jacobi.jacobi_sequence for the meta machinery
+    # see also: prysm.polynomials.jacobi.jacobi_seq for the meta machinery
     # in use here
     ns = list(ns)
     min_i = 0
@@ -339,7 +339,7 @@ def hermite_H_der(n, x):
     return 2 * n * hermite_H(n-1, x)
 
 
-def hermite_H_der_sequence(ns, x):
+def hermite_H_der_seq(ns, x):
     """First derivative of He_[ns] with respect to x, at points x.
 
     Parameters
@@ -361,7 +361,7 @@ def hermite_H_der_sequence(ns, x):
     # but excludes the note comments.  Read that first if you're looking for
     # clarity
 
-    # see also: prysm.polynomials.jacobi.jacobi_sequence for the meta machinery
+    # see also: prysm.polynomials.jacobi.jacobi_seq for the meta machinery
     # in use here
     ns = list(ns)
     min_i = 0

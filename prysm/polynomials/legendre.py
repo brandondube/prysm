@@ -2,9 +2,9 @@
 
 from .jacobi import (
     jacobi,
-    jacobi_sequence,
+    jacobi_seq,
     jacobi_der,
-    jacobi_der_sequence,
+    jacobi_der_seq,
 )
 
 
@@ -27,7 +27,7 @@ def legendre(n, x):
     return jacobi(n, 0, 0, x)
 
 
-def legendre_sequence(ns, x):
+def legendre_seq(ns, x):
     """Legendre polynomials of orders ns.
 
     Faster than legendre in a loop.
@@ -47,7 +47,7 @@ def legendre_sequence(ns, x):
         return has shape (5, 100, 100)
 
     """
-    return jacobi_sequence(ns, 0, 0, x)
+    return jacobi_seq(ns, 0, 0, x)
 
 
 def legendre_der(n, x):
@@ -69,7 +69,7 @@ def legendre_der(n, x):
     return jacobi_der(n, 0, 0, x)
 
 
-def legendre_der_sequence(ns, x):
+def legendre_der_seq(ns, x):
     """Partial derivative w.r.t. x of Legendre polynomials of orders ns.
 
     Faster than legendre_der in a loop.
@@ -89,4 +89,4 @@ def legendre_der_sequence(ns, x):
         return has shape (5, 100, 100)
 
     """
-    return jacobi_der_sequence(ns, 0, 0, x)
+    return jacobi_der_seq(ns, 0, 0, x)

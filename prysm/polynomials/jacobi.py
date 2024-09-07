@@ -83,7 +83,7 @@ def jacobi(n, alpha, beta, x):
     return Pn
 
 
-def jacobi_sequence(ns, alpha, beta, x):
+def jacobi_seq(ns, alpha, beta, x):
     """Jacobi polynomials of orders ns with weight parameters alpha and beta.
 
     Parameters
@@ -106,7 +106,7 @@ def jacobi_sequence(ns, alpha, beta, x):
 
     """
     # previously returned a gnerator; ergonomics were not-good
-    # typical usage woudl be array(list(jacobi_sequence(...))
+    # typical usage would be array(list(jacobi_seq(...))
     # generator lowers peak memory consumption by allowing caller
     # to do weighted sums 'inline', but
     # for example (1024, 1024) x is ~8 megabytes per mode;
@@ -185,7 +185,7 @@ def jacobi_der(n, alpha, beta, x):
     return coef * Pn
 
 
-def jacobi_der_sequence(ns, alpha, beta, x):
+def jacobi_der_seq(ns, alpha, beta, x):
     """First partial derivative of Pn w.r.t. x for order ns, i.e. P_n'.
 
     Parameters
@@ -207,7 +207,7 @@ def jacobi_der_sequence(ns, alpha, beta, x):
         return has shape (5, 100, 100)
 
     """
-    # the body of this function is very similar to that of jacobi_sequence,
+    # the body of this function is very similar to that of jacobi_seq,
     # except note that der is related to jacobi n-1,
     # and the actual jacobi polynomial has a different alpha and beta
 

@@ -82,7 +82,7 @@ def dickson2(n, alpha, x):
     return Pn
 
 
-def dickson1_sequence(ns, alpha, x):
+def dickson1_seq(ns, alpha, x):
     """Sequence of Dickson Polynomial of the first kind of orders ns.
 
     Parameters
@@ -141,7 +141,7 @@ def dickson1_sequence(ns, alpha, x):
     return out
 
 
-def dickson2_sequence(ns, alpha, x):
+def dickson2_seq(ns, alpha, x):
     """Sequence of Dickson Polynomial of the second kind of orders ns.
 
     Parameters

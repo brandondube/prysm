@@ -75,13 +75,13 @@ def test_xy_poly_later_cross_term():
     assert np.allclose(prysm_calc, truth)
 
 
-def test_xy_poly_sequence_cross_terms():
+def test_xy_poly_seq_cross_terms():
     mns = [
         (1, 1),
         (1, 3),
     ]
     xx, yy = np.meshgrid(X, Y)
-    prysm_calc1, prysm_calc2 = polynomials.xy_polynomial_sequence(mns, xx, yy)
+    prysm_calc1, prysm_calc2 = polynomials.xy_polynomial_seq(mns, xx, yy)
     truth1 = xx * yy
     truth2 = xx * yy ** 3
     assert np.allclose(prysm_calc1, truth1)
@@ -95,9 +95,9 @@ def test_qbfs_functions(n, rho):
     assert sag.any()
 
 
-def test_qbfs_sequence_functions(rho):
+def test_qbfs_seq_functions(rho):
     ns = [1, 2, 3, 4, 5, 6]
-    gen = polynomials.Qbfs_sequence(ns, rho)
+    gen = polynomials.Qbfs_seq(ns, rho)
     assert len(list(gen)) == len(ns)
 
 
@@ -107,9 +107,9 @@ def test_qcon_functions(n, rho):
     assert sag.any()
 
 
-def test_qcon_sequence_functions(rho):
+def test_qcon_seq_functions(rho):
     ns = [1, 2, 3, 4, 5, 6]
-    gen = polynomials.Qcon_sequence(ns, rho)
+    gen = polynomials.Qcon_seq(ns, rho)
     assert len(list(gen)) == len(ns)
 
 # there are truth tables in the paper, which are not used here.  Some of them contain
@@ -131,9 +131,9 @@ def test_2d_Q(nm, rho, phi):
     assert sag.any()
 
 
-def test_2d_Q_sequence_same_as_loop(rho, phi):
+def test_2d_Q_seq_same_as_loop(rho, phi):
     nms = [polynomials.noll_to_nm(i) for i in range(1, 11)]
-    modes = list(polynomials.Q2d_sequence(nms, rho, phi))
+    modes = list(polynomials.Q2d_seq(nms, rho, phi))
     iterated = [polynomials.Q2d(n, m, rho, phi) for n, m in nms]
     for m, i in zip(modes, iterated):
         assert np.allclose(m, i)
@@ -167,7 +167,7 @@ def test_ansi_2_term_can_construct(rho, phi):
     assert ary.any()
 
 
-def test_zernike_sequence_same_as_loop(rho, phi):
+def test_zernike_seq_same_as_loop(rho, phi):
     nms = (
         (2, 0),  # defocus
         (4, 0),  # sph1
@@ -180,20 +180,20 @@ def test_zernike_sequence_same_as_loop(rho, phi):
         (3, -1),
         (3, -3),
     )
-    seq = list(polynomials.zernike_nm_sequence(nms, rho, phi))
+    seq = list(polynomials.zernike_nm_seq(nms, rho, phi))
     for elem, nm in zip(seq, nms):
         exp = polynomials.zernike_nm(*nm, rho, phi)
         assert np.allclose(exp, elem)
 
 
 @pytest.mark.parametrize('norm', [True, False])
-def test_zernike_der_sequence_same_as_loop(norm, rho, phi):
+def test_zernike_der_seq_same_as_loop(norm, rho, phi):
     nms = [polynomials.noll_to_nm(j) for j in range(0, 12)]
     loop = []
     for n, m in nms:
         loop.append(polynomials.zernike_nm_der(n, m, rho, phi, norm=norm))
 
-    non_loop = polynomials.zernike_nm_der_sequence(nms, rho, phi, norm=norm)
+    non_loop = polynomials.zernike_nm_der_seq(nms, rho, phi, norm=norm)
     for looped, not_looped in zip(loop, non_loop):
         rl, tl = looped
         rnl, tnl = not_looped
@@ -298,9 +298,9 @@ def test_legendre_matches_scipy(n):
     assert np.allclose(prysm_, scipy_)
 
 
-def test_legendre_sequence_matches_loop():
+def test_legendre_seq_matches_loop():
     ns = [1, 2, 3, 4, 5]
-    seq = polynomials.legendre_sequence(ns, X)
+    seq = polynomials.legendre_seq(ns, X)
     loop = [polynomials.legendre(n, X) for n in ns]
     for elem, exp in zip(seq, loop):
         assert np.allclose(elem, exp)
@@ -313,9 +313,9 @@ def test_hermite_he_matches_scipy(n):
     assert np.allclose(prysm_, scipy_)
 
 
-def test_hermite_he_sequence_matches_loop():
+def test_hermite_he_seq_matches_loop():
     ns = [1, 2, 3, 4, 5]
-    seq = polynomials.hermite_He_sequence(ns, X)
+    seq = polynomials.hermite_He_seq(ns, X)
     loop = [polynomials.hermite_He(n, X) for n in ns]
     for elem, exp in zip(seq, loop):
         assert np.allclose(elem, exp)
@@ -328,9 +328,9 @@ def test_hermite_h_matches_scipy(n):
     assert np.allclose(prysm_, scipy_)
 
 
-def test_hermite_h_sequence_matches_loop():
+def test_hermite_h_seq_matches_loop():
     ns = [1, 2, 3, 4, 5]
-    seq = polynomials.hermite_H_sequence(ns, X)
+    seq = polynomials.hermite_H_seq(ns, X)
     loop = [polynomials.hermite_H(n, X) for n in ns]
     for elem, exp in zip(seq, loop):
         assert np.allclose(elem, exp)
@@ -352,7 +352,7 @@ def test_cheby2_matches_scipy(n):
 
 def test_cheby1_seq_matches_loop():
     ns = [0, 1, 2, 3, 4, 5]
-    seq = list(polynomials.cheby1_sequence(ns, X))
+    seq = list(polynomials.cheby1_seq(ns, X))
     for elem, n in zip(seq, ns):
         exp = polynomials.cheby1(n, X)
         assert np.allclose(exp, elem)
@@ -360,7 +360,7 @@ def test_cheby1_seq_matches_loop():
 
 def test_cheby2_seq_matches_loop():
     ns = [0, 1, 2, 3, 4, 5]
-    seq = list(polynomials.cheby2_sequence(ns, X))
+    seq = list(polynomials.cheby2_seq(ns, X))
     for elem, n in zip(seq, ns):
         exp = polynomials.cheby2(n, X)
         assert np.allclose(exp, elem)
@@ -389,7 +389,7 @@ def test_dickson2_functions(n):
 
 def test_dickson1_seq_matches_loop():
     ns = [0, 1, 2, 3, 4, 5]
-    seq = list(polynomials.dickson1_sequence(ns, 1, X))
+    seq = list(polynomials.dickson1_seq(ns, 1, X))
     for elem, n in zip(seq, ns):
         exp = polynomials.dickson1(n, 1, X)
         assert np.allclose(exp, elem)
@@ -397,7 +397,7 @@ def test_dickson1_seq_matches_loop():
 
 def test_dickson2_seq_matches_loop():
     ns = [0, 1, 2, 3, 4, 5]
-    seq = list(polynomials.dickson2_sequence(ns, 1, X))
+    seq = list(polynomials.dickson2_seq(ns, 1, X))
     for elem, n in zip(seq, ns):
         exp = polynomials.dickson2(n, 1, X)
         assert np.allclose(exp, elem)
@@ -415,9 +415,9 @@ def test_jacobi_der_matches_finite_diff(n):
     assert abs(ratio-1).max() < 0.1  # 10% relative error
 
 
-def test_jacobi_der_sequence_same_as_loop():
+def test_jacobi_der_seq_same_as_loop():
     ns = [0, 1, 2, 3, 4, 5]
-    seq = list(polynomials.jacobi_der_sequence(ns, 0.5, 0.5, X))
+    seq = list(polynomials.jacobi_der_seq(ns, 0.5, 0.5, X))
     for elem, n in zip(seq, ns):
         exp = polynomials.jacobi_der(n, 0.5, 0.5, X)
         assert np.allclose(exp, elem)
@@ -435,9 +435,9 @@ def test_cheby1_der_matches_finite_diff(n):
     assert abs(ratio-1).max() < 0.15  # 15% relative error
 
 
-def test_cheby1_der_sequence_same_as_loop():
+def test_cheby1_der_seq_same_as_loop():
     ns = [0, 1, 2, 3, 4, 5]
-    seq = list(polynomials.cheby1_der_sequence(ns, X))
+    seq = list(polynomials.cheby1_der_seq(ns, X))
     for elem, n in zip(seq, ns):
         exp = polynomials.cheby1_der(n, X)
         assert np.allclose(exp, elem)
@@ -455,9 +455,9 @@ def test_cheby2_der_matches_finite_diff(n):
     assert abs(ratio-1).max() < 0.15  # 15% relative error
 
 
-def test_cheby2_der_sequence_same_as_loop():
+def test_cheby2_der_seq_same_as_loop():
     ns = [0, 1, 2, 3, 4, 5]
-    seq = list(polynomials.cheby2_der_sequence(ns, X))
+    seq = list(polynomials.cheby2_der_seq(ns, X))
     for elem, n in zip(seq, ns):
         exp = polynomials.cheby2_der(n, X)
         assert np.allclose(exp, elem)
@@ -475,9 +475,9 @@ def test_cheby3_der_matches_finite_diff(n):
     assert abs(ratio-1).max() < 0.15  # 15% relative error
 
 
-def test_cheby3_der_sequence_same_as_loop():
+def test_cheby3_der_seq_same_as_loop():
     ns = [0, 1, 2, 3, 4, 5]
-    seq = list(polynomials.cheby3_der_sequence(ns, X))
+    seq = list(polynomials.cheby3_der_seq(ns, X))
     for elem, n in zip(seq, ns):
         exp = polynomials.cheby3_der(n, X)
         assert np.allclose(exp, elem)
@@ -495,9 +495,9 @@ def test_cheby4_der_matches_finite_diff(n):
     assert abs(ratio-1).max() < 0.15  # 15% relative error
 
 
-def test_cheby4_der_sequence_same_as_loop():
+def test_cheby4_der_seq_same_as_loop():
     ns = [0, 1, 2, 3, 4, 5]
-    seq = list(polynomials.cheby4_der_sequence(ns, X))
+    seq = list(polynomials.cheby4_der_seq(ns, X))
     for elem, n in zip(seq, ns):
         exp = polynomials.cheby4_der(n, X)
         assert np.allclose(exp, elem)
@@ -515,9 +515,9 @@ def test_legendre_der_matches_finite_diff(n):
     assert abs(ratio-1).max() < 0.35  # 35% relative error
 
 
-def test_legendre_der_sequence_same_as_loop():
+def test_legendre_der_seq_same_as_loop():
     ns = [0, 1, 2, 3, 4, 5]
-    seq = list(polynomials.legendre_der_sequence(ns, X))
+    seq = list(polynomials.legendre_der_seq(ns, X))
     for elem, n in zip(seq, ns):
         exp = polynomials.legendre_der(n, X)
         assert np.allclose(exp, elem)
@@ -535,9 +535,9 @@ def test_hermite_He_der_matches_finite_diff(n):
     assert abs(diff).max() < 0.35  # 10%
 
 
-def test_hermite_He_der_sequence_same_as_loop():
+def test_hermite_He_der_seq_same_as_loop():
     ns = [0, 1, 2, 3, 4, 5]
-    seq = list(polynomials.hermite_He_der_sequence(ns, X))
+    seq = list(polynomials.hermite_He_der_seq(ns, X))
     for elem, n in zip(seq, ns):
         exp = polynomials.hermite_He_der(n, X)
         assert np.allclose(exp, elem)
@@ -555,9 +555,9 @@ def test_hermite_H_der_matches_finite_diff(n):
     assert abs(ratio-1).max() < 0.1  # 10%
 
 
-def test_hermite_H_der_sequence_same_as_loop():
+def test_hermite_H_der_seq_same_as_loop():
     ns = [0, 1, 2, 3, 4, 5]
-    seq = list(polynomials.hermite_H_der_sequence(ns, X))
+    seq = list(polynomials.hermite_H_der_seq(ns, X))
     for elem, n in zip(seq, ns):
         exp = polynomials.hermite_H_der(n, X)
         assert np.allclose(exp, elem)
@@ -567,7 +567,7 @@ def test_clenshaw_matches_standard_way():
     # pseudorandom numbers
     # this test fails sometimes when random coefs are used?
     cs = np.random.rand(5)
-    basis = list(polynomials.jacobi_sequence([0, 1, 2, 3, 4], .5, .5, X))
+    basis = list(polynomials.jacobi_seq([0, 1, 2, 3, 4], .5, .5, X))
     exp = np.dot(cs, basis)
     clenshaw = polynomials.jacobi_sum_clenshaw(cs, .5, .5, X)
     assert np.allclose(exp, clenshaw, atol=1e-8)
@@ -585,7 +585,7 @@ def test_clenshaw_matches_standard_way():
 def test_clenshaw_matches_standard_way_der(a, b):
     # this test fails sometimes when random coefs are used?
     cs = np.random.rand(7)
-    basis = list(polynomials.jacobi_der_sequence([0, 1, 2, 3, 4, 5, 6], a, b, X))
+    basis = list(polynomials.jacobi_der_seq([0, 1, 2, 3, 4, 5, 6], a, b, X))
     exp = np.dot(cs, basis)
     clenshaw = polynomials.jacobi_sum_clenshaw_der(cs, a, b, X)
     clenshaw = clenshaw[1][0]
@@ -608,17 +608,17 @@ def test_cheby4_functions(n):
     assert P.any()
 
 
-def test_cheby3_sequence_matches_loop():
+def test_cheby3_seq_matches_loop():
     ns = [1, 2, 3, 4, 5]
-    seq = polynomials.cheby3_sequence(ns, X)
+    seq = polynomials.cheby3_seq(ns, X)
     loop = [polynomials.cheby3(n, X) for n in ns]
     for elem, exp in zip(seq, loop):
         assert np.allclose(elem, exp)
 
 
-def test_cheby4_sequence_matches_loop():
+def test_cheby4_seq_matches_loop():
     ns = [1, 2, 3, 4, 5]
-    seq = polynomials.cheby4_sequence(ns, X)
+    seq = polynomials.cheby4_seq(ns, X)
     loop = [polynomials.cheby4(n, X) for n in ns]
     for elem, exp in zip(seq, loop):
         assert np.allclose(elem, exp)

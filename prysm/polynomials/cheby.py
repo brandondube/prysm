@@ -4,8 +4,8 @@ from prysm.mathops import np
 from .jacobi import (
     jacobi,
     jacobi_der,
-    jacobi_sequence,
-    jacobi_der_sequence,
+    jacobi_seq,
+    jacobi_der_seq,
 )
 
 
@@ -24,7 +24,7 @@ def cheby1(n, x):
     return jacobi(n, -.5, -.5, x) * c
 
 
-def cheby1_sequence(ns, x):
+def cheby1_seq(ns, x):
     """Chebyshev polynomials of the first kind of orders ns.
 
     Faster than chevy1 in a loop.
@@ -45,8 +45,8 @@ def cheby1_sequence(ns, x):
 
     """
     ns = list(ns)
-    cs = 1/jacobi_sequence(ns, -.5, -.5, np.ones(1, dtype=x.dtype))
-    seq = jacobi_sequence(ns, -.5, -.5, x)
+    cs = 1/jacobi_seq(ns, -.5, -.5, np.ones(1, dtype=x.dtype))
+    seq = jacobi_seq(ns, -.5, -.5, x)
     return seq*cs
 
 
@@ -65,7 +65,7 @@ def cheby1_der(n, x):
     return jacobi_der(n, -0.5, -0.5, x) * c
 
 
-def cheby1_der_sequence(ns, x):
+def cheby1_der_seq(ns, x):
     """Partial derivative w.r.t. x of Chebyshev polynomials of the first kind of orders ns.
 
     Faster than chevy1_der in a loop.
@@ -86,8 +86,8 @@ def cheby1_der_sequence(ns, x):
 
     """
     ns = list(ns)
-    cs = 1/jacobi_sequence(ns, -.5, -.5, np.ones(1, dtype=x.dtype))
-    seq = jacobi_der_sequence(ns, -.5, -.5, x)
+    cs = 1/jacobi_seq(ns, -.5, -.5, np.ones(1, dtype=x.dtype))
+    seq = jacobi_der_seq(ns, -.5, -.5, x)
     return seq*cs
 
 
@@ -106,7 +106,7 @@ def cheby2(n, x):
     return jacobi(n, .5, .5, x) * c
 
 
-def cheby2_sequence(ns, x):
+def cheby2_seq(ns, x):
     """Chebyshev polynomials of the second kind of orders ns.
 
     Faster than chevy1 in a loop.
@@ -129,12 +129,12 @@ def cheby2_sequence(ns, x):
     # gross squeeze -> new axis dance;
     # seq is (N,M)
     # cs is (N,)
-    # return of jacobi_sequence is (N,1)
+    # return of jacobi_seq is (N,1)
     # drop the 1 to avoid broadcast to (N,N)
     # then put back 1 for compatibility on the multiply
     ns = np.asarray(ns)
-    cs = (ns+1)/np.squeeze(jacobi_sequence(ns, .5, .5, np.ones(1, dtype=x.dtype)))
-    seq = jacobi_sequence(ns, .5, .5, x)
+    cs = (ns+1)/np.squeeze(jacobi_seq(ns, .5, .5, np.ones(1, dtype=x.dtype)))
+    seq = jacobi_seq(ns, .5, .5, x)
     return seq*cs[:, np.newaxis]
 
 
@@ -153,7 +153,7 @@ def cheby2_der(n, x):
     return jacobi_der(n, .5, .5, x) * c
 
 
-def cheby2_der_sequence(ns, x):
+def cheby2_der_seq(ns, x):
     """Partial derivative w.r.t. x of Chebyshev polynomials of the second kind of orders ns.
 
     Faster than chevy2_der in a loop.
@@ -174,8 +174,8 @@ def cheby2_der_sequence(ns, x):
 
     """
     ns = np.asarray(ns)
-    cs = (ns + 1)/np.squeeze(jacobi_sequence(ns, .5, .5, np.ones(1, dtype=x.dtype)))
-    seq = jacobi_der_sequence(ns, .5, .5, x)
+    cs = (ns + 1)/np.squeeze(jacobi_seq(ns, .5, .5, np.ones(1, dtype=x.dtype)))
+    seq = jacobi_der_seq(ns, .5, .5, x)
     return seq*cs[:, np.newaxis]
 
 
@@ -194,7 +194,7 @@ def cheby3(n, x):
     return jacobi(n, -.5, .5, x) * c
 
 
-def cheby3_sequence(ns, x):
+def cheby3_seq(ns, x):
     """Chebyshev polynomials of the third kind of orders ns.
 
     Faster than chevy1 in a loop.
@@ -215,8 +215,8 @@ def cheby3_sequence(ns, x):
 
     """
     ns = list(ns)
-    cs = 1/jacobi_sequence(ns, -.5, .5, np.ones(1, dtype=x.dtype))
-    seq = jacobi_sequence(ns, -.5, .5, x)
+    cs = 1/jacobi_seq(ns, -.5, .5, np.ones(1, dtype=x.dtype))
+    seq = jacobi_seq(ns, -.5, .5, x)
     return seq*cs
 
 
@@ -235,7 +235,7 @@ def cheby3_der(n, x):
     return jacobi_der(n, -0.5, 0.5, x) * c
 
 
-def cheby3_der_sequence(ns, x):
+def cheby3_der_seq(ns, x):
     """Partial derivative w.r.t. x of Chebyshev polynomials of the third kind of orders ns.
 
     Faster than chevy1_der in a loop.
@@ -256,8 +256,8 @@ def cheby3_der_sequence(ns, x):
 
     """
     ns = list(ns)
-    cs = 1/jacobi_sequence(ns, -.5, .5, np.ones(1, dtype=x.dtype))
-    seq = jacobi_der_sequence(ns, -.5, .5, x)
+    cs = 1/jacobi_seq(ns, -.5, .5, np.ones(1, dtype=x.dtype))
+    seq = jacobi_der_seq(ns, -.5, .5, x)
     return seq*cs
 
 
@@ -276,7 +276,7 @@ def cheby4(n, x):
     return jacobi(n, .5, -.5, x) * c
 
 
-def cheby4_sequence(ns, x):
+def cheby4_seq(ns, x):
     """Chebyshev polynomials of the fourth kind of orders ns.
 
     Faster than chevy1 in a loop.
@@ -297,8 +297,8 @@ def cheby4_sequence(ns, x):
 
     """
     ns = np.asarray(ns)
-    cs = (2*ns+1)/np.squeeze(jacobi_sequence(ns, .5, -.5, np.ones(1, dtype=x.dtype)))
-    seq = jacobi_sequence(ns, .5, -.5, x)
+    cs = (2*ns+1)/np.squeeze(jacobi_seq(ns, .5, -.5, np.ones(1, dtype=x.dtype)))
+    seq = jacobi_seq(ns, .5, -.5, x)
     return seq*cs[:, np.newaxis]
 
 
@@ -317,7 +317,7 @@ def cheby4_der(n, x):
     return jacobi_der(n, 0.5, -0.5, x) * c
 
 
-def cheby4_der_sequence(ns, x):
+def cheby4_der_seq(ns, x):
     """Partial derivative w.r.t. x of Chebyshev polynomials of the fourth kind of orders ns.
 
     Faster than chevy1_der in a loop.
@@ -338,6 +338,6 @@ def cheby4_der_sequence(ns, x):
 
     """
     ns = np.asarray(ns)
-    cs = (2*ns+1)/np.squeeze(jacobi_sequence(ns, .5, -.5, np.ones(1, dtype=x.dtype)))
-    seq = jacobi_der_sequence(ns, .5, -.5, x)
+    cs = (2*ns+1)/np.squeeze(jacobi_seq(ns, .5, -.5, np.ones(1, dtype=x.dtype)))
+    seq = jacobi_der_seq(ns, .5, -.5, x)
     return seq*cs[:, np.newaxis]

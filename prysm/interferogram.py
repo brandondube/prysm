@@ -704,7 +704,7 @@ class Interferogram(RichData):
 
         """
         from prysm.polynomials import (
-            zernike_nm_sequence,
+            zernike_nm_seq,
             fringe_to_nm,
             lstsq,
             sum_of_2d_modes
@@ -725,7 +725,7 @@ class Interferogram(RichData):
         data[mask] = np.nan
 
         nms = [fringe_to_nm(j) for j in range(1, 38)]  # 1 => 37; 36 terms
-        basis = list(zernike_nm_sequence(nms, r, t, norm=False))  # slightly faster without norm, no need for pvr
+        basis = zernike_nm_seq(nms, r, t, norm=False)  # slightly faster without norm, no need for pvr
         coefs = lstsq(basis, data)
 
         projected = sum_of_2d_modes(basis, coefs)

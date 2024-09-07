@@ -5,7 +5,7 @@ import numpy as truenp
 from prysm.mathops import np  # NOQA
 from prysm.coordinates import optimize_xy_separable
 
-from .dickson import dickson1_sequence
+from .dickson import dickson1_seq
 
 
 def j_to_xy(j):
@@ -84,13 +84,13 @@ def j_to_xy(j):
     return x, y
 
 
-def xy_polynomial_sequence(mns, x, y, cartesian_grid=True):
-    """Contemporary XY monomial sequence.
+def xy_polynomial_seq(mns, x, y, cartesian_grid=True):
+    """Contemporary XY monomial seq.
 
     Parameters
     ----------
     mns : iterable of length 2 vectors
-        sequence [(m1, n1), (m2, n2), ...]
+        seq [(m1, n1), (m2, n2), ...]
     x : numpy.ndarray
         x coordinates
     y : numpy.ndarray
@@ -115,8 +115,8 @@ def xy_polynomial_sequence(mns, x, y, cartesian_grid=True):
     ms = truenp.arange(0, maxm+1)
     ns = truenp.arange(0, maxn+1)
     # dicksons with alpha=0 are the monomials
-    x_seq = list(dickson1_sequence(ms, 0, x))
-    y_seq = list(dickson1_sequence(ns, 0, y))
+    x_seq = list(dickson1_seq(ms, 0, x))
+    y_seq = list(dickson1_seq(ns, 0, y))
 
     out = []
     for m, n in mns:

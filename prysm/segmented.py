@@ -452,6 +452,30 @@ class CompositeKeystoneAperture:
                           segment_basis, segment_orders,
                           center_basis_kwargs=None, segment_basis_kwargs=None,
                           rotate_xyaxes=False):
+        """Prepare the polynomial bases for per-segment phase errors.
+
+        Parameters
+        ----------
+        basis_func : callable
+            a function with signature basis_func(orders, [x, y or r, t], **kwargs)
+            for example, zernike_nm_sequence from prysm.polyomials fits the bill
+        orders : iterable
+            sequence of polynomial orders or indices.
+            for example, zernike_nm_sequence may be combined with a monoindexing
+            function as e.g. orders=[noll_to_nm(j) for j in range(3,12)]
+        basis_func_kwargs : dict
+            any keyword arguments to pass to basis_func.  The spatial coordinates
+            will already be passed based on inspection of the function signature
+            and should not be attempted to be included here
+        normalization_radius : float
+            the normaliation radius to use to convert local surface coordinates
+            to normalized coordinates for an orthogonal polynomial.
+            if None, defaults to the half segment vertex to vertex distance,
+            v to v is 2/sqrt(3) times the segment diameter given in the constructor
+            if basis_func does not take arguments (r, t), the radius is assumed
+            to be equal in X and Y
+
+        """
         if center_basis_kwargs is None:
             center_basis_kwargs = {}
 

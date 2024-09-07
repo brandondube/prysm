@@ -5,72 +5,72 @@ from prysm.mathops import np
 
 from .jacobi import (  # NOQA
     jacobi,
-    jacobi_sequence,
+    jacobi_seq,
     jacobi_der,
-    jacobi_der_sequence,
+    jacobi_der_seq,
     jacobi_sum_clenshaw,
     jacobi_sum_clenshaw_der
 )
 from .cheby import (  # NOQA
     cheby1,
-    cheby1_sequence,
+    cheby1_seq,
     cheby1_der,
-    cheby1_der_sequence,
+    cheby1_der_seq,
     cheby2,
-    cheby2_sequence,
+    cheby2_seq,
     cheby2_der,
-    cheby2_der_sequence,
+    cheby2_der_seq,
     cheby3,
-    cheby3_sequence,
+    cheby3_seq,
     cheby3_der,
-    cheby3_der_sequence,
+    cheby3_der_seq,
     cheby4,
-    cheby4_sequence,
+    cheby4_seq,
     cheby4_der,
-    cheby4_der_sequence,
+    cheby4_der_seq,
 )
 from .legendre import (  # NOQA
     legendre,
-    legendre_sequence,
+    legendre_seq,
     legendre_der,
-    legendre_der_sequence,
+    legendre_der_seq,
 )  # NOQA
 from .hermite import (  # NOQA
     hermite_He,
-    hermite_He_sequence,
+    hermite_He_seq,
     hermite_He_der,
-    hermite_He_der_sequence,
+    hermite_He_der_seq,
     hermite_H,
-    hermite_H_sequence,
+    hermite_H_seq,
     hermite_H_der,
-    hermite_H_der_sequence,
+    hermite_H_der_seq,
 )
 from .qpoly import (  # NOQA
     Qbfs,
-    Qbfs_sequence,
+    Qbfs_seq,
     Qcon,
-    Qcon_sequence,
+    Qcon_seq,
     Q2d,
-    Q2d_sequence,
+    Q2d_seq,
 )
 from .dickson import (  # NOQA
     dickson1,
-    dickson1_sequence,
+    dickson1_seq,
     dickson2,
-    dickson2_sequence
+    dickson2_seq
 )
 from .xy import (  # NOQA
     j_to_xy,
     xy_polynomial,
-    xy_polynomial_sequence,
+    xy_polynomial_seq,
 )
 
 from .zernike import (  # NOQA
     zernike_norm,
     zernike_nm,
-    zernike_nm_sequence,
+    zernike_nm_seq,
     zernike_nm_der,
-    zernike_nm_der_sequence,
+    zernike_nm_der_seq,
     zernikes_to_magnitude_angle,
     zernikes_to_magnitude_angle_nmkey,
     zero_separation as zernike_zero_separation,
@@ -92,7 +92,7 @@ def sum_of_2d_modes(modes, weights):
     Parameters
     ----------
     modes : iterable
-        sequence of ndarray of shape (k, m, n);
+        seq of ndarray of shape (k, m, n);
         a list of length k with elements of shape (m,n) works
     weights : numpy.ndarray
         weight of each mode
@@ -125,7 +125,7 @@ def sum_of_2d_modes_backprop(modes, databar):
     Parameters
     ----------
     modes : iterable
-        sequence of ndarray of shape (k, m, n);
+        seq of ndarray of shape (k, m, n);
         a list of length k with elements of shape (m,n) works
     databar : numpy.ndarray
         partial gradient backpropated up to the return of sum_of_2d_modes
@@ -188,7 +188,7 @@ def lstsq(modes, data):
     Parameters
     ----------
     modes : iterable
-        modes to fit; sequence of ndarray of shape (m, n);
+        modes to fit; seq of ndarray of shape (m, n);
         array of shape (k, m, n), k=num modes, (m,n) = spatial domain is best
     data : numpy.ndarray
         data to fit, of shape (m, n)
@@ -241,5 +241,31 @@ def normalize_modes(modes, mask, to='std'):
 
     modes_masked = modes[:, mask]
     norms = func(modes_masked, axis=1)
+    norms[norms < 1e-9] = 1.  # loophole for piston
     # newaxes for correct numpy broadcast semantics
     return modes * (1/norms[:, np.newaxis, np.newaxis])
+
+
+def orthogonalize_modes(modes, mask):
+    """Use a Gram-Schmidt like process to orthogonalize modes over mask.
+
+    Parameters
+    ----------
+    modes : ndarray
+        array of shape (k, m, n) to scale
+    mask : ndarray
+        2D boolean array, True in the interior of the appropriate domain
+
+    Returns
+    -------
+    ndarray
+        orthogonal modes
+
+    """
+    basis = modes[:, mask]
+    Q, R = np.linalg.qr(basis.T)
+    sgn = np.sign(np.diag(R))  # modes can flip, undo that
+    Qmod = Q*sgn
+    out = np.zeros_like(modes)
+    out[:, mask] = Qmod.T
+    return out

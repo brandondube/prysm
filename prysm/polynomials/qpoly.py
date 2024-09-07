@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from scipy import special
 
-from .jacobi import jacobi, jacobi_sequence, jacobi_sum_clenshaw_der
+from .jacobi import jacobi, jacobi_seq, jacobi_sum_clenshaw_der
 
 from prysm.mathops import np, kronecker, gamma, sign
 from prysm.conf import config
@@ -137,7 +137,7 @@ def change_basis_Qbfs_to_Pn(cs):
     Parameters
     ----------
     cs : iterable
-        sequence of polynomial coefficients, from order n=0..len(cs)-1
+        seq of polynomial coefficients, from order n=0..len(cs)-1
 
     Returns
     -------
@@ -377,7 +377,7 @@ def compute_z_zprime_Qcon(coefs, u, usq):
     return S, Sprime
 
 
-def Qbfs_sequence(ns, x):
+def Qbfs_seq(ns, x):
     """Qbfs polynomials of orders ns at point(s) x.
 
     Parameters
@@ -396,7 +396,7 @@ def Qbfs_sequence(ns, x):
 
     """
     # see the leading comment of Qbfs for some explanation of this code
-    # and prysm:jacobi.py#jacobi_sequence the "_sequence" portion
+    # and prysm:jacobi.py#jacobi_seq the "_seq" portion
 
     ns = list(ns)
     min_i = 0
@@ -483,7 +483,7 @@ def Qcon(n, x):
     return Pn * x ** 4
 
 
-def Qcon_sequence(ns, x):
+def Qcon_seq(ns, x):
     """Qcon polynomials of orders ns at point(s) x.
 
     Parameters
@@ -504,7 +504,7 @@ def Qcon_sequence(ns, x):
     xx = x ** 2
     xx = 2 * xx - 1
     x4 = x ** 4
-    Pns = jacobi_sequence(ns, 0, 4, xx)
+    Pns = jacobi_seq(ns, 0, 4, xx)
     return Pns * x4
 
 
@@ -780,8 +780,8 @@ def Q2d(n, m, r, t):
     return Qn * prefix  # NOQA
 
 
-def Q2d_sequence(nms, r, t):
-    """Sequence of 2D-Q polynomials.
+def Q2d_seq(nms, r, t):
+    """Seq of 2D-Q polynomials.
 
     Parameters
     ----------
@@ -802,7 +802,7 @@ def Q2d_sequence(nms, r, t):
     """
     # see Q2d for general sense of this algorithm.
     # the way this one works is to compute the maximum N for each |m|, and then
-    # compute the recurrence for each of those sequences and storing it.  A loop
+    # compute the recurrence for each of those seqs and storing it.  A loop
     # is then iterated over the input nms, and selected value with appropriate
     # prefixes / other terms yielded.
 
@@ -838,12 +838,12 @@ def Q2d_sequence(nms, r, t):
         if absm in m_has_pos:
             cos_scales[absm] = np.cos(absm * t)
 
-    sequences = {}
+    seqs = {}
     for m, N in max_ns.items():
         if m == 0:
-            sequences[m] = list(Qbfs_sequence(range(N+1), r))
+            seqs[m] = list(Qbfs_seq(range(N+1), r))
         else:
-            sequences[m] = []
+            seqs[m] = []
             P0 = 1/2
             if m == 1:
                 P1 = 1 - x/2
@@ -852,14 +852,14 @@ def Q2d_sequence(nms, r, t):
 
             f0 = f_q2d(0, m)
             Q0 = 1 / (2 * f0)
-            sequences[m].append(Q0)
+            seqs[m].append(Q0)
             if N == 0:
                 continue
 
             g0 = g_q2d(0, m)
             f1 = f_q2d(1, m)
             Q1 = (P1 - g0 * Q0) * (1/f1)
-            sequences[m].append(Q1)
+            seqs[m].append(Q1)
             if N == 1:
                 continue
             # everything above here works, or at least everything in the returns works
@@ -874,8 +874,8 @@ def Q2d_sequence(nms, r, t):
                 g2 = g_q2d(2, m)
                 f3 = f_q2d(3, m)
                 Q3 = (P3 - g2 * Q2) * (1/f3)
-                sequences[m].append(Q2)
-                sequences[m].append(Q3)
+                seqs[m].append(Q2)
+                seqs[m].append(Q3)
                 # Q2, Q3 correct
                 if N <= 3:
                     continue
@@ -894,7 +894,7 @@ def Q2d_sequence(nms, r, t):
                 gnm1 = g_q2d(nn-1, m)
                 fn = f_q2d(nn, m)
                 Qn = (Pn - gnm1 * Qnm1) * (1/fn)
-                sequences[m].append(Qn)
+                seqs[m].append(Qn)
 
                 Pnm2, Pnm1 = Pnm1, Pn
                 Qnm1 = Qn
@@ -909,10 +909,10 @@ def Q2d_sequence(nms, r, t):
             else:
                 prefix = cos_scales[m] * u_scales[m]
 
-            out[j] = sequences[abs(m)][n] * prefix
+            out[j] = seqs[abs(m)][n] * prefix
             j += 1
         else:
-            out[j] = sequences[0][n]
+            out[j] = seqs[0][n]
             j += 1
 
     return out
@@ -930,7 +930,7 @@ def change_of_basis_Q2d_to_Pnm(cns, m):
     Parameters
     ----------
     cns : iterable
-        sequence of polynomial coefficients, from order n=0..len(cs)-1 and a given
+        seq of polynomial coefficients, from order n=0..len(cs)-1 and a given
         m (not |m|, but m, i.e. either "-2" or "+2" but not both)
     m : int
         azimuthal order
@@ -1203,7 +1203,7 @@ def Q2d_nm_c_to_a_b(nms, coefs):
     Parameters
     ----------
     nms : iterable
-        sequence of [(n1, m1), (n2, m2), ...]
+        seq of [(n1, m1), (n2, m2), ...]
         negative m encodes "sine term" while positive m encodes "cosine term"
     coefs : iterable
         same length as nms, coefficients for mode n_m
