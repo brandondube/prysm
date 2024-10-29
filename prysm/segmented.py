@@ -59,7 +59,7 @@ def hex_neighbor(h, direction):
 
 
 def hex_to_xy(h, radius, rot=90):
-    """Convert hexagon coordinate to (x,y), if all hexagons have a given radius and rotation."""
+    """Convert hexagon coordinate to (x,y), if all hexagons have a given radius and rotation."""  # NOQA - length
     if rot == 90:
         x = 3/2 * h.q
         y = truenp.sqrt(3)/2 * h.q + truenp.sqrt(3) * h.r
@@ -89,7 +89,7 @@ def hex_ring(radius):
 
     # rotate one so that the first element is 'north'
     for _ in range(radius):
-        results.append(results.pop(0))  # roll < radius > elements so that the first element is "north"
+        results.append(results.pop(0))  # roll < radius > elements so that the first element is "north"  # NOQA - length
 
     return results
 
@@ -128,8 +128,8 @@ def _local_window(cy, cx, center, dx, samples_per_seg, x, y):
 class CompositeHexagonalAperture:
     """An aperture composed of several hexagonal segments."""
 
-    def __init__(self, x, y, rings, segment_diameter, segment_separation, segment_angle=90, exclude=()):
-        """Create a new CompositeHexagonalAperture.
+    def __init__(self, x, y, rings, segment_diameter, segment_separation, segment_angle=90, exclude=()):  # NOQA - length
+        """Create a new CompositeHexagonalAperture.  # NOQA - length
 
         Note that __init__ is relatively computationally expensive and hides a lot of work.
 
@@ -162,7 +162,7 @@ class CompositeHexagonalAperture:
             self.local_masks,
             self.segment_ids,
             self.amp
-         ) = _composite_hexagonal_aperture(rings, segment_diameter, segment_separation,
+         ) = _composite_hexagonal_aperture(rings, segment_diameter, segment_separation,  # NOQA
                                            x, y, segment_angle, exclude)
 
         self.x = x
@@ -172,8 +172,8 @@ class CompositeHexagonalAperture:
         self.segment_angle = segment_angle
         self.exclude = exclude
 
-    def prepare_opd_bases(self, basis_func, orders, basis_func_kwargs=None, normalization_radius=None):
-        """Prepare the polynomial bases for per-segment phase errors.
+    def prepare_opd_bases(self, basis_func, orders, basis_func_kwargs=None, normalization_radius=None):  # NOQA - length
+        """Prepare the polynomial bases for per-segment phase errors.  # NOQA - length
 
         Parameters
         ----------
@@ -234,7 +234,7 @@ class CompositeHexagonalAperture:
                 if key not in gridcache:
                     r, t = cart_to_polar(x, y)
                     r /= nr
-                    basis = list(basis_func(orders, r=r, t=t, **basis_func_kwargs))
+                    basis = list(basis_func(orders, r=r, t=t, **basis_func_kwargs))  # NOQA - length
                     basis = np.asarray(basis)
                     gridcache[key] = r, t
                     polycache[key] = basis
@@ -252,7 +252,7 @@ class CompositeHexagonalAperture:
                 if key not in gridcache:
                     xx = x / normalization_radius[0]
                     yy = y / normalization_radius[1]
-                    basis = list(basis_func(orders, x=xx, y=yy, **basis_func_kwargs))
+                    basis = list(basis_func(orders, x=xx, y=yy, **basis_func_kwargs))  # NOQA - length
                     basis = np.asarray(basis)
                     gridcache[key] = xx, yy
                     polycache[key] = basis
@@ -268,7 +268,7 @@ class CompositeHexagonalAperture:
         return grids, bases
 
     def compose_opd(self, coefs, out=None):
-        """Compose per-segment optical path errors using the basis from prepare_opd_bases.
+        """Compose per-segment optical path errors using the basis from prepare_opd_bases.  # NOQA - length
 
         Parameters
         ----------
@@ -288,7 +288,7 @@ class CompositeHexagonalAperture:
         """
         if out is None:
             out = np.zeros_like(self.x)
-        for win, mask, base, c in zip(self.windows, self.local_masks, self.opd_bases, coefs):
+        for win, mask, base, c in zip(self.windows, self.local_masks, self.opd_bases, coefs):  # NOQA - length
             tile = sum_of_2d_modes(base, c)
             tile *= mask
             out[win] += tile
@@ -296,7 +296,7 @@ class CompositeHexagonalAperture:
         return out
 
 
-def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x, y, segment_angle=90, exclude=(0,)):
+def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x, y, segment_angle=90, exclude=(0,)):    # NOQA - length
     if segment_angle not in {0, 90}:
         raise ValueError('can only synthesize composite apertures with hexagons along a cartesian axis')
 
@@ -375,9 +375,9 @@ def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x
 class CompositeKeystoneAperture:
     """Composite apertures with keystone shaped segments."""
     def __init__(self, x, y, center_circle_diameter,
-                 rings, ring_radius, segments_per_ring, segment_gap,
+                 rings, ring_radius, segments_per_ring, radial_gap, azimuthal_gap=None,    # NOQA - length
                  rotation_per_ring=None):
-        """Create a new CompositeKeystoneAperture.
+        """Create a new CompositeKeystoneAperture.  # NOQA - length
 
         Parameters
         ----------
@@ -387,9 +387,6 @@ class CompositeKeystoneAperture:
             array of y sample positions, of shape (m, n)
         center_circle_diameter : float
             diameter of the circular supersegment at the center of the aperture
-        segment_gap : float
-            segment gap, same units as x and y; has the sense of the full gap,
-            not the radius of the gap
         rings : int
             number of rings in the aperture
         ring_radius : float or Iterable
@@ -398,6 +395,10 @@ class CompositeKeystoneAperture:
         segments_per_ring : int or Iterable
             number of segments in a given ring.  Can be an iterable for variable
             segment count in each ring
+        radial_gap : float
+            gap between each ring radially in the aperture
+        azimuthal_gap : float
+            gap between segments in each ring, if None same as radial_gap
         rotation_per_ring : float or Iterable, optional
             the rotation of each ring.  Rotation is used to avoid alignment
             of segment gaps into radial lines, when fractal segment divisions
@@ -410,11 +411,18 @@ class CompositeKeystoneAperture:
             by (360/16)=22.5 degrees so that the gaps do not align
 
         """
-        pak = _composite_keystone_aperture(center_circle_diameter=center_circle_diameter,
-                                           segment_gap=segment_gap, x=x, y=y,
-                                           rings=rings, ring_radius=ring_radius,
-                                           segments_per_ring=segments_per_ring,
-                                           rotation_per_ring=rotation_per_ring)
+        if azimuthal_gap is None:
+            azimuthal_gap = radial_gap
+
+        # def _composite_keystone_aperture(x, y, center_circle_diameter,
+        #                          rings, ring_radius, segments_per_ring,
+        #                          rotation_per_ring, radial_gap, azimuthal_gap):
+
+        pak = _composite_keystone_aperture(x=x, y=y,
+            center_circle_diameter=center_circle_diameter,  # NOQA
+            rings=rings, ring_radius=ring_radius, segments_per_ring=segments_per_ring,  # NOQA
+            radial_gap=radial_gap, azimuthal_gap=azimuthal_gap,  # NOQA
+            rotation_per_ring=rotation_per_ring)  # NOQA
 
         cs = pak['center_segment']
         ks = pak['keystones']
@@ -442,7 +450,8 @@ class CompositeKeystoneAperture:
         self.x = x
         self.y = y
         self.center_circle_diameter = center_circle_diameter
-        self.segment_gap = segment_gap
+        self.radial_gap = radial_gap
+        self.azimuthal_gap = azimuthal_gap
         self.rings = rings
         self.ring_radius = ring_radius
         self.segments_per_ring = segments_per_ring
@@ -452,7 +461,7 @@ class CompositeKeystoneAperture:
                           segment_basis, segment_orders,
                           center_basis_kwargs=None, segment_basis_kwargs=None,
                           rotate_xyaxes=False):
-        """Prepare the polynomial bases for per-segment phase errors.
+        """Prepare the polynomial bases for per-segment phase errors.  # NOQA - length
 
         Parameters
         ----------
@@ -492,7 +501,7 @@ class CompositeKeystoneAperture:
             nr = self.center_circle_diameter/2
             rr = self.center_rr / nr
             tt = self.center_tt
-            basis = list(center_basis(center_orders, r=rr, t=tt, **center_basis_kwargs))
+            basis = list(center_basis(center_orders, r=rr, t=tt, **center_basis_kwargs))  # NOQA - length
             basis = np.asarray(basis)
             grids.append((rr, tt))
             bases.append(basis)
@@ -500,7 +509,7 @@ class CompositeKeystoneAperture:
             nr = self.center_circle_diameter/2
             xx = self.center_xx / nr
             yy = self.center_yy
-            basis = list(center_basis(center_orders, x=xx, y=yy, **center_basis_kwargs))
+            basis = list(center_basis(center_orders, x=xx, y=yy, **center_basis_kwargs))  # NOQA - length
             basis = np.asarray(basis)
             grids.append((rr, tt))
             bases.append(basis)
@@ -517,7 +526,7 @@ class CompositeKeystoneAperture:
                 nr = min(xext, yext) / 2  # /2; diameter -> radius
                 r, t = cart_to_polar(x, y)
                 r /= nr
-                basis = list(segment_basis(segment_orders, r=r, t=t, **segment_basis_kwargs))
+                basis = list(segment_basis(segment_orders, r=r, t=t, **segment_basis_kwargs))  # NOQA - length
                 basis = np.asarray(basis)
                 grids.append((r, t))
                 bases.append(basis)
@@ -556,8 +565,8 @@ class CompositeKeystoneAperture:
                     # first move into the local frame via rotation
                     xcorner, ycorner = self.segment_corners[i]
                     xcenter, ycenter = self.segment_ids_ods[i]
-                    rcorner, tcorner = cart_to_polar(xcorner, ycorner, vec_to_grid=False)
-                    rcenter, tcenter = cart_to_polar(xcenter, ycenter, vec_to_grid=False)
+                    rcorner, tcorner = cart_to_polar(xcorner, ycorner, vec_to_grid=False)  # NOQA - length
+                    rcenter, tcenter = cart_to_polar(xcenter, ycenter, vec_to_grid=False)  # NOQA - length
                     tcorner -= t_offset
                     tcenter -= t_offset
                     xcorner, ycorner = polar_to_cart(rcorner, tcorner)
@@ -587,7 +596,7 @@ class CompositeKeystoneAperture:
                     xx = x / (xext/2)
                     yy = y / (yext/2)
 
-                basis = list(segment_basis(segment_orders, x=xx, y=yy, **segment_basis_kwargs))
+                basis = list(segment_basis(segment_orders, x=xx, y=yy, **segment_basis_kwargs))  # NOQA - length
                 basis = np.asarray(basis)
 
                 grids.append((xx, yy))
@@ -633,9 +642,9 @@ class CompositeKeystoneAperture:
         return out
 
 
-def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
+def _composite_keystone_aperture(x, y, center_circle_diameter,
                                  rings, ring_radius, segments_per_ring,
-                                 rotation_per_ring=None):
+                                 rotation_per_ring, radial_gap, azimuthal_gap):
     # one of the things this function returns are the "edges" of a segment
     #
     # consider the ASCII art,
@@ -658,7 +667,7 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
     #
     # the function also returns the center, which is the radial and azimuthal
     # midpoint of the segment
-    if isinstance(rotation_per_ring, numbers.Number) or rotation_per_ring is None:
+    if isinstance(rotation_per_ring, numbers.Number) or rotation_per_ring is None:  # NOQA - length
         rotation_per_ring = [rotation_per_ring] * rings
 
     if isinstance(ring_radius, numbers.Number):
@@ -667,8 +676,8 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
     if isinstance(segments_per_ring, numbers.Number):
         segments_per_ring = [segments_per_ring] * rings
 
-    if isinstance(segment_gap, numbers.Number):
-        segment_gap = [segment_gap] * rings
+    if isinstance(radial_gap, numbers.Number):
+        radial_gap = [radial_gap] * rings
 
     center_radius = center_circle_diameter / 2
 
@@ -706,7 +715,7 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
     outer_radius = center_radius
 
     segment_id = 0
-    iterable = (segments_per_ring, ring_radius, segment_gap, rotation_per_ring)
+    iterable = (segments_per_ring, ring_radius, radial_gap, rotation_per_ring)
     # for ring in range(len(segments_per_ring)):
     for (nsegments, local_radius, gap, rotation) in zip(*iterable):
         inner_radius = outer_radius + gap
@@ -718,7 +727,7 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
         if rotation is None:
             rotation = arc_per_seg
 
-        segment_angles = np.arange(nsegments, dtype=float) * arc_per_seg + rotation
+        segment_angles = np.arange(nsegments, dtype=float) * arc_per_seg + rotation  # NOQA
         segment_angles = np.radians(segment_angles) - np.pi
 
         for angle in segment_angles:
@@ -819,7 +828,7 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
             maxy = max(yy[1], yy[3])
             rangex = maxx - minx
             rangey = maxy - miny
-            samples = tuple(math.ceil(v) for v in (rangex/dx + gap/dx, rangey/dx + gap/dx))
+            samples = tuple(math.ceil(v) for v in (rangex/dx + gap/dx, rangey/dx + gap/dx))  # NOQA - length
             cx = minx + rangex/2
             cy = miny + rangey/2
 
@@ -828,7 +837,7 @@ def _composite_keystone_aperture(center_circle_diameter, segment_gap, x, y,
             yy = y[window]
             rr = r[window]
             # TODO: this can be optimized with fewer bitwise inversions?
-            spid = ~spider(1, gap, xx, yy, rotation=hi, rotation_is_rad=True)
+            spid = ~spider(1, azimuthal_gap, xx, yy, rotation=hi, rotation_is_rad=True)  # NOQA - length
 
             low_cut = ~circle(inner_radius, rr)
             hi_cut = circle(outer_radius, rr)
