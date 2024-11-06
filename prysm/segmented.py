@@ -12,6 +12,7 @@ from .coordinates import cart_to_polar, polar_to_cart
 from .polynomials import sum_of_2d_modes
 
 FLAT_TO_FLAT_TO_VERTEX_TO_VERTEX = 2 / truenp.sqrt(3)
+VERTEX_TO_VERTEX_TO_FLAT_TO_FLAT = 1 / FLAT_TO_FLAT_TO_VERTEX_TO_VERTEX
 
 
 Hex = namedtuple('Hex', ['q', 'r', 's'])
@@ -62,9 +63,9 @@ def hex_to_xy(h, radius, rot=90):
     """Convert hexagon coordinate to (x,y), if all hexagons have a given radius and rotation."""  # NOQA - length
     if rot == 90:
         x = 3/2 * h.q
-        y = truenp.sqrt(3)/2 * h.q + truenp.sqrt(3) * h.r
+        y = VERTEX_TO_VERTEX_TO_FLAT_TO_FLAT * h.q + truenp.sqrt(3) * h.r
     else:
-        x = truenp.sqrt(3) * h.q + truenp.sqrt(3)/2 * h.r
+        x = truenp.sqrt(3) * h.q + VERTEX_TO_VERTEX_TO_FLAT_TO_FLAT * h.r
         y = 3/2 * h.r
     return x*radius, y*radius
 
@@ -301,6 +302,11 @@ def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x
         raise ValueError('can only synthesize composite apertures with hexagons along a cartesian axis')
 
     segment_vtov = segment_diameter * FLAT_TO_FLAT_TO_VERTEX_TO_VERTEX
+    # segment_separation = segment_separation * FLAT_TO_FLAT_TO_VERTEX_TO_VERTEX
+
+    # below, segments are two radii apart.  Convert flat-to-flat gap to V-to-V,
+    # then divide by two for "2r" separation
+    segment_separation = (segment_separation * FLAT_TO_FLAT_TO_VERTEX_TO_VERTEX)/2
     rseg = segment_vtov / 2
 
     # center segment
@@ -340,7 +346,7 @@ def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x
         windows = []
     for i in range(1, rings+1):
         hexes = hex_ring(i)
-        centers = [hex_to_xy(h, rseg+(segment_separation/2), rot=segment_angle) for h in hexes]
+        centers = [hex_to_xy(h, rseg+segment_separation, rot=segment_angle) for h in hexes]
         ids = np.arange(segment_id+1, segment_id+1+len(centers), dtype=int)
         id_mask = ~np.isin(ids, exclude, assume_unique=True)
         valid_ids = ids[id_mask]
@@ -717,6 +723,7 @@ def _composite_keystone_aperture(x, y, center_circle_diameter,
     segment_id = 0
     iterable = (segments_per_ring, ring_radius, radial_gap, rotation_per_ring)
     # for ring in range(len(segments_per_ring)):
+
     for (nsegments, local_radius, gap, rotation) in zip(*iterable):
         inner_radius = outer_radius + gap
         outer_radius = inner_radius + local_radius
