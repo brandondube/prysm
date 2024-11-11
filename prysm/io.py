@@ -5,6 +5,7 @@ import ctypes
 import struct
 import datetime
 import shutil
+import warnings
 
 from pathlib import Path
 
@@ -198,11 +199,35 @@ def read_zygo_dat(file, multi_intensity_action='first'):
 
     # little-endian camera data, not sure if always need to byteswap, may break for some users...
     dt = np.dtype(np.int32).newbyteorder('>')
-    phase_raw = np.frombuffer(contents, offset=header_len + ilen * 2, count=plen, dtype=dt)
+    try:
+        phase_raw = np.frombuffer(contents, offset=header_len + ilen * 2, count=plen, dtype=dt)
+    except ValueError as e:
+        # malformed dat files from some programs (Durango)
+        # "buffer is smaller than requested size"
+        # typically, zero-padded region is truncated for some reason.
+        # zero pad the buffer and warn the user
+        warnings.warn('provided file was malformed (truncated) - appending zeros to phase data')
+        offset = header_len + ilen * 2
+        valid = len(contents) - offset
+        missing_buf = bytes(plen*4 - valid)
+        contents2 = contents[offset:] + missing_buf  # + is append zeros
+        phase_raw = np.frombuffer(contents2, count=plen, dtype=dt)
+        phase_raw = np.copy(phase_raw)  # remove read only
+        backtrack = math.ceil(len(missing_buf)/4)
+        phase_raw[-backtrack:] = ZYGO_INVALID_PHASE
+
+    phase_raw = np.flipud(phase_raw)
     phase = phase_raw.astype(config.precision).reshape((ph, pw))
     phase[phase >= ZYGO_INVALID_PHASE] = np.nan
-    phase *= (meta['scale_factor'] * meta['obliquity_factor'] * meta['wavelength'] /
-              ZYGO_PHASE_RES_FACTORS[meta['phase_res']]) * 1e9  # unit m to nm
+    res = meta['phase_res']
+    S = meta['scale_factor']
+    W = meta['wavelength']
+    O = meta['obliquity_factor']
+    R = ZYGO_PHASE_RES_FACTORS[res]
+
+    sf = (W*S*O)/R  # metropro reference guide, pg. 12-6
+
+    phase *= (sf * 1e9)  # unit m to nm
     return {
         'phase': phase,
         'intensity': intensity,
@@ -475,9 +500,17 @@ def write_zygo_dat(file, phase, dx, wavelength=0.6328, intensity=None):
     # (raw*scale_factor*obliquity*wvl)/phase_res_fctr * 1e9
     # so nm -> zygos
     # (1e9*wvl/phase_res_factor/z)  # 1e9/1e6; I use um, they use m
+    phase = np.flipud(phase)
     mask = np.isnan(phase)
-    im = ((phase*1e-3*phase_res_fctr)/(wavelength)).astype(np.int32)
-    im[mask] = 2147483640
+
+    W = wavelength/1e6
+    S = 1.
+    O = 1.
+    R = phase_res_fctr
+    sf_m = (W * S * O)/R  # Metropro manual, pg 12-6
+    sf_nm = sf_m
+    im = (phase/1e9*(1/sf_nm)).astype(np.int32)
+    im[mask] = ZYGO_INVALID_PHASE
 
     dt = np.dtype(np.int32).newbyteorder('>')
     bufphs = im.astype(dt).tobytes(order='C')
