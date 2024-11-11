@@ -540,58 +540,46 @@ class CompositeKeystoneAperture:
             # assume x, y are the kwargs
             for i, (x, y) in enumerate(self.segment_grids):
                 if rotate_xyaxes:
-                    r, t = cart_to_polar(x, y)
                     t_offset = self.segment_rotations[i]
+
+                    r, t = cart_to_polar(x, y)
                     t -= t_offset
                     x, y = polar_to_cart(r, t)
 
-                    # x is the compact axis of the segment,
-                    # y is the long axis
-                    # x is normalized by the gap between od and id
-                    # y is normalized by the gap metween the midpoints
-                    # of the radial edges
-                    # BDD: old strategy, use the edges to figure out extent
-                    # ledge = self.segment_ledges[i]
-                    # redge = self.segment_redges[i]
-                    # rl, tl = cart_to_polar(*ledge, vec_to_grid=False)
-                    # rr, tr = cart_to_polar(*redge, vec_to_grid=False)
-                    # tl -= t_offset
-                    # tr -= t_offset
-                    # xledge, yledge = polar_to_cart(rl, tl)
-                    # xredge, yredge = polar_to_cart(rr, tr)
-                    # yd = yredge - yledge
 
-                    # xnorm = self.segment_radial_diameters[i]/2
-                    # x /= xnorm
-                    # y /= (yd/2)
-                    # xx, yy = x, y
-
-                    # now new strategy:
-                    # use the corners and seams to define things
-                    # first move into the local frame via rotation
+                    # corners have smaller r and OD has larger r, use min corner
+                    # for new x normalization
+                    xc, yc = self.segment_centers[i]
                     xcorner, ycorner = self.segment_corners[i]
                     xcenter, ycenter = self.segment_ids_ods[i]
-                    rcorner, tcorner = cart_to_polar(xcorner, ycorner, vec_to_grid=False)  # NOQA - length
-                    rcenter, tcenter = cart_to_polar(xcenter, ycenter, vec_to_grid=False)  # NOQA - length
-                    tcorner -= t_offset
-                    tcenter -= t_offset
-                    xcorner, ycorner = polar_to_cart(rcorner, tcorner)
-                    xcenter, ycenter = polar_to_cart(rcenter, tcenter)
 
-                    # now find the min and max of everything
-                    # slight complexity in the X normalization
-                    # the center of the normalization
+                    # get the x normalization
+                    xcenter = xcenter - xc
+                    ycenter = ycenter - yc
+                    xcorner = xcorner - xc
+                    ycorner = ycorner - yc
+
+                    rcenter, tcenter = cart_to_polar(xcenter, ycenter, vec_to_grid=False)
+                    tcenter -= t_offset
+                    xcenter, ycenter = cart_to_polar(rcenter, tcenter, vec_to_grid=False)
                     xmax = xcenter.max()
-                    xmin = xcenter.min()
+
+                    rcorner, tcorner = cart_to_polar(xcorner, ycorner, vec_to_grid=False)  # NOQA - length
+                    tcorner -= t_offset
+                    xcorner, ycorner = polar_to_cart(rcorner, tcorner)
+
+                    xmin = xcorner.min()
                     ymin = ycorner.min()
                     ymax = ycorner.max()
-                    xnorm = (xmax-xmin)/2 + (xmin - xcorner.min())
+
+                    xnorm = (xmax-xmin)/2  # + (xmin - xcorner.min())
                     ynorm = (ymax-ymin)/2
-                    # print(f'xmax={xmax:.2f}, xmin={xmin:.2f}, xnorm={xnorm:.2f}')
-                    x /= xnorm
-                    y /= ynorm
-                    xx = x
-                    yy = y
+
+                    xx = x / xnorm
+                    yy = y / ynorm
+
+                    basis = segment_basis(segment_orders, x=xx, y=yy, **segment_basis_kwargs)  # NOQA - length
+                    basis = np.asarray(basis)
                 else:
                     raise ValueError('must rotate xy axes')
 
@@ -602,7 +590,7 @@ class CompositeKeystoneAperture:
                     xx = x / (xext/2)
                     yy = y / (yext/2)
 
-                basis = list(segment_basis(segment_orders, x=xx, y=yy, **segment_basis_kwargs))  # NOQA - length
+                basis = segment_basis(segment_orders, x=xx, y=yy, **segment_basis_kwargs)  # NOQA - length
                 basis = np.asarray(basis)
 
                 grids.append((xx, yy))
