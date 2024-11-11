@@ -18,11 +18,11 @@ def test_segmented_hex_functions():
 def test_segmented_keystone_functions():
     x, y = coordinates.make_xy_grid(256, diameter=8)
     csa = segmented.CompositeKeystoneAperture(x, y,
-        center_circle_diameter=2.4,
-        rings=3,
-        segments_per_ring=[6,12,18],
-        ring_radius=0.9,
-        segment_gap=.007)  # NOQA
+                                              center_circle_diameter=2.4,
+                                              rings=3,
+                                              segments_per_ring=[6, 12, 18],
+                                              ring_radius=0.9,
+                                              radial_gap=.007)  # NOQA
     nms = [polynomials.noll_to_nm(j) for j in [1, 2, 3]]
 
     nms2 = [polynomials.j_to_xy(j) for j in [2, 3, 4, 5]]
