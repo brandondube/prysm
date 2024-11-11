@@ -953,6 +953,7 @@ def read_codev_gridint(file):
     a = a.astype(config.precision) * (1000*wvl/ssz)
     a[mask] = np.nan
     a = a.reshape((n, m))
+    a = np.flipud(a)
     meta = {
         'title': title,
         'wavelength': wvl,
