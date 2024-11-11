@@ -64,7 +64,7 @@ def plot_rays(phist, lw=1, ls='-', c='r', alpha=1, zorder=4, x='z', y='y', fig=N
 def _gather_inputs_for_surface_sag(surf, phist, j, points, y):
     if surf.bounding is None:
         # need to look at the raytrace to see bounding limits
-        p = phist[j+1]  # j+1, first element of phist is the start of the raytrace
+        p = phist[j]  # j+1, first element of phist is the start of the raytrace
         xx = p[..., 0]
         yy = p[..., 1]
         mask = []
@@ -157,7 +157,7 @@ def plot_optics(prescription, phist, mirror_backing=None, points=100,
         if surf.typ == STYPE_REFLECT:
             z = surf.P[2]
             xpt, ypt, mask, ploty = _gather_inputs_for_surface_sag(surf, phist, j, points, y)
-            sag = surf.F(xpt, ypt)
+            sag, *_ = surf.FFp(xpt, ypt)
             sag += z
             sag[mask] = np.nan
             # TODO: mirror backing
@@ -168,7 +168,7 @@ def plot_optics(prescription, phist, mirror_backing=None, points=100,
 
             z = surf.P[2]
             xpt, ypt, mask, ploty = _gather_inputs_for_surface_sag(surf, phist, j, points, y)
-            sag = surf.F(xpt, ypt)
+            sag, *_ = surf.FFp(xpt, ypt)
             sag += z
             sag[mask] = np.nan
 
