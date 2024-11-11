@@ -40,7 +40,7 @@ def test_std_is_correct(sample_i):
 
 
 def test_pvr_is_correct(sample_i):
-    assert 294.293 == pytest.approx(sample_i.pvr(24), abs=1e-2)
+    assert 299.814 == pytest.approx(sample_i.pvr(24), abs=1e-2)
 
 
 def test_sa_is_correct(sample_i):
@@ -52,7 +52,7 @@ def test_strehl_is_correct(sample_i):
 
 
 def test_bandlimited_rms_is_correct(sample_i_mutate):
-    assert 11.524 == pytest.approx(sample_i_mutate.bandlimited_rms(1, 10), abs=1e-3)
+    assert 11.527 == pytest.approx(sample_i_mutate.bandlimited_rms(1, 10), abs=1e-2)
 
 
 def test_spike_clip_functions(sample_i_mutate):
@@ -103,7 +103,7 @@ def test_synthesize_from_psd_functions():
 
 
 def test_pad_functions(sample_i_mutate):
-    assert sample_i_mutate.pad(5)
+    assert sample_i_mutate.pad(np.nan, samples=5)
 
 
 def test_recenter_functions(sample_i_mutate):

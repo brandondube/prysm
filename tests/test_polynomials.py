@@ -243,26 +243,19 @@ def test_zernike_topn_correct():
 
 
 def test_barplot_functions():
-    data = {
-        2: 1,
-        3: 2,
-        4: 3,
-        5: 4,
-        6: 5
-    }
-    fig, ax = polynomials.zernike_barplot(data)
+    js = np.arange(2, 13)
+    coefs = js  # don't need dummy data for test, reduce waste work in CI
+    nms = [polynomials.noll_to_nm(j) for j in js]
+    names = [polynomials.nm_to_name(*nm) for nm in nms]
+    fig, ax = polynomials.zernike_barplot(coefs, names)
     assert fig, ax
 
 
 def test_barplot_magnitudes_functions():
-    data = {
-        2: 1,
-        3: 2,
-        4: 3,
-        5: 4,
-        6: 5
-    }
-    fig, ax = polynomials.zernike_barplot_magnitudes(data)
+    js = np.arange(2, 13)
+    coefs = js  # don't need dummy data for test, reduce waste work in CI
+    nms = [polynomials.noll_to_nm(j) for j in js]
+    fig, ax = polynomials.zernike_barplot_magnitudes(coefs, nms)
     assert fig, ax
 
 
