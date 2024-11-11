@@ -381,7 +381,7 @@ def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x
 class CompositeKeystoneAperture:
     """Composite apertures with keystone shaped segments."""
     def __init__(self, x, y, center_circle_diameter,
-                 rings, ring_radius, segments_per_ring, radial_gap, azimuthal_gap=None,    # NOQA - length
+
                  rotation_per_ring=None):
         """Create a new CompositeKeystoneAperture.  # NOQA - length
 
