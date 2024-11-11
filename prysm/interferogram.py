@@ -15,7 +15,7 @@ from .io import (
     write_zygo_ascii,
     write_zygo_dat,
 )
-from .fttools import forward_ft_unit
+from .fttools import forward_ft_unit, pad2d
 from .coordinates import (
     cart_to_polar,
     broadcast_1d_to_2d,
@@ -840,8 +840,7 @@ class Interferogram(RichData):
 
     def strip_latcal(self):
         """Strip the lateral calibration and revert to pixels."""
-        self.y, self.x = (np.arange(s, dtype=config.precision) for s in self.shape)
-        self.dx = 1
+        self.x, self.y = make_xy_grid(self.data.shape, dx=1)
         self._latcaled = False
         return self
 
@@ -870,16 +869,22 @@ class Interferogram(RichData):
         self._latcaled = True
         return self
 
-    def pad(self, value):
-        """Pad the interferogram with N samples of NaN or zeros.
+    def pad(self, value=np.nan, *, samples=None, shape=None):
+        """Pad the interferogram, using value to fill the periphery.
 
-        NaNs are used if NaNs fill the periphery of the data.  If zeros fill
-        the periphery, zero is used.
+        Exactly one of samples or shape must be provided.
 
         Parameters
         ----------
-        value : int
-            how many samples to pad the data with
+        value : float
+            What to fill the blank space with
+        samples : int or tuple
+            number of samples to pad by;
+            if int, pad each axis equally
+            if tuple, use specified values for (axis0, axis1)
+        shape : int or tuple
+            what shape (array dimension) to pad to, same rule for providing
+            int vs tuple
 
         Returns
         -------
@@ -887,19 +892,18 @@ class Interferogram(RichData):
             self
 
         """
-        npx = value
+        if samples is None and shape is None:
+            raise ValueError('Neither samples nor shape specified')
+        if samples is not None and shape is not None:
+            raise ValueError('Both sampels and shape provided: only one can be given')
 
-        if np.isnan(self.data[0, 0]):
-            fill_val = np.nan
-        else:
-            fill_val = 0
+        if samples is not None:
+            if isinstance(samples, int):
+                samples = (samples, samples)
 
-        s = self.shape
-        out = np.empty((s[0] + 2 * npx, s[1] + 2 * npx), dtype=self.data.dtype)
-        out[:, :] = fill_val
-        out[npx:-npx, npx:-npx] = self.data
-        self.data = out
+            shape = tuple(s+p for s, p in zip(self.data.shape, samples))
 
+        self.data = pad2d(self.data, value=value, out_shape=shape)
         return self.latcal(self.dx)
 
     def spike_clip(self, nsigma=3):
@@ -1003,6 +1007,16 @@ class Interferogram(RichData):
         kernel *= self.bandlimited_rms(upper_limit, None) / wavelength
         return 1 - np.exp(-kernel**2)
 
+    def slope(self):
+        """Returns slope in X, Y, 'non-directional'."""
+        dx = self.dx
+        gy, gx = np.gradient(self.data, dx)
+        gr = np.hypot(gx, gy)
+        rdx = RichData(gx, dx, None)
+        rdy = RichData(gy, dx, None)
+        rdr = RichData(gr, dx, None)
+        return rdx, rdy, rdr
+
     def interferogram(self, visibility=1, passes=2, tilt_waves=(0, 0), interpolation=None, fig=None, ax=None):
         """Create a picture of fringes.
 
@@ -1046,7 +1060,7 @@ class Interferogram(RichData):
                        interpolation=interpolation,
                        clim=(-1, 1),
                        origin='lower')
-        fig.colorbar(im, label=r'Wrapped Phase [$\lambda$]', ax=ax, fraction=0.046)
+        fig.colorbar(im, label='Intensity', ax=ax, fraction=0.046)
         return fig, ax
 
     def save_zygo_ascii(self, file):
