@@ -293,7 +293,7 @@ class RichData:
     def plot2d(self, xlim=None, ylim=None, clim=None, cmap=None,
                log=False, power=1, interpolation=None,
                show_colorbar=True, colorbar_label=None, extend='both',
-               axis_labels=(None, None),
+               axis_labels=(None, None), zorder=3,
                fig=None, ax=None):
         """Plot data in 2D.
 
@@ -379,6 +379,7 @@ class RichData:
                        cmap=cmap,
                        clim=clim,
                        norm=norm,
+                       zorder=zorder,
                        interpolation=interpolation)
 
         if show_colorbar:
