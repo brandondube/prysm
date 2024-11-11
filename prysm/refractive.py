@@ -60,3 +60,25 @@ def sellmeier(wvl, A, B):
         seed += (num/den)
 
     return np.sqrt(seed)
+
+
+def internal_transmission(t, k, wvl):
+    """Internal transmission of a glass slab.
+
+    Parameters
+    ----------
+    t : ndarray
+        thickness of the plate, millimeters
+    k : ndarray
+        the complex part of the refractive index, k, in the expression  n + ik
+    wvl : ndarray
+        wavelength of light, microns
+
+    Returns
+    -------
+    complex transmission T
+
+    """
+    # convert wavelength to millimeters
+    wvl = wvl / 1e3
+    return np.exp(-4*np.pi*k*t/wvl)
