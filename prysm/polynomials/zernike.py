@@ -528,8 +528,8 @@ def barplot(coefs, names=None, orientation='h', buffer=1, zorder=3, number=True,
 
     Parameters
     ----------
-    coefs : dict
-        with keys of Zn, values of numbers
+    coefs : iterable
+        sequence of Zernike coefficients
     names : dict
         with keys of Zn, values of names (e.g. Primary Coma X)
     orientation : str, {'h', 'v', 'horizontal', 'vertical'}
@@ -560,9 +560,8 @@ def barplot(coefs, names=None, orientation='h', buffer=1, zorder=3, number=True,
     from matplotlib import pyplot as plt
     fig, ax = share_fig_ax(fig, ax)
 
-    coefs2 = np.asarray(list(coefs.values()))
-    idxs = np.asarray(list(coefs.keys()))
-    coefs = coefs2
+    idxs = np.arange(len(coefs))
+    coefs = coefs
     lims = (idxs[0] - buffer, idxs[-1] + buffer)
 
     if names is None:
@@ -588,7 +587,7 @@ def barplot(coefs, names=None, orientation='h', buffer=1, zorder=3, number=True,
     return fig, ax
 
 
-def barplot_magnitudes(magnitudes, orientation='h', sort=False,
+def barplot_magnitudes(coefs, nms, errorbars=None, orientation='h', sort=False,
                        buffer=1, zorder=3, offset=0, width=0.8,
                        fig=None, ax=None):
     """Create a barplot of magnitudes of coefficient pairs and their names.
@@ -597,8 +596,12 @@ def barplot_magnitudes(magnitudes, orientation='h', sort=False,
 
     Parameters
     ----------
-    magnitudes : dict
-        keys of names, values of magnitudes.  E.g., {'Primary Coma': 1234567}
+    coefs : ndarray
+        1D list of coefficients of the modes
+    nms : ndarray
+        1D list of ANSI (n,m) for each coef
+    errorbars : ndarray
+        list of errors associated with each coefficient
     orientation : str, {'h', 'v', 'horizontal', 'vertical'}
         orientation of the plot
     sort : bool, optional
@@ -626,24 +629,41 @@ def barplot_magnitudes(magnitudes, orientation='h', sort=False,
     """
     from matplotlib import pyplot as plt
 
-    mags = magnitudes.values()
-    names = magnitudes.keys()
+    lst = [(*nm, v) for nm, v in zip(nms, coefs)]
+    pak = zernikes_to_magnitude_angle(lst)
+
+    mags = list(abs(v[0]) for v in pak.values())
+    names = list(pak.keys())
+
+    if errorbars is not None:
+        lst = [(*nm, v) for nm, v in zip(nms, errorbars)]
+        pak = zernikes_to_magnitude_angle(lst)
+        errorbars = list(abs(v[0]) for v in pak.values())
+        errorbars = np.asarray(errorbars)
+
     idxs = np.arange(len(names))
-    # idxs = np.asarray(list(range(len(names))))
+    mags = np.asarray(mags)
+    names = np.asarray(names)
 
     if sort:
-        mags, names = sort_xy(mags, names)
-        mags = list(reversed(mags))
-        names = list(reversed(names))
+        jsort = np.argsort(mags)
+        mags = mags[jsort]
+        names = names[jsort]
+        if errorbars is not None:
+            errorbars = errorbars[jsort]
 
     lims = (idxs[0] - buffer, idxs[-1] + buffer)
     fig, ax = share_fig_ax(fig, ax)
     if orientation.lower() in ('h', 'horizontal'):
         ax.bar(idxs + offset, mags, zorder=zorder, width=width)
+        if errorbars is not None:
+            ax.errorbar(idxs + offset, mags, errorbars, fmt='o')
         ax.set_xticks(idxs, names, rotation=90)
         ax.set(xlim=lims)
     else:
         ax.barh(idxs + offset, mags, zorder=zorder, height=width)
+        if errorbars is not None:
+            ax.errorbar(mags, idxs + offset, xerr=errorbars, fmt='.', color='r', zorder=zorder+1, capsize=5)
         ax.set_yticks(idxs, names)
         ax.set(ylim=lims)
     return fig, ax
