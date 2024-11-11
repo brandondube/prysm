@@ -840,7 +840,8 @@ class Interferogram(RichData):
 
     def strip_latcal(self):
         """Strip the lateral calibration and revert to pixels."""
-        self.x, self.y = make_xy_grid(self.data.shape, dx=1)
+        self.dx = 1.
+        self.x, self.y = make_xy_grid(self.data.shape, dx=self.dx)
         self._latcaled = False
         return self
 
