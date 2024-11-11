@@ -189,6 +189,29 @@ def circle(radius, r):
     return r <= radius
 
 
+def annulus(rin, rout, r):
+    """Create an annular mask.
+
+    Parameters
+    ----------
+    rin : float
+        inner radius
+    rout : float
+        outer radius
+    r : numpy.ndarray
+        2D array of radial coordinates
+
+    Returns
+    -------
+    numpy.ndarray
+        binary ndarray representation of the mask
+
+    """
+    lo = r >= rin
+    hi = r <= rout
+    return lo & hi
+
+
 def regular_polygon(sides, radius, x, y, center=(0, 0), rotation=0):
     """Generate a regular polygon mask with the given number of sides.
 
