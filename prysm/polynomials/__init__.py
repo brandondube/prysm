@@ -210,7 +210,7 @@ def lstsq(modes, data):
     return c
 
 
-def normalize_modes(modes, mask, to='std'):
+def normalize_modes(modes, mask, to='std', remove_piston=True):
     """Scale modes such that they have unit RMS.
 
     Parameters
@@ -228,9 +228,13 @@ def normalize_modes(modes, mask, to='std'):
         scaled modes
 
     """
+    # first sweep, take out piston
     func = getattr(np, to)
     if modes.ndim == 2:
-        mode = modes[mask]
+        mode = modes[:, mask]
+        if remove_piston:
+            mode = mode - np.mean(mode, axis=1)[:, np.newaxis]
+
         norm = func(mode)
 
         # loophole for piston
@@ -240,10 +244,16 @@ def normalize_modes(modes, mask, to='std'):
         return modes * (1/norm)
 
     modes_masked = modes[:, mask]
+    if remove_piston:
+        mean = np.mean(modes_masked, axis=1)
+        modes_masked = modes_masked - mean[:, np.newaxis]
+
     norms = func(modes_masked, axis=1)
     norms[norms < 1e-9] = 1.  # loophole for piston
     # newaxes for correct numpy broadcast semantics
-    return modes * (1/norms[:, np.newaxis, np.newaxis])
+    out = np.zeros_like(modes)
+    out[:, mask] = modes_masked * (1/norms[:, np.newaxis])
+    return out
 
 
 def orthogonalize_modes(modes, mask):
