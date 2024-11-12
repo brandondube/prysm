@@ -9,7 +9,7 @@ import numpy as truenp
 from .mathops import np
 from .geometry import regular_polygon, circle, spider
 from .coordinates import cart_to_polar, polar_to_cart
-from .polynomials import sum_of_2d_modes, normalize_modes
+from .polynomials import sum_of_2d_modes
 
 FLAT_TO_FLAT_TO_VERTEX_TO_VERTEX = 2 / truenp.sqrt(3)
 VERTEX_TO_VERTEX_TO_FLAT_TO_FLAT = 1 / FLAT_TO_FLAT_TO_VERTEX_TO_VERTEX
@@ -466,7 +466,7 @@ class CompositeKeystoneAperture:
     def prepare_opd_bases(self, center_basis, center_orders,
                           segment_basis, segment_orders,
                           center_basis_kwargs=None, segment_basis_kwargs=None,
-                          rotate_xyaxes=False, normalize=True):
+                          rotate_xyaxes=False):
         """Prepare the polynomial bases for per-segment phase errors.  # NOQA - length
 
         Parameters
@@ -592,10 +592,6 @@ class CompositeKeystoneAperture:
 
                 basis = segment_basis(segment_orders, x=xx, y=yy, **segment_basis_kwargs)  # NOQA - length
                 basis = np.asarray(basis)
-
-                if normalize:
-                    mask = self.segment_masks[i]
-                    basis = normalize_modes(basis, mask)
 
                 grids.append((xx, yy))
                 bases.append(basis)
