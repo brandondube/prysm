@@ -1,5 +1,9 @@
 """Phase Shifting Interferometry."""
+from collections import namedtuple
+
 import numpy as truenp
+
+from scipy import signal
 
 from prysm.mathops import np
 from prysm.fttools import fftrange
@@ -8,23 +12,19 @@ from prysm.polynomials import sum_of_2d_modes
 
 from skimage.restoration._unwrap_2d import unwrap_2d as sk_unwrap
 
+Scheme = namedtuple('Scheme', ['shifts', 's', 'c'])
 
-FIVE_FRAME_PSI_NOMINAL_SHIFTS = (-np.pi, -np.pi/2, 0, +np.pi/2, +np.pi)
-FOUR_FRAME_PSI_NOMINAL_SHIFTS = (0, np.pi/2, np.pi, 3/2*np.pi)
+ZYGO_THIRTEEN_FRAME = Scheme(
+    fftrange(13) * np.pi/4,
+    truenp.asarray((-3, -4, 0, 12, 21, 16, 0, -16, -21, -12, 0, 4, 3)),
+    truenp.asarray((0, -4, -12, -12, 0, 16, 24, 16, 0, -12, -12, -4, 0)),
+)
 
-ZYGO_THIRTEEN_FRAME_SHIFTS = fftrange(13) * np.pi/4
-ZYGO_THIRTEEN_FRAME_SS = (-3, -4, 0, 12, 21, 16, 0, -16, -21, -12, 0, 4, 3)
-ZYGO_THIRTEEN_FRAME_CS = (0, -4, -12, -12, 0, 16, 24, 16, 0, -12, -12, -4, 0)
-
-SCHWIDER_SHIFTS = fftrange(5) * np.pi/2
-SCHWIDER_SS = (0, 2, 0, -2, 0)
-SCHWIDER_CS = (-1, 0, 2, 0, -1)
-
-# one-time array conversion for dtype lookups in psi acc
-ZYGO_THIRTEEN_FRAME_SS = truenp.asarray(ZYGO_THIRTEEN_FRAME_SS)
-ZYGO_THIRTEEN_FRAME_CS = truenp.asarray(ZYGO_THIRTEEN_FRAME_CS)
-SCHWIDER_SS = truenp.asarray(SCHWIDER_SS)
-SCHWIDER_CS = truenp.asarray(SCHWIDER_CS)
+SCHWIDER = Scheme(
+    fftrange(5) * np.pi/2,
+    truenp.asarray((0, 2, 0, -2, 0)),
+    truenp.asarray((-1, 0, 2, 0, -1)),
+)
 
 
 # def _psi_acc_dtype(gs, ss, cs):
@@ -41,28 +41,45 @@ SCHWIDER_CS = truenp.asarray(SCHWIDER_CS)
 #     else:
 #         return np.int64
 
-def psi_accumulate(gs, ss, cs):
+def psi_accumulate(gs, scheme):
+    """Accumulate the numerator and denominator for PSI reconstruction.
+
+    The numerator is the sine of the complex wave, and the denominator the cosine.
+
+    Parameters
+    ----------
+    gs : iterable
+        sequence of images
+    scheme : Scheme
+        a PSI scheme, or any other object with .s and .c attributes, which are
+        the sines and cosines of a sequence of phase shifts
+
+    Returns
+    -------
+    ndarray, ndarray
+        numerator (sine) and denominator (cosine)
+
+    """
     # ss = np.asarray(ss)
     # cs = np.asarray(cs)
     # dtype = _psi_acc_dtype(gs)
     # num = np.zeros(gs[0].shape, dtype=dtype)
     # den = np.zeros(gs[0].shape, dtype=dtype)
-    num = sum_of_2d_modes(gs, ss)
-    den = sum_of_2d_modes(gs, cs)
+    num = sum_of_2d_modes(gs, scheme.s)
+    den = sum_of_2d_modes(gs, scheme.c)
     return num, den
 
 
-def degroot_formalism_psi(gs, ss, cs):
+def degroot_formalism_psi(gs, scheme):
     """Peter de Groot's formalism for Phase Shifting Interferometry algorithms.
 
     Parameters
     ----------
     gs : iterable
         sequence of images
-    ss : iterable
-        sequence of numerator weights
-    cs : iterable
-        sequence of denominator weights
+    scheme : Scheme
+        a PSI scheme, or any other object with .s and .c attributes, which are
+        the sines and cosines of a sequence of phase shifts
 
     Returns
     -------
@@ -77,32 +94,66 @@ def degroot_formalism_psi(gs, ss, cs):
 
     Peter de Groot, Appl. Opt,  39, 2658-2663 (2000)
     https://doi.org/10.1364/AO.39.002658
-
-    Common/Sample formalisms,
-    Schwider-Harihan five-frame algorithms, pi/4 steps
-    s = (0, 2, 0, -2, 0)
-    c = (-1, 0, 2, 0, -1)
-
-    Zygo 13-frame algorithm, pi/4 steps
-    s = (-3, -4, 0, 12, 21, 16, 0, -16, -21, -12, 0, 4, 3)
-    c = (0, -4, -12, -12, 0, 16, 24, 16, 0, -12, -12, -4, 0)
-
-    Zygo 15-frame algorithm, pi/2 steps
-    s = (-1, 0, 9, 0, -21, 0, 29, 0, -29, 0, 21, 0, -9, 0, 1)
-    c = (0, -4, 0, 15, 0, -26, 0, 30, 0, -26, 0, 15, 0, -4, 0)
-
     """
     was_rd = isinstance(gs[0], RichData)
     if was_rd:
         g00 = gs[0]
         gs = [g.data for g in gs]
 
-    num, den = psi_accumulate(gs, ss, cs)
+    num, den = psi_accumulate(gs, scheme)
     out = np.arctan2(num, den)
     if was_rd:
         out = RichData(out, g00.dx, g00.wavelength)
 
     return out
+
+
+def design_scheme(N, stepsize=None, window=None):
+    """Design a new PSI scheme.
+
+    A scheme is simply the cosine or sine of the phase shifts, each multiplied
+    by a window whose job is to reduce spectral leakage and improve robustness
+    to imperfect phase shifts and other data acquisition errors.  The window is
+    often rounded or made non-ideal, in order for the s and c coefficients
+    generated to be integers.  There is no inherent benefit to integer
+    coefficients except that they are easier to write down and more sympathetic
+    to an implementation of psi_accumulate() on an FPGA or microprocessor with
+    reduced floating point performance.
+
+    Parameters
+    ----------
+    N : int
+        number of steps in the scheme; odd numbers are typically preferrable
+    stepsize : float
+        stepsize, in the sense of 2pi = a full phase shift.
+        stepsize = 2pi/(N-1) if stepsize is not given
+    window : None or ndarray or str
+        if None, no window (equivalent to a window of ones) is used.
+        if an ndarray, used as-is
+        if a str, a member of scipy.signal.window; note that sym=False will be
+        passed
+
+    Returns
+    -------
+    Scheme
+        a complete PSI scheme
+
+    """
+    if stepsize is None:
+        stepsize = (2*truenp.pi)/(N-1)
+
+    shifts = fftrange(N) * stepsize
+    s = truenp.sin(shifts)
+    c = truenp.cos(shifts)
+
+    if window is not None:
+        if isinstance(window, str):
+            window = signal.windows.get_window(window, N)
+
+        s *= window
+        c *= window
+
+    return Scheme(shifts, s, c)
 
 
 def unwrap_phase(wrapped, mask):
