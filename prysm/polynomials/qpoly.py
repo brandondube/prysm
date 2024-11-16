@@ -54,7 +54,7 @@ def Qbfs(n, x):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         Qbfs_n(x)
 
     """
@@ -141,7 +141,7 @@ def change_basis_Qbfs_to_Pn(cs):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         array of same type as cs holding the coefficients that represent the
         same surface as a sum of shifted Chebyshev polynomials of the third kind
 
@@ -200,10 +200,10 @@ def clenshaw_qbfs(cs, usq, alphas=None):
     ----------
     cs : iterable of float
         coefficients for a Qbfs surface, from order 0..len(cs)-1
-    usq : numpy.ndarray
+    usq : ndarray
         radial coordinate(s) to evaluate, squared, notionally in the range [0,1]
         the variable u^2 from oe-18-19-19700
-    alphas : numpy.ndarray, optional
+    alphas : ndarray, optional
         array to store the alpha sums in,
         the surface is u^2(1-u^2) * (2 * (alphas[0]+alphas[1])
         if not None, alphas should be of shape (len(s), x.shape)
@@ -211,7 +211,7 @@ def clenshaw_qbfs(cs, usq, alphas=None):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         Qbfs surface, the quantity u^2(1-u^2) S(u^2) from Eq. (3.13)
         note: excludes the division by phi, since c and rho are unknown
 
@@ -242,12 +242,12 @@ def clenshaw_qbfs_der(cs, usq, j=1, alphas=None):
     ----------
     cs : iterable of float
         coefficients for a Qbfs surface, from order 0..len(cs)-1
-    usq : numpy.ndarray
+    usq : ndarray
         radial coordinate(s) to evaluate, squared, notionally in the range [0,1]
         the variable u^2 from oe-18-19-19700
     j : int
         derivative order
-    alphas : numpy.ndarray, optional
+    alphas : ndarray, optional
         array to store the alpha sums in,
         if x = u * u, then
         S   = (x * (1 - x)) * 2 * (alphas[0][0] + alphas[0][1])
@@ -260,7 +260,7 @@ def clenshaw_qbfs_der(cs, usq, j=1, alphas=None):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         the alphas array
 
     """
@@ -296,9 +296,9 @@ def compute_z_zprime_Qbfs(coefs, u, usq):
     ----------
     coefs : iterable
         surface coefficients for Q0..QN, N=len(coefs)-1
-    u : numpy.ndarray
+    u : ndarray
         normalized radial coordinates (rho/rho_max)
-    usq : numpy.ndarray
+    usq : ndarray
         u^2
     c : float
         best fit sphere curvature
@@ -306,7 +306,7 @@ def compute_z_zprime_Qbfs(coefs, u, usq):
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         S, Sprime in Forbes' parlance
 
     """
@@ -346,14 +346,14 @@ def compute_z_zprime_Qcon(coefs, u, usq):
     ----------
     coefs : iterable
         surface coefficients for Q0..QN, N=len(coefs)-1
-    u : numpy.ndarray
+    u : ndarray
         normalized radial coordinates (rho/rho_max)
-    usq : numpy.ndarray
+    usq : ndarray
         u^2
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         S, Sprime in Forbes' parlance
 
     """
@@ -462,7 +462,7 @@ def Qcon(n, x):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         Qcon_n(x)
 
     Notes
@@ -679,14 +679,14 @@ def Q2d(n, m, r, t):
         radial polynomial order
     m : int
         azimuthal polynomial order
-    r : numpy.ndarray
+    r : ndarray
         radial coordinate, slope orthogonal in [0,1]
-    t : numpy.ndarray
+    t : ndarray
         azimuthal coordinate, radians
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         array containing Q2d_n^m(r,t)
         the leading coefficient u^m or u^2 (1 - u^2) and sines/cosines
         are included in the return
@@ -787,9 +787,9 @@ def Q2d_seq(nms, r, t):
     ----------
     nms : iterable of tuple
         (n,m) for each desired term
-    r : numpy.ndarray
+    r : ndarray
         radial coordinates
-    t : numpy.ndarray
+    t : ndarray
         azimuthal coordinates
 
     Returns
@@ -937,7 +937,7 @@ def change_of_basis_Q2d_to_Pnm(cns, m):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         array of same type as cs holding the coefficients that represent the
         same surface as a sum of shifted Chebyshev polynomials of the third kind
 
@@ -994,10 +994,10 @@ def clenshaw_q2d(cns, m, usq, alphas=None):
         coefficients for a Qbfs surface, from order 0..len(cs)-1
     m : int
         azimuthal order for the cns
-    usq : numpy.ndarray
+    usq : ndarray
         radial coordinate(s) to evaluate, squared, notionally in the range [0,1]
         the variable u^2 from oe-18-19-19700
-    alphas : numpy.ndarray, optional
+    alphas : ndarray, optional
         array to store the alpha sums in,
         the surface is u^2(1-u^2) * (2 * (alphas[0]+alphas[1])
         if not None, alphas should be of shape (len(s), *x.shape)
@@ -1044,19 +1044,19 @@ def clenshaw_q2d_der(cns, m, usq, j=1, alphas=None):
         coefficients for a Qbfs surface, from order 0..len(cs)-1
     m : int
         azimuthal order
-    usq : numpy.ndarray
+    usq : ndarray
         radial coordinate(s) to evaluate, squared, notionally in the range [0,1]
         the variable u from oe-18-19-19700
     j : int
         derivative order
-    alphas : numpy.ndarray, optional
+    alphas : ndarray, optional
         array to store the alpha sums in,
         if not None, alphas should be of shape (j+1, len(cs), *x.shape)
         see _initialize_alphas if you desire more information
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         the alphas array
 
     """
@@ -1105,14 +1105,14 @@ def compute_z_zprime_Q2d(cm0, ams, bms, u, t):
         For example, if ams extends to m=3, then bms must reach m=3
         but, if the ams for m=3 span n=0..5, it is OK for the bms to span n=0..3,
         or any other value, even just [0].
-    u : numpy.ndarray
+    u : ndarray
         normalized radial coordinates (rho/rho_max)
-    t : numpy.ndarray
+    t : ndarray
         azimuthal coordinate, in the range [0, 2pi]
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray, numpy.ndarray
+    ndarray, ndarray, ndarray
         surface sag, radial derivative of sag, azimuthal derivative of sag
 
     """

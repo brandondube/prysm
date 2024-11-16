@@ -10,7 +10,7 @@ def object_to_image_dist(efl, object_distance):
     ----------
     efl : float
         focal length of the lens
-    object_distance : float or numpy.ndarray
+    object_distance : float or ndarray
         distance from the object to the front principal plane of the lens,
         negative for an object to the left of the lens
 
@@ -37,7 +37,7 @@ def image_to_object_dist(efl, image_distance):
     ----------
     efl : float
         focal length of the lens
-    image_distance : float or numpy.ndarray
+    image_distance : float or ndarray
         distance from the object to the front principal plane of the lens,
         positive for an object in front of a lens of positive focal length.
 
@@ -186,7 +186,7 @@ def mag_to_fno(mag, infinite_fno, pupil_mag=1):
 
     Parameters
     ----------
-    mag : float or numpy.ndarray
+    mag : float or ndarray
         linear or lateral magnification
     infinite_fno : float
         f/# as defined by EFL/EPD
@@ -207,7 +207,7 @@ def defocus_to_image_displacement(W020, fno, wavelength=None):
 
     Parameters
     ----------
-    W020 : float or numpy.ndarray
+    W020 : float or ndarray
         wavefront defocus, units of waves if wavelength != None, else units of length
     fno : float
         f/# of the lens or system
@@ -231,7 +231,7 @@ def image_displacement_to_defocus(dz, fno, wavelength=None):
 
     Parameters
     ----------
-    dz : float or numpy.ndarray
+    dz : float or ndarray
         displacement of the image
     fno : float
         f/# of the lens or system
@@ -255,7 +255,7 @@ def image_shift_to_tilt(dx, fno):
 
     Parameters
     ----------
-    dx : float or numpy.ndarray
+    dx : float or ndarray
         translation of the image
     fno : float
         f/# of the lens or system
@@ -277,7 +277,7 @@ def tilt_to_image_shift(W111, fno):
 
     Parameters
     ----------
-    W111 : float or numpy.ndarray
+    W111 : float or ndarray
         wavefront tilt, unit amplitude (peak-to-valley of 2)
     fno : float
         f/# of the lens or system

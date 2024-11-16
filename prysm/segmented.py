@@ -136,9 +136,9 @@ class CompositeHexagonalAperture:
 
         Parameters
         ----------
-        x : numpy.ndarray
+        x : ndarray
             array of x sample positions, of shape (m, n)
-        y : numpy.ndarray
+        y : ndarray
             array of y sample positions, of shape (m, n)
         rings : int
             number of rings in the structure
@@ -278,12 +278,12 @@ class CompositeHexagonalAperture:
             those in the exclude list from the constructor
             if an array, must be of shape (len(self.segment_ids), len(orders))
             where orders comes from the proceeding call to prepare_opd_bases
-        out : numpy.ndarray
+        out : ndarray
             array to insert OPD into, allocated if None
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             OPD map of real datatype
 
         """
@@ -387,9 +387,9 @@ class CompositeKeystoneAperture:
 
         Parameters
         ----------
-        x : numpy.ndarray
+        x : ndarray
             array of x sample positions, of shape (m, n)
-        y : numpy.ndarray
+        y : ndarray
             array of y sample positions, of shape (m, n)
         center_circle_diameter : float
             diameter of the circular supersegment at the center of the aperture
@@ -610,12 +610,12 @@ class CompositeKeystoneAperture:
             those in the exclude list from the constructor
             if an array, must be of shape (len(self.segment_ids), len(orders))
             where orders comes from the proceeding call to prepare_opd_bases
-        out : numpy.ndarray
+        out : ndarray
             array to insert OPD into, allocated if None
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             OPD map of real datatype
 
         """

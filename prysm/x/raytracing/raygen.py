@@ -17,7 +17,7 @@ def concat_rayfans(*rayfans):
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         concatonated P, S
 
     """
@@ -41,14 +41,14 @@ def split_rayfans(P, chunksizes, S=None):
 
     Parameters
     ----------
-    P : numpy.ndarray
+    P : ndarray
         ndarray of shape (N, 3)
         position (or position history)
     chunksizes : iterable of int
         the size of each chunk of P
         for example, if P was made by concat_rayfans(N=3,N=1,N=5)
         then chunksizes=[3,1,5]
-    S : numpy.ndarray
+    S : ndarray
         ndarray of shape (N, 3)
         direction cosine (or history of)
 
@@ -110,7 +110,7 @@ def generate_collimated_ray_fan(nrays, maxr, z=0, minr=None, azimuth=90,
         a uniform distribution has rays which are equally spaced from minr to maxr,
         random has rays randomly distributed in minr and maxr, while cheby has the
         Cheby-Gauss-Lobatto roots as its locations from minr to maxr
-    aim_at : numpy.ndarray or float
+    aim_at : ndarray or float
         position [X,Y,Z] aim the rays such that the gut ray of the fan,
         when propagated in an open medium, hits (aim_at)
 
@@ -122,7 +122,7 @@ def generate_collimated_ray_fan(nrays, maxr, z=0, minr=None, azimuth=90,
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         "P" and "S" variables, positions and direction cosines of the rays
 
     """
@@ -181,7 +181,7 @@ def generate_collimated_rect_ray_grid(nrays, maxx, z=0, minx=None, maxy=None, mi
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         "P" and "S" variables, positions and direction cosines of the rays
 
     """
@@ -232,7 +232,7 @@ def generate_finite_ray_fan(nrays, na, P=0, min_na=None, azimuth=90,
         the number of rays in the fan
     na : float
         object-space numerical aperture
-    P : numpy.ndarray
+    P : ndarray
         length 3 vector containing the position from which the rays emanate
     min_na : float, optional
         minimum NA for the beam, -na if None
@@ -252,7 +252,7 @@ def generate_finite_ray_fan(nrays, na, P=0, min_na=None, azimuth=90,
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         "P" and "S" variables, positions and direction cosines of the rays
 
     """

@@ -11,14 +11,14 @@ def conv(obj, psf):
 
     Parameters
     ----------
-    obj : numpy.ndarray
+    obj : ndarray
         array representing the object, of shape (M, N)
-    psf : numpy.ndarray
+    psf : ndarray
         array representing the psf, of shape (M, N)
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         ndarray after undergoing convolution
 
     """
@@ -36,7 +36,7 @@ def apply_transfer_functions(obj, dx, tfs, fx=None, fy=None, ft=None, fr=None, s
 
     Parameters
     ----------
-    obj : numpy.ndarray
+    obj : ndarray
         array representing the object, of shape (M, N)
     dx : float
         sample spacing of the object.  Ignored if fx, etc are defined.
@@ -45,13 +45,13 @@ def apply_transfer_functions(obj, dx, tfs, fx=None, fy=None, ft=None, fr=None, s
         If a callable, should be  functions which
         take arguments of any of fx, fy, ft, fr.  Use functools partial or
         class methods to curry other parameters
-    fx : numpy.ndarray
+    fx : ndarray
         cartesian X frequency, shape (M, N)
-    fy : numpy.ndarray
+    fy : ndarray
         cartesian X frequency, shape (M, N)
-    fr : numpy.ndarray
+    fr : ndarray
         cartesian radial frequency, shape (M, N)
-    ft : numpy.ndarray
+    ft : ndarray
         cartesian azimuthal frequency, shape (M, N)
     shift : bool, optional
         if True, fx, fy, ft, fr are assumed to have the origin in the center
@@ -60,7 +60,7 @@ def apply_transfer_functions(obj, dx, tfs, fx=None, fy=None, ft=None, fr=None, s
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         image after being blurred by each transfer function
 
     """

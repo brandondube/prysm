@@ -47,7 +47,7 @@ class RichData:
 
         Parameters
         ----------
-        data : numpy.ndarray
+        data : ndarray
             2D array containing the z data
         dx : float
             inter-sample spacing, mm
@@ -225,7 +225,7 @@ class RichData:
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             data at the given points
 
         """
@@ -247,7 +247,7 @@ class RichData:
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             data at the given points
 
         """
@@ -261,12 +261,12 @@ class RichData:
 
         Parameters
         ----------
-        x : number or numpy.ndarray
+        x : number or ndarray
             x coordinate(s) to return
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             ndarray of values
 
         """
@@ -278,12 +278,12 @@ class RichData:
 
         Parameters
         ----------
-        y : number or numpy.ndarray
+        y : number or ndarray
             y coordinate(s) to return
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             ndarray of values
 
         """
@@ -398,11 +398,11 @@ class Slices:
 
         Parameters
         ----------
-        data : numpy.ndarray
+        data : ndarray
             2D array of data
-        x : numpy.ndarray
+        x : ndarray
             1D array of x points
-        y : numpy.ndarray
+        y : ndarray
             1D array of y points
         twosided : bool, optional
             if True, plot slices from (-ext, ext), else from (0,ext)
@@ -430,9 +430,9 @@ class Slices:
 
         Returns
         -------
-        x : numpy.ndarray
+        x : ndarray
             coordinates
-        slice : numpy.ndarray
+        slice : ndarray
             values of the data array at these coordinates
 
         """
@@ -447,9 +447,9 @@ class Slices:
 
         Returns
         -------
-        y : numpy.ndarray
+        y : ndarray
             coordinates
-        slice : numpy.ndarray
+        slice : ndarray
             values of the data array at these coordinates
 
         """
@@ -464,9 +464,9 @@ class Slices:
 
         Returns
         -------
-        rho : numpy.ndarray
+        rho : ndarray
             coordinates
-        slice : numpy.ndarray
+        slice : ndarray
             values of the data array at these coordinates
 
         """
@@ -479,9 +479,9 @@ class Slices:
 
         Returns
         -------
-        rho : numpy.ndarray
+        rho : ndarray
             coordinates
-        slice : numpy.ndarray
+        slice : ndarray
             values of the data array at these coordinates
 
         """
@@ -494,9 +494,9 @@ class Slices:
 
         Returns
         -------
-        rho : numpy.ndarray
+        rho : ndarray
             coordinates
-        slice : numpy.ndarray
+        slice : ndarray
             values of the data array at these coordinates
 
         """
@@ -509,9 +509,9 @@ class Slices:
 
         Returns
         -------
-        rho : numpy.ndarray
+        rho : ndarray
             coordinates
-        slice : numpy.ndarray
+        slice : ndarray
             values of the data array at these coordinates
 
         """
@@ -524,9 +524,9 @@ class Slices:
 
         Returns
         -------
-        rho : numpy.ndarray
+        rho : ndarray
             coordinates
-        slice : numpy.ndarray
+        slice : ndarray
             values of the data array at these coordinates
 
         """
@@ -540,9 +540,9 @@ class Slices:
 
         Returns
         -------
-        rho : numpy.ndarray
+        rho : ndarray
             coordinates
-        slice : numpy.ndarray
+        slice : ndarray
             values of the data array at these coordinates
 
         """
@@ -555,9 +555,9 @@ class Slices:
 
         Returns
         -------
-        rho : numpy.ndarray
+        rho : ndarray
             coordinates
-        slice : numpy.ndarray
+        slice : ndarray
             values of the data array at these coordinates
 
         """

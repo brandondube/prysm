@@ -9,7 +9,7 @@ def mean(array):
 
     Parameters
     ----------
-    array : numpy.ndarray
+    array : ndarray
         array of values
 
     Returns
@@ -27,7 +27,7 @@ def pv(array):
 
     Parameters
     ----------
-    array : numpy.ndarray
+    array : ndarray
         array of values
 
     Returns
@@ -45,7 +45,7 @@ def rms(array):
 
     Parameters
     ----------
-    array : numpy.ndarray
+    array : ndarray
         array of values
 
     Returns
@@ -63,7 +63,7 @@ def Sa(array):
 
     Parameters
     ----------
-    array: numpy.ndarray
+    array: ndarray
         array of values
 
     Returns
@@ -83,7 +83,7 @@ def std(array):
 
     Parameters
     ----------
-    array: numpy.ndarray
+    array: ndarray
         array of values
 
     Returns
@@ -107,9 +107,9 @@ def ecdf(x):
 
     Returns
     -------
-    xs : numpy.ndarray
+    xs : ndarray
         sorted data
-    ys : numpy.ndarray
+    ys : ndarray
         cumulative distribution function of the data
 
     """

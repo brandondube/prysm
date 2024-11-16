@@ -16,7 +16,7 @@ def cauchy(wvl, A, *args):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         array of refractive indices of the same shape as wvl
 
     """
@@ -39,7 +39,7 @@ def sellmeier(wvl, A, B):
 
     Parameters
     ----------
-    wvl : numpy.ndarray
+    wvl : ndarray
         wavelengths, microns
     A : Iterable
         sequence of "A" coefficients
@@ -48,7 +48,7 @@ def sellmeier(wvl, A, B):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         refractive index
 
     """

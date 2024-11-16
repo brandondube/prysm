@@ -10,14 +10,14 @@ def apply_lut(img, lut):
 
     Parameters
     ----------
-    img : numpy.ndarray
+    img : ndarray
         n dimensional array (2D and 3D are both OK) of an unsigned integer dtype
-    lut : numpy.ndarray
+    lut : ndarray
         1 dimensional array whose indices are input values and values are output values
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         ndarray of the same shape as img
         the output array must not be modified in place, or lut will be modified as well.
 
@@ -58,13 +58,13 @@ class Detector:
             number of bits for the ADC, multiples of 2 in 8..16 are contemporary
         exposure_time : float
             exposure time, seconds
-        prnu : numpy.ndarray, optional
+        prnu : ndarray, optional
             relative pixel response nonuiformity, a fixed map that the
             input field is multiplied by.  ones_like is perfectly uniform.
-        dcnu : numpy.ndarray, optional
+        dcnu : ndarray, optional
             dark current nonuniformity, a fixed map that the dark current
             is multiplied by.  ones_like is perfectly uniform.
-        lut : numpy.ndarray, optional
+        lut : ndarray, optional
             look-up table of ideal output DN values to output DN values,
             representing the nonlinearity of the detector
 
@@ -85,7 +85,7 @@ class Detector:
 
         Parameters
         ----------
-        aerial_img : numpy.ndarray
+        aerial_img : ndarray
             aerial image, with units of e-/sec.  Should include any QE as part
             of its Z scaling
         frames : int
@@ -95,7 +95,7 @@ class Detector:
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             of shape (frames, aerial_img.shape), if frames=1 the first dim
             is squeezed, and output shape is same as input shape.
             dtype=uint8 if nbits <= 8, else uint16 for <= 16, etc
@@ -154,9 +154,9 @@ def olpf_ft(fx, fy, width_x, width_y):
 
     Parameters
     ----------
-    fx : numpy.ndarray
+    fx : ndarray
         x spatial frequency, in cycles per micron
-    fy : numpy.ndarray
+    fy : ndarray
         y spatial frequency, in cycles per micron
     width_x : float
         x diameter of the pixel, in microns
@@ -165,7 +165,7 @@ def olpf_ft(fx, fy, width_x, width_y):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         FT of the OLPF
 
     """
@@ -177,9 +177,9 @@ def pixel_ft(fx, fy, width_x, width_y):
 
     Parameters
     ----------
-    fx : numpy.ndarray
+    fx : ndarray
         x spatial frequency, in cycles per micron
-    fy : numpy.ndarray
+    fy : ndarray
         y spatial frequency, in cycles per micron
     width_x : float
         x diameter of the pixel, in microns
@@ -188,7 +188,7 @@ def pixel_ft(fx, fy, width_x, width_y):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         FT of the pixel
 
     """
@@ -200,9 +200,9 @@ def pixel(x, y, width_x, width_y):
 
     Parameters
     ----------
-    x : numpy.ndarray
+    x : ndarray
         x coordinates
-    y : numpy.ndarray
+    y : ndarray
         y coordinates
     width_x : float
         x diameter of the pixel, in microns
@@ -211,7 +211,7 @@ def pixel(x, y, width_x, width_y):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         spatial representation of the pixel
 
     """
@@ -225,7 +225,7 @@ def bindown(array, factor, mode='avg'):
 
     Parameters
     ----------
-    array : numpy.ndarray
+    array : ndarray
         array of values
     factor : int or sequence of int
         binning factor.  If an integer, broadcast to each axis of array,
@@ -235,7 +235,7 @@ def bindown(array, factor, mode='avg'):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         ndarray binned by given number of samples
 
     Notes
@@ -280,7 +280,7 @@ def tile(array, factor, scaling='sum'):
 
     Parameters
     ----------
-    array : numpy.ndarray
+    array : ndarray
         array of values
     factor : int or sequence of int
         binning factor.  If an integer, broadcast to each axis of array,
@@ -290,7 +290,7 @@ def tile(array, factor, scaling='sum'):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         ndarray binned by given number of samples
 
     Notes

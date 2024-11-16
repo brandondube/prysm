@@ -9,9 +9,9 @@ def smear_ft(fx, fy, width, height):
 
     Parameters
     ----------
-    fx : numpy.ndarray
+    fx : ndarray
         X spatial frequencies, units of reciprocal width
-    fy : numpy.ndarray
+    fy : ndarray
         Y spatial frequencies, units of reciprocal width
     width : float
         width of the smear, units of length (e.g. um)
@@ -20,7 +20,7 @@ def smear_ft(fx, fy, width, height):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         transfer function of the smear
 
     """
@@ -43,7 +43,7 @@ def jitter_ft(fr, scale):
 
     Parameters
     ----------
-    fr : numpy.ndarray
+    fr : ndarray
         radial spatial frequency, units of reciprocal length, e.g. cy/mm
     scale : float
         scale of the jitter, in same units as "dx"
@@ -51,7 +51,7 @@ def jitter_ft(fr, scale):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         transfer function of the jitter
 
     """

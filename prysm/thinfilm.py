@@ -266,7 +266,7 @@ def multilayer_matrix_p(n0, theta0, characteristic_matrices, nnp1, theta_np1):
         refractive index of the first medium
     theta0 : float
         angle of incidence on the first medium, radians
-    characteristic_matrices : iterable of numpy.ndarray each of which of shape 2x2
+    characteristic_matrices : iterable of ndarray each of which of shape 2x2
         the characteristic matrices of each layer
     nnp1 : float or complex
         refractive index of the final medium
@@ -275,7 +275,7 @@ def multilayer_matrix_p(n0, theta0, characteristic_matrices, nnp1, theta_np1):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         2x2 matrix A^s
 
     """
@@ -338,7 +338,7 @@ def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
         refractive index of the first medium
     theta0 : float
         angle of incidence on the first medium, radians
-    characteristic_matrices : iterable of numpy.ndarray each of which of shape 2x2
+    characteristic_matrices : iterable of ndarray each of which of shape 2x2
         the characteristic matrices of each layer
     nnp1 : float or complex
         refractive index of the final medium
@@ -347,7 +347,7 @@ def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         2x2 matrix A^s
 
     """
@@ -377,7 +377,7 @@ def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
 
     if term2.ndim > 2:
         term2 = np.moveaxis(term2, 2, 0)
-    
+
     if term4.ndim > 2:
         term4 = np.moveaxis(term4, 2, 0)
 
@@ -396,7 +396,7 @@ def rtot(Amat):
 
     Parameters
     ----------
-    Amat : numpy.ndarray
+    Amat : ndarray
         2x2 array
 
     Returns
@@ -414,7 +414,7 @@ def ttot(Amat):
 
     Parameters
     ----------
-    Amat : numpy.ndarray
+    Amat : ndarray
         2x2 array
 
     Returns
@@ -433,7 +433,7 @@ def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, ambient_index=1)
     ----------
     polarization : str, {'p', 's'}
         the polarization state
-    stack : numpy.ndarray
+    stack : ndarray
         array which has final dimensions of [n, t]
         where n is the index and t is the thickness in microns.
         i.e., stack[0] is N dimensional index of refraction, and
@@ -482,7 +482,7 @@ def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, ambient_index=1)
         thicknesses = np.moveaxis(thicknesses.reshape((nlayers, -1)), 1, 0)
 
     angles = np.empty(thicknesses.shape, dtype=config.precision_complex)
-    
+
     # do the first loop by hand to handle ambient vacuum gracefully
     if angles.ndim > 1:
         for i in range(angles.shape[1]):

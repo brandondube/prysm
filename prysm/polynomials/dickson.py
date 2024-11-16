@@ -16,12 +16,12 @@ def dickson1(n, alpha, x):
         if alpha = 0, the dickson polynomials are the monomials x^n
         if alpha = 1, the dickson polynomials and cheby1 polynomials are
         related by D_n(2x) = 2T_n(x)
-    x : numpy.ndarray
+    x : ndarray
         coordinates to evaluate the polynomial at
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         D_n(x)
 
     """
@@ -54,12 +54,12 @@ def dickson2(n, alpha, x):
     alpha : float
         shape parameter
         if alpha = -1, the dickson polynomials are Lucas Polynomials
-    x : numpy.ndarray
+    x : ndarray
         coordinates to evaluate the polynomial at
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         E_n(x)
 
     """
@@ -95,7 +95,7 @@ def dickson1_seq(ns, alpha, x):
         if alpha = 0, the dickson polynomials are the monomials x^n
         if alpha = 1, the dickson polynomials and cheby1 polynomials are
         related by D_n(2x) = 2T_n(x)
-    x : numpy.ndarray
+    x : ndarray
         coordinates to evaluate the polynomial at
 
     Returns
@@ -151,7 +151,7 @@ def dickson2_seq(ns, alpha, x):
     alpha : float
         shape parameter
         if alpha = -1, the dickson polynomials are Lucas Polynomials
-    x : numpy.ndarray
+    x : ndarray
         coordinates to evaluate the polynomial at
 
     Returns

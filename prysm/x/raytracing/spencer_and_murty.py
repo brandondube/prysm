@@ -94,11 +94,11 @@ def newton_raphson_solve_s(P1, S, FFp, s1=0.0,
 
     Parameters
     ----------
-    P1 : numpy.ndarray
+    P1 : ndarray
         shape (3,) or (N,3), any float dtype
         position (X1,Y1,Z1) at in the plane normal to the surface vertex
         Eq. 7 from Spencer & Murty, except we keep Z1 so we can utilize vector algebra
-    S : numpy.ndarray
+    S : ndarray
         shape (3,) or (N,3), any float dtype
         (k,l,m) incident direction cosines
     FFp : callable of signature F(x,y) -> z, [Nx, Ny, Nz]
@@ -113,7 +113,7 @@ def newton_raphson_solve_s(P1, S, FFp, s1=0.0,
 
     Returns
     -------
-    Pj, r : numpy.ndarray, numpy.ndarray
+    Pj, r : ndarray, ndarray
         final position of the ray intersection, and the surface normal at that point
 
     """
@@ -176,11 +176,11 @@ def intersect(P0, S, FFp, s1=0,
 
     Parameters
     ----------
-    P0 : numpy.ndarray
+    P0 : ndarray
         shape (3,) or (N,3), any float dtype
         position of the ray, in local coordinates (but Z not necessarily zero)
         Eq. 3 Spencer & Murty
-    S : numpy.ndarray
+    S : ndarray
         shape (3,) or (N,3), any float dtype
         (k,l,m) incident direction cosines
     FFp : callable of signature F(x,y) -> z, [Nx, Ny, Nz]
@@ -195,7 +195,7 @@ def intersect(P0, S, FFp, s1=0,
 
     Returns
     -------
-    Pj, r : numpy.ndarray, numpy.ndarray
+    Pj, r : ndarray, ndarray
         final position of the ray intersection, and the surface normal at that point
 
     """
@@ -220,22 +220,22 @@ def transform_to_global_coords(XYZ, P, S, R=None):
 
     Parameters
     ----------
-    XYZ : numpy.ndarray
+    XYZ : ndarray
         shape (3,) or (N,3), any float dtype
         "world" coordinates [X,Y,Z] along the final dimension
-    P : numpy.ndarray
+    P : ndarray
         shape (3,), any float dtype
         point defining the origin of the local coordinate frame, [X0,Y0,Z0]
-    S : numpy.ndarray
+    S : ndarray
         shape (3,) or (N,3), any float dtype
         (k,l,m) incident direction cosines
-    R : numpy.ndarray
+    R : ndarray
         shape (3,3), any float dtype
         rotation matrix to apply, if the surface is tilted
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         rotated XYZ coordinates, rotated direction cosines
 
     """
@@ -253,22 +253,22 @@ def transform_to_local_coords(XYZ, P, S, R=None):
 
     Parameters
     ----------
-    XYZ : numpy.ndarray
+    XYZ : ndarray
         shape (3,) or (N,3), any float dtype
         "world" coordinates [X,Y,Z] along the final dimension
-    P : numpy.ndarray
+    P : ndarray
         shape (3,), any float dtype
         point defining the origin of the local coordinate frame, [X0,Y0,Z0]
-    S : numpy.ndarray
+    S : ndarray
         shape (3,) or (N,3), any float dtype
         (k,l,m) incident direction cosines
-    R : numpy.ndarray
+    R : ndarray
         shape (3,3), any float dtype
         rotation matrix to apply, if the surface is tilted
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         rotated XYZ coordinates, rotated direction cosines
 
     """
@@ -293,16 +293,16 @@ def refract(n, nprime, S, r):
         preceeding index of refraction
     nprime : float
         following index of refraction
-    S : numpy.ndarray
+    S : ndarray
         shape (3,) or (N,3), any float dtype
         (k,l,m) incident direction cosines
-    r : numpy.ndarray
+    r : ndarray
         shape (3,) or (N,3), any float dtype
         surface normals (Fx, Fy, 1)
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         Sprime, a length 3 vector containing the exitant direction cosines
 
     """
@@ -324,16 +324,16 @@ def reflect(S, r):
 
     Parameters
     ----------
-    S : numpy.ndarray
+    S : ndarray
         shape (3,) or (N,3), any float dtype
         (k,l,m) incident direction cosines
-    r : numpy.ndarray
+    r : ndarray
         shape (3,) or (N,3), any float dtype
         surface normals (Fx, Fy, 1)
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         Sprime, the exitant direction cosines
 
     """
@@ -387,10 +387,10 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
         surf.P, surface global coordinates, [X,Y,Z]
         surf.R, surface rotation matrix (may be None)
         surf.n(wvl) -> refractive index (wvl in um)
-    P : numpy.ndarray
+    P : ndarray
         shape (3,) or (N,3), any float dtype
         position (X0,Y0,Z0) at the outset of the raytrace
-    S : numpy.ndarray
+    S : ndarray
         shape (3,) or (N,3), any float dtype
         (k,l,m) starting direction cosines
     wvl : float

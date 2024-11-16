@@ -14,7 +14,7 @@ def wb_prescale(mosaic, wr, wg1, wg2, wb, cfa='rggb', safe=False, saturation=Non
 
     Parameters
     ----------
-    mosaic : numpy.ndarray
+    mosaic : ndarray
         ndarray of shape (m, n), a float dtype
     wr : float
         red white balance prescalar
@@ -70,7 +70,7 @@ def wb_postscale(rgb, wr, wg, wb, safe=False, saturation=None):
 
     Parameters
     ----------
-    rgb : numpy.ndarray
+    rgb : ndarray
         ndarray of shape (m, n, 3), a float dtype
     wr : float
         red white balance gain
@@ -116,22 +116,22 @@ def composite_bayer(r, g1, g2, b, cfa='rggb', output=None):
 
     Parameters
     ----------
-    r : numpy.ndarray
+    r : ndarray
         ndarray of shape (m, n)
-    g1 : numpy.ndarray
+    g1 : ndarray
         ndarray of shape (m, n)
-    g2 : numpy.ndarray
+    g2 : ndarray
         ndarray of shape (m, n)
-    b : numpy.ndarray
+    b : ndarray
         ndarray of shape (m, n)
     cfa : str, optional, {'rggb', 'bggr'}
         color filter arangement
-    output : numpy.ndarray, optional
+    output : ndarray, optional
         output array, of shape (m, n) and same dtype as r, g1, g2, b
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         array of interleaved data
 
     """
@@ -160,20 +160,20 @@ def decomposite_bayer(img, cfa='rggb'):
 
     Parameters
     ----------
-    img : numpy.ndarray
+    img : ndarray
         composited ndarray of shape (m, n)
     cfa : str, optional, {'rggb', 'bggr'}
         color filter arangement
 
     Returns
     -------
-    r : numpy.ndarray
+    r : ndarray
         ndarray of shape (m//2, n//2)
-    g1 : numpy.ndarray
+    g1 : ndarray
         ndarray of shape (m//2, n//2)
-    g2 : numpy.ndarray
+    g2 : ndarray
         ndarray of shape (m//2, n//2)
-    b : numpy.ndarray
+    b : ndarray
         ndarray of shape (m//2, n//2)
 
     """
@@ -198,22 +198,22 @@ def recomposite_bayer(r, g1, g2, b, cfa='rggb', output=None):
 
     Parameters
     ----------
-    r : numpy.ndarray
+    r : ndarray
         ndarray of shape (m, n)
-    g1 : numpy.ndarray
+    g1 : ndarray
         ndarray of shape (m, n)
-    g2 : numpy.ndarray
+    g2 : ndarray
         ndarray of shape (m, n)
-    b : numpy.ndarray
+    b : ndarray
         ndarray of shape (m, n)
     cfa : str, optional, {'rggb', 'bggr'}
         color filter arangement
-    output : numpy.ndarray, optional
+    output : ndarray, optional
         output array, of shape (2m, 2n) and same dtype as r, g1, g2, b
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         array containing the re-composited color planes
 
     """
@@ -249,25 +249,25 @@ def assemble_superresolved(r, g1, g2, b, zoomfactor, cfa='rggb', out=None):
 
     Parameters
     ----------
-    r : numpy.ndarray
+    r : ndarray
         ndarray of shape (m, n) representing the R bayer color channel
-    g1 : numpy.ndarray
+    g1 : ndarray
         ndarray of shape (m, n) representing the G1 bayer color channel
-    g2 : numpy.ndarray
+    g2 : ndarray
         ndarray of shape (m, n) representing the G2 bayer color channel
-    b : numpy.ndarray
+    b : ndarray
         ndarray of shape (m, n) representing the B bayer color channel
     zoomfactor : float
         amount of upsampling applied, e.g. 500 => 1500; zoomfactor = 3
     cfa : str, {'rggb', 'bggr'}
         color filter arrangement
-    out : numpy.ndarray
+    out : ndarray
         array to place the output in, shape of (m,n,3)
         if None, freshly allocated
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         array of shape (m, n, 3) containing the trichromatic image
     """
     if cfa == 'rggb':
@@ -341,7 +341,7 @@ def demosaic_malvar(img, cfa='rggb'):
 
     Parameters
     ----------
-    img : numpy.ndarray
+    img : ndarray
         ndarray of shape (m, n) containing mosaiced (interleaved) pixel data,
         as from a raw file
     cfa : str, optional, {'rggb', 'bggr'}
@@ -349,7 +349,7 @@ def demosaic_malvar(img, cfa='rggb'):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         ndarray of shape (m, n, 3) that has been demosaiced.  Final dimension
         is ordered R, G, B.  Is of the same dtype as img and has the same energy
         content and sense of z scaling

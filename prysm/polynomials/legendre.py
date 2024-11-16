@@ -36,7 +36,7 @@ def legendre_seq(ns, x):
     ----------
     ns : int
         orders to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     Returns
@@ -57,12 +57,12 @@ def legendre_der(n, x):
     ----------
     n : int
         order to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         d/dx of legendre polynomial evaluated at the given points
 
     """
@@ -78,7 +78,7 @@ def legendre_der_seq(ns, x):
     ----------
     ns : int
         orders to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     Returns

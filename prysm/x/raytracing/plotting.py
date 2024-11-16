@@ -12,7 +12,7 @@ def plot_rays(phist, lw=1, ls='-', c='r', alpha=1, zorder=4, x='z', y='y', fig=N
 
     Parameters
     ----------
-    phist : list or numpy.ndarray
+    phist : list or ndarray
         the first return from spencer_and_murty.raytrace,
         iterable of arrays of length 3 (X,Y,Z)
     lw : float, optional
@@ -107,7 +107,7 @@ def plot_optics(prescription, phist, mirror_backing=None, points=100,
     ----------
     prescription : iterable of Surface
         a prescription for an optical layout
-    phist : iterable of numpy.ndarray
+    phist : iterable of ndarray
         the first return of spencer_and_murty.raytrace, the history of positions
         through a raytrace
     mirror_backing : TODO
@@ -199,7 +199,7 @@ def plot_transverse_ray_aberration(phist, lw=1, ls='-', c='r', alpha=1, zorder=4
 
     Parameters
     ----------
-    phist : list or numpy.ndarray
+    phist : list or ndarray
         the first return from spencer_and_murty.raytrace,
         iterable of arrays of length 3 (X,Y,Z)
     lw : float, optional
@@ -247,7 +247,7 @@ def plot_wave_aberration(phist, lw=1, ls='-', c='r', alpha=1, zorder=4, axis='y'
 
     Parameters
     ----------
-    phist : list or numpy.ndarray
+    phist : list or ndarray
         the first return from spencer_and_murty.raytrace,
         iterable of arrays of length 3 (X,Y,Z)
     lw : float, optional
@@ -294,7 +294,7 @@ def plot_spot_diagram(phist, marker='+', c='k', alpha=1, zorder=4, s=None, fig=N
 
     Parameters
     ----------
-    phist : list or numpy.ndarray
+    phist : list or ndarray
         the first return from spencer_and_murty.raytrace,
         iterable of arrays of length 3 (X,Y,Z)
     marker : str, optional

@@ -10,12 +10,12 @@ def hermite_He(n, x):
     ----------
     n : int
         polynomial order
-    x : numpy.ndarray
+    x : ndarray
         point(s) to evaluate at.  Scalars and arrays both work.
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         He_n(x)
 
     """
@@ -63,7 +63,7 @@ def hermite_He_seq(ns, x):
     ----------
     ns : iterable of int
         rising polynomial orders, assumed to be sorted
-    x : numpy.ndarray
+    x : ndarray
         point(s) to evaluate at.  Scalars and arrays both work.
 
     Returns
@@ -125,12 +125,12 @@ def hermite_He_der(n, x):
     ----------
     n : int
         polynomial order
-    x : numpy.ndarray
+    x : ndarray
         point(s) to evaluate at.  Scalars and arrays both work.
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         d/dx[He_n(x)]
 
     """
@@ -146,7 +146,7 @@ def hermite_He_der_seq(ns, x):
     ----------
     ns : iterable of int
         rising polynomial orders, assumed to be sorted
-    x : numpy.ndarray
+    x : ndarray
         point(s) to evaluate at.  Scalars and arrays both work.
 
     Returns
@@ -209,12 +209,12 @@ def hermite_H(n, x):
     ----------
     n : int
         polynomial order
-    x : numpy.ndarray
+    x : ndarray
         point(s) to evaluate at.  Scalars and arrays both work.
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         H_n(x)
 
     """
@@ -262,7 +262,7 @@ def hermite_H_seq(ns, x):
     ----------
     ns : iterable of int
         rising polynomial orders, assumed to be sorted
-    x : numpy.ndarray
+    x : ndarray
         point(s) to evaluate at.  Scalars and arrays both work.
 
     Returns
@@ -325,12 +325,12 @@ def hermite_H_der(n, x):
     ----------
     n : int
         polynomial order
-    x : numpy.ndarray
+    x : ndarray
         point(s) to evaluate at.  Scalars and arrays both work.
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         d/dx[H_n(x)]
 
     """
@@ -346,7 +346,7 @@ def hermite_H_der_seq(ns, x):
     ----------
     ns : iterable of int
         rising polynomial orders, assumed to be sorted
-    x : numpy.ndarray
+    x : ndarray
         point(s) to evaluate at.  Scalars and arrays both work.
 
     Returns

@@ -104,7 +104,7 @@ class DM:
 
         Parameters
         ----------
-        ifn : numpy.ndarray
+        ifn : ndarray
             influence function; assumes the same for all actuators and must
             be the same shape as (x,y).  Assumed centered on N//2th sample of x, y.
             Assumed to be well-conditioned for use in convolution, i.e.
@@ -227,7 +227,7 @@ class DM:
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             surface figure error or wfe, projected into the beam normal
             by self.rot
 
@@ -276,7 +276,7 @@ class DM:
 
         Parameters
         ----------
-        protograd : numpy.ndarray
+        protograd : ndarray
             "prototype gradient"
             the array holding the work-in-progress towards the gradient.
             For example, in a problem fitting actuator commands to a surface,
@@ -299,7 +299,7 @@ class DM:
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             analytic gradient, shape Nact x Nact
 
         Notes

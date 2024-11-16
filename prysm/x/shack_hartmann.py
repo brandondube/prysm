@@ -23,9 +23,9 @@ def shack_hartmann(pitch, n, efl, wavelength, x, y,
         focal length of each lenslet, mm
     wavelength : float
         wavelength of light, microns
-    x : numpy.ndarray
+    x : ndarray
         x coordinates that define the space of the lens, mm
-    y : numpy.ndarray
+    y : ndarray
         y coordinates that define the space of the beam, mm
     aperture : callable, optional
         the aperture can either be:
@@ -41,7 +41,7 @@ def shack_hartmann(pitch, n, efl, wavelength, x, y,
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         complex ndarray, such that:
         wf2 = wf * shack_hartmann_complex_screen(... efl=efl)
         wf3 = wf2.free_space(efl=efl)

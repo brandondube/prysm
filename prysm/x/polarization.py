@@ -27,7 +27,7 @@ def _empty_pol_vector(shape=None):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         The empty array of specified shape
     """
 
@@ -55,7 +55,7 @@ def linear_pol_vector(angle, degrees=True):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         linear jones vector
     """
 
@@ -88,7 +88,7 @@ def circular_pol_vector(handedness='left', shape=None):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         circular jones vector
     """
 
@@ -115,7 +115,7 @@ def _empty_jones(shape=None):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         The empty array of specified shape
     """
 
@@ -145,7 +145,7 @@ def jones_rotation_matrix(theta, shape=None):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         2D rotation matrix
     """
 
@@ -179,7 +179,7 @@ def linear_retarder(retardance, theta=0, shape=None):
 
     Returns
     -------
-    retarder : numpy.ndarray
+    retarder : ndarray
         numpy array containing the retarder matrices
     """
 
@@ -216,7 +216,7 @@ def linear_diattenuator(alpha, theta=0, shape=None):
 
     Returns
     -------
-    diattenuator : numpy.ndarray
+    diattenuator : ndarray
         numpy array containing the diattenuator matrices
     """
     assert (alpha >= 0) and (alpha <= 1), f"alpha cannot be less than 0 or greater than 1, got: {alpha}"
@@ -302,7 +302,7 @@ def vector_vortex_retarder(charge, theta, retardance=np.pi, rotate=0):
     ----------
     charge : float
         topological charge of the vortex, typically an interger
-    theta : numpy.ndarray
+    theta : ndarray
         angular coordinate grid describing the azimuthal angle of the
         vortex. This can be created from prysm.coordinates.cart_to_polar
     retardance : float
@@ -312,7 +312,7 @@ def vector_vortex_retarder(charge, theta, retardance=np.pi, rotate=0):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         jones matrix of a vector vortex retarder
     """
 
@@ -361,9 +361,9 @@ def broadcast_kron(a, b):
 
     Parameters
     ----------
-    a : numpy.ndarray
+    a : ndarray
         N,M,...,2,2 array used to scale b in kronecker product
-    b : numpy.ndarray
+    b : ndarray
         N,M,...,2,2 array used to form block matrices in kronecker product
 
     Returns
@@ -456,7 +456,7 @@ def pauli_coefficients(jones):
 
     Parameters
     ----------
-    jones : numpy.ndarray
+    jones : ndarray
         complex jones matrix to decompose
 
 
@@ -555,14 +555,14 @@ def apply_polarization_optic(field, pol_optic):
 
     Parameters
     ----------
-    field : numpy.ndarray
+    field : ndarray
         scalar field of shape M x N
-    pol_optic : numpy.ndarray
+    pol_optic : ndarray
         jones matrix of shape M x N x 2 x 2
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         jones matrix of shape M x N x 2 x 2
     """
 

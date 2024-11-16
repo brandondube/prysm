@@ -15,14 +15,14 @@ def focus(wavefunction, Q):
 
     Parameters
     ----------
-    wavefunction : numpy.ndarray
+    wavefunction : ndarray
         the pupil wavefunction
     Q : float
         oversampling / padding factor
 
     Returns
     -------
-    psf : numpy.ndarray
+    psf : ndarray
         point spread function
 
     """
@@ -40,14 +40,14 @@ def unfocus(wavefunction, Q):
 
     Parameters
     ----------
-    wavefunction : numpy.ndarray
+    wavefunction : ndarray
         the pupil wavefunction
     Q : float
         oversampling / padding factor
 
     Returns
     -------
-    pupil : numpy.ndarray
+    pupil : ndarray
         field in the pupil plane
 
     """
@@ -66,7 +66,7 @@ def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
 
     Parameters
     ----------
-    wavefunction : numpy.ndarray
+    wavefunction : ndarray
         the pupil wavefunction
     input_dx : float
         spacing between samples in the pupil plane, millimeters
@@ -87,7 +87,7 @@ def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
 
     Returns
     -------
-    data : numpy.ndarray
+    data : ndarray
         2D array of data
 
     """
@@ -117,7 +117,7 @@ def focus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
 
     Parameters
     ----------
-    wavefunction : numpy.ndarray
+    wavefunction : ndarray
         the pupil wavefunction
     input_dx : float
         spacing between samples in the pupil plane, millimeters
@@ -138,7 +138,7 @@ def focus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
 
     Returns
     -------
-    data : numpy.ndarray
+    data : ndarray
         2D array of data
 
     """
@@ -169,7 +169,7 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
 
     Parameters
     ----------
-    wavefunction : numpy.ndarray
+    wavefunction : ndarray
         the image plane wavefunction
     input_dx : float
         spacing between samples in the focal plane, microns
@@ -190,11 +190,11 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
 
     Returns
     -------
-    x : numpy.ndarray
+    x : ndarray
         x axis unit, 1D ndarray
-    y : numpy.ndarray
+    y : ndarray
         y axis unit, 1D ndarray
-    data : numpy.ndarray
+    data : ndarray
         2D array of data
 
     """
@@ -371,7 +371,7 @@ def angular_spectrum(field, wvl, dx, z, Q=2, tf=None):
 
     Parameters
     ----------
-    field : numpy.ndarray
+    field : ndarray
         2D array of complex electric field values
     wvl : float
         wavelength of light, microns
@@ -381,13 +381,13 @@ def angular_spectrum(field, wvl, dx, z, Q=2, tf=None):
         cartesian sample spacing, units of millimeters
     Q : float
         sampling factor used.  Q>=2 for Nyquist sampling of incoherent fields
-    tf : numpy.ndarray
+    tf : ndarray
         if not None, clobbers all other arguments
         transfer function for the propagation
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         2D ndarray of the output field, complex
 
     """
@@ -418,7 +418,7 @@ def angular_spectrum_transfer_function(samples, wvl, dx, z):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         ndarray of shape samples containing the complex valued transfer function
         such that X = fft2(x); xhat = ifft2(X*tf) is signal x after free space propagation
 
@@ -446,7 +446,7 @@ def to_fpm_and_back(wavefunction, dx, efl, wavelength, fpm, fpm_dx, shift=(0, 0)
 
     Parameters
     ----------
-    wavefunction : numpy.ndarray
+    wavefunction : ndarray
         complex wave to propagate
     dx : float
         inter-sample spacing of wavefunction, mm
@@ -454,7 +454,7 @@ def to_fpm_and_back(wavefunction, dx, efl, wavelength, fpm, fpm_dx, shift=(0, 0)
         focal length for the propagation
     wavelength : float
         wavelength of light to propagate at, um
-    fpm : Wavefront or numpy.ndarray
+    fpm : Wavefront or ndarray
         the focal plane mask
     fpm_dx : float
         sampling increment in the focal plane,  microns;
@@ -506,7 +506,7 @@ def to_fpm_and_back_backprop(wavefunction, dx, wavelength, efl, fpm, fpm_dx=None
 
     Parameters
     ----------
-    wavefunction : numpy.ndarray
+    wavefunction : ndarray
         backpropagated partial derivative, prior to going through the FPM
     dx : float
         inter-sample spacing of wavefunction, mm
@@ -514,7 +514,7 @@ def to_fpm_and_back_backprop(wavefunction, dx, wavelength, efl, fpm, fpm_dx=None
         wavelength of light to propagate at, um
     efl : float
         focal length for the propagation
-    fpm : Wavefront or numpy.ndarray
+    fpm : Wavefront or ndarray
         the focal plane mask
     fpm_dx : float
         sampling increment in the focal plane,  microns;
@@ -566,7 +566,7 @@ class Wavefront:
 
         Parameters
         ----------
-        cmplx_field : numpy.ndarray
+        cmplx_field : ndarray
             complex-valued array with both amplitude and phase error
         wavelength : float
             wavelength of light, microns
@@ -587,9 +587,9 @@ class Wavefront:
 
         Parameters
         ----------
-        amplitude : numpy.ndarray
+        amplitude : ndarray
             array containing the amplitude
-        phase : numpy.ndarray, optional
+        phase : ndarray, optional
             array containing the optical path error with units of nm
             if None, assumed zero
         wavelength : float
@@ -611,7 +611,7 @@ class Wavefront:
 
         Parameters
         ----------
-        phase : numpy.ndarray
+        phase : ndarray
             phase or optical path error, units of nm
         wavelength : float
             wavelength of light with units of microns
@@ -641,9 +641,9 @@ class Wavefront:
             focal length of the lens, millimeters
         wavelength : float
             wavelength of light, microns
-        x : numpy.ndarray
+        x : ndarray
             x coordinates that define the space of the lens, mm
-        y : numpy.ndarray
+        y : ndarray
             y coordinates that define the space of the beam, mm
 
         Returns
@@ -705,7 +705,7 @@ class Wavefront:
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             gradient backpropagated to the phase of wf_in
 
         """
@@ -723,7 +723,7 @@ class Wavefront:
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             gradient backpropagated to the complex wavefront before
             intensity was calculated
 
@@ -736,7 +736,7 @@ class Wavefront:
 
         Parameters
         ----------
-        array : numpy.ndarray
+        array : ndarray
             source array
         Q : float, optional
             oversampling factor; ratio of input to output array widths
@@ -838,7 +838,7 @@ class Wavefront:
             inter-plane distance, millimeters
         Q : float
             padding factor.  Q=1 does no padding, Q=2 pads 1024 to 2048.
-        tf : numpy.ndarray
+        tf : ndarray
             if not None, clobbers all other arguments
             transfer function for the propagation
 
@@ -1061,7 +1061,7 @@ class Wavefront:
         ----------
         efl : float
             focal length for the propagation
-        fpm : Wavefront or numpy.ndarray
+        fpm : Wavefront or ndarray
             the focal plane mask
         fpm_dx : float
             sampling increment in the focal plane,  microns;
@@ -1107,7 +1107,7 @@ class Wavefront:
         ----------
         efl : float
             focal length for the propagation
-        fpm : Wavefront or numpy.ndarray
+        fpm : Wavefront or ndarray
             the focal plane mask
         fpm_dx : float
             sampling increment in the focal plane,  microns;
@@ -1151,9 +1151,9 @@ class Wavefront:
         ----------
         efl : float
             focal length for the propagation
-        lyot : Wavefront or numpy.ndarray
+        lyot : Wavefront or ndarray
             the Lyot stop; if None, equivalent to ones_like(self.data)
-        fpm : Wavefront or numpy.ndarray
+        fpm : Wavefront or ndarray
             1 - fpm
             one minus the focal plane mask (see Soummer et al 2007)
         fpm_dx : float
@@ -1223,9 +1223,9 @@ class Wavefront:
         ----------
         efl : float
             focal length for the propagation
-        lyot : Wavefront or numpy.ndarray
+        lyot : Wavefront or ndarray
             the Lyot stop; if None, equivalent to ones_like(self.data)
-        fpm : Wavefront or numpy.ndarray
+        fpm : Wavefront or ndarray
             np.conj(1 - fpm)
             one minus the focal plane mask (see Soummer et al 2007)
         fpm_dx : float

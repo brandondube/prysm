@@ -51,7 +51,7 @@ def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, method='mdft', 
     ----------
     efl : float
         focal length for the propagation
-    fpm : Wavefront or numpy.ndarray
+    fpm : Wavefront or ndarray
         the focal plane mask
     fib_dx : float
         sampling increment in the focal plane,  microns;
@@ -140,10 +140,10 @@ class SelfReferencedInterferometer:
 
         Parameters
         ----------
-        x : numpy.ndarray
+        x : ndarray
             x coordinates for arrays that will be passed to forward_model
             not normalized
-        y : numpy.ndarray
+        y : ndarray
             y coordinates for arrays that will be passed to forward_model
             not normalized
         efl : float
@@ -193,7 +193,7 @@ class SelfReferencedInterferometer:
 
         Parameters
         ----------
-        wave_in : numpy.ndarray
+        wave_in : ndarray
             complex wavefunction present at the input to the interferometer
         phase_shift : float
             phase shift, modulo 2pi, if any

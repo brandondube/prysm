@@ -40,13 +40,13 @@ class Softmax:
 
         Parameters
         ----------
-        x : numpy.ndarray, shape (A,B,C, ... K)
+        x : ndarray, shape (A,B,C, ... K)
             any number of leading dimensions, required trailing dimension of
             size K, where K is the number of levels to be used with an encoder
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             same shape as x, activated x, where sum(axis=K) == 1
 
         """
@@ -68,13 +68,13 @@ class Softmax:
 
         Parameters
         ----------
-        grad : numpy.ndarray
+        grad : ndarray
             gradient of scalar cost function w.r.t. following step in forward
             problem,  of same shape as passed to forward()
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             dcost/dsoftmax-input
 
         """
@@ -151,7 +151,7 @@ class DiscreteEncoder:
         ----------
         estimator : an initialized estimator
             for example GumbelSoftmax()
-        levels : int or numpy.ndarray
+        levels : int or ndarray
             if int, self-generates arange(levels)
             else, expected to be K discrete, non-overlapping integer states
 
@@ -206,7 +206,7 @@ class DiscreteEncoder:
         # take argmax along dim k, and take that from levels
         indices = np.argmax(encoded, axis=-1)
         return np.take(self.levels, indices)
-    
+
 
 class Tanh:
     """Tanh(x)
@@ -226,14 +226,14 @@ class Tanh:
         self.a = a
         self.x0 = x0
         self.y0 = y0
-   
+
     def forward(self, x):
         x = x-self.x0
         return (2 / (1 + np.exp(-2 * self.a * x)) - 1 + self.y0)
-    
+
     def backprop(self, xbar):
         fx = self.forward(xbar) - self.y0 # have to subtract offset
-        return self.a*(1 - fx**2) 
+        return self.a*(1 - fx**2)
 
 
 class Arctan:
@@ -255,11 +255,11 @@ class Arctan:
         self.a = a
         self.x0 = x0
         self.y0 = y0
-   
+
     def forward(self, x):
         x = x - self.x0
         return np.arctan(self.a * x) + self.y0
-    
+
     def backprop(self, xbar):
         xbar = xbar - self.x0
         xbar *= self.a
@@ -284,21 +284,21 @@ class Softplus:
         self.a = a
         self.x0 = x0
         self.y0 = y0
-   
+
     def forward(self, x):
         x = x-self.x0
         arg = 1 + np.exp(self.a * x)
         return np.log(arg) + self.y0
-    
+
     def backprop(self, xbar):
         xbar = xbar - self.x0
         return self.a * (1 / (1 + np.exp(-self.a * xbar)))
-    
+
 
 class Sigmoid:
     """Sigmoid(x)
     """
-    def __init__(self, a=1, x0=0, y0=0): 
+    def __init__(self, a=1, x0=0, y0=0):
         """Activation function Sigmoid(x)
 
         Parameters
@@ -313,11 +313,11 @@ class Sigmoid:
         self.a = a
         self.x0 = x0
         self.y0 = y0
-   
+
     def forward(self, x):
         x = x - self.x0
         return (1 / (1 + np.exp(-self.a * x))) + self.y0
-    
+
     def backprop(self, xbar):
         sig = self.forward(xbar) - self.y0
         return self.a * sig * (1 - sig)

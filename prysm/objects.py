@@ -10,9 +10,9 @@ def slit(x, y, width_x, width_y=None):
 
     Parameters
     ----------
-    x : numpy.ndarray
+    x : ndarray
         x coordinates, 1D or 2D
-    y : numpy.ndarray
+    y : ndarray
         y coordinates, 1D or 2D
     width_x : float
         the half-width of the slit in x, diameter will be 2x width_x.
@@ -50,14 +50,14 @@ def slit_ft(width_x, width_y, fx, fy):
         x width of the slit, pass zero if the slit only has width in y
     width_y : float
         y width of the slit, pass zero if the slit only has width in x
-    fx : numpy.ndarray
+    fx : ndarray
         sample points in x frequency axis
-    fy : numpy.ndarray
+    fy : ndarray
         sample points in y frequency axis
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         2D array containing the analytic fourier transform
 
     """
@@ -77,12 +77,12 @@ def pinhole(radius, rho):
     ----------
     radius : float
         radius of the pinhole
-    rho : numpy.ndarray
+    rho : ndarray
         radial coordinates
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         2D array containing the pinhole
 
     """
@@ -96,12 +96,12 @@ def pinhole_ft(radius, fr):
     ----------
     radius : float
         radius of the pinhole
-    fr : numpy.ndarray
+    fr : ndarray
         radial spatial frequency
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         2D array containing the analytic fourier transform
 
     """
@@ -114,9 +114,9 @@ def siemensstar(r, t, spokes, oradius=0.9, iradius=0, background='black', contra
 
     Parameters
     ----------
-    r : numpy.ndarray
+    r : ndarray
         radial coordinates, 2D
-    t : numpy.ndarray
+    t : ndarray
         azimuthal coordinates, 2D
     spokes : int
         number of spokes in the star
@@ -133,7 +133,7 @@ def siemensstar(r, t, spokes, oradius=0.9, iradius=0, background='black', contra
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         2D array of the same shape as r, t which is in the range [0,1]
 
     """
@@ -168,9 +168,9 @@ def tiltedsquare(x, y, angle=4, radius=0.5, contrast=0.9, background='white'):
 
     Parameters
     ----------
-    x : numpy.ndarray
+    x : ndarray
         x coordinates, 2D
-    y : numpy.ndarray
+    y : ndarray
         y coordinates, 2D
     angle : float
         counter-clockwise angle of the square from x, degrees
@@ -183,7 +183,7 @@ def tiltedsquare(x, y, angle=4, radius=0.5, contrast=0.9, background='white'):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         ndarray containing the rasterized square
 
     """
@@ -211,9 +211,9 @@ def slantededge(x, y, angle=4, contrast=0.9, crossed=False):
 
     Parameters
     ----------
-    x : numpy.ndarray
+    x : ndarray
         x coordinates, 2D
-    y : numpy.ndarray
+    y : ndarray
         y coordinates, 2D
     angle : float
         angle of the edge to the cartesian y axis

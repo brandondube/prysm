@@ -30,9 +30,9 @@ def zernike_nm(n, m, r, t, norm=True):
         radial order
     m : int
         azimuthal order
-    r : numpy.ndarray
+    r : ndarray
         radial coordinates
-    t : numpy.ndarray
+    t : ndarray
         azimuthal coordinates
     norm : bool, optional
         if True, orthonormalize the result (unit RMS)
@@ -40,7 +40,7 @@ def zernike_nm(n, m, r, t, norm=True):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         zernike mode of order n,m at points r,t
 
     """
@@ -67,9 +67,9 @@ def zernike_nm_seq(nms, r, t, norm=True):
     ----------
     nms : iterable of tuple of int,
         seq of (n, m); looks like [(1,1), (3,1), ...]
-    r : numpy.ndarray
+    r : ndarray
         radial coordinates
-    t : numpy.ndarray
+    t : ndarray
         azimuthal coordinates
     norm : bool, optional
         if True, orthonormalize the result (unit RMS)
@@ -77,7 +77,7 @@ def zernike_nm_seq(nms, r, t, norm=True):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         shape (k, n, m), with k = len(nms)
 
     """
@@ -164,9 +164,9 @@ def zernike_nm_der(n, m, r, t, norm=True):
         radial order
     m : int
         azimuthal order
-    r : numpy.ndarray
+    r : ndarray
         radial coordinates
-    t : numpy.ndarray
+    t : ndarray
         azimuthal coordinates
     norm : bool, optional
         if True, orthonormalize the result (unit RMS)
@@ -174,7 +174,7 @@ def zernike_nm_der(n, m, r, t, norm=True):
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         dZ/dr, dZ/dt
 
     """
@@ -250,9 +250,9 @@ def zernike_nm_der_seq(nms, r, t, norm=True):
         seq of [(n, m)] radial and azimuthal orders
     m : int
         azimuthal order
-    r : numpy.ndarray
+    r : ndarray
         radial coordinates
-    t : numpy.ndarray
+    t : ndarray
         azimuthal coordinates
     norm : bool, optional
         if True, orthonormalize the result (unit RMS)

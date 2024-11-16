@@ -28,16 +28,16 @@ def _establish_axis(P1, P2):
 
     Parameters
     ----------
-    P1 : numpy.ndarray
+    P1 : ndarray
         shape (3,), any float dtype
         first point
-    P2 : numpy.ndarray
+    P2 : ndarray
         shape (3,), any float dtype
         second point
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         P1 (same exact PyObject) and direction cosine from P1 -> P2
 
     """
@@ -78,7 +78,7 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         the "P" value to be used with Surface.stop to complete the solve
 
     """
@@ -123,9 +123,9 @@ def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan), debug=False):
 
     Parameters
     ----------
-    P : numpy.ndarray
+    P : ndarray
         shape (3,), a single ray's initial positions
-    S : numpy.ndarray
+    S : ndarray
         shape (3,) a single ray's initial direction cosines
     prescription : iterable
         sequence of surfaces in the prescription
@@ -142,7 +142,7 @@ def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan), debug=False):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         deltas to P which result in ray intersection
 
     """
@@ -180,9 +180,9 @@ def locate_ep(P_chief, S_chief, P_obj, P_s1):
 
     Parameters
     ----------
-    P_chief : numpy.ndarray
+    P_chief : ndarray
         starting position of the chief ray, at the object plane
-    S_chief : numpy.ndarray
+    S_chief : ndarray
         starting direction cosine of the chief ray
     P_obj : iterable
         the position of the object
@@ -194,7 +194,7 @@ def locate_ep(P_chief, S_chief, P_obj, P_s1):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         position of the entrance pupil (X,Y,Z)
 
     """
@@ -216,9 +216,9 @@ def locate_xp(P_chief, S_chief, P_img, P_sk):
 
     Parameters
     ----------
-    P_chief : numpy.ndarray
+    P_chief : ndarray
         final position of the chief ray, at the image plane
-    S_chief : numpy.ndarray
+    S_chief : ndarray
         final direction cosine of the chief ray
     P_img : iterable
         the position of the object
@@ -230,7 +230,7 @@ def locate_xp(P_chief, S_chief, P_img, P_sk):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         position of the entrance pupil (X,Y,Z)
 
     """

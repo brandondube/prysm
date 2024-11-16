@@ -17,16 +17,16 @@ def bias_and_gain_invariant_error(I, D, mask):  # NOQA
 
     Parameters
     ----------
-    I : numpy.ndarray
+    I : ndarray
         'intensity' or model data, any float dtype, any shape
-    D : numpy.ndarray
+    D : ndarray
         'data' or true mesaurement to be matched, any float dtype, any shape
-    mask : numpy.ndarray
+    mask : ndarray
         logical array with elements to keep (True) or exclude (False)
 
     Returns
     -------
-    float, numpy.ndarray
+    float, ndarray
         cost, dcost/dI
 
 
@@ -70,16 +70,16 @@ def mean_square_error(M, D, mask=None):
 
     Parameters
     ----------
-    M : numpy.ndarray
+    M : ndarray
         "model data"
-    D : numpy.ndarray
+    D : ndarray
         "truth data"
-    mask : numpy.ndarray, optional
+    mask : ndarray, optional
         True where M should contribute to the cost, False where it should not
 
     Returns
     -------
-    float, numpy.ndarray
+    float, ndarray
         cost, dcost/dM
 
     """
@@ -105,16 +105,16 @@ def negative_loglikelihood(y, yhat, mask=None):
 
     Parameters
     ----------
-    y : numpy.ndarray
+    y : ndarray
         predicted values; typically the output of a model
-    yhat : numpy.ndarray
+    yhat : ndarray
         truth or target values
-    mask : numpy.ndarray, optional
+    mask : ndarray, optional
         True where M should contribute to the cost, False where it should not
 
     Returns
     -------
-    float, numpy.ndarray
+    float, ndarray
         cost, dcost/dy
 
     """

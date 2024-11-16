@@ -16,7 +16,7 @@ def cheby1(n, x):
     ----------
     n : int
         order to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
@@ -33,7 +33,7 @@ def cheby1_seq(ns, x):
     ----------
     ns : Iterable of int
         orders to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     Returns
@@ -57,7 +57,7 @@ def cheby1_der(n, x):
     ----------
     n : int
         order to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
@@ -74,7 +74,7 @@ def cheby1_der_seq(ns, x):
     ----------
     ns : Iterable of int
         orders to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     Returns
@@ -98,7 +98,7 @@ def cheby2(n, x):
     ----------
     n : int
         order to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
@@ -115,7 +115,7 @@ def cheby2_seq(ns, x):
     ----------
     ns : Iterable of int
         orders to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     Returns
@@ -145,7 +145,7 @@ def cheby2_der(n, x):
     ----------
     n : int
         order to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
@@ -162,7 +162,7 @@ def cheby2_der_seq(ns, x):
     ----------
     ns : Iterable of int
         orders to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     Returns
@@ -186,7 +186,7 @@ def cheby3(n, x):
     ----------
     n : int
         order to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
@@ -203,7 +203,7 @@ def cheby3_seq(ns, x):
     ----------
     ns : Iterable of int
         orders to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     Returns
@@ -227,7 +227,7 @@ def cheby3_der(n, x):
     ----------
     n : int
         order to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
@@ -244,7 +244,7 @@ def cheby3_der_seq(ns, x):
     ----------
     ns : Iterable of int
         orders to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     Returns
@@ -268,7 +268,7 @@ def cheby4(n, x):
     ----------
     n : int
         order to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
@@ -285,7 +285,7 @@ def cheby4_seq(ns, x):
     ----------
     ns : Iterable of int
         orders to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     Returns
@@ -309,7 +309,7 @@ def cheby4_der(n, x):
     ----------
     n : int
         order to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
@@ -326,7 +326,7 @@ def cheby4_der_seq(ns, x):
     ----------
     ns : Iterable of int
         orders to evaluate
-    x : numpy.ndarray
+    x : ndarray
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     Returns

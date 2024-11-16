@@ -48,7 +48,7 @@ def pad2d(array, Q=2, value=0, mode='constant', out_shape=None):
 
     Parameters
     ----------
-    array : numpy.ndarray
+    array : ndarray
         source array
     Q : float, optional
         oversampling factor; ratio of input to output array widths
@@ -62,7 +62,7 @@ def pad2d(array, Q=2, value=0, mode='constant', out_shape=None):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         padded array, may share memory with input array
 
     Notes
@@ -116,7 +116,7 @@ def crop_center(img, out_shape):
 
     Parameters
     ----------
-    img : numpy.ndarray
+    img : ndarray
         ndarray of shape (m, n)
     out_shape : int or iterable of int
         shape to crop out, either a scalar or pair of values
@@ -146,7 +146,7 @@ def forward_ft_unit(dx, samples, shift=True):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         array of sample frequencies in the output of an fft
 
     """
@@ -163,7 +163,7 @@ def fourier_resample(f, zoom):
 
     Parameters
     ----------
-    f : numpy.ndarray
+    f : ndarray
         ndim 2 ndarray, floating point dtype
     zoom : float
         zoom factor to apply
@@ -171,7 +171,7 @@ def fourier_resample(f, zoom):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         zoomed f
 
     Notes
@@ -249,7 +249,7 @@ class MatrixDFTExecutor:
 
         Parameters
         ----------
-        ary : numpy.ndarray
+        ary : ndarray
             an array, 2D, real or complex.  Not fftshifted.
         Q : float
             oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
@@ -262,7 +262,7 @@ class MatrixDFTExecutor:
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             2D array containing the shifted transform.
             Equivalent to ifftshift(fft2(fftshift(ary))) modulo output
             sampling/grid differences
@@ -281,9 +281,9 @@ class MatrixDFTExecutor:
 
         Parameters
         ----------
-        fbar : numpy.ndarray
+        fbar : ndarray
             the array from the previous gradient calculation step
-        ary : numpy.ndarray
+        ary : ndarray
             the array used in the forward computation
         Q : float
             oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
@@ -307,7 +307,7 @@ class MatrixDFTExecutor:
 
         Parameters
         ----------
-        ary : numpy.ndarray
+        ary : ndarray
             an array, 2D, real or complex.  Not fftshifted.
         Q : float
             oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
@@ -320,7 +320,7 @@ class MatrixDFTExecutor:
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             2D array containing the shifted transform.
             Equivalent to ifftshift(ifft2(fftshift(ary))) modulo output
             sampling/grid differences
@@ -339,7 +339,7 @@ class MatrixDFTExecutor:
 
         Parameters
         ----------
-        fbar : numpy.ndarray
+        fbar : ndarray
             the array from the previous gradient calculation step
         Q : float
             oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
@@ -431,7 +431,7 @@ class ChirpZTransformExecutor:
 
         Parameters
         ----------
-        ary : numpy.ndarray
+        ary : ndarray
             an array, 2D, real or complex.  Not fftshifted.
         Q : float
             oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
@@ -447,7 +447,7 @@ class ChirpZTransformExecutor:
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             2D array containing the shifted transform.
             Equivalent to ifftshift(fft2(fftshift(ary))) modulo output
             sampling/grid differences
@@ -512,7 +512,7 @@ class ChirpZTransformExecutor:
 
         Parameters
         ----------
-        ary : numpy.ndarray
+        ary : ndarray
             an array, 2D, real or complex.  Not fftshifted.
         Q : float
             oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
@@ -528,7 +528,7 @@ class ChirpZTransformExecutor:
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             2D array containing the shifted transform.
             Equivalent to ifftshift(fft2(fftshift(ary))) modulo output
             sampling/grid differences

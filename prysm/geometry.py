@@ -17,16 +17,16 @@ def gaussian(sigma, x, y, center=(0, 0)):
     ----------
     sigma : float
         width parameter of the gaussian, expressed in the same units as x and y
-    x : numpy.ndarray
+    x : ndarray
         x spatial coordinates, 2D or 1D
-    y : numpy.ndarray
+    y : ndarray
         y spatial coordinates, 2D or 1D
     center : tuple of float
         center of the gaussian, (x,y)
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         mask with gaussian shape
 
     """
@@ -52,14 +52,14 @@ def rectangle(width, x, y, height=None, angle=0):
         If None, inherited from width to make a square
     angle : float
         angle
-    x : numpy.ndarray
+    x : ndarray
         x spatial coordinates, 2D
-    y : numpy.ndarray
+    y : ndarray
         y spatial coordinates, 2D
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         array with the rectangle painted at 1 and the background at 0
 
     """
@@ -92,14 +92,14 @@ def rotated_ellipse(width_major, width_minor, x, y, major_axis_angle=0):
         width of the ellipse in its minor axis
     major_axis_angle : float
         angle of the major axis w.r.t. the x axis, degrees
-    x : numpy.ndarray
+    x : ndarray
         x spatial coordinates, 2D
-    y : numpy.ndarray
+    y : ndarray
         y spatial coordinates, 2D
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         An ndarray of shape (samples,samples) of value 0 outside the ellipse and value 1 inside the ellipse
 
     """
@@ -123,14 +123,14 @@ def square(x, y):
     ----------
     samples : int, optional
         number of samples in the square output array
-    x : numpy.ndarray
+    x : ndarray
         x spatial coordinates, 2D
-    y : numpy.ndarray
+    y : ndarray
         y spatial coordinates, 2D
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         binary ndarray representation of the mask
 
     """
@@ -146,12 +146,12 @@ def truecircle(radius, r):
         number of samples in the square output array
     radius : float, optional
         radius of the shape in the square output array.  radius=1 will fill the
-    r : numpy.ndarray
+    r : ndarray
         radial coordinate, 2D
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         nonbinary ndarray representation of the mask
 
     Notes
@@ -177,12 +177,12 @@ def circle(radius, r):
     radius : float
         radius of the circle, same units as r.  The return is 1 inside the
         radius and 0 outside
-    r : numpy.ndarray
+    r : ndarray
         2D array of radial coordinates
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         binary ndarray representation of the mask
 
     """
@@ -198,12 +198,12 @@ def annulus(rin, rout, r):
         inner radius
     rout : float
         outer radius
-    r : numpy.ndarray
+    r : ndarray
         2D array of radial coordinates
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         binary ndarray representation of the mask
 
     """
@@ -221,9 +221,9 @@ def regular_polygon(sides, radius, x, y, center=(0, 0), rotation=0):
         number of sides to the polygon
     radius : float, optional
         distance from the origin to a vertex
-    x : numpy.ndarray
+    x : ndarray
         x spatial coordinates, 2D or 1D
-    y : numpy.ndarray
+    y : ndarray
         y spatial coordinates, 2D or 1D
     center : tuple of float
         center of the gaussian, (x,y)
@@ -232,7 +232,7 @@ def regular_polygon(sides, radius, x, y, center=(0, 0), rotation=0):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         mask for regular polygon with radius equal to the array radius
 
     """
@@ -247,14 +247,14 @@ def _generate_mask(vertices, x, y):
     ----------
     vertices : iterable
         ensemble of vertice (x,y) coordinates, in array units
-    x : numpy.ndarray
+    x : ndarray
         x spatial coordinates, 2D or 1D
-    y : numpy.ndarray
+    y : ndarray
         y spatial coordinates, 2D or 1D
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         polygon mask
 
     """
@@ -293,7 +293,7 @@ def _generate_vertices(sides, radius=1, center=(0, 0), rotation=0):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         array with first column X points, second column Y points
 
     """
@@ -316,9 +316,9 @@ def spider(vanes, width, x, y, rotation=0, center=(0, 0), rotation_is_rad=False)
     width : float
         width of the vanes in array units, i.e. a width=1/128 spider with
         arydiam=1 and samples=128 will be 1 pixel wide
-    x : numpy.ndarray
+    x : ndarray
         x spatial coordinates, 2D or 1D
-    y : numpy.ndarray
+    y : ndarray
         y spatial coordinates, 2D or 1D
     rotation : float, optional
         rotational offset of the vanes, clockwise
@@ -329,7 +329,7 @@ def spider(vanes, width, x, y, rotation=0, center=(0, 0), rotation_is_rad=False)
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         array, 0 inside the spider and 1 outside
 
     """
@@ -371,16 +371,16 @@ def offset_circle(radius, x, y, center):
     ----------
     radius : float
         radius of the circle, same units as x and y
-    x : numpy.ndarray
+    x : ndarray
         array of x coordinates
-    y : numpy.ndarray
+    y : ndarray
         array of y coordinates
     center : tuple
         tuple of (x, y) centers
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         ndarray containing the boolean mask
 
     """
@@ -507,9 +507,9 @@ def rectangle_with_corner_fillets(width, height, cradius, x, y, center=(0, 0), r
         half-height of the rectangle, same units as x and y
     cradius : float
         radius of the corner fillets
-    x : numpy.ndarray
+    x : ndarray
         x coordinates
-    y : numpy.ndarray
+    y : ndarray
         y coordinates
     center : tuple of float
         (x,y) center of the rectangle
@@ -518,7 +518,7 @@ def rectangle_with_corner_fillets(width, height, cradius, x, y, center=(0, 0), r
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         1 inside "squircle", 0 outside
 
     """
@@ -551,7 +551,7 @@ def chebygauss_quadrature_xy(rings, radius=1, spokes=-1, center=(0, 0)):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         Chebyshev-Gauss-Lobatto points (x,y)
 
     """

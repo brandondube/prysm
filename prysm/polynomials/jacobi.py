@@ -52,12 +52,12 @@ def jacobi(n, alpha, beta, x):
         first weight parameter
     beta : float
         second weight parameter
-    x : numpy.ndarray
+    x : ndarray
         x coordinates to evaluate at
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         jacobi polynomial evaluated at the given points
 
     """
@@ -163,12 +163,12 @@ def jacobi_der(n, alpha, beta, x):
         first weight parameter
     beta : float
         second weight parameter
-    x : numpy.ndarray
+    x : ndarray
         x coordinates to evaluate at
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         jacobi polynomial evaluated at the given points
 
     """
@@ -196,7 +196,7 @@ def jacobi_der_seq(ns, alpha, beta, x):
         first weight parameter
     beta : float
         second weight parameter
-    x : numpy.ndarray
+    x : ndarray
         x coordinates to evaluate at
 
     Returns
@@ -319,17 +319,17 @@ def jacobi_sum_clenshaw(s, alpha, beta, x, alphas=None):
         first Jacobi shape parameter
     beta : float
         second Jacobi shape parameter
-    x : numpy.ndarray or float_like
+    x : ndarray or float_like
         coordinates to evaluate the sum at,
         orthogonal over [-1,1]
-    alphas : numpy.ndarray, optional
+    alphas : ndarray, optional
         array to store the alpha sums in, alphas[0] contains the sum and is returned
         if not None, alphas should be of shape (len(s), x.shape)
         see _initialize_alphas if you desire more information
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         weighted sum of Jacobi polynomials
 
     """
@@ -370,12 +370,12 @@ def jacobi_sum_clenshaw_der(s, alpha, beta, x, j=1, alphas=None):
         first Jacobi shape parameter
     beta : float
         second Jacobi shape parameter
-    x : numpy.ndarray or float_like
+    x : ndarray or float_like
         coordinates to evaluate the sum at,
         orthogonal over [-1,1]
     j : int
         derivative order to compute
-    alphas : numpy.ndarray, optional
+    alphas : ndarray, optional
         array to store the alpha sums in,
         alphas[n] is the nth order derivative alpha terms
         with n=0 being the non-derivative terms.
@@ -386,7 +386,7 @@ def jacobi_sum_clenshaw_der(s, alpha, beta, x, j=1, alphas=None):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         alphas array, see alphas parameter documentation for meaning
 
     """

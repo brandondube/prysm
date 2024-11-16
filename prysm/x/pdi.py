@@ -16,7 +16,7 @@ def rectangle_pulse(x, duty=0.5, amplitude=0.5, offset=0.5, period=2*np.pi):
 
     Parameters
     ----------
-    x : numpy.ndarray
+    x : ndarray
         spatial domain, the pulse is notionally equivalent to
         np.sign(np.sin(x/period))
     duty : float
@@ -30,7 +30,7 @@ def rectangle_pulse(x, duty=0.5, amplitude=0.5, offset=0.5, period=2*np.pi):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         rectangular pulse
 
     """
@@ -68,10 +68,10 @@ class PSPDI:
 
         Parameters
         ----------
-        x : numpy.ndarray
+        x : ndarray
             x coordinates for arrays that will be passed to forward_model
             not normalized
-        y : numpy.ndarray
+        y : ndarray
             y coordinates for arrays that will be passed to forward_model
             not normalized
         efl : float
@@ -184,7 +184,7 @@ class PSPDI:
 
         Parameters
         ----------
-        wave_in : numpy.ndarray
+        wave_in : ndarray
             complex wavefunction present at the input to the interferometer
         phase_shift : float
             phase shift, modulo 2pi, if any

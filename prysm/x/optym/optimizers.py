@@ -585,10 +585,10 @@ class F77LBFGSB:
         memory : int
             the number of recent gradient vectors to use in performing the
             approximate Newton's step
-        lower_bounds : numpy.ndarray, optional
+        lower_bounds : ndarray, optional
             vector of same size as x0 containing the hard lower bounds for the
             variables; if None, unconstrained lb
-        upper_bounds : numpy.ndarray, optional
+        upper_bounds : ndarray, optional
             vector of same size as x0 containing the hard upper bounds for the
             variables; if None, unconstrained ub
 

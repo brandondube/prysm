@@ -94,7 +94,7 @@ def sum_of_2d_modes(modes, weights):
     modes : iterable
         seq of ndarray of shape (k, m, n);
         a list of length k with elements of shape (m,n) works
-    weights : numpy.ndarray
+    weights : ndarray
         weight of each mode
 
     Returns
@@ -127,7 +127,7 @@ def sum_of_2d_modes_backprop(modes, databar):
     modes : iterable
         seq of ndarray of shape (k, m, n);
         a list of length k with elements of shape (m,n) works
-    databar : numpy.ndarray
+    databar : ndarray
         partial gradient backpropated up to the return of sum_of_2d_modes
 
     Returns
@@ -156,16 +156,16 @@ def hopkins(a, b, c, r, t, H):
         radial order
     c : int
         order in field ("H-order")
-    r : numpy.ndarray
+    r : ndarray
         radial pupil coordinate
-    t : numpy.ndarray
+    t : ndarray
         azimuthal pupil coordinate
-    H : numpy.ndarray
+    H : ndarray
         field coordinate
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         polynomial evaluated at this point
 
     """
@@ -190,13 +190,13 @@ def lstsq(modes, data):
     modes : iterable
         modes to fit; seq of ndarray of shape (m, n);
         array of shape (k, m, n), k=num modes, (m,n) = spatial domain is best
-    data : numpy.ndarray
+    data : ndarray
         data to fit, of shape (m, n)
         place NaN values in data for points to ignore
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         fit coefficients
 
     """

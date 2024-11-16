@@ -41,16 +41,16 @@ def fit_plane(x, y, z):
 
     Parameters
     ----------
-    x : numpy.ndarray
+    x : ndarray
         2D array of x (axis 1) values
-    y : numpy.ndarray
+    y : ndarray
         2D array of y (axis 0) values
-    z : numpy.ndarray
+    z : ndarray
         2D array of z values
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         array representation of plane
 
     """
@@ -64,12 +64,12 @@ def fit_sphere(z):
 
     Parameters
     ----------
-    z : numpy.ndarray
+    z : ndarray
         2D array of data
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         mask, sphere
 
     """
@@ -91,7 +91,7 @@ def make_window(signal, dx, which=None, alpha=4):
 
     Parameters
     ----------
-    signal : numpy.ndarray
+    signal : ndarray
         signal or phase data
     dx : float
         spacing of samples in the input data
@@ -109,7 +109,7 @@ def make_window(signal, dx, which=None, alpha=4):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         window array
 
     """
@@ -154,7 +154,7 @@ def psd(height, dx, window=None):
 
     Parameters
     ----------
-    height : numpy.ndarray
+    height : ndarray
         height or phase data
     dx : float
         spacing of samples in the input data
@@ -163,11 +163,11 @@ def psd(height, dx, window=None):
 
     Returns
     -------
-    x : numpy.ndarray
+    x : ndarray
         ordinate x frequency axis
-    y : numpy.ndarray
+    y : ndarray
         ordinate y frequency axis
-    psd : numpy.ndarray
+    psd : ndarray
         power spectral density
 
     Notes
@@ -196,9 +196,9 @@ def bandlimited_rms(r, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
 
     Parameters
     ----------
-    r : numpy.ndarray
+    r : ndarray
         radial spatial frequencies
-    psd : numpy.ndarray
+    psd : ndarray
         power spectral density
     wllow : float
         short spatial scale
@@ -274,14 +274,14 @@ def window_2d_welch(r, alpha=8):
 
     Parameters
     ----------
-    r : numpy.ndarray
+    r : ndarray
         radial coordinate
     alpha : float
         alpha (edge roll) parameter
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         window
 
     """
@@ -295,7 +295,7 @@ def abc_psd(nu, a, b, c):
 
     Parameters
     ----------
-    nu : numpy.ndarray or float
+    nu : ndarray or float
         spatial frequency
     a : float
         a coefficient
@@ -306,7 +306,7 @@ def abc_psd(nu, a, b, c):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         value of PSD model
 
     """
@@ -318,7 +318,7 @@ def ab_psd(nu, a, b):
 
     Parameters
     ----------
-    nu : numpy.ndarray or float
+    nu : ndarray or float
         spatial frequency
     a : float
         a coefficient
@@ -327,7 +327,7 @@ def ab_psd(nu, a, b):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         value of PSD model
 
     """
@@ -339,11 +339,11 @@ def synthesize_surface_from_psd(psd, nu_x, nu_y):
 
     Parameters
     ----------
-    psd : numpy.ndarray
+    psd : ndarray
         PSD data, units nm²/(cy/mm)²
-    nu_x : numpy.ndarray
+    nu_x : ndarray
         x spatial frequency, cy/mm
-    nu_y : numpy.ndarray
+    nu_y : ndarray
         y spatial frequency, cy_mm
 
     """
@@ -383,7 +383,7 @@ def render_synthetic_surface(size, samples, rms=None, mask=None, psd_fcn=abc_psd
         number of samples across the output surface
     rms : float, optional
         desired RMS value of the output, if rms=None, no normalization is done
-    mask : numpy.ndarray, optional
+    mask : ndarray, optional
         mask defining the pupil aperture
     psd_fcn : callable
         function used to generate the PSD
@@ -396,11 +396,11 @@ def render_synthetic_surface(size, samples, rms=None, mask=None, psd_fcn=abc_psd
 
     Returns
     -------
-    x : numpy.ndarray
+    x : ndarray
         x coordinates, mm
-    y: numpy.ndarray
+    y: ndarray
         y coordinates, mm
-    z : numpy.ndarray
+    z : ndarray
         height data, nm
 
     """
@@ -436,9 +436,9 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
 
     Parameters
     ----------
-    f : numpy.ndarray
+    f : ndarray
         spatial frequency, cy/length
-    psd : numpy.ndarray
+    psd : ndarray
         1D PSD, units of height^2 / (cy/length)^2
     callable : callable, optional
         a callable object that takes parameters of (frequency, args); all other parameters will be fit
@@ -452,7 +452,7 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
     optres
         scipy.optimization.OptimizationResult
     coefficients
-        numpy.ndarray of coefficients
+        ndarray of coefficients
 
     """
     sig = inspect.signature(callable)
@@ -513,7 +513,7 @@ def designfilt2d(r, dx, fc, typ='lowpass'):
 
     Parameters
     ----------
-    r : numpy.ndarray
+    r : ndarray
         radial coordinates of data to be filtered
     dx : float
         sample spacing of r
@@ -525,7 +525,7 @@ def designfilt2d(r, dx, fc, typ='lowpass'):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         2D array containing the infinite impulse response, h.
         Convolution of the data with this "PSF" will produce
         the desired spectral filtering
@@ -582,12 +582,12 @@ def make_random_subaperture_mask(shape, mask):
     ----------
     shape : tuple
         length two tuple, containing (m, n) of the returned mask
-    mask : numpy.ndarray
+    mask : ndarray
         mask to apply for sub-apertures
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         an array that can be used to mask ary.  Use as:
         ary[ret == 0] = np.nan
 
@@ -616,14 +616,14 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        phase : numpy.ndarray
+        phase : ndarray
             phase values, units of nm
         dx : float
             sample spacing in mm; if zero the data has no lateral calibration
             (xy scale only "px", not mm)
         wavelength : float
             wavelength of light, microns
-        intensity : numpy.ndarray, optional
+        intensity : ndarray, optional
             intensity array from interferometer camera
         meta : dict
             dictionary of any metadata.  if a wavelength or Wavelength key is
@@ -826,7 +826,7 @@ class Interferogram(RichData):
 
         Parameters
         ----------
-        mask : numpy.ndarray
+        mask : ndarray
             binary ndarray indicating pixels to keep (True) and discard (False)
 
         Returns
@@ -993,12 +993,12 @@ class Interferogram(RichData):
         ----------
         wavelength : float
             wavelength of light in microns
-        incident_angle : float or numpy.ndarray
+        incident_angle : float or ndarray
             incident angle(s) of light
 
         Returns
         -------
-        float or numpy.ndarray
+        float or ndarray
             TIS
 
         """

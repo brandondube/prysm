@@ -94,9 +94,9 @@ def xy_seq(mns, x, y, cartesian_grid=True):
     ----------
     mns : iterable of length 2 vectors
         seq [(m1, n1), (m2, n2), ...]
-    x : numpy.ndarray
+    x : ndarray
         x coordinates
-    y : numpy.ndarray
+    y : ndarray
         y coordinates
     cartesian_grid : bool, optional
         if True, the input grid is assumed to be cartesian, i.e., x and y
@@ -139,9 +139,9 @@ def xy(m, n, x, y, cartesian_grid=True):
         x order
     n : int
         y order
-    x : numpy.ndarray
+    x : ndarray
         x coordinates
-    y : numpy.ndarray
+    y : ndarray
         y coordinates
     cartesian_grid : bool, optional
         if True, the input grid is assumed to be cartesian, i.e., x and y

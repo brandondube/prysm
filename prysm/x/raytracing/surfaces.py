@@ -35,11 +35,11 @@ def fix_zero_singularity(arr, x, y, fill='xypoly', order=2):
 
     Parameters
     ----------
-    arr : numpy.ndarray
+    arr : ndarray
         array of dimension 2 to modify at the origin (x==y==0)
-    x : numpy.ndarray
+    x : ndarray
         array of dimension 2 of X coordinates
-    y : numpy.ndarray
+    y : ndarray
         array of dimension 2 of Y coordinates
     fill : str, optional, {'xypoly'}
         how to fill.  Not used/hard-coded to X/Y polynomials, but made an arg
@@ -49,7 +49,7 @@ def fix_zero_singularity(arr, x, y, fill='xypoly', order=2):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         arr (modified in-place)
 
     """
@@ -93,18 +93,18 @@ def surface_normal_from_cylindrical_derivatives(fp, ft, r, t):
 
     Parameters
     ----------
-    fp : numpy.ndarray
+    fp : ndarray
         derivative of f w.r.t. r
-    ft : numpy.ndarray
+    ft : ndarray
         derivative of f w.r.t. t
-    r : numpy.ndarray
+    r : ndarray
         radial coordinates
-    t : numpy.ndarray
+    t : ndarray
         azimuthal coordinates
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         x, y derivatives; will contain a singularity where r=0,
         see fix_zero_singularity
 
@@ -121,18 +121,18 @@ def surface_normal_from_cartesian_derivatives(fx, fy, r, t):
 
     Parameters
     ----------
-    fx : numpy.ndarray
+    fx : ndarray
         derivative of f w.r.t. x
-    fy : numpy.ndarray
+    fy : ndarray
         derivative of f w.r.t. y
-    r : numpy.ndarray
+    r : ndarray
         radial coordinates
-    t : numpy.ndarray
+    t : ndarray
         azimuthal coordinates
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         r, t derivatives; will contain a singularity where r=0,
         see fix_zero_singularity
 
@@ -161,12 +161,12 @@ def phi_spheroid(c, k, rhosq):
         curvature, reciprocal radius of curvature
     k : float
         kappa, conic constant
-    rhosq : numpy.ndarray
+    rhosq : ndarray
         squared radial coordinate (non-normalized)
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         phi term
 
     """
@@ -188,12 +188,12 @@ def der_direction_cosine_spheroid(c, k, rho, rhosq=None, phi=None):
         curvature, reciprocal radius of curvature
     k : float
         kappa, conic constant
-    rho : numpy.ndarray
+    rho : ndarray
         radial coordinate (non-normalized)
-    rhosq : numpy.ndarray
+    rhosq : ndarray
         squared radial coordinate (non-normalized)
         rho ** 2 if None
-    phi : numpy.ndarray, optional
+    phi : ndarray, optional
         (1 - c^2 r^2)^.5
         computed if not provided
         many surface types utilize phi; its computation can be
@@ -201,7 +201,7 @@ def der_direction_cosine_spheroid(c, k, rho, rhosq=None, phi=None):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         d/drho of (1/phi)
 
     """
@@ -223,14 +223,14 @@ def sphere_sag(c, rhosq, phi=None):
     ----------
     c : float
         surface curvature
-    rhosq : numpy.ndarray
+    rhosq : ndarray
         radial coordinate squared
         e.g. for a 15 mm half-diameter optic,
         rho = 0 .. 15
         rhosq = 0 .. 225
         there is no requirement on rectilinear sampling or array
         dimensionality
-    phi : numpy.ndarray, optional
+    phi : ndarray, optional
         (1 - c^2 r^2)^.5
         computed if not provided
         many surface types utilize phi; its computation can be
@@ -238,7 +238,7 @@ def sphere_sag(c, rhosq, phi=None):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         surface sag
 
     """
@@ -256,13 +256,13 @@ def sphere_sag_der(c, rho, phi=None):
     ----------
     c : float
         surface curvature
-    rho : numpy.ndarray
+    rho : ndarray
         radial coordinate
         e.g. for a 15 mm half-diameter optic,
         rho = 0 .. 15
         there is no requirement on rectilinear sampling or array
         dimensionality
-    phi : numpy.ndarray, optional
+    phi : ndarray, optional
         (1 - c^2 r^2)^.5
         computed if not provided
         many surface types utilize phi; its computation can be
@@ -270,7 +270,7 @@ def sphere_sag_der(c, rho, phi=None):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         derivative of surface sag
 
     """
@@ -290,14 +290,14 @@ def conic_sag(c, kappa, rhosq, phi=None):
         surface curvature
     kappa : float
         conic constant
-    rhosq : numpy.ndarray
+    rhosq : ndarray
         radial coordinate squared
         e.g. for a 15 mm half-diameter optic,
         rho = 0 .. 15
         rhosq = 0 .. 225
         there is no requirement on rectilinear sampling or array
         dimensionality
-    phi : numpy.ndarray, optional
+    phi : ndarray, optional
         (1 - (1+kappa) c^2 r^2)^.5
         computed if not provided
         many surface types utilize phi; its computation can be
@@ -305,7 +305,7 @@ def conic_sag(c, kappa, rhosq, phi=None):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         surface sag
 
     """
@@ -325,13 +325,13 @@ def conic_sag_der(c, kappa, rho, phi=None):
         surface curvature
     kappa : float
         conic constant, 0=sphere, 1=parabola, etc
-    rho : numpy.ndarray
+    rho : ndarray
         radial coordinate
         e.g. for a 15 mm half-diameter optic,
         rho = 0 .. 15
         there is no requirement on rectilinear sampling or array
         dimensionality
-    phi : numpy.ndarray, optional
+    phi : ndarray, optional
         (1 - (1+kappa) c^2 r^2)^.5
         computed if not provided
         many surface types utilize phi; its computation can be
@@ -339,7 +339,7 @@ def conic_sag_der(c, kappa, rho, phi=None):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         surface sag
 
     """
@@ -360,9 +360,9 @@ def off_axis_conic_sag(c, kappa, r, t, dx, dy=0):
         axial curvature of the conic
     kappa : float
         conic constant
-    r : numpy.ndarray
+    r : ndarray
         radial coordinate, where r=0 is centered on the off-axis section
-    t : numpy.ndarray
+    t : ndarray
         azimuthal coordinate
     dx : float
         shift of the surface in x with respect to the base conic vertex,
@@ -373,7 +373,7 @@ def off_axis_conic_sag(c, kappa, r, t, dx, dy=0):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         surface sag, z(x,y)
 
     """
@@ -403,9 +403,9 @@ def off_axis_conic_der(c, kappa, r, t, dx, dy=0):
         axial curvature of the conic
     kappa : float
         conic constant
-    r : numpy.ndarray
+    r : ndarray
         radial coordinate, where r=0 is centered on the off-axis section
-    t : numpy.ndarray
+    t : ndarray
         azimuthal coordinate
     dx : float
         shift of the surface in x with respect to the base conic vertex,
@@ -416,7 +416,7 @@ def off_axis_conic_der(c, kappa, r, t, dx, dy=0):
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         d/dr(z), d/dt(z)
 
     """
@@ -481,9 +481,9 @@ def off_axis_conic_sigma(c, kappa, r, t, dx, dy=0):
         axial curvature of the conic
     kappa : float
         conic constant
-    r : numpy.ndarray
+    r : ndarray
         radial coordinate, where r=0 is centered on the off-axis section
-    t : numpy.ndarray
+    t : ndarray
         azimuthal coordinate
     dx : float
         shift of the surface in x with respect to the base conic vertex,
@@ -525,9 +525,9 @@ def off_axis_conic_sigma_der(c, kappa, r, t, dx, dy=0):
         axial curvature of the conic
     kappa : float
         conic constant
-    r : numpy.ndarray
+    r : ndarray
         radial coordinate, where r=0 is centered on the off-axis section
-    t : numpy.ndarray
+    t : ndarray
         azimuthal coordinate
     dx : float
         shift of the surface in x with respect to the base conic vertex,
@@ -538,7 +538,7 @@ def off_axis_conic_sigma_der(c, kappa, r, t, dx, dy=0):
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    ndarray, ndarray
         d/dr(z), d/dt(z)
 
     """
@@ -609,9 +609,9 @@ def Q2d_and_der(cm0, ams, bms, x, y, normalization_radius, c, k, dx=0, dy=0):
         For example, if ams extends to m=3, then bms must reach m=3
         but, if the ams for m=3 span n=0..5, it is OK for the bms to span n=0..3,
         or any other value, even just [0].
-    x : numpy.ndarray
+    x : ndarray
         X coordinates
-    y : numpy.ndarray
+    y : ndarray
         Y coordinates
     normalization_radius : float
         radius by which to normalize rho to produce u
@@ -619,7 +619,7 @@ def Q2d_and_der(cm0, ams, bms, x, y, normalization_radius, c, k, dx=0, dy=0):
         curvature, reciprocal radius of curvature
     k : float
         kappa, conic constant
-    rhosq : numpy.ndarray
+    rhosq : ndarray
         squared radial coordinate (non-normalized)
     dx : float
         shift of the base conic in x
@@ -628,7 +628,7 @@ def Q2d_and_der(cm0, ams, bms, x, y, normalization_radius, c, k, dx=0, dy=0):
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray, numpy.ndarray
+    ndarray, ndarray, ndarray
         sag, dsag/drho, dsag/dtheta
 
     """
@@ -714,14 +714,14 @@ class Surface:
             if an int, must be one of the STYPE constants
             if a str, must be something in the set {'refl', 'reflect', 'refr', 'refract', 'eval'}
             the type of surface (reflection, refraction, no ray bend)
-        P : numpy.ndarray
+        P : ndarray
             global surface position, [X,Y,Z]
         n : callable n(wvl) -> refractive index
             a function which returns the index of refraction at the given wavelength
         FFp : callable of signature F(x,y) -> z, [Nx, Ny]
             a function which returns the surface sag at point x, y as well as
             the X and Y partial derivatives at that point
-        R : numpy.ndarray
+        R : ndarray
             rotation matrix, may be None
         params : dict, optional
             surface type specific parameters
@@ -749,14 +749,14 @@ class Surface:
 
         Parameters
         ----------
-        x : numpy.ndarray
+        x : ndarray
             x coordinate, non-normalized
-        y : numpy.ndarray
+        y : ndarray
             y coordinate, non-normalized
 
         Returns
         -------
-        numpy.ndarray
+        ndarray
             surface sag in Z
 
         """

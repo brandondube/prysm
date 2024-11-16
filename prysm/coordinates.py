@@ -10,9 +10,9 @@ def optimize_xy_separable(x, y):
 
     Parameters
     ----------
-    x : numpy.ndarray
+    x : ndarray
         2D or 1D array
-    y : numpy.ndarray
+    y : ndarray
         2D or 1D array
 
     Returns
@@ -45,16 +45,16 @@ def broadcast_1d_to_2d(x, y):
 
     Parameters
     ----------
-    x : numpy.ndarray
+    x : ndarray
         ndarray of shape (n,)
-    y : numpy.ndarray
+    y : ndarray
         ndarray of shape (m,)
 
     Returns
     -------
-    xx : numpy.ndarray
+    xx : ndarray
         ndarray of shape (m, n)
-    yy : numpy.ndarray
+    yy : ndarray
         ndarray of shape (m, n)
 
     """
@@ -70,18 +70,18 @@ def cart_to_polar(x, y, vec_to_grid=True):
 
     Parameters
     ----------
-    x : numpy.ndarray or number
+    x : ndarray or number
         x coordinate
-    y : numpy.ndarray or number
+    y : ndarray or number
         y coordinate
     vec_to_grid : bool, optional
         if True, convert a vector (x,y) input to a grid (r,t) output
 
     Returns
     -------
-    rho : numpy.ndarray or number
+    rho : ndarray or number
         radial coordinate
-    phi : numpy.ndarray or number
+    phi : ndarray or number
         azimuthal coordinate
 
     """
@@ -102,16 +102,16 @@ def polar_to_cart(rho, phi):
 
     Parameters
     ----------
-    rho : numpy.ndarray or number
+    rho : ndarray or number
         radial coordinate
-    phi : numpy.ndarray or number
+    phi : ndarray or number
         azimuthal coordinate
 
     Returns
     -------
-    x : numpy.ndarray or number
+    x : ndarray or number
         x coordinate
-    y : numpy.ndarray or number
+    y : ndarray or number
         y coordinate
 
     """
@@ -125,20 +125,20 @@ def uniform_cart_to_polar(x, y, data):
 
     Parameters
     ----------
-    x : numpy.ndarray
+    x : ndarray
         sorted 1D array of x sample pts
-    y : numpy.ndarray
+    y : ndarray
         sorted 1D array of y sample pts
-    data : numpy.ndarray
+    data : ndarray
         data sampled over the (x,y) coordinates
 
     Returns
     -------
-    rho : numpy.ndarray
+    rho : ndarray
         samples for interpolated values
-    phi : numpy.ndarray
+    phi : ndarray
         samples for interpolated values
-    f(rho,phi) : numpy.ndarray
+    f(rho,phi) : ndarray
         data uniformly sampled in (rho,phi)
 
     """
@@ -175,10 +175,10 @@ def resample_2d(array, sample_pts, query_pts, kind='cubic'):
 
     Parameters
     ----------
-    array : numpy.ndarray
+    array : ndarray
         2D array
     sample_pts : tuple
-        pair of numpy.ndarray objects that contain the x and y sample locations,
+        pair of ndarray objects that contain the x and y sample locations,
         each array should be 1D
     query_pts : tuple
         points to interpolate onto, also 1D for each array
@@ -187,7 +187,7 @@ def resample_2d(array, sample_pts, query_pts, kind='cubic'):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         array resampled onto query_pts
 
     """
@@ -212,9 +212,9 @@ def make_xy_grid(shape, *, dx=0, diameter=0, grid=True):
 
     Returns
     -------
-    x : numpy.ndarray
+    x : ndarray
         x grid
-    y : numpy.ndarray
+    y : ndarray
         y grid
 
     """
@@ -245,7 +245,7 @@ def make_rotation_matrix(zyx, radians=False):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         3x3 rotation matrix
 
     """
@@ -313,12 +313,12 @@ def drop_z_3d_transformation(M):
 
     Parameters
     ----------
-    M : numpy.ndarray
+    M : ndarray
         4x4 ndarray for (x, y, z, w)
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         3x3 array, (x, y, w)
 
     """
@@ -333,14 +333,14 @@ def pack_xy_to_homographic_points(x, y):
 
     Parameters
     ----------
-    x : numpy.ndarray
+    x : ndarray
         x points
-    y : numpy.ndarray
+    y : ndarray
         y points
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         3xN array (x, y, w)
 
     """
@@ -367,14 +367,14 @@ def solve_for_planar_homography(src, dst):
 
     Parameters
     ----------
-    src : numpy.ndarray
+    src : ndarray
         (N, 2) shaped array
-    dst : numpy.ndarray
+    dst : ndarray
         (N, 2) shaped ndarray
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         3x3 array containing the planar homography such that H * src = dst
 
     """
@@ -399,16 +399,16 @@ def warp(img, xnew, ynew):
 
     Parameters
     ----------
-    img : numpy.ndarray
+    img : ndarray
         2D ndarray
-    xnew : numpy.ndarray
+    xnew : ndarray
         2D array containing x or column coordinates to look up in img
-    ynew : numpy.ndarray
+    ynew : ndarray
         2D array containing y or row    coordinates to look up in img
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         "pulled" warped image
 
     Notes
@@ -435,7 +435,7 @@ def distort_annular_grid(r, eps):
 
     Parameters
     ----------
-    r : numpy.ndarray
+    r : ndarray
         Undistorted grid of normalized radial coordinates
     eps : float
         linear obscuration fraction, radius, not diameter;
@@ -443,7 +443,7 @@ def distort_annular_grid(r, eps):
 
     Returns
     -------
-    numpy.ndarray
+    ndarray
         distorted r, to be passed to a polynomial function
 
     """
