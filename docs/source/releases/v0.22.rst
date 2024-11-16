@@ -44,15 +44,15 @@ special routines for annular apertures:
 
 * :func:`~prysm.polynomials.normalize_modes`
 
-See :doc:`Ins-and-Outs-of-Polynomials` for usage examples
+See :doc:`Ins-and-Outs-of-Polynomials.ipynb` for usage examples
 
 Rich XY polynomial capability has been introduced:
 
-* :func:`~prysm.polynomials.xy.j_to_xy`
+* :func:`~prysm.polynomials.xy.j_to_mn` for monoindex to dual index
 
-* :func:`~prysm.polynomials.xy.xy_polynomial`
+* :func:`~prysm.polynomials.xy.xy`
 
-* :func:`~prysm.polynomials.xy.xy_polynomial_seq`
+* :func:`~prysm.polynomials.xy.xy_seq`
 
 Additionally, Laguerre polynomials have been introduced, which can be used for
 generating Laguerre-Gaussian beams:
@@ -65,7 +65,7 @@ generating Laguerre-Gaussian beams:
 
 * :func:`~prysm.polynomials.laguerre_der_seq`
 
-All of the :code:`_sequence` polynomial functions have been revised.
+All of the :code:`_seq` polynomial functions have been revised.
 Previously, they returned generators to allow weighted sums of extremely high
 order expansions to be computed in a reduced memory footprint. This lead to the
 most common usage being :code:`basis = array(list(xxx_sequence()))`.  This
@@ -107,7 +107,7 @@ Bayer
 * :func:`~prysm.bayer.wb_postscale` now has additional :code:`safe` and
   :code:`saturation` kwargs for colorimetrically correct handling of saturation
 
-* :func:`~prysm.bayer.demosaic_deinterlate` for deinterlace-style demosaicing,
+* :func:`~prysm.bayer.demosaic_deinterlace` for deinterlace-style demosaicing,
   which cuts resolution by a factor of two but imparts no blur or color channel
   crosstalk.
 
@@ -121,9 +121,12 @@ i/o
 
 * :func:`prysm.io.read_codev_bsp` to load BSP data from Code V.
 
-* :func:`prysm.io.write_codev_gridint` to write Code V grid INT files.
+* :func:`prysm.io.write_codev_gridint` to write Code V grid INT files.  Note
+  that while the format has no restrictions and this function generates
+  syntactically valid grid files in all cases, Code V appears to fail to
+  properly read files that are greater than about 1k x 1k resolution.
 
-* :func:`prysm.io.write_codev_zfr_int` to write Code V grid Fringe Zernike INT files.
+* :func:`prysm.io.write_codev_zfr_int` to write Code V Fringe Zernike INT files.
 
 
 Detectors
@@ -137,10 +140,13 @@ array.
 More convenient backend swaps, misc
 -----------------------------------
 
-* :func:`prysm.mathops.set_backend_to_cupy`,
-  :func:`~prysm.mathops.set_backend_to_pytorch`,
-  :func:`~prysm.mathops.set_fft_backend_to_mkl_fft` and
-  :func:`~prysm.mathops.set_backend_to_defaults`.
+* :func:`prysm.mathops.set_backend_to_cupy`
+
+* :func:`~prysm.mathops.set_backend_to_pytorch`
+
+* :func:`~prysm.mathops.set_fft_backend_to_mkl_fft`
+
+* :func:`~prysm.mathops.set_backend_to_defaults`.
 
 Note that other numpy/scipy-like APIs can also be used, and these are simply
 convenience functions; there is no special support for either library beyond

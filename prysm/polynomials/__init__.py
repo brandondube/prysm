@@ -60,9 +60,9 @@ from .dickson import (  # NOQA
     dickson2_seq
 )
 from .xy import (  # NOQA
-    j_to_xy,
-    xy_polynomial,
-    xy_polynomial_seq,
+    j_to_mn,
+    xy,
+    xy_seq,
 )
 
 from .zernike import (  # NOQA

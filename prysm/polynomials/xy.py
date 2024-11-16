@@ -8,14 +8,17 @@ from prysm.coordinates import optimize_xy_separable
 from .dickson import dickson1_seq
 
 
-def j_to_xy(j):
-    """Convert a mono-index j into the x and y powers.
+def j_to_mn(j):
+    """Convert a mono-index j into the m and n powers.
 
-    counts from j=2 for x^1 y^0 and j=3 for x^0 y^1 to be consistent with Code V.
+    Does not precisely follow Code V; the j=1 term is piston, which does not
+    exist in Code V.
 
     """
-    if j < 2:
-        raise ValueError('j must be >= 2')
+    if j < 1:
+        raise ValueError('j must be >= 1')
+    if j == 1:
+        return 0, 0
     if j == 2:
         return 1, 0
     if j == 3:
@@ -84,7 +87,7 @@ def j_to_xy(j):
     return x, y
 
 
-def xy_polynomial_seq(mns, x, y, cartesian_grid=True):
+def xy_seq(mns, x, y, cartesian_grid=True):
     """Contemporary XY monomial seq.
 
     Parameters
@@ -127,7 +130,7 @@ def xy_polynomial_seq(mns, x, y, cartesian_grid=True):
     return out
 
 
-def xy_polynomial(m, n, x, y, cartesian_grid=True):
+def xy(m, n, x, y, cartesian_grid=True):
     """Contemporary XY monomial for a given m, n.
 
     Parameters

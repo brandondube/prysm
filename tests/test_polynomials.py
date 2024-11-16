@@ -54,14 +54,14 @@ xy_poly_truth_table = [  # NOQA
 
 @pytest.mark.parametrize('j', np.arange(2, 67))
 def test_xy_poly_mapping_roundtrip(j):
-    n, m = polynomials.j_to_xy(j)
+    n, m = polynomials.j_to_mn(j)
     assert xy_poly_truth_table[m][n] == j
 
 
 def test_xy_poly_first_cross_term():
     m = n = 1
     xx, yy = np.meshgrid(X, Y)
-    prysm_calc = polynomials.xy_polynomial(m, n, xx, yy)
+    prysm_calc = polynomials.xy(m, n, xx, yy)
     truth = xx * yy
     assert np.allclose(prysm_calc, truth)
 
@@ -70,7 +70,7 @@ def test_xy_poly_later_cross_term():
     m = 1
     n = 3
     xx, yy = np.meshgrid(X, Y)
-    prysm_calc = polynomials.xy_polynomial(m, n, xx, yy)
+    prysm_calc = polynomials.xy(m, n, xx, yy)
     truth = xx * yy**3
     assert np.allclose(prysm_calc, truth)
 
@@ -81,7 +81,7 @@ def test_xy_poly_seq_cross_terms():
         (1, 3),
     ]
     xx, yy = np.meshgrid(X, Y)
-    prysm_calc1, prysm_calc2 = polynomials.xy_polynomial_seq(mns, xx, yy)
+    prysm_calc1, prysm_calc2 = polynomials.xy_seq(mns, xx, yy)
     truth1 = xx * yy
     truth2 = xx * yy ** 3
     assert np.allclose(prysm_calc1, truth1)
