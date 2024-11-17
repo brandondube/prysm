@@ -69,6 +69,7 @@ def set_backend_to_pytorch():
 
 
 def set_fft_backend_to_mkl_fft():
+    """Convenience method to automatically configure prysm's backend to MKL_FFT for FFTs."""
     from mkl_fft import _numpy_fft as mklfft
 
     fft._srcmodule = mklfft
