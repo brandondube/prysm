@@ -200,8 +200,9 @@ Activation functions and discretizers
 
 Cost or loss functions
 
-* :func:`~prysm.x.optym.cost.BiasAndGainInvariantError`
-* :func:`~prysm.x.optym.cost.LogLikelyhood`
+* :func:`~prysm.x.optym.cost.bias_and_gain_invariant_error`
+* :func:`~prysm.x.optym.cost.mean_square_error`
+* :func:`~prysm.x.optym.cost.negative_loglikelihood`
 
 x/polarization
 --------------
@@ -255,7 +256,7 @@ The main user-facing routines are:
 
 * :func:`~prysm.x.fibers.smf_mode_field`
 
-* :func:`~prysm.x.fibers.mode_overlap`
+* :func:`~prysm.x.fibers.mode_overlap_integral`
 
 
 x/psi, x/pdi, x/sri, x/shack_hartmann
