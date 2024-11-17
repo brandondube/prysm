@@ -157,6 +157,52 @@ these simple functions.
   beyond the color limits.
 
 
+Geometry
+--------
+
+New shapes available:
+
+* :func:`~prysm.geometry.annulus`
+
+* :func:`~prysm.geometry.rectangle_with_corner_fillets`
+
+
+Coordinates
+-----------
+
+New function :func:`~prysm.coordinates.chebygauss_quadrature_xy` for generating
+optimally spaced spiral sampling patterns
+
+A suite of functions has been added for working with homographies, a type of 3D
+transformation that can used for projecting surfaces onto inclined planes and
+other geometric manipulations. :
+
+* :func:`~prysm.coordinates.make_rotation_matrix` returns a 3x3 rotation matrix
+
+* :func:`~prysm.coordinates.promote_3d_transformation_to_homography` converts a
+  3x3 transformation (x, y, z) to a homography (x, y, z, w)
+
+* :func:`~prysm.coordinates.make_homomorphic_translation_matrix` creates a
+  4x4 homographic matrix for translation in 3D
+
+* :func:`~prysm.coordinates.drop_z_3d_transformation` discards the z input and z
+  output for a homography to be applied to points lying in the z=0 plane
+
+* :func:`~prysm.coordinates.pack_xy_to_homographic_points` packs (x,y) points to
+  (x, y, w) for applying a homography, after using
+  :code:`drop_z_3d_transformation` on it
+
+* :func:`~prysm.coordinates.apply_homography` applies a homography to points
+  prepared by :code:`pack_xy_to_homographic_points`
+
+* :func:`~prysm.coordinates.warp` for looking up distorted coordinates in an
+  image
+
+: :func:`~prysm.coordinates.solve_for_planar_homography` for calculating the
+homography that best maps two sets of corresponding points to each other
+
+
+
 eXperimental Modules
 ====================
 
