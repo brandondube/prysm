@@ -110,3 +110,9 @@ def test_distort_annular_grid_functions(data_2d):
     r = np.hypot(x, y)
     rprime = coordinates.distort_annular_grid(r, 0.2)
     assert rprime.any()
+
+
+def test_chebygauss_quadrature_xy_functions():
+    x, y = coordinates.chebygauss_quadrature_xy(2)
+    assert x.any()
+    assert y.any()

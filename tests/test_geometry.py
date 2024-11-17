@@ -98,3 +98,16 @@ def test_offset_circle():
     c = geometry.offset_circle(3, x, y, center=(2, 2))
     s = c.sum()
     assert s == 29  # 29 = roundup of 3^2 * pi
+
+
+def test_annulus_functions():
+    x, y = coordinates.make_xy_grid(32, dx=1)
+    r = np.hypot(x, y)
+    annul = geometry.annulus(5, 6, r)
+    assert annul.any()
+
+
+def test_rectangle_with_corner_fillets_function():
+    x, y = coordinates.make_xy_grid(32, dx=1)
+    mask = geometry.rectangle_with_corner_fillets(10, 10, 2, x, y)
+    assert mask.any()
