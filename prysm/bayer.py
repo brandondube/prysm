@@ -239,6 +239,25 @@ def recomposite_bayer(r, g1, g2, b, cfa='rggb', output=None):
 
 
 def demosaic_deinterlace(img, cfa='rggb'):
+    """Demosaic an image by de-interlacing the channels.
+
+    This is the lowest quality of demosaicing, cutting image resolution by 2x in
+    exchange for having no crosstalk between color channels.  It is equivalent
+    to decomposite_bayer, except the two green bands are averaged.
+
+    Parameters
+    ----------
+    img : ndarray
+        composited ndarray of shape (m, n)
+    cfa : str, optional, {'rggb', 'bggr'}
+        color filter arangement
+
+    Returns
+    -------
+    ndarray
+        shape (m//2, n//2, 3) trichromatic image
+
+    """
     r, g1, g2, b = decomposite_bayer(img, cfa)
     g = (g1+g2)/2
     return np.stack([r, g, b], axis=2)
@@ -269,6 +288,7 @@ def assemble_superresolved(r, g1, g2, b, zoomfactor, cfa='rggb', out=None):
     -------
     ndarray
         array of shape (m, n, 3) containing the trichromatic image
+
     """
     if cfa == 'rggb':
         g2_to_g1 = [-zoomfactor, zoomfactor]  # "up and over"
