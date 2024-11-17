@@ -44,7 +44,7 @@ special routines for annular apertures:
 
 * :func:`~prysm.polynomials.normalize_modes`
 
-See :doc:`Ins-and-Outs-of-Polynomials.ipynb` for usage examples
+See :doc:`../explanation/Ins and Outs of Polynomials` for usage examples
 
 Rich XY polynomial capability has been introduced:
 
