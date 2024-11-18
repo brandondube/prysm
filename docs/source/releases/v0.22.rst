@@ -255,10 +255,9 @@ x/polarization
 
 New module for Jones calculus and other polarization calculations. Included is
 an adapter that generalizes all routines within the propagation module to
-propagation of Jones states, an extremely powerful feature for modeling
-polarized fields.
-
-TODO link to new tutorials/documentation
+propagation of Jones states.  A tutorial is available at
+:doc:`../tutorials/Jones Calculus` and a How-To at
+:doc:`../how-tos/Polarized Propagation`.
 
 Jones Vectors
 
