@@ -357,6 +357,7 @@ def smf_mode_field(V, a, b, r):
 
     Returns
     -------
+    float
         the single mode of the fiber
 
     """
@@ -378,7 +379,19 @@ def smf_mode_field(V, a, b, r):
 
 
 def marcuse_mfr_from_V(V):
-    """Marcuse' estimate for the mode field radius based on the V-number."""
+    """Marcuse' estimate for the mode field radius based on the V-number.
+
+    Parameters
+    ----------
+    V : float
+        V-number (see the V function)
+
+    Returns
+    -------
+    float
+        w/a, the ratio of mode field radius to core radius
+
+    """
     # D. Marcuse, “Loss analysis of single-mode fiber splices”, Bell Syst. Tech. J. 56, 703 (1977)
     # https://doi.org/10.1002/j.1538-7305.1977.tb00534.x
 
@@ -389,6 +402,17 @@ def petermann_mfr_from_V(V):
     """Petermann's estimate for the mode field radius based on the V-number.
 
     More accurate than Marcuse
+
+    Parameters
+    ----------
+    V : float
+        V-number (see the V function)
+
+    Returns
+    -------
+    float
+        w/a, the ratio of mode field radius to core radius
+
 
     """
     # TODO: cite

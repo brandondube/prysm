@@ -300,6 +300,7 @@ def promote_affine_transformation_to_homography(Maff):
 
 
 def make_homomorphic_translation_matrix(tx=0, ty=0, tz=0):
+    """Create a homographic transformation matrix for a 3D translation."""
     out = np.eye(4, dtype=config.precision)
     out[0, -1] = tx
     out[1, -1] = ty

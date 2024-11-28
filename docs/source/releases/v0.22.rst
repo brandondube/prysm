@@ -85,7 +85,25 @@ Propagation
   argument, allowing off-axis propagation without adding wavefront tilt
 
 * all propagation routines have a :code:`_backprop` twin, which should be used
-  to do gradient backpropagation through optical models
+  to do gradient backpropagation through optical models:
+
+* * :func:`~prysm.propagation.focus_backprop`
+
+* * :func:`~prysm.propagation.unfocus_backprop`
+
+* * :func:`~prysm.propagation.focus_fixed_sampling_backprop`
+
+* * :func:`~prysm.propagation.unfocus_fixed_sampling_backprop`
+
+* * :func:`~prysm.propagation.to_fpm_and_back_backprop`
+
+* * :func:`~prysm.propagation.free_space_backprop`
+
+* * :func:`~prysm.propagation.Wavefront.babinet_backprop`
+
+* * :func:`~prysm.propagation.Wavefront.from_amp_and_phase_backprop_phase`
+
+* * :func:`prysm.polynomials.sum_of_2d_modes_backprop`
 
 * add and subtract :code:`+` and :code:`-` operators are now defined for
   :class:`~prysm.propagation.Wavefront` for convenient recombination /
@@ -190,10 +208,10 @@ other geometric manipulations. :
 
 * :func:`~prysm.coordinates.pack_xy_to_homographic_points` packs (x,y) points to
   (x, y, w) for applying a homography, after using
-  :code:`drop_z_3d_transformation` on it
+  :func:`drop_z_3d_transformation` on it
 
 * :func:`~prysm.coordinates.apply_homography` applies a homography to points
-  prepared by :code:`pack_xy_to_homographic_points`
+  prepared by :func:`pack_xy_to_homographic_points`
 
 * :func:`~prysm.coordinates.warp` for looking up distorted coordinates in an
   image
@@ -218,9 +236,9 @@ x/opytm
 The interface of this package is very different to :code:`scipy.optimize` and it
 offers numerous optimizers and building blocks from the machine learning world.
 In addition to API level documentation that describes each of these items in
-detail, a new :doc:`Optimization Basics` tutorial has been created which
+detail, a new :doc:`../tutorials/Optimization Basics` tutorial has been created which
 demonstrates how to use the module, as well as a how-to on
-:doc:`Differentiable-Optical-Models` which demonstrates how to use the
+:doc:`../how-tos/Differentiable Optical Models` which demonstrates how to use the
 algorithmic differentiation capabilities built into prysm to perform phase
 retrieval with x/optym.
 
@@ -303,6 +321,10 @@ The main user-facing routines are:
 
 * :func:`~prysm.x.fibers.mode_overlap_integral`
 
+The tutorial on :doc:`../tutorials/Single Mode Fibers` covers basic usage.
+Multimode fibers have the same as single mode except
+:func:`~prysm.x.fibers.compute_LP_modes` is used instead of
+:func:`~prysm.x.fibers.smf_mode_field`.
 
 x/psi, x/pdi, x/sri, x/shack_hartmann
 -------------------------------------
@@ -394,7 +416,7 @@ Bug Fixes
 
 * The sign of :func:`~prysm.propagation.Wavefront.thin_lens` was incorrect,
   requiring a propagation by the negative of the focal length to go to the
-  focus.  The sign has been swapped; :code:`(wf * thin_lens(f,...)).free_space(f)``
+  focus.  The sign has been swapped; :code:`(wf * thin_lens(f,...)).free_space(f)`
   now goes to the focus
 
 * :func:`~prysm.otf.mtf_from_psf` as well as the ptf and otf functions used the
@@ -407,8 +429,8 @@ Bug Fixes
   corrected within prysm in this version, and Q-coma is no longer destined for
   NaN
 
-* :code:`prysm.polynomials.zernike.barplot` and
-  :code:`~prysm.polynomials.zernike.barplot_magnitudes` now apply axis labels to
+* :func:`prysm.polynomials.zernike.barplot` and
+  :func:`~prysm.polynomials.zernike.barplot_magnitudes` now apply axis labels to
   the correct axis when plotting on a figure with multiple axes
 
 * fixed a bug in :func:`prysm.psf.encircled_energy` where x,y axes were double
