@@ -136,6 +136,24 @@ def laguerre_seq(ns, alpha, x):
 
 
 def laguerre_der(n, alpha, x):
+    """d/dx of Laguerre polynomial of order n.
+
+    Parameters
+    ----------
+    n : int
+        polynomial order
+    alpha : float
+        shaping parameter
+    x : numpy.ndarray
+        coordinates to evaluate at; the laguerre polynomials are orthogonal on
+        the interval [0,inf)
+
+    Returns
+    -------
+    numpy.ndarray
+        d/dx of generalized laguerre polynomial evaluated at the given points
+
+    """
     # see wiki
     # d^k/dx^k L_n^alpha = (-1)^k L_(n-k)^(alpha+k)
     k = 1
@@ -143,6 +161,25 @@ def laguerre_der(n, alpha, x):
 
 
 def laguerre_der_seq(ns, alpha, x):
+    """d/dx of Generalized Laguerre polynomial of orders ns.
+
+    Parameters
+    ----------
+    ns : sequence
+        polynomial orders, ascending order
+    alpha : float
+        shaping parameter
+    x : numpy.ndarray
+        coordinates to evaluate at; the laguerre polynomials are orthogonal on
+        the interval [0,inf)
+
+    Returns
+    -------
+    numpy.ndarray
+        shape (k, len(x))
+        d/dx of generalized laguerre polynomials evaluated at the given points
+
+    """
     k = 1
     ns = [n-k for n in ns]
     return laguerre_seq(ns, alpha+k, x)
