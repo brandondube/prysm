@@ -14,13 +14,17 @@ from scipy.special import (
     chebyt as sps_cheby1,
     chebyu as sps_cheby2,
     hermite as sps_H,
-    hermitenorm as sps_He
+    hermitenorm as sps_He,
+    genlaguerre as sps_laguerre,
 )
 
 
 SAMPLES = 32
 X, Y = np.linspace(-1, 1, SAMPLES), np.linspace(-1, 1, SAMPLES)
 rho, phi = cart_to_polar(X, Y)
+
+# for Laguerre, orthogonal on [0,inf]; cutoff at 10 is arbitrary
+XLEFT = np.linspace(0, 10, SAMPLES)
 
 
 @pytest.fixture
@@ -675,3 +679,22 @@ def test_qcon_zzprime_q2d():
     ddy *= mask
     assert np.allclose(dx, ddx, atol=1)
     assert np.allclose(dy, ddy, atol=1)
+
+
+@pytest.mark.parametrize(['n', 'alpha'], [
+    [0, 0],
+    [1, 0],
+    [0, 1],
+    [1, 1],
+    [2, 1],
+    [3, 1],
+    [4, 1],
+    [0, 2],
+    [1, 2],
+    [2, 2],
+    [3, 2],
+    [4, 2]])
+def test_laguerre_matches_scipy(n, alpha):
+    prysm_lag = polynomials.laguerre(n, alpha, XLEFT)
+    scipy_lag = sps_laguerre(n, alpha)(XLEFT)
+    assert np.allclose(prysm_lag, scipy_lag)
