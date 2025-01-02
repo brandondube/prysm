@@ -560,8 +560,8 @@ def barplot(coefs, names=None, orientation='h', buffer=1, zorder=3, number=True,
     from matplotlib import pyplot as plt
     fig, ax = share_fig_ax(fig, ax)
 
+    coefs = truenp.asarray(coefs)
     idxs = np.arange(len(coefs))
-    coefs = coefs
     lims = (idxs[0] - buffer, idxs[-1] + buffer)
 
     if names is None:
