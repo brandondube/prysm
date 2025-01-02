@@ -2,6 +2,8 @@
 prysm v0.16
 ***********
 
+Released 2019-05-09
+
 This release has been largely focused on updating the internals of prysm and
 brings relatively new features.  The bulk of the work in this release has been
 spent on reworking the :mod:`~prysm.mathops` module for a cleaner and more

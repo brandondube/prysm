@@ -2,6 +2,8 @@
 prysm v0.15
 ***********
 
+Released 2019-03-14
+
 Version 0.15 introduces a host of new features and many internal changes that
 improve the maintainability of the library, users are encouraged to upgrade.
 

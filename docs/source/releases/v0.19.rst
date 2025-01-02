@@ -2,6 +2,8 @@
 prysm v0.19
 ***********
 
+Released 2020-08-15
+
 This release focuses on increasing the capability of prysm for multi-plane
 diffraction modeling and includes other improvements to quality of life.
 

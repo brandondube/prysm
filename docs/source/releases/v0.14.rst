@@ -2,6 +2,8 @@
 prysm v0.14
 ***********
 
+Released 2019-01-17
+
 Version 0.14 introduces a host of new features and critical improvements to
 existing features of prysm.  Users are encouraged to upgrade from prior
 releases.

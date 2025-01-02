@@ -2,6 +2,8 @@
 prysm v0.17
 ***********
 
+Released 2019-10-08
+
 As is becoming tradition, this release is not backwards compatible and will
 break your code base if you do anything with non-default units or MTF data.  The
 authors apologize for this, and note that we make these changes to improve the

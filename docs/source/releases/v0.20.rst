@@ -2,6 +2,8 @@
 prysm v0.20
 ***********
 
+Released 2021-08-21
+
 Summary
 =======
 

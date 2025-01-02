@@ -2,6 +2,8 @@
 prysm v0.13
 ***********
 
+Released 2018-12-15
+
 This release brings a number of new features and enhancements. Users are
 encouraged to upgrade from older releases.
 

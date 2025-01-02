@@ -2,6 +2,8 @@
 prysm v0.18
 ***********
 
+Released 2020-02-09
+
 This release brings several enhancements related to processing interferoemter
 data, and completes the update of the Zernike module.  Perhaps as a breath of
 fresh air, you are likely to experience *zero* breaking changes.  Users are
