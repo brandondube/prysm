@@ -2,6 +2,8 @@
 prysm v0.22
 ***********
 
+Released (eventually)
+
 Version 0.22 marks the final version of prysm prior to 1.0, in which
 compatibility and API stability will be guaranteed.  In preparation for this,
 the library has been split into mature code such as coordinates, geometry,
@@ -48,7 +50,7 @@ See :doc:`../explanation/Ins and Outs of Polynomials` for usage examples
 
 Rich XY polynomial capability has been introduced:
 
-* :func:`~prysm.polynomials.xy.j_to_mn` for monoindex to dual index
+* :func:`~prysm.polynomials.xy.xy_j_to_mn` for monoindex to dual index
 
 * :func:`~prysm.polynomials.xy.xy`
 
@@ -57,27 +59,29 @@ Rich XY polynomial capability has been introduced:
 Additionally, Laguerre polynomials have been introduced, which can be used for
 generating Laguerre-Gaussian beams:
 
-* :func:`~prysm.polynomials.laguerre`
+* :func:`~prysm.polynomials.laguerre.laguerre`
 
-* :func:`~prysm.polynomials.laguerre_der`
+* :func:`~prysm.polynomials.laguerre.laguerre_der`
 
-* :func:`~prysm.polynomials.laguerre_seq`
+* :func:`~prysm.polynomials.laguerre.laguerre_seq`
 
-* :func:`~prysm.polynomials.laguerre_der_seq`
+* :func:`~prysm.polynomials.laguerre.laguerre_der_seq`
 
 All of the :code:`_seq` polynomial functions have been revised.
 Previously, they returned generators to allow weighted sums of extremely high
 order expansions to be computed in a reduced memory footprint. This lead to the
 most common usage being :code:`basis = array(list(xxx_sequence()))`.  This
-benefit has been more theoretical than practical.  Now equivalent usage is
-:code:`basis = xxx_seq()`, which returns the dense array of shape :code:`(K,N,M)`
-directly (K=num modes, (N,M) = spatial dimensionality).
+benefit has been more theoretical than practical, e.g. a 1000-term expansion at
+4096x4096 requires much less than 1GB of memory to hold the dense coefficient
+array.  Now equivalent usage is :code:`basis = xxx_seq()`, which returns the
+dense array of shape :code:`(K,N,M)` directly (K=num modes, (N,M) = spatial
+dimensionality).
 
 Propagation
 -----------
 
-* new :code:`.real` property, returning a Richdata to support :code:`wf.real.plot2d()` and
-  similar usage
+* new :code:`.real` property, returning a Richdata to support
+  :code:`wf.real.plot2d()` and similar usage
 
 * new :code:`.imag` property, same as :code:`.real`
 
@@ -98,6 +102,10 @@ Propagation
 * * :func:`~prysm.propagation.to_fpm_and_back_backprop`
 
 * * :func:`~prysm.propagation.free_space_backprop`
+
+The above functions also have :code:`_backprop` routines for their versions
+defined as methods on :class:`~prysm.propagation.Wavefront`.  The following
+wavefront-only functions also support backpropagation:
 
 * * :func:`~prysm.propagation.Wavefront.babinet_backprop`
 
@@ -127,13 +135,13 @@ Bayer
 
 * :func:`~prysm.bayer.demosaic_deinterlace` for deinterlace-style demosaicing,
   which cuts resolution by a factor of two but imparts no blur or color channel
-  crosstalk.
+  crosstalk
 
 
 i/o
 ---
 
-* :func:`prysm.io.write_zygo_dat` to write Zygo .dat files.
+* :func:`prysm.io.write_zygo_dat` to write Zygo .dat files
 
 * :func:`prysm.io.read_codev_psf` to load PSF output from Code V
 
@@ -142,9 +150,9 @@ i/o
 * :func:`prysm.io.write_codev_gridint` to write Code V grid INT files.  Note
   that while the format has no restrictions and this function generates
   syntactically valid grid files in all cases, Code V appears to fail to
-  properly read files that are greater than about 1k x 1k resolution.
+  properly read files that are greater than about 1k x 1k resolution
 
-* :func:`prysm.io.write_codev_zfr_int` to write Code V Fringe Zernike INT files.
+* :func:`prysm.io.write_codev_zfr_int` to write Code V Fringe Zernike INT files
 
 
 Detectors
@@ -153,7 +161,7 @@ Detectors
 new :func:`~prysm.detector.apply_lut` function, and associated kwarg :code:`lut`
 when initializing a :class:`~prysm.detector.Detector` instance.  This adds the
 capability to simulate detector nonlinearity that is homogeneous over the whole
-array.
+array
 
 More convenient backend swaps, misc
 -----------------------------------
@@ -172,7 +180,7 @@ these simple functions.
 
 * the :func:`~prysm._richdata.RichData.plot2d` method of RichData now has an
   :code:`extend` keyword argument, which controls the extension of the colorbar
-  beyond the color limits.
+  beyond the color limits
 
 
 Geometry
@@ -193,7 +201,7 @@ optimally spaced spiral sampling patterns
 
 A suite of functions has been added for working with homographies, a type of 3D
 transformation that can used for projecting surfaces onto inclined planes and
-other geometric manipulations. :
+other geometric manipulations:
 
 * :func:`~prysm.coordinates.make_rotation_matrix` returns a 3x3 rotation matrix
 
@@ -228,7 +236,7 @@ A total of seven new x/ modules have been introduced in this release.  Half of
 them concern modeling different kinds of interferometers or wavefront sensors,
 while the remaining half are general and widely applicable.  The largest of the
 new additions is :code:`x/opytm`, a package for optimization with several cost
-functions, activation functions, and gradient-based optimizers.
+functions, activation functions, and gradient-based optimizers
 
 x/opytm
 -------
@@ -240,7 +248,10 @@ detail, a new :doc:`../tutorials/Optimization Basics` tutorial has been created 
 demonstrates how to use the module, as well as a how-to on
 :doc:`../how-tos/Differentiable Optical Models` which demonstrates how to use the
 algorithmic differentiation capabilities built into prysm to perform phase
-retrieval with x/optym.
+retrieval with x/optym.  Users are encouraged to build on these examples to
+create their own code to perform tasks such as focus diverse phase retrieval (or
+other forms of diversity), coronagraph mask design or other inverse design
+problems and similar tasks
 
 Optimizers
 
@@ -254,7 +265,7 @@ Optimizers
 * :func:`~prysm.x.optym.optimizers.F77LBFGSB`
 
 All have full support for GPUs and 32-bit numbers, except for F77LBFGSB which
-is CPU-only and double precision only.
+is CPU-only and double precision only
 
 Activation functions and discretizers
 
@@ -264,8 +275,8 @@ Activation functions and discretizers
 
 Cost or loss functions
 
-* :func:`~prysm.x.optym.cost.bias_and_gain_invariant_error`
 * :func:`~prysm.x.optym.cost.mean_square_error`
+* :func:`~prysm.x.optym.cost.bias_and_gain_invariant_error`
 * :func:`~prysm.x.optym.cost.negative_loglikelihood`
 
 x/polarization
@@ -329,12 +340,10 @@ Multimode fibers have the same as single mode except
 x/psi, x/pdi, x/sri, x/shack_hartmann
 -------------------------------------
 
-These four modules are for the modeling of Shack-Hartmann sensors abd two types
+These four modules are for the modeling of Shack-Hartmann sensors and two types
 of pinhole and/or fiber/waveguide based interferometers.  Extensive phase
 shifting interferometry (PSI) reconstruction capability is included, both
-of wavefront phase as well as complex E-field.  A future release will include
-additional capability for differential reconstruction that is superior to taking
-the difference of two absolute reconstructions, after it has been published.
+of wavefront phase as well as complex E-field.
 
 * Forward modeling of Shack Hartmann wavefront sensors using
   :func:`~prysm.x.shack_hartmann.shack_hartmann` and the propagation module
@@ -347,14 +356,19 @@ the difference of two absolute reconstructions, after it has been published.
   pinhole to generate the reference wave using light from the input port using
   :class:`~prysm.x.sri.PinholeSRI`
 
-* SRIs, which use a single mode fiber or waveguide to generate the reference
-  wave using light from the input port using :class:`~prysm.x.sri.PSRI`
+* Photonic SRIs, which use a single mode fiber or waveguide to generate the
+  reference wave using light from the input port using :class:`~prysm.x.sri.PSRI`
 
 * PSI routines:
 
+All of the PSI routines revolve around the :class:`~prysm.x.psi.Scheme` type,
+which contains the phase shifts and associated sine and cosine weights
+
+* * :func:`~prysm.x.psi.design_scheme` creates a new
+    :class:`~prysm.x.psi.Scheme` from a parametric representation
+
 * * :func:`~prysm.x.psi.degroot_formalism_psi` for reconstructing phase from a
-    set of PSI measurements.  See also the package-level constants XXX_SHIFTS,
-    XXX_SS, XXX_CS for several sets of s and c and phase shift values
+    set of PSI measurements
 
 * * :func:`~prysm.x.psi.psi_accumulate` for accumulating the sums of de groot's
     formalism, an essential intermediate step in full complex E-field
