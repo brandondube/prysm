@@ -31,7 +31,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'prysm'
-copyright = '2017-2023, the prysm authors'
+copyright = '2017 Brandon Dube; 2024 the prysm authors'
 author = 'Brandon Dube et al'
 
 autoclass_content = 'both'

@@ -11,6 +11,7 @@ Experimental modules, not subject to stability or compatiblity guarantees
    pdi
    psi
    sri
+   fibers
    shack_hartmann
    polarization
    optym/index.rst
