@@ -1,5 +1,4 @@
 """Various polynomials of optics."""
-import warnings
 
 from prysm.mathops import np
 
@@ -34,7 +33,7 @@ from .legendre import (  # NOQA
     legendre_seq,
     legendre_der,
     legendre_der_seq,
-)  # NOQA
+)
 from .hermite import (  # NOQA
     hermite_He,
     hermite_He_seq,
@@ -60,7 +59,7 @@ from .dickson import (  # NOQA
     dickson2_seq
 )
 from .xy import (  # NOQA
-    j_to_mn,
+    xy_j_to_mn,
     xy,
     xy_seq,
 )
@@ -85,6 +84,13 @@ from .zernike import (  # NOQA
     top_n,
 )
 
+from .laguerre import (
+    laguerre,
+    laguerre_seq,
+    laguerre_der,
+    laguerre_der_seq
+)
+
 
 def sum_of_2d_modes(modes, weights):
     """Compute a sum of 2D modes.
@@ -94,7 +100,7 @@ def sum_of_2d_modes(modes, weights):
     modes : iterable
         seq of ndarray of shape (k, m, n);
         a list of length k with elements of shape (m,n) works
-    weights : ndarray
+    weights : numpy.ndarray
         weight of each mode
 
     Returns
@@ -103,17 +109,8 @@ def sum_of_2d_modes(modes, weights):
         ndarray of shape (m, n) that is the sum of modes as given
 
     """
-    if isinstance(modes, (list, tuple)):
-        warnings.warn('sum_of_2d_modes: modes is a list or tuple: for optimal performance, pre convert to array of shape (k, m, n)')
-        modes = np.asarray(modes)
-
-    if isinstance(weights, (list, tuple)):
-        warnings.warn('sum_of_2d_modes weights is a list or tuple: for optimal performance, pre convert to array of shape (k,)')
-        weights = np.asarray(weights)
-
-    if weights.dtype != modes.dtype:
-        warnings.warn("sum_of_2d_modes weights dtype mismatched to modes dtype, converting weights to modes' dtype: use same dtype for optimal speed")
-        weights = weights.astype(modes.dtype)
+    modes = np.asarray(modes)
+    weights = np.asarray(weights).astype(modes.dtype)
 
     # dot product of the 0th dim of modes and weights => weighted sum
     return np.tensordot(modes, weights, axes=(0, 0))
@@ -127,7 +124,7 @@ def sum_of_2d_modes_backprop(modes, databar):
     modes : iterable
         seq of ndarray of shape (k, m, n);
         a list of length k with elements of shape (m,n) works
-    databar : ndarray
+    databar : numpy.ndarray
         partial gradient backpropated up to the return of sum_of_2d_modes
 
     Returns
@@ -156,16 +153,16 @@ def hopkins(a, b, c, r, t, H):
         radial order
     c : int
         order in field ("H-order")
-    r : ndarray
+    r : numpy.ndarray
         radial pupil coordinate
-    t : ndarray
+    t : numpy.ndarray
         azimuthal pupil coordinate
-    H : ndarray
+    H : numpy.ndarray
         field coordinate
 
     Returns
     -------
-    ndarray
+    numpy.ndarray
         polynomial evaluated at this point
 
     """
@@ -188,15 +185,14 @@ def lstsq(modes, data):
     Parameters
     ----------
     modes : iterable
-        modes to fit; seq of ndarray of shape (m, n);
-        array of shape (k, m, n), k=num modes, (m,n) = spatial domain is best
-    data : ndarray
+        modes to fit; seq of ndarray of shape (m, n)
+    data : numpy.ndarray
         data to fit, of shape (m, n)
         place NaN values in data for points to ignore
 
     Returns
     -------
-    ndarray
+    numpy.ndarray
         fit coefficients
 
     """
@@ -204,78 +200,6 @@ def lstsq(modes, data):
     data = data[mask]
     modes = np.asarray(modes)
     modes = modes.reshape((modes.shape[0], -1))  # flatten second dim
-    # transpose moves modes to columns, as needed for least squares fit
-    modes = modes[:, mask.ravel()].T
+    modes = modes[:, mask.ravel()].T  # transpose moves modes to columns, as needed for least squares fit
     c, *_ = np.linalg.lstsq(modes, data, rcond=None)
     return c
-
-
-def normalize_modes(modes, mask, to='std', remove_piston=True):
-    """Scale modes such that they have unit RMS.
-
-    Parameters
-    ----------
-    modes : ndarray
-        mode shape (m, n) or modes shape (k, m, n) to scale
-    mask : ndarray
-        2D boolean array, True in the interior of the appropriate domain
-    to : str
-        what to normalize modes by, use std for "RMS" or ptp for PV
-
-    Returns
-    -------
-    ndarray
-        scaled modes
-
-    """
-    # first sweep, take out piston
-    func = getattr(np, to)
-    if modes.ndim == 2:
-        mode = modes[:, mask]
-        if remove_piston:
-            mode = mode - np.mean(mode, axis=1)[:, np.newaxis]
-
-        norm = func(mode)
-
-        # loophole for piston
-        if norm < 1e-9:
-            norm = 1.
-
-        return modes * (1/norm)
-
-    modes_masked = modes[:, mask]
-    if remove_piston:
-        mean = np.mean(modes_masked, axis=1)
-        modes_masked = modes_masked - mean[:, np.newaxis]
-
-    norms = func(modes_masked, axis=1)
-    norms[norms < 1e-9] = 1.  # loophole for piston
-    # newaxes for correct numpy broadcast semantics
-    out = np.zeros_like(modes)
-    out[:, mask] = modes_masked * (1/norms[:, np.newaxis])
-    return out
-
-
-def orthogonalize_modes(modes, mask):
-    """Use a Gram-Schmidt like process to orthogonalize modes over mask.
-
-    Parameters
-    ----------
-    modes : ndarray
-        array of shape (k, m, n) to scale
-    mask : ndarray
-        2D boolean array, True in the interior of the appropriate domain
-
-    Returns
-    -------
-    ndarray
-        orthogonal modes
-
-    """
-    basis = modes[:, mask]
-    Q, R = np.linalg.qr(basis.T)
-    sgn = np.sign(np.diag(R))  # modes can flip, undo that
-    Qmod = Q*sgn
-    out = np.zeros_like(modes)
-    out[:, mask] = Qmod.T
-    return out
