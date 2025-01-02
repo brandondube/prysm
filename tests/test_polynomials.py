@@ -54,7 +54,7 @@ xy_poly_truth_table = [  # NOQA
 
 @pytest.mark.parametrize('j', np.arange(2, 67))
 def test_xy_poly_mapping_roundtrip(j):
-    n, m = polynomials.j_to_mn(j)
+    n, m = polynomials.xy_j_to_mn(j)
     assert xy_poly_truth_table[m][n] == j
 
 
@@ -243,18 +243,15 @@ def test_zernike_topn_correct():
 
 
 def test_barplot_functions():
-    js = np.arange(2, 13)
-    coefs = js  # don't need dummy data for test, reduce waste work in CI
-    nms = [polynomials.noll_to_nm(j) for j in js]
-    names = [polynomials.nm_to_name(*nm) for nm in nms]
+    coefs = [0, 1, 2]
+    names = ['Foo', 'Bar', 'Baz']
     fig, ax = polynomials.zernike_barplot(coefs, names)
     assert fig, ax
 
 
 def test_barplot_magnitudes_functions():
-    js = np.arange(2, 13)
-    coefs = js  # don't need dummy data for test, reduce waste work in CI
-    nms = [polynomials.noll_to_nm(j) for j in js]
+    coefs = [0, 1, 2]
+    nms = [polynomials.noll_to_nm(j) for j in range(1, 4)]
     fig, ax = polynomials.zernike_barplot_magnitudes(coefs, nms)
     assert fig, ax
 

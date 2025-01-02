@@ -25,7 +25,7 @@ def test_segmented_keystone_functions():
                                               radial_gap=.007)  # NOQA
     nms = [polynomials.noll_to_nm(j) for j in [1, 2, 3]]
 
-    nms2 = [polynomials.j_to_mn(j) for j in [2, 3, 4, 5]]
+    nms2 = [polynomials.xy_j_to_mn(j) for j in [2, 3, 4, 5]]
     csa.prepare_opd_bases(polynomials.zernike_nm_seq, nms, polynomials.xy_seq, nms2, rotate_xyaxes=True, segment_basis_kwargs=dict(cartesian_grid=False))
     center_coefs = np.random.rand(len(nms))
     segment_coefs = np.random.rand(len(csa.segment_ids), len(nms2))

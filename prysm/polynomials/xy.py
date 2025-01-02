@@ -8,7 +8,7 @@ from prysm.coordinates import optimize_xy_separable
 from .dickson import dickson1_seq
 
 
-def j_to_mn(j):
+def xy_j_to_mn(j):
     """Convert a mono-index j into the m and n powers.
 
     Does not precisely follow Code V; the j=1 term is piston, which does not
