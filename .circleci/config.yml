@@ -5,7 +5,7 @@ orbs:
   # Orb commands and jobs help you with common scripting around a language/tool
   # so you dont have to copy and paste it everywhere.
   # See the orb documentation here: https://circleci.com/developer/orbs/orb/circleci/python
-  python: circleci/python@1.2
+  python: circleci/python@2.0.2
 
 workflows:
   build-and-test:  # This is the name of the workflow, feel free to change it to better match your workflow.
@@ -24,7 +24,7 @@ jobs:
     # Change the version below to your required version of python
     resource_class: small
     docker:
-      - image: cimg/python:3.11
+      - image: cimg/python:3.14
     # Checkout the code as the first step. This is a dedicated CircleCI step.
     # The python orb's install-packages step will install the dependencies from a Pipfile via Pipenv by default.
     # Here we're making sure we use just use the system-wide pip. By default it uses the project root's requirements.txt.
