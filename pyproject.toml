@@ -22,6 +22,12 @@ exclude_also = ["except ImportError", "assert",]
 ignore = ["D200", "D203", "D204", "D210", "D213", "D300", "D401", "D416"]
 
 [project]
+name = "prysm"
+version = "0.22"
+license = "MIT"
+description = "physical optics integrated modeling, phase retrieval, segmented systems, polynomials and fitting, sequential raytracing..."
+authors = ["Brandon Dube <brandon@retrorefractions.com>"]
+
 dependencies = [
     "numpy",
     "scipy",
