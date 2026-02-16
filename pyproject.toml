@@ -10,10 +10,6 @@ readme = "README.md"
 license = "MIT"
 version = "0.22"
 
-[tool.poetry.dependencies]
-python = "^3.10"
-numpy = "^1.26.4"
-
 [tool.coverage.run]
 include = ["prysm/*",]
 omit = ["prysm/x/*","tests/*",]
@@ -24,3 +20,11 @@ exclude_also = ["except ImportError", "assert",]
 
 [tool.pydocstyle]
 ignore = ["D200", "D203", "D204", "D210", "D213", "D300", "D401", "D416"]
+
+[project]
+dependencies = [
+    "numpy",
+    "scipy",
+]
+[project.optional-dependencies]
+full = ["matplotlib", "h5py", "pandas", "imageio"]
