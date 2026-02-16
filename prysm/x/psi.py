@@ -157,6 +157,25 @@ def design_scheme(N, stepsize=None, window=None):
 
 
 def unwrap_phase(wrapped, mask):
+    """Unwrap an array containing phase warpped at pi.
+
+    Parameters
+    ----------
+    wrapped : ndarray
+        2D array of phase data, wrapped
+    mask : ndarray
+        boolean mask array
+
+    Returns
+    -------
+    ndarray
+        unwrapped phase
+
+    Notes
+    -----
+    currently just a wrapper for scikit-image
+
+    """
     was_rd = isinstance(wrapped, RichData)
     if was_rd:
         w0 = wrapped
