@@ -2,9 +2,11 @@ version: 2
 build:
   os: ubuntu-lts-latest
   tools:
-    python: "3.12"
+    python: "3.14"
 python:
   install:
     - requirements: docs/requirements.txt
     - method: pip
       path: .
+sphinx:
+  configuration: docs/source/conf.py
