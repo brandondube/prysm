@@ -6,4 +6,4 @@ h5py
 pytest>=7.4.4
 pytest-cov==5.0.0
 coverage==7.6.1
-coveralls==4.0.1
+coveralls==4.0.2
