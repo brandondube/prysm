@@ -11,13 +11,13 @@ import matplotlib
 matplotlib.use('Agg')
 
 
-@pytest.fixture
+@pytest.fixture(scope='function')
 def sample_i():
     i = Interferogram.from_zygo_dat(sample_files('dat'))
     return i.mask(circle(40, i.r)).crop().remove_piston().remove_tiptilt()
 
 
-@pytest.fixture
+@pytest.fixture(scope='function')
 def sample_i_mutate():
     i = Interferogram.from_zygo_dat(sample_files('dat'))
     return i.mask(circle(40, i.r)).crop().remove_piston().remove_tiptilt().remove_power().fill()
