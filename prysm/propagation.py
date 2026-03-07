@@ -117,6 +117,127 @@ def unfocus_backprop(wavefunction, Q):
     return crop_center(back_field, out_shape)
 
 
+class DFTPropagator:
+    def __init__(self, Ein, Eout):
+        self.Ein = Ein
+        self.Eout = Eout
+
+    def forward(self, array):
+        return self.Eout @ array @ self.Ein
+
+    def reverse(self, array):
+        EoutH = self.Eout.conj().T
+        EinH = self.Ein.conj().T
+        return EoutH @ array @ EinH
+
+    @classmethod
+    def focus(cls, input_dx, input_samples, prop_dist,
+                wavelength, output_dx, output_samples,
+                shift=(0, 0), method='mdft'):
+        """Propagate a pupil function to the PSF plane with fixed sampling,
+        see `focus_fixed_sampling`
+
+        Parameters
+        ----------
+        input_dx : float
+            spacing between samples in the pupil plane, millimeters
+        input_samples: int
+            number of samples in the square input array
+        prop_dist : float
+            propagation distance along the z distance, milimeters
+        wavelength : float
+            wavelength of light, microns
+        output_dx : float
+            sample spacing in the output plane, microns
+        output_samples : int
+            number of samples in the square output array
+        shift : tuple of float
+            shift in (X, Y), same units as output_dx
+        method : str, {'mdft', 'czt'}
+            how to propagate the field, matrix DFT or Chirp Z transform
+            CZT is usually faster single-threaded and has less memory consumption
+            MDFT is usually faster multi-threaded and has more memory consumption
+        """
+        if not isinstance(output_samples, Iterable):
+            output_samples = (output_samples, output_samples)
+
+        dia = input_samples * input_dx
+        Q = Q_for_sampling(input_diameter=dia,
+                           prop_dist=prop_dist,
+                           wavelength=wavelength,
+                           output_dx=output_dx)
+                           
+        if shift[0] != 0 or shift[1] != 0:
+            shift = (shift[0]/output_dx, shift[1]/output_dx)
+
+        if method == 'mdft':
+            # Setup bases
+            key = mdft._key(samples_in=input_samples, Q=Q, samples_out=output_samples, shift=shift, fwd=True)
+            mdft._setup_bases(key)
+            Ein, Eout = mdft.Ein[key], mdft.Eout[key]
+             
+        elif method == 'czt':
+            out = czt._setup_bases(samples_in=input_samples, Q=Q, samples_out=output_samples, shift=shift, fwd=True)  # NOQA
+            czt._setup_bases(key) 
+            Ein, Eout = czt.Ein[key], czt.Eout[key]
+
+        return cls(Ein, Eout)
+
+
+    @classmethod
+    def unfocus(cls, input_dx, input_samples, prop_dist,
+                wavelength, output_dx, output_samples,
+                shift=(0, 0), method='mdft'):
+        """Propagate a PSF to the pupil plane with fixed sampling,
+        see `unfocus_fixed_sampling`
+
+        Parameters
+        ----------
+        input_dx : float
+            spacing between samples in the pupil plane, millimeters
+        input_samples: int
+            number of samples in the square input array
+        prop_dist : float
+            propagation distance along the z distance, milimeters
+        wavelength : float
+            wavelength of light, microns
+        output_dx : float
+            sample spacing in the output plane, microns
+        output_samples : int
+            number of samples in the square output array
+        shift : tuple of float
+            shift in (X, Y), same units as output_dx
+        method : str, {'mdft', 'czt'}
+            how to propagate the field, matrix DFT or Chirp Z transform
+            CZT is usually faster single-threaded and has less memory consumption
+            MDFT is usually faster multi-threaded and has more memory consumption
+        """
+        if not isinstance(output_samples, Iterable):
+            output_samples = (output_samples, output_samples)
+
+        dia = input_samples * input_dx
+        Q = Q_for_sampling(input_diameter=dia,
+                           prop_dist=prop_dist,
+                           wavelength=wavelength,
+                           output_dx=output_dx)
+                           
+        if shift[0] != 0 or shift[1] != 0:
+            shift = (shift[0]/output_dx, shift[1]/output_dx)
+
+        if method == 'mdft':
+            # Setup bases
+            key = mdft._key(samples_in=input_samples, Q=Q, samples_out=output_samples, shift=shift, fwd=False)
+            mdft._setup_bases(key) 
+            Ein, Eout = mdft.Ein[key], mdft.Eout[key]
+             
+        elif method == 'czt':
+            out = czt._setup_bases(samples_in=input_samples, Q=Q, samples_out=output_samples, shift=shift, fwd=False)  # NOQA
+            czt._setup_bases(key)
+            Ein, Eout = czt.Ein[key], czt.Eout[key]
+
+        return cls(Ein, Eout)
+
+
 def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
                          wavelength, output_dx, output_samples,
                          shift=(0, 0), method='mdft'):
