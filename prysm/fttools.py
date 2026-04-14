@@ -419,6 +419,23 @@ class MatrixDFTExecutor:
 
         return total
 
+    # TODO: Replace Q with physical distances (dpup, dimg, efl) 
+    @classmethod
+    def from_pupil_and_focal_sampling(cls, samples_in, Q, samples_out, shift, fwd):
+
+        # create instance of cls without __init__ to access _setup_bases
+        # Fairly certain the garbage collector takes care of this after this method
+        # is finished executing
+        mdft_instance = cls.__new__(cls)
+        key = mdft_instance._key(samples_in=samples_in,
+                              Q=Q,
+                              samples_out=samples_out,
+                              shift=shift,
+                              fwd=fwd)
+        mdft_instance._setup_bases(key)
+        Ein, Eout = mdft_instance.Ein[key], mdft_instance.Eout[key]
+        return cls(Ein, Eout)
+
 
 class ChirpZTransformExecutor:
     """Type which executes Chirp Z Transforms on 2D data, aka zoom FFTs."""
