@@ -119,3 +119,53 @@ def test_thinlens_hopkins_agree():
     wf = no_phs_wf * tl
     psf2 = wf.focus(efl=100, Q=2).intensity
     assert np.allclose(psf.data, psf2.data, rtol=1e-5)
+
+
+def test_DFTPropagator_forward_mdft():
+    # A test against focus_fixed_sampling, which this should emulate
+     
+    # Pulled from prior test 
+    dx = 1
+    z = np.random.rand(SAMPLES, SAMPLES)
+    wf = propagation.Wavefront(dx=dx, cmplx_field=z, wavelength=HeNe, space='pupil')
+    unfocus_fft = wf.focus(Q=2, efl=1)
+
+    dft = propagation.DFTPropagator.focus(input_dx=dx,
+                                        input_samples=SAMPLES,
+                                        prop_dist=1,
+                                        wavelength=HeNe,
+                                        output_dx=unfocus_fft.dx,
+                                        output_samples=unfocus_fft.data.shape)
+
+    unfocus_dft_propagator = dft.forward(z)
+    unfocus_mdft = wf.focus_fixed_sampling(
+        efl=1,
+        dx=unfocus_fft.dx,
+        samples=unfocus_fft.data.shape)
+
+    assert np.allclose(unfocus_mdft.data, unfocus_dft_propagator)
+
+    
+def test_DFTPropagator_reverse_mdft():
+    # A test against focus_fixed_sampling, which this should emulate
+     
+    # Pulled from prior test 
+    z = np.random.rand(128, 128)
+    dx = 1
+    wf = propagation.Wavefront(dx=dx, cmplx_field=z, wavelength=HeNe, space='psf')
+    unfocus_fft = wf.unfocus(Q=2, efl=1)
+    unfocus_mdft = wf.unfocus_fixed_sampling(
+        efl=1,
+        dx=unfocus_fft.dx,
+        samples=unfocus_fft.data.shape)
+
+    dft = propagation.DFTPropagator.unfocus(input_dx=dx,
+                                        input_samples=z.shape[0],
+                                        prop_dist=1,
+                                        wavelength=HeNe,
+                                        output_dx=unfocus_fft.dx,
+                                        output_samples=unfocus_fft.data.shape[0])
+
+    unfocus_dft_propagator = dft.forward(z)
+
+    assert np.allclose(unfocus_mdft.data, unfocus_dft_propagator)

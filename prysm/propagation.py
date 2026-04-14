@@ -117,55 +117,14 @@ def unfocus_backprop(wavefunction, Q):
     return crop_center(back_field, out_shape)
 
 
-def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
-                         wavelength, output_dx, output_samples,
-                         shift=(0, 0), method='mdft'):
-    """Propagate a pupil function to the PSF plane with fixed sampling.
+def executor_fixed_sampling(wavefunction, executor):
+    Ein, Eout = executor.Ein, executor.Eout
+    return Eout @ wavefunction @ Ein
 
-    Parameters
-    ----------
-    wavefunction : ndarray
-        the pupil wavefunction
-    input_dx : float
-        spacing between samples in the pupil plane, millimeters
-    prop_dist : float
-        propagation distance along the z distance
-    wavelength : float
-        wavelength of light
-    output_dx : float
-        sample spacing in the output plane, microns
-    output_samples : int
-        number of samples in the square output array
-    shift : tuple of float
-        shift in (X, Y), same units as output_dx
-    method : str, {'mdft', 'czt'}
-        how to propagate the field, matrix DFT or Chirp Z transform
-        CZT is usually faster single-threaded and has less memory consumption
-        MDFT is usually faster multi-threaded and has more memory consumption
 
-    Returns
-    -------
-    data : ndarray
-        2D array of data
-
-    """
-    if not isinstance(output_samples, Iterable):
-        output_samples = (output_samples, output_samples)
-
-    dia = wavefunction.shape[0] * input_dx
-    Q = Q_for_sampling(input_diameter=dia,
-                       prop_dist=prop_dist,
-                       wavelength=wavelength,
-                       output_dx=output_dx)
-    if shift[0] != 0 or shift[1] != 0:
-        shift = (shift[0]/output_dx, shift[1]/output_dx)
-
-    if method == 'mdft':
-        out = mdft.dft2(ary=wavefunction, Q=Q, samples_out=output_samples, shift=shift)  # NOQA
-    elif method == 'czt':
-        out = czt.czt2(ary=wavefunction, Q=Q, samples_out=output_samples, shift=shift)  # NOQA
-
-    return out
+def executor_fixed_sampling_backprop(wavefunction, executor):
+    Ein, Eout = executor.Ein.T.conj(), executor.Eout.T.conj()
+    return Eout @ wavefunction @ Ein
 
 
 def focus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
