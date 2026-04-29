@@ -27,7 +27,7 @@ version = "0.22"
 license = "MIT"
 description = "physical optics integrated modeling, phase retrieval, segmented systems, polynomials and fitting, sequential raytracing..."
 authors = [
-{name = "Brandon Dube email = brandon@retrorefractions.com"},
+{name = "Brandon Dube", email = "brandon@retrorefractions.com"},
 ]
 
 dependencies = [

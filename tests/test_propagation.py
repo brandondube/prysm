@@ -90,6 +90,98 @@ def test_can_div_wavefronts():
     assert wf2
 
 
+def test_wavefront_scalar_sub_and_div_use_wavefront_as_left_operand():
+    data = np.asarray([[4, 8], [16, 32]], dtype=np.complex128)
+    wf = propagation.Wavefront(cmplx_field=data, dx=1, wavelength=.6328)
+
+    assert np.allclose((wf / 2).data, data / 2)
+    assert np.allclose((wf - 2).data, data - 2)
+
+
+def test_to_fpm_and_back_return_more_uses_wavefront_fpm_dx():
+    wf = propagation.Wavefront(
+        cmplx_field=np.ones((4, 4), dtype=np.complex128),
+        dx=1,
+        wavelength=.6328)
+    fpm = propagation.Wavefront(
+        cmplx_field=np.ones((4, 4), dtype=np.complex128),
+        dx=.25,
+        wavelength=.6328,
+        space='psf')
+
+    _, at_fpm, after_fpm = wf.to_fpm_and_back(
+        efl=10,
+        fpm=fpm,
+        return_more=True)
+
+    assert at_fpm.dx == fpm.dx
+    assert after_fpm.dx == fpm.dx
+
+
+def test_to_fpm_and_back_backprop_accepts_wavefront_fpm():
+    fpm = propagation.Wavefront(
+        cmplx_field=np.ones((4, 4), dtype=np.complex128),
+        dx=.25,
+        wavelength=.6328,
+        space='psf')
+
+    out = propagation.to_fpm_and_back_backprop(
+        wavefunction=np.ones((4, 4), dtype=np.complex128),
+        dx=1,
+        wavelength=.6328,
+        efl=10,
+        fpm=fpm)
+
+    assert out.shape == (4, 4)
+
+
+def test_to_fpm_and_back_backprop_passes_shift_to_both_propagations(monkeypatch):
+    shifts = []
+
+    def fake_unfocus_backprop(wavefunction, input_dx, prop_dist, wavelength,
+                              output_dx, output_samples, shift=(0, 0),
+                              method='mdft'):
+        shifts.append(('unfocus', shift))
+        return np.ones(output_samples, dtype=np.complex128)
+
+    def fake_focus_backprop(wavefunction, input_dx, prop_dist, wavelength,
+                            output_dx, output_samples, shift=(0, 0),
+                            method='mdft'):
+        shifts.append(('focus', shift))
+        return np.ones(output_samples, dtype=np.complex128)
+
+    monkeypatch.setattr(
+        propagation,
+        'unfocus_fixed_sampling_backprop',
+        fake_unfocus_backprop)
+    monkeypatch.setattr(
+        propagation,
+        'focus_fixed_sampling_backprop',
+        fake_focus_backprop)
+
+    propagation.to_fpm_and_back_backprop(
+        wavefunction=np.ones((4, 4), dtype=np.complex128),
+        dx=1,
+        wavelength=.6328,
+        efl=10,
+        fpm=np.ones((4, 4), dtype=np.complex128),
+        fpm_dx=.25,
+        shift=(1, -2))
+
+    assert shifts == [('unfocus', (1, -2)), ('focus', (1, -2))]
+
+
+@pytest.mark.parametrize('func,args', [
+    (propagation.focus_fixed_sampling, (np.ones((4, 4)), 1, 10, .6328, .25, 4)),
+    (propagation.focus_fixed_sampling_backprop, (np.ones((4, 4)), 1, 10, .6328, .25, 4)),
+    (propagation.unfocus_fixed_sampling, (np.ones((4, 4)), .25, 10, .6328, 1, 4)),
+    (propagation.unfocus_fixed_sampling_backprop, (np.ones((4, 4)), .25, 10, .6328, 1, 4)),
+])
+def test_fixed_sampling_rejects_unsupported_method(func, args):
+    with pytest.raises(ValueError, match='unsupported propagation method'):
+        func(*args, method='bogus')
+
+
 def test_precomputed_angular_spectrum_functions():
     data = np.random.rand(2, 2)
     wf = propagation.Wavefront(cmplx_field=data, dx=1, wavelength=.6328)

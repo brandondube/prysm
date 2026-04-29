@@ -164,6 +164,8 @@ def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
         out = mdft.dft2(ary=wavefunction, Q=Q, samples_out=output_samples, shift=shift)  # NOQA
     elif method == 'czt':
         out = czt.czt2(ary=wavefunction, Q=Q, samples_out=output_samples, shift=shift)  # NOQA
+    else:
+        raise ValueError(f'unsupported propagation method: {method}')
 
     return out
 
@@ -215,7 +217,8 @@ def focus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
         out = mdft.dft2_backprop(wavefunction, Q, samples_in=output_samples, shift=shift)  # NOQA
     elif method == 'czt':
         raise ValueError('gradient backpropagation not yet implemented for CZT')  # NOQA
-        out = czt.czt2_backprop(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)  # NOQA
+    else:
+        raise ValueError(f'unsupported propagation method: {method}')
 
     return out
 
@@ -277,6 +280,8 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
         out = mdft.idft2(ary=wavefunction, Q=Q, samples_out=output_samples, shift=shift)  # NOQA
     elif method == 'czt':
         out = czt.iczt2(ary=wavefunction, Q=Q, samples_out=output_samples, shift=shift)  # NOQA
+    else:
+        raise ValueError(f'unsupported propagation method: {method}')
 
     return out
 
@@ -336,7 +341,8 @@ def unfocus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
         out = mdft.idft2_backprop(wavefunction, Q, samples_out=output_samples, shift=shift)  # NOQA
     elif method == 'czt':
         raise ValueError('gradient backpropagation not yet implemented for CZT')  # NOQA
-        out = czt.iczt2_backprop(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)  # NOQA
+    else:
+        raise ValueError(f'unsupported propagation method: {method}')
 
     return out
 
@@ -632,6 +638,7 @@ def to_fpm_and_back_backprop(wavefunction, dx, wavelength, efl, fpm, fpm_dx=None
     if isinstance(fpm, Wavefront):
         fpm_samples = fpm.data.shape
         fpm_dx = fpm.dx
+        fpm = fpm.data
     else:
         if fpm_dx is None:
             raise ValueError('fpm was not a Wavefront and fpm_dx was None')
@@ -642,9 +649,9 @@ def to_fpm_and_back_backprop(wavefunction, dx, wavelength, efl, fpm, fpm_dx=None
     if np.iscomplexobj(fpm.dtype):
         fpm = fpm.conj()
 
-    Ebbar = -unfocus_fixed_sampling_backprop(wavefunction, fpm_dx, efl, wavelength, dx, fpm_samples)  # NOQA
+    Ebbar = -unfocus_fixed_sampling_backprop(wavefunction, fpm_dx, efl, wavelength, dx, fpm_samples, shift=shift)  # NOQA
     intermediate = Ebbar * fpm
-    Eabar = focus_fixed_sampling_backprop(intermediate, dx, efl, wavelength, fpm_dx, wavefunction.shape)  # NOQA
+    Eabar = focus_fixed_sampling_backprop(intermediate, dx, efl, wavelength, fpm_dx, wavefunction.shape, shift=shift)  # NOQA
     if return_more:
         return Eabar, Ebbar, intermediate
     else:
@@ -898,7 +905,7 @@ class Wavefront:
 
             data = func(self.data, other.data)
         elif type(other) == type(self.data) or isinstance(other, numbers.Number):  # NOQA
-            data = func(other, self.data)
+            data = func(self.data, other)
         else:
             raise TypeError(f'unsupported operand type(s) for {op}: \'Wavefront\' and {type(other)}')  # NOQA
 
@@ -1139,7 +1146,7 @@ class Wavefront:
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')  # NOQA
 
-    def to_fpm_and_back(self, efl, fpm, fpm_dx, method='mdft', shift=(0, 0), return_more=False):  # NOQA
+    def to_fpm_and_back(self, efl, fpm, fpm_dx=None, method='mdft', shift=(0, 0), return_more=False):  # NOQA
         """Propagate to a focal plane mask, apply it, and return.
 
         This routine handles normalization properly for the user.
@@ -1172,6 +1179,9 @@ class Wavefront:
             new wavefront, [field at fpm, field after fpm]
 
         """
+        if isinstance(fpm, Wavefront):
+            fpm_dx = fpm.dx
+
         pak = to_fpm_and_back(self.data, dx=self.dx, wavelength=self.wavelength,  # NOQA
                               efl=efl, fpm=fpm, fpm_dx=fpm_dx, method=method,
                               shift=shift, return_more=return_more)
@@ -1218,6 +1228,9 @@ class Wavefront:
             new wavefront, [field at fpm, field after fpm]
 
         """
+        if isinstance(fpm, Wavefront):
+            fpm_dx = fpm.dx
+
         pak = to_fpm_and_back_backprop(self.data, self.dx, self.wavelength,
                                        efl=efl, fpm=fpm, fpm_dx=fpm_dx,
                                        method=method, shift=shift,
