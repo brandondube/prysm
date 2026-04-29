@@ -1,14 +1,6 @@
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry]
-name = "prysm"
-description = "physical optics integrated modeling, phase retrieval, segmented systems, polynomials and fitting, sequential raytracing..."
-authors = ["Brandon Dube <brandon@retrorefractions.com>"]
-readme = "README.md"
-license = "MIT"
-version = "0.22"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.coverage.run]
 include = ["prysm/*",]
@@ -26,6 +18,8 @@ name = "prysm"
 version = "0.22"
 license = "MIT"
 description = "physical optics integrated modeling, phase retrieval, segmented systems, polynomials and fitting, sequential raytracing..."
+readme = "README.md"
+requires-python = ">=3.10"
 authors = [
 {name = "Brandon Dube", email = "brandon@retrorefractions.com"},
 ]
@@ -36,3 +30,6 @@ dependencies = [
 ]
 [project.optional-dependencies]
 full = ["matplotlib", "h5py", "pandas", "imageio"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["prysm"]

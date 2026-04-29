@@ -1,4 +1,3 @@
-setuptools==75.5.0
 sphinx==8.1.3
 pydata-sphinx-theme==0.16
 nbconvert==7.16.4
