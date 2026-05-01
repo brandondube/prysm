@@ -90,6 +90,27 @@ def test_can_div_wavefronts():
     assert wf2
 
 
+def test_wavefront_scalar_arithmetic_operand_order():
+    # non-commutative ops (sub, truediv) must compute self OP other, not other OP self
+    data = (np.random.rand(2, 2) + 1).astype(np.complex128)
+    wf = propagation.Wavefront(cmplx_field=data, dx=1, wavelength=.6328)
+    assert np.allclose((wf - 1.0).data, data - 1.0)
+    assert np.allclose((wf / 2.0).data, data / 2.0)
+
+
+def test_to_fpm_and_back_backprop_accepts_wavefront_fpm():
+    # regression: previously raised AttributeError on fpm.dtype / fpm.conj()
+    dx = 1.0
+    z = (np.random.rand(SAMPLES, SAMPLES) + 1j * np.random.rand(SAMPLES, SAMPLES))
+    wf = propagation.Wavefront(cmplx_field=z, dx=dx, wavelength=HeNe, space='pupil')
+    fpm_data = (np.random.rand(SAMPLES, SAMPLES)
+                + 1j * np.random.rand(SAMPLES, SAMPLES)).astype(np.complex128)
+    fpm = propagation.Wavefront(cmplx_field=fpm_data, dx=0.1, wavelength=HeNe, space='psf')
+    out = wf.to_fpm_and_back(efl=10.0, fpm=fpm, fpm_dx=fpm.dx)
+    grad = out.to_fpm_and_back_backprop(efl=10.0, fpm=fpm, fpm_dx=fpm.dx)
+    assert grad.data.shape == wf.data.shape
+
+
 def test_precomputed_angular_spectrum_functions():
     data = np.random.rand(2, 2)
     wf = propagation.Wavefront(cmplx_field=data, dx=1, wavelength=.6328)

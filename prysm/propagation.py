@@ -113,33 +113,34 @@ def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
 def focus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
                                   wavelength, output_dx, output_samples,
                                   shift=(0, 0), method='mdft'):
-    """Propagate a pupil function to the PSF plane with fixed sampling.
+    """Backpropagate gradient through focus_fixed_sampling.
 
     Parameters
     ----------
     wavefunction : ndarray
-        the pupil wavefunction
+        gradient at the PSF plane (output of the forward propagation)
     input_dx : float
-        spacing between samples in the pupil plane, millimeters
+        sample spacing in the pupil plane, millimeters (matches the forward call)
     prop_dist : float
-        propagation distance along the z distance
+        propagation distance, millimeters
     wavelength : float
-        wavelength of light
+        wavelength of light, microns
     output_dx : float
-        sample spacing in the output plane, microns
-    output_samples : int
-        number of samples in the square output array
+        sample spacing in the PSF plane, microns (matches the forward call)
+    output_samples : int or tuple of int
+        shape of the pupil array — i.e. the shape of the gradient that this
+        function returns. Note: despite the name, this is the *forward input*
+        shape, not the forward output shape.
     shift : tuple of float
         shift in (X, Y), same units as output_dx
     method : str, {'mdft', 'czt'}
-        how to propagate the field, matrix DFT or Chirp Z transform
-        CZT is usually faster single-threaded and has less memory consumption
-        MDFT is usually faster multi-threaded and has more memory consumption
+        propagation method (must match the forward call); CZT backprop is not
+        implemented and will raise
 
     Returns
     -------
-    data : ndarray
-        2D array of data
+    ndarray
+        gradient at the pupil plane, shape ``output_samples``
 
     """
     if not isinstance(output_samples, Iterable):
@@ -157,7 +158,6 @@ def focus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
         out = mdft.dft2_backprop(wavefunction, Q, samples_in=output_samples, shift=shift)
     elif method == 'czt':
         raise ValueError('gradient backpropagation not yet implemented for CZT')
-        out = czt.czt2_backprop(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
 
     return out
 
@@ -226,6 +226,36 @@ def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
 def unfocus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
                                     wavelength, output_dx, output_samples,
                                     shift=(0, 0), method='mdft'):
+    """Backpropagate gradient through unfocus_fixed_sampling.
+
+    Parameters
+    ----------
+    wavefunction : ndarray
+        gradient at the pupil plane (output of the forward propagation)
+    input_dx : float
+        sample spacing in the focal plane, microns (matches the forward call)
+    prop_dist : float
+        propagation distance, millimeters
+    wavelength : float
+        wavelength of light, microns
+    output_dx : float
+        sample spacing in the pupil plane, mm (matches the forward call)
+    output_samples : int or tuple of int
+        shape used as the forward call's ``output_samples``; this function
+        returns a gradient with the same shape as the forward's input (i.e.,
+        the focal-plane shape implied by ``wavefunction.shape``)
+    shift : tuple of float
+        shift in (X, Y), same units as output_dx
+    method : str, {'mdft', 'czt'}
+        propagation method (must match the forward call); CZT backprop is not
+        implemented and will raise
+
+    Returns
+    -------
+    ndarray
+        gradient at the focal plane
+
+    """
     if not isinstance(output_samples, Iterable):
         output_samples = (output_samples, output_samples)
 
@@ -245,7 +275,6 @@ def unfocus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
         out = mdft.idft2_backprop(wavefunction, Q, samples_out=output_samples, shift=shift)
     elif method == 'czt':
         raise ValueError('gradient backpropagation not yet implemented for CZT')
-        out = czt.iczt2_backprop(ary=wavefunction, Q=Q, samples=output_samples, shift=shift)
 
     return out
 
@@ -479,6 +508,7 @@ def to_fpm_and_back(wavefunction, dx, efl, wavelength, fpm, fpm_dx, shift=(0, 0)
     if isinstance(fpm, Wavefront):
         fpm_samples = fpm.data.shape
         fpm_dx = fpm.dx
+        fpm = fpm.data
     else:
         if fpm_dx is None:
             raise ValueError('fpm was not a Wavefront and fpm_dx was None')
@@ -496,49 +526,43 @@ def to_fpm_and_back(wavefunction, dx, efl, wavelength, fpm, fpm_dx, shift=(0, 0)
     return field_at_next_pupil
 
 
-def to_fpm_and_back_backprop(wavefunction, dx, wavelength, efl, fpm, fpm_dx=None,
+def to_fpm_and_back_backprop(wavefunction, dx, efl, wavelength, fpm, fpm_dx=None,
                              method='mdft', shift=(0, 0), return_more=False):
-    """Propagate to a focal plane mask, apply it, and return.
-
-    This routine handles normalization properly for the user.
-
-    To invoke babinet's principle, simply use to_fpm_and_back(fpm=1 - fpm).
+    """Backpropagate gradient through to_fpm_and_back.
 
     Parameters
     ----------
     wavefunction : ndarray
-        backpropagated partial derivative, prior to going through the FPM
+        gradient at the next pupil plane (output of the forward to_fpm_and_back)
     dx : float
-        inter-sample spacing of wavefunction, mm
-    wavelength : float
-        wavelength of light to propagate at, um
+        inter-sample spacing of the pupil-plane wavefront, mm
     efl : float
-        focal length for the propagation
+        focal length used in the forward propagation
+    wavelength : float
+        wavelength of light, um
     fpm : Wavefront or ndarray
-        the focal plane mask
+        the focal plane mask used in the forward propagation
     fpm_dx : float
-        sampling increment in the focal plane,  microns;
+        sampling increment in the focal plane, microns;
         do not need to pass if fpm is a Wavefront
     method : str, {'mdft', 'czt'}, optional
-        how to propagate the field, matrix DFT or Chirp Z transform
-        CZT is usually faster single-threaded and has less memory consumption
-        MDFT is usually faster multi-threaded and has more memory consumption
+        propagation method (must match the forward call)
     shift : tuple of float, optional
-        shift in the image plane to go to the FPM
-        appropriate shift will be computed returning to the pupil
+        shift used in the forward propagation
     return_more : bool, optional
-        if True, return (new_wavefront, field_at_fpm, field_after_fpm)
-        else return new_wavefront
+        if True, return (Eabar, Ebbar, intermediate)
+        else return Eabar
 
     Returns
     -------
-    Wavefront, Wavefront, Wavefront
-        new wavefront, [field at fpm, field after fpm]
+    ndarray or tuple of ndarray
+        gradient at the input pupil; optionally also the intermediate gradients
 
     """
     if isinstance(fpm, Wavefront):
         fpm_samples = fpm.data.shape
         fpm_dx = fpm.dx
+        fpm = fpm.data
     else:
         if fpm_dx is None:
             raise ValueError('fpm was not a Wavefront and fpm_dx was None')
@@ -546,10 +570,10 @@ def to_fpm_and_back_backprop(wavefunction, dx, wavelength, efl, fpm, fpm_dx=None
         fpm_samples = fpm.shape
 
     # do not take complex conjugate of reals (no-op, but numpy still does it)
-    if np.iscomplexobj(fpm.dtype):
+    if np.iscomplexobj(fpm):
         fpm = fpm.conj()
 
-    Ebbar = -unfocus_fixed_sampling_backprop(wavefunction, fpm_dx, efl, wavelength, dx, fpm_samples)
+    Ebbar = unfocus_fixed_sampling_backprop(wavefunction, fpm_dx, efl, wavelength, dx, fpm_samples)
     intermediate = Ebbar * fpm
     Eabar = focus_fixed_sampling_backprop(intermediate, dx, efl, wavelength, fpm_dx, wavefunction.shape)
     if return_more:
@@ -805,7 +829,7 @@ class Wavefront:
 
             data = func(self.data, other.data)
         elif type(other) == type(self.data) or isinstance(other, numbers.Number):  # NOQA
-            data = func(other, self.data)
+            data = func(self.data, other)
         else:
             raise TypeError(f'unsupported operand type(s) for {op}: \'Wavefront\' and {type(other)}')
 
@@ -961,9 +985,10 @@ class Wavefront:
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='psf')
 
     def focus_fixed_sampling_backprop(self, efl, dx, samples, shift=(0, 0), method='mdft'):
-        """Perform a "pupil" to "psf" propagation with fixed output sampling.
+        """Backprop a "pupil" to "psf" propagation with fixed output sampling.
 
-        Uses matrix triple product DFTs to specify the grid directly.
+        ``self`` carries the gradient at the psf plane; the returned Wavefront
+        carries the gradient at the pupil plane.
 
         Parameters
         ----------
@@ -977,9 +1002,8 @@ class Wavefront:
         shift : tuple of float
             shift in (X, Y), same units as output_dx
         method : str, {'mdft', 'czt'}
-            how to propagate the field, matrix DFT or Chirp Z transform
-            CZT is usually faster single-threaded and has less memory consumption
-            MDFT is usually faster multi-threaded and has more memory consumption
+            propagation method (must match the forward call); CZT backprop is
+            not implemented and will raise
 
         Returns
         -------
@@ -1050,6 +1074,47 @@ class Wavefront:
 
         return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')
 
+    def unfocus_fixed_sampling_backprop(self, efl, dx, samples, shift=(0, 0), method='mdft'):
+        """Backprop a "psf" to "pupil" propagation with fixed output sampling.
+
+        Parameters
+        ----------
+        efl : float
+            un-focusing distance, millimeters (matches the forward call)
+        dx : float
+            focal-plane sample spacing, microns (matches the forward's input_dx)
+        samples : int or tuple
+            shape used as the forward's ``output_samples`` (pupil shape)
+        shift : tuple of float
+            shift in (X, Y), same units as dx
+        method : str, {'mdft', 'czt'}
+            propagation method (must match the forward call); CZT backprop is
+            not implemented and will raise
+
+        Returns
+        -------
+        Wavefront
+            gradient at the focal plane
+
+        """
+        if self.space != 'pupil':
+            raise ValueError('can only backpropagate from a pupil to psf plane')
+
+        if isinstance(samples, int):
+            samples = (samples, samples)
+
+        data = unfocus_fixed_sampling_backprop(self.data,
+                                               input_dx=dx,
+                                               prop_dist=efl,
+                                               wavelength=self.wavelength,
+                                               output_dx=self.dx,
+                                               output_samples=samples,
+                                               shift=shift,
+                                               method=method
+        )
+
+        return Wavefront(dx=dx, cmplx_field=data, wavelength=self.wavelength, space='psf')
+
     def to_fpm_and_back(self, efl, fpm, fpm_dx, method='mdft', shift=(0, 0), return_more=False):
         """Propagate to a focal plane mask, apply it, and return.
 
@@ -1097,40 +1162,38 @@ class Wavefront:
             return Wavefront(pak, self.wavelength, self.dx, self.space)
 
     def to_fpm_and_back_backprop(self, efl, fpm, fpm_dx=None, method='mdft', shift=(0, 0), return_more=False):
-        """Propagate to a focal plane mask, apply it, and return.
+        """Backprop the to_fpm_and_back propagation.
 
-        This routine handles normalization properly for the user.
-
-        To invoke babinet's principle, simply use to_fpm_and_back(fpm=1 - fpm).
+        ``self`` carries the gradient at the next pupil (output of the forward
+        to_fpm_and_back); the returned Wavefront carries the gradient at the
+        original input pupil.
 
         Parameters
         ----------
         efl : float
-            focal length for the propagation
+            focal length used in the forward propagation
         fpm : Wavefront or ndarray
-            the focal plane mask
+            the focal plane mask used in the forward propagation
         fpm_dx : float
-            sampling increment in the focal plane,  microns;
+            sampling increment in the focal plane, microns;
             do not need to pass if fpm is a Wavefront
         method : str, {'mdft', 'czt'}, optional
-            how to propagate the field, matrix DFT or Chirp Z transform
-            CZT is usually faster single-threaded and has less memory consumption
-            MDFT is usually faster multi-threaded and has more memory consumption
+            propagation method (must match the forward call)
         shift : tuple of float, optional
-            shift in the image plane to go to the FPM
-            appropriate shift will be computed returning to the pupil
+            shift used in the forward propagation
         return_more : bool, optional
-            if True, return (new_wavefront, field_at_fpm, field_after_fpm)
-            else return new_wavefront
+            if True, return (Eabar, Ebbar, intermediate) as Wavefronts
+            else return Eabar
 
         Returns
         -------
-        Wavefront, Wavefront, Wavefront
-            new wavefront, [field at fpm, field after fpm]
+        Wavefront or tuple of Wavefront
+            gradient at the input pupil; optionally also the intermediate gradients
 
         """
-        pak = to_fpm_and_back_backprop(self.data, self.dx, self.wavelength,
-                                       efl=efl, fpm=fpm, fpm_dx=fpm_dx,
+        pak = to_fpm_and_back_backprop(self.data, dx=self.dx, efl=efl,
+                                       wavelength=self.wavelength,
+                                       fpm=fpm, fpm_dx=fpm_dx,
                                        method=method, shift=shift,
                                        return_more=return_more)
         if return_more:
@@ -1247,7 +1310,7 @@ class Wavefront:
         # C = A*B          |
         # c = iDFT(C)      | Cbar to Abar absorbed in to_fpm_and_back_backprop
         # d = c*L          | cbar = dbar * conj(L)
-        # f = d - flip(a)  | dbar = d
+        # f = a - c        | a contributes +cbar; c contributes -(to_fpm_and_back grad)
 
         fpm = 1 - fpm
 
@@ -1260,9 +1323,8 @@ class Wavefront:
         else:
             cbar = dbar
 
-        # minus from Ebefore minus Eafter fpm
         cbarW = Wavefront(cbar, self.wavelength, self.dx, self.space)
         abar = cbarW.to_fpm_and_back_backprop(efl=efl, fpm=fpm, fpm_dx=fpm_dx, method=method)
 
-        abar.data += cbar
+        abar.data = cbar - abar.data
         return abar
