@@ -426,26 +426,47 @@ def ttot(Amat):
     return 1 / Amat[..., 0, 0]
 
 
-def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, ambient_index=1):
+def _as_layer_arrays(indices, thicknesses):
+    """Validate and broadcast layer index and thickness arrays."""
+    indices = np.asarray(indices)
+    thicknesses = np.asarray(thicknesses)
+
+    if indices.ndim == 0:
+        indices = indices[None]
+
+    if thicknesses.ndim == 0:
+        thicknesses = thicknesses[None]
+
+    try:
+        indices, thicknesses = np.broadcast_arrays(indices, thicknesses)
+    except ValueError as exc:
+        raise ValueError('indices and thicknesses must be broadcastable to the same shape') from exc
+
+    if indices.ndim < 1 or indices.shape[0] == 0:
+        raise ValueError('indices and thicknesses must contain at least one film layer')
+
+    return indices, thicknesses
+
+
+def multilayer_stack_rt(indices, thicknesses, wavelength, polarization, substrate_index, aoi=0, ambient_index=1):
     """Compute r and t for a given stack of materials.
 
     Parameters
     ----------
-    polarization : str, {'p', 's'}
-        the polarization state
-    stack : ndarray
-        array which has final dimensions of [n, t]
-        where n is the index and t is the thickness in microns.
-        i.e., stack[0] is N dimensional index of refraction, and
-              stack[1] is N dimensional thickness
-
-        For example, if stack is of shape (2, 100, 100)
-        then the computation is for a 100x100 spatial arrangement of index
-        and thickness
-
-        iterable of tuples, which looks like [(n1, t1), (n2, t2) ...] also work
+    indices : ndarray
+        refractive index for each film layer.  The first axis is the layer
+        axis; any trailing axes are vectorized calculation dimensions.
+    thicknesses : ndarray
+        thickness of each film layer, microns.  Must be broadcastable to the
+        same shape as ``indices``.
     wavelength : float
         wavelength of light, microns
+    polarization : str, {'p', 's'}
+        the polarization state
+    substrate_index : float or ndarray
+        refractive index of the medium after the final film layer.  May be a
+        scalar, or broadcastable to the trailing dimensions of ``indices`` and
+        ``thicknesses``.
     aoi : float, optional
         angle of incidence, degrees
     ambient_index : float, optional
@@ -460,13 +481,14 @@ def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, ambient_index=1)
     # digest inputs a little bit
     polarization = polarization.lower()
     aoi = np.radians(aoi)
-    stack = np.asarray(stack)
-    indices = stack[:, 0, ...]  # : = all layers, ... = keep other dims as present
-    thicknesses = stack[:, 1, ...]
+    indices, thicknesses = _as_layer_arrays(indices, thicknesses)
+    layer_shape = indices.shape
+    nlayers = layer_shape[0]
+    calculation_shape = layer_shape[1:]
 
     # input munging:
     # downstream routines require shape (N, 2, 2) for batched matmul
-    # input shape is (Nlayers, 2, ...more)
+    # input shape is (Nlayers, ...more)
     # we are ultimately going to loop over Nlayers, but we need to flatten
     # the last dimension(s) and move them to the front
     # then within this function, because things do not naturally align to the
@@ -475,13 +497,18 @@ def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, ambient_index=1)
     #
     # there's no way (that I know of) around that
 
-    nlayers = len(stack)
-
     if indices.ndim > 1:
         indices = np.moveaxis(indices.reshape((nlayers, -1)), 1, 0)
         thicknesses = np.moveaxis(thicknesses.reshape((nlayers, -1)), 1, 0)
 
+        substrate_index = np.asarray(substrate_index)
+        try:
+            substrate_index = np.broadcast_to(substrate_index, calculation_shape).reshape(-1)
+        except ValueError as exc:
+            raise ValueError('substrate_index must be broadcastable to the trailing layer dimensions') from exc
+
     angles = np.empty(thicknesses.shape, dtype=config.precision_complex)
+    substrate_angle = snell_aor(ambient_index, substrate_index, aoi, degrees=False)
 
     # do the first loop by hand to handle ambient vacuum gracefully
     if angles.ndim > 1:
@@ -512,14 +539,14 @@ def multilayer_stack_rt(stack, wavelength, polarization, aoi=0, ambient_index=1)
         Mjs = [np.moveaxis(M, 2, 0) for M in Mjs]
 
     if angles.ndim > 1:
-        A = fn2(ambient_index, aoi, Mjs, indices[:, -1], angles[:, -1])
+        A = fn2(ambient_index, aoi, Mjs, substrate_index, substrate_angle)
     else:
-        A = fn2(ambient_index, aoi, Mjs, indices[-1], angles[-1])
+        A = fn2(ambient_index, aoi, Mjs, substrate_index, substrate_angle)
 
     r = rtot(A)
     t = ttot(A)
 
     if indices.ndim > 1:
-        r = r.reshape(stack.shape[2:])
-        t = t.reshape(stack.shape[2:])
+        r = r.reshape(calculation_shape)
+        t = t.reshape(calculation_shape)
     return r, t
