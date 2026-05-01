@@ -1,26 +1,34 @@
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.poetry]
+[project]
 name = "prysm"
-description = "physical optics integrated modeling, phase retrieval, segmented systems, polynomials and fitting, sequential raytracing..."
-authors = ["Brandon Dube <brandon@retrorefractions.com>"]
-readme = "README.md"
-license = "MIT"
 version = "0.22"
+description = "physical optics integrated modeling, phase retrieval, segmented systems, polynomials and fitting, sequential raytracing..."
+readme = "README.md"
+license = { file = "LICENSE.md" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Brandon Dube", email = "brandon@retrorefractions.com" },
+]
+dependencies = [
+    "numpy",
+    "scipy",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-numpy = "^1.26.4"
+[tool.hatch.build.targets.wheel]
+packages = ["prysm"]
+
+[tool.hatch.build.targets.sdist]
+include = ["prysm", "README.md", "LICENSE.md"]
 
 [tool.coverage.run]
-include = ["prysm/*",]
-omit = ["prysm/x/*","tests/*",]
+include = ["prysm/*"]
+omit = ["prysm/x/*", "tests/*"]
 
 [tool.coverage.report]
-# Regexes for lines to exclude from consideration
-exclude_also = ["except ImportError", "assert",]
+exclude_also = ["except ImportError", "assert"]
 
 [tool.pydocstyle]
 ignore = ["D200", "D203", "D204", "D210", "D213", "D300", "D401", "D416"]
