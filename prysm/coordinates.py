@@ -354,6 +354,23 @@ def pack_xy_to_homographic_points(x, y):
 
 
 def apply_homography(M, x, y):
+    """Apply a homographic transformation M to arrays x and y.
+
+    Parameters
+    ----------
+    M : ndarray
+        3x3 matrix containing a homographic transformation for 2D points
+    x : ndarray
+        array (1D or 2D) of coordinates
+    y : ndarray
+        array (1D or 2D) of coordinates
+
+    Returns
+    -------
+    ndarray, ndarray
+        transformed (x, y) points
+
+    """
     points = pack_xy_to_homographic_points(x, y)
     xp, yp, w = M @ points
     xp /= w

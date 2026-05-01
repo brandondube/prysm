@@ -15,7 +15,11 @@ brings a number of new features for modeling specific types of wavefront
 sensors, and alternate segmentation geometry in segmented telescopes. All
 optical propagation routines now feature convenient gradient backpropagation
 equivalents for extremely fast optimization of optical models to learn
-parameters, perform phase retrieval, etc.
+parameters, perform phase retrieval, etc.  Models made with this semi-manual
+backpropagation code are typically over an order of magnitude faster than other
+packages using machine learning libraries such as Jax or Pytorch to do the
+backpropagation, and allow certain operations like array insertion and cropping
+that are forbidden by other libraries.
 
 `dygdug <https://github.com/brandondube/dygdug>`_ has been created as an
 external module of prysm dedicated to coronagraphy, similar to the x
