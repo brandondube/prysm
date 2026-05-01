@@ -1,9 +1,26 @@
 """Various optimization algorithms."""
 import warnings
 
+import scipy
 from scipy.optimize import _lbfgsb
 
 from prysm.mathops import np
+
+
+def _scipy_has_c_lbfgsb():
+    """True if scipy ships the C port of L-BFGS-B (>= 1.15).
+
+    SciPy 1.15 replaced the Fortran 77 L-BFGS-B driver with a C port.  The
+    setulb signature changed: csave and iprint were dropped, an ln_task
+    output array was added, and task is now an int array (not a 60-byte
+    char array) whose first element encodes the request code.
+    """
+    parts = scipy.__version__.split('.')
+    try:
+        major, minor = int(parts[0]), int(parts[1])
+    except (ValueError, IndexError):
+        return False
+    return (major, minor) >= (1, 15)
 
 
 def runN(optimizer, N):
@@ -730,3 +747,153 @@ def _fortran_converged(task):
 
 def _fortran_major_iter_complete(task):
     return task.startswith(b'NEW_X')
+
+
+# Task codes returned by scipy >= 1.15's C L-BFGS-B driver in task[0].
+# See scipy.optimize._lbfgsb_py.task_messages.
+_C_TASK_NEW_X = 1
+_C_TASK_FG = 3
+_C_TASK_CONVERGENCE = 4
+_C_TASK_STOP = 5
+
+
+class CLBFGSB:
+    """L-BFGS-B optimizer using the SciPy >= 1.15 C driver.
+
+    Behaves identically to :class:`F77LBFGSB` from the user's perspective,
+    but targets the C port of L-BFGS-B that replaced the Fortran 77 driver
+    in SciPy 1.15.  The differences vs. the Fortran driver are internal:
+
+    * ``csave`` and ``iprint`` are no longer arguments to ``setulb``.
+    * A new two-element integer ``ln_task`` workspace array is required.
+    * ``task`` is a length-2 integer array; ``task[0]`` carries the request
+      code (3=FG, 1=NEW_X, 4=CONVERGENCE, 5=STOP).
+
+    See :class:`F77LBFGSB` for parameter documentation; this class accepts
+    the same arguments and exposes the same ``step``/``run_to`` interface.
+    """
+    def __init__(self, fg, x0, memory=10, lower_bounds=None, upper_bounds=None):
+        """Create a new L-BFGS-B optimizer using the C driver."""
+        self.fg = fg
+        self.x0 = x0
+        self.n = len(x0)
+        self.m = memory
+
+        # SciPy's C driver picks int dtype based on whether SciPy was built
+        # with ILP64 LAPACK; mirror that choice.
+        try:
+            from scipy.linalg.lapack import HAS_ILP64
+            int_dtype = np.int64 if HAS_ILP64 else np.int32
+        except ImportError:
+            int_dtype = np.int32
+
+        ffloat_dtype = np.float64
+
+        if lower_bounds is None:
+            lower_bounds = np.full(self.n, -np.inf, dtype=ffloat_dtype)
+
+        if upper_bounds is None:
+            upper_bounds = np.full(self.n, np.inf, dtype=ffloat_dtype)
+
+        nbd = np.zeros(self.n, dtype=int_dtype)
+        self.l = lower_bounds  # NOQA
+        self.u = upper_bounds
+        finite_lower_bound = np.isfinite(self.l)
+        finite_upper_bound = np.isfinite(self.u)
+        lower_but_not_upper_bound = finite_lower_bound & ~finite_upper_bound
+        upper_but_not_lower_bound = finite_upper_bound & ~finite_lower_bound
+        both_bounds = finite_lower_bound & finite_upper_bound
+        nbd[lower_but_not_upper_bound] = 1
+        nbd[both_bounds]               = 2  # NOQA
+        nbd[upper_but_not_lower_bound] = 3
+        self.nbd = nbd
+
+        m, n = self.m, self.n
+        self.x = x0.copy()
+        # f is a 0-d float64 array in the C interface, not a 1-element array.
+        self.f = np.array(0.0, dtype=ffloat_dtype)
+        self.g = np.zeros(self.n, dtype=ffloat_dtype)
+        self.wa = np.zeros(2*m*n + 5*n + 11*m*m + 8*m, dtype=ffloat_dtype)
+        self.iwa = np.zeros(3*n, dtype=int_dtype)
+        # task is now an int array; csave is gone; ln_task is new.
+        self.task = np.zeros(2, dtype=int_dtype)
+        self.ln_task = np.zeros(2, dtype=int_dtype)
+        self.lsave = np.zeros(4, dtype=int_dtype)
+        self.isave = np.zeros(44, dtype=int_dtype)
+        self.dsave = np.zeros(29, dtype=ffloat_dtype)
+
+        self.iter = 0
+
+        # Defeat the built-in convergence tests, matching F77LBFGSB.
+        self.factr = 0
+        self.pgtol = 0
+
+        self.maxls = 30
+
+    def _call_c(self):
+        _lbfgsb.setulb(self.m, self.x, self.l, self.u, self.nbd,
+                       self.f, self.g, self.factr, self.pgtol,
+                       self.wa, self.iwa, self.task,
+                       self.lsave, self.isave, self.dsave,
+                       self.maxls, self.ln_task)
+
+    def _view_s(self):
+        m, n = self.m, self.n
+        return self.wa[0:m*n].reshape(m, n)[:self._valid_space_sy]
+
+    def _view_y(self):
+        m, n = self.m, self.n
+        return self.wa[m*n:2*m*n].reshape(m, n)[:self._valid_space_sy]
+
+    @property
+    def _nbfgs_updates(self):
+        return self.isave[30]
+
+    @property
+    def _valid_space_sy(self):
+        return min(self._nbfgs_updates, self.m)
+
+    def step(self):
+        """Perform one iteration of optimization."""
+        self.iter += 1
+        x = self.x.copy()
+        while self._nbfgs_updates < self.iter:
+            self._call_c()
+            code = int(self.task[0])
+            if code == _C_TASK_FG:
+                f, g = self.fg(self.x)
+                if g.ndim != 1:
+                    g = g.ravel()
+
+                self.f[...] = f
+                self.g[:] = g
+                self._call_c()
+                code = int(self.task[0])
+
+            if code == _C_TASK_STOP:
+                raise ValueError(
+                    "the C L-BFGS-B driver thinks something is wrong with "
+                    f"the problem; task code {code}"
+                )
+
+            if code == _C_TASK_CONVERGENCE:
+                raise StopIteration
+
+            if code == _C_TASK_NEW_X:
+                break
+
+        return x, float(self.f), self.g
+
+    def run_to(self, N):
+        """Run the optimizer until its iteration count equals N."""
+        while self.iter < N:
+            try:
+                yield self.step()
+            except StopIteration:
+                warnings.warn(f'L-BFGS-B can make no further progress; stopped on iteration {self.iter}/N iterations')
+                break
+
+
+# Public alias — picks the right driver for the installed SciPy.
+# F77LBFGSB and CLBFGSB remain available for callers who want a specific one.
+LBFGSB = CLBFGSB if _scipy_has_c_lbfgsb() else F77LBFGSB
