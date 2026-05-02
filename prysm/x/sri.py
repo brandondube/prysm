@@ -3,8 +3,11 @@
 # Cousin of the point diffraction interferometer
 import warnings
 from prysm.mathops import np
-from prysm.propagation import Wavefront, Q_for_sampling
-from prysm.fttools import mdft, czt
+from prysm.propagation import (
+    Wavefront,
+    focus_fixed_sampling,
+    unfocus_fixed_sampling,
+)
 from prysm.coordinates import make_xy_grid, cart_to_polar
 from prysm.geometry import circle
 
@@ -75,21 +78,12 @@ def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, method='mdft', 
     """
     fib_samples = Efib.shape
     input_samples = self.data.shape
-    input_diameters = [self.dx * s for s in input_samples]
-    Q_forward = [Q_for_sampling(d, efl, self.wavelength, fib_dx) for d in input_diameters]
-    # soummer notation: use m, which would be 0.5 for a 2x zoom
-    # BDD notation: Q, would be 2 for a 2x zoom
-    m_forward = [1/q for q in Q_forward]
-    m_reverse = [b/a*m for a, b, m in zip(input_samples, fib_samples, m_forward)]
-    Q_reverse = [1/m for m in m_reverse]
-    shift_forward = tuple(s/fib_dx for s in shift)
 
-    # prop forward
-    kwargs = dict(ary=self.data, Q=Q_forward, samples_out=fib_samples, shift=shift_forward)
-    if method == 'mdft':
-        field_at_fpm = mdft.dft2(**kwargs)
-    elif method == 'czt':
-        field_at_fpm = czt.czt2(**kwargs)
+    field_at_fpm = focus_fixed_sampling(
+        wavefunction=self.data, input_dx=self.dx, prop_dist=efl,
+        wavelength=self.wavelength, output_dx=fib_dx,
+        output_samples=fib_samples, shift=shift, method=method,
+    )
 
     at_fpm = self.focus_fixed_sampling(efl, fib_dx, Efib.shape)
     I_at_fpm = at_fpm.intensity
@@ -103,23 +97,16 @@ def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, method='mdft', 
         phase_shift = np.exp(1j*phase_shift)
         Eout = Eout * phase_shift
 
-    # shift_reverse = tuple(-s for s, q in zip(shift_forward, Q_forward))
-    shift_reverse = shift_forward
-    kwargs = dict(ary=Eout, Q=Q_reverse, samples_out=input_samples, shift=shift_reverse)
-    if method == 'mdft':
-        field_at_next_pupil = mdft.idft2(**kwargs)
-    elif method == 'czt':
-        field_at_next_pupil = czt.iczt2(**kwargs)
+    field_at_next_pupil = unfocus_fixed_sampling(
+        wavefunction=Eout, input_dx=fib_dx, prop_dist=efl,
+        wavelength=self.wavelength, output_dx=self.dx,
+        output_samples=input_samples, shift=shift, method=method,
+    )
 
-    # scaling
-    # TODO: make this handle anamorphic transforms properly
-    if Q_forward[0] != Q_forward[1]:
-        warnings.warn(f'Forward propagation had Q {Q_forward} which was not uniform between axes, scaling is off')
     if input_samples[0] != input_samples[1]:
         warnings.warn(f'Forward propagation had input shape {input_samples} which was not uniform between axes, scaling is off')
     if fib_samples[0] != fib_samples[1]:
         warnings.warn(f'Forward propagation had fpm shape {fib_samples} which was not uniform between axes, scaling is off')
-    # Q_reverse is calculated from Q_forward; if one is consistent the other is
 
     out = Wavefront(field_at_next_pupil, self.wavelength, self.dx, self.space)
     if return_more:

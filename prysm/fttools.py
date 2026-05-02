@@ -1,6 +1,5 @@
 """Supplimental tools for computing fourier transforms."""
 import math
-from collections.abc import Iterable
 
 import numpy as truenp
 
@@ -10,7 +9,6 @@ from .conf import config
 
 def fftrange(n, dtype=None):
     """FFT-aligned coordinate grid for n samples."""
-    # return np.arange(-n//2, -n//2+n, dtype=dtype)
     return np.arange(-(n//2), -(n//2)+n, dtype=dtype)
 
 
@@ -35,10 +33,6 @@ def fftfreq(n, d=1.0):
     try:
         return fft.fftfreq(n, d).astype(config.precision)
     except:  # NOQA -- cannot predict arbitrary library error types
-        # if the FFT backend does not have fftfreq, use numpy's.  Then, cast
-        # the data to the current numpy backend's data type
-        # for example, if fft = cupy fft and it doesn't have FFTfreq,
-        # use numpy's fftfreq, then turn that into a CuPy array
         out = truenp.fft.fftfreq(n, d).astype(config.precision)
         return np.asarray(out)
 
@@ -88,9 +82,6 @@ def pad2d(array, Q=2, value=0, mode='constant', out_shape=None):
             pad_shape.append(lcl)
 
         if mode == 'constant':
-            # TODO: clean this garbage up, the code here shouldn't be completely
-            # non common mode the way it is
-
             dbytwo = [math.ceil(d/2) for d in shape_diff]
             slcs = tuple((slice(d, d+s) for d, s in zip(dbytwo, in_shape)))
             out = np.zeros(out_shape, dtype=array.dtype)
@@ -158,6 +149,176 @@ def forward_ft_unit(dx, samples, shift=True):
         return unit
 
 
+class MDFT:
+    """Matrix DFT parameterized by input coordinates and output frequencies.
+
+    Computes ``out[i, j] = sum_{k, l} ary[k, l] * exp(sign * 2j*pi * (y[k]*fy[i] + x[l]*fx[j]))``
+    by precomputing two 1D basis matrices and applying them as ``Ey @ ary @ Ex.T``.
+
+    The class is a pure DFT — it carries no notion of optics, oversampling, or
+    normalization. Callers multiply the result by whatever scalar is appropriate
+    for their problem.
+
+    Parameters
+    ----------
+    x, y : ndarray
+        1D arrays of input-plane coordinates along the second and first axis
+        of the input array, respectively. Lengths must match ``ary.shape[1]``
+        and ``ary.shape[0]``.
+    fx, fy : ndarray
+        1D arrays of output-plane frequencies along the second and first axis
+        of the output array, respectively. Output shape will be
+        ``(len(fy), len(fx))``.
+    sign : int, optional
+        Sign of the kernel exponent. ``-1`` (default) is the forward DFT
+        convention; ``+1`` is the inverse DFT convention.
+
+    Notes
+    -----
+    The same instance can be reused on different input arrays of matching
+    shape — basis matrices are precomputed once at construction. Holding
+    an instance is the caching mechanism; there is no global cache.
+
+    """
+
+    def __init__(self, x, y, fx, fy, sign=-1):
+        """Build the basis matrices."""
+        prefix = sign * 2j * np.pi
+        self.Ex = np.exp(prefix * np.outer(fx, x))  # shape (len(fx), len(x))
+        self.Ey = np.exp(prefix * np.outer(fy, y))  # shape (len(fy), len(y))
+
+    def __call__(self, ary):
+        """Apply the forward DFT to ``ary``."""
+        return self.Ey @ ary @ self.Ex.T
+
+    def adjoint(self, grad):
+        """Apply the adjoint (conjugate transpose) of the forward DFT.
+
+        For a real scalar normalization, this is the gradient backpropagation
+        operator for ``__call__``. It also coincides with the inverse DFT
+        (i.e. an ``MDFT`` of opposite sign that maps the *output* shape back
+        to the *input* shape) up to scaling.
+        """
+        return self.Ey.conj().T @ grad @ self.Ex.conj()
+
+    def nbytes(self):
+        """Total size in memory of the basis matrices, bytes."""
+        return self.Ex.nbytes + self.Ey.nbytes
+
+
+class CZT:
+    """Chirp-Z transform with the same external API as :class:`MDFT`.
+
+    Internally uses the Bluestein/Jurling factorization for ``O(N log N)``
+    cost per axis. Requires ``fx`` and ``fy`` to be uniformly spaced; ``x``
+    and ``y`` are also assumed uniformly spaced.
+
+    Parameters mirror :class:`MDFT`. ``sign=+1`` is implemented by complex
+    conjugation of the input and output (matches the prior ``iczt2`` behavior).
+
+    """
+
+    def __init__(self, x, y, fx, fy, sign=-1):
+        """Precompute CZT components for both axes."""
+        if sign not in (-1, 1):
+            raise ValueError(f'sign must be -1 or +1, got {sign}')
+        self.sign = sign
+
+        Nx = len(x)
+        Mx = len(fx)
+        Ny = len(y)
+        My = len(fy)
+
+        dx = float(x[1] - x[0])
+        dfx = float(fx[1] - fx[0])
+        dy = float(y[1] - y[0])
+        dfy = float(fy[1] - fy[0])
+
+        alpha_x = dx * dfx
+        alpha_y = dy * dfy
+
+        # CZT internal coordinate convention is fftrange + shift; recover
+        # the per-axis shift (in samples) by reading the value at the
+        # centered index.
+        shift_x = float(fx[Mx//2]) / dfx
+        shift_y = float(fy[My//2]) / dfy
+
+        Kx = next_fast_len(Nx + Mx - 1)
+        Ky = next_fast_len(Ny + My - 1)
+
+        dtype = config.precision_complex
+        Hx, bx, ax = _prepare_czt_basis(Nx, Mx, Kx, shift_x, alpha_x, dtype)
+        Hy, by, ay = _prepare_czt_basis(Ny, My, Ky, shift_y, alpha_y, dtype)
+
+        # column vectors broadcast along axis 0
+        self._brow = by[:, np.newaxis]
+        self._Hrow = Hy[:, np.newaxis]
+        self._arow = ay[:, np.newaxis]
+        self._bcol = bx
+        self._Hcol = Hx
+        self._acol = ax
+        self._Mx, self._My = Mx, My
+        self._Kx, self._Ky = Kx, Ky
+
+    def __call__(self, ary):
+        """Apply the CZT to ``ary``."""
+        if self.sign == 1:
+            ary = np.conj(ary) if np.iscomplexobj(ary) else ary
+        gb = ary * self._bcol
+        gb = gb * self._brow
+        GB = fft.fft2(gb, (self._Ky, self._Kx))
+        GB = GB * self._Hcol
+        GB = GB * self._Hrow
+        out = fft.ifft2(GB)
+        out = out[:self._My, :self._Mx]
+        out = out * self._acol
+        out = out * self._arow
+        if self.sign == 1:
+            out = np.conj(out)
+        return out
+
+    def adjoint(self, grad):
+        """Adjoint not implemented for CZT (matches prior behavior)."""
+        raise NotImplementedError('gradient backpropagation not yet implemented for CZT')
+
+    def nbytes(self):
+        """Total size in memory of the cached components, bytes."""
+        total = 0
+        for arr in (self._brow, self._bcol, self._Hrow, self._Hcol,
+                    self._arow, self._acol):
+            total += arr.nbytes
+        return total
+
+
+def _prepare_czt_basis(N, M, K, shift, alpha, dtype):
+    m = fftrange(M, dtype=config.precision)
+    if shift != 0:
+        m = m + shift
+
+    prefix = -1j * np.pi
+    a = np.exp(prefix * m*m * alpha)
+
+    n = fftrange(N, dtype=config.precision)
+    b = np.exp(prefix * n*n * alpha)
+
+    h = np.zeros(K, dtype=dtype)
+
+    # populate h piecewise, see Jurling2014 48c, 48d
+    start = -((N - M) // 2) + shift
+    j = np.arange(-start, -start+M, dtype=config.precision)
+    h_left = np.pi * (j * j)
+
+    j = np.arange(-start-N+1, -start, dtype=config.precision)
+    h_right = np.pi * (j * j)
+
+    h[:M] = np.exp(1j * alpha * h_left)
+    h[K-N+1:K] = np.exp(1j * alpha * h_right)
+    h[M:K-N+1] = 0
+    H = fft.fft(h)
+
+    return H, b, a
+
+
 def fourier_resample(f, zoom):
     """Resample f via Fourier methods (truncated sinc interpolation).
 
@@ -182,436 +343,32 @@ def fourier_resample(f, zoom):
     being smaller than the Fourier support of f
 
     """
-    # performance: not pre-shifting f introduces a linear phase term to the FFT
-    # but we do the opposite "mistake" on the way out and they cancel.
     if zoom == 1:
         return f
 
     if isinstance(zoom, (float, int)):
         zoom = (zoom, zoom)
     elif not isinstance(zoom, tuple):
-        zoom = tuple(float(zoom) for zoom in zoom)  # float for dtype stabilization: cupy
+        zoom = tuple(float(z) for z in zoom)
 
     m, n = f.shape
     M = int(m*zoom[0])
     N = int(n*zoom[1])
 
     F = fft.fftshift(fft.fft2(fft.ifftshift(f)))
-    fprime = mdft.idft2(F, zoom, (M, N)).real
-    fprime *= (zoom[0]*zoom[1])/(np.sqrt(f.size))
+
+    # Build coordinates for an MDFT that maps the (m, n) Fourier-plane samples
+    # to (M, N) spatial samples, mimicking what idft2 used to do with Q=zoom.
+    # Input-plane samples (the F array) live on integer indices fftrange(m), fftrange(n).
+    # Output-plane samples should live on (1/zoom[i]) * fftrange(M_i).
+    x = fftrange(n, dtype=config.precision)
+    y = fftrange(m, dtype=config.precision)
+    fx = fftrange(N, dtype=config.precision) * (1.0/zoom[1]/n)
+    fy = fftrange(M, dtype=config.precision) * (1.0/zoom[0]/m)
+
+    fprime = MDFT(x, y, fx, fy, sign=+1)(F).real
+    # match the prior implementation, which combined the executor's internal
+    # sqrt(1/(m*n*zoom[0]*zoom[1])) normalization with an external
+    # (zoom[0]*zoom[1])/sqrt(m*n) scaling — the net is sqrt(zoom)/(m*n).
+    fprime *= math.sqrt(zoom[0]*zoom[1]) / (m*n)
     return fprime
-    # the below code is not commented out but is unreachable, it is an
-    # alternative way, however it will produce a rounding error in the scaling
-    # when m*zoom is not an integer
-    F = fft.fftshift(fft.fft2(fft.ifftshift(f)))
-    if zoom < 1:
-        F = crop_center(F, (M, N))
-    else:
-        F = pad2d(F, out_shape=(M, N), value=0, mode='constant')
-
-    # ifftshift divides by m*n
-    # the scaling is wrong by the ratio F.size/f.size ~= zoom^2 (integer rounding)
-    # real before shift, cheaper to shift f64 than c128
-    fprime = fft.fftshift(fft.ifft2(fft.ifftshift(F)).real)
-    fprime *= (F.size/f.size)
-    return fprime
-
-
-class MatrixDFTExecutor:
-    """MatrixDFTExecutor is an engine for performing matrix triple product DFTs as fast as possible."""
-
-    def __init__(self):
-        """Create a new MatrixDFTExecutor instance."""
-        # Eq. (10-11) page 8 from R. Soumer (2007) oe-15--24-15935
-        self.Ein = {}
-        self.Eout = {}
-
-    def _key(self, samples_in, Q, samples_out, shift, fwd):
-        """Key to X, Y, U, V dicts."""
-        if isinstance(Q, (float, int)):
-            Q = (Q, Q)
-        elif not isinstance(Q, tuple):
-            Q = tuple(float(q) for q in Q)  # float for dtype stabilization: cupy
-
-        if not isinstance(samples_in, Iterable):
-            samples_in = (samples_in, samples_in)
-
-        if not isinstance(samples_out, Iterable):
-            samples_out = (samples_out, samples_out)
-
-        if not isinstance(shift, Iterable):
-            shift = (shift, shift)
-
-        return (Q, samples_in, samples_out, shift, fwd)
-
-    def dft2(self, ary, Q, samples_out, shift=(0, 0)):
-        """Compute the two dimensional Discrete Fourier Transform of a matrix.
-
-        Parameters
-        ----------
-        ary : ndarray
-            an array, 2D, real or complex.  Not fftshifted.
-        Q : float
-            oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
-        samples_out : int or Iterable
-            number of samples in the output plane.
-            If an int, used for both dimensions.  If an iterable, used for each dim
-        shift : float, optional
-            shift of the output domain, as a frequency.  Same broadcast
-            rules apply as with samples.
-
-        Returns
-        -------
-        ndarray
-            2D array containing the shifted transform.
-            Equivalent to ifftshift(fft2(fftshift(ary))) modulo output
-            sampling/grid differences
-
-        """
-        key = self._key(samples_in=ary.shape, Q=Q, samples_out=samples_out, shift=shift, fwd=True)
-        self._setup_bases(key)
-        Eout, Ein = self.Eout[key], self.Ein[key]
-
-        out = Eout @ ary @ Ein
-
-        return out
-
-    def dft2_backprop(self, fbar, Q, samples_in, shift=(0, 0)):
-        """Gradient backpropagation for dft2.
-
-        Parameters
-        ----------
-        fbar : ndarray
-            the array from the previous gradient calculation step
-        ary : ndarray
-            the array used in the forward computation
-        Q : float
-            oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
-        samples : int or Iterable
-            number of samples in the output plane.
-            If an int, used for both dimensions.  If an iterable, used for each dim
-        shift : float, optional
-            shift of the output domain, as a frequency.  Same broadcast
-            rules apply as with samples.
-        """
-        key = self._key(samples_in=samples_in, Q=Q, samples_out=fbar.shape, shift=shift, fwd=True)
-        self._setup_bases(key)
-        Eout, Ein = self.Eout[key], self.Ein[key]
-        Eout_conj_t = Eout.T.conj()
-        Ein_conj_t = Ein.T.conj()
-        out = Eout_conj_t @ (fbar @ Ein_conj_t)
-        return out
-
-    def idft2(self, ary, Q, samples_out, shift=(0, 0)):
-        """Compute the two dimensional inverse Discrete Fourier Transform of a matrix.
-
-        Parameters
-        ----------
-        ary : ndarray
-            an array, 2D, real or complex.  Not fftshifted.
-        Q : float
-            oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
-        samples_out : int or Iterable
-            number of samples in the output plane.
-            If an int, used for both dimensions.  If an iterable, used for each dim
-        shift : float, optional
-            shift of the output domain, as a frequency.  Same broadcast
-            rules apply as with samples.
-
-        Returns
-        -------
-        ndarray
-            2D array containing the shifted transform.
-            Equivalent to ifftshift(ifft2(fftshift(ary))) modulo output
-            sampling/grid differences
-
-        """
-        key = self._key(samples_in=ary.shape, Q=Q, samples_out=samples_out, shift=shift, fwd=False)
-        self._setup_bases(key)
-
-        Eout, Ein = self.Eout[key], self.Ein[key]
-        out = Eout @ (ary @ Ein)
-
-        return out
-
-    def idft2_backprop(self, fbar, Q, samples_out, shift=(0, 0)):
-        """Gradient backpropagation for idft2.
-
-        Parameters
-        ----------
-        fbar : ndarray
-            the array from the previous gradient calculation step
-        Q : float
-            oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
-        samples_in : int or Iterable
-            number of samples in the input plane.
-            If an int, used for both dimensions.  If an iterable, used for each dim
-        shift : float, optional
-            shift of the output domain, as a frequency.  Same broadcast
-            rules apply as with samples.
-        """
-        key = self._key(samples_in=samples_out, Q=Q, samples_out=fbar.shape, shift=shift, fwd=False)
-        self._setup_bases(key)
-        Eout, Ein = self.Eout[key], self.Ein[key]
-        Eout_conj_t = Eout.T.conj()
-        Ein_conj_t = Ein.T.conj()
-        out = Eout_conj_t @ (fbar @ Ein_conj_t)
-        return out
-
-    def _setup_bases(self, key):
-        """Set up the basis matricies for given sampling parameters."""
-        # broadcast sampling and shifts
-
-        Q, shp, samples, shift, fwd = key
-
-        Qn, Qm = Q
-        # conversion here to Soummer's notation
-        # still have N, M for dimensionality but
-        # use lowercase m for "zoom" factor...
-        mn, mm = 1 / Qn, 1 / Qm
-        Na, Ma = shp
-        Nb, Mb = samples
-
-        try:
-            # assume all arrays for the input are made together
-            self.Ein[key]
-        except KeyError:
-            # X is the second dimension in C (numpy) array ordering convention
-
-            X, Y, U, V = (fftrange(n, dtype=config.precision) for n in (Ma, Na, Mb, Nb))
-
-            # do not even perform an op if shift is nothing
-            if shift[1] != 0:
-                Y -= shift[1]
-                V -= shift[1]
-
-            if shift[0] != 0:
-                X -= shift[0]
-                U -= shift[0]
-
-            if fwd:
-                Eout = np.exp(-2j * np.pi / Na * mn * np.outer(Y, V).T)
-                Ein = np.exp(-2j * np.pi / Ma * mm * np.outer(X, U))
-            else:
-                Eout = np.exp(2j * np.pi / Na * mn * np.outer(Y, V).T)
-                Ein = np.exp(2j * np.pi / Ma * mm * np.outer(X, U))
-
-            alphay = 1/(Na*Qn)
-            alphax = 1/(Ma*Qm)
-            normy = np.sqrt(alphay)  # square root for energy, instead of power
-            normx = np.sqrt(alphax)
-            Ein *= normy
-            Eout *= normx
-            self.Ein[key] = Ein
-            self.Eout[key] = Eout
-
-    def clear(self):
-        """Empty the internal caches to release memory."""
-        self.Ein = {}
-        self.Eout = {}
-
-    def nbytes(self):
-        """Total size in memory of the cache in bytes."""
-        total = 0
-        for dict_ in (self.Ein, self.Eout):
-            for key in dict_:
-                total += dict_[key].nbytes
-
-        return total
-
-
-class ChirpZTransformExecutor:
-    """Type which executes Chirp Z Transforms on 2D data, aka zoom FFTs."""
-    def __init__(self):
-        """Create a new Chirp Z Transform Executor."""
-        self.components = {}
-
-    def czt2(self, ary, Q, samples_out, shift=(0, 0)):
-        """Compute the two dimensional Chirp Z Transform of a matrix.
-
-        Parameters
-        ----------
-        ary : ndarray
-            an array, 2D, real or complex.  Not fftshifted.
-        Q : float
-            oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
-        samples_out : int or Iterable
-            number of samples in the output plane.
-            If an int, used for both dimensions.  If an iterable, used for each dim
-        shift : float, optional
-            shift of the output domain, as a number of samples at the output
-            sample rate.  I.e., if ary is 256x256, Q=2, and samples=512, then
-            the output is identical to a padded FFT.  If shift=256, the DC frequency
-            will be at the edge of the array; shift=(-256,256) would produce the
-            same result as a padded FFT without shifts.
-
-        Returns
-        -------
-        ndarray
-            2D array containing the shifted transform.
-            Equivalent to ifftshift(fft2(fftshift(ary))) modulo output
-            sampling/grid differences
-
-        """
-        if not isinstance(samples_out, Iterable):
-            samples_out = (samples_out, samples_out)
-
-        if not isinstance(shift, Iterable):
-            shift = (shift, shift)
-
-        if not isinstance(Q, Iterable):
-            Q = (Q, Q)
-
-        dtype = ary.dtype
-
-        m, n = ary.shape
-        M, N = samples_out
-        alphay = 1/(m*Q[0])
-        alphax = 1/(n*Q[1])
-        # alphay, alphax = Q
-
-        # slightly different notation to Jurling
-        # in Jurling, M = unpadded size of input domain
-        #             R = unpadded size of output domain
-        # we have     m = unpadded size of input domain
-        #             M = unpadded size of output domain
-        # the constraint is >= M+R - 1 -> m+M-1 (and #cols analogs)
-        K = next_fast_len(m+M-1)
-        L = next_fast_len(n+N-1)  # -                    norm = False
-        key = (m, n, M, N, K, L, alphay, alphax, *shift, dtype, True)
-        self._setup_bases(key)
-        # b, H, a are the variables from Jurling (where they have hats)
-        brow, bcol, Hrow, Hcol, arow, acol = self.components[key]
-
-        # in our case, the dense 2D arrays are stored as vectors, which
-        # dramatically reduces static memory usage.
-        # Runtime is very slightly slower.
-
-        # now do the transform, written out just like Jurling
-        gb = ary * bcol
-        gb *= brow  # faster in-place (minutely...)
-
-        # K, L = size; pad if need be internally
-        # benchmarked, and found 256 -> 512 w/ fft2:
-        # pad2d+fft2 = 4.34 ms
-        # fft2 w/ internal padding = 4.2 ms
-        # 1024 -> 2048 = 112, 113 (same order)
-        # --> marginal improvement internal to FFT for small data, who cares
-        # for big; let FFT do it
-        GBhat = fft.fft2(gb, (K, L))
-        GBhat *= Hcol
-        GBhat *= Hrow
-        gxformed = fft.ifft2(GBhat)  # transformed g
-        gxformed = gxformed[:M, :N]
-        gxformed *= acol
-        gxformed *= arow
-        return gxformed
-
-    def iczt2(self, ary, Q, samples_out, shift=(0, 0)):
-        """Compute the two dimensional inverse Chirp Z Transform of a matrix.
-
-        Parameters
-        ----------
-        ary : ndarray
-            an array, 2D, real or complex.  Not fftshifted.
-        Q : float
-            oversampling / padding factor to mimic an FFT.  If Q=2, Nyquist sampled
-        samples : int or Iterable
-            number of samples in the output plane.
-            If an int, used for both dimensions.  If an iterable, used for each dim
-        shift : float, optional
-            shift of the output domain, as a number of samples at the output
-            sample rate.  I.e., if ary is 256x256, Q=2, and samples=512, then
-            the output is identical to a padded FFT.  If shift=256, the DC frequency
-            will be at the edge of the array; shift=(-256,256) would produce the
-            same result as a padded FFT without shifts.
-
-        Returns
-        -------
-        ndarray
-            2D array containing the shifted transform.
-            Equivalent to ifftshift(fft2(fftshift(ary))) modulo output
-            sampling/grid differences
-
-        """
-        # notice: chirp z transform is fwd/reverse based only on +i vs -i in the
-        # complex exponents
-        # we can save a whole ton of memory and code dup by just using the
-        # forward transform on the complex conjugate of the input.  Generally
-        # arrays are complex for optics since we want to handle having OPD,
-        # but np.conj copies real inputs, so we optimize for that.
-        if np.iscomplexobj(ary):
-            ary = np.conj(ary)
-        xformed = np.conj(self.czt2(ary, Q, samples_out, shift))
-        return xformed
-
-    def _setup_bases(self, key):
-        try:
-            # probe the cache to see if the key exists, else generate
-            self.components[key]
-        except KeyError:
-            m, n, M, N, K, L, alphay, alphax, shifty, shiftx, dtype, norm = key
-            Hrow, brow, arow = _prepare_czt_basis(m, M, K, shiftx, alphax, dtype, norm)
-            Hcol, bcol, acol = _prepare_czt_basis(n, N, L, shifty, alphay, dtype, norm)
-            # those are all vectors, now add singleton dimensions for numpy
-            # to broadcast correctly in the following steps
-            brow = brow[:, np.newaxis]
-            Hrow = Hrow[:, np.newaxis]
-            arow = arow[:, np.newaxis]
-            self.components[key] = (brow, bcol, Hrow, Hcol, arow, acol)
-            # benchmarked a version which turns these into 2D arrays at this step,
-            # instead of doing two multiplies in the main czt function.
-            # it is about 2% faster to compute the products up front here, in
-            # exchange for squaring the memory use -> leave the caches as vectors
-
-    def clear(self):
-        """Empty the cache."""
-        self.components = {}
-
-    def nbytes(self):
-        """Total size in memory of the cache in bytes."""
-        total = 0
-        for key in self.components:
-            arrays = self.components[key]
-            for array in arrays:
-                total += array.nbytes
-
-        return total
-
-
-def _prepare_czt_basis(N, M, K, shift, alpha, dtype, norm=False):
-    m = fftrange(M, dtype=dtype)
-    if shift != 0:
-        m += shift
-
-    prefix = -1j * np.pi
-    a = np.exp(prefix * m*m * alpha)
-
-    n = fftrange(N, dtype=dtype)
-    b = np.exp(prefix * n*n * alpha)
-
-    # maybe can replace with empty for minor performance gains?
-    h = np.zeros(K, dtype=dtype)
-
-    # need to populate h piecewise, see Jurling2014 48c, 48d
-    start = -((N - M) // 2) + shift
-    j = np.arange(-start, -start+M, dtype=dtype)  # do not need a "-1" because arange is naturally end-exclusive
-    # j is an index variable
-    h[:M] = np.pi * (j * j)
-
-    # check for off-by-1 bug
-    j = np.arange(-start-N+1, -start, dtype=dtype)
-    h[K-N+1:K] = np.pi * (j * j)
-
-    # order matters, scalar * scalar * array avoids operations on whole array over and over again
-    h = np.exp(1j * alpha * h)
-    h[M:K-N+1] = 0
-    H = fft.fft(h)
-    if norm:
-        b *= (alpha / np.sqrt(alpha))  # mul cheaper than div; div a single scalar instead of M elements
-
-    return H, b, a
-
-
-mdft = MatrixDFTExecutor()  # NOQA
-czt = ChirpZTransformExecutor()  # NOQA

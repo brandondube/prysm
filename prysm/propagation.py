@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from .conf import config
 from .mathops import np, fft, is_odd
 from ._richdata import RichData
-from .fttools import pad2d, crop_center, mdft, czt
+from .fttools import pad2d, crop_center, fftrange, MDFT, CZT
 
 
 def focus(wavefunction, Q):
@@ -59,6 +59,99 @@ def unfocus(wavefunction, Q):
     return fft.fftshift(fft.ifft2(fft.ifftshift(padded_wavefront), norm='ortho'))
 
 
+def coordinates_for_focus(pupil_dx, pupil_samples, focal_dx, focal_samples,
+                          wavelength, efl, focal_shift=(0, 0)):
+    """Coordinate / frequency vectors for an MDFT-based pupil ↔ focal propagation.
+
+    The Fraunhofer kernel is ``exp(-2πi · x_pupil · x_focal / (λ · efl))``. This
+    returns the input pupil coordinates ``(x, y)`` and the spatial frequencies
+    ``(fx, fy)`` that pair with them, where ``fx = x_focal / (λ · efl)``. The
+    same ``(x, y, fx, fy)`` quartet works for both directions:
+
+    - Focus (pupil → focal):    ``MDFT(x, y, fx, fy, sign=-1)(pupil) * norm``
+    - Unfocus (focal → pupil):  ``MDFT(x, y, fx, fy, sign=-1).adjoint(focal) * norm``
+
+    where ``norm = pupil_dx * focal_dx / (wavelength * efl)``. The unfocus form
+    works because the adjoint of the focus operator is the inverse propagation
+    (up to the real scalar normalization).
+
+    Parameters
+    ----------
+    pupil_dx : float
+        pupil-plane sample spacing, mm
+    pupil_samples : int or (int, int)
+        pupil samples; a single int is treated as square, a tuple as ``(rows, cols)``
+    focal_dx : float
+        focal-plane sample spacing, microns
+    focal_samples : int or (int, int)
+        focal samples; a single int is treated as square, a tuple as ``(rows, cols)``
+    wavelength : float
+        wavelength of light, microns
+    efl : float
+        effective focal length, mm
+    focal_shift : (float, float)
+        ``(x, y)`` translation of the focal grid center, microns
+
+    Returns
+    -------
+    x, y : ndarray
+        pupil coordinates along the column and row axes, mm
+    fx, fy : ndarray
+        spatial frequencies along the column and row axes, 1/mm
+
+    """
+    if not isinstance(pupil_samples, Iterable):
+        pupil_samples = (pupil_samples, pupil_samples)
+    if not isinstance(focal_samples, Iterable):
+        focal_samples = (focal_samples, focal_samples)
+
+    pny, pnx = pupil_samples
+    fny, fnx = focal_samples
+    fsx, fsy = focal_shift
+
+    dtype = config.precision
+    x = fftrange(pnx, dtype=dtype) * pupil_dx
+    y = fftrange(pny, dtype=dtype) * pupil_dx
+    # focal positions in microns, then convert to spatial frequency 1/mm:
+    # fx = x_focal_mm / (lambda_mm * efl) = x_focal_um / (wavelength_um * efl_mm)
+    inv_lz = 1.0 / (wavelength * efl)
+    fx = (fftrange(fnx, dtype=dtype) * focal_dx + fsx) * inv_lz
+    fy = (fftrange(fny, dtype=dtype) * focal_dx + fsy) * inv_lz
+    return x, y, fx, fy
+
+
+def _focus_norm(pupil_dx, focal_dx, wavelength, prop_dist):
+    """Scaling factor that turns a bare MDFT/CZT sum into a unitary-equivalent
+    focal-plane field. ``mm * um / (um * mm) = 1`` (dimensionless)."""
+    return (pupil_dx * focal_dx) / (wavelength * prop_dist)
+
+
+def _coords_focal_to_pupil(focal_dx, focal_samples, pupil_dx, pupil_samples,
+                           wavelength, efl, focal_shift=(0, 0)):
+    """Coordinate / frequency vectors for a focal → pupil MDFT/CZT, oriented
+    so that the operator can be applied directly to focal data without using
+    the adjoint. Used by the CZT unfocus path, since CZT has no adjoint.
+    """
+    if not isinstance(pupil_samples, Iterable):
+        pupil_samples = (pupil_samples, pupil_samples)
+    if not isinstance(focal_samples, Iterable):
+        focal_samples = (focal_samples, focal_samples)
+
+    pny, pnx = pupil_samples
+    fny, fnx = focal_samples
+    fsx, fsy = focal_shift
+    dtype = config.precision
+
+    # input coordinates: focal positions in mm (focal_dx is um)
+    x = (fftrange(fnx, dtype=dtype) * focal_dx + fsx) * 1e-3
+    y = (fftrange(fny, dtype=dtype) * focal_dx + fsy) * 1e-3
+    # output frequencies: pupil_mm / (lambda_mm * efl_mm)
+    inv_lz_mm = 1e3 / (wavelength * efl)
+    fx = fftrange(pnx, dtype=dtype) * pupil_dx * inv_lz_mm
+    fy = fftrange(pny, dtype=dtype) * pupil_dx * inv_lz_mm
+    return x, y, fx, fy
+
+
 def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
                          wavelength, output_dx, output_samples,
                          shift=(0, 0), method='mdft'):
@@ -69,45 +162,39 @@ def focus_fixed_sampling(wavefunction, input_dx, prop_dist,
     wavefunction : ndarray
         the pupil wavefunction
     input_dx : float
-        spacing between samples in the pupil plane, millimeters
+        spacing between samples in the pupil plane, mm
     prop_dist : float
-        propagation distance along the z distance
+        propagation distance along the z axis, mm
     wavelength : float
-        wavelength of light
+        wavelength of light, microns
     output_dx : float
         sample spacing in the output plane, microns
-    output_samples : int
-        number of samples in the square output array
-    shift : tuple of float
-        shift in (X, Y), same units as output_dx
+    output_samples : int or (int, int)
+        number of samples in the output array
+    shift : (float, float)
+        shift in (X, Y) of the focal grid center, microns
     method : str, {'mdft', 'czt'}
         how to propagate the field, matrix DFT or Chirp Z transform
-        CZT is usually faster single-threaded and has less memory consumption
-        MDFT is usually faster multi-threaded and has more memory consumption
 
     Returns
     -------
-    data : ndarray
-        2D array of data
+    ndarray
+        focal-plane field
 
     """
-    if not isinstance(output_samples, Iterable):
-        output_samples = (output_samples, output_samples)
-
-    dia = wavefunction.shape[0] * input_dx
-    Q = Q_for_sampling(input_diameter=dia,
-                       prop_dist=prop_dist,
-                       wavelength=wavelength,
-                       output_dx=output_dx)
-    if shift[0] != 0 or shift[1] != 0:
-        shift = (shift[0]/output_dx, shift[1]/output_dx)
-
+    x, y, fx, fy = coordinates_for_focus(
+        pupil_dx=input_dx, pupil_samples=wavefunction.shape,
+        focal_dx=output_dx, focal_samples=output_samples,
+        wavelength=wavelength, efl=prop_dist, focal_shift=shift,
+    )
+    norm = _focus_norm(input_dx, output_dx, wavelength, prop_dist)
     if method == 'mdft':
-        out = mdft.dft2(ary=wavefunction, Q=Q, samples_out=output_samples, shift=shift)
+        op = MDFT(x, y, fx, fy, sign=-1)
     elif method == 'czt':
-        out = czt.czt2(ary=wavefunction, Q=Q, samples_out=output_samples, shift=shift)
-
-    return out
+        op = CZT(x, y, fx, fy, sign=-1)
+    else:
+        raise ValueError(f"method must be 'mdft' or 'czt', got {method!r}")
+    return op(wavefunction) * norm
 
 
 def focus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
@@ -118,24 +205,21 @@ def focus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
     Parameters
     ----------
     wavefunction : ndarray
-        gradient at the PSF plane (output of the forward propagation)
+        gradient at the PSF plane (the forward output)
     input_dx : float
-        sample spacing in the pupil plane, millimeters (matches the forward call)
+        pupil sample spacing, mm (matches the forward call)
     prop_dist : float
-        propagation distance, millimeters
+        propagation distance, mm
     wavelength : float
         wavelength of light, microns
     output_dx : float
-        sample spacing in the PSF plane, microns (matches the forward call)
-    output_samples : int or tuple of int
-        shape of the pupil array — i.e. the shape of the gradient that this
-        function returns. Note: despite the name, this is the *forward input*
-        shape, not the forward output shape.
-    shift : tuple of float
-        shift in (X, Y), same units as output_dx
+        focal sample spacing, microns (matches the forward call)
+    output_samples : int or (int, int)
+        shape of the *pupil* array — the shape of the returned gradient
+    shift : (float, float)
+        focal-grid shift, microns
     method : str, {'mdft', 'czt'}
-        propagation method (must match the forward call); CZT backprop is not
-        implemented and will raise
+        propagation method; CZT backprop is not implemented and will raise
 
     Returns
     -------
@@ -143,84 +227,70 @@ def focus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
         gradient at the pupil plane, shape ``output_samples``
 
     """
-    if not isinstance(output_samples, Iterable):
-        output_samples = (output_samples, output_samples)
-
-    dia = output_samples[0] * input_dx
-    Q = Q_for_sampling(input_diameter=dia,
-                       prop_dist=prop_dist,
-                       wavelength=wavelength,
-                       output_dx=output_dx)
-    if shift[0] != 0 or shift[1] != 0:
-        shift = (shift[0]/output_dx, shift[1]/output_dx)
-
+    x, y, fx, fy = coordinates_for_focus(
+        pupil_dx=input_dx, pupil_samples=output_samples,
+        focal_dx=output_dx, focal_samples=wavefunction.shape,
+        wavelength=wavelength, efl=prop_dist, focal_shift=shift,
+    )
+    norm = _focus_norm(input_dx, output_dx, wavelength, prop_dist)
     if method == 'mdft':
-        out = mdft.dft2_backprop(wavefunction, Q, samples_in=output_samples, shift=shift)
+        op = MDFT(x, y, fx, fy, sign=-1)
     elif method == 'czt':
         raise ValueError('gradient backpropagation not yet implemented for CZT')
-
-    return out
+    else:
+        raise ValueError(f"method must be 'mdft' or 'czt', got {method!r}")
+    return op.adjoint(wavefunction) * norm
 
 
 def unfocus_fixed_sampling(wavefunction, input_dx, prop_dist,
                            wavelength, output_dx, output_samples,
                            shift=(0, 0), method='mdft'):
-    """Propagate an image plane field to the pupil plane with fixed sampling.
+    """Propagate an image-plane field to the pupil plane with fixed sampling.
 
     Parameters
     ----------
     wavefunction : ndarray
-        the image plane wavefunction
+        the image-plane wavefunction
     input_dx : float
-        spacing between samples in the focal plane, microns
+        focal sample spacing, microns
     prop_dist : float
-        propagation distance along the z distance, mm
+        propagation distance, mm
     wavelength : float
         wavelength of light, microns
     output_dx : float
-        sample spacing in the output plane, mm
-    output_samples : int
-        number of samples in the square output array
-    shift : tuple of float
-        shift in (X, Y), same units as output_dx
+        pupil sample spacing in the output, mm
+    output_samples : int or (int, int)
+        number of pupil samples in the output
+    shift : (float, float)
+        shift in (X, Y) of the focal grid center, microns
     method : str, {'mdft', 'czt'}
         how to propagate the field, matrix DFT or Chirp Z transform
-        CZT is usually faster single-threaded and has less memory consumption
-        MDFT is usually faster multi-threaded and has more memory consumption
 
     Returns
     -------
-    x : ndarray
-        x axis unit, 1D ndarray
-    y : ndarray
-        y axis unit, 1D ndarray
-    data : ndarray
-        2D array of data
+    ndarray
+        pupil-plane field
 
     """
-    # we calculate sampling parameters
-    # backwards so we can reuse as much code as possible
-    if not isinstance(output_samples, Iterable):
-        output_samples = (output_samples, output_samples)
-
-    dias = [output_dx * s for s in output_samples]
-    dia = max(dias)
-    Q = Q_for_sampling(input_diameter=dia,
-                       prop_dist=prop_dist,
-                       wavelength=wavelength,
-                       output_dx=input_dx)  # not a typo
-
-    Q /= wavefunction.shape[0] / output_samples[0]
-
-    if shift[0] != 0 or shift[1] != 0:
-        shift = (shift[0]/output_dx, shift[1]/output_dx)
-
+    norm = _focus_norm(output_dx, input_dx, wavelength, prop_dist)
     if method == 'mdft':
-        out = mdft.idft2(ary=wavefunction, Q=Q, samples_out=output_samples, shift=shift)
+        # adjoint of the focus operator is the inverse propagation
+        x, y, fx, fy = coordinates_for_focus(
+            pupil_dx=output_dx, pupil_samples=output_samples,
+            focal_dx=input_dx, focal_samples=wavefunction.shape,
+            wavelength=wavelength, efl=prop_dist, focal_shift=shift,
+        )
+        return MDFT(x, y, fx, fy, sign=-1).adjoint(wavefunction) * norm
     elif method == 'czt':
-        out = czt.iczt2(ary=wavefunction, Q=Q, samples_out=output_samples, shift=shift)
-
-    return out
+        # CZT has no adjoint; drive it directly in the focal → pupil orientation
+        x, y, fx, fy = _coords_focal_to_pupil(
+            focal_dx=input_dx, focal_samples=wavefunction.shape,
+            pupil_dx=output_dx, pupil_samples=output_samples,
+            wavelength=wavelength, efl=prop_dist, focal_shift=shift,
+        )
+        return CZT(x, y, fx, fy, sign=+1)(wavefunction) * norm
+    else:
+        raise ValueError(f"method must be 'mdft' or 'czt', got {method!r}")
 
 
 def unfocus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
@@ -231,24 +301,21 @@ def unfocus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
     Parameters
     ----------
     wavefunction : ndarray
-        gradient at the pupil plane (output of the forward propagation)
+        gradient at the pupil plane (the forward output)
     input_dx : float
-        sample spacing in the focal plane, microns (matches the forward call)
+        focal sample spacing, microns (matches the forward call)
     prop_dist : float
-        propagation distance, millimeters
+        propagation distance, mm
     wavelength : float
         wavelength of light, microns
     output_dx : float
-        sample spacing in the pupil plane, mm (matches the forward call)
-    output_samples : int or tuple of int
-        shape used as the forward call's ``output_samples``; this function
-        returns a gradient with the same shape as the forward's input (i.e.,
-        the focal-plane shape implied by ``wavefunction.shape``)
-    shift : tuple of float
-        shift in (X, Y), same units as output_dx
+        pupil sample spacing, mm (matches the forward call)
+    output_samples : int or (int, int)
+        shape used as the forward call's ``output_samples`` (pupil shape)
+    shift : (float, float)
+        focal-grid shift, microns
     method : str, {'mdft', 'czt'}
-        propagation method (must match the forward call); CZT backprop is not
-        implemented and will raise
+        propagation method; CZT backprop is not implemented and will raise
 
     Returns
     -------
@@ -256,27 +323,21 @@ def unfocus_fixed_sampling_backprop(wavefunction, input_dx, prop_dist,
         gradient at the focal plane
 
     """
-    if not isinstance(output_samples, Iterable):
-        output_samples = (output_samples, output_samples)
-
-    dias = [output_dx * s for s in output_samples]
-    dia = max(dias)
-    Q = Q_for_sampling(input_diameter=dia,
-                       prop_dist=prop_dist,
-                       wavelength=wavelength,
-                       output_dx=input_dx)  # not a typo
-
-    Q /= wavefunction.shape[0] / output_samples[0]
-
-    if shift[0] != 0 or shift[1] != 0:
-        shift = (shift[0]/output_dx, shift[1]/output_dx)
-
+    # backprop input (wavefunction) is at pupil plane; backprop output is at
+    # focal plane. output_samples names the *focal* shape we want to return.
+    x, y, fx, fy = coordinates_for_focus(
+        pupil_dx=output_dx, pupil_samples=wavefunction.shape,
+        focal_dx=input_dx, focal_samples=output_samples,
+        wavelength=wavelength, efl=prop_dist, focal_shift=shift,
+    )
+    norm = _focus_norm(output_dx, input_dx, wavelength, prop_dist)
     if method == 'mdft':
-        out = mdft.idft2_backprop(wavefunction, Q, samples_out=output_samples, shift=shift)
+        # adjoint of unfocus is focus
+        return MDFT(x, y, fx, fy, sign=-1)(wavefunction) * norm
     elif method == 'czt':
         raise ValueError('gradient backpropagation not yet implemented for CZT')
-
-    return out
+    else:
+        raise ValueError(f"method must be 'mdft' or 'czt', got {method!r}")
 
 
 def Q_for_sampling(input_diameter, prop_dist, wavelength, output_dx):
