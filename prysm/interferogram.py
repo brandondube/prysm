@@ -261,10 +261,10 @@ def bandlimited_rms(r, psd, wllow=None, wlhigh=None, flow=None, fhigh=None):
     # prysm doesn't enforce the user to be "top left" or "lower left" origin,
     # abs makes sure we do things right no matter what
     dx = abs(pt2 - pt1)
-    reduced = np.trapz(work, dx=dx, axis=0)
+    reduced = np.trapezoid(work, dx=dx, axis=0)
 
     if r.ndim == 2:
-        reduced = np.trapz(reduced, dx=dx, axis=0)
+        reduced = np.trapezoid(reduced, dx=dx, axis=0)
 
     return np.sqrt(reduced)
 
