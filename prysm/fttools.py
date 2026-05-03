@@ -152,12 +152,8 @@ def forward_ft_unit(dx, samples, shift=True):
 class MDFT:
     """Matrix DFT parameterized by input coordinates and output frequencies.
 
-    Computes ``out[i, j] = sum_{k, l} ary[k, l] * exp(sign * 2j*pi * (y[k]*fy[i] + x[l]*fx[j]))``
+    Computes ``out[i, j] = norm * sum_{k, l} ary[k, l] * exp(sign * 2j*pi * (y[k]*fy[i] + x[l]*fx[j]))``
     by precomputing two 1D basis matrices and applying them as ``Ey @ ary @ Ex.T``.
-
-    The class is a pure DFT — it carries no notion of optics, oversampling, or
-    normalization. Callers multiply the result by whatever scalar is appropriate
-    for their problem.
 
     Parameters
     ----------
@@ -172,6 +168,10 @@ class MDFT:
     sign : int, optional
         Sign of the kernel exponent. ``-1`` (default) is the forward DFT
         convention; ``+1`` is the inverse DFT convention.
+    norm : float, optional
+        Real scalar applied to the result of every ``__call__`` and
+        ``adjoint``. Default ``1.0`` (bare DFT sum). Set this to bake the
+        problem-appropriate scaling into the operator.
 
     Notes
     -----
@@ -181,25 +181,26 @@ class MDFT:
 
     """
 
-    def __init__(self, x, y, fx, fy, sign=-1):
+    def __init__(self, x, y, fx, fy, sign=-1, norm=1.0):
         """Build the basis matrices."""
         prefix = sign * 2j * np.pi
         self.Ex = np.exp(prefix * np.outer(fx, x))  # shape (len(fx), len(x))
         self.Ey = np.exp(prefix * np.outer(fy, y))  # shape (len(fy), len(y))
+        self.norm = norm
 
     def __call__(self, ary):
         """Apply the forward DFT to ``ary``."""
-        return self.Ey @ ary @ self.Ex.T
+        return (self.Ey @ ary @ self.Ex.T) * self.norm
 
     def adjoint(self, grad):
         """Apply the adjoint (conjugate transpose) of the forward DFT.
 
-        For a real scalar normalization, this is the gradient backpropagation
-        operator for ``__call__``. It also coincides with the inverse DFT
-        (i.e. an ``MDFT`` of opposite sign that maps the *output* shape back
-        to the *input* shape) up to scaling.
+        For a real ``norm``, this is the gradient backpropagation operator
+        for ``__call__``. It also coincides with the inverse DFT (i.e. an
+        ``MDFT`` of opposite sign that maps the *output* shape back to the
+        *input* shape) up to scaling.
         """
-        return self.Ey.conj().T @ grad @ self.Ex.conj()
+        return (self.Ey.conj().T @ grad @ self.Ex.conj()) * self.norm
 
     def nbytes(self):
         """Total size in memory of the basis matrices, bytes."""
@@ -218,11 +219,12 @@ class CZT:
 
     """
 
-    def __init__(self, x, y, fx, fy, sign=-1):
+    def __init__(self, x, y, fx, fy, sign=-1, norm=1.0):
         """Precompute CZT components for both axes."""
         if sign not in (-1, 1):
             raise ValueError(f'sign must be -1 or +1, got {sign}')
         self.sign = sign
+        self.norm = norm
 
         Nx = len(x)
         Mx = len(fx)
@@ -275,7 +277,7 @@ class CZT:
         out = out * self._arow
         if self.sign == 1:
             out = np.conj(out)
-        return out
+        return out * self.norm
 
     def adjoint(self, grad):
         """Adjoint not implemented for CZT (matches prior behavior)."""

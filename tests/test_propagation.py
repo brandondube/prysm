@@ -31,10 +31,8 @@ def test_unfocus_fft_mdft_equivalent_Wavefront():
     dx = 1
     wf = propagation.Wavefront(dx=dx, cmplx_field=z, wavelength=HeNe, space='psf')
     unfocus_fft = wf.unfocus(Q=2, efl=1)
-    unfocus_mdft = wf.unfocus_fixed_sampling(
-        efl=1,
-        dx=unfocus_fft.dx,
-        samples=unfocus_fft.data.shape)
+    mdft = wf.prepare_executor(efl=1, dx=unfocus_fft.dx, samples=unfocus_fft.data.shape)
+    unfocus_mdft = wf.unfocus_dft(mdft)
 
     assert np.allclose(unfocus_fft.data, unfocus_mdft.data)
 
@@ -43,13 +41,11 @@ def test_focus_fft_mdft_equivalent_Wavefront():
     dx = 1
     z = np.random.rand(SAMPLES, SAMPLES)
     wf = propagation.Wavefront(dx=dx, cmplx_field=z, wavelength=HeNe, space='pupil')
-    unfocus_fft = wf.focus(Q=2, efl=1)
-    unfocus_mdft = wf.focus_fixed_sampling(
-        efl=1,
-        dx=unfocus_fft.dx,
-        samples=unfocus_fft.data.shape)
+    focus_fft = wf.focus(Q=2, efl=1)
+    mdft = wf.prepare_executor(efl=1, dx=focus_fft.dx, samples=focus_fft.data.shape)
+    focus_mdft = wf.focus_dft(mdft)
 
-    assert np.allclose(unfocus_fft.data, unfocus_mdft.data)
+    assert np.allclose(focus_fft.data, focus_mdft.data)
 
 
 def test_frespace_functions():
@@ -106,8 +102,9 @@ def test_to_fpm_and_back_backprop_accepts_wavefront_fpm():
     fpm_data = (np.random.rand(SAMPLES, SAMPLES)
                 + 1j * np.random.rand(SAMPLES, SAMPLES)).astype(np.complex128)
     fpm = propagation.Wavefront(cmplx_field=fpm_data, dx=0.1, wavelength=HeNe, space='psf')
-    out = wf.to_fpm_and_back(efl=10.0, fpm=fpm, fpm_dx=fpm.dx)
-    grad = out.to_fpm_and_back_backprop(efl=10.0, fpm=fpm, fpm_dx=fpm.dx)
+    mdft = wf.prepare_executor(efl=10.0, dx=fpm.dx, samples=fpm.data.shape)
+    out = wf.to_fpm_and_back(fpm=fpm, executor=mdft)
+    grad = out.to_fpm_and_back_backprop(fpm=fpm, executor=mdft)
     assert grad.data.shape == wf.data.shape
 
 

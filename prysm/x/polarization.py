@@ -10,8 +10,8 @@ from prysm import propagation
 supported_propagation_funcs = [
     'focus',
     'unfocus',
-    'focus_fixed_sampling',
-    'unfocus_fixed_sampling',
+    'focus_dft',
+    'unfocus_dft',
     'angular_spectrum'
 ]
 

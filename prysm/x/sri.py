@@ -5,8 +5,9 @@ import warnings
 from prysm.mathops import np
 from prysm.propagation import (
     Wavefront,
-    focus_fixed_sampling,
-    unfocus_fixed_sampling,
+    focus_dft,
+    unfocus_dft,
+    prepare_executor,
 )
 from prysm.coordinates import make_xy_grid, cart_to_polar
 from prysm.geometry import circle
@@ -43,7 +44,7 @@ def overlap_integral(E1, E2, sumI1, sumI2):
     return num/den
 
 
-def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, method='mdft', shift=(0, 0), phase_shift=0, return_more=False):
+def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, executor=None, shift=(0, 0), phase_shift=0, return_more=False):
     """Propagate to a focal plane mask, apply it, and return.
 
     This routine handles normalization properly for the user.
@@ -59,10 +60,9 @@ def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, method='mdft', 
     fib_dx : float
         sampling increment in the focal plane,  microns;
         do not need to pass if fpm is a Wavefront
-    method : str, {'mdft', 'czt'}, optional
-        how to propagate the field, matrix DFT or Chirp Z transform
-        CZT is usually faster single-threaded and has less memory consumption
-        MDFT is usually faster multi-threaded and has more memory consumption
+    executor : MDFT, optional
+        precomputed bidirectional transform operator. If None, defaults are
+        built per call.
     shift : tuple of float, optional
         shift in the image plane to go to the FPM
         appropriate shift will be computed returning to the pupil
@@ -79,13 +79,16 @@ def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, method='mdft', 
     fib_samples = Efib.shape
     input_samples = self.data.shape
 
-    field_at_fpm = focus_fixed_sampling(
-        wavefunction=self.data, input_dx=self.dx, prop_dist=efl,
-        wavelength=self.wavelength, output_dx=fib_dx,
-        output_samples=fib_samples, shift=shift, method=method,
-    )
+    if executor is None:
+        executor = prepare_executor(
+            pupil_dx=self.dx, pupil_samples=input_samples,
+            focal_dx=fib_dx, focal_samples=fib_samples,
+            wavelength=self.wavelength, efl=efl, focal_shift=shift,
+        )
 
-    at_fpm = self.focus_fixed_sampling(efl, fib_dx, Efib.shape)
+    field_at_fpm = focus_dft(self.data, executor)
+
+    at_fpm = self.focus_dft(executor)
     I_at_fpm = at_fpm.intensity
     input_power = I_at_fpm.data.sum()
     coupling_loss = overlap_integral(at_fpm.data, Efib, input_power, Ifibsum)
@@ -97,11 +100,7 @@ def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, method='mdft', 
         phase_shift = np.exp(1j*phase_shift)
         Eout = Eout * phase_shift
 
-    field_at_next_pupil = unfocus_fixed_sampling(
-        wavefunction=Eout, input_dx=fib_dx, prop_dist=efl,
-        wavelength=self.wavelength, output_dx=self.dx,
-        output_samples=input_samples, shift=shift, method=method,
-    )
+    field_at_next_pupil = unfocus_dft(Eout, executor)
 
     if input_samples[0] != input_samples[1]:
         warnings.warn(f'Forward propagation had input shape {input_samples} which was not uniform between axes, scaling is off')
