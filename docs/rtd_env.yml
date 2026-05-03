@@ -11,7 +11,9 @@ dependencies:
 - pydata-sphinx-theme
 - scikit-image
 - imageio
+- jupyter-lab
 - pip
 - pip:
   - nbsphinx
   - nbconvert
+  - ipykernel
