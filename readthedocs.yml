@@ -2,11 +2,15 @@ version: 2
 build:
   os: ubuntu-lts-latest
   tools:
-    python: "3.14"
-python:
-  install:
-    - requirements: docs/requirements.txt
-    - method: pip
-      path: .
+    python: "miniforge3-25.11"
+
+conda:
+  environment: docs/rtd_env.yml
+
 sphinx:
   configuration: docs/source/conf.py
+
+python:
+  install:
+    - method: pip
+      path: .
