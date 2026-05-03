@@ -32,8 +32,8 @@ wavefront control of real systems.  For the highest performance, the
 differentiation has been done by hand.
 
 
-New Features
-============
+Changes by module
+=================
 
 Polynomials
 -----------
@@ -84,13 +84,51 @@ dimensionality).
 Propagation
 -----------
 
+A significant breaking change has been made to how fixed sampling / DFT based
+propagations are done.  The previous API used a global matrix DFT or CZT object
+and the user passed arguments that implicitly define a grid to propagation
+functions.  This created significant complexity with backpropagation.  The API
+now requires two lines of code to do the equivalent, but usage is significantly
+simplified.  The previous usage looked like:
+
+.. code-block:: python
+  :linenos:
+  :caption: WAS.py
+
+  from prysm.propagation import wavefront as WF
+
+  wf = WF(...)
+  efoc = wf.focus_fixed_sampling(efl, focal_dx, Nfocal)
+  epup = efoc.unfocus_fixed_sampling(efl, wf.dx, wf.data.shape)
+
+The new usage looks like:
+
+.. code-block:: python
+  :linenos:
+  :caption: IS.py
+
+  from prysm.propagation import Wavefront as WF
+
+  wf = WF(...)
+  mdft = wf.prepare_executor(efl, focal_dx, Nfocal) # can add shifts
+  efoc = wf.focus_dft(mdft)
+  epup = efoc.unfocus_dft(mdft)
+
+This change *significantly* simplifies logic around backpropagation.  Functions
+have been renamed:
+
+* :code:`propagation.focus_fixed_sampling` →
+  :func:`~prysm.propagation.focus_dft`
+
+* :code:`propagation.unfocus_fixed_sampling` →
+  :func:`~prysm.propagation.unfocus_dft`
+
+New features:
+
 * new :code:`.real` property, returning a Richdata to support
   :code:`wf.real.plot2d()` and similar usage
 
 * new :code:`.imag` property, same as :code:`.real`
-
-* :func:`~prysm.propagation.Wavefront.to_fpm_and_back` now takes a :code:`shift`
-  argument, allowing off-axis propagation without adding wavefront tilt
 
 * all propagation routines have a :code:`_backprop` twin, which should be used
   to do gradient backpropagation through optical models:
@@ -99,9 +137,9 @@ Propagation
 
 * * :func:`~prysm.propagation.unfocus_backprop`
 
-* * :func:`~prysm.propagation.focus_fixed_sampling_backprop`
+* * :func:`~prysm.propagation.focus_dft_backprop`
 
-* * :func:`~prysm.propagation.unfocus_fixed_sampling_backprop`
+* * :func:`~prysm.propagation.unfocus_dft_backprop`
 
 * * :func:`~prysm.propagation.to_fpm_and_back_backprop`
 
@@ -120,6 +158,33 @@ wavefront-only functions also support backpropagation:
 * add and subtract :code:`+` and :code:`-` operators are now defined for
   :class:`~prysm.propagation.Wavefront` for convenient recombination /
   superposition of waves, as in interferometers
+
+
+fttools
+-------
+
+The fttools module has been reworked, and greatly simplified.  The module was
+created to serve the needs of the propagation module, which resulted in an
+indirect form of input to the DFT, where instead of passing the spatial and
+frequency grids, abstractions over them were passed.  In the new module, the
+matrix DFT and chirp Z transform are implemented directly.  Most users do not
+interact with the fttools module directly.  The previous API signature was
+
+.. code-block:: python
+
+  from prysm.fttools import mdft
+  mdft.dft2(self, ary, Q, samples_out, shift=(0, 0))
+
+The new API is:
+
+.. code-block:: python
+
+  from prysm.fttools import MDFT
+  mdft = MDFT(x, y, fx, fy)
+  mdft() # call it
+  mdft.adjoint() # adjoint operator for backpropagation
+
+The CZT class works in the same way.
 
 
 Segmented Systems
@@ -231,6 +296,34 @@ other geometric manipulations:
 : :func:`~prysm.coordinates.solve_for_planar_homography` for calculating the
 homography that best maps two sets of corresponding points to each other
 
+
+Thin Films
+----------
+
+The API has been changed and the user passes separate thickness and index
+arrays.  This makes the module easier to use and less error prone by swapping
+the position of the index and thickness variables.  The substrate also is now
+handled separately, and no longer needs to be passed as a very thick film layer.
+This second change avoids subtle etalon effect errors that could occur.
+
+.. code-block:: python
+  :linenos:
+  :caption: WAS.py
+
+  stack = [
+      (n_MgF2, .150),
+      (n_C7980, 10_000),
+  ]
+  r, _ = thinfilm.multilayer_stack_rt(stack, wvl, 'p')
+
+.. code-block:: python
+  :linenos:
+  :caption: IS.py
+
+  indices = [n_MgF2]
+  thicknesses = [.150]
+  # note last arg is substrate index
+  r, _ = thinfilm.multilayer_stack_rt(indices, thicknesses, wvl, 'p', n_C7980)
 
 
 eXperimental Modules
@@ -410,6 +503,14 @@ x/dm
   transposition of the DM surface for some rotations fixed.
 
 
+x/raytracing
+------------
+
+Some work has been done on computing OPD, improving ray aiming, and surfaces
+that are more generally off axis in each of x and y.  This module is still a
+ways away from prime time.
+
+
 Performance Optimizations
 =========================
 
@@ -454,8 +555,8 @@ Bug Fixes
 * fixed a bug in :func:`prysm.psf.encircled_energy` where x,y axes were double
   meshgrided
 
-Breaking Changes
-================
+Code Removal and other Breaking Changes
+=======================================
 
 Numerous features related to MTF benches have been removed.  The code was
 extremely old, had incomplete test coverage, and is rarely used:
