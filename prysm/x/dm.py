@@ -1,8 +1,6 @@
 """Deformable Mirrors."""
 import copy
 
-import numpy as truenp
-
 from prysm.conf import config
 from prysm.mathops import np, fft, is_odd
 from prysm.fttools import forward_ft_unit, fourier_resample, crop_center, pad2d
@@ -23,19 +21,18 @@ def prepare_actuator_lattice(shape, Nact, sep, dtype):
     # Usage guide:
     # returns a dict of
     # {
-    #     mask, shape Nact
-    #     actuators, shape Nact
+    #     mask, shape (Nacty, Nactx)
+    #     actuators, shape (Nacty, Nactx)  -- row-major (y, x), matches poke_arr
     #     poke_arr, shape shape
     #     ixx, shape (truthy part of mask)
     #     iyy, shape (truthy part of mask)
     # }
     #
     # assign poke_arr[iyy, ixx] = actuators[mask] in the next step
-    actuators = np.zeros(Nact, dtype=dtype)
-
     cy, cx = [s//2 for s in shape]
     Nactx, Nacty = Nact
     skip_samples_x, skip_samples_y = sep
+    actuators = np.zeros((Nacty, Nactx), dtype=dtype)
     # python trick; floor division (//) rounds to negative inf, not zero
     # because FFT grid alignment biases things to the left, if Nact is odd
     # we want more on the negative side;
@@ -112,7 +109,9 @@ class DM:
         Nout : int or tuple of int, length 2
             number of samples in the output array; see notes for details
         Nact : int or tuple of int, length 2
-            (X, Y) actuator counts
+            (X, Y) actuator counts.  The corresponding `self.actuators` array
+            has shape `(Nact_y, Nact_x)` (row-major, matching image (y, x)
+            indexing), so user code should index it as `actuators[y, x]`.
         sep : int or tuple of int, length 2
             (X, Y) actuator separation, samples of influence function
         shift : tuple of float, length 2
@@ -158,7 +157,9 @@ class DM:
         self.Nact = Nact
         self.sep = sep
         self.shift = shift
-        self.obliquity = truenp.cos(truenp.radians(truenp.linalg.norm(rot)))
+        # obliquity is the z-component of the rotated surface normal,
+        # i.e. R @ [0, 0, 1] -> R[:, 2]; in-plane (Z) rotations leave it at 1.
+        self.obliquity = float(make_rotation_matrix(rot)[2, 2])
         self.rot = rot
         self.upsample = upsample
 

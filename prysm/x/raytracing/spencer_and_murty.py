@@ -400,8 +400,14 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
 
     Returns
     -------
-    P_hist, S_hist
-        position history and direction cosine history
+    P_hist, S_hist, OPL_hist
+        position history (jj+1, ..., 3), direction cosine history (jj+1, ..., 3),
+        and per-segment optical path length history (jj+1, ...).
+
+        OPL_hist[0] is zero by convention.  OPL_hist[j+1] is the OPL of the
+        segment from P_hist[j] to P_hist[j+1] (i.e., the path through the
+        medium preceding surface j).  The cumulative OPL up to surface j is
+        OPL_hist[:j+2].sum(axis=0).
 
     Implementation Notes
     --------------------
@@ -419,6 +425,7 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
     jj = len(surfaces)
     P_hist = np.empty((jj+1, *P.shape), dtype=P.dtype)
     S_hist = np.empty((jj+1, *S.shape), dtype=P.dtype)
+    OPL_hist = np.zeros((jj+1, *P.shape[:-1]), dtype=P.dtype)
     Pj = P
     Sj = S
     P_hist[0] = P
@@ -435,7 +442,6 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
         elif surf.typ == STYPE_REFRACT:
             nprime = surf.n(wvl)
             Sjp1 = refract(nj, nprime, Sj, r)
-            nj = nprime
         else:
             # other surface types do not bend rays
             Sjp1 = Sj
@@ -448,8 +454,58 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
             # transformation matrix has inverse which is its transpose
             Rt = surf.R.T
         Pjp1, Sjp1 = transform_to_global_coords(Pj, surf.P, Sjp1, Rt)
+        # geometric path of the segment we just traversed (medium index = nj),
+        # computed in the global frame for batch+rotated-surface compatibility
+        seg = Pjp1 - P_hist[j]
+        seg_len = np.sqrt(np.sum(seg * seg, axis=-1))
+        OPL_hist[j+1] = nj * seg_len
+        if surf.typ == STYPE_REFRACT:
+            nj = nprime
         P_hist[j+1] = Pjp1
         S_hist[j+1] = Sjp1
         Pj, Sj = Pjp1, Sjp1
 
-    return P_hist, S_hist
+    return P_hist, S_hist, OPL_hist
+
+
+def intersect_reference_sphere(P, S, C, R):
+    """Intersect a batch of rays P + t*S with the sphere |X - C| = R.
+
+    Picks the root nearer to P along +S — appropriate when rays are
+    propagating toward the sphere center (converging beam) and the sphere
+    sits between the last optical surface and the image point.  For a
+    diverging beam (virtual exit pupil behind the optic) the same root
+    convention still yields the upstream intersection.
+
+    Parameters
+    ----------
+    P : ndarray
+        shape (N,3), any float dtype.  Ray origins (typically the last surface).
+    S : ndarray
+        shape (N,3), any float dtype.  Ray direction cosines.
+    C : ndarray
+        shape (3,), any float dtype.  Sphere center (image point).
+    R : float
+        sphere radius (|XP - image|).
+
+    Returns
+    -------
+    Q, t : ndarray, ndarray
+        intersection points (N,3) and signed segment lengths (N,) from P along S.
+
+    """
+    P, S = np.atleast_2d(P, S)
+    C = np.asarray(C)
+    d = P - C                                  # (N,3)
+    b = _multi_dot(S, d)                       # S . (P-C)
+    cc = _multi_dot(d, d) - R * R
+    disc = b * b - cc
+    # near-zero negative disc from FP noise -> clamp
+    disc = np.where(disc < 0, np.zeros_like(disc), disc)
+    sqrt_disc = np.sqrt(disc)
+    # of the two roots t = -b +/- sqrt_disc, pick the one closer to P (smaller |t|).
+    # for a converging ray with C ahead of P (b<0), -b - sqrt_disc and -b + sqrt_disc
+    # straddle the closest approach; the upstream intersection is -b - sqrt_disc.
+    t = -b - sqrt_disc
+    Q = P + t[:, np.newaxis] * S
+    return Q, t

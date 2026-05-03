@@ -2,34 +2,33 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.coverage.run]
-include = ["prysm/*",]
-omit = ["prysm/x/*","tests/*",]
-
-[tool.coverage.report]
-# Regexes for lines to exclude from consideration
-exclude_also = ["except ImportError", "assert",]
-
-[tool.pydocstyle]
-ignore = ["D200", "D203", "D204", "D210", "D213", "D300", "D401", "D416"]
-
 [project]
 name = "prysm"
 version = "0.22"
-license = "MIT"
 description = "physical optics integrated modeling, phase retrieval, segmented systems, polynomials and fitting, sequential raytracing..."
 readme = "README.md"
+license = { file = "LICENSE.md" }
 requires-python = ">=3.10"
 authors = [
-{name = "Brandon Dube", email = "brandon@retrorefractions.com"},
+    { name = "Brandon Dube", email = "brandon@retrorefractions.com" },
 ]
-
 dependencies = [
     "numpy",
     "scipy",
 ]
-[project.optional-dependencies]
-full = ["matplotlib", "h5py", "pandas", "imageio"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["prysm"]
+
+[tool.hatch.build.targets.sdist]
+include = ["prysm", "README.md", "LICENSE.md"]
+
+[tool.coverage.run]
+include = ["prysm/*"]
+omit = ["prysm/x/*", "tests/*"]
+
+[tool.coverage.report]
+exclude_also = ["except ImportError", "assert"]
+
+[tool.pydocstyle]
+ignore = ["D200", "D203", "D204", "D210", "D213", "D300", "D401", "D416"]

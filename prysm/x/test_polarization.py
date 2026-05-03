@@ -149,8 +149,9 @@ def test_make_propagation_polarized():
         focus,
         unfocus,
         angular_spectrum,
-        focus_fixed_sampling,
-        unfocus_fixed_sampling
+        focus_dft,
+        unfocus_dft,
+        prepare_executor,
     )
 
     # focus works
@@ -165,13 +166,14 @@ def test_make_propagation_polarized():
     A_prop = angular_spectrum(A_pupil, wvl=wave, dx=dx, z=5e1, Q=1)
     J_prop = angular_spectrum(J_pupil, wvl=wave, dx=dx, z=5e1, Q=1)
 
-    # focus fixed sampling
-    A_psf_fixed = focus_fixed_sampling(A, dx, 50, wave, 1000e-3, 256)
-    J_psf_fixed = focus_fixed_sampling(J, dx, 50, wave, 1000e-3, 256)
-
-    # unfocus fixed sampling
-    A_pupil_fixed = unfocus_fixed_sampling(A_psf_fixed, 1000e-3/256, 50, wave, dx, samples)  # NOQA
-    J_pupil_fixed = unfocus_fixed_sampling(J_psf_fixed, 1000e-3/256, 50, wave, dx, samples)  # NOQA
+    # focus / unfocus via DFT executor
+    mdft = prepare_executor(pupil_dx=dx, pupil_samples=samples,
+                            focal_dx=1000e-3, focal_samples=256,
+                            wavelength=wave, efl=50)
+    A_psf_fixed = focus_dft(A, mdft)
+    J_psf_fixed = focus_dft(J, mdft)
+    A_pupil_fixed = unfocus_dft(A_psf_fixed, mdft)  # NOQA
+    J_pupil_fixed = unfocus_dft(J_psf_fixed, mdft)  # NOQA
 
     slc = (..., 0, 0)
     assert np.allclose(A_psf, J_psf[slc])

@@ -42,10 +42,11 @@ def _establish_axis(P1, P2):
 
     """
     diff = P2 - P1
-    euclidean_distance = np.sqrt(diff ** 2).sum()
-    num = diff
-    den = euclidean_distance
-    return num / den
+    # L2 norm: prior code computed sqrt(diff**2).sum() which is the L1 norm and
+    # only accidentally equals L2 when diff has a single nonzero component
+    # (e.g. coaxial systems with diff = [0,0,dz]).
+    euclidean_distance = np.sqrt(np.sum(diff * diff))
+    return diff / euclidean_distance
 
 
 def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
@@ -92,7 +93,7 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
         rayfany = raygen.generate_collimated_ray_fan(2, maxr=r)
         all_rays = raygen.concat_rayfans(rayfanx, rayfany)
         ps, ss = all_rays
-        phist, shist = spencer_and_murty.raytrace(prescription, ps, ss, wvl)
+        phist, shist, _ = spencer_and_murty.raytrace(prescription, ps, ss, wvl)
         # now solve for intersection between the X rays,
 
         # P for the each ray
@@ -153,7 +154,7 @@ def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan), debug=False):
 
     def optfcn(x):
         P[:2] = x
-        phist, _ = spencer_and_murty.raytrace(trace_path, P, S, wvl)
+        phist, _, _ = spencer_and_murty.raytrace(trace_path, P, S, wvl)
         final_position = phist[-1]
         euclidean_dist = (final_position - target)**2
         euclidean_dist = np.nansum(euclidean_dist)/3  # /3 = div by number of axes
@@ -168,29 +169,55 @@ def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan), debug=False):
         return P
 
 
+def _closest_approach_on_axis(P_chief, S_chief, axis_point, axis_dir):
+    """Point on (axis_point, axis_dir) closest to the chief ray.
+
+    For a centered system, the optical axis is z-hat through the origin and
+    the exit (or entrance) pupil center lies where the chief ray crosses it.
+    Real chief rays in 3D are usually skew to that axis, so we return the
+    point on the axis at the foot of the common perpendicular.
+
+    """
+    A = np.asarray(P_chief)
+    Sc = np.asarray(S_chief)
+    B = np.asarray(axis_point)
+    Sa = np.asarray(axis_dir)
+    Sa = Sa / np.sqrt(np.sum(Sa * Sa))
+    w = A - B
+    a = np.sum(Sc * Sc)
+    b = np.sum(Sc * Sa)
+    c = np.sum(Sa * Sa)
+    d = np.sum(Sc * w)
+    e = np.sum(Sa * w)
+    denom = a * c - b * b
+    if abs(denom) < 1e-30:
+        # chief ray parallel to axis -> pupil at infinity along the axis
+        # return the projection of A onto the axis, with a NaN flag in z if you like
+        t = e / c
+        return B + t * Sa
+    t = (a * e - b * d) / denom
+    return B + t * Sa
+
+
 def locate_ep(P_chief, S_chief, P_obj, P_s1):
     """Locate the entrance pupil of a system.
 
-    Note, for a co-axial system P_obj[0] and [1] should be 0, and the same
-    is true for P_s1[0] and [1].
-
-    This function,
-    1) establishes the axis between the object and the first surface of the system
-    2) finds the intersection of the chief ray and that axis
+    Defines the optical axis as the line through P_obj and P_s1, then finds
+    the point on that axis closest to the chief ray.  For a coaxial system
+    this reduces to the standard z-axis intersection; for tilted/decentered
+    systems the user should supply a meaningful axis pair (P_obj, P_s1).
 
     Parameters
     ----------
     P_chief : ndarray
-        starting position of the chief ray, at the object plane
+        any point on the chief ray (e.g. its starting position at the object)
     S_chief : ndarray
-        starting direction cosine of the chief ray
+        chief ray direction cosines
     P_obj : iterable
-        the position of the object
-
+        object-side point on the optical axis (commonly the object location)
     P_s1 : iterable
-        the position of the first surface of the prescription.
-        Not the point of intersection for the chief ray, pres[0].P
-
+        a second axis point (commonly the first surface vertex).  Must differ
+        from P_obj.
 
     Returns
     -------
@@ -198,43 +225,137 @@ def locate_ep(P_chief, S_chief, P_obj, P_s1):
         position of the entrance pupil (X,Y,Z)
 
     """
-    S_axis = _establish_axis(P_obj, P_s1)
-    s = _intersect_lines(P_chief, S_chief, P_s1, S_axis)
-    # s is the slerp for each ray, we just want to go from S1
-    return P_s1 + s[1] * S_axis
+    S_axis = _establish_axis(np.asarray(P_obj), np.asarray(P_s1))
+    return _closest_approach_on_axis(P_chief, S_chief, np.asarray(P_obj), S_axis)
+
+
+def xp_reference_sphere(P_chief, S_chief, axis_point=None, axis_dir=None):
+    """Compute the exit-pupil reference sphere for a single chief ray.
+
+    The reference sphere is centered on the chief ray's image point (P_chief)
+    and has radius |P_xp - P_chief|, where P_xp is the chief ray's closest
+    approach to the optical axis (the line through axis_point parallel to
+    axis_dir).  For a centered coaxial system, the optical axis is the
+    z-axis through the origin (the defaults).
+
+    For tilted/decentered systems, supply axis_point and axis_dir explicitly,
+    or compute P_xp via independent means (e.g., from a bundle of chief rays
+    from different fields) and pass it directly to opd_from_raytrace.
+
+    Parameters
+    ----------
+    P_chief : ndarray
+        shape (3,).  Position of the chief ray, typically at the image plane.
+        This becomes the center of the reference sphere.
+    S_chief : ndarray
+        shape (3,).  Direction cosines of the chief ray after the last surface.
+    axis_point : iterable, optional
+        a point on the optical axis (default: origin)
+    axis_dir : iterable, optional
+        direction of the optical axis (default: +z)
+
+    Returns
+    -------
+    C, R, P_xp : ndarray, float, ndarray
+        sphere center (=P_chief), radius, exit pupil center
+
+    """
+    if axis_point is None:
+        axis_point = np.zeros(3, dtype=np.asarray(P_chief).dtype)
+    if axis_dir is None:
+        axis_dir = np.array([0., 0., 1.], dtype=np.asarray(P_chief).dtype)
+    C = np.asarray(P_chief)
+    P_xp = _closest_approach_on_axis(P_chief, S_chief,
+                                     np.asarray(axis_point),
+                                     np.asarray(axis_dir))
+    R = np.sqrt(np.sum((P_xp - C) ** 2))
+    return C, float(R), P_xp
+
+
+def opd_from_raytrace(P_hist, S_hist, OPL_hist, P_img, P_xp,
+                      n_image=1.0, chief_index=None):
+    """Compute OPD on the exit-pupil reference sphere from a ray-trace.
+
+    For each ray, the OPL is summed through the prescription, then extended
+    along the final direction cosine until it intersects the reference sphere
+    centered on P_img with radius |P_xp - P_img|.  OPD is reported relative
+    to the chief ray (chief OPD = 0).
+
+    The starting plane for OPL accumulation is whatever transverse plane the
+    rays were launched on (e.g. z = const for a collimated fan).  Provided all
+    rays in the bundle share that starting plane, the constant OPL offset
+    cancels in the chief-relative subtraction.
+
+    Parameters
+    ----------
+    P_hist : ndarray
+        position history from raytrace, shape (jj+1, N, 3)
+    S_hist : ndarray
+        direction cosine history from raytrace, shape (jj+1, N, 3)
+    OPL_hist : ndarray
+        per-segment OPL history from raytrace, shape (jj+1, N).  OPL_hist[0]
+        is zero by convention; OPL_hist[j+1] is the OPL of the segment ending
+        at surface j.
+    P_img : iterable
+        image point — center of the reference sphere
+    P_xp : iterable
+        exit pupil center — sets the radius
+    n_image : float
+        index of refraction in image space (1=vacuum)
+    chief_index : int, optional
+        row index of the chief ray.  If None, defaults to N//2 which matches
+        the convention used by raygen.generate_collimated_ray_fan.
+
+    Returns
+    -------
+    opd : ndarray
+        shape (N,).  Optical path difference at the reference sphere, in the
+        same length units as the prescription.  Sign convention: chief == 0;
+        rays whose OPL exceeds the chief's are positive.
+
+    """
+    P_img = np.asarray(P_img)
+    P_xp = np.asarray(P_xp)
+    R = np.sqrt(np.sum((P_xp - P_img) ** 2))
+
+    P_last = P_hist[-1]
+    S_last = S_hist[-1]
+    Q, t = spencer_and_murty.intersect_reference_sphere(P_last, S_last, P_img, R)
+
+    OPL_through = OPL_hist.sum(axis=0)
+    OPL_total = OPL_through + n_image * t
+
+    if chief_index is None:
+        chief_index = OPL_total.shape[0] // 2
+
+    return OPL_total - OPL_total[chief_index]
 
 
 def locate_xp(P_chief, S_chief, P_img, P_sk):
     """Locate the exit pupil of a system.
 
-    Note, for a co-axial system P_img[0] and [1] should be 0, and the same
-    is true for P_sk[0] and [1].
-
-    This function,
-    1) establishes the axis between the object and the first surface of the system
-    2) finds the intersection of the chief ray and that axis
+    Defines the optical axis as the line through P_img and P_sk, then finds
+    the point on that axis closest to the chief ray.  For a coaxial system
+    this reduces to the standard z-axis intersection; for tilted/decentered
+    systems the user should supply a meaningful axis pair (P_img, P_sk).
 
     Parameters
     ----------
     P_chief : ndarray
-        final position of the chief ray, at the image plane
+        any point on the chief ray (e.g. final position at the image plane)
     S_chief : ndarray
-        final direction cosine of the chief ray
+        chief ray direction cosines (after the last surface)
     P_img : iterable
-        the position of the object
-
+        image-side point on the optical axis (commonly the image point)
     P_sk : iterable
-        the position of the first surface of the prescription.
-        Not the point of intersection for the chief ray, pres[0].P
-
+        a second axis point (commonly the last optical surface vertex —
+        NOT the image plane).  Must differ from P_img.
 
     Returns
     -------
     ndarray
-        position of the entrance pupil (X,Y,Z)
+        position of the exit pupil (X,Y,Z)
 
     """
-    S_axis = _establish_axis(P_img, P_sk)
-    s = _intersect_lines(P_chief, S_chief, P_sk, S_axis)
-    # s is the slerp for each ray, we just want to go from S1
-    return P_sk + s[1] * S_axis
+    S_axis = _establish_axis(np.asarray(P_img), np.asarray(P_sk))
+    return _closest_approach_on_axis(P_chief, S_chief, np.asarray(P_img), S_axis)

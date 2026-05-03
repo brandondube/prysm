@@ -68,7 +68,7 @@ target/
 .idea
 .ropeproject
 
-.DS_store
+.DS_Store
 
 # sample data
 prysm/sampledata/*

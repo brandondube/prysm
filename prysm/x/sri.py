@@ -3,8 +3,12 @@
 # Cousin of the point diffraction interferometer
 import warnings
 from prysm.mathops import np
-from prysm.propagation import Wavefront, Q_for_sampling
-from prysm.fttools import mdft, czt
+from prysm.propagation import (
+    Wavefront,
+    focus_dft,
+    unfocus_dft,
+    prepare_executor,
+)
 from prysm.coordinates import make_xy_grid, cart_to_polar
 from prysm.geometry import circle
 
@@ -40,7 +44,7 @@ def overlap_integral(E1, E2, sumI1, sumI2):
     return num/den
 
 
-def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, method='mdft', shift=(0, 0), phase_shift=0, return_more=False):
+def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, executor=None, shift=(0, 0), phase_shift=0, return_more=False):
     """Propagate to a focal plane mask, apply it, and return.
 
     This routine handles normalization properly for the user.
@@ -56,10 +60,9 @@ def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, method='mdft', 
     fib_dx : float
         sampling increment in the focal plane,  microns;
         do not need to pass if fpm is a Wavefront
-    method : str, {'mdft', 'czt'}, optional
-        how to propagate the field, matrix DFT or Chirp Z transform
-        CZT is usually faster single-threaded and has less memory consumption
-        MDFT is usually faster multi-threaded and has more memory consumption
+    executor : MDFT, optional
+        precomputed bidirectional transform operator. If None, defaults are
+        built per call.
     shift : tuple of float, optional
         shift in the image plane to go to the FPM
         appropriate shift will be computed returning to the pupil
@@ -75,23 +78,17 @@ def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, method='mdft', 
     """
     fib_samples = Efib.shape
     input_samples = self.data.shape
-    input_diameters = [self.dx * s for s in input_samples]
-    Q_forward = [Q_for_sampling(d, efl, self.wavelength, fib_dx) for d in input_diameters]
-    # soummer notation: use m, which would be 0.5 for a 2x zoom
-    # BDD notation: Q, would be 2 for a 2x zoom
-    m_forward = [1/q for q in Q_forward]
-    m_reverse = [b/a*m for a, b, m in zip(input_samples, fib_samples, m_forward)]
-    Q_reverse = [1/m for m in m_reverse]
-    shift_forward = tuple(s/fib_dx for s in shift)
 
-    # prop forward
-    kwargs = dict(ary=self.data, Q=Q_forward, samples_out=fib_samples, shift=shift_forward)
-    if method == 'mdft':
-        field_at_fpm = mdft.dft2(**kwargs)
-    elif method == 'czt':
-        field_at_fpm = czt.czt2(**kwargs)
+    if executor is None:
+        executor = prepare_executor(
+            pupil_dx=self.dx, pupil_samples=input_samples,
+            focal_dx=fib_dx, focal_samples=fib_samples,
+            wavelength=self.wavelength, efl=efl, focal_shift=shift,
+        )
 
-    at_fpm = self.focus_fixed_sampling(efl, fib_dx, Efib.shape)
+    field_at_fpm = focus_dft(self.data, executor)
+
+    at_fpm = self.focus_dft(executor)
     I_at_fpm = at_fpm.intensity
     input_power = I_at_fpm.data.sum()
     coupling_loss = overlap_integral(at_fpm.data, Efib, input_power, Ifibsum)
@@ -103,23 +100,12 @@ def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, method='mdft', 
         phase_shift = np.exp(1j*phase_shift)
         Eout = Eout * phase_shift
 
-    # shift_reverse = tuple(-s for s, q in zip(shift_forward, Q_forward))
-    shift_reverse = shift_forward
-    kwargs = dict(ary=Eout, Q=Q_reverse, samples_out=input_samples, shift=shift_reverse)
-    if method == 'mdft':
-        field_at_next_pupil = mdft.idft2(**kwargs)
-    elif method == 'czt':
-        field_at_next_pupil = czt.iczt2(**kwargs)
+    field_at_next_pupil = unfocus_dft(Eout, executor)
 
-    # scaling
-    # TODO: make this handle anamorphic transforms properly
-    if Q_forward[0] != Q_forward[1]:
-        warnings.warn(f'Forward propagation had Q {Q_forward} which was not uniform between axes, scaling is off')
     if input_samples[0] != input_samples[1]:
         warnings.warn(f'Forward propagation had input shape {input_samples} which was not uniform between axes, scaling is off')
     if fib_samples[0] != fib_samples[1]:
         warnings.warn(f'Forward propagation had fpm shape {fib_samples} which was not uniform between axes, scaling is off')
-    # Q_reverse is calculated from Q_forward; if one is consistent the other is
 
     out = Wavefront(field_at_next_pupil, self.wavelength, self.dx, self.space)
     if return_more:
