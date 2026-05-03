@@ -22,7 +22,7 @@ def find_zero_indices_2d(x, y, tol=1e-8):
     y0 = y[lookup]
     if y0 > tol:
         lookup2 = (lookup[0]+1, lookup[1])
-        y1 = x[lookup2]
+        y1 = y[lookup2]
         dy = y1-y0
         shift_samples = (y0 / dy)
         lookup = (lookup[0]+shift_samples, lookup[1])
@@ -72,12 +72,13 @@ def fix_zero_singularity(arr, x, y, fill='xypoly', order=2):
     # use Hermite polynomials as
     # XY polynomial-like basis orthogonal
     # over the infinite plane
-    # H0 = 0
+    # H0 = 1
     # H1 = x
     # H2 = x^2 - 1, and so on
-    ns = np.arange(order+1)
-    xbasis = hermite_He_seq(ns, xpts)
-    ybasis = hermite_He_seq(ns, ypts)
+    # H0(x) and H0(y) are both the constant 1, so only include
+    # the m=0 term once (under x) to keep the basis full rank.
+    xbasis = hermite_He_seq(np.arange(order+1), xpts)
+    ybasis = hermite_He_seq(np.arange(1, order+1), ypts)
     # convert 1D modes to 2D for lstsq
     xbasis = [np.broadcast_to(mode, (ypts.size, xpts.size)) for mode in xbasis]
     ybasis = [np.broadcast_to(mode, (ypts.size, xpts.size)) for mode in ybasis]
@@ -139,14 +140,13 @@ def surface_normal_from_cartesian_derivatives(fx, fy, r, t):
     """
     cost = np.cos(t)
     sint = np.sin(t)
-    onebyr = 1/r
-    r = fx * cost + fy * sint
-    t = fx * -sint / onebyr + fy * cost / onebyr
-    return r, t
+    fr = fx * cost + fy * sint
+    ft = -fx * r * sint + fy * r * cost
+    return fr, ft
 
 
 def product_rule(u, v, du, dv):
-    """The product rule of calculus, d/dx uv = u dv v du."""
+    """The product rule of calculus, d/dx uv = u dv + v du."""
     return u * dv + v * du
 
 
@@ -282,7 +282,7 @@ def sphere_sag_der(c, rho, phi=None):
 
 
 def conic_sag(c, kappa, rhosq, phi=None):
-    """Sag of a spherical surface.
+    """Sag of a conic surface.
 
     Parameters
     ----------
@@ -317,7 +317,7 @@ def conic_sag(c, kappa, rhosq, phi=None):
 
 
 def conic_sag_der(c, kappa, rho, phi=None):
-    """Sag of a spherical surface.
+    """Derivative of the sag of a conic surface.
 
     Parameters
     ----------
@@ -365,9 +365,7 @@ def off_axis_conic_sag(c, kappa, r, t, dx, dy=0):
     t : ndarray
         azimuthal coordinate
     dx : float
-        shift of the surface in x with respect to the base conic vertex,
-        mutually exclusive to dy (only one may be nonzero)
-        use dx=0 when dy != 0
+        shift of the surface in x with respect to the base conic vertex
     dy : float
         shift of the surface in y with respect to the base conic vertex
 
@@ -377,17 +375,11 @@ def off_axis_conic_sag(c, kappa, r, t, dx, dy=0):
         surface sag, z(x,y)
 
     """
-    if dy != 0 and dx != 0:
-        raise ValueError('only one of dx/dy may be nonzero')
-
-    if dx != 0:
-        s = dx
-        oblique_term = 2 * s * r * np.cos(t)
-    else:
-        s = dy
-        oblique_term = 2 * s * r * np.sin(t)
-
-    aggregate_term = r * r + oblique_term + s * s
+    cost = np.cos(t)
+    sint = np.sin(t)
+    oblique_term = 2 * r * (dx * cost + dy * sint)
+    ssq = dx * dx + dy * dy
+    aggregate_term = r * r + oblique_term + ssq
     num = c * aggregate_term
     csq = c * c
     den = 1 + np.sqrt(1 - (1 + kappa) * csq * aggregate_term)
@@ -408,9 +400,7 @@ def off_axis_conic_der(c, kappa, r, t, dx, dy=0):
     t : ndarray
         azimuthal coordinate
     dx : float
-        shift of the surface in x with respect to the base conic vertex,
-        mutually exclusive to dy (only one may be nonzero)
-        use dx=0 when dy != 0
+        shift of the surface in x with respect to the base conic vertex
     dy : float
         shift of the surface in y with respect to the base conic vertex
 
@@ -420,27 +410,15 @@ def off_axis_conic_der(c, kappa, r, t, dx, dy=0):
         d/dr(z), d/dt(z)
 
     """
-    if dy != 0 and dx != 0:
-        raise ValueError('only one of dx/dy may be nonzero')
-
     cost = np.cos(t)
     sint = np.sin(t)
-    if dx != 0:
-        s = dx
-        oblique_term = 2 * s * r * cost
-        ddr_oblique = 2 * r + 2 * s * cost
-        # I accept the evil in writing this the way I have
-        # to deduplicate the computation
-        ddt_oblique_ = r*(-s)*sint
-        ddt_oblique = 2 * ddt_oblique_
-    else:
-        s = dy
-        oblique_term = 2 * s * r * sint
-        ddr_oblique = 2 * r + 2 * s * sint
-        ddt_oblique_ = r*s*cost
-        ddt_oblique = 2 * ddt_oblique_
+    oblique_term = 2 * r * (dx * cost + dy * sint)
+    ddr_oblique = 2 * r + 2 * (dx * cost + dy * sint)
+    ddt_oblique_ = r * (-dx * sint + dy * cost)
+    ddt_oblique = 2 * ddt_oblique_
+    ssq = dx * dx + dy * dy
 
-    aggregate_term = r * r + oblique_term + s * s
+    aggregate_term = r * r + oblique_term + ssq
     csq = c * c
     c3 = csq * c
     # d/dr first
@@ -486,9 +464,7 @@ def off_axis_conic_sigma(c, kappa, r, t, dx, dy=0):
     t : ndarray
         azimuthal coordinate
     dx : float
-        shift of the surface in x with respect to the base conic vertex,
-        mutually exclusive to dy (only one may be nonzero)
-        use dx=0 when dy != 0
+        shift of the surface in x with respect to the base conic vertex
     dy : float
         shift of the surface in y with respect to the base conic vertex
 
@@ -497,17 +473,11 @@ def off_axis_conic_sigma(c, kappa, r, t, dx, dy=0):
     sigma(r,t)
 
     """
-    if dy != 0 and dx != 0:
-        raise ValueError('only one of dx/dy may be nonzero')
-
-    if dx != 0:
-        s = dx
-        oblique_term = 2 * s * r * np.cos(t)
-    else:
-        s = dy
-        oblique_term = 2 * s * r * np.sin(t)
-
-    aggregate_term = r * r + oblique_term + s * s
+    cost = np.cos(t)
+    sint = np.sin(t)
+    oblique_term = 2 * r * (dx * cost + dy * sint)
+    ssq = dx * dx + dy * dy
+    aggregate_term = r * r + oblique_term + ssq
     csq = c * c
     num = np.sqrt(1 - (1+kappa) * csq * aggregate_term)
     den = np.sqrt(1 - kappa * csq * aggregate_term)  # flipped sign, 1-kappa
@@ -530,9 +500,7 @@ def off_axis_conic_sigma_der(c, kappa, r, t, dx, dy=0):
     t : ndarray
         azimuthal coordinate
     dx : float
-        shift of the surface in x with respect to the base conic vertex,
-        mutually exclusive to dy (only one may be nonzero)
-        use dx=0 when dy != 0
+        shift of the surface in x with respect to the base conic vertex
     dy : float
         shift of the surface in y with respect to the base conic vertex
 
@@ -542,50 +510,44 @@ def off_axis_conic_sigma_der(c, kappa, r, t, dx, dy=0):
         d/dr(z), d/dt(z)
 
     """
-    if dy != 0 and dx != 0:
-        raise ValueError('only one of dx/dy may be nonzero')
-
     cost = np.cos(t)
     sint = np.sin(t)
-    if dx != 0:
-        s = dx
-        oblique_term = 2 * s * r * cost
-        ddr_oblique = 2 * r + 2 * s * cost
-        # I accept the evil in writing this the way I have
-        # to deduplicate the computation
-        ddt_oblique_ = r*(-s)*sint
-    else:
-        s = dy
-        oblique_term = 2 * s * r * sint
-        ddr_oblique = 2 * r + 2 * s * sint
-        ddt_oblique_ = r*s*cost
+    oblique_term = 2 * r * (dx * cost + dy * sint)
+    ddr_oblique = 2 * r + 2 * (dx * cost + dy * sint)
+    ddt_oblique_ = r * (-dx * sint + dy * cost)
+    ssq = dx * dx + dy * dy
 
-    aggregate_term = r * r + oblique_term + s * s
+    aggregate_term = r * r + oblique_term + ssq
     csq = c * c
-    # d/dr first
+    # 1/sigma = sqrt(1 - kappa c^2 A) / sqrt(1 - (1+kappa) c^2 A) = u/phi
+    # let phi = sqrt(1 - (1+kappa) c^2 A), notquitephi (= u) = sqrt(1 - kappa c^2 A)
+    # d/dx (u/phi) = u'/phi + u * d/dx (1/phi)
+    #              = u'/phi - u*phi'/phi^2
+    # phi' = -(1+kappa) c^2 A' / (2 phi)  =>  -u*phi'/phi^2 = u (1+kappa) c^2 A' / (2 phi^3)
+    # u'   = -kappa c^2 A' / (2 u)        =>  u'/phi = -kappa c^2 A' / (2 u phi)
     phi_kernel = (1 + kappa) * csq * aggregate_term
     phi = np.sqrt(1 - phi_kernel)
-    notquitephi_kernel = kappa * csq * aggregate_term
-    notquitephi = np.sqrt(1 + notquitephi_kernel)
+    notquitephi = np.sqrt(1 - kappa * csq * aggregate_term)
 
+    # d/dr
     num = csq * (1 + kappa) * ddr_oblique * notquitephi
     den = 2 * (1 - phi_kernel) ** (3/2)
     term1 = num / den
 
-    num = csq * kappa * ddr_oblique
+    num = -csq * kappa * ddr_oblique
     den = 2 * phi * notquitephi
     term2 = num / den
     dr = term1 + term2
 
-    # d/dt
-    num = csq * (1+kappa) * ddt_oblique_ * notquitephi
-    den = (1 - phi_kernel) ** (3/2)  # phi^3?
-    term1 = num/den
+    # d/dt — same structure but with d/dt of aggregate_term (= 2 * ddt_oblique_)
+    num = csq * (1 + kappa) * ddt_oblique_ * notquitephi
+    den = (1 - phi_kernel) ** (3/2)
+    term1 = num / den
 
-    num = csq * kappa * ddt_oblique_
+    num = -csq * kappa * ddt_oblique_
     den = phi * notquitephi
     term2 = num / den
-    dt = term1 + term2  # minus in writing, but sine/cosine
+    dt = term1 + term2
     return dr, dt
 
 
@@ -619,8 +581,6 @@ def Q2d_and_der(cm0, ams, bms, x, y, normalization_radius, c, k, dx=0, dy=0):
         curvature, reciprocal radius of curvature
     k : float
         kappa, conic constant
-    rhosq : ndarray
-        squared radial coordinate (non-normalized)
     dx : float
         shift of the base conic in x
     dy : float
@@ -688,7 +648,7 @@ def _map_stype(typ):
     if typ in ('refr', 'refract'):
         return STYPE_REFRACT
 
-    if typ in ('eval'):
+    if typ == 'eval':
         return STYPE_EVAL
 
 
@@ -809,7 +769,7 @@ class Surface:
         return cls(typ=typ, P=P, n=n, FFp=FFp, R=R, params=params, bounding=bounding)
 
     @classmethod
-    def off_axis_conic(cls, c, k, typ, P, dy, dx=0, n=None, R=None, bounding=None):
+    def off_axis_conic(cls, c, k, typ, P, dx=0, dy=0, n=None, R=None, bounding=None):
         """Off-axis conic surface type.
 
         for documentation on typ, P, N, R, and bounding see the docstring for
@@ -825,10 +785,10 @@ class Surface:
             0 = sphere
             < - 1 = hyperbola
             > - 1 = ellipse
-        dy : float
-            off-axis distance in y
         dx : float
             off-axis distance in x
+        dy : float
+            off-axis distance in y
 
         Returns
         -------
@@ -859,12 +819,10 @@ class Surface:
         for documentation on typ, P, N, R, and bounding see the docstring for
         Surface.__init__
 
-        The name of this will change in the future, likely to "plane."
-
         Returns
         -------
         Surface
-            a stop
+            a planar surface
 
         """
 
