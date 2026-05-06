@@ -4,12 +4,18 @@
 # not using it at the moment for GPU compatability
 # from numpy.core.umath_tests import inner1d
 
-from prysm.mathops import np
+from prysm.mathops import np, row_dot
 
 from .surfaces import (
     STYPE_REFLECT,
     STYPE_REFRACT,
 )
+
+
+# Backward-compat alias.  This function used to live here as ``_multi_dot``
+# and was imported by ``prysm/x/optym/activation.py``; the implementation
+# now lives in ``prysm.mathops.row_dot``.  New code should import from there.
+_multi_dot = row_dot
 
 
 SURFACE_INTERSECTION_DEFAULT_MAXITER = 100
@@ -30,61 +36,6 @@ def _sanitize_eps(eps, dtype):
 
     return eps
 
-
-def _multi_dot(a, b):
-    """Dot product between a and b along the last (batch) dimension.
-
-    Implementation will change over time to track the fastest way to do this
-    with numpy. (maybe)
-
-    There is no BLAS level 1/2/3 function for a batch of dot products.
-
-    For a (1024*1024)*3, aka 1 million dot batch, the fastest function below
-    takes 4.23 ms on a dual channel laptop (~40GB/s bandwidth from RAM).
-
-    The dot product is simply sum += a[i]*b[i], which touches three values for
-    each element of the input array, i.e.
-    sum = 0
-    sum += a[0] + b[0]
-    sum += a[1] + b[1]
-    sum += a[2] + b[2]
-
-    It also performs one flop (floating-point operation) per element.
-
-    with 6,291,456 elements and eight bytes per element, this is 50,331,648 bytes
-    of computation in 4.23 ms, 11,898,734,751 (about 12GB/sec)
-
-    So, this can be made faster by using a few threads, but those threads must not
-    perform extra copies, since we are near the memory bandwidth limit of the system
-
-    But, in a gist
-    https://gist.github.com/brandondube/43ab9e9f173252f5a97e0c0d5c3ca54f
-
-    with batch size 1 million (einsum is not the fastest below)
-    no parallelism - 7.39 ms ± 424 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
-    thread pool 1  - 8.8 ms ± 259 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
-    thread pool 2  - 5.23 ms ± 68.5 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
-    thread pool 3  - 5.77 ms ± 177 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
-
-    best case 30% speedup - not worth it
-
-    rule of thumb, intel CPU can start two floating point operations per clock per core
-    ~= 4 billion clocks per second ~= 8 billion flops/sec/core
-
-    we need 6.3M flops for our example batch size, and the calc took 4.3 ms, so
-    1,463,129,302 flops/sec were used (~= 25% of one CPU core)
-
-    so, the task was memory bandwidth limited, and we go faster with multiple
-    threads only because of some quirk of intel's memory controller and prefetch
-    semantics.  But >10x faster is not living in reality.  Maybe on a system
-    with vast memory bandwidth (say, 4 socket xeon -- 800GB/sec).  But that's
-    $40k of CPUs and one A40 GPU does that for $5k, so why bother.
-
-    """
-    return np.einsum('ij,ij->i', a, b)
-    # return np.matmul(a[:,None,:], b[:,:,None])
-    # return np.sum(a*b, axis=1)
-    # return inner1d(a, b)
 
 
 def newton_raphson_solve_s(P1, S, FFp, s1=0.0,

@@ -1,8 +1,6 @@
 """Activation functions and related nodes."""
-from prysm.mathops import np
+from prysm.mathops import np, row_dot
 from prysm.conf import config
-
-from prysm.x.raytracing.spencer_and_murty import _multi_dot
 
 # resources used in deriving softmax reverse()
 # https://eli.thegreenplace.net/2016/the-softmax-function-and-its-derivative/
@@ -86,7 +84,7 @@ class Softmax:
 
         # first step is to compute the dot product between the activation levels
         # and the input gradient
-        tmp = _multi_dot(grad, self.out)
+        tmp = row_dot(grad, self.out)
         # tmp will be of shape (K,) for an (N, K) work shape
         tmp = np.broadcast_to(tmp[:, np.newaxis], self.work_shape)
 
