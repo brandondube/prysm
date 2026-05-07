@@ -205,6 +205,105 @@ def test_zernike_der_seq_same_as_loop(norm, rho, phi):
         assert np.allclose(tl, tnl)
 
 
+_zernike_xy_nms = [(0, 0), (1, 1), (1, -1), (2, 0), (2, 2), (2, -2),
+                   (3, 1), (3, -1), (3, 3), (3, -3), (4, 0), (4, 2), (4, -4),
+                   (5, 1), (5, 5), (6, 0)]
+
+
+@pytest.mark.parametrize('n,m', _zernike_xy_nms)
+@pytest.mark.parametrize('norm', [True, False])
+def test_zernike_nm_der_xy_matches_numerical(n, m, norm):
+    # stay strictly inside the unit disk so finite differences don't escape it
+    xs = np.linspace(-0.7, 0.7, 41)
+    X, Y = np.meshgrid(xs, xs, indexing='xy')
+    h = 1e-5
+
+    def zern_xy(xx, yy):
+        rho_ = np.sqrt(xx * xx + yy * yy)
+        phi_ = np.arctan2(yy, xx)
+        return polynomials.zernike_nm(n, m, rho_, phi_, norm=norm)
+
+    dzdx_num = (zern_xy(X + h, Y) - zern_xy(X - h, Y)) / (2 * h)
+    dzdy_num = (zern_xy(X, Y + h) - zern_xy(X, Y - h)) / (2 * h)
+    dzdx_an, dzdy_an = polynomials.zernike_nm_der_xy(n, m, X, Y, norm=norm)
+    np.testing.assert_allclose(dzdx_an, dzdx_num, atol=1e-7, rtol=1e-5)
+    np.testing.assert_allclose(dzdy_an, dzdy_num, atol=1e-7, rtol=1e-5)
+
+
+@pytest.mark.parametrize('n,m', _zernike_xy_nms)
+def test_zernike_nm_der_xy_finite_at_origin(n, m):
+    """Cartesian derivatives must be finite at x=y=0 (no 1/r singularity)."""
+    zero = np.array(0.0)
+    dx, dy = polynomials.zernike_nm_der_xy(n, m, zero, zero)
+    assert np.isfinite(dx) and np.isfinite(dy)
+
+
+def test_zernike_nm_der_xy_seq_matches_loop():
+    nms = [polynomials.noll_to_nm(j) for j in range(0, 12)]
+    xs = np.linspace(-0.7, 0.7, 21)
+    X, Y = np.meshgrid(xs, xs, indexing='xy')
+    looped = [polynomials.zernike_nm_der_xy(n, m, X, Y) for n, m in nms]
+    seq = polynomials.zernike_nm_der_xy_seq(nms, X, Y)
+    for (dx_l, dy_l), entry in zip(looped, seq):
+        assert np.allclose(dx_l, entry[0])
+        assert np.allclose(dy_l, entry[1])
+
+
+def _zernike_sum_loop(coefs, nms, X, Y, norm):
+    rho, phi = coordinates.cart_to_polar(X, Y)
+    W = np.zeros_like(X)
+    dWx = np.zeros_like(X)
+    dWy = np.zeros_like(X)
+    for c, (n, m) in zip(coefs, nms):
+        W += c * polynomials.zernike_nm(n, m, rho, phi, norm=norm)
+        dx, dy = polynomials.zernike_nm_der_xy(n, m, X, Y, norm=norm)
+        dWx += c * dx
+        dWy += c * dy
+    return W, dWx, dWy
+
+
+@pytest.mark.parametrize('norm', [True, False])
+def test_zernike_sum_der_xy_matches_loop(norm):
+    nms = [(0, 0), (1, 1), (1, -1), (2, 0), (2, 2), (2, -2),
+           (3, 1), (3, -1), (3, 3), (3, -3),
+           (4, 0), (4, 2), (4, -4), (5, 1), (5, -3), (5, 5),
+           (6, 0), (6, 4), (6, -6)]
+    rng = np.random.default_rng(42)
+    coefs = rng.normal(size=len(nms))
+    xs = np.linspace(-0.7, 0.7, 41)
+    X, Y = np.meshgrid(xs, xs, indexing='xy')
+
+    W_l, dWx_l, dWy_l = _zernike_sum_loop(coefs, nms, X, Y, norm)
+    W_c, dWx_c, dWy_c = polynomials.zernike_sum_der_xy(coefs, nms, X, Y, norm=norm)
+    np.testing.assert_allclose(W_c, W_l, atol=1e-12, rtol=1e-12)
+    np.testing.assert_allclose(dWx_c, dWx_l, atol=1e-12, rtol=1e-12)
+    np.testing.assert_allclose(dWy_c, dWy_l, atol=1e-12, rtol=1e-12)
+
+
+def test_zernike_sum_der_xy_finite_at_origin():
+    nms = [(2, 0), (3, 1), (3, -1), (4, 0), (5, 5)]
+    coefs = [0.3, -1.2, 0.5, 0.1, 0.7]
+    zero = np.array(0.0)
+    W, dx, dy = polynomials.zernike_sum_der_xy(coefs, nms, zero, zero)
+    assert np.isfinite(W) and np.isfinite(dx) and np.isfinite(dy)
+
+
+def test_zernike_sum_der_xy_handles_single_mode_and_duplicates():
+    xs = np.linspace(-0.7, 0.7, 17)
+    X, Y = np.meshgrid(xs, xs, indexing='xy')
+    # single mode (exercises the len-1 padding inside the Clenshaw helper)
+    W, dx, dy = polynomials.zernike_sum_der_xy([2.0], [(0, 0)], X, Y, norm=True)
+    np.testing.assert_allclose(W, 2.0 * np.ones_like(X))
+    np.testing.assert_allclose(dx, np.zeros_like(X), atol=0)
+    np.testing.assert_allclose(dy, np.zeros_like(X), atol=0)
+    # duplicate (n,m) entries should sum
+    W2, dx2, dy2 = polynomials.zernike_sum_der_xy([1.0, 1.0], [(2, 2), (2, 2)], X, Y, norm=True)
+    Wref, dxref, dyref = polynomials.zernike_sum_der_xy([2.0], [(2, 2)], X, Y, norm=True)
+    np.testing.assert_allclose(W2, Wref, atol=1e-14)
+    np.testing.assert_allclose(dx2, dxref, atol=1e-14)
+    np.testing.assert_allclose(dy2, dyref, atol=1e-14)
+
+
 def test_zernike_to_magang_functions():
     # data has piston, tt, power, sph, ast, cma, tre = 7 unique things
     data = [
@@ -584,6 +683,47 @@ def test_clenshaw_matches_standard_way_der(a, b):
     clenshaw = polynomials.jacobi_sum_clenshaw_der(cs, a, b, X)
     clenshaw = clenshaw[1][0]
     assert np.allclose(exp, clenshaw, atol=1e-8)
+
+
+def test_clenshaw_handles_single_coefficient():
+    # piston: only P_0 contributes; sum = s[0], all derivatives are 0
+    res = polynomials.jacobi_sum_clenshaw([2.5], 0, 0, X)
+    np.testing.assert_allclose(res, 2.5 * np.ones_like(X))
+    res_der = polynomials.jacobi_sum_clenshaw_der([2.5], 0, 0, X, j=2)
+    np.testing.assert_allclose(res_der[0, 0], 2.5 * np.ones_like(X))
+    np.testing.assert_allclose(res_der[1, 0], np.zeros_like(X))
+    np.testing.assert_allclose(res_der[2, 0], np.zeros_like(X))
+
+
+@pytest.mark.parametrize('a, b', [(0, 0), (0, 1), (-.5, .5)])
+def test_clenshaw_higher_derivatives_match_finite_diff(a, b):
+    # j>=2 was previously broken: line 406 used `j` instead of `jj`,
+    # corrupting derivative orders 1..j-1.  Validate against central diffs.
+    rng = np.random.default_rng(0)
+    cs = rng.normal(size=7)
+    xs = np.linspace(-0.6, 0.6, 51)
+    h = 1e-4
+
+    def sum_at(x):
+        return polynomials.jacobi_sum_clenshaw(cs, a, b, x)
+
+    d1_num = (sum_at(xs + h) - sum_at(xs - h)) / (2 * h)
+    d2_num = (sum_at(xs + h) - 2 * sum_at(xs) + sum_at(xs - h)) / (h * h)
+
+    res = polynomials.jacobi_sum_clenshaw_der(cs, a, b, xs, j=2)
+    np.testing.assert_allclose(res[1, 0], d1_num, atol=1e-7, rtol=1e-6)
+    np.testing.assert_allclose(res[2, 0], d2_num, atol=1e-3, rtol=1e-4)
+
+
+def test_clenshaw_der_zeros_above_polynomial_degree():
+    # derivative order > polynomial degree must return zeros, not crash
+    xs = np.linspace(-0.5, 0.5, 11)
+    res = polynomials.jacobi_sum_clenshaw_der([1.0, 2.0], 0, 0, xs, j=3)
+    # P_1(x) = x for alpha=beta=0, sum = 1 + 2x, d/dx = 2, d2/dx2 = 0, d3/dx3 = 0
+    np.testing.assert_allclose(res[0, 0], 1.0 + 2.0 * xs)
+    np.testing.assert_allclose(res[1, 0], 2.0 * np.ones_like(xs))
+    np.testing.assert_allclose(res[2, 0], np.zeros_like(xs))
+    np.testing.assert_allclose(res[3, 0], np.zeros_like(xs))
 
 
 @pytest.mark.parametrize('n', [1, 2, 3])

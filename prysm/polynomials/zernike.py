@@ -4,7 +4,7 @@ from collections import defaultdict
 
 import numpy as truenp
 
-from .jacobi import jacobi, jacobi_der, jacobi_seq
+from .jacobi import jacobi, jacobi_der, jacobi_seq, jacobi_sum_clenshaw_der
 
 from prysm.mathops import np, kronecker, sign, is_odd
 from prysm.util import sort_xy
@@ -275,6 +275,206 @@ def zernike_nm_der_seq(nms, r, t, norm=True):
         out[j] = tmp
 
     return out
+
+
+def zernike_nm_der_xy(n, m, x, y, norm=True):
+    """Cartesian partial derivatives of Zernike Z_n^m w.r.t. x and y.
+
+    Computed directly in (x, y) without going through polar coordinates,
+    so the result is smooth everywhere on the disk including the origin.
+
+    Parameters
+    ----------
+    n : int
+        radial order
+    m : int
+        azimuthal order
+    x : ndarray
+        x coordinate (same normalization as r in zernike_nm; unit disk)
+    y : ndarray
+        y coordinate
+    norm : bool, optional
+        if True, orthonormalize the result (unit RMS)
+        else leave orthogonal (zero-to-peak = 1)
+
+    Returns
+    -------
+    ndarray, ndarray
+        dZ/dx, dZ/dy
+
+    """
+    # Z = J(rho^2) * H(x,y), where
+    #   J(u)    = jacobi(n_j, 0, |m|, 2u - 1),  u = rho^2 = x^2 + y^2
+    #   H(x,y)  = 1                       if m == 0
+    #           = Re((x + i y)^|m|)       if m > 0
+    #           = Im((x + i y)^|m|)       if m < 0
+    # both are smooth polynomials in (x, y); the polar form r^|m| * trig(m t)
+    # is identically the harmonic polynomial H, with no 1/r terms in the
+    # Cartesian derivatives.
+    am = abs(m)
+    n_j = (n - am) // 2
+    rho_sq = x * x + y * y
+    arg = 2 * rho_sq - 1
+    J = jacobi(n_j, 0, am, arg)
+    Jp = jacobi_der(n_j, 0, am, arg)  # d/d(arg) of J
+    # d/dx J(rho^2) = Jp * 4x   (chain rule through arg = 2 rho^2 - 1)
+    if am == 0:
+        dzdx = 4 * x * Jp
+        dzdy = 4 * y * Jp
+    else:
+        # build (C_k, S_k) = (Re, Im) of (x + i y)^k by recurrence
+        # C_0 = 1, S_0 = 0; C_k = x C_{k-1} - y S_{k-1}, S_k = x S_{k-1} + y C_{k-1}
+        C_prev = np.ones_like(x)
+        S_prev = np.zeros_like(x)
+        for _ in range(am - 1):
+            C_new = x * C_prev - y * S_prev
+            S_new = x * S_prev + y * C_prev
+            C_prev, S_prev = C_new, S_new
+        # one more step yields (C_am, S_am); H = C_am for m>0, S_am for m<0
+        C_am = x * C_prev - y * S_prev
+        S_am = x * S_prev + y * C_prev
+        # d (x+iy)^m / dx =  m (x+iy)^(m-1)  =>  dC_m/dx =  m C_{m-1}, dS_m/dx = m S_{m-1}
+        # d (x+iy)^m / dy = im (x+iy)^(m-1)  =>  dC_m/dy = -m S_{m-1}, dS_m/dy = m C_{m-1}
+        if m > 0:
+            dzdx = 4 * x * Jp * C_am + am * J * C_prev
+            dzdy = 4 * y * Jp * C_am - am * J * S_prev
+        else:
+            dzdx = 4 * x * Jp * S_am + am * J * S_prev
+            dzdy = 4 * y * Jp * S_am + am * J * C_prev
+
+    if norm:
+        N = zernike_norm(n, m)
+        dzdx = dzdx * N
+        dzdy = dzdy * N
+
+    return dzdx, dzdy
+
+
+def zernike_nm_der_xy_seq(nms, x, y, norm=True):
+    """Cartesian partial derivatives for a sequence of Zernike polynomials.
+
+    Parameters
+    ----------
+    nms : iterable
+        seq of [(n, m)] radial and azimuthal orders
+    x : ndarray
+        x coordinate
+    y : ndarray
+        y coordinate
+    norm : bool, optional
+        if True, orthonormalize the result (unit RMS)
+
+    Returns
+    -------
+    ndarray
+        shape (len(nms), 2, *x.shape); leading dim is mode index, second dim
+        is (dZ/dx, dZ/dy)
+
+    """
+    # TODO: dedupe jacobi/Cartesian-harmonic computation across modes,
+    # mirroring zernike_nm_seq.  For now this matches zernike_nm_der_seq's
+    # simple-loop structure for API homogeneity.
+    out = np.empty((len(nms), 2, *x.shape), dtype=x.dtype)
+    for j, (n, m) in enumerate(nms):
+        out[j] = zernike_nm_der_xy(n, m, x, y, norm=norm)
+    return out
+
+
+def zernike_sum_der_xy(coefs, nms, x, y, norm=True):
+    """Synthesize a Zernike-coefficient sum and its xy partial derivatives in one Clenshaw pass.
+
+    Computes W(x,y) = sum_i coefs[i] * Z_{n_i, m_i}(x,y) along with dW/dx and
+    dW/dy.  Never materializes individual mode arrays: per pixel, peak memory
+    is O(max radial coefs at any single |m|) instead of O(len(nms)).
+
+    Singularity-free at the origin (uses the same J(rho^2) * H(x,y) factoring
+    as zernike_nm_der_xy).
+
+    Parameters
+    ----------
+    coefs : iterable of float
+        coefficients, parallel to nms
+    nms : iterable of (int, int)
+        (n, m) pairs identifying each Zernike mode; order is irrelevant,
+        and duplicate (n, m) entries are summed
+    x : ndarray
+        x coordinate (unit-disk normalization, same convention as r in zernike_nm)
+    y : ndarray
+        y coordinate
+    norm : bool, optional
+        if True, treat coefs as orthonormal Zernike weights (unit RMS basis);
+        if False, treat them as zero-to-peak weights
+
+    Returns
+    -------
+    W : ndarray
+        sum surface
+    dWdx : ndarray
+        dW/dx
+    dWdy : ndarray
+        dW/dy
+
+    """
+    # Group coefficients by |m|, separating cosine (m>=0) and sine (m<0)
+    # branches.  Each branch gives a dense list indexed by n_j = (n - |m|) / 2,
+    # ready for Clenshaw on the Jacobi (alpha=0, beta=|m|) recurrence.
+    by_m_cos = {}
+    by_m_sin = {}
+    for c, (n, m) in zip(coefs, nms):
+        am = abs(m)
+        n_j = (n - am) // 2
+        cc = c * zernike_norm(n, m) if norm else c
+        bucket = by_m_cos if m >= 0 else by_m_sin
+        arr = bucket.setdefault(am, [])
+        while len(arr) <= n_j:
+            arr.append(0.0)
+        arr[n_j] += cc
+
+    used_ms = set(by_m_cos) | set(by_m_sin)
+    W = np.zeros_like(x)
+    dWdx = np.zeros_like(x)
+    dWdy = np.zeros_like(x)
+    if not used_ms:
+        return W, dWdx, dWdy
+
+    # u = 2*rho^2 - 1 is the Jacobi argument; chain rule: du/dx = 4x, du/dy = 4y.
+    u = 2 * (x * x + y * y) - 1
+
+    def _radial(am, s):
+        alphas = jacobi_sum_clenshaw_der(s, 0, am, u, j=1)
+        return alphas[0, 0], alphas[1, 0]  # R(u), dR/du
+
+    # m = 0: H = 1, no harmonic derivative.
+    if 0 in by_m_cos:
+        R, Ru = _radial(0, by_m_cos[0])
+        W = W + R
+        dWdx = dWdx + 4 * x * Ru
+        dWdy = dWdy + 4 * y * Ru
+
+    # m >= 1: maintain (C_{m-1}, S_{m-1}) -> (C_m, S_m) by the (x+iy)^m recurrence.
+    # The harmonic derivatives use the previous step:
+    #   d (x+iy)^m / dx =  m (x+iy)^(m-1)  -> dC_m/dx =  m C_{m-1}, dS_m/dx = m S_{m-1}
+    #   d (x+iy)^m / dy = im (x+iy)^(m-1)  -> dC_m/dy = -m S_{m-1}, dS_m/dy = m C_{m-1}
+    max_am = max(used_ms)
+    if max_am >= 1:
+        C_prev = np.ones_like(x)
+        S_prev = np.zeros_like(x)
+        for m in range(1, max_am + 1):
+            C_m = x * C_prev - y * S_prev
+            S_m = x * S_prev + y * C_prev
+            if m in by_m_cos:
+                R, Ru = _radial(m, by_m_cos[m])
+                W = W + R * C_m
+                dWdx = dWdx + 4 * x * Ru * C_m + m * R * C_prev
+                dWdy = dWdy + 4 * y * Ru * C_m - m * R * S_prev
+            if m in by_m_sin:
+                R, Ru = _radial(m, by_m_sin[m])
+                W = W + R * S_m
+                dWdx = dWdx + 4 * x * Ru * S_m + m * R * S_prev
+                dWdy = dWdy + 4 * y * Ru * S_m + m * R * C_prev
+            C_prev, S_prev = C_m, S_m
+
+    return W, dWdx, dWdy
 
 
 def nm_to_fringe(n, m):
