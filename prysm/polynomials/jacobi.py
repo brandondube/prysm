@@ -340,8 +340,12 @@ def jacobi_sum_clenshaw(s, alpha, beta, x, alphas=None):
     # checked to be correct, though...
     alphas = _initialize_alphas(s, x, alphas)
     M = len(s) - 1
+    if M == 0:
+        # only P_0 = 1 contributes; sum = s[0] (broadcast over x)
+        alphas[0] = s[0]
+        return alphas[0]
     alphas[M] = s[M]
-    a, b, c = recurrence_abc(M-1, alpha, beta)
+    a, b, _ = recurrence_abc(M-1, alpha, beta)
     alphas[M-1] = s[M-1] + (a * x + b) * s[M]
     for n in range(M-2, -1, -1):
         a, b, _ = recurrence_abc(n, alpha, beta)
@@ -400,10 +404,14 @@ def jacobi_sum_clenshaw_der(s, alpha, beta, x, j=1, alphas=None):
     jacobi_sum_clenshaw(s, alpha, beta, x, alphas=alphas[0])
     # now loop over increasing j
     for jj in range(1, j+1):
+        if jj > M:
+            # the (jj)-th derivative of a degree-M polynomial is identically
+            # zero; alphas[jj] is already zero from _initialize_alphas
+            continue
         # more twisted notation - follow Forbes' paper, but our
         # idea of b and a are swapped
         a, *_ = recurrence_abc(M-jj, alpha, beta)
-        alphas[jj][M-jj] = j * a * alphas[jj-1][M-jj+1]
+        alphas[jj][M-jj] = jj * a * alphas[jj-1][M-jj+1]
         for n in range(M-jj-1, -1, -1):
             a, b, _ = recurrence_abc(n, alpha, beta)
             _, _, c = recurrence_abc(n+1, alpha, beta)
