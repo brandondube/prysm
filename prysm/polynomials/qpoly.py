@@ -221,6 +221,11 @@ def clenshaw_qbfs(cs, usq, alphas=None):
     # alphas = np.zeros((len(cs), len(u)), dtype=u.dtype)
     alphas = _initialize_alphas(cs, x, alphas, j=0)
     M = len(bs)-1
+    if M == 0:
+        # only Q_0 contributes; the standard recurrence's "alphas[1]" is
+        # implicitly zero, giving S = 2 * alphas[0].
+        alphas[0] = bs[0]
+        return (x * (1 - x)) * (2 * alphas[0])
     prefix = 2 - 4 * x
     alphas[M] = bs[M]
     alphas[M-1] = bs[M-1] + prefix * alphas[M]
@@ -271,10 +276,17 @@ def clenshaw_qbfs_der(cs, usq, j=1, alphas=None):
     # seed with j=0 (S, not its derivative)
     clenshaw_qbfs(cs, usq, alphas[0])
     for jj in range(1, j+1):
-        alphas[jj][M-j] = -4 * jj * alphas[jj-1][M-jj+1]
-        for n in range(M-2, -1, -1):
+        if jj > M:
+            # the (jj)-th derivative of a degree-M polynomial is identically
+            # zero; alphas[jj] is already zeroed by _initialize_alphas
+            continue
+        # boundary index is M-jj (not M-j); the inner loop sweeps from
+        # M-jj-1 down to 0 (not from M-2)
+        alphas[jj][M-jj] = -4 * jj * alphas[jj-1][M-jj+1]
+        for n in range(M-jj-1, -1, -1):
             # this is hideous, and just expresses:
-            # for the jth derivative, alpha_n is 2 - 4x * a_n+1 - a_n+2 - 4 j a_n+1^j-1
+            # for the (jj)-th derivative, alpha_n = (2 - 4x) a_n+1 - a_n+2
+            #                                      - 4 jj a_n+1^(jj-1)
             alphas[jj][n] = prefix * alphas[jj][n+1] - alphas[jj][n+2] - 4 * jj * alphas[jj-1][n+1]
 
     return alphas
@@ -312,14 +324,22 @@ def compute_z_zprime_Qbfs(coefs, u, usq):
     """
     # clenshaw does its own u^2
     alphas = clenshaw_qbfs_der(coefs, usq, j=1)
-    S = 2 * (alphas[0][0] + alphas[0][1])
+    # for len(coefs) == 1 the recurrence has no "alphas[*][1]" element; the
+    # standard formula's alphas[0][1] / alphas[1][1] terms are implicitly zero.
+    if alphas.shape[1] >= 2:
+        a01 = alphas[0][1]
+        a11 = alphas[1][1]
+    else:
+        a01 = np.zeros_like(alphas[0][0])
+        a11 = np.zeros_like(alphas[1][0])
+    S = 2 * (alphas[0][0] + a01)
     # Sprime should be two times the alphas, just like S, but as a performance
     # optimization, S = sum cn Qn u^2
     # we're doing d/du, so a prefix of 2u comes in front
     # and 2*u * (2 * alphas)
     # = 4*u*alphas
     # = do two in-place muls on Sprime for speed
-    Sprime = alphas[1][0] + alphas[1][1]
+    Sprime = alphas[1][0] + a11
     Sprime *= 4
     Sprime *= u
 
@@ -1071,8 +1091,11 @@ def clenshaw_q2d_der(cns, m, usq, j=1, alphas=None):
     #
     # return alphas
     for jj in range(1, j+1):
+        if jj > N:
+            # (jj)-th derivative of a degree-N polynomial is identically zero
+            continue
         _, b, _ = abc_q2d_clenshaw(N-jj, m)
-        alphas[jj][N-jj] = j * b * alphas[jj-1][N-jj+1]
+        alphas[jj][N-jj] = jj * b * alphas[jj-1][N-jj+1]
         for n in range(N-jj-1, -1, -1):
             a, b, _ = abc_q2d_clenshaw(n, m)
             _, _, c = abc_q2d_clenshaw(n+1, m)
