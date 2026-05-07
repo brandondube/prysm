@@ -5,10 +5,13 @@ prysm v0.22
 Released (eventually)
 
 Version 0.22 marks the final version of prysm prior to 1.0, in which
-compatibility and API stability will be guaranteed.  In preparation for this,
-the library has been split into mature code such as coordinates, geometry,
+compatibility and API stability will be guaranteed. In preparation for this, the
+library has been split into mature code such as coordinates, geometry,
 propagation, or polynomials, and less mature code in code :`prysm.x`-perimental
-(shorthand, x or x/).  The compatibility guarantee of 1.0 will not extend to x.
+(shorthand, x or x/). The compatibility guarantee of 1.0 will not extend to x.
+In general, there may be an additional batch of breaking changes in the 0.22 =>
+1.0 update.
+
 
 The new x/ modules are detailed in the release notes below.  This release
 brings a number of new features for modeling specific types of wavefront
@@ -44,11 +47,11 @@ A breaking change has been made by renaming :code:`xxx_sequence` to
 Utilities to orthogonalize and normalize modes over arbitrary apertures with
 special routines for annular apertures:
 
-* :func:`~prysm.coordinates.distort_annular_grid`
+* :func:`~prysm.coordinates.distort_annular_grid` - deforms an ordinary (r, t) coordinate mesh to represent a new unit domain for using conventional orthogonal polynomial sets.  For example, vanilla zernikes can be generated on the return from this function, and they will be orthogonal over the annulus.
 
-* :func:`~prysm.polynomials.orthogonalize_modes`
+* :func:`~prysm.polynomials.orthogonalize_modes` - using a QR factorization (more stable gramm-schmidt style process) approach to generate numerically orthogonalized modes.
 
-* :func:`~prysm.polynomials.normalize_modes`
+* :func:`~prysm.polynomials.normalize_modes` - normalize modes so that they are orthonormal or otherwise (e.g., to='std').
 
 See :doc:`../explanation/Ins and Outs of Polynomials` for usage examples
 
@@ -71,6 +74,15 @@ generating Laguerre-Gaussian beams:
 
 * :func:`~prysm.polynomials.laguerre.laguerre_der_seq`
 
+New functions for cartesian derivatives of Zernikes, as well as using Clenshaw's
+method to compute their sum and x- and y- derivatives in one sweep:
+
+* :func:`~prysm.polynomials.zernike.zernike_nm_der_xy`
+
+* :func:`~prysm.polynomials.zernike.zernike_nm_der_xy_seq`
+
+* :func:`~prysm.polynomials.zernike.zernike_sum_der_xy`
+
 All of the :code:`_seq` polynomial functions have been revised.
 Previously, they returned generators to allow weighted sums of extremely high
 order expansions to be computed in a reduced memory footprint. This lead to the
@@ -81,15 +93,18 @@ array.  Now equivalent usage is :code:`basis = xxx_seq()`, which returns the
 dense array of shape :code:`(K,N,M)` directly (K=num modes, (N,M) = spatial
 dimensionality).
 
+Some bugs in edge cases with clenshaw's method for sums of Q polynomials were fixed.
+
 Propagation
 -----------
 
 A significant breaking change has been made to how fixed sampling / DFT based
-propagations are done.  The previous API used a global matrix DFT or CZT object
+propagations are done. The previous API used a global matrix DFT or CZT object
 and the user passed arguments that implicitly define a grid to propagation
-functions.  This created significant complexity with backpropagation.  The API
-now requires two lines of code to do the equivalent, but usage is significantly
-simplified.  The previous usage looked like:
+functions. This created significant complexity with backpropagation. The API now
+requires two lines of code to do the equivalent, but usage is significantly
+simplified for models that repeatedly propagate between the same samplings. The
+previous usage looked like:
 
 .. code-block:: python
   :linenos:
@@ -507,8 +522,9 @@ x/raytracing
 ------------
 
 Some work has been done on computing OPD, improving ray aiming, and surfaces
-that are more generally off axis in each of x and y.  This module is still a
-ways away from prime time.
+that are more generally off axis in each of x and y. This module is still a ways
+away from prime time. An enormous improvement in capability will come in the
+next update, with improved documentation brought up alongside it.
 
 
 Performance Optimizations
