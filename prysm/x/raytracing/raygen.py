@@ -7,6 +7,36 @@ from prysm.coordinates import make_rotation_matrix, polar_to_cart
 from .surfaces import _ensure_P_vec
 
 
+def _sample_axis(distribution, lo, hi, n, dtype=None):
+    """Generate n samples between lo and hi (inclusive) under a named scheme.
+
+    Distributions
+    -------------
+    'uniform' : linspace(lo, hi, n)
+    'random'  : uniformly distributed in [lo, hi]
+    'cheby'   : Chebyshev-Gauss-Lobatto nodes mapped monotonically from lo to hi.
+                Includes both endpoints; clusters near them, sparse in the middle.
+
+    """
+    if dtype is None:
+        dtype = config.precision
+    if n == 1:
+        return np.asarray([(lo + hi) / 2.0], dtype=dtype)
+    distribution = distribution.lower()
+    if distribution == 'uniform':
+        return np.linspace(lo, hi, n, dtype=dtype)
+    if distribution == 'random':
+        return np.random.uniform(low=lo, high=hi, size=n).astype(dtype)
+    if distribution == 'cheby':
+        k = np.arange(n)
+        nodes = np.cos(k * np.pi / (n - 1))  # +1 down to -1
+        return ((lo + hi) / 2.0 - (hi - lo) / 2.0 * nodes).astype(dtype)
+    raise ValueError(
+        f'unknown distribution {distribution!r}; '
+        "expected 'uniform', 'random', or 'cheby'"
+    )
+
+
 def concat_rayfans(*rayfans):
     """Merge N rayfans for a single batch trace.
 
@@ -59,8 +89,8 @@ def split_rayfans(P, chunksizes, S=None):
 
     """
     expected_N = sum(chunksizes)
-    if P.size[0] != expected_N:
-        return ValueError('P is not sum(chunksizes) in length')
+    if P.shape[0] != expected_N:
+        raise ValueError('P is not sum(chunksizes) in length')
 
     ps = []
     low = 0
@@ -138,10 +168,7 @@ def generate_collimated_ray_fan(nrays, maxr, z=0, minr=None, azimuth=90,
     S = np.broadcast_to(S, (nrays, 3))
 
     # now generate the radial part of P
-    if distribution == 'uniform':
-        r = np.linspace(minr, maxr, nrays, dtype=dtype)
-    elif distribution == 'random':
-        r = np.random.uniform(low=minr, high=maxr, size=nrays).astype(dtype)
+    r = _sample_axis(distribution, minr, maxr, nrays, dtype=dtype)
 
     t = np.asarray(np.radians(azimuth), dtype=dtype)
     t = np.broadcast_to(t, r.shape)
@@ -201,24 +228,15 @@ def generate_collimated_rect_ray_grid(nrays, maxx, z=0, minx=None, maxy=None, mi
     S = np.broadcast_to(S, (nrays*nrays, 3))
 
     # now generate the x and y fans
-    if distribution == 'uniform':
-        x = np.linspace(minx, maxx, nrays)
-        y = np.linspace(miny, maxy, nrays)
-        xx, yy = np.meshgrid(x, y)
-        xx = xx.ravel()
-        yy = yy.ravel()
-    elif distribution == 'random':
-        x = np.random.uniform(low=minx, high=maxx, size=nrays)
-        y = np.random.uniform(low=miny, high=maxy, size=nrays)
-        xx, yy = np.meshgrid(x, y)
-        xx = xx.ravel()
-        yy = yy.ravel()
+    x = _sample_axis(distribution, minx, maxx, nrays)
+    y = _sample_axis(distribution, miny, maxy, nrays)
+    xx, yy = np.meshgrid(x, y)
+    xx = xx.ravel()
+    yy = yy.ravel()
 
     z = np.broadcast_to(z, xx.shape)
     xyz = np.stack([xx, yy, z], axis=1)
     return xyz, S
-
-# TODO: cheby-gauss-lobatto-forbes circular spiral, random spiral
 
 
 def generate_finite_ray_fan(nrays, na, P=0, min_na=None, azimuth=90,
@@ -267,10 +285,7 @@ def generate_finite_ray_fan(nrays, na, P=0, min_na=None, azimuth=90,
 
     max_t = np.arcsin(na / n)
     min_t = np.arcsin(min_na / n)
-    if distribution == 'uniform':
-        t = np.linspace(min_t, max_t, nrays, dtype=config.precision)
-    elif distribution == 'random':
-        t = np.random.uniform(low=min_t, high=max_t, size=nrays).astype(config.precision)
+    t = _sample_axis(distribution, min_t, max_t, nrays)
 
     # use the even function for the y direction cosine,
     # use trig identity to compute the z direction cosine
@@ -290,4 +305,177 @@ def generate_finite_ray_fan(nrays, na, P=0, min_na=None, azimuth=90,
     # need to see a copy of P for each ray, -> add empty dim and broadcast
     P = P[np.newaxis, :]
     P = np.broadcast_to(P, (nrays, 3))
+    return P, S
+
+
+def clip_to_aperture(rayfan, aperture):
+    """Filter a ray fan by an aperture function applied to ray origins.
+
+    Pre-trace filter: keep only rays whose starting (x, y) position is
+    inside the aperture.  Use this before ``raytrace`` when you want to
+    drop out-of-pupil rays from a generic generator (hex, rect, etc.)
+    rather than letting them propagate and get flagged STATUS_CLIP at the
+    first surface.
+
+    Parameters
+    ----------
+    rayfan : tuple of (P, S)
+        the result of any ``generate_*`` function in this module
+    aperture : callable
+        a function ``(x, y) -> bool`` returning True for points inside the
+        aperture and False outside.  Same signature as ``Surface.aperture``.
+
+    Returns
+    -------
+    P, S : ndarray, ndarray
+        positions and direction cosines of the rays whose origins fell
+        inside the aperture.
+
+    """
+    P, S = rayfan
+    inside = np.asarray(aperture(P[..., 0], P[..., 1]), dtype=bool)
+    return P[inside], S[inside]
+
+
+def _make_collimated_S(npoints, yangle=0, xangle=0):
+    """Build the (npoints, 3) direction-cosine matrix for collimated rays."""
+    S = np.array([0., 0., 1.], dtype=config.precision)
+    R = make_rotation_matrix((0, yangle, -xangle))
+    S = np.matmul(R, S)
+    return np.broadcast_to(S[np.newaxis, :], (npoints, 3))
+
+
+def generate_collimated_hex_ray_grid(nrings, spacing, z=0,
+                                     yangle=0, xangle=0):
+    """Generate a hexapolar 2D grid of collimated rays.
+
+    Concentric rings centered on (0, 0, z): ring 0 is one ray at the origin,
+    ring k (k = 1..nrings) carries 6k rays at radius k * spacing, equally
+    spaced in azimuth.  The total ray count is ``1 + 3*nrings*(nrings+1)``
+    (e.g. 7 for one ring, 19 for two, 37 for three, ...).  This is the
+    standard "hexapolar" pupil sampling used by lens-design tools.
+
+    Parameters
+    ----------
+    nrings : int
+        number of concentric rings (excluding the center).  Must be >= 0.
+    spacing : float
+        radial separation between consecutive rings (radius of ring 1)
+    z : float
+        z-plane on which the rays start
+    yangle, xangle : float
+        propagation angle adjustments (degrees), as in
+        generate_collimated_ray_fan
+
+    Returns
+    -------
+    P, S : ndarray, ndarray
+        positions (N, 3) and unit direction cosines (N, 3) of the rays,
+        N = 1 + 3*nrings*(nrings+1)
+
+    """
+    if nrings < 0:
+        raise ValueError(f'nrings must be >= 0, got {nrings}')
+    pts_x = [0.0]
+    pts_y = [0.0]
+    for k in range(1, nrings + 1):
+        nazi = 6 * k
+        thetas = np.linspace(0, 2 * np.pi, nazi, endpoint=False)
+        r = k * spacing
+        pts_x.extend((r * np.cos(thetas)).tolist())
+        pts_y.extend((r * np.sin(thetas)).tolist())
+    nrays = 1 + 3 * nrings * (nrings + 1)
+    xs = np.asarray(pts_x, dtype=config.precision)
+    ys = np.asarray(pts_y, dtype=config.precision)
+    zs = np.broadcast_to(np.array(z, dtype=config.precision), (nrays,))
+    P = np.stack([xs, ys, zs], axis=1)
+    S = _make_collimated_S(nrays, yangle=yangle, xangle=xangle)
+    return P, S
+
+
+def generate_collimated_radial_spiral_ray_grid(nrings, maxr, z=0,
+                                               samples_per_ring=None,
+                                               radial_distribution='cheby',
+                                               include_center=True,
+                                               yangle=0, xangle=0):
+    """Generate a radial-azimuthal spiral grid of collimated rays.
+
+    Cheby-Gauss-Lobatto radial sampling (clusters near the edge) plus
+    azimuthal samples per ring whose count grows with the ring index, in
+    the spirit of Forbes' Q-polynomial fitting grids (see Forbes 2010,
+    "Robust and fast computation for the polynomials of optics").  This
+    sampling is well suited for fitting Q-type freeform coefficients —
+    each ring sees a similar number of azimuthal samples relative to its
+    arc length, so high-order azimuthal modes don't go under-sampled near
+    the rim.
+
+    Parameters
+    ----------
+    nrings : int
+        number of radial rings (NOT counting the optional center sample)
+    maxr : float
+        outer radius of the outermost ring
+    z : float
+        z-plane on which the rays start
+    samples_per_ring : callable, optional
+        function ``f(k)`` mapping ring index k = 1..nrings to number of
+        azimuthal samples on that ring.  Default ``lambda k: 6*k`` matches
+        the hexapolar density (also a good Q-polynomial sampling default).
+    radial_distribution : str, optional
+        passed to ``_sample_axis``; one of {'uniform', 'cheby', 'random'}.
+        Default 'cheby'.
+    include_center : bool, optional
+        if True (default), include one extra sample at the origin
+    yangle, xangle : float
+        propagation angle adjustments (degrees)
+
+    Returns
+    -------
+    P, S : ndarray, ndarray
+        positions (N, 3) and unit direction cosines (N, 3) of the rays.
+        ``N = (1 if include_center else 0) + sum(samples_per_ring(k) for k=1..nrings)``.
+
+    """
+    if nrings < 1:
+        raise ValueError(f'nrings must be >= 1, got {nrings}')
+    if samples_per_ring is None:
+        def samples_per_ring(k):
+            return 6 * k
+
+    # ring radii on (0, maxr]; we use the outer half of the Cheby-Lobatto
+    # grid on [0, maxr] (i.e., positive nodes), which yields the desired
+    # endpoint clustering near maxr without placing a ring at r=0.
+    if radial_distribution == 'cheby':
+        # nodes at cos(k*pi/(2*nrings)) for k = 1..nrings, descending from
+        # cos(pi/(2N)) ~ 1 down to cos(pi/2) = 0 — but we want monotonic
+        # increasing radii, so reverse.
+        k = np.arange(1, nrings + 1)
+        nodes = np.cos((nrings - k + 0.5) * np.pi / (2 * nrings))  # in (0, 1)
+        radii = (maxr * nodes).astype(config.precision)
+    else:
+        radii = _sample_axis(radial_distribution, 0.0, maxr, nrings + 1)[1:]
+
+    pts_x = []
+    pts_y = []
+    if include_center:
+        pts_x.append(0.0)
+        pts_y.append(0.0)
+
+    for k, r in enumerate(radii, start=1):
+        nazi = int(samples_per_ring(k))
+        if nazi <= 0:
+            continue
+        # offset each ring's azimuth by half a step from the prior ring to
+        # break alignments and approximate a spiral
+        offset = (np.pi / nazi) * (k % 2)
+        thetas = np.linspace(0, 2 * np.pi, nazi, endpoint=False) + offset
+        pts_x.extend((float(r) * np.cos(thetas)).tolist())
+        pts_y.extend((float(r) * np.sin(thetas)).tolist())
+
+    nrays = len(pts_x)
+    xs = np.asarray(pts_x, dtype=config.precision)
+    ys = np.asarray(pts_y, dtype=config.precision)
+    zs = np.broadcast_to(np.array(z, dtype=config.precision), (nrays,))
+    P = np.stack([xs, ys, zs], axis=1)
+    S = _make_collimated_S(nrays, yangle=yangle, xangle=xangle)
     return P, S

@@ -1,0 +1,135 @@
+"""Tests for first-class per-surface tilt and decenter on Surface."""
+import numpy as np
+import pytest
+
+from prysm.coordinates import make_rotation_matrix
+from prysm.x.raytracing.surfaces import Surface
+from prysm.x.raytracing.spencer_and_murty import raytrace
+
+
+# ---------- decenter ----------
+
+def test_decenter_shifts_vertex_by_amount():
+    """Surface.P should equal nominal P + decenter."""
+    nominal = np.array([0., 0., 5.])
+    decenter = np.array([1., 2., 0.5])
+    surf = Surface.plane(typ='eval', P=nominal, decenter=decenter)
+    np.testing.assert_allclose(surf.P, nominal + decenter)
+
+
+def test_decenter_changes_intersection_point():
+    """A flat eval plane decentered in z by +d should be hit at z = d
+    (relative to the nominal vertex), not z = 0."""
+    nominal = np.array([0., 0., 0.])
+    surf = Surface.plane(typ='eval', P=nominal, decenter=[0., 0., 3.0])
+    P0 = np.array([0., 0., -10.])
+    S0 = np.array([0., 0., 1.])
+    phist, _, _ = raytrace([surf], P0, S0, wvl=0.55)
+    np.testing.assert_allclose(phist[-1, 2], 3.0, atol=1e-12)
+
+
+def test_decenter_validates_shape():
+    with pytest.raises(ValueError, match='length-3'):
+        Surface.plane(typ='eval', P=np.array([0., 0., 0.]),
+                      decenter=[1.0, 2.0])
+
+
+# ---------- tilt ----------
+
+def test_tilt_alone_sets_R_to_rotation_matrix():
+    """With R=None and tilt=(rz, ry, rx), Surface.R should equal
+    make_rotation_matrix(tilt)."""
+    tilt = (10.0, 5.0, 2.0)
+    surf = Surface.plane(typ='eval', P=np.array([0., 0., 0.]), tilt=tilt)
+    R_expected = make_rotation_matrix(tilt)
+    np.testing.assert_allclose(surf.R, R_expected, atol=1e-12)
+
+
+def test_tilt_radians_kwarg():
+    """tilt_radians=True must produce a different rotation than degrees."""
+    angle = 0.1
+    surf_deg = Surface.plane(typ='eval', P=np.array([0., 0., 0.]),
+                             tilt=(0., 0., angle), tilt_radians=False)
+    surf_rad = Surface.plane(typ='eval', P=np.array([0., 0., 0.]),
+                             tilt=(0., 0., angle), tilt_radians=True)
+    # the angle is small enough that the two interpretations differ by ~57x
+    assert not np.allclose(surf_deg.R, surf_rad.R)
+    # cross-check: passing the same value in degrees-converted-to-radians
+    # gives matching R
+    surf_deg_eq = Surface.plane(typ='eval', P=np.array([0., 0., 0.]),
+                                tilt=(0., 0., np.degrees(angle)))
+    np.testing.assert_allclose(surf_deg_eq.R, surf_rad.R, atol=1e-12)
+
+
+def test_tilt_composes_with_existing_R():
+    """If both R and tilt are provided, R_total = R @ R_tilt."""
+    R_base = make_rotation_matrix((0., 45., 0.))
+    R_tilt = make_rotation_matrix((0., 5., 0.))
+    surf = Surface.plane(typ='eval', P=np.array([0., 0., 0.]),
+                         R=R_base, tilt=(0., 5., 0.))
+    np.testing.assert_allclose(surf.R, R_base @ R_tilt, atol=1e-12)
+
+
+def test_tilted_mirror_reflects_at_double_angle():
+    """A planar mirror tilted by alpha about y deflects an axial input ray
+    by 2*alpha.  Use radians to avoid degree<->rad confusion in the check.
+    """
+    alpha = np.radians(10.0)  # 10 deg about y-axis
+    surf = Surface.plane(typ='refl', P=np.array([0., 0., 0.]),
+                         tilt=(0., np.degrees(alpha), 0.))
+    P0 = np.array([0., 0., -10.])
+    S0 = np.array([0., 0., 1.])
+    _, shist, _ = raytrace([surf], P0, S0, wvl=0.55)
+    S_out = shist[-1]
+    # for an input along +z hitting a mirror tilted by alpha about y, the
+    # reflected ray makes angle 2*alpha with the -z axis in the xz plane
+    # i.e. S_out should be approximately (sin(2a), 0, -cos(2a))
+    expected = np.array([np.sin(2 * alpha), 0.0, -np.cos(2 * alpha)])
+    np.testing.assert_allclose(S_out, expected, atol=1e-9)
+
+
+def test_zero_tilt_zero_decenter_match_no_perturbation():
+    """tilt=(0,0,0) and decenter=(0,0,0) must match the un-perturbed surface
+    bit-for-bit on intersection."""
+    P_vertex = np.array([0., 0., 5.])
+    surf_a = Surface.sphere(c=1 / 50.0, typ='refr', P=P_vertex,
+                            n=lambda wvl: 1.5)
+    surf_b = Surface.sphere(c=1 / 50.0, typ='refr', P=P_vertex,
+                            n=lambda wvl: 1.5,
+                            tilt=(0., 0., 0.), decenter=(0., 0., 0.))
+    P0 = np.array([1., 0., -10.])
+    S0 = np.array([0., 0., 1.])
+    pa, sa, _ = raytrace([surf_a], P0, S0, wvl=0.55)
+    pb, sb, _ = raytrace([surf_b], P0, S0, wvl=0.55)
+    np.testing.assert_allclose(pa, pb, atol=1e-12)
+    np.testing.assert_allclose(sa, sb, atol=1e-12)
+
+
+def test_tilt_decenter_threaded_through_all_factories():
+    """Smoke check: every classmethod factory accepts tilt/decenter without
+    TypeError and produces a Surface whose P/R reflect the perturbation."""
+    P0 = np.array([0., 0., 0.])
+    decenter = (0.1, 0.2, 0.3)
+    tilt = (1., 2., 3.)
+    factories = [
+        Surface.plane(typ='eval', P=P0, tilt=tilt, decenter=decenter),
+        Surface.sphere(c=1 / 100., typ='refr', P=P0, n=lambda w: 1.5,
+                       tilt=tilt, decenter=decenter),
+        Surface.conic(c=1 / 100., k=-1., typ='refl', P=P0,
+                      tilt=tilt, decenter=decenter),
+        Surface.off_axis_conic(c=1 / 100., k=-1., typ='refl', P=P0,
+                               dx=10., dy=0.,
+                               tilt=tilt, decenter=decenter),
+        Surface.even_asphere(c=1 / 100., k=0.0, coefs=[1e-8],
+                             typ='refr', P=P0, n=lambda w: 1.5,
+                             tilt=tilt, decenter=decenter),
+        Surface.q2d(c=1 / 100., k=0.0, normalization_radius=10.,
+                    cm0=(0.,), ams=(), bms=(),
+                    typ='refr', P=P0, n=lambda w: 1.5,
+                    tilt=tilt, decenter=decenter),
+    ]
+    expected_P = P0 + np.array(decenter)
+    expected_R = make_rotation_matrix(tilt)
+    for surf in factories:
+        np.testing.assert_allclose(surf.P, expected_P, atol=1e-12)
+        np.testing.assert_allclose(surf.R, expected_R, atol=1e-12)

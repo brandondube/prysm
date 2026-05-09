@@ -1,0 +1,181 @@
+"""Tests for the RayTraceResult / status plumbing (Phase 3.2 + 3.3)."""
+import numpy as np
+import pytest
+
+from prysm.x.raytracing.surfaces import Surface
+from prysm.x.raytracing.spencer_and_murty import (
+    raytrace,
+    RayTraceResult,
+    STATUS_OK,
+    STATUS_NEWTON,
+    STATUS_CLIP,
+    STATUS_MISS,
+    STATUS_TIR,
+)
+from prysm.x.raytracing.raygen import generate_collimated_ray_fan
+
+
+# ---------- backward compatibility ----------
+
+def _simple_prescription():
+    return [
+        Surface.conic(c=1 / 200., k=-1.0, typ='refl', P=np.array([0., 0., 0.])),
+        Surface.plane('eval', P=np.array([0., 0., -50.])),
+    ]
+
+
+def test_legacy_3tuple_unpacking_still_works():
+    """`P, S, OPL = raytrace(...)` must keep working unchanged."""
+    pres = _simple_prescription()
+    P0, S0 = generate_collimated_ray_fan(7, maxr=10.0, z=-100.0)
+    P, S, OPL = raytrace(pres, P0, S0, wvl=0.55)
+    # the unpacked names hold the right arrays
+    assert P.shape == (3, 7, 3)
+    assert S.shape == (3, 7, 3)
+    assert OPL.shape == (3, 7)
+
+
+def test_raytrace_result_has_named_attributes():
+    pres = _simple_prescription()
+    P0, S0 = generate_collimated_ray_fan(7, maxr=10.0, z=-100.0)
+    result = raytrace(pres, P0, S0, wvl=0.55)
+    assert isinstance(result, RayTraceResult)
+    np.testing.assert_array_equal(result.P[0], P0)
+    np.testing.assert_array_equal(result.S[0], S0)
+    assert result.status.shape == (7,)
+    assert result.status.dtype == np.complex128
+
+
+def test_raytrace_result_repr_smoke():
+    pres = _simple_prescription()
+    P0, S0 = generate_collimated_ray_fan(5, maxr=10.0, z=-100.0)
+    result = raytrace(pres, P0, S0, wvl=0.55)
+    s = repr(result)
+    assert 'RayTraceResult' in s
+    assert 'N_rays=5' in s
+
+
+# ---------- valid (status.imag == 0) ----------
+
+def test_collimated_through_parabola_all_valid():
+    """Collimated rays well within a parabolic mirror's aperture should all
+    finish status==jj + 0j."""
+    pres = _simple_prescription()
+    P0, S0 = generate_collimated_ray_fan(11, maxr=20.0, z=-200.0)
+    result = raytrace(pres, P0, S0, wvl=0.55)
+    assert (result.status.imag == 0).all()
+    # status.real records the surface count for valid rays
+    np.testing.assert_array_equal(result.status.real, len(pres))
+
+
+def test_single_ray_1d_input_returns_length1_status():
+    pres = _simple_prescription()
+    P0 = np.array([0.0, 0.0, -100.0])
+    S0 = np.array([0.0, 0.0, 1.0])
+    result = raytrace(pres, P0, S0, wvl=0.55)
+    assert result.status.shape == (1,)
+    assert result.status[0].imag == 0
+
+
+# ---------- aperture clipping (STATUS_CLIP) ----------
+
+def test_aperture_clipping_marks_outside_rays():
+    """An off-axis ray that misses a circular aperture is marked CLIP."""
+    # circular aperture of radius 5 on a flat eval surface
+    aperture = lambda x, y: (x * x + y * y) <= 25.0
+    pres = [
+        Surface.plane(typ='eval', P=np.array([0., 0., 0.]), aperture=aperture),
+    ]
+    # 7 collimated rays from y=-9 to y=+9: outer rays clipped, center inside
+    P0, S0 = generate_collimated_ray_fan(7, maxr=9.0, z=-50.0)
+    result = raytrace(pres, P0, S0, wvl=0.55)
+    radii_at_surface = np.sqrt(result.P[1, :, 0] ** 2 + result.P[1, :, 1] ** 2)
+    # rays outside r=5 should be clipped
+    expected_clipped = radii_at_surface > 5.0
+    actual_clipped = result.status.imag == STATUS_CLIP
+    np.testing.assert_array_equal(actual_clipped, expected_clipped)
+    # the surface index is 1-based; the only surface is index 1
+    np.testing.assert_array_equal(
+        result.status.real[actual_clipped],
+        np.full(actual_clipped.sum(), 1.0),
+    )
+
+
+def test_clip_persists_through_subsequent_surfaces():
+    """A ray clipped at the first surface stays invalid through downstream surfaces."""
+    aperture = lambda x, y: x * x + y * y <= 1.0
+    pres = [
+        Surface.plane(typ='eval', P=np.array([0., 0., 0.]), aperture=aperture),
+        Surface.plane(typ='eval', P=np.array([0., 0., 5.])),  # downstream, no aperture
+    ]
+    P0, S0 = generate_collimated_ray_fan(5, maxr=2.0, z=-10.0)
+    result = raytrace(pres, P0, S0, wvl=0.55)
+    # the outer rays were clipped at surface 1; status.real should remain 1
+    clipped = result.status.imag == STATUS_CLIP
+    assert clipped.any()
+    # verify status.real for clipped rays is 1, not 2 (didn't get re-marked)
+    np.testing.assert_array_equal(
+        result.status.real[clipped],
+        np.full(clipped.sum(), 1.0),
+    )
+
+
+# ---------- analytic miss (STATUS_MISS) ----------
+
+def test_analytic_miss_marked_as_miss():
+    """A ray geometrically incapable of intersecting the sphere should be
+    STATUS_MISS at that surface index."""
+    # small sphere; rays well outside its support
+    pres = [
+        Surface.sphere(c=1 / 5.0, typ='refl', P=np.array([0., 0., 0.]), n=None),
+    ]
+    P0 = np.array([[0., 0., -10.],   # axial, hits the sphere
+                   [50., 0., -10.]])  # 50mm off-axis, sphere R=5 → can't reach
+    S0 = np.array([[0., 0., 1.],
+                   [0., 0., 1.]])
+    result = raytrace(pres, P0, S0, wvl=0.55)
+    assert result.status[0].imag == 0           # axial valid
+    assert result.status[1].imag == STATUS_MISS  # off-axis missed
+    assert result.status[1].real == 1.0
+
+
+# ---------- TIR detection (STATUS_TIR) ----------
+
+def test_total_internal_reflection_marked_as_tir():
+    """A ray going from glass (n=1.5) to air past the critical angle should TIR."""
+    # critical angle for n=1.5 → 1.0 is arcsin(1/1.5) ≈ 41.81°.
+    # build a refracting plane at z=0; ray comes from -z in glass at 50° to normal.
+    pres = [
+        Surface.plane(typ='refr', P=np.array([0., 0., 0.]),
+                      n=lambda wvl: 1.0),  # the medium AFTER the surface
+    ]
+    angle = np.radians(50.0)  # > critical
+    # ray in n=1.5 medium hitting the surface at 50° to z (normal)
+    P0 = np.array([[0., -10., -10.]])
+    S0 = np.array([[0., np.sin(angle), np.cos(angle)]])
+    result = raytrace(pres, P0, S0, wvl=0.55, n_ambient=1.5)
+    assert result.status[0].imag == STATUS_TIR
+    assert result.status[0].real == 1.0
+
+
+# ---------- end-to-end: aperture + valid + clipped mixed batch ----------
+
+def test_mixed_batch_status_codes_distinct():
+    """A batch with valid rays, clipped rays, and missed rays should produce
+    three distinct status outcomes."""
+    aperture = lambda x, y: (x * x + y * y) <= 4.0
+    pres = [
+        Surface.sphere(c=1 / 100.0, typ='refl', P=np.array([0., 0., 0.]), n=None,
+                       aperture=aperture),
+        Surface.plane(typ='eval', P=np.array([0., 0., -10.])),
+    ]
+    P0 = np.array([
+        [0., 0., -50.],     # axial: valid through both surfaces
+        [3., 0., -50.],     # outside aperture (r=3 > 2): clipped
+        [200., 0., -50.],   # outside the sphere's reach: missed
+    ])
+    S0 = np.array([[0., 0., 1.]] * 3)
+    result = raytrace(pres, P0, S0, wvl=0.55)
+    assert result.status[0].imag == 0
+    assert result.status[1].imag == STATUS_CLIP
+    assert result.status[2].imag == STATUS_MISS

@@ -1,10 +1,18 @@
-"""Plotting functions for raytraces."""
+"""Plotting functions for raytraces.
+
+This is the one module in prysm.x.raytracing that uses ``import numpy as np``
+directly: matplotlib's renderer only accepts true numpy arrays, so we cannot
+go through the swappable ``prysm.mathops`` backend here.  User-supplied arrays
+(``phist``, ``shist``, ...) may be cupy/torch tensors when alternate backends
+are in use, so each public function calls ``array_to_true_numpy`` at entry.
+"""
 
 from prysm.plotting import share_fig_ax
+from prysm.mathops import array_to_true_numpy
 
 from .surfaces import STYPE_REFLECT, STYPE_REFRACT
 
-import numpy as np  # always numpy, matplotlib only understands numpy
+import numpy as np  # see module docstring; do not "fix" to mathops np
 
 
 def plot_rays(phist, lw=1, ls='-', c='r', alpha=1, zorder=4, x='z', y='y', fig=None, ax=None):
@@ -44,7 +52,7 @@ def plot_rays(phist, lw=1, ls='-', c='r', alpha=1, zorder=4, x='z', y='y', fig=N
     """
     fig, ax = share_fig_ax(fig, ax)
 
-    ph = np.asarray(phist)
+    ph = np.asarray(array_to_true_numpy(phist))
     xs = ph[..., 0]
     ys = ph[..., 1]
     zs = ph[..., 2]
@@ -144,6 +152,7 @@ def plot_optics(prescription, phist, mirror_backing=None, points=100,
     x = x.lower()
     y = y.lower()
     fig, ax = share_fig_ax(fig, ax)
+    phist = np.asarray(array_to_true_numpy(phist))
 
     # manual iteration due to how lenses are drawn, start from -1 so the
     # increment can be at the top of a large loop
@@ -229,7 +238,7 @@ def plot_transverse_ray_aberration(phist, lw=1, ls='-', c='r', alpha=1, zorder=4
     """
     fig, ax = share_fig_ax(fig, ax)
 
-    ph = np.asarray(phist)
+    ph = np.asarray(array_to_true_numpy(phist))
     sieve = {
         'x': 0,
         'y': 1,
@@ -242,51 +251,24 @@ def plot_transverse_ray_aberration(phist, lw=1, ls='-', c='r', alpha=1, zorder=4
     return fig, ax
 
 
-def plot_wave_aberration(phist, lw=1, ls='-', c='r', alpha=1, zorder=4, axis='y', fig=None, ax=None):
-    """Plot the transverse ray aberration for a single ray fan.
+def plot_wave_aberration(*args, **kwargs):
+    """Deprecated alias for plot_transverse_ray_aberration.
 
-    Parameters
-    ----------
-    phist : list or ndarray
-        the first return from spencer_and_murty.raytrace,
-        iterable of arrays of length 3 (X,Y,Z)
-    lw : float, optional
-        linewidth
-    ls : str, optional
-        line style
-    c : color
-        anything matplotlib interprets as a color, strings, 3-tuples, 4-tuples, ...
-    alpha : float
-        opacity of the rays, 1=fully opaque, 0=fully transparent
-    zorder : int
-        stack order in the plot, higher z orders are on top of lower z orders
-    axis : str, {'x', 'y'}
-        which ray position to plot, x or y
-    fig : matplotlib.figure.Figure
-        A figure object
-    ax : matplotlib.axes.Axis
-        An axis object
-
-    Returns
-    -------
-    matplotlib.figure.Figure
-        A figure object
-    matplotlib.axes.Axis
-        An axis object
+    The original implementation never computed wave aberration / OPD; it
+    plotted input vs output ray position, identical to
+    plot_transverse_ray_aberration.  Use that function directly.  A real
+    wave-aberration plot belongs downstream of opt.opd_from_raytrace.
 
     """
-    fig, ax = share_fig_ax(fig, ax)
-
-    sieve = {
-        'x': 0,
-        'y': 1,
-    }
-    axis = axis.lower()
-    axis = sieve[axis]
-    input_rays = phist[0, ..., axis]
-    output_rays = phist[-1, ..., axis]
-    ax.plot(input_rays, output_rays, c=c, lw=lw, alpha=alpha, zorder=zorder)
-    return fig, ax
+    import warnings
+    warnings.warn(
+        'plot_wave_aberration is a misnamed alias for '
+        'plot_transverse_ray_aberration and will be removed in a future '
+        'release; use plot_transverse_ray_aberration directly.',
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return plot_transverse_ray_aberration(*args, **kwargs)
 
 
 def plot_spot_diagram(phist, marker='+', c='k', alpha=1, zorder=4, s=None, fig=None, ax=None):
@@ -323,6 +305,7 @@ def plot_spot_diagram(phist, marker='+', c='k', alpha=1, zorder=4, s=None, fig=N
 
     """
     fig, ax = share_fig_ax(fig, ax)
+    phist = np.asarray(array_to_true_numpy(phist))
     x = phist[-1, ..., 0]
     y = phist[-1, ..., 1]
     ax.scatter(x, y, c=c, s=s, marker=marker, alpha=alpha, zorder=zorder)
