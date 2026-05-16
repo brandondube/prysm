@@ -711,6 +711,11 @@ class F77LBFGSB:
                 if g.ndim != 1:
                     g = g.ravel()
 
+                # Handle cupy-typed f and g
+                if hasattr(f, "get"):
+                    f = f.get()
+                    g = g.get()
+
                 self.f[:] = f
                 self.g[:] = g
                 self._call_fortran()
@@ -864,6 +869,11 @@ class CLBFGSB:
                 f, g = self.fg(self.x)
                 if g.ndim != 1:
                     g = g.ravel()
+
+                # Handle cupy-typed f and g
+                if hasattr(f, "get"):
+                    f = f.get()
+                    g = g.get()
 
                 self.f[...] = f
                 self.g[:] = g
