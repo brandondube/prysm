@@ -47,7 +47,9 @@ def cheby1_seq(ns, x):
     ns = list(ns)
     cs = 1/jacobi_seq(ns, -.5, -.5, np.ones(1, dtype=x.dtype))
     seq = jacobi_seq(ns, -.5, -.5, x)
-    return seq*cs
+    # cs is (N, 1) from a 1-D jacobi argument; broadcast against seq's
+    # (N, *x.shape) for any x.ndim by reshaping to (N,) + (1,) * x.ndim.
+    return seq * cs.reshape((-1,) + (1,) * x.ndim)
 
 
 def cheby1_der(n, x):
@@ -88,7 +90,7 @@ def cheby1_der_seq(ns, x):
     ns = list(ns)
     cs = 1/jacobi_seq(ns, -.5, -.5, np.ones(1, dtype=x.dtype))
     seq = jacobi_der_seq(ns, -.5, -.5, x)
-    return seq*cs
+    return seq * cs.reshape((-1,) + (1,) * x.ndim)
 
 
 def cheby2(n, x):
@@ -126,16 +128,12 @@ def cheby2_seq(ns, x):
         return has shape (5, 100, 100)
 
     """
-    # gross squeeze -> new axis dance;
-    # seq is (N,M)
-    # cs is (N,)
-    # return of jacobi_seq is (N,1)
-    # drop the 1 to avoid broadcast to (N,N)
-    # then put back 1 for compatibility on the multiply
     ns = np.asarray(ns)
     cs = (ns+1)/np.squeeze(jacobi_seq(ns, .5, .5, np.ones(1, dtype=x.dtype)))
     seq = jacobi_seq(ns, .5, .5, x)
-    return seq*cs[:, np.newaxis]
+    # cs is 1-D after squeeze; broadcast against seq's (N, *x.shape) for any
+    # x.ndim by reshaping to (N,) + (1,) * x.ndim.
+    return seq * cs.reshape((-1,) + (1,) * x.ndim)
 
 
 def cheby2_der(n, x):
@@ -176,7 +174,7 @@ def cheby2_der_seq(ns, x):
     ns = np.asarray(ns)
     cs = (ns + 1)/np.squeeze(jacobi_seq(ns, .5, .5, np.ones(1, dtype=x.dtype)))
     seq = jacobi_der_seq(ns, .5, .5, x)
-    return seq*cs[:, np.newaxis]
+    return seq * cs.reshape((-1,) + (1,) * x.ndim)
 
 
 def cheby3(n, x):
@@ -217,7 +215,7 @@ def cheby3_seq(ns, x):
     ns = list(ns)
     cs = 1/jacobi_seq(ns, -.5, .5, np.ones(1, dtype=x.dtype))
     seq = jacobi_seq(ns, -.5, .5, x)
-    return seq*cs
+    return seq * cs.reshape((-1,) + (1,) * x.ndim)
 
 
 def cheby3_der(n, x):
@@ -258,7 +256,7 @@ def cheby3_der_seq(ns, x):
     ns = list(ns)
     cs = 1/jacobi_seq(ns, -.5, .5, np.ones(1, dtype=x.dtype))
     seq = jacobi_der_seq(ns, -.5, .5, x)
-    return seq*cs
+    return seq * cs.reshape((-1,) + (1,) * x.ndim)
 
 
 def cheby4(n, x):
@@ -299,7 +297,7 @@ def cheby4_seq(ns, x):
     ns = np.asarray(ns)
     cs = (2*ns+1)/np.squeeze(jacobi_seq(ns, .5, -.5, np.ones(1, dtype=x.dtype)))
     seq = jacobi_seq(ns, .5, -.5, x)
-    return seq*cs[:, np.newaxis]
+    return seq * cs.reshape((-1,) + (1,) * x.ndim)
 
 
 def cheby4_der(n, x):
@@ -340,4 +338,4 @@ def cheby4_der_seq(ns, x):
     ns = np.asarray(ns)
     cs = (2*ns+1)/np.squeeze(jacobi_seq(ns, .5, -.5, np.ones(1, dtype=x.dtype)))
     seq = jacobi_der_seq(ns, .5, -.5, x)
-    return seq*cs[:, np.newaxis]
+    return seq * cs.reshape((-1,) + (1,) * x.ndim)
