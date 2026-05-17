@@ -9,6 +9,8 @@ import warnings
 
 from pathlib import Path
 
+# truenp: disk I/O uses truenp.savetxt / genfromtxt; file-format buffers must
+#         live in real numpy regardless of the prysm backend.
 import numpy as truenp
 
 from .conf import config

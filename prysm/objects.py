@@ -223,7 +223,6 @@ def slantededge(x, y, angle=4, contrast=0.9, crossed=False):
         if True, draw crossed edges instead of just one
 
     """
-
     diff = (1 - contrast) / 2
     arr = np.full(x.shape, 1 - diff)
 

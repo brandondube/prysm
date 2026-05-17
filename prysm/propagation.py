@@ -18,7 +18,7 @@ def _maybe_pad(wavefunction, Q):
 
 
 def _phase_prefix(wavelength):
-    """Phase prefix or scale factor such that mul w/ OPD in nm produces radians
+    """Phase prefix or scale factor such that mul w/ OPD in nm produces radians.
     """
     return 1j * 2 * np.pi / wavelength / 1e3
 
@@ -487,7 +487,8 @@ def to_fpm_and_back(wavefunction, fpm, executor, return_more=False):
     return field_at_next_pupil
 
 
-def to_fpm_and_back_backprop(wavefunction, fpm, executor, return_more=False):
+def to_fpm_and_back_backprop(wavefunction, fpm, executor, return_more=False,
+                             return_fpm_grad=False, field_at_fpm=None):
     """Backpropagate gradient through :func:`to_fpm_and_back`.
 
     Parameters
@@ -501,17 +502,29 @@ def to_fpm_and_back_backprop(wavefunction, fpm, executor, return_more=False):
     return_more : bool, optional
         if True, return (Eabar, Ebbar, intermediate)
         else return Eabar
+    return_fpm_grad : bool, optional
+        if True, also return the gradient with respect to ``fpm``. Requires
+        ``field_at_fpm`` from the matching forward propagation.
+    field_at_fpm : Wavefront or ndarray, optional
+        focal-plane field before the FPM from the forward propagation
 
     Returns
     -------
     ndarray or tuple of ndarray
         gradient at the input pupil; optionally also the intermediate gradients
+        and/or the gradient with respect to ``fpm``
 
     """
     if isinstance(executor, CZT):
         raise TypeError('to_fpm_and_back_backprop requires an MDFT executor; CZT is not supported')
+    fpm_is_complex = np.iscomplexobj(fpm.data if isinstance(fpm, Wavefront) else fpm)
     if isinstance(fpm, Wavefront):
         fpm = fpm.data
+    if isinstance(field_at_fpm, Wavefront):
+        field_at_fpm = field_at_fpm.data
+
+    if return_fpm_grad and field_at_fpm is None:
+        raise ValueError('return_fpm_grad=True requires field_at_fpm from the forward propagation')
 
     # do not take complex conjugate of reals (no-op, but numpy still does it)
     if np.iscomplexobj(fpm):
@@ -520,8 +533,18 @@ def to_fpm_and_back_backprop(wavefunction, fpm, executor, return_more=False):
     Ebbar = unfocus_dft_backprop(wavefunction, executor)
     intermediate = Ebbar * fpm
     Eabar = focus_dft_backprop(intermediate, executor)
+
+    if return_fpm_grad:
+        fpm_bar = Ebbar * np.conj(field_at_fpm)
+        if not fpm_is_complex:
+            fpm_bar = np.real(fpm_bar)
+
     if return_more:
+        if return_fpm_grad:
+            return Eabar, Ebbar, intermediate, fpm_bar
         return Eabar, Ebbar, intermediate
+    elif return_fpm_grad:
+        return Eabar, fpm_bar
     else:
         return Eabar
 
@@ -585,7 +608,7 @@ class Wavefront:
         dx : float
             sample spacing with units of mm
 
-            """
+        """
         E = np.exp(_phase_prefix(wavelength) * phase)
         return cls(E, wavelength, dx)
 
@@ -1044,7 +1067,8 @@ class Wavefront:
         else:
             return Wavefront(pak, self.wavelength, self.dx, self.space)
 
-    def to_fpm_and_back_backprop(self, fpm, executor, return_more=False):
+    def to_fpm_and_back_backprop(self, fpm, executor, return_more=False,
+                                 return_fpm_grad=False, field_at_fpm=None):
         """Backprop the to_fpm_and_back propagation.
 
         ``self`` carries the gradient at the next pupil (output of the forward
@@ -1060,21 +1084,40 @@ class Wavefront:
         return_more : bool, optional
             if True, return (Eabar, Ebbar, intermediate) as Wavefronts
             else return Eabar
+        return_fpm_grad : bool, optional
+            if True, also return the gradient with respect to ``fpm``.
+            Requires ``field_at_fpm`` from the matching forward propagation.
+        field_at_fpm : Wavefront or ndarray, optional
+            focal-plane field before the FPM from the forward propagation
 
         Returns
         -------
         Wavefront or tuple of Wavefront
-            gradient at the input pupil; optionally also the intermediate gradients
+            gradient at the input pupil; optionally also the intermediate
+            gradients and/or the gradient with respect to ``fpm``
 
         """
         pak = to_fpm_and_back_backprop(self.data, fpm=fpm, executor=executor,
-                                       return_more=return_more)
+                                       return_more=return_more,
+                                       return_fpm_grad=return_fpm_grad,
+                                       field_at_fpm=field_at_fpm)
         if return_more:
-            Eabar, Ebbar, intermediate = pak
+            if return_fpm_grad:
+                Eabar, Ebbar, intermediate, fpm_bar = pak
+            else:
+                Eabar, Ebbar, intermediate = pak
             Eabar = Wavefront(Eabar, self.wavelength, self.dx, self.space)
             Ebbar = Wavefront(Ebbar, self.wavelength, executor.focal_dx, 'psf')
             intermediate = Wavefront(intermediate, self.wavelength, executor.focal_dx, 'psf')
+            if return_fpm_grad:
+                fpm_bar = Wavefront(fpm_bar, self.wavelength, executor.focal_dx, 'psf')
+                return Eabar, Ebbar, intermediate, fpm_bar
             return Eabar, Ebbar, intermediate
+        elif return_fpm_grad:
+            Eabar, fpm_bar = pak
+            Eabar = Wavefront(Eabar, self.wavelength, self.dx, self.space)
+            fpm_bar = Wavefront(fpm_bar, self.wavelength, executor.focal_dx, 'psf')
+            return Eabar, fpm_bar
         else:
             return Wavefront(pak, self.wavelength, self.dx, self.space)
 
@@ -1119,6 +1162,11 @@ class Wavefront:
             field after lyot, [field at fpm, field after fpm, field at lyot]
 
         """
+        if isinstance(fpm, Wavefront):
+            fpm = fpm.data
+        if isinstance(lyot, Wavefront):
+            lyot = lyot.data
+
         fpm = 1 - fpm
         result = self.to_fpm_and_back(fpm=fpm, executor=executor, return_more=return_more)
         if return_more:
@@ -1140,7 +1188,9 @@ class Wavefront:
             return field_after_lyot, field_at_fpm, field_after_fpm, field_at_lyot
         return field_after_lyot
 
-    def babinet_backprop(self, lyot, fpm, executor):
+    def babinet_backprop(self, lyot, fpm, executor, field_at_fpm=None,
+                         field_at_lyot=None, return_fpm_grad=False,
+                         return_lyot_grad=False):
         """Backpropagate gradient through :meth:`babinet`.
 
         Parameters
@@ -1152,11 +1202,23 @@ class Wavefront:
             one minus the focal plane mask (see Soummer et al 2007)
         executor : MDFT
             same operator as the forward call.
+        field_at_fpm : Wavefront or ndarray, optional
+            focal-plane field before the FPM from the matching forward call.
+            Required when ``return_fpm_grad`` is True.
+        field_at_lyot : Wavefront or ndarray, optional
+            pupil-plane field before the Lyot stop from the matching forward
+            call. Required when ``return_lyot_grad`` is True.
+        return_fpm_grad : bool, optional
+            if True, also return the gradient with respect to the original
+            ``fpm`` argument passed to :meth:`babinet`.
+        return_lyot_grad : bool, optional
+            if True, also return the gradient with respect to ``lyot``.
 
         Returns
         -------
-        Wavefront
-            back-propagated gradient
+        Wavefront or tuple of Wavefront
+            back-propagated gradient; optionally followed by FPM and/or Lyot
+            gradients in the order requested by the keyword names
 
         """
         # babinet's principle is implemented by
@@ -1165,6 +1227,22 @@ class Wavefront:
         # c = iDFT(C)      | Cbar to Abar absorbed in to_fpm_and_back_backprop
         # d = c*L          | cbar = dbar * conj(L)
         # f = a - c        | a contributes +cbar; c contributes -(to_fpm_and_back grad)
+
+        if isinstance(fpm, Wavefront):
+            fpm = fpm.data
+        lyot_is_complex = True
+        if isinstance(lyot, Wavefront):
+            lyot_is_complex = np.iscomplexobj(lyot.data)
+            lyot = lyot.data
+        elif lyot is not None:
+            lyot_is_complex = np.iscomplexobj(lyot)
+        if isinstance(field_at_fpm, Wavefront):
+            field_at_fpm = field_at_fpm.data
+        if isinstance(field_at_lyot, Wavefront):
+            field_at_lyot = field_at_lyot.data
+
+        if return_lyot_grad and field_at_lyot is None:
+            raise ValueError('return_lyot_grad=True requires field_at_lyot from the forward propagation')
 
         fpm = 1 - fpm
 
@@ -1176,5 +1254,26 @@ class Wavefront:
         else:
             cbar = dbar
 
-        abar_data = to_fpm_and_back_backprop(cbar, fpm=fpm, executor=executor)
-        return Wavefront(cbar - abar_data, self.wavelength, self.dx, self.space)
+        if return_fpm_grad:
+            abar_data, fpm_bar = to_fpm_and_back_backprop(
+                cbar, fpm=fpm, executor=executor,
+                return_fpm_grad=True, field_at_fpm=field_at_fpm,
+            )
+        else:
+            abar_data = to_fpm_and_back_backprop(cbar, fpm=fpm, executor=executor)
+
+        abar = Wavefront(cbar - abar_data, self.wavelength, self.dx, self.space)
+        if not (return_fpm_grad or return_lyot_grad):
+            return abar
+
+        out = [abar]
+        if return_fpm_grad:
+            fpm_bar = Wavefront(fpm_bar, self.wavelength, executor.focal_dx, 'psf')
+            out.append(fpm_bar)
+        if return_lyot_grad:
+            lyot_bar = dbar * np.conj(field_at_lyot)
+            if not lyot_is_complex:
+                lyot_bar = np.real(lyot_bar)
+            lyot_bar = Wavefront(lyot_bar, self.wavelength, self.dx, self.space)
+            out.append(lyot_bar)
+        return tuple(out)

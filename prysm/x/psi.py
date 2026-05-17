@@ -1,11 +1,12 @@
 """Phase Shifting Interferometry."""
 from collections import namedtuple
 
+# truenp: module-level ZYGO_THIRTEEN_FRAME / SCHWIDER scheme arrays and small
+#         host-side trig in design_scheme; coefficient lists are 5–13 ints
+#         feeding sum_of_2d_modes, no GPU benefit.
 import numpy as truenp
 
-from scipy import signal
-
-from prysm.mathops import np
+from prysm.mathops import np, signal
 from prysm.fttools import fftrange
 from prysm._richdata import RichData
 from prysm.polynomials import sum_of_2d_modes

@@ -1,10 +1,9 @@
 """Routines for working with optical fibers."""
+# truenp: host-side deduplication of scalar root list via truenp.unique;
+#         operates on Python lists of floats from brentq, not GPU arrays.
 import numpy as truenp
 
-from scipy.optimize import brentq
-
-
-from prysm.mathops import np, special
+from prysm.mathops import np, special, optimize
 
 
 cutoff = np.pi
@@ -193,7 +192,7 @@ def find_all_roots(f, args=(), kwargs=None, interval=(0, 1), npts_signsearch=100
             # Ghatak Eq. 8.40 is an infinity or zero; discard this root
             continue
 
-        _, root = brentq(curried_f, a=left, b=right, maxiter=maxiter, full_output=True)
+        _, root = optimize.brentq(curried_f, a=left, b=right, maxiter=maxiter, full_output=True)
         if not root.converged:
             raise ValueError(f'root search on interval{x[j]}-{x[j+1]} failed')
         roots.append(root.root)

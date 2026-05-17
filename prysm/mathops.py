@@ -2,7 +2,7 @@
 import warnings
 
 import numpy as np
-from scipy import ndimage, interpolate, special, fft
+from scipy import ndimage, interpolate, special, fft, optimize, signal
 
 
 class BackendShim:
@@ -22,11 +22,15 @@ _ndimage = ndimage
 _special = special
 _fft = fft
 _interpolate = interpolate
+_optimize = optimize
+_signal = signal
 np = BackendShim(np)
 ndimage = BackendShim(ndimage)
 special = BackendShim(special)
 fft = BackendShim(fft)
 interpolate = BackendShim(interpolate)
+optimize = BackendShim(optimize)
+signal = BackendShim(signal)
 
 
 def set_backend_to_cupy():
@@ -44,6 +48,13 @@ def set_backend_to_cupy():
     ndimage._srcmodule = cpndimage
     special._srcmodule = cpspecial
     interpolate._srcmodule = cpinterpolate
+    # cupyx.scipy.signal exists but cupyx.scipy.optimize generally does not;
+    # opportunistically remap signal if present, leave optimize on scipy.
+    try:
+        from cupyx.scipy import signal as cpsignal
+        signal._srcmodule = cpsignal
+    except ImportError:
+        pass
     return
 
 
@@ -54,6 +65,8 @@ def set_backend_to_defaults():
     ndimage._srcmodule = _ndimage
     special._srcmodule = _special
     interpolate._srcmodule = _interpolate
+    optimize._srcmodule = _optimize
+    signal._srcmodule = _signal
     return
 
 
@@ -64,7 +77,7 @@ def set_backend_to_pytorch():
     np._srcmodule = torch
     fft._srcmodule = torch.fft
     special._srcmodule = torch.special
-    warnings.warn('set_backend_to_pytorch: only np, fft, special remapped; ndimage, interpolate do not have known torch equivalents.')
+    warnings.warn('set_backend_to_pytorch: only np, fft, special remapped; ndimage, interpolate, optimize, signal do not have known torch equivalents.')
     return
 
 
@@ -77,7 +90,7 @@ def set_fft_backend_to_mkl_fft():
 
 
 def array_to_true_numpy(*args):
-    """convert one or more arrays from an alternate backend to numpy.
+    """Convert one or more arrays from an alternate backend to numpy.
 
     Needed for plotting, serialization, etc.
 

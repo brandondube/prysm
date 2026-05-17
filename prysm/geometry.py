@@ -1,8 +1,12 @@
 """Functions used to generate various geometrical constructs."""
 import math
 
+# truenp: host-side polygon / aperture construction; scipy.spatial.Delaunay
+#         (used in mask_cleaner) only accepts real numpy arrays.
 import numpy as truenp
 
+# scipy.spatial is not exposed via prysm.mathops because no cupy/torch
+# equivalent of Delaunay triangulation exists; this module is host-only.
 from scipy import spatial
 
 from .conf import config

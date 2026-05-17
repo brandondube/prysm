@@ -4,11 +4,9 @@ import inspect
 import random
 import math
 
-from scipy import optimize
-
 from .conf import config
 from ._richdata import RichData
-from .mathops import np, fft, jinc
+from .mathops import np, fft, jinc, optimize
 from .io import (
     read_zygo_dat,
     read_zygo_datx,

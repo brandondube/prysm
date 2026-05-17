@@ -4,8 +4,12 @@ import inspect
 import numbers
 from collections import namedtuple
 
+# truenp: host-side hex (q, r, s) coordinate construction and the
+#         small `centers` table; sqrt(3) cells are scalars feeding a GPU
+#         array, not GPU work themselves.
 import numpy as truenp
 
+from .conf import config
 from .mathops import np
 from .geometry import regular_polygon, circle, spider
 from .coordinates import cart_to_polar, polar_to_cart
@@ -130,7 +134,7 @@ class CompositeHexagonalAperture:
     """An aperture composed of several hexagonal segments."""
 
     def __init__(self, x, y, rings, segment_diameter, segment_separation, segment_angle=90, exclude=()):  # NOQA - length
-        """Create a new CompositeHexagonalAperture.  # NOQA - length
+        """Create a new CompositeHexagonalAperture.
 
         Note that __init__ is relatively computationally expensive and hides a lot of work.
 
@@ -174,7 +178,7 @@ class CompositeHexagonalAperture:
         self.exclude = exclude
 
     def prepare_opd_bases(self, basis_func, orders, basis_func_kwargs=None, normalization_radius=None):  # NOQA - length
-        """Prepare the polynomial bases for per-segment phase errors.  # NOQA - length
+        """Prepare the polynomial bases for per-segment phase errors.
 
         Parameters
         ----------
@@ -269,7 +273,7 @@ class CompositeHexagonalAperture:
         return grids, bases
 
     def compose_opd(self, coefs, out=None):
-        """Compose per-segment optical path errors using the basis from prepare_opd_bases.  # NOQA - length
+        """Compose per-segment optical path errors using the basis from prepare_opd_bases.
 
         Parameters
         ----------
@@ -383,7 +387,7 @@ class CompositeKeystoneAperture:
     def __init__(self, x, y, center_circle_diameter,
                  rings, ring_radius, segments_per_ring, radial_gap, azimuthal_gap=None,    # NOQA - length
                  rotation_per_ring=None):
-        """Create a new CompositeKeystoneAperture.  # NOQA - length
+        """Create a new CompositeKeystoneAperture.
 
         Parameters
         ----------
@@ -467,7 +471,7 @@ class CompositeKeystoneAperture:
                           segment_basis, segment_orders,
                           center_basis_kwargs=None, segment_basis_kwargs=None,
                           rotate_xyaxes=False):
-        """Prepare the polynomial bases for per-segment phase errors.  # NOQA - length
+        """Prepare the polynomial bases for per-segment phase errors.
 
         Parameters
         ----------
@@ -722,7 +726,7 @@ def _composite_keystone_aperture(x, y, center_circle_diameter,
         if rotation is None:
             rotation = arc_per_seg
 
-        segment_angles = np.arange(nsegments, dtype=float) * arc_per_seg + rotation  # NOQA
+        segment_angles = np.arange(nsegments, dtype=config.precision) * arc_per_seg + rotation  # NOQA
         segment_angles = np.radians(segment_angles) - np.pi
 
         for angle in segment_angles:

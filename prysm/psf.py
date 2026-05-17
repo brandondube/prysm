@@ -2,12 +2,11 @@
 import numbers
 from prysm.fttools import fftrange
 
-from scipy import optimize
-
 from .mathops import (
     np, jinc,
     ndimage,
-    special
+    special,
+    optimize,
 )
 from .coordinates import uniform_cart_to_polar
 

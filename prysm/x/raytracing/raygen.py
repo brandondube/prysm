@@ -220,9 +220,11 @@ def generate_collimated_rect_ray_grid(nrays, maxx, z=0, minx=None, maxy=None, mi
     if miny is None:
         miny = minx
 
-    S = np.array([0, 0, 1])
+    dtype = config.precision
+    S = np.array([0, 0, 1], dtype=dtype)
     R = make_rotation_matrix((0, yangle, -xangle))
-    S = np.matmul(R, S)
+    # make_rotation_matrix returns float64; matmul would upcast S, so cast back
+    S = np.matmul(R, S).astype(dtype, copy=False)
     # need to see a copy of S for each ray, -> add empty dim and broadcast
     S = S[np.newaxis, :]
     S = np.broadcast_to(S, (nrays*nrays, 3))

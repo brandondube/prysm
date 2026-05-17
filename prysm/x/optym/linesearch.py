@@ -1,6 +1,10 @@
 """Line searching routines."""
 from prysm.mathops import np
 
+# truenp: _cubicmin / _quadmin operate on quasi-scalars (cubic/quadratic
+#         minimizers with hand-coded 2×2 linear solves and errstate guards).
+#         GPU dispatch would dominate cost; functions locally rebind `np`
+#         to truenp to enforce host execution.
 import numpy as truenp
 
 from .problem import as_problem

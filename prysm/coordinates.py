@@ -1,4 +1,6 @@
 """Coordinate conversions."""
+# truenp: host-side construction of small Euler-angle rotation matrices
+#         used as reference orientations; never participates in GPU traces.
 import numpy as truenp
 
 from .conf import config
@@ -518,7 +520,7 @@ def chebygauss_quadrature_xy(rings, radius=1, spokes=-1, center=(0, 0)):
         Delta = 2*np.pi / spokes
         # arange term = "j"
         # Greg forbes' theta = (j+k/psi)Delta; Delta = 2pi/J
-        j = np.arange(1, spokes+1, dtype=np.float64)
+        j = np.arange(1, spokes+1, dtype=config.precision)
         kk = k + 1
         t = (j + (kk/psi)) * Delta
         x, y = polar_to_cart(rr, t)

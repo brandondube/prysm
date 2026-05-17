@@ -1,6 +1,9 @@
 """Supplimental tools for computing fourier transforms."""
 import math
 
+# truenp: fftfreq fallback path; some backends (e.g., certain torch versions)
+#         don't expose fft.fftfreq, so we build it on the host and astype to
+#         config.precision before returning to the caller.
 import numpy as truenp
 
 from .mathops import np, fft

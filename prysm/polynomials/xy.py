@@ -1,5 +1,7 @@
 """XY polynomials."""
 
+# truenp: host-side j ↔ (m, n) index conversion and the small `mns2` array
+#         used to sort coefficient tables; both are Python-loop bookkeeping.
 import numpy as truenp
 
 from prysm.mathops import np  # NOQA
@@ -17,72 +19,12 @@ def xy_j_to_mn(j):
         raise ValueError('j must be >= 1')
     if j == 1:
         return 0, 0
-    if j == 2:
-        return 1, 0
-    if j == 3:
-        return 0, 1
 
-    # exerpt from the Code V manual:
-    # +-----+---------+----------+-----------+-----------+-----------+-----------+
-    # |     | X0      | X1       | X2        | X3        | X4        | X5        |
-    # +-----+---------+----------+-----------+-----------+-----------+-----------+
-    # |     |         |          |           |           |           |           |
-    # | Y0  |         | X C2     | X2 C4     | X3 C7     | X4 C11    | X5 C16    |
-    # |     |         |          |           |           |           |           |
-    # | Y1  | Y C3    | XY C5    | X2Y C8    | X3Y C12   | X4Y C17   | X5Y C23   |
-    # |     |         |          |           |           |           |           |
-    # | Y2  | Y2 C6   | XY2 C9   | X2Y2 C13  | X3Y2 C18  | X4Y2 C24  | X5Y2 C31  |
-    # |     |         |          |           |           |           |           |
-    # | Y3  | Y3 C10  | XY3 C14  | X2Y3 C19  | X3Y3 C25  | X4Y3 C32  | X5Y3 C40  |
-    # |     |         |          |           |           |           |           |
-    # | Y4  | Y4 C15  | XY4 C20  | X2Y4 C26  | X3Y4 C33  | X4Y4 C41  | X5Y3 C50  |
-    # |     |         |          |           |           |           |           |
-    # | Y5  | Y5 C21  | XY5 C27  | X2Y5 C34  | X3Y5 C42  | X4Y5 C51  | X5Y5 C61  |
-    # |     |         |          |           |           |           |           |
-    # +-----+---------+----------+-----------+-----------+-----------+-----------+
-
-    # strategy: find the maximum dimension j would support,
-    # then search efficiently in that matrix
-
-    # number of elements in a triangular matrix of dimension k
-    # without diagonal k(k-1)/2
-    # with    diagonal k(k+1)/2
-
-    # for j>3, dimension >= 3
-    # TODO: this can be made more efficient with a heuristic
-    # perhaps advance k by 2 and then seek one down if we miss
-    k = 2
-    max_j = k*(k+1)//2
-    while max_j < j:
-        max_j = k*(k+1)//2
-        k += 1
-
-    largest_pure_y_term = max_j
-    largest_pure_x_term = max_j - k + 2
-
-    diffy = abs(j-largest_pure_y_term)
-    diffx = abs(j-largest_pure_x_term)
-
-    if diffy < diffx:
-        # iterate up and to the right
-        x = 0
-        y = k-2
-        jj = largest_pure_y_term
-        while jj != j:
-            jj -= 1
-            x += 1
-            y -= 1
-    else:
-        # iterate down and to the left
-        x = k-2
-        y = 0
-        jj = largest_pure_x_term
-        while jj != j:
-            jj += 1
-            x -= 1
-            y += 1
-
-    return x, y
+    total_order = int(truenp.ceil((truenp.sqrt(8*j + 1) - 3) / 2))
+    first_j = total_order * (total_order + 1) // 2 + 1
+    y_order = j - first_j
+    x_order = total_order - y_order
+    return x_order, y_order
 
 
 def xy(m, n, x, y, cartesian_grid=True):
@@ -239,7 +181,14 @@ def _xy_seq_with(mns, x, y, cartesian_grid, x_powers_op, y_powers_op):
     x_seq = x_powers_op(maxm, x)
     y_seq = y_powers_op(maxn, y)
 
-    return [x_seq[m] * y_seq[n] for m, n in mns]
+    m0, n0 = mns2[0]
+    first = x_seq[m0] * y_seq[n0]
+    out = np.empty((len(mns2), *first.shape), dtype=first.dtype)
+    out[0] = first
+    for j, (m, n) in enumerate(mns2[1:], start=1):
+        out[j] = x_seq[m] * y_seq[n]
+
+    return out
 
 
 def _monomial_seq(maxk, z):
@@ -284,8 +233,8 @@ def xy_seq(mns, x, y, cartesian_grid=True):
 
     Returns
     -------
-    list
-        list of modes, in the same order as mns
+    ndarray
+        has shape (len(mns), *broadcast(x, y).shape), in the same order as mns
 
     """
     return _xy_seq_with(
@@ -302,8 +251,9 @@ def xy_der_x_seq(mns, x, y, cartesian_grid=True):
 
     Returns
     -------
-    list
-        list of d/dx of x^m * y^n, in the same order as mns
+    ndarray
+        has shape (len(mns), *broadcast(x, y).shape); d/dx of x^m * y^n in
+        the same order as mns
 
     """
     return _xy_seq_with(
@@ -320,8 +270,9 @@ def xy_der_y_seq(mns, x, y, cartesian_grid=True):
 
     Returns
     -------
-    list
-        list of d/dy of x^m * y^n, in the same order as mns
+    ndarray
+        has shape (len(mns), *broadcast(x, y).shape); d/dy of x^m * y^n in
+        the same order as mns
 
     """
     return _xy_seq_with(
@@ -338,8 +289,9 @@ def xy_der_xy_seq(mns, x, y, cartesian_grid=True):
 
     Returns
     -------
-    list
-        list of d^2/dxdy of x^m * y^n, in the same order as mns
+    ndarray
+        has shape (len(mns), *broadcast(x, y).shape); d^2/dxdy of x^m * y^n
+        in the same order as mns
 
     """
     return _xy_seq_with(
