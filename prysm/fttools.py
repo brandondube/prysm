@@ -24,7 +24,7 @@ def next_fast_len(n):
     """
     try:
         return fft.next_fast_len(n)
-    except:  # NOQA -- cannot predict arbitrary library error types
+    except AttributeError:
         return _next_power_of_2(n)
 
 
@@ -32,7 +32,7 @@ def fftfreq(n, d=1.0):
     """Fast Fourier Transform frequency vector."""
     try:
         return fft.fftfreq(n, d).astype(config.precision)
-    except:  # NOQA -- cannot predict arbitrary library error types
+    except AttributeError:
         out = truenp.fft.fftfreq(n, d).astype(config.precision)
         return np.asarray(out)
 
