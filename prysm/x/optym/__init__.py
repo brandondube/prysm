@@ -1,5 +1,10 @@
 """Optimization primitives for prysm."""
 
+from .problem import (  # NOQA
+    Problem,
+    as_problem,
+)
+
 from .activation import (  # NOQA
     Softmax,
     GumbelSoftmax,
@@ -19,5 +24,5 @@ from .optimizers import (  # NOQA
     Adam,
     RAdam,
     Yogi,
-    F77LBFGSB,
+    LBFGSB,
 )
