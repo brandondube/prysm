@@ -13,28 +13,9 @@ from prysm.coordinates import make_xy_grid, cart_to_polar
 from prysm.geometry import circle
 
 from .pdi import evaluate_test_ref_arm_matching
-
-from scipy.special import j0, j1, k0, k1
+from .fibers import smf_mode_field
 
 WF = Wavefront
-
-
-def smf_mode_field(V, a, b, r):
-    U = V * np.sqrt(1-b)
-    W = V * np.sqrt(b)
-    # inside core
-    rnorm = r*(1/a)  # faster to divide on scalar, mul on vector
-    rinterior = rnorm < 1
-    num = j0(U*rnorm[rinterior])
-    den = j1(U)
-    out = np.empty_like(r)
-    out[rinterior] = num*(1/den)
-
-    rexterior = ~rinterior
-    num = k0(W*rnorm[rexterior])
-    den = k1(W)
-    out[rexterior] = num*(1/den)
-    return out
 
 
 def overlap_integral(E1, E2, sumI1, sumI2):
