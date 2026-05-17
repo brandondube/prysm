@@ -53,7 +53,7 @@ def set_backend_to_defaults():
     fft._srcmodule = _fft
     ndimage._srcmodule = _ndimage
     special._srcmodule = _special
-    interpolate._srcmodule = interpolate
+    interpolate._srcmodule = _interpolate
     return
 
 
