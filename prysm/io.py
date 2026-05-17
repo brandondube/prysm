@@ -947,7 +947,8 @@ def read_codev_gridint(file):
         raise ValueError('CV INT header did not contain GRD, only grid INT files are supported')
 
     main_data = txt[end+1:]
-    a = np.fromstring(main_data, sep=' ', dtype=np.int64)
+    # potentially faster to use a stringio here and loadtxt
+    a = np.array(main_data.split(), dtype=np.int64)
     mask = a == nda
     # div by ssz converts to wvl, div by wvl to um, *1000 to nm
     a = a.astype(config.precision) * (1000*wvl/ssz)
