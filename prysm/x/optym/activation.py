@@ -76,8 +76,9 @@ class Softmax:
             dcost/dsoftmax-input
 
         """
-        # TODO: look into exploiting the symmetry of the result here
-        # to speed up the calculation
+        # NOTE: the (I - out·outᵀ) Jacobian is symmetric and rank-K-1; a
+        # specialized kernel could halve work, but the row_dot + broadcast
+        # implementation below already vectorizes well on GPU.
         assert self.out is not None, 'must run forward() before running reverse()'
 
         grad = grad.reshape(self.work_shape)
@@ -124,8 +125,10 @@ class GumbelSoftmax:
         # footnote 1 from https://arxiv.org/pdf/1611.01144.pdf,
         # with a guard against log of 0
         # u = np.random.uniform(low=0, high=1, size=shp)
-        # TODO: can this be replaced with rng.gumbel()?
-        # what is the relatinship between low, high and gumbel parameters?
+        # NOTE: rng.gumbel() draws from Gumbel(loc, scale). This formulation
+        # uses -log(-log(u)) which is Gumbel(0, 1) but with explicit eps
+        # guards against log(0). Equivalent when u is well inside (0, 1);
+        # diverges only at the numerical boundary, which we want to guard.
         u = self.rng.uniform(low=0, high=1, size=shp)
         g = -np.log(-np.log(u + eps) + eps)
         # x are the "logits" from the paper, add gumbel noise and normalize by temperature
@@ -206,116 +209,80 @@ class DiscreteEncoder:
         return np.take(self.levels, indices)
 
 
-class Tanh:
-    """Tanh(x)
-    """
-    def __init__(self, a=1, x0=0, y0=0):
-        """Activation function Arctan(x)
+class _AffineActivation:
+    """Base for elementwise activations of the form y = a · f(x - x0) + y0.
 
-        Parameters
-        ----------
-        a : float, optional
-            scale for the activation slope, by default 1
-        x0 : float, optional
-            x-offset of the Tanh(x) function, by default 0
-        y0 : float, optional
-            y-offset of the Tanh(x) function, by default 0
-        """
+    Subclasses implement two methods that take x (the activation input,
+    *not* an upstream gradient) and apply the affine pre- and post-shift:
+
+      forward(x) returns the activation value at x.
+      backprop(x) returns dy/dx at x
+      (the local derivative evaluated at x; multiplied by an upstream gradient
+      by the caller if standard chain-rule backprop is wanted).
+
+    The shared constructor takes the three affine parameters:
+
+    Parameters
+    ----------
+    a : float
+        slope scaling.
+    x0 : float
+        horizontal shift (input is recentered to x - x0 before the
+        underlying activation is applied).
+    y0 : float
+        vertical shift added to the activation output.
+
+    """
+
+    def __init__(self, a=1, x0=0, y0=0):
         self.a = a
         self.x0 = x0
         self.y0 = y0
+
+
+class Tanh(_AffineActivation):
+    """Affine-scaled hyperbolic tangent: y = tanh(a·(x - x0)) + y0."""
 
     def forward(self, x):
-        x = x-self.x0
+        x = x - self.x0
         return (2 / (1 + np.exp(-2 * self.a * x)) - 1 + self.y0)
 
-    def backprop(self, xbar):
-        fx = self.forward(xbar) - self.y0 # have to subtract offset
-        return self.a*(1 - fx**2)
+    def backprop(self, x):
+        fx = self.forward(x) - self.y0  # peel off y0 to recover tanh value
+        return self.a * (1 - fx**2)
 
 
-class Arctan:
-    """Arctan(x)
-    """
-
-    def __init__(self, a=1, x0=0, y0=0):
-        """Activation function Arctan(x)
-
-        Parameters
-        ----------
-        a : float, optional
-            scale for the activation slope, by default 1
-        x0 : float, optional
-            x-offset of the Arctan(x) function, by default 0
-        y0 : float, optional
-            y-offset of the Arctan(x) function, by default 0
-        """
-        self.a = a
-        self.x0 = x0
-        self.y0 = y0
+class Arctan(_AffineActivation):
+    """Affine-scaled arctangent: y = arctan(a·(x - x0)) + y0."""
 
     def forward(self, x):
         x = x - self.x0
         return np.arctan(self.a * x) + self.y0
 
-    def backprop(self, xbar):
-        xbar = xbar - self.x0
-        xbar *= self.a
-        return self.a * (1 / (xbar**2 + 1))
+    def backprop(self, x):
+        u = self.a * (x - self.x0)
+        return self.a / (u**2 + 1)
 
 
-class Softplus:
-    """Softplus(x)
-    """
-    def __init__(self, a=1, x0=0, y0=0):
-        """Activation function Softplus(x)
-
-        Parameters
-        ----------
-        a : float, optional
-            scale for the activation slope, by default 1
-        x0 : float, optional
-            x-offset of the Softplus(x) function, by default 0
-        y0 : float, optional
-            y-offset of the Softplus(x) function, by default 0
-        """
-        self.a = a
-        self.x0 = x0
-        self.y0 = y0
+class Softplus(_AffineActivation):
+    """Affine-scaled softplus: y = log(1 + exp(a·(x - x0))) + y0."""
 
     def forward(self, x):
-        x = x-self.x0
-        arg = 1 + np.exp(self.a * x)
-        return np.log(arg) + self.y0
+        x = x - self.x0
+        return np.log(1 + np.exp(self.a * x)) + self.y0
 
-    def backprop(self, xbar):
-        xbar = xbar - self.x0
-        return self.a * (1 / (1 + np.exp(-self.a * xbar)))
+    def backprop(self, x):
+        x = x - self.x0
+        return self.a / (1 + np.exp(-self.a * x))
 
 
-class Sigmoid:
-    """Sigmoid(x)
-    """
-    def __init__(self, a=1, x0=0, y0=0):
-        """Activation function Sigmoid(x)
-
-        Parameters
-        ----------
-        a : float, optional
-            scale for the activation slope, by default 1
-        x0 : float, optional
-            x-offset of the Sigmoid(x) function, by default 0
-        y0 : float, optional
-            y-offset of the Sigmoid(x) function, by default 0
-        """
-        self.a = a
-        self.x0 = x0
-        self.y0 = y0
+class Sigmoid(_AffineActivation):
+    """Affine-scaled logistic sigmoid: y = σ(a·(x - x0)) + y0."""
 
     def forward(self, x):
         x = x - self.x0
         return (1 / (1 + np.exp(-self.a * x))) + self.y0
 
-    def backprop(self, xbar):
-        sig = self.forward(xbar) - self.y0
+    def backprop(self, x):
+        sig = self.forward(x) - self.y0  # peel off y0 to recover σ value
         return self.a * sig * (1 - sig)
