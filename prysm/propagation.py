@@ -10,6 +10,19 @@ from ._richdata import RichData
 from .fttools import pad2d, crop_center, fftrange, MDFT, CZT
 
 
+def _maybe_pad(wavefunction, Q):
+    """Symmetric-pad by factor Q, or pass through if Q == 1."""
+    if Q != 1:
+        return pad2d(wavefunction, Q)
+    return wavefunction
+
+
+def _phase_prefix(wavelength):
+    """Phase prefix or scale factor such that mul w/ OPD in nm produces radians
+    """
+    return 1j * 2 * np.pi / wavelength / 1e3
+
+
 def focus(wavefunction, Q):
     """Propagate a pupil plane to a PSF plane.
 
@@ -26,11 +39,7 @@ def focus(wavefunction, Q):
         point spread function
 
     """
-    if Q != 1:
-        padded_wavefront = pad2d(wavefunction, Q)
-    else:
-        padded_wavefront = wavefunction
-
+    padded_wavefront = _maybe_pad(wavefunction, Q)
     impulse_response = fft.fftshift(fft.fft2(fft.ifftshift(padded_wavefront), norm='ortho'))
     return impulse_response
 
@@ -51,11 +60,7 @@ def unfocus(wavefunction, Q):
         field in the pupil plane
 
     """
-    if Q != 1:
-        padded_wavefront = pad2d(wavefunction, Q)
-    else:
-        padded_wavefront = wavefunction
-
+    padded_wavefront = _maybe_pad(wavefunction, Q)
     return fft.fftshift(fft.ifft2(fft.ifftshift(padded_wavefront), norm='ortho'))
 
 
@@ -562,8 +567,7 @@ class Wavefront:
 
         """
         if phase is not None:
-            phase_prefix = 1j * 2 * np.pi / wavelength / 1e3  # / 1e3 does nm-to-um for phase on a scalar
-            P = amplitude * np.exp(phase_prefix * phase)
+            P = amplitude * np.exp(_phase_prefix(wavelength) * phase)
         else:
             P = amplitude
         return cls(P, wavelength, dx)
@@ -582,8 +586,7 @@ class Wavefront:
             sample spacing with units of mm
 
             """
-        phase_prefix = 1j * 2 * np.pi / wavelength / 1e3  # / 1e3 does nm-to-um for phase on a scalar
-        E = np.exp(phase_prefix*phase)
+        E = np.exp(_phase_prefix(wavelength) * phase)
         return cls(E, wavelength, dx)
 
     @classmethod
