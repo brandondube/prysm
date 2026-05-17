@@ -5,7 +5,6 @@ import numpy as np
 from prysm import coordinates
 
 from prysm.coordinates import cart_to_polar
-from prysm.x.raytracing.surfaces import surface_normal_from_cylindrical_derivatives, fix_zero_singularity
 from prysm import polynomials
 
 from scipy.special import (
@@ -459,6 +458,23 @@ def test_cheby2_seq_matches_loop():
         assert np.allclose(exp, elem)
 
 
+@pytest.mark.parametrize('seq_fn', [
+    polynomials.cheby1_seq, polynomials.cheby1_der_seq,
+    polynomials.cheby2_seq, polynomials.cheby2_der_seq,
+    polynomials.cheby3_seq, polynomials.cheby3_der_seq,
+    polynomials.cheby4_seq, polynomials.cheby4_der_seq,
+])
+def test_cheby_seq_2d_input(seq_fn):
+    """Cheby seq/der_seq broadcast correctly for 2-D x (docstring claim)."""
+    ns = [0, 1, 2, 3, 4]
+    x1 = np.linspace(-0.4, 0.4, 9)
+    x2 = np.stack([x1] * 7)  # shape (7, 9)
+    seq2 = seq_fn(ns, x2)
+    assert seq2.shape == (len(ns), 7, 9)
+    seq1 = seq_fn(ns, x1)
+    np.testing.assert_allclose(seq2[:, 0, :], seq1)
+
+
 @pytest.mark.parametrize('n', [1, 2, 3, 4, 8])
 def test_dickson1_alpha0_powers(n):
     d = polynomials.dickson1(n, 0, X)
@@ -790,39 +806,6 @@ def test_qcon_zzprime_grads():
     fd = np.gradient(z, dx)
     # tends to be about 6e-4, permit 10x higher so sporadic failures don't happen
     assert np.allclose(zprime[1:-1], fd[1:-1], atol=5e-1)
-
-@pytest.mark.skip(reason='CircleCI, what the hell?')
-def test_qcon_zzprime_q2d():
-    # decent number of points, so that finite diff isn't awful
-    with np.testing.suppress_warnings() as sup:
-        sup.filter(RuntimeWarning)
-        x, y = coordinates.make_xy_grid(512, diameter=2)
-        r, t = coordinates.cart_to_polar(x, y)
-        coefs_c = np.asarray([1, 2, 3, 4, 5])
-        coefs_a = (np.arange(16)+1).reshape(4, 4)
-        coefs_b = (np.arange(16)+1).reshape(4, 4)
-        # coefs_c = np.random.rand(5)
-        # coefs_a = np.random.rand(4, 4)
-        # coefs_b = np.random.rand(4, 4)
-        z, zprimer, zprimet = polynomials.qpoly.compute_z_zprime_Q2d(coefs_c, coefs_a, coefs_b, r, t)
-        delta = x[0, 1] - x[0, 0]
-        ddy, ddx = np.gradient(z, delta)
-        dx, dy = surface_normal_from_cylindrical_derivatives(zprimer, zprimet, r, t)
-        dx = fix_zero_singularity(dx, x, y)
-        dy = fix_zero_singularity(dy, x, y)
-
-    # apply this mask, otherwise the very large gradients outside the unit disk
-    # make things look terrible.
-    # even at 512x512, the relative error is very large at the edge of the unit
-    # circle, hence the enormous rtol that works out to about 25%
-    mask = r < 0.95  # slightly less than unit circle to preserve my sanity
-    dx *= mask
-    dy *= mask
-    ddx *= mask
-    ddy *= mask
-    assert np.allclose(dx, ddx, atol=1)
-    assert np.allclose(dy, ddy, atol=1)
-
 
 @pytest.mark.parametrize(['n', 'alpha'], [
     [0, 0],
