@@ -1,10 +1,45 @@
 """Cost functions, aka figures of merit for models."""
+import functools
 import numbers
 
 from prysm.mathops import np
 
 
-def bias_and_gain_invariant_error(I, D, mask):  # NOQA
+def _masked_cost(fn):
+    """Wrap a cost function to handle masking and dtype validation.
+
+    The wrapped fn(M, D) -> (cost, grad) is called on either the full
+    arrays (when mask is None) or on the masked subset.  In the masked
+    case the returned gradient is scattered back into a zero-init buffer
+    shaped like the original M so the caller always sees a gradient
+    aligned with the full input.
+
+    Also asserts M.dtype == D.dtype when both have a dtype, to catch
+    silent float32/float64 upcasts that waste compute and memory.
+
+    """
+    @functools.wraps(fn)
+    def wrapper(M, D, mask=None):
+        if hasattr(M, 'dtype') and hasattr(D, 'dtype') and M.dtype != D.dtype:
+            raise TypeError(
+                f"{fn.__name__}: input dtype mismatch — first array is "
+                f"{M.dtype}, second is {D.dtype}; cast one to match before calling"
+            )
+        if mask is None:
+            return fn(M, D)
+
+        M_m = M[mask]
+        D_m = D if isinstance(D, numbers.Number) else D[mask]
+        cost, grad_m = fn(M_m, D_m)
+        grad = np.zeros_like(M)
+        grad[mask] = grad_m
+        return cost, grad
+
+    return wrapper
+
+
+@_masked_cost
+def bias_and_gain_invariant_error(I, D):  # NOQA
     """Bias and gain invariant error.
 
     This cost function computes internal least mean squares estimates of the
@@ -21,7 +56,7 @@ def bias_and_gain_invariant_error(I, D, mask):  # NOQA
         'intensity' or model data, any float dtype, any shape
     D : ndarray
         'data' or true mesaurement to be matched, any float dtype, any shape
-    mask : ndarray
+    mask : ndarray, optional
         logical array with elements to keep (True) or exclude (False)
 
     Returns
@@ -29,43 +64,30 @@ def bias_and_gain_invariant_error(I, D, mask):  # NOQA
     float, ndarray
         cost, dcost/dI
 
-
     """
-    if mask is not None:
-        grad = np.zeros_like(I)
-        I = I[mask]  # NOQA
-        D = D[mask]
-
-    Ihat = I - I.mean()  # zero mean
+    Ihat = I - I.mean()
     Dhat = D - D.mean()
 
     N = I.size
 
-    num = (Ihat*Dhat).sum()
-    den = (Ihat*Ihat).sum()
-    alpha = num/den
+    num = (Ihat * Dhat).sum()
+    den = (Ihat * Ihat).sum()
+    alpha = num / den
 
-    alphaI = alpha*I
+    alphaI = alpha * I
 
-    beta = (D-alphaI)/N
+    beta = (D - alphaI) / N
 
-    R = 1/((D*D).sum())
+    R = 1 / ((D * D).sum())
     raw_err = (alphaI + beta) - D
-    err = R*(raw_err*raw_err).sum()
-    # 2 is from raw_err squared
-    # R is multiplied and not part of the differentiation, pass-through
-    # likewise with alpha
-    grad = 2*R*alpha*raw_err
-
-    if mask is not None:
-        grad2 = np.zeros(mask.shape, dtype=I.dtype)
-        grad2[mask] = grad
-        grad = grad2
-
+    err = R * (raw_err * raw_err).sum()
+    # 2 is from raw_err squared; R and alpha are pass-throughs of the chain rule
+    grad = 2 * R * alpha * raw_err
     return err, grad
 
 
-def mean_square_error(M, D, mask=None):
+@_masked_cost
+def mean_square_error(M, D):
     """Mean square error.
 
     Parameters
@@ -83,31 +105,22 @@ def mean_square_error(M, D, mask=None):
         cost, dcost/dM
 
     """
-    diff = (M-D)
-    if mask is not None:
-        diff = diff[mask]
-
+    diff = M - D
     alpha = 1 / diff.size
-    cost = (diff*diff).sum() * alpha
-
-    # backprop
-    if mask is not None:
-        grad = np.zeros_like(M)
-        grad[mask] = 2 * alpha * diff
-    else:
-        grad = 2 * alpha * diff
-
+    cost = (diff * diff).sum() * alpha
+    grad = 2 * alpha * diff
     return cost, grad
 
 
-def negative_loglikelihood(y, yhat, mask=None):
+@_masked_cost
+def negative_loglikelihood(y, yhat):
     """Negative log likelihood.
 
     Parameters
     ----------
     y : ndarray
         predicted values; typically the output of a model
-    yhat : ndarray
+    yhat : ndarray or scalar
         truth or target values
     mask : ndarray, optional
         True where M should contribute to the cost, False where it should not
@@ -118,23 +131,11 @@ def negative_loglikelihood(y, yhat, mask=None):
         cost, dcost/dy
 
     """
-    if mask is not None:
-        y = y[mask]
-        if not isinstance(yhat, numbers.Number): # scalar, don't index
-            yhat = yhat[mask]
+    sub1 = 1 - y
+    sub2 = 1 - yhat
+    prefix = 1 / y.size
+    cost = -prefix * (yhat * np.log(y) + sub2 * np.log(sub1)).sum()
 
-    sub1 = 1-y
-    sub2 = 1-yhat
-    prefix = 1/y.size  #               1-yhat        1-y  # NOQA flake8 doesn't like comment starting with space
-    cost = -prefix * (yhat*np.log(y) + (sub2)*np.log(sub1)).sum()
-
-    #                   1-yhat  1-y
-    dcost = (-yhat/y) + (sub2)/(sub1)
+    dcost = (-yhat / y) + (sub2 / sub1)
     dcost *= prefix
-
-    if mask is not None:
-        dcost2 = np.zeros(mask.shape, dtype=y.dtype)
-        dcost2[mask] = dcost
-        dcost = dcost2
-
     return cost, dcost
