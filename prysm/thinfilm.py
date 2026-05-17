@@ -50,7 +50,7 @@ def critical_angle(n0, n1, deg=True):
     return ang
 
 
-def snell_aor(n0, n1, theta, degrees=True):
+def snell_aor(n0, n1, theta, deg=True):
     """Compute the angle of refraction using Snell's law.
 
     Parameters
@@ -60,8 +60,8 @@ def snell_aor(n0, n1, theta, degrees=True):
     n1 : float
         index of refraction of the "right" material
     theta : float
-        angle of incidence, in degrees if degrees=True
-    degrees : bool, optional
+        angle of incidence, in degrees if deg=True
+    deg : bool, optional
         if True, theta is interpreted as an angle in degrees
 
     Returns
@@ -70,7 +70,7 @@ def snell_aor(n0, n1, theta, degrees=True):
         angle of refraction
 
     """
-    if degrees:
+    if deg:
         theta = np.radians(theta)
     return np.lib.scimath.arcsin(n0/n1 * np.sin(theta))
 
@@ -508,15 +508,15 @@ def multilayer_stack_rt(indices, thicknesses, wavelength, polarization, substrat
             raise ValueError('substrate_index must be broadcastable to the trailing layer dimensions') from exc
 
     angles = np.empty(thicknesses.shape, dtype=config.precision_complex)
-    substrate_angle = snell_aor(ambient_index, substrate_index, aoi, degrees=False)
+    substrate_angle = snell_aor(ambient_index, substrate_index, aoi, deg=False)
 
     # do the first loop by hand to handle ambient vacuum gracefully
     if angles.ndim > 1:
         for i in range(angles.shape[1]):
-            angles[:,i] = snell_aor(ambient_index, indices[:,i], aoi, degrees=False)
+            angles[:,i] = snell_aor(ambient_index, indices[:,i], aoi, deg=False)
     else:
         for i in range(len(angles)):
-            angles[i] = snell_aor(ambient_index, indices[i], aoi, degrees=False)
+            angles[i] = snell_aor(ambient_index, indices[i], aoi, deg=False)
 
     if polarization == 'p':
         fn1 = characteristic_matrix_p
