@@ -63,6 +63,53 @@ Rich XY polynomial capability has been introduced:
 
 * :func:`~prysm.polynomials.xy.xy_seq`
 
+Partial derivatives of the XY monomials have been added.  Three named callables
+plus their sequence variants are provided rather than one with an :code:`axis=`
+kwarg, so the chain rule reads naturally at call sites:
+
+* :func:`~prysm.polynomials.xy.xy_der_x`, :func:`~prysm.polynomials.xy.xy_der_x_seq`
+
+* :func:`~prysm.polynomials.xy.xy_der_y`, :func:`~prysm.polynomials.xy.xy_der_y_seq`
+
+* :func:`~prysm.polynomials.xy.xy_der_xy`, :func:`~prysm.polynomials.xy.xy_der_xy_seq` (mixed :math:`\partial^2 / \partial x \partial y`)
+
+A latent bug in :func:`~prysm.polynomials.xy.xy_seq` was also fixed: the
+internal monomial table was generated from :func:`~prysm.polynomials.dickson.dickson1_seq`
+with :code:`alpha=0`, but the Dickson convention gives :math:`D_0 = 2` rather
+than the monomial :math:`x^0 = 1`.  This meant :code:`xy_seq([(0,0)], x, y)`
+returned an array of 4 while :code:`xy(0, 0, x, y)` returned 1.  Both forms
+now return 1 consistently.
+
+Derivatives of the Dickson polynomials of the first and second kind are now
+available via the standard differentiated three-term recurrence:
+
+* :func:`~prysm.polynomials.dickson.dickson1_der`, :func:`~prysm.polynomials.dickson.dickson1_der_seq`
+
+* :func:`~prysm.polynomials.dickson.dickson2_der`, :func:`~prysm.polynomials.dickson.dickson2_der_seq`
+
+Derivatives of the Forbes Q polynomials are now exposed as ordinary
+:code:`_der` / :code:`_der_seq` callables, matching the convention used by
+every other family in the package.  For the radial families (Qbfs and Qcon)
+the derivative is taken with respect to :math:`x`:
+
+* :func:`~prysm.polynomials.qpoly.Qbfs_der`, :func:`~prysm.polynomials.qpoly.Qbfs_der_seq`
+
+* :func:`~prysm.polynomials.qpoly.Qcon_der`, :func:`~prysm.polynomials.qpoly.Qcon_der_seq`
+
+The 2D Q polynomials (Q2D, aka Forbes) expose both polar and Cartesian
+derivatives, mirroring the convention used by Zernikes.  Each callable returns
+a pair of arrays:
+
+* :func:`~prysm.polynomials.qpoly.Q2d_der`, :func:`~prysm.polynomials.qpoly.Q2d_der_seq` return :math:`(\partial / \partial r, \partial / \partial t)`
+
+* :func:`~prysm.polynomials.qpoly.Q2d_der_xy`, :func:`~prysm.polynomials.qpoly.Q2d_der_xy_seq` return :math:`(\partial / \partial x, \partial / \partial y)`
+
+The Cartesian variant is computed directly in :math:`(x, y)` via the harmonic
+decomposition :math:`r^{|m|} \cos(m t) = \mathrm{Re}\bigl((x + i y)^{|m|}\bigr)`
+(and :math:`\mathrm{Im}` for negative :math:`m`), so it is smooth at the origin
+with no :math:`1/r` singularity, in direct analogy to
+:func:`~prysm.polynomials.zernike.zernike_nm_der_xy`.
+
 Additionally, Laguerre polynomials have been introduced, which can be used for
 generating Laguerre-Gaussian beams:
 
@@ -93,7 +140,16 @@ array.  Now equivalent usage is :code:`basis = xxx_seq()`, which returns the
 dense array of shape :code:`(K,N,M)` directly (K=num modes, (N,M) = spatial
 dimensionality).
 
-Some bugs in edge cases with clenshaw's method for sums of Q polynomials were fixed.
+The :code:`_seq` callables also skip the internal :code:`ns = list(ns)` copy
+when :code:`ns` already supports :code:`len()`, so passing an ndarray or other
+sized iterable no longer incurs a redundant Python-list materialization.
+
+Some bugs in edge cases with clenshaw's method for sums of Q polynomials were
+fixed.  Internally, the per-family Clenshaw loops in :code:`jacobi`,
+:code:`qpoly`, and the related derivative paths have been unified behind a
+shared kernel in :code:`prysm.polynomials._clenshaw`, and the :code:`len == 1`
+mode-axis padding is now handled centrally so callers no longer need to guard
+the single-mode degenerate case at each Clenshaw call site.
 
 Propagation
 -----------
@@ -360,6 +416,11 @@ This second change avoids subtle etalon effect errors that could occur.
   thicknesses = [.150]
   # note last arg is substrate index
   r, _ = thinfilm.multilayer_stack_rt(indices, thicknesses, wvl, 'p', n_C7980)
+
+:func:`~prysm.thinfilm.snell_aor` previously took a :code:`degrees` kwarg, while
+the sibling functions :func:`~prysm.thinfilm.brewsters_angle` and
+:func:`~prysm.thinfilm.critical_angle` took :code:`deg`.  All three now use
+:code:`deg` consistently.
 
 
 Thin Lens

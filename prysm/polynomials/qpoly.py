@@ -5,7 +5,8 @@ from functools import lru_cache
 
 from scipy import special
 
-from .jacobi import jacobi, jacobi_seq, jacobi_sum_clenshaw_der
+from .jacobi import jacobi, jacobi_der, jacobi_seq, jacobi_der_seq, jacobi_sum_clenshaw_der
+from ._clenshaw import _initialize_alphas, _clenshaw_sum, _clenshaw_sum_der
 
 from prysm.mathops import np, kronecker, gamma, sign
 from prysm.conf import config
@@ -172,27 +173,6 @@ def change_basis_Qbfs_to_Pn(cs):
     return bs
 
 
-def _initialize_alphas(cs, x, alphas, j=0):
-    # j = derivative order
-    if alphas is None:
-        if hasattr(x, 'dtype'):
-            dtype = x.dtype
-        else:
-            dtype = config.precision
-        if hasattr(x, 'shape'):
-            shape = (len(cs), *x.shape)
-        elif hasattr(x, '__len__'):
-            shape = (len(cs), len(x))
-        else:
-            shape = (len(cs),)
-
-        if j != 0:
-            shape = (j+1, *shape)
-
-        alphas = np.zeros(shape, dtype=dtype)
-    return alphas
-
-
 def clenshaw_qbfs(cs, usq, alphas=None):
     """Use Clenshaw's method to compute a Qbfs surface from its coefficients.
 
@@ -218,22 +198,14 @@ def clenshaw_qbfs(cs, usq, alphas=None):
     """
     x = usq
     bs = change_basis_Qbfs_to_Pn(cs)
-    # alphas = np.zeros((len(cs), len(u)), dtype=u.dtype)
     alphas = _initialize_alphas(cs, x, alphas, j=0)
-    M = len(bs)-1
-    if M == 0:
-        # only Q_0 contributes; the standard recurrence's "alphas[1]" is
-        # implicitly zero, giving S = 2 * alphas[0].
-        alphas[0] = bs[0]
-        return (x * (1 - x)) * (2 * alphas[0])
+    # Qbfs recurrence: P_n = (2 - 4x) P_{n-1} - P_{n-2}; lin is n-independent,
+    # c is 1.
     prefix = 2 - 4 * x
-    alphas[M] = bs[M]
-    alphas[M-1] = bs[M-1] + prefix * alphas[M]
-    for i in range(M-2, -1, -1):
-        alphas[i] = bs[i] + prefix * alphas[i+1] - alphas[i+2]
-
-    S = 2 * (alphas[0] + alphas[1])
-    return (x * (1 - x)) * S
+    _clenshaw_sum(bs, lambda n: prefix, lambda n: 1, alphas)
+    # alphas[1] is zero for the len-1 case (mode axis is padded to >=2 by
+    # _initialize_alphas), so the formula collapses correctly.
+    return (x * (1 - x)) * (2 * (alphas[0] + alphas[1]))
 
 
 def clenshaw_qbfs_der(cs, usq, j=1, alphas=None):
@@ -270,25 +242,17 @@ def clenshaw_qbfs_der(cs, usq, j=1, alphas=None):
 
     """
     x = usq
-    M = len(cs) - 1
+    bs = change_basis_Qbfs_to_Pn(cs)
+    alphas = _initialize_alphas(cs, x, alphas, j=j)
     prefix = 2 - 4 * x
-    alphas = _initialize_alphas(cs, usq, alphas, j=j)
-    # seed with j=0 (S, not its derivative)
-    clenshaw_qbfs(cs, usq, alphas[0])
-    for jj in range(1, j+1):
-        if jj > M:
-            # the (jj)-th derivative of a degree-M polynomial is identically
-            # zero; alphas[jj] is already zeroed by _initialize_alphas
-            continue
-        # boundary index is M-jj (not M-j); the inner loop sweeps from
-        # M-jj-1 down to 0 (not from M-2)
-        alphas[jj][M-jj] = -4 * jj * alphas[jj-1][M-jj+1]
-        for n in range(M-jj-1, -1, -1):
-            # this is hideous, and just expresses:
-            # for the (jj)-th derivative, alpha_n = (2 - 4x) a_n+1 - a_n+2
-            #                                      - 4 jj a_n+1^(jj-1)
-            alphas[jj][n] = prefix * alphas[jj][n+1] - alphas[jj][n+2] - 4 * jj * alphas[jj-1][n+1]
-
+    _clenshaw_sum_der(
+        bs,
+        lambda n: prefix,        # lin_n(x)        = 2 - 4x (n-independent)
+        lambda n: -4,            # coefficient of x in lin_n
+        lambda n: 1,             # c_n
+        alphas,
+        j,
+    )
     return alphas
 
 
@@ -322,24 +286,17 @@ def compute_z_zprime_Qbfs(coefs, u, usq):
         S, Sprime in Forbes' parlance
 
     """
-    # clenshaw does its own u^2
+    # clenshaw does its own u^2; _initialize_alphas pads the mode axis to
+    # at least 2, so alphas[*][1] is always readable (zero for len==1).
     alphas = clenshaw_qbfs_der(coefs, usq, j=1)
-    # for len(coefs) == 1 the recurrence has no "alphas[*][1]" element; the
-    # standard formula's alphas[0][1] / alphas[1][1] terms are implicitly zero.
-    if alphas.shape[1] >= 2:
-        a01 = alphas[0][1]
-        a11 = alphas[1][1]
-    else:
-        a01 = np.zeros_like(alphas[0][0])
-        a11 = np.zeros_like(alphas[1][0])
-    S = 2 * (alphas[0][0] + a01)
+    S = 2 * (alphas[0][0] + alphas[0][1])
     # Sprime should be two times the alphas, just like S, but as a performance
     # optimization, S = sum cn Qn u^2
     # we're doing d/du, so a prefix of 2u comes in front
     # and 2*u * (2 * alphas)
     # = 4*u*alphas
     # = do two in-place muls on Sprime for speed
-    Sprime = alphas[1][0] + a11
+    Sprime = alphas[1][0] + alphas[1][1]
     Sprime *= 4
     Sprime *= u
 
@@ -418,7 +375,8 @@ def Qbfs_seq(ns, x):
     # see the leading comment of Qbfs for some explanation of this code
     # and prysm:jacobi.py#jacobi_seq the "_seq" portion
 
-    ns = list(ns)
+    if not hasattr(ns, '__len__'):
+        ns = list(ns)
     min_i = 0
     out = np.empty((len(ns), *x.shape), dtype=x.dtype)
 
@@ -465,6 +423,147 @@ def Qbfs_seq(ns, x):
         Qnm1 = Qn
         if ns[min_i] == nn:
             out[min_i] = Qn * c_Q
+            min_i += 1
+
+    return out
+
+
+def Qbfs_der(n, x):
+    """Partial derivative w.r.t. x of the Qbfs polynomial of order n.
+
+    Uses the parallel auxiliary recurrence on y = x^2 to evaluate both
+    Q_n(y) and Q'_n(y) = dQ_n/dy, then chains through the leading
+    x^2(1 - x^2) envelope:
+
+        dQbfs_n/dx = (2x - 4x^3) Q_n(x^2) + (2x^3 - 2x^5) Q'_n(x^2)
+
+    Parameters
+    ----------
+    n : int
+        polynomial order
+    x : ndarray
+        point(s) at which to evaluate, notionally in [0, 1]
+
+    Returns
+    -------
+    ndarray
+        d/dx Qbfs_n(x)
+
+    """
+    rho = x ** 2
+    # leading-envelope derivative pieces, reused at the bottom
+    env = rho * (1 - rho)
+    denv_dx = 2*x - 4*x*rho  # 2x - 4x^3
+
+    if n == 0:
+        # Qbfs_0(x) = x^2 - x^4 → derivative = 2x - 4x^3
+        return denv_dx
+
+    inv_sqrt19 = 1.0 / np.sqrt(19)
+    Q_curr = inv_sqrt19 * (13 - 16 * rho)
+    dQ_curr = -16 * inv_sqrt19  # scalar; dQ_1/dy
+    if n == 1:
+        # multiply by env-derivative chain: 2x for d/dx of Q(rho)
+        return denv_dx * Q_curr + env * (2 * x) * dQ_curr
+
+    # auxiliary recurrence on y = rho
+    P_prev = np.ones_like(x) * 2          # P_0(y) = 2
+    P_curr = 6 - 8 * rho                  # P_1(y) = 6 - 8y
+    dP_prev = 0                           # dP_0/dy = 0
+    dP_curr = -8                          # dP_1/dy = -8
+
+    Q_prev = np.ones_like(x)              # Q_0 = 1
+    dQ_prev = 0                           # dQ_0/dy = 0
+
+    prefix = 2 - 4 * rho
+    for nn in range(2, n+1):
+        Pn = prefix * P_curr - P_prev
+        dPn = -4 * P_curr + prefix * dP_curr - dP_prev
+        g = g_qbfs(nn - 1)
+        h = h_qbfs(nn - 2)
+        inv_f = 1 / f_qbfs(nn)
+        Qn = (Pn - g * Q_curr - h * Q_prev) * inv_f
+        dQn = (dPn - g * dQ_curr - h * dQ_prev) * inv_f
+        P_prev, P_curr = P_curr, Pn
+        dP_prev, dP_curr = dP_curr, dPn
+        Q_prev, Q_curr = Q_curr, Qn
+        dQ_prev, dQ_curr = dQ_curr, dQn
+
+    return denv_dx * Q_curr + env * (2 * x) * dQ_curr  # NOQA
+
+
+def Qbfs_der_seq(ns, x):
+    """Partial derivative w.r.t. x of Qbfs polynomials of orders ns.
+
+    Companion to Qbfs_seq; see Qbfs_der for the derivation.
+
+    Parameters
+    ----------
+    ns : Iterable of int
+        polynomial orders (assumed sorted ascending)
+    x : ndarray
+        point(s) at which to evaluate
+
+    Returns
+    -------
+    ndarray
+        has shape (len(ns), *x.shape); the i-th plane is d/dx Qbfs_{ns[i]}(x)
+
+    """
+    if not hasattr(ns, '__len__'):
+        ns = list(ns)
+    min_i = 0
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
+
+    rho = x ** 2
+    env = rho * (1 - rho)
+    denv_dx = 2*x - 4*x*rho
+    two_x = 2 * x
+
+    if ns[min_i] == 0:
+        out[min_i] = denv_dx
+        min_i += 1
+
+    if min_i == len(ns):
+        return out
+
+    inv_sqrt19 = 1.0 / np.sqrt(19)
+    Q_curr = inv_sqrt19 * (13 - 16 * rho)
+    dQ_curr_scalar = -16 * inv_sqrt19  # dQ_1/dy is a scalar
+    if ns[min_i] == 1:
+        out[min_i] = denv_dx * Q_curr + env * two_x * dQ_curr_scalar
+        min_i += 1
+
+    if min_i == len(ns):
+        return out
+
+    # promote dQ_curr to array for the parallel recurrence
+    dQ_curr = np.broadcast_to(np.asarray(dQ_curr_scalar, dtype=x.dtype), x.shape).copy()
+
+    P_prev = np.ones_like(x) * 2
+    P_curr = 6 - 8 * rho
+    # dP needs to be array-shaped from the start to participate in recurrence
+    dP_prev = np.zeros_like(x)
+    dP_curr = np.full_like(x, -8)
+
+    Q_prev = np.ones_like(x)
+    dQ_prev = np.zeros_like(x)
+
+    prefix = 2 - 4 * rho
+    for nn in range(2, ns[-1]+1):
+        Pn = prefix * P_curr - P_prev
+        dPn = -4 * P_curr + prefix * dP_curr - dP_prev
+        g = g_qbfs(nn - 1)
+        h = h_qbfs(nn - 2)
+        inv_f = 1 / f_qbfs(nn)
+        Qn = (Pn - g * Q_curr - h * Q_prev) * inv_f
+        dQn = (dPn - g * dQ_curr - h * dQ_prev) * inv_f
+        P_prev, P_curr = P_curr, Pn
+        dP_prev, dP_curr = dP_curr, dPn
+        Q_prev, Q_curr = Q_curr, Qn
+        dQ_prev, dQ_curr = dQ_curr, dQn
+        if ns[min_i] == nn:
+            out[min_i] = denv_dx * Qn + env * two_x * dQn
             min_i += 1
 
     return out
@@ -526,6 +625,60 @@ def Qcon_seq(ns, x):
     x4 = x ** 4
     Pns = jacobi_seq(ns, 0, 4, xx)
     return Pns * x4
+
+
+def Qcon_der(n, x):
+    """Partial derivative w.r.t. x of the Qcon polynomial of order n.
+
+    Qcon_n(x) = x^4 * P_n(2x^2 - 1) where P_n is the Jacobi polynomial with
+    alpha=0, beta=4.  Differentiating::
+
+        dQcon_n/dx = 4 x^3 P_n(2x^2 - 1) + 4 x^5 P'_n(2x^2 - 1)
+
+    Parameters
+    ----------
+    n : int
+        polynomial order
+    x : ndarray
+        point(s) at which to evaluate, notionally in [0, 1]
+
+    Returns
+    -------
+    ndarray
+        d/dx Qcon_n(x)
+
+    """
+    xx = 2 * x * x - 1
+    x3 = x * x * x
+    Pn = jacobi(n, 0, 4, xx)
+    dPn = jacobi_der(n, 0, 4, xx)
+    return 4 * x3 * Pn + 4 * x3 * (x * x) * dPn
+
+
+def Qcon_der_seq(ns, x):
+    """Partial derivative w.r.t. x of Qcon polynomials of orders ns.
+
+    Companion to Qcon_seq; see Qcon_der for the derivation.
+
+    Parameters
+    ----------
+    ns : Iterable of int
+        polynomial orders (assumed sorted ascending)
+    x : ndarray
+        point(s) at which to evaluate
+
+    Returns
+    -------
+    ndarray
+        has shape (len(ns), *x.shape); the i-th plane is d/dx Qcon_{ns[i]}(x)
+
+    """
+    xx = 2 * x * x - 1
+    x3 = x * x * x
+    x5 = x3 * x * x
+    Pns = jacobi_seq(ns, 0, 4, xx)
+    dPns = jacobi_der_seq(ns, 0, 4, xx)
+    return 4 * x3 * Pns + 4 * x5 * dPns
 
 
 @lru_cache(4000)
@@ -938,6 +1091,461 @@ def Q2d_seq(nms, r, t):
     return out
 
 
+def _qbfs_aux_recurrence(Nmax, u):
+    """Tables of the auxiliary Qbfs polynomial Q_n(u) and dQ_n/du.
+
+    These are the unprefixed Qbfs polynomials — i.e., Qbfs_n(x) =
+    x^2(1-x^2) * Q_n(x^2). Used by Q2d Cartesian derivatives when m=0.
+
+    Returns
+    -------
+    list, list
+        Q[0..Nmax] and dQ[0..Nmax]; each entry is an ndarray broadcast to
+        the shape of u.
+    """
+    Q0 = np.ones_like(u)
+    dQ0 = np.zeros_like(u)
+    Q_list = [Q0]
+    dQ_list = [dQ0]
+    if Nmax == 0:
+        return Q_list, dQ_list
+
+    inv_sqrt19 = 1.0 / np.sqrt(19)
+    Q1 = inv_sqrt19 * (13 - 16 * u)
+    dQ1 = np.full_like(u, -16 * inv_sqrt19)
+    Q_list.append(Q1)
+    dQ_list.append(dQ1)
+    if Nmax == 1:
+        return Q_list, dQ_list
+
+    # parallel P / P' / Q / Q' recurrence on u
+    P_prev = np.full_like(u, 2.0)
+    P_curr = 6 - 8 * u
+    dP_prev = np.zeros_like(u)
+    dP_curr = np.full_like(u, -8.0)
+    Q_prev = Q0
+    Q_curr = Q1
+    dQ_prev = dQ0
+    dQ_curr = dQ1
+    prefix = 2 - 4 * u
+    for nn in range(2, Nmax + 1):
+        Pn = prefix * P_curr - P_prev
+        dPn = -4 * P_curr + prefix * dP_curr - dP_prev
+        g = g_qbfs(nn - 1)
+        h = h_qbfs(nn - 2)
+        inv_f = 1 / f_qbfs(nn)
+        Qn = (Pn - g * Q_curr - h * Q_prev) * inv_f
+        dQn = (dPn - g * dQ_curr - h * dQ_prev) * inv_f
+        P_prev, P_curr = P_curr, Pn
+        dP_prev, dP_curr = dP_curr, dPn
+        Q_prev, Q_curr = Q_curr, Qn
+        dQ_prev, dQ_curr = dQ_curr, dQn
+        Q_list.append(Qn)
+        dQ_list.append(dQn)
+
+    return Q_list, dQ_list
+
+
+def _q2d_radial_recurrence(Nmax, m, u):
+    """Tables of Q_n^m(u) and dQ_n^m/du for n=0..Nmax, m >= 1.
+
+    Where u = rho^2 in Forbes' parlance. This computes the radial part
+    *without* the u^m or trig prefix.
+
+    Returns
+    -------
+    list, list
+        Q[0..Nmax] and dQ[0..Nmax]; each entry is an ndarray broadcast to
+        the shape of u.
+    """
+    if m < 1:
+        raise ValueError(f'_q2d_radial_recurrence requires m >= 1, got {m}')
+
+    f0 = f_q2d(0, m)
+    Q_prev = np.full_like(u, 1 / (2 * f0))
+    dQ_prev = np.zeros_like(u)
+    Q_list = [Q_prev]
+    dQ_list = [dQ_prev]
+    if Nmax == 0:
+        return Q_list, dQ_list
+
+    P_prev = np.full_like(u, 0.5)         # P_0 = 1/2
+    dP_prev = np.zeros_like(u)
+    if m == 1:
+        P_curr = 1 - u / 2
+        dP_curr = np.full_like(u, -0.5)
+    else:
+        P_curr = (m - 0.5) + (1 - m) * u
+        dP_curr = np.full_like(u, 1 - m)
+
+    g0 = g_q2d(0, m)
+    f1 = f_q2d(1, m)
+    inv_f1 = 1 / f1
+    Q_curr = (P_curr - g0 * Q_prev) * inv_f1
+    dQ_curr = (dP_curr - g0 * dQ_prev) * inv_f1
+    Q_list.append(Q_curr)
+    dQ_list.append(dQ_curr)
+    if Nmax == 1:
+        return Q_list, dQ_list
+
+    if m == 1:
+        # hardcoded P_2, P_3 mirror Q2d
+        P2 = (3 - u * (12 - 8 * u)) / 6
+        dP2 = (-12 + 16 * u) / 6
+        g1 = g_q2d(1, 1)
+        f2 = f_q2d(2, 1)
+        inv_f2 = 1 / f2
+        Q2 = (P2 - g1 * Q_curr) * inv_f2
+        dQ2 = (dP2 - g1 * dQ_curr) * inv_f2
+        Q_list.append(Q2)
+        dQ_list.append(dQ2)
+        if Nmax == 2:
+            return Q_list, dQ_list
+
+        P3 = (5 - u * (60 - u * (120 - 64 * u))) / 10
+        dP3 = (-60 + u * (240 - 192 * u)) / 10
+        g2 = g_q2d(2, 1)
+        f3 = f_q2d(3, 1)
+        inv_f3 = 1 / f3
+        Q3 = (P3 - g2 * Q2) * inv_f3
+        dQ3 = (dP3 - g2 * dQ2) * inv_f3
+        Q_list.append(Q3)
+        dQ_list.append(dQ3)
+        if Nmax == 3:
+            return Q_list, dQ_list
+
+        P_prev, P_curr = P2, P3
+        dP_prev, dP_curr = dP2, dP3
+        Q_curr = Q3
+        dQ_curr = dQ3
+        start_n = 4
+    else:
+        start_n = 2
+
+    for nn in range(start_n, Nmax + 1):
+        A, B, C = abc_q2d(nn - 1, m)
+        Pn = (A + B * u) * P_curr - C * P_prev
+        dPn = B * P_curr + (A + B * u) * dP_curr - C * dP_prev
+        gnm1 = g_q2d(nn - 1, m)
+        fn = f_q2d(nn, m)
+        inv_fn = 1 / fn
+        Qn = (Pn - gnm1 * Q_curr) * inv_fn
+        dQn = (dPn - gnm1 * dQ_curr) * inv_fn
+        P_prev, P_curr = P_curr, Pn
+        dP_prev, dP_curr = dP_curr, dPn
+        Q_curr = Qn
+        dQ_curr = dQn
+        Q_list.append(Qn)
+        dQ_list.append(dQn)
+
+    return Q_list, dQ_list
+
+
+def _harmonic_powers(am, x, y):
+    """Real and imaginary parts of (x + i y)^k for k=0..am.
+
+    Returns
+    -------
+    list of (C_k, S_k)
+        out[k] = (Re((x+iy)^k), Im((x+iy)^k)) for k in 0..am.
+    """
+    C0 = np.ones_like(x)
+    S0 = np.zeros_like(x)
+    out = [(C0, S0)]
+    C_prev, S_prev = C0, S0
+    for _ in range(am):
+        C_new = x * C_prev - y * S_prev
+        S_new = x * S_prev + y * C_prev
+        out.append((C_new, S_new))
+        C_prev, S_prev = C_new, S_new
+    return out
+
+
+def Q2d_der(n, m, r, t):
+    """Polar partial derivatives of the 2D Q polynomial Q2d_n^m.
+
+    Parameters
+    ----------
+    n : int
+        radial order
+    m : int
+        azimuthal order (sign controls cosine vs sine prefix; m=0 is the
+        purely-radial Qbfs case)
+    r : ndarray
+        radial coordinate in [0, 1]
+    t : ndarray
+        azimuthal coordinate, radians
+
+    Returns
+    -------
+    ndarray, ndarray
+        d/dr Q2d_n^m, d/dt Q2d_n^m
+
+    """
+    if m == 0:
+        # Q2d for m=0 reduces to Qbfs(n, r) which has no t-dependence
+        return Qbfs_der(n, r), np.zeros_like(r * t)
+
+    u = r * r
+    am = abs(m)
+    Q_list, dQ_list = _q2d_radial_recurrence(n, am, u)
+    Q = Q_list[n]
+    dQdu = dQ_list[n]
+
+    if m > 0:
+        trig = np.cos(am * t)
+        trig_der = -am * np.sin(am * t)
+    else:
+        trig = np.sin(am * t)
+        trig_der = am * np.cos(am * t)
+
+    # F(r) = r^am * Q(r^2);  F'(r) = am r^(am-1) Q + 2 r^(am+1) Q'(r^2)
+    if am == 1:
+        r_am_minus_1 = np.ones_like(r)
+        r_am = r
+    else:
+        r_am_minus_1 = r ** (am - 1)
+        r_am = r_am_minus_1 * r
+
+    F = r_am * Q
+    Fp = am * r_am_minus_1 * Q + 2 * r_am * r * dQdu
+
+    return trig * Fp, trig_der * F
+
+
+def Q2d_der_xy(n, m, x, y):
+    """Cartesian partial derivatives of the 2D Q polynomial Q2d_n^m.
+
+    Computed directly in (x, y) via the harmonic decomposition
+    r^|m| cos(m t) = Re((x + i y)^|m|) (and Im for m<0), so the result is
+    smooth at the origin with no 1/r singularity.
+
+    Parameters
+    ----------
+    n : int
+        radial order
+    m : int
+        azimuthal order
+    x : ndarray
+        Cartesian x coordinate (same normalization as r in Q2d)
+    y : ndarray
+        Cartesian y coordinate
+
+    Returns
+    -------
+    ndarray, ndarray
+        dQ/dx, dQ/dy
+
+    """
+    rho_sq = x * x + y * y
+    am = abs(m)
+
+    if m == 0:
+        Q_list, dQ_list = _qbfs_aux_recurrence(n, rho_sq)
+        Q = Q_list[n]
+        dQdu = dQ_list[n]
+        u = rho_sq
+        env = u * (1 - u)
+        denv_du = 1 - 2 * u
+        common = denv_du * Q + env * dQdu  # d(sag)/du
+        return 2 * x * common, 2 * y * common
+
+    Q_list, dQ_list = _q2d_radial_recurrence(n, am, rho_sq)
+    J = Q_list[n]
+    Jp = dQ_list[n]
+
+    harm = _harmonic_powers(am, x, y)
+    C_am, S_am = harm[am]
+    C_amm1, S_amm1 = harm[am - 1]
+    if m > 0:
+        H = C_am
+        dHdx = am * C_amm1
+        dHdy = -am * S_amm1
+    else:
+        H = S_am
+        dHdx = am * S_amm1
+        dHdy = am * C_amm1
+
+    # d/dx J(rho^2) = Jp * 2x; similarly for y
+    return 2 * x * Jp * H + J * dHdx, 2 * y * Jp * H + J * dHdy
+
+
+def Q2d_der_seq(nms, r, t):
+    """Polar partial derivatives of a sequence of Q2d polynomials.
+
+    Companion to Q2d_seq; per-m recurrence is shared across all radial
+    orders for that m.
+
+    Parameters
+    ----------
+    nms : iterable of tuple
+        (n, m) for each desired term
+    r : ndarray
+        radial coordinates
+    t : ndarray
+        azimuthal coordinates
+
+    Returns
+    -------
+    ndarray, ndarray
+        arrays of shape (len(nms), *r.shape); the first is d/dr, the second
+        is d/dt, in the same order as nms
+
+    """
+    u = r * r
+
+    # Plan per-m work: max radial order for each |m|, and which signs occur
+    m_has_pos = set()
+    m_has_neg = set()
+    max_ns = defaultdict(int)
+    for n, m in nms:
+        am = abs(m)
+        if max_ns[am] < n:
+            max_ns[am] = n
+        if m > 0:
+            m_has_pos.add(am)
+        elif m < 0:
+            m_has_neg.add(am)
+
+    # Precompute trig and radial-prefix tables per |m|
+    cos_table = {}
+    sin_table = {}
+    cos_der_table = {}
+    sin_der_table = {}
+    r_am_table = {}        # r^am
+    r_am_minus_1_table = {}  # r^(am-1)
+    for am in max_ns:
+        if am == 0:
+            continue
+        if am in m_has_pos:
+            cos_table[am] = np.cos(am * t)
+            sin_der_table[am] = -am * np.sin(am * t)
+        if am in m_has_neg:
+            sin_table[am] = np.sin(am * t)
+            cos_der_table[am] = am * np.cos(am * t)
+        if am == 1:
+            r_am_minus_1_table[am] = np.ones_like(r)
+            r_am_table[am] = r
+        else:
+            r_am_minus_1_table[am] = r ** (am - 1)
+            r_am_table[am] = r_am_minus_1_table[am] * r
+
+    # Per-|m| recurrence
+    Q_tables = {}
+    dQ_tables = {}
+    for am, Nmax in max_ns.items():
+        if am == 0:
+            # use the auxiliary Qbfs recurrence; sag = u(1-u) Q, but for polar
+            # derivatives we want d/dr Qbfs_n(r) directly
+            # easier: just call Qbfs_der per-mode below; build value tables
+            # for the auxiliary form so we can reuse for d/dt (which is 0)
+            Q_tables[0] = None
+            dQ_tables[0] = None
+        else:
+            Q_tables[am], dQ_tables[am] = _q2d_radial_recurrence(Nmax, am, u)
+
+    out_dr = np.empty((len(nms), *r.shape), dtype=r.dtype)
+    out_dt = np.empty((len(nms), *r.shape), dtype=r.dtype)
+    for j, (n, m) in enumerate(nms):
+        if m == 0:
+            out_dr[j] = Qbfs_der(n, r)
+            out_dt[j] = 0
+            continue
+        am = abs(m)
+        Q = Q_tables[am][n]
+        dQdu = dQ_tables[am][n]
+        r_am = r_am_table[am]
+        r_am_minus_1 = r_am_minus_1_table[am]
+        F = r_am * Q
+        Fp = am * r_am_minus_1 * Q + 2 * r_am * r * dQdu
+        if m > 0:
+            out_dr[j] = cos_table[am] * Fp
+            out_dt[j] = sin_der_table[am] * F
+        else:
+            out_dr[j] = sin_table[am] * Fp
+            out_dt[j] = cos_der_table[am] * F
+
+    return out_dr, out_dt
+
+
+def Q2d_der_xy_seq(nms, x, y):
+    """Cartesian partial derivatives of a sequence of Q2d polynomials.
+
+    Companion to Q2d_der_xy; per-m recurrence and per-am harmonic powers
+    are shared across all radial orders for that m.
+
+    Parameters
+    ----------
+    nms : iterable of tuple
+        (n, m) for each desired term
+    x : ndarray
+        Cartesian x coordinate
+    y : ndarray
+        Cartesian y coordinate
+
+    Returns
+    -------
+    ndarray, ndarray
+        arrays of shape (len(nms), *x.shape); the first is d/dx, the second
+        is d/dy, in the same order as nms
+
+    """
+    rho_sq = x * x + y * y
+
+    max_ns = defaultdict(int)
+    for n, m in nms:
+        am = abs(m)
+        if max_ns[am] < n:
+            max_ns[am] = n
+
+    # Per-|m| recurrence
+    Q_tables = {}
+    dQ_tables = {}
+    for am, Nmax in max_ns.items():
+        if am == 0:
+            Q_tables[0], dQ_tables[0] = _qbfs_aux_recurrence(Nmax, rho_sq)
+        else:
+            Q_tables[am], dQ_tables[am] = _q2d_radial_recurrence(Nmax, am, rho_sq)
+
+    # Harmonic powers up to the largest am
+    am_max = max(max_ns) if max_ns else 0
+    harm = _harmonic_powers(am_max, x, y) if am_max > 0 else None
+
+    # m=0 envelope pieces (reused per (n, 0))
+    if 0 in max_ns:
+        u = rho_sq
+        env = u * (1 - u)
+        denv_du = 1 - 2 * u
+
+    out_dx = np.empty((len(nms), *x.shape), dtype=x.dtype)
+    out_dy = np.empty((len(nms), *x.shape), dtype=x.dtype)
+    for j, (n, m) in enumerate(nms):
+        am = abs(m)
+        if m == 0:
+            Q = Q_tables[0][n]
+            dQdu = dQ_tables[0][n]
+            common = denv_du * Q + env * dQdu
+            out_dx[j] = 2 * x * common
+            out_dy[j] = 2 * y * common
+            continue
+        J = Q_tables[am][n]
+        Jp = dQ_tables[am][n]
+        C_am, S_am = harm[am]
+        C_amm1, S_amm1 = harm[am - 1]
+        if m > 0:
+            H = C_am
+            dHdx = am * C_amm1
+            dHdy = -am * S_amm1
+        else:
+            H = S_am
+            dHdx = am * S_amm1
+            dHdy = am * C_amm1
+        out_dx[j] = 2 * x * Jp * H + J * dHdx
+        out_dy[j] = 2 * y * Jp * H + J * dHdy
+
+    return out_dx, out_dy
+
+
 def change_of_basis_Q2d_to_Pnm(cns, m):
     """Perform the change of basis from Q_n^m to the auxiliary polynomial P_n^m.
 
@@ -1034,19 +1642,20 @@ def clenshaw_q2d(cns, m, usq, alphas=None):
     x = usq
     ds = change_of_basis_Q2d_to_Pnm(cns, m)
     alphas = _initialize_alphas(ds, x, alphas, j=0)
-    N = len(ds) - 1
-    alphas[N] = ds[N]
-    if N == 0:
-        return alphas
+    # Q2d recurrence: P_n = (A_n + B_n x) P_{n-1} - C_n P_{n-2} (Forbes notation;
+    # do not swap A, B vs the paper — kept consistent with Forbes previously).
 
-    A, B, _ = abc_q2d_clenshaw(N-1, m)
-    # do not swap A, B vs the paper - used them consistent to Forbes previously
-    alphas[N-1] = ds[N-1] + (A + B * x) * alphas[N]
-    for n in range(N-2, -1, -1):
+    def lin(n):
         A, B, _ = abc_q2d_clenshaw(n, m)
-        _, _, C = abc_q2d_clenshaw(n+1, m)
-        alphas[n] = ds[n] + (A + B * x) * alphas[n+1] - C * alphas[n+2]
+        return A + B * x
 
+    def lin_x(n):
+        return abc_q2d_clenshaw(n, m)[1]
+
+    def c_fn(n):
+        return abc_q2d_clenshaw(n, m)[2]
+
+    _clenshaw_sum(ds, lin, c_fn, alphas)
     return alphas
 
 
@@ -1080,27 +1689,21 @@ def clenshaw_q2d_der(cns, m, usq, j=1, alphas=None):
         the alphas array
 
     """
-    cs = cns
     x = usq
-    N = len(cs) - 1
-    alphas = _initialize_alphas(cs, x, alphas, j=j)
-    # seed with j=0 (S, not its derivative)
-    clenshaw_q2d(cs, m, x, alphas[0])
-    # Eq. B.11, init with alpha_N+2-j = alpha_N+1-j = 0
-    # a^j = j B_n * a_n+1^j+1 + (A_n + B_n x) A_n+1^j - C_n+1 a_n+2^j
-    #
-    # return alphas
-    for jj in range(1, j+1):
-        if jj > N:
-            # (jj)-th derivative of a degree-N polynomial is identically zero
-            continue
-        _, b, _ = abc_q2d_clenshaw(N-jj, m)
-        alphas[jj][N-jj] = jj * b * alphas[jj-1][N-jj+1]
-        for n in range(N-jj-1, -1, -1):
-            a, b, _ = abc_q2d_clenshaw(n, m)
-            _, _, c = abc_q2d_clenshaw(n+1, m)
-            alphas[jj][n] = jj * b * alphas[jj-1][n+1] + (a + b * x) * alphas[jj][n+1] - c * alphas[jj][n+2]
+    ds = change_of_basis_Q2d_to_Pnm(cns, m)
+    alphas = _initialize_alphas(cns, x, alphas, j=j)
 
+    def lin(n):
+        A, B, _ = abc_q2d_clenshaw(n, m)
+        return A + B * x
+
+    def lin_x(n):
+        return abc_q2d_clenshaw(n, m)[1]
+
+    def c_fn(n):
+        return abc_q2d_clenshaw(n, m)[2]
+
+    _clenshaw_sum_der(ds, lin, lin_x, c_fn, alphas, j)
     return alphas
 
 

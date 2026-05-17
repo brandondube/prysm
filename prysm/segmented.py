@@ -11,7 +11,7 @@ from .geometry import regular_polygon, circle, spider
 from .coordinates import cart_to_polar, polar_to_cart
 from .polynomials import sum_of_2d_modes
 
-FLAT_TO_FLAT_TO_VERTEX_TO_VERTEX = 2 / truenp.sqrt(3)
+FLAT_TO_FLAT_TO_VERTEX_TO_VERTEX = 1.1547005383792515  # 2/sqrt(3)
 VERTEX_TO_VERTEX_TO_FLAT_TO_FLAT = 1 / FLAT_TO_FLAT_TO_VERTEX_TO_VERTEX
 
 

@@ -5,8 +5,6 @@ import numpy as truenp
 from prysm.mathops import np  # NOQA
 from prysm.coordinates import optimize_xy_separable
 
-from .dickson import dickson1_seq
-
 
 def xy_j_to_mn(j):
     """Convert a mono-index j into the m and n powers.
@@ -87,6 +85,187 @@ def xy_j_to_mn(j):
     return x, y
 
 
+def xy(m, n, x, y, cartesian_grid=True):
+    """Contemporary XY monomial for a given m, n.
+
+    Parameters
+    ----------
+    m : int
+        x order
+    n : int
+        y order
+    x : ndarray
+        x coordinates
+    y : ndarray
+        y coordinates
+    cartesian_grid : bool, optional
+        if True, the input grid is assumed to be cartesian, i.e., x and y
+        axes are aligned to the array dimensions arr[y,x] to accelerate
+        the computation
+
+    Returns
+    -------
+    ndarray
+        x^m * y^n evaluated on the input grid
+
+    """
+    if cartesian_grid:
+        x, y = optimize_xy_separable(x, y)
+
+    return x**m * y**n
+
+
+def xy_der_x(m, n, x, y, cartesian_grid=True):
+    """Partial derivative w.r.t. x of the XY monomial x^m * y^n.
+
+    Returns m * x^(m-1) * y^n; zero everywhere when m == 0.
+
+    Parameters
+    ----------
+    m : int
+        x order
+    n : int
+        y order
+    x : ndarray
+        x coordinates
+    y : ndarray
+        y coordinates
+    cartesian_grid : bool, optional
+        if True, the input grid is assumed to be cartesian, i.e., x and y
+        axes are aligned to the array dimensions arr[y,x] to accelerate
+        the computation
+
+    Returns
+    -------
+    ndarray
+        d/dx of x^m * y^n evaluated on the input grid
+
+    """
+    if cartesian_grid:
+        x, y = optimize_xy_separable(x, y)
+
+    if m == 0:
+        # broadcast zeros to the (y, x) grid using the input shapes
+        return np.zeros_like(x * y)
+
+    return m * x**(m-1) * y**n
+
+
+def xy_der_y(m, n, x, y, cartesian_grid=True):
+    """Partial derivative w.r.t. y of the XY monomial x^m * y^n.
+
+    Returns n * x^m * y^(n-1); zero everywhere when n == 0.
+
+    Parameters
+    ----------
+    m : int
+        x order
+    n : int
+        y order
+    x : ndarray
+        x coordinates
+    y : ndarray
+        y coordinates
+    cartesian_grid : bool, optional
+        if True, the input grid is assumed to be cartesian, i.e., x and y
+        axes are aligned to the array dimensions arr[y,x] to accelerate
+        the computation
+
+    Returns
+    -------
+    ndarray
+        d/dy of x^m * y^n evaluated on the input grid
+
+    """
+    if cartesian_grid:
+        x, y = optimize_xy_separable(x, y)
+
+    if n == 0:
+        return np.zeros_like(x * y)
+
+    return n * x**m * y**(n-1)
+
+
+def xy_der_xy(m, n, x, y, cartesian_grid=True):
+    """Mixed partial derivative d^2/dxdy of the XY monomial x^m * y^n.
+
+    Returns m * n * x^(m-1) * y^(n-1); zero everywhere when m == 0 or n == 0.
+
+    Parameters
+    ----------
+    m : int
+        x order
+    n : int
+        y order
+    x : ndarray
+        x coordinates
+    y : ndarray
+        y coordinates
+    cartesian_grid : bool, optional
+        if True, the input grid is assumed to be cartesian, i.e., x and y
+        axes are aligned to the array dimensions arr[y,x] to accelerate
+        the computation
+
+    Returns
+    -------
+    ndarray
+        d^2/dxdy of x^m * y^n evaluated on the input grid
+
+    """
+    if cartesian_grid:
+        x, y = optimize_xy_separable(x, y)
+
+    if m == 0 or n == 0:
+        return np.zeros_like(x * y)
+
+    return (m * n) * x**(m-1) * y**(n-1)
+
+
+def _xy_seq_with(mns, x, y, cartesian_grid, x_powers_op, y_powers_op):
+    """Internal shared engine for xy_seq / xy_der_*_seq.
+
+    x_powers_op(maxm, x) returns the list of x-axis terms — either
+    [1, x, x^2, ..., x^maxm] for plain monomials or [0, 1, 2x, ...,
+    maxm*x^(maxm-1)] for the d/dx variant.  y_powers_op likewise for the
+    y-axis.  The mixed factor m*n for the xy mixed partial falls out of
+    multiplying the two derivative tables together.
+    """
+    mns2 = truenp.asarray(mns)
+    maxm, maxn = mns2.max(axis=0)
+
+    if cartesian_grid and x.ndim > 1:
+        x, y = optimize_xy_separable(x, y)
+
+    x_seq = x_powers_op(maxm, x)
+    y_seq = y_powers_op(maxn, y)
+
+    return [x_seq[m] * y_seq[n] for m, n in mns]
+
+
+def _monomial_seq(maxk, z):
+    """List [z^0, z^1, ..., z^maxk]; cumulatively multiplied."""
+    out = [np.ones_like(z)]
+    current = None
+    for _ in range(1, maxk + 1):
+        current = z if current is None else current * z
+        out.append(current)
+    return out
+
+
+def _monomial_der_seq(maxk, z):
+    """List [d/dz z^0, d/dz z^1, ..., d/dz z^maxk] = [0, 1, 2z, 3z^2, ...]."""
+    out = [np.zeros_like(z)]
+    if maxk == 0:
+        return out
+    out.append(np.ones_like(z))
+    current = None
+    for k in range(2, maxk + 1):
+        # k * z^(k-1)
+        current = z if current is None else current * z
+        out.append(k * current)
+    return out
+
+
 def xy_seq(mns, x, y, cartesian_grid=True):
     """Contemporary XY monomial seq.
 
@@ -109,52 +288,61 @@ def xy_seq(mns, x, y, cartesian_grid=True):
         list of modes, in the same order as mns
 
     """
-    mns2 = truenp.asarray(mns)
-    maxm, maxn = mns2.max(axis=0)
-
-    if cartesian_grid and x.ndim > 1:
-        x, y = optimize_xy_separable(x, y)
-
-    ms = truenp.arange(0, maxm+1)
-    ns = truenp.arange(0, maxn+1)
-    # dicksons with alpha=0 are the monomials
-    x_seq = list(dickson1_seq(ms, 0, x))
-    y_seq = list(dickson1_seq(ns, 0, y))
-
-    out = []
-    for m, n in mns:
-        xterm = x_seq[m]
-        yterm = y_seq[n]
-        out.append(xterm*yterm)
-
-    return out
+    return _xy_seq_with(
+        mns, x, y, cartesian_grid,
+        _monomial_seq, _monomial_seq,
+    )
 
 
-def xy(m, n, x, y, cartesian_grid=True):
-    """Contemporary XY monomial for a given m, n.
+def xy_der_x_seq(mns, x, y, cartesian_grid=True):
+    """Partial derivative w.r.t. x of the XY monomial seq.
 
-    Parameters
-    ----------
-    m : int
-        x order
-    n : int
-        y order
-    x : ndarray
-        x coordinates
-    y : ndarray
-        y coordinates
-    cartesian_grid : bool, optional
-        if True, the input grid is assumed to be cartesian, i.e., x and y
-        axes are aligned to the array dimensions arr[y,x] to accelerate
-        the computation
+    Parameters mirror xy_seq.  The (m, n) output is m * x^(m-1) * y^n;
+    entries with m == 0 are zero.
 
     Returns
     -------
     list
-        list of modes, in the same order as mns
+        list of d/dx of x^m * y^n, in the same order as mns
 
     """
-    if cartesian_grid:
-        x, y = optimize_xy_separable(x, y)
+    return _xy_seq_with(
+        mns, x, y, cartesian_grid,
+        _monomial_der_seq, _monomial_seq,
+    )
 
-    return x**m * y**n
+
+def xy_der_y_seq(mns, x, y, cartesian_grid=True):
+    """Partial derivative w.r.t. y of the XY monomial seq.
+
+    Parameters mirror xy_seq.  The (m, n) output is n * x^m * y^(n-1);
+    entries with n == 0 are zero.
+
+    Returns
+    -------
+    list
+        list of d/dy of x^m * y^n, in the same order as mns
+
+    """
+    return _xy_seq_with(
+        mns, x, y, cartesian_grid,
+        _monomial_seq, _monomial_der_seq,
+    )
+
+
+def xy_der_xy_seq(mns, x, y, cartesian_grid=True):
+    """Mixed partial derivative d^2/dxdy of the XY monomial seq.
+
+    Parameters mirror xy_seq.  The (m, n) output is m*n * x^(m-1) * y^(n-1);
+    entries where m == 0 or n == 0 are zero.
+
+    Returns
+    -------
+    list
+        list of d^2/dxdy of x^m * y^n, in the same order as mns
+
+    """
+    return _xy_seq_with(
+        mns, x, y, cartesian_grid,
+        _monomial_der_seq, _monomial_der_seq,
+    )

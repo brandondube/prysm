@@ -1,8 +1,9 @@
 """High performance / recursive jacobi polynomial calculation."""
 from prysm.mathops import np
-from prysm.conf import config
 
 from functools import lru_cache
+
+from ._clenshaw import _initialize_alphas, _clenshaw_sum, _clenshaw_sum_der  # NOQA
 
 
 def weight(alpha, beta, x):
@@ -112,7 +113,8 @@ def jacobi_seq(ns, alpha, beta, x):
     # for example (1024, 1024) x is ~8 megabytes per mode;
     # need to be in an edge case scenario for it to matter,
     # just return array for ergonomics
-    ns = list(ns)
+    if not hasattr(ns, '__len__'):
+        ns = list(ns)
     min_i = 0
     out = np.empty((len(ns), *x.shape), dtype=x.dtype)
     if ns[min_i] == 0:
@@ -218,7 +220,8 @@ def jacobi_der_seq(ns, alpha, beta, x):
     # except when it comes time to yield terms, we yield the modification
     # per A&S / the NIST link
     # and we modify the arguments to
-    ns = list(ns)
+    if not hasattr(ns, '__len__'):
+        ns = list(ns)
     min_i = 0
     out = np.empty((len(ns), *x.shape), dtype=x.dtype)
     if ns[min_i] == 0:
@@ -286,27 +289,6 @@ def jacobi_der_seq(ns, alpha, beta, x):
     return out
 
 
-def _initialize_alphas(s, x, alphas, j=0):
-    # j = derivative order
-    if alphas is None:
-        if hasattr(x, 'dtype'):
-            dtype = x.dtype
-        else:
-            dtype = config.precision
-        if hasattr(x, 'shape'):
-            shape = (len(s), *x.shape)
-        elif hasattr(x, '__len__'):
-            shape = (len(s), len(x))
-        else:
-            shape = (len(s),)
-
-        if j != 0:
-            shape = (j+1, *shape)
-
-        alphas = np.zeros(shape, dtype=dtype)
-    return alphas
-
-
 def jacobi_sum_clenshaw(s, alpha, beta, x, alphas=None):
     """Compute a weighted sum of Jacobi polynomials using Clenshaw's method.
 
@@ -333,25 +315,17 @@ def jacobi_sum_clenshaw(s, alpha, beta, x, alphas=None):
         weighted sum of Jacobi polynomials
 
     """
-    # this doesn't match Forbes,
-    # because Forbes uses Pn = (a + b x)Pn-1 - cPn-2
-    # and I use the A&S notation Pn = (a x + b)Pn-1 - cPn-2
-    # so the "a" and "b" below are swapped here
-    # checked to be correct, though...
+    # A&S notation: Pn = (a x + b)Pn-1 - cPn-2 (note: Forbes swaps a and b).
     alphas = _initialize_alphas(s, x, alphas)
-    M = len(s) - 1
-    if M == 0:
-        # only P_0 = 1 contributes; sum = s[0] (broadcast over x)
-        alphas[0] = s[0]
-        return alphas[0]
-    alphas[M] = s[M]
-    a, b, _ = recurrence_abc(M-1, alpha, beta)
-    alphas[M-1] = s[M-1] + (a * x + b) * s[M]
-    for n in range(M-2, -1, -1):
-        a, b, _ = recurrence_abc(n, alpha, beta)
-        _, _, c = recurrence_abc(n+1, alpha, beta)
-        alphas[n] = s[n] + (a * x + b) * alphas[n+1] - c * alphas[n+2]
 
+    def lin(n):
+        a, b, _ = recurrence_abc(n, alpha, beta)
+        return a * x + b
+
+    def c_fn(n):
+        return recurrence_abc(n, alpha, beta)[2]
+
+    _clenshaw_sum(s, lin, c_fn, alphas)
     return alphas[0]
 
 
@@ -394,27 +368,19 @@ def jacobi_sum_clenshaw_der(s, alpha, beta, x, j=1, alphas=None):
         alphas array, see alphas parameter documentation for meaning
 
     """
-    # alphas is dual indexed by alphas[j][n]
-    # j = derivative
-    # n = order
-    # inner loop over n, outer loop over j
+    # alphas is dual indexed by alphas[j][n] (j=derivative, n=order)
     alphas = _initialize_alphas(s, x, None, j=j)
-    M = len(s) - 1
-    # seed the first sweep of alpha, for j=0, by side effect
-    jacobi_sum_clenshaw(s, alpha, beta, x, alphas=alphas[0])
-    # now loop over increasing j
-    for jj in range(1, j+1):
-        if jj > M:
-            # the (jj)-th derivative of a degree-M polynomial is identically
-            # zero; alphas[jj] is already zero from _initialize_alphas
-            continue
-        # more twisted notation - follow Forbes' paper, but our
-        # idea of b and a are swapped
-        a, *_ = recurrence_abc(M-jj, alpha, beta)
-        alphas[jj][M-jj] = jj * a * alphas[jj-1][M-jj+1]
-        for n in range(M-jj-1, -1, -1):
-            a, b, _ = recurrence_abc(n, alpha, beta)
-            _, _, c = recurrence_abc(n+1, alpha, beta)
-            alphas[jj][n] = jj * a * alphas[jj-1][n+1] + (a * x + b) * alphas[jj][n+1] - c * alphas[jj][n+2]
 
+    def lin(n):
+        a, b, _ = recurrence_abc(n, alpha, beta)
+        return a * x + b
+
+    def lin_x(n):
+        # coefficient of x in the linear factor; A&S uses (a x + b), so it's a
+        return recurrence_abc(n, alpha, beta)[0]
+
+    def c_fn(n):
+        return recurrence_abc(n, alpha, beta)[2]
+
+    _clenshaw_sum_der(s, lin, lin_x, c_fn, alphas, j)
     return alphas

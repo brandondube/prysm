@@ -106,7 +106,8 @@ def dickson1_seq(ns, alpha, x):
         return has shape (5, 100, 100)
 
     """
-    ns = list(ns)
+    if not hasattr(ns, '__len__'):
+        ns = list(ns)
     min_i = 0
     j = 0
     out = np.empty((len(ns), *x.shape), dtype=x.dtype)
@@ -141,6 +142,197 @@ def dickson1_seq(ns, alpha, x):
     return out
 
 
+def dickson1_der(n, alpha, x):
+    """Partial derivative w.r.t. x of the Dickson polynomial of the first kind of order n.
+
+    Uses the differentiated recurrence D'_n = D_{n-1} + x D'_{n-1} - alpha D'_{n-2}
+    with D'_0 = 0, D'_1 = 1.
+
+    Parameters
+    ----------
+    n : int
+        polynomial order
+    alpha : float
+        shape parameter (see dickson1)
+    x : ndarray
+        coordinates to evaluate the derivative at
+
+    Returns
+    -------
+    ndarray
+        d/dx D_n(x)
+
+    """
+    if n == 0:
+        return np.zeros_like(x)
+    if n == 1:
+        return np.ones_like(x)
+
+    # carry along values D_k AND derivatives D'_k via the parallel recurrence
+    Pnm2 = np.ones_like(x) * 2  # D_0
+    Pnm1 = x                    # D_1
+    Dnm2 = np.zeros_like(x)     # D'_0
+    Dnm1 = np.ones_like(x)      # D'_1
+    for _ in range(2, n+1):
+        Pn = x * Pnm1 - alpha * Pnm2
+        Dn = Pnm1 + x * Dnm1 - alpha * Dnm2
+        Pnm2, Pnm1 = Pnm1, Pn
+        Dnm2, Dnm1 = Dnm1, Dn
+
+    return Dn
+
+
+def dickson1_der_seq(ns, alpha, x):
+    """Partial derivative w.r.t. x of Dickson Polynomials of the first kind for orders ns.
+
+    Parameters
+    ----------
+    ns : iterable of int
+        rising polynomial orders, assumed to be sorted
+    alpha : float
+        shape parameter (see dickson1)
+    x : ndarray
+        coordinates to evaluate the derivative at
+
+    Returns
+    -------
+    ndarray
+        has shape (len(ns), *x.shape); the i-th plane is d/dx D_{ns[i]}(x)
+
+    """
+    if not hasattr(ns, '__len__'):
+        ns = list(ns)
+    min_i = 0
+    j = 0
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
+    if ns[min_i] == 0:
+        out[j] = 0
+        min_i += 1
+        j += 1
+
+    if min_i == len(ns):
+        return out
+
+    if ns[min_i] == 1:
+        out[j] = 1
+        min_i += 1
+        j += 1
+
+    if min_i == len(ns):
+        return out
+
+    Pnm2 = np.ones_like(x) * 2
+    Pnm1 = x
+    Dnm2 = np.zeros_like(x)
+    Dnm1 = np.ones_like(x)
+    for i in range(2, ns[-1]+1):
+        Pn = x * Pnm1 - alpha * Pnm2
+        Dn = Pnm1 + x * Dnm1 - alpha * Dnm2
+        Pnm2, Pnm1 = Pnm1, Pn
+        Dnm2, Dnm1 = Dnm1, Dn
+        if ns[min_i] == i:
+            out[j] = Dn
+            min_i += 1
+            j += 1
+
+    return out
+
+
+def dickson2_der(n, alpha, x):
+    """Partial derivative w.r.t. x of the Dickson polynomial of the second kind of order n.
+
+    The recurrence for E_n and its derivative share the same coefficients as
+    for D_n; only the n=0 seed differs (E_0 = 1 vs D_0 = 2), but E'_0 = D'_0 = 0.
+
+    Parameters
+    ----------
+    n : int
+        polynomial order
+    alpha : float
+        shape parameter (see dickson2)
+    x : ndarray
+        coordinates to evaluate the derivative at
+
+    Returns
+    -------
+    ndarray
+        d/dx E_n(x)
+
+    """
+    if n == 0:
+        return np.zeros_like(x)
+    if n == 1:
+        return np.ones_like(x)
+
+    Pnm2 = np.ones_like(x)
+    Pnm1 = x
+    Dnm2 = np.zeros_like(x)
+    Dnm1 = np.ones_like(x)
+    for _ in range(2, n+1):
+        Pn = x * Pnm1 - alpha * Pnm2
+        Dn = Pnm1 + x * Dnm1 - alpha * Dnm2
+        Pnm2, Pnm1 = Pnm1, Pn
+        Dnm2, Dnm1 = Dnm1, Dn
+
+    return Dn
+
+
+def dickson2_der_seq(ns, alpha, x):
+    """Partial derivative w.r.t. x of Dickson Polynomials of the second kind for orders ns.
+
+    Parameters
+    ----------
+    ns : iterable of int
+        rising polynomial orders, assumed to be sorted
+    alpha : float
+        shape parameter (see dickson2)
+    x : ndarray
+        coordinates to evaluate the derivative at
+
+    Returns
+    -------
+    ndarray
+        has shape (len(ns), *x.shape); the i-th plane is d/dx E_{ns[i]}(x)
+
+    """
+    if not hasattr(ns, '__len__'):
+        ns = list(ns)
+    min_i = 0
+    j = 0
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
+    if ns[min_i] == 0:
+        out[j] = 0
+        min_i += 1
+        j += 1
+
+    if min_i == len(ns):
+        return out
+
+    if ns[min_i] == 1:
+        out[j] = 1
+        min_i += 1
+        j += 1
+
+    if min_i == len(ns):
+        return out
+
+    Pnm2 = np.ones_like(x)
+    Pnm1 = x
+    Dnm2 = np.zeros_like(x)
+    Dnm1 = np.ones_like(x)
+    for i in range(2, ns[-1]+1):
+        Pn = x * Pnm1 - alpha * Pnm2
+        Dn = Pnm1 + x * Dnm1 - alpha * Dnm2
+        Pnm2, Pnm1 = Pnm1, Pn
+        Dnm2, Dnm1 = Dnm1, Dn
+        if ns[min_i] == i:
+            out[j] = Dn
+            min_i += 1
+            j += 1
+
+    return out
+
+
 def dickson2_seq(ns, alpha, x):
     """Sequence of Dickson Polynomial of the second kind of orders ns.
 
@@ -162,7 +354,8 @@ def dickson2_seq(ns, alpha, x):
         return has shape (5, 100, 100)
 
     """
-    ns = list(ns)
+    if not hasattr(ns, '__len__'):
+        ns = list(ns)
     min_i = 0
     j = 0
     out = np.empty((len(ns), *x.shape), dtype=x.dtype)

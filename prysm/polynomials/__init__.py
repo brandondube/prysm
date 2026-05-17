@@ -48,21 +48,39 @@ from .hermite import (  # NOQA
 from .qpoly import (  # NOQA
     Qbfs,
     Qbfs_seq,
+    Qbfs_der,
+    Qbfs_der_seq,
     Qcon,
     Qcon_seq,
+    Qcon_der,
+    Qcon_der_seq,
     Q2d,
     Q2d_seq,
+    Q2d_der,
+    Q2d_der_seq,
+    Q2d_der_xy,
+    Q2d_der_xy_seq,
 )
 from .dickson import (  # NOQA
     dickson1,
     dickson1_seq,
+    dickson1_der,
+    dickson1_der_seq,
     dickson2,
-    dickson2_seq
+    dickson2_seq,
+    dickson2_der,
+    dickson2_der_seq,
 )
 from .xy import (  # NOQA
     xy_j_to_mn,
     xy,
     xy_seq,
+    xy_der_x,
+    xy_der_x_seq,
+    xy_der_y,
+    xy_der_y_seq,
+    xy_der_xy,
+    xy_der_xy_seq,
 )
 
 from .zernike import (  # NOQA

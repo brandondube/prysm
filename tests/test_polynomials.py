@@ -824,3 +824,221 @@ def test_laguerre_matches_scipy(n, alpha):
     prysm_lag = polynomials.laguerre(n, alpha, XLEFT)
     scipy_lag = sps_laguerre(n, alpha)(XLEFT)
     assert np.allclose(prysm_lag, scipy_lag)
+
+
+# Phase 1 derivative additions: dickson / xy / qpoly
+
+@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+@pytest.mark.parametrize('alpha', [-1.0, 0.0, 1.0])
+def test_dickson1_der_matches_finite_diff(n, alpha):
+    x = np.linspace(-0.9, 0.9, 256)
+    h = 1e-5
+    der = polynomials.dickson1_der(n, alpha, x)
+    fd = (polynomials.dickson1(n, alpha, x + h)
+          - polynomials.dickson1(n, alpha, x - h)) / (2 * h)
+    assert np.allclose(der, fd, atol=1e-6, rtol=1e-5)
+
+
+def test_dickson1_der_n_zero_and_one():
+    x = np.linspace(-1, 1, 32)
+    np.testing.assert_array_equal(polynomials.dickson1_der(0, 1.0, x), 0)
+    np.testing.assert_array_equal(polynomials.dickson1_der(1, 1.0, x), 1)
+
+
+def test_dickson1_der_seq_same_as_loop():
+    x = np.linspace(-0.9, 0.9, 64)
+    ns = [0, 1, 2, 3, 5]
+    seq = polynomials.dickson1_der_seq(ns, 1.0, x)
+    for i, n in enumerate(ns):
+        assert np.allclose(seq[i], polynomials.dickson1_der(n, 1.0, x))
+
+
+@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+@pytest.mark.parametrize('alpha', [-1.0, 0.0, 1.0])
+def test_dickson2_der_matches_finite_diff(n, alpha):
+    x = np.linspace(-0.9, 0.9, 256)
+    h = 1e-5
+    der = polynomials.dickson2_der(n, alpha, x)
+    fd = (polynomials.dickson2(n, alpha, x + h)
+          - polynomials.dickson2(n, alpha, x - h)) / (2 * h)
+    assert np.allclose(der, fd, atol=1e-6, rtol=1e-5)
+
+
+def test_dickson2_der_seq_same_as_loop():
+    x = np.linspace(-0.9, 0.9, 64)
+    ns = [0, 1, 2, 3, 5]
+    seq = polynomials.dickson2_der_seq(ns, 1.0, x)
+    for i, n in enumerate(ns):
+        assert np.allclose(seq[i], polynomials.dickson2_der(n, 1.0, x))
+
+
+@pytest.mark.parametrize(('m', 'n'), [(0, 0), (1, 0), (0, 1), (1, 1),
+                                       (2, 3), (4, 2)])
+def test_xy_der_x_matches_truth(m, n):
+    x = np.linspace(-1, 1, 32)
+    y = np.linspace(-1, 1, 32).reshape(-1, 1)
+    der = polynomials.xy_der_x(m, n, x, y, cartesian_grid=False)
+    if m == 0:
+        truth = np.zeros_like(x * y)
+    else:
+        truth = m * x**(m-1) * y**n
+    assert np.allclose(der, np.broadcast_to(truth, der.shape))
+
+
+@pytest.mark.parametrize(('m', 'n'), [(0, 0), (1, 0), (0, 1), (1, 1),
+                                       (2, 3), (4, 2)])
+def test_xy_der_y_matches_truth(m, n):
+    x = np.linspace(-1, 1, 32)
+    y = np.linspace(-1, 1, 32).reshape(-1, 1)
+    der = polynomials.xy_der_y(m, n, x, y, cartesian_grid=False)
+    if n == 0:
+        truth = np.zeros_like(x * y)
+    else:
+        truth = n * x**m * y**(n-1)
+    assert np.allclose(der, np.broadcast_to(truth, der.shape))
+
+
+@pytest.mark.parametrize(('m', 'n'), [(0, 0), (1, 0), (0, 1), (1, 1),
+                                       (2, 3), (4, 2)])
+def test_xy_der_xy_matches_truth(m, n):
+    x = np.linspace(-1, 1, 32)
+    y = np.linspace(-1, 1, 32).reshape(-1, 1)
+    der = polynomials.xy_der_xy(m, n, x, y, cartesian_grid=False)
+    if m == 0 or n == 0:
+        truth = np.zeros_like(x * y)
+    else:
+        truth = (m * n) * x**(m-1) * y**(n-1)
+    assert np.allclose(der, np.broadcast_to(truth, der.shape))
+
+
+def test_xy_der_seq_matches_loop():
+    x = np.linspace(-1, 1, 16)
+    y = np.linspace(-1, 1, 16).reshape(-1, 1)
+    mns = [(0, 0), (1, 0), (0, 1), (2, 1), (3, 4)]
+    for seq_fn, single_fn in [
+        (polynomials.xy_der_x_seq, polynomials.xy_der_x),
+        (polynomials.xy_der_y_seq, polynomials.xy_der_y),
+        (polynomials.xy_der_xy_seq, polynomials.xy_der_xy),
+    ]:
+        seq = seq_fn(mns, x, y, cartesian_grid=False)
+        for elem, (m, n) in zip(seq, mns):
+            ref = single_fn(m, n, x, y, cartesian_grid=False)
+            assert np.allclose(elem, ref)
+
+
+def test_xy_seq_piston_returns_one():
+    # latent bug fix: prior xy_seq used dickson1_seq(alpha=0) which gives D_0=2,
+    # so xy_seq([(0,0)], ...) returned 4. The single-mode xy(0, 0, ...) has
+    # always returned 1; the seq variant now agrees.
+    x = np.linspace(-1, 1, 8)
+    y = np.linspace(-1, 1, 8).reshape(-1, 1)
+    (elem,) = polynomials.xy_seq([(0, 0)], x, y, cartesian_grid=False)
+    assert np.allclose(elem, np.ones_like(x * y))
+
+
+@pytest.mark.parametrize('n', [0, 1, 2, 3, 4, 5])
+def test_Qbfs_der_matches_finite_diff(n):
+    x = np.linspace(0.05, 0.95, 256)
+    h = 1e-5
+    der = polynomials.Qbfs_der(n, x)
+    fd = (polynomials.Qbfs(n, x + h) - polynomials.Qbfs(n, x - h)) / (2 * h)
+    assert np.allclose(der, fd, atol=1e-6, rtol=1e-4)
+
+
+def test_Qbfs_der_seq_same_as_loop():
+    x = np.linspace(0.05, 0.95, 64)
+    ns = [0, 1, 2, 3, 5]
+    seq = polynomials.Qbfs_der_seq(ns, x)
+    for i, n in enumerate(ns):
+        assert np.allclose(seq[i], polynomials.Qbfs_der(n, x))
+
+
+@pytest.mark.parametrize('n', [0, 1, 2, 3, 4, 5])
+def test_Qcon_der_matches_finite_diff(n):
+    x = np.linspace(0.05, 0.95, 256)
+    h = 1e-5
+    der = polynomials.Qcon_der(n, x)
+    fd = (polynomials.Qcon(n, x + h) - polynomials.Qcon(n, x - h)) / (2 * h)
+    # Qcon involves jacobi(0, 4), high-order derivatives swing in magnitude,
+    # so accept a slightly looser tolerance than Qbfs.
+    assert np.allclose(der, fd, atol=1e-5, rtol=1e-3)
+
+
+def test_Qcon_der_seq_same_as_loop():
+    x = np.linspace(0.05, 0.95, 64)
+    ns = [0, 1, 2, 3, 5]
+    seq = polynomials.Qcon_der_seq(ns, x)
+    for i, n in enumerate(ns):
+        assert np.allclose(seq[i], polynomials.Qcon_der(n, x))
+
+
+# Q2d polar and Cartesian derivatives
+
+_Q2D_DER_NMS = [(0, 0), (1, 0), (2, 1), (3, -2), (2, 3), (1, -1), (4, 1)]
+
+
+@pytest.mark.parametrize(('n', 'm'), _Q2D_DER_NMS)
+def test_Q2d_der_polar_matches_finite_diff(n, m):
+    r1 = np.linspace(0.05, 0.95, 64)
+    t1 = np.linspace(0.1, 2 * np.pi - 0.1, 64)
+    R, T = np.meshgrid(r1, t1)
+    h = 1e-5
+    dr_an, dt_an = polynomials.Q2d_der(n, m, R, T)
+    dr_fd = (polynomials.Q2d(n, m, R + h, T)
+             - polynomials.Q2d(n, m, R - h, T)) / (2 * h)
+    dt_fd = (polynomials.Q2d(n, m, R, T + h)
+             - polynomials.Q2d(n, m, R, T - h)) / (2 * h)
+    assert np.allclose(dr_an, dr_fd, atol=1e-5, rtol=1e-3)
+    assert np.allclose(dt_an, dt_fd, atol=1e-5, rtol=1e-3)
+
+
+def test_Q2d_der_seq_same_as_loop():
+    r1 = np.linspace(0.05, 0.95, 32)
+    t1 = np.linspace(0.1, 2 * np.pi - 0.1, 32)
+    R, T = np.meshgrid(r1, t1)
+    dr_seq, dt_seq = polynomials.Q2d_der_seq(_Q2D_DER_NMS, R, T)
+    for i, (n, m) in enumerate(_Q2D_DER_NMS):
+        dr_s, dt_s = polynomials.Q2d_der(n, m, R, T)
+        assert np.allclose(dr_seq[i], dr_s)
+        assert np.allclose(dt_seq[i], dt_s)
+
+
+@pytest.mark.parametrize(('n', 'm'), _Q2D_DER_NMS)
+def test_Q2d_der_xy_matches_finite_diff(n, m):
+    # use a disk-interior Cartesian grid that stays away from r=1
+    x1 = np.linspace(-0.6, 0.6, 48)
+    y1 = np.linspace(-0.6, 0.6, 48).reshape(-1, 1)
+    X, Y = np.meshgrid(x1.ravel(), y1.ravel())
+    h = 1e-5
+    dx_an, dy_an = polynomials.Q2d_der_xy(n, m, X, Y)
+
+    def Z_at(xa, ya):
+        ra = np.sqrt(xa * xa + ya * ya)
+        ta = np.arctan2(ya, xa)
+        return polynomials.Q2d(n, m, ra, ta)
+
+    dx_fd = (Z_at(X + h, Y) - Z_at(X - h, Y)) / (2 * h)
+    dy_fd = (Z_at(X, Y + h) - Z_at(X, Y - h)) / (2 * h)
+    assert np.allclose(dx_an, dx_fd, atol=1e-5, rtol=1e-3)
+    assert np.allclose(dy_an, dy_fd, atol=1e-5, rtol=1e-3)
+
+
+def test_Q2d_der_xy_seq_same_as_loop():
+    x1 = np.linspace(-0.6, 0.6, 24)
+    y1 = np.linspace(-0.6, 0.6, 24).reshape(-1, 1)
+    X, Y = np.meshgrid(x1.ravel(), y1.ravel())
+    dx_seq, dy_seq = polynomials.Q2d_der_xy_seq(_Q2D_DER_NMS, X, Y)
+    for i, (n, m) in enumerate(_Q2D_DER_NMS):
+        dx_s, dy_s = polynomials.Q2d_der_xy(n, m, X, Y)
+        assert np.allclose(dx_seq[i], dx_s)
+        assert np.allclose(dy_seq[i], dy_s)
+
+
+def test_Q2d_der_xy_finite_at_origin():
+    # the harmonic decomposition keeps the Cartesian derivative finite at r=0
+    x = np.array([[0.0, 1e-12], [1e-12, 0.0]])
+    y = np.array([[0.0, 0.0], [1e-12, 1e-12]])
+    for n, m in [(0, 0), (2, 1), (3, -2), (4, 3)]:
+        dx, dy = polynomials.Q2d_der_xy(n, m, x, y)
+        assert np.isfinite(dx).all()
+        assert np.isfinite(dy).all()

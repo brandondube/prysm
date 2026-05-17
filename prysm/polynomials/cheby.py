@@ -9,6 +9,17 @@ from .jacobi import (
 )
 
 
+def _cheby_inv_jacobi_at_one(ns, alpha, beta, dtype):
+    """Return 1 / P_n^(alpha,beta)(1) for each n in ns, shape (len(ns),).
+
+    The cheby families differ only in which (alpha, beta) they pull and what
+    scalar coefficient they fold on top; this helper isolates the shared
+    jacobi-at-1 normalization that every cheby*_seq / cheby*_der_seq performs.
+    """
+    pn_at_one = jacobi_seq(ns, alpha, beta, np.ones(1, dtype=dtype))[:, 0]
+    return 1 / pn_at_one
+
+
 def cheby1(n, x):
     """Chebyshev polynomial of the first kind of order n.
 
@@ -44,11 +55,9 @@ def cheby1_seq(ns, x):
         return has shape (5, 100, 100)
 
     """
-    ns = list(ns)
-    cs = 1/jacobi_seq(ns, -.5, -.5, np.ones(1, dtype=x.dtype))
+    ns = np.asarray(ns)
+    cs = _cheby_inv_jacobi_at_one(ns, -.5, -.5, x.dtype)
     seq = jacobi_seq(ns, -.5, -.5, x)
-    # cs is (N, 1) from a 1-D jacobi argument; broadcast against seq's
-    # (N, *x.shape) for any x.ndim by reshaping to (N,) + (1,) * x.ndim.
     return seq * cs.reshape((-1,) + (1,) * x.ndim)
 
 
@@ -87,8 +96,8 @@ def cheby1_der_seq(ns, x):
         return has shape (5, 100, 100)
 
     """
-    ns = list(ns)
-    cs = 1/jacobi_seq(ns, -.5, -.5, np.ones(1, dtype=x.dtype))
+    ns = np.asarray(ns)
+    cs = _cheby_inv_jacobi_at_one(ns, -.5, -.5, x.dtype)
     seq = jacobi_der_seq(ns, -.5, -.5, x)
     return seq * cs.reshape((-1,) + (1,) * x.ndim)
 
@@ -129,10 +138,8 @@ def cheby2_seq(ns, x):
 
     """
     ns = np.asarray(ns)
-    cs = (ns+1)/np.squeeze(jacobi_seq(ns, .5, .5, np.ones(1, dtype=x.dtype)))
+    cs = (ns + 1) * _cheby_inv_jacobi_at_one(ns, .5, .5, x.dtype)
     seq = jacobi_seq(ns, .5, .5, x)
-    # cs is 1-D after squeeze; broadcast against seq's (N, *x.shape) for any
-    # x.ndim by reshaping to (N,) + (1,) * x.ndim.
     return seq * cs.reshape((-1,) + (1,) * x.ndim)
 
 
@@ -172,7 +179,7 @@ def cheby2_der_seq(ns, x):
 
     """
     ns = np.asarray(ns)
-    cs = (ns + 1)/np.squeeze(jacobi_seq(ns, .5, .5, np.ones(1, dtype=x.dtype)))
+    cs = (ns + 1) * _cheby_inv_jacobi_at_one(ns, .5, .5, x.dtype)
     seq = jacobi_der_seq(ns, .5, .5, x)
     return seq * cs.reshape((-1,) + (1,) * x.ndim)
 
@@ -212,8 +219,8 @@ def cheby3_seq(ns, x):
         return has shape (5, 100, 100)
 
     """
-    ns = list(ns)
-    cs = 1/jacobi_seq(ns, -.5, .5, np.ones(1, dtype=x.dtype))
+    ns = np.asarray(ns)
+    cs = _cheby_inv_jacobi_at_one(ns, -.5, .5, x.dtype)
     seq = jacobi_seq(ns, -.5, .5, x)
     return seq * cs.reshape((-1,) + (1,) * x.ndim)
 
@@ -253,8 +260,8 @@ def cheby3_der_seq(ns, x):
         return has shape (5, 100, 100)
 
     """
-    ns = list(ns)
-    cs = 1/jacobi_seq(ns, -.5, .5, np.ones(1, dtype=x.dtype))
+    ns = np.asarray(ns)
+    cs = _cheby_inv_jacobi_at_one(ns, -.5, .5, x.dtype)
     seq = jacobi_der_seq(ns, -.5, .5, x)
     return seq * cs.reshape((-1,) + (1,) * x.ndim)
 
@@ -295,7 +302,7 @@ def cheby4_seq(ns, x):
 
     """
     ns = np.asarray(ns)
-    cs = (2*ns+1)/np.squeeze(jacobi_seq(ns, .5, -.5, np.ones(1, dtype=x.dtype)))
+    cs = (2 * ns + 1) * _cheby_inv_jacobi_at_one(ns, .5, -.5, x.dtype)
     seq = jacobi_seq(ns, .5, -.5, x)
     return seq * cs.reshape((-1,) + (1,) * x.ndim)
 
@@ -336,6 +343,6 @@ def cheby4_der_seq(ns, x):
 
     """
     ns = np.asarray(ns)
-    cs = (2*ns+1)/np.squeeze(jacobi_seq(ns, .5, -.5, np.ones(1, dtype=x.dtype)))
+    cs = (2 * ns + 1) * _cheby_inv_jacobi_at_one(ns, .5, -.5, x.dtype)
     seq = jacobi_der_seq(ns, .5, -.5, x)
     return seq * cs.reshape((-1,) + (1,) * x.ndim)
