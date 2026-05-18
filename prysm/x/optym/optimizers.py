@@ -2,9 +2,15 @@
 
 from prysm.mathops import np
 
+from .governors import (
+    GovernorDecision,
+    OptimizationResult,
+    StepRecord,
+)
 from .problem import as_problem
 
 from ._lbfgsb import LBFGSB  # NOQA - exporting optimizer
+
 
 def runN(optimizer, N):
     """Perform N iterations of optimization.
@@ -26,6 +32,82 @@ def runN(optimizer, N):
     """
     for _ in range(N):
         yield optimizer.step()
+
+
+def _stop_iteration_decision(exc):
+    value = exc.value
+    success = bool(getattr(value, 'success', True))
+    message = getattr(value, 'message', 'optimizer stopped')
+    if not message:
+        message = 'optimizer stopped'
+    return GovernorDecision(True, success, message)
+
+
+def _step_metadata(optimizer):
+    metadata = getattr(optimizer, 'last_step_metadata', {})
+    if metadata is None:
+        return {}
+    return metadata
+
+
+def run_until(optimizer, governor, *, maxiter=None):
+    """Run an optimizer until a governor decides to stop.
+
+    Parameters
+    ----------
+    optimizer : Any
+        Optimizer exposing a step method returning x, f, g.  After each step,
+        optimizer.x is expected to hold the post-step iterate.
+    governor : Governor
+        Stop condition that observes each completed step.
+    maxiter : int, optional
+        Safety cap for runner-owned iterations.  This is independent of any
+        MaxIterations governor supplied by the caller.
+
+    Returns
+    -------
+    OptimizationResult
+        Result with the final optimizer.x, terminal decision, and step records.
+
+    """
+    records = []
+    if maxiter is not None:
+        maxiter = int(maxiter)
+        if maxiter <= 0:
+            decision = GovernorDecision(
+                True, False, 'maximum iterations reached',
+            )
+            return OptimizationResult(
+                getattr(optimizer, 'x', None), decision, records, optimizer,
+            )
+
+    iteration = 0
+    while maxiter is None or iteration < maxiter:
+        iteration += 1
+        try:
+            x, f, g = optimizer.step()
+        except StopIteration as exc:
+            decision = _stop_iteration_decision(exc)
+            return OptimizationResult(
+                getattr(optimizer, 'x', None), decision, records, optimizer,
+            )
+
+        record = StepRecord(
+            optimizer=optimizer,
+            iteration=iteration,
+            x=x,
+            f=f,
+            g=g,
+            x_next=optimizer.x,
+            metadata=_step_metadata(optimizer),
+        )
+        records.append(record)
+        decision = governor.observe(record)
+        if decision.stop:
+            return OptimizationResult(optimizer.x, decision, records, optimizer)
+
+    decision = GovernorDecision(True, False, 'maximum iterations reached')
+    return OptimizationResult(optimizer.x, decision, records, optimizer)
 
 
 class _Accumulator:

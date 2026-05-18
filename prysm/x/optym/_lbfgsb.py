@@ -111,6 +111,8 @@ class _LBFGSBBase:
         self.dsave = np.zeros(29, dtype=ffloat_dtype)
 
         self.iter = 0
+        self.nfev = 0
+        self.last_step_metadata = {}
         self._last_eval_x = None
         self._last_eval_f = None
         self._last_eval_g = None
@@ -164,6 +166,7 @@ class _LBFGSBBase:
             task = self._decode_task()  # NOQA - defined by subclasses.
             if task == 'FG':
                 f, g = self.problem.fg(self.x)
+                self.nfev += 1
                 if g.ndim != 1:
                     g = g.ravel()
                 self._record_eval(self.x, f, g)
@@ -190,10 +193,15 @@ class _LBFGSBBase:
 
         if f_start is None:
             f_start, g_start = self.problem.fg(x_start)
+            self.nfev += 1
             if g_start.ndim != 1:
                 g_start = g_start.ravel()
             self._record_eval(x_start, f_start, g_start)
 
+        self.last_step_metadata = {
+            'task': self._task_diagnostic(),
+            'nbfgs_updates': int(self._nbfgs_updates),
+        }
         return x_start, float(f_start), g_start.copy()
 
     def run_to(self, N):

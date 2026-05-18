@@ -6,8 +6,15 @@ from prysm import coordinates
 
 from prysm.coordinates import cart_to_polar
 from prysm import polynomials
+from prysm.polynomials.bessel import _series_tol
 
 from scipy.special import (
+    j0 as sps_j0,
+    j1 as sps_j1,
+    jv as sps_jv,
+    k0 as sps_k0,
+    k1 as sps_k1,
+    kv as sps_kv,
     jacobi as sps_jac,
     legendre as sps_leg,
     chebyt as sps_cheby1,
@@ -24,6 +31,8 @@ rho, phi = cart_to_polar(X, Y)
 
 # for Laguerre, orthogonal on [0,inf]; cutoff at 10 is arbitrary
 XLEFT = np.linspace(0, 10, SAMPLES)
+BESSEL_X = np.linspace(0, 40, 257)
+BESSEL_KX = np.linspace(0.05, 40, 257)
 
 
 @pytest.fixture
@@ -36,6 +45,83 @@ def rho():
 def phi():
     rho, phi = cart_to_polar(X, Y)
     return phi
+
+
+# Bessel functions
+
+
+@pytest.mark.parametrize('dtype', [np.float16, np.float32, np.float64])
+def test_bessel_series_tol_follows_dtype_eps(dtype):
+    x = np.ones(1, dtype=dtype)
+    assert _series_tol(x) == 50 * np.finfo(dtype).eps
+
+
+def test_besselj0_matches_scipy():
+    np.testing.assert_allclose(polynomials.besselj0(BESSEL_X), sps_j0(BESSEL_X), atol=6e-9, rtol=6e-9)
+
+
+def test_besselj1_matches_scipy():
+    np.testing.assert_allclose(polynomials.besselj1(BESSEL_X), sps_j1(BESSEL_X), atol=6e-9, rtol=6e-9)
+
+
+@pytest.mark.parametrize('n', [0, 1, 2, 3, 5, 12, 24])
+def test_besselj_matches_scipy(n):
+    np.testing.assert_allclose(polynomials.besselj(n, BESSEL_X), sps_jv(n, BESSEL_X), atol=1e-8, rtol=1e-8)
+
+
+def test_besselj_negative_order_identity():
+    x = np.linspace(0.1, 12, 64)
+    np.testing.assert_allclose(polynomials.besselj(-3, x), -polynomials.besselj(3, x), atol=1e-13, rtol=1e-13)
+
+
+def test_besselj_seq_matches_loop():
+    ns = [0, 1, 2, 5, 12]
+    seq = polynomials.besselj_seq(ns, BESSEL_X)
+    loop = [polynomials.besselj(n, BESSEL_X) for n in ns]
+    for elem, exp in zip(seq, loop):
+        np.testing.assert_allclose(elem, exp)
+
+
+def test_besselj_adjacent_and_ratio():
+    x = np.linspace(1, 20, 128)
+    jm1, jn = polynomials.besselj_adjacent(5, x)
+    np.testing.assert_allclose(jm1, polynomials.besselj(4, x))
+    np.testing.assert_allclose(jn, polynomials.besselj(5, x))
+    np.testing.assert_allclose(polynomials.besselj_ratio_jnm1(5, x), jm1 / jn)
+
+
+def test_besselk0_matches_scipy():
+    np.testing.assert_allclose(polynomials.besselk0(BESSEL_KX), sps_k0(BESSEL_KX), atol=2e-7, rtol=2e-7)
+
+
+def test_besselk1_matches_scipy():
+    np.testing.assert_allclose(polynomials.besselk1(BESSEL_KX), sps_k1(BESSEL_KX), atol=2e-7, rtol=2e-7)
+
+
+@pytest.mark.parametrize('n', [0, 1, 2, 3, 5, 12])
+def test_besselk_matches_scipy(n):
+    np.testing.assert_allclose(polynomials.besselk(n, BESSEL_KX), sps_kv(n, BESSEL_KX), atol=5e-7, rtol=5e-7)
+
+
+def test_besselk_negative_order_identity():
+    x = np.linspace(0.1, 12, 64)
+    np.testing.assert_allclose(polynomials.besselk(-3, x), polynomials.besselk(3, x), atol=1e-13, rtol=1e-13)
+
+
+def test_besselk_seq_matches_loop():
+    ns = [0, 1, 2, 5, 12]
+    seq = polynomials.besselk_seq(ns, BESSEL_KX)
+    loop = [polynomials.besselk(n, BESSEL_KX) for n in ns]
+    for elem, exp in zip(seq, loop):
+        np.testing.assert_allclose(elem, exp)
+
+
+def test_besselk_adjacent_and_ratio():
+    x = np.linspace(1, 20, 128)
+    km1, kn = polynomials.besselk_adjacent(5, x)
+    np.testing.assert_allclose(km1, polynomials.besselk(4, x))
+    np.testing.assert_allclose(kn, polynomials.besselk(5, x))
+    np.testing.assert_allclose(polynomials.besselk_ratio_knm1(5, x), km1 / kn)
 
 
 # XY poly
@@ -301,6 +387,12 @@ def test_zernike_sum_der_xy_handles_single_mode_and_duplicates():
     np.testing.assert_allclose(W2, Wref, atol=1e-14)
     np.testing.assert_allclose(dx2, dxref, atol=1e-14)
     np.testing.assert_allclose(dy2, dyref, atol=1e-14)
+    # trailing zero coefficients should not force high-order recurrence work
+    high_zero = [(2, 2), (12, 0), (15, -3)]
+    W3, dx3, dy3 = polynomials.zernike_sum_der_xy([2.0, 0.0, 0.0], high_zero, X, Y, norm=True)
+    np.testing.assert_allclose(W3, Wref, atol=1e-14)
+    np.testing.assert_allclose(dx3, dxref, atol=1e-14)
+    np.testing.assert_allclose(dy3, dyref, atol=1e-14)
 
 
 def test_zernike_to_magang_functions():
@@ -701,6 +793,18 @@ def test_clenshaw_matches_standard_way_der(a, b):
     assert np.allclose(exp, clenshaw, atol=1e-8)
 
 
+@pytest.mark.parametrize('a, b', [(0, 0), (0, 1), (-.5, .5), (.5, .5), (0, 4)])
+def test_jacobi_fused_value_derivative_matches_existing_apis(a, b):
+    ns = [0, 1, 2, 3, 4, 5, 6]
+    vals, ders = polynomials.jacobi_seq_with_der(ns, a, b, X)
+    np.testing.assert_allclose(vals, polynomials.jacobi_seq(ns, a, b, X))
+    np.testing.assert_allclose(ders, polynomials.jacobi_der_seq(ns, a, b, X))
+
+    val, der = polynomials.jacobi_with_der(4, a, b, X)
+    np.testing.assert_allclose(val, polynomials.jacobi(4, a, b, X))
+    np.testing.assert_allclose(der, polynomials.jacobi_der(4, a, b, X))
+
+
 def test_clenshaw_handles_single_coefficient():
     # piston: only P_0 contributes; sum = s[0], all derivatives are 0
     res = polynomials.jacobi_sum_clenshaw([2.5], 0, 0, X)
@@ -806,6 +910,54 @@ def test_qcon_zzprime_grads():
     fd = np.gradient(z, dx)
     # tends to be about 6e-4, permit 10x higher so sporadic failures don't happen
     assert np.allclose(zprime[1:-1], fd[1:-1], atol=5e-1)
+
+
+def test_qpoly_summed_paths_ignore_trailing_zeros():
+    r = np.linspace(0, 1, 64)
+    t = np.linspace(0, 2*np.pi, 64)
+    rr, tt = np.meshgrid(r, t)
+
+    coefs = [0.1, -0.2, 0.05]
+    coefs_padded = [0.1, -0.2, 0.05, 0, 0, 0]
+    z, zp = polynomials.qpoly.compute_z_zprime_Qbfs(coefs, r, r*r)
+    z_pad, zp_pad = polynomials.qpoly.compute_z_zprime_Qbfs(coefs_padded, r, r*r)
+    np.testing.assert_allclose(z_pad, z)
+    np.testing.assert_allclose(zp_pad, zp)
+
+    z, zp = polynomials.qpoly.compute_z_zprime_Qcon(coefs, r, r*r)
+    z_pad, zp_pad = polynomials.qpoly.compute_z_zprime_Qcon(coefs_padded, r, r*r)
+    np.testing.assert_allclose(z_pad, z)
+    np.testing.assert_allclose(zp_pad, zp)
+
+    cm0 = [0.1, -0.05]
+    ams = [[0.2], [], [0.15]]
+    bms = [[], [0.3], []]
+    cm0_padded = [0.1, -0.05, 0, 0]
+    ams_padded = [[0.2, 0, 0], [0, 0], [0.15, 0, 0], [0, 0, 0]]
+    bms_padded = [[0, 0], [0.3, 0, 0], [0], [0, 0, 0]]
+    out = polynomials.qpoly.compute_z_zprime_Q2d(cm0, ams, bms, rr, tt)
+    out_padded = polynomials.qpoly.compute_z_zprime_Q2d(cm0_padded, ams_padded, bms_padded, rr, tt)
+    for elem, elem_padded in zip(out, out_padded):
+        np.testing.assert_allclose(elem_padded, elem)
+
+    zero = polynomials.qpoly.compute_z_zprime_Q2d([0, 0], [[0, 0]], [[0, 0]], rr, tt)
+    for elem in zero:
+        np.testing.assert_allclose(elem, np.zeros_like(rr))
+
+
+def test_q2d_coefficient_restructure_skips_zero_terms():
+    nms = [(0, 0), (5, 0), (1, 1), (8, 1), (2, -2), (7, -2)]
+    coefs = [0.25, 0, -0.5, 0, 0.75, 0]
+    cm0, ams, bms = polynomials.qpoly.Q2d_nm_c_to_a_b(nms, coefs)
+    assert cm0 == [0.25]
+    assert ams == [[0, -0.5], []]
+    assert bms == [[], [0, 0, 0.75]]
+
+    cm0, ams, bms = polynomials.qpoly.Q2d_nm_c_to_a_b(nms, [0, 0, 0, 0, 0, 0])
+    assert cm0 == []
+    assert ams == []
+    assert bms == []
+
 
 @pytest.mark.parametrize(['n', 'alpha'], [
     [0, 0],

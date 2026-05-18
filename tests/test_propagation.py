@@ -108,6 +108,87 @@ def test_to_fpm_and_back_backprop_accepts_wavefront_fpm():
     assert grad.data.shape == wf.data.shape
 
 
+def _real_vdot(a, b):
+    return np.real(np.vdot(a, b))
+
+
+def test_to_fpm_and_back_backprop_returns_fpm_gradient():
+    rng = np.random.default_rng(123)
+    dx = 1.0
+    z = rng.normal(size=(8, 8)) + 1j * rng.normal(size=(8, 8))
+    wf = propagation.Wavefront(cmplx_field=z, dx=dx, wavelength=HeNe, space='pupil')
+    fpm_data = rng.normal(size=(8, 8))
+    fpm = propagation.Wavefront(cmplx_field=fpm_data, dx=0.1, wavelength=HeNe, space='psf')
+    mdft = wf.prepare_executor(efl=10.0, dx=fpm.dx, samples=fpm.data.shape)
+    out, at_fpm, _ = wf.to_fpm_and_back(fpm=fpm, executor=mdft, return_more=True)
+    outbar_data = rng.normal(size=out.data.shape) + 1j * rng.normal(size=out.data.shape)
+    outbar = propagation.Wavefront(cmplx_field=outbar_data, dx=out.dx,
+                                   wavelength=HeNe, space=out.space)
+
+    _, fpm_bar = outbar.to_fpm_and_back_backprop(
+        fpm=fpm, executor=mdft, return_fpm_grad=True, field_at_fpm=at_fpm,
+    )
+
+    y, x = 3, 4
+    eps = 1e-6
+    fpm_plus = fpm_data.copy()
+    fpm_minus = fpm_data.copy()
+    fpm_plus[y, x] += eps
+    fpm_minus[y, x] -= eps
+    j_plus = _real_vdot(outbar_data, wf.to_fpm_and_back(fpm=fpm_plus, executor=mdft).data)
+    j_minus = _real_vdot(outbar_data, wf.to_fpm_and_back(fpm=fpm_minus, executor=mdft).data)
+    fd = (j_plus - j_minus) / (2 * eps)
+    assert fpm_bar.data[y, x] == pytest.approx(fd, rel=1e-6, abs=1e-8)
+
+
+def test_babinet_backprop_returns_fpm_and_lyot_gradients():
+    rng = np.random.default_rng(456)
+    dx = 1.0
+    z = rng.normal(size=(8, 8)) + 1j * rng.normal(size=(8, 8))
+    wf = propagation.Wavefront(cmplx_field=z, dx=dx, wavelength=HeNe, space='pupil')
+    fpm_data = rng.normal(size=(8, 8))
+    lyot_data = rng.normal(size=(8, 8))
+    fpm = propagation.Wavefront(cmplx_field=fpm_data, dx=0.1, wavelength=HeNe, space='psf')
+    lyot = propagation.Wavefront(cmplx_field=lyot_data, dx=dx, wavelength=HeNe, space='pupil')
+    mdft = wf.prepare_executor(efl=10.0, dx=fpm.dx, samples=fpm.data.shape)
+    out, at_fpm, _, at_lyot = wf.babinet(lyot=lyot, fpm=fpm, executor=mdft, return_more=True)
+    outbar_data = rng.normal(size=out.data.shape) + 1j * rng.normal(size=out.data.shape)
+    outbar = propagation.Wavefront(cmplx_field=outbar_data, dx=out.dx,
+                                   wavelength=HeNe, space=out.space)
+
+    _, fpm_bar, lyot_bar = outbar.babinet_backprop(
+        lyot=lyot, fpm=fpm, executor=mdft,
+        field_at_fpm=at_fpm, field_at_lyot=at_lyot,
+        return_fpm_grad=True, return_lyot_grad=True,
+    )
+
+    eps = 1e-6
+    fy, fx = 2, 5
+    fpm_plus = fpm_data.copy()
+    fpm_minus = fpm_data.copy()
+    fpm_plus[fy, fx] += eps
+    fpm_minus[fy, fx] -= eps
+    fpm_plus = propagation.Wavefront(fpm_plus, HeNe, fpm.dx, 'psf')
+    fpm_minus = propagation.Wavefront(fpm_minus, HeNe, fpm.dx, 'psf')
+    j_plus = _real_vdot(outbar_data, wf.babinet(lyot=lyot, fpm=fpm_plus, executor=mdft).data)
+    j_minus = _real_vdot(outbar_data, wf.babinet(lyot=lyot, fpm=fpm_minus, executor=mdft).data)
+    fd_fpm = (j_plus - j_minus) / (2 * eps)
+
+    ly, lx = 6, 1
+    lyot_plus = lyot_data.copy()
+    lyot_minus = lyot_data.copy()
+    lyot_plus[ly, lx] += eps
+    lyot_minus[ly, lx] -= eps
+    lyot_plus = propagation.Wavefront(lyot_plus, HeNe, lyot.dx, 'pupil')
+    lyot_minus = propagation.Wavefront(lyot_minus, HeNe, lyot.dx, 'pupil')
+    j_plus = _real_vdot(outbar_data, wf.babinet(lyot=lyot_plus, fpm=fpm, executor=mdft).data)
+    j_minus = _real_vdot(outbar_data, wf.babinet(lyot=lyot_minus, fpm=fpm, executor=mdft).data)
+    fd_lyot = (j_plus - j_minus) / (2 * eps)
+
+    assert fpm_bar.data[fy, fx] == pytest.approx(fd_fpm, rel=1e-6, abs=1e-8)
+    assert lyot_bar.data[ly, lx] == pytest.approx(fd_lyot, rel=1e-6, abs=1e-8)
+
+
 def test_precomputed_angular_spectrum_functions():
     data = np.random.rand(2, 2)
     wf = propagation.Wavefront(cmplx_field=data, dx=1, wavelength=.6328)

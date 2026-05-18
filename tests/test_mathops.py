@@ -33,3 +33,29 @@ def test_is_power_of_2_powers_of_2(num):
 def test_is_power_of_2_non_powers_of_2(num):
     assert not mathops.is_power_of_2(num)
 
+
+@pytest.mark.parametrize('shim_name,probe_attr', [
+    ('np', 'arange'),
+    ('fft', 'fft'),
+    ('ndimage', 'gaussian_filter'),
+    ('special', 'jn'),
+    ('interpolate', 'interp1d'),
+    ('optimize', 'brentq'),
+    ('signal', 'windows'),
+])
+def test_backend_shim_default_routes_to_scipy_numpy(shim_name, probe_attr):
+    shim = getattr(mathops, shim_name)
+    assert hasattr(shim, probe_attr)
+
+
+def test_set_backend_to_defaults_restores_optimize_and_signal():
+    # poke the shims, then verify defaults reseat them.
+    sentinel = object()
+    mathops.optimize._srcmodule = sentinel
+    mathops.signal._srcmodule = sentinel
+    mathops.set_backend_to_defaults()
+    assert mathops.optimize._srcmodule is mathops._optimize
+    assert mathops.signal._srcmodule is mathops._signal
+    assert hasattr(mathops.optimize, 'brentq')
+    assert hasattr(mathops.signal, 'windows')
+

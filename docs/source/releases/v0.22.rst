@@ -312,6 +312,19 @@ array
 More convenient backend swaps, misc
 -----------------------------------
 
+The global :attr:`prysm.conf.config.precision` setting now accepts any real
+floating dtype-like value, not only the previous :code:`32` and :code:`64`
+integer selectors.  The matching complex dtype is inferred automatically.
+
+.. code-block:: python
+
+  from prysm.conf import config
+  import numpy as np
+
+  config.precision = np.float16
+  config.precision = "float32"
+  config.precision = np.dtype("float64")
+
 * :func:`prysm.mathops.set_backend_to_cupy`
 
 * :func:`~prysm.mathops.set_backend_to_pytorch`
@@ -463,6 +476,29 @@ retrieval with x/optym.  Users are encouraged to build on these examples to
 create their own code to perform tasks such as focus diverse phase retrieval (or
 other forms of diversity), coronagraph mask design or other inverse design
 problems and similar tasks
+
+The optimization tools now include governed runners and convergence plotting.
+The :func:`~prysm.x.optym.optimizers.run_until` runner pairs any step-based
+optimizer with reusable governors such as
+:class:`~prysm.x.optym.governors.MaxIterations`,
+:class:`~prysm.x.optym.governors.FunctionTolerance`,
+:class:`~prysm.x.optym.governors.GradientTolerance`,
+:class:`~prysm.x.optym.governors.StepTolerance`,
+:class:`~prysm.x.optym.governors.MaxEvaluations`, and
+:class:`~prysm.x.optym.governors.ConstraintTolerance`.  The
+:func:`~prysm.x.optym.plotting.plot_convergence` helper plots objective value,
+gradient norm, and active bounded-variable counts from the resulting step
+records.  See :doc:`../how-tos/Advanced Optimization with Problem and Governors`
+for a complete example using :class:`~prysm.x.optym.problem.Problem`,
+L-BFGS-B bounds, governors, and convergence plotting.
+
+Benchmark sample problems are available as ready-to-use :code:`(f, g)`
+callables for optimizer examples, smoke tests, and comparisons:
+
+* :func:`~prysm.x.optym.sample_problems.sphere`
+* :func:`~prysm.x.optym.sample_problems.rosenbrock`
+* :func:`~prysm.x.optym.sample_problems.rastrigin`
+* :func:`~prysm.x.optym.sample_problems.himmelblau`
 
 Optimizers
 

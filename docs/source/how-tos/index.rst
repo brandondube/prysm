@@ -11,5 +11,6 @@ How-Tos
     Advanced Interferogram Processing.ipynb
     GPU and Exascale Computing.ipynb
     Differentiable Optical Models.ipynb
+    Advanced Optimization with Problem and Governors.ipynb
     Polarized Propagation.ipynb
     Modeling Phase Shifting Interferometers.ipynb
