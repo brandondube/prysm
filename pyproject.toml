@@ -30,5 +30,10 @@ omit = ["prysm/x/*", "tests/*"]
 [tool.coverage.report]
 exclude_also = ["except ImportError", "assert"]
 
-[tool.pydocstyle]
+
+[tool.ruff.lint]
+select = [
+    "F",   # pyflakes (errors/undefined names/unused imports)
+    "D"
+]
 ignore = ["D200", "D203", "D204", "D210", "D213", "D300", "D401", "D416"]
