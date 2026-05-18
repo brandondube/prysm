@@ -84,6 +84,55 @@ def jacobi(n, alpha, beta, x):
     return Pn
 
 
+def jacobi_with_der(n, alpha, beta, x):
+    """Jacobi polynomial and first derivative of order n.
+
+    This uses the differentiated three-term recurrence directly, so callers
+    that need both P_n and P_n' do not need separate Jacobi recurrences.
+
+    Parameters
+    ----------
+    n : int
+        polynomial order
+    alpha : float
+        first weight parameter
+    beta : float
+        second weight parameter
+    x : ndarray
+        x coordinates to evaluate at
+
+    Returns
+    -------
+    ndarray, ndarray
+        P_n and dP_n/dx evaluated at the given points
+
+    """
+    if n < 0:
+        return jacobi(n, alpha, beta, x), jacobi_der(n, alpha, beta, x)
+
+    if n == 0:
+        return np.ones_like(x), np.zeros_like(x)
+
+    dP1 = 0.5 * (alpha + beta + 2)
+    P1 = alpha + 1 + (alpha + beta + 2) * ((x - 1) / 2)
+    if n == 1:
+        return P1, np.ones_like(x) * dP1
+
+    Pnm2 = np.ones_like(x)
+    dPnm2 = np.zeros_like(x)
+    Pnm1 = P1
+    dPnm1 = np.ones_like(x) * dP1
+    for i in range(2, n + 1):
+        A, B, C = recurrence_abc(i - 1, alpha, beta)
+        lin = A * x + B
+        Pn = lin * Pnm1 - C * Pnm2
+        dPn = A * Pnm1 + lin * dPnm1 - C * dPnm2
+        Pnm2, Pnm1 = Pnm1, Pn
+        dPnm2, dPnm1 = dPnm1, dPn
+
+    return Pn, dPn
+
+
 def jacobi_seq(ns, alpha, beta, x):
     """Jacobi polynomials of orders ns with weight parameters alpha and beta.
 
@@ -152,6 +201,72 @@ def jacobi_seq(ns, alpha, beta, x):
             min_i += 1
 
     return out
+
+
+def jacobi_seq_with_der(ns, alpha, beta, x):
+    """Jacobi polynomials and first derivatives for orders ns.
+
+    Parameters
+    ----------
+    ns : iterable
+        sorted polynomial orders to return
+    alpha : float
+        first weight parameter
+    beta : float
+        second weight parameter
+    x : ndarray
+        x coordinates to evaluate at
+
+    Returns
+    -------
+    ndarray, ndarray
+        P_n and dP_n/dx arrays, each shaped (len(ns), *x.shape)
+
+    """
+    if not hasattr(ns, '__len__'):
+        ns = list(ns)
+    min_i = 0
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
+    dout = np.empty_like(out)
+
+    if ns[min_i] == 0:
+        out[min_i] = 1
+        dout[min_i] = 0
+        min_i += 1
+
+    if min_i == len(ns):
+        return out, dout
+
+    dP1 = 0.5 * (alpha + beta + 2)
+    P1 = alpha + 1 + (alpha + beta + 2) * ((x - 1) / 2)
+    if ns[min_i] == 1:
+        out[min_i] = P1
+        dout[min_i] = dP1
+        min_i += 1
+
+    if min_i == len(ns):
+        return out, dout
+
+    Pnm2 = np.ones_like(x)
+    dPnm2 = np.zeros_like(x)
+    Pnm1 = P1
+    dPnm1 = np.ones_like(x) * dP1
+    max_n = ns[-1]
+    for i in range(2, max_n + 1):
+        A, B, C = recurrence_abc(i - 1, alpha, beta)
+        lin = A * x + B
+        Pn = lin * Pnm1 - C * Pnm2
+        dPn = A * Pnm1 + lin * dPnm1 - C * dPnm2
+        Pnm2, Pnm1 = Pnm1, Pn
+        dPnm2, dPnm1 = dPnm1, dPn
+        if ns[min_i] == i:
+            out[min_i] = Pn
+            dout[min_i] = dPn
+            min_i += 1
+            if min_i == len(ns):
+                return out, dout
+
+    return out, dout
 
 
 def jacobi_der(n, alpha, beta, x):

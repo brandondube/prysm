@@ -27,6 +27,7 @@ def _initialize_alphas(s, x, alphas, j=0):
     j : int, optional
         derivative order.  If j == 0, alphas has shape (N, *x.shape);
         otherwise it is (j+1, N, *x.shape).
+
     """
     if alphas is not None:
         return alphas
@@ -80,12 +81,14 @@ def _clenshaw_sum(coefs, lin_fn, c_fn, alphas):
         c_fn(n) -> scalar giving the constant recurrence factor
     alphas : ndarray
         pre-allocated buffer of shape (>= max(len(coefs), 2), *x.shape)
+
     """
     M = len(coefs) - 1
     if M == 0:
         # only P_0 contributes; alphas[0] gets the sole weight, alphas[1+]
         # stay zero from the initial allocation.
         alphas[0] = coefs[0]
+        alphas[1:] = 0
         return alphas
     alphas[M] = coefs[M]
     alphas[M - 1] = coefs[M - 1] + lin_fn(M - 1) * alphas[M]
@@ -118,12 +121,14 @@ def _clenshaw_sum_der(coefs, lin_fn, lin_x_coef_fn, c_fn, alphas, j):
         pre-allocated buffer of shape (j+1, >= max(len(coefs), 2), *x.shape)
     j : int
         max derivative order to compute
+
     """
     M = len(coefs) - 1
     _clenshaw_sum(coefs, lin_fn, c_fn, alphas[0])
     for jj in range(1, j + 1):
         if jj > M:
             # the (jj)-th derivative of a degree-M polynomial is identically zero
+            alphas[jj] = 0
             continue
         b = lin_x_coef_fn(M - jj)
         alphas[jj][M - jj] = jj * b * alphas[jj - 1][M - jj + 1]

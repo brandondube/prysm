@@ -3,13 +3,36 @@
 from collections import defaultdict
 from functools import lru_cache
 
-from scipy import special
-
-from .jacobi import jacobi, jacobi_der, jacobi_seq, jacobi_der_seq, jacobi_sum_clenshaw_der
+from .jacobi import (
+    jacobi,
+    jacobi_with_der,
+    jacobi_seq,
+    jacobi_seq_with_der,
+    jacobi_sum_clenshaw_der,
+)
 from ._clenshaw import _initialize_alphas, _clenshaw_sum, _clenshaw_sum_der
 
-from prysm.mathops import np, kronecker, gamma, sign
+from prysm.mathops import np, special, kronecker, gamma, sign
 from prysm.conf import config
+
+
+_INV_SQRT19 = 1.0 / np.sqrt(19)
+
+
+def _trim_trailing_zeros(coefs):
+    """Drop trailing exact-zero coefficients from a dense coefficient vector."""
+    if coefs is None:
+        return []
+    if not hasattr(coefs, '__len__'):
+        coefs = list(coefs)
+
+    n = len(coefs)
+    while n > 0 and coefs[n - 1] == 0:
+        n -= 1
+
+    if n == 0:
+        return []
+    return coefs[:n]
 
 
 @lru_cache(1000)
@@ -72,27 +95,27 @@ def Qbfs(n, x):
     # the first two Qbfs polynomials are
     # Q_bfs0 = x^2 - x^4
     # Q_bfs1 = 1/19^.5 * (13 - 16 * x^2) * (x^2 - x^4)
-    rho = x ** 2
+    rho = x * x
     # c_Q is the leading term used to convert Qm to Qbfs
     c_Q = rho * (1 - rho)
     if n == 0:
         return c_Q  # == x^2 - x^4
 
     if n == 1:
-        return 1 / np.sqrt(19) * (13 - 16 * rho) * c_Q
+        return _INV_SQRT19 * (13 - 16 * rho) * c_Q
 
     # c is the leading term of the recurrence relation for P
     c = 2 - 4 * rho
     # P0, P1 are the first two terms of the recurrence relation for auxiliary
     # polynomial P_n
-    P0 = np.ones_like(x) * 2
+    P0 = 2
     P1 = 6 - 8 * rho
     Pnm2 = P0
     Pnm1 = P1
 
     # Q0, Q1 are the first two terms of the recurrence relation for Qm
-    Q0 = np.ones_like(x)
-    Q1 = 1 / np.sqrt(19) * (13 - 16 * rho)
+    Q0 = 1
+    Q1 = _INV_SQRT19 * (13 - 16 * rho)
     Qnm2 = Q0
     Qnm1 = Q1
     for nn in range(2, n+1):
@@ -146,7 +169,6 @@ def change_basis_Qbfs_to_Pn(cs):
         array of same type as cs holding the coefficients that represent the
         same surface as a sum of shifted Chebyshev polynomials of the third kind
 
-
     """
     if hasattr(cs, 'dtype'):
         # array, initialize as array
@@ -197,6 +219,10 @@ def clenshaw_qbfs(cs, usq, alphas=None):
 
     """
     x = usq
+    cs = _trim_trailing_zeros(cs)
+    if len(cs) == 0:
+        return np.zeros_like(x)
+
     bs = change_basis_Qbfs_to_Pn(cs)
     alphas = _initialize_alphas(cs, x, alphas, j=0)
     # Qbfs recurrence: P_n = (2 - 4x) P_{n-1} - P_{n-2}; lin is n-independent,
@@ -242,6 +268,12 @@ def clenshaw_qbfs_der(cs, usq, j=1, alphas=None):
 
     """
     x = usq
+    cs = _trim_trailing_zeros(cs)
+    if len(cs) == 0:
+        alphas = _initialize_alphas([0], x, alphas, j=j)
+        alphas[...] = 0
+        return alphas
+
     bs = change_basis_Qbfs_to_Pn(cs)
     alphas = _initialize_alphas(cs, x, alphas, j=j)
     prefix = 2 - 4 * x
@@ -286,6 +318,10 @@ def compute_z_zprime_Qbfs(coefs, u, usq):
         S, Sprime in Forbes' parlance
 
     """
+    coefs = _trim_trailing_zeros(coefs)
+    if len(coefs) == 0:
+        return np.zeros_like(u), np.zeros_like(u)
+
     # clenshaw does its own u^2; _initialize_alphas pads the mode axis to
     # at least 2, so alphas[*][1] is always readable (zero for len==1).
     alphas = clenshaw_qbfs_der(coefs, usq, j=1)
@@ -312,6 +348,17 @@ def compute_z_zprime_Qbfs(coefs, u, usq):
     return S, Sprime
 
 
+def compute_z_Qbfs(coefs, u, usq):
+    """Sag-only sibling of compute_z_zprime_Qbfs.
+
+    clenshaw_qbfs already returns u^2 (1 - u^2) S(u^2), the full sag, so this
+    is just a thin name-parity wrapper that mirrors compute_z_zprime_Qbfs's
+    signature.
+
+    """
+    return clenshaw_qbfs(coefs, usq)
+
+
 def compute_z_zprime_Qcon(coefs, u, usq):
     """Compute the surface sag and first radial derivative of a Qcon surface.
 
@@ -334,6 +381,10 @@ def compute_z_zprime_Qcon(coefs, u, usq):
         S, Sprime in Forbes' parlance
 
     """
+    coefs = _trim_trailing_zeros(coefs)
+    if len(coefs) == 0:
+        return np.zeros_like(u), np.zeros_like(u)
+
     x = 2 * usq - 1
     alphas = jacobi_sum_clenshaw_der(coefs, 0, 4, x=x, j=1)
     S = alphas[0][0]
@@ -377,10 +428,12 @@ def Qbfs_seq(ns, x):
 
     if not hasattr(ns, '__len__'):
         ns = list(ns)
+    if len(ns) == 0:
+        return np.empty((0, *x.shape), dtype=x.dtype)
     min_i = 0
     out = np.empty((len(ns), *x.shape), dtype=x.dtype)
 
-    rho = x ** 2
+    rho = x * x
     # c_Q is the leading term used to convert Qm to Qbfs
     c_Q = rho * (1 - rho)
     if ns[min_i] == 0:
@@ -391,7 +444,7 @@ def Qbfs_seq(ns, x):
         return out
 
     if ns[min_i] == 1:
-        out[min_i] = 1 / np.sqrt(19) * (13 - 16 * rho) * c_Q
+        out[min_i] = _INV_SQRT19 * (13 - 16 * rho) * c_Q
         min_i += 1
 
     if min_i == len(ns):
@@ -401,14 +454,14 @@ def Qbfs_seq(ns, x):
     c = 2 - 4 * rho
     # P0, P1 are the first two terms of the recurrence relation for auxiliary
     # polynomial P_n
-    P0 = np.ones_like(x) * 2
+    P0 = 2
     P1 = 6 - 8 * rho
     Pnm2 = P0
     Pnm1 = P1
 
     # Q0, Q1 are the first two terms of the recurrence relation for Qbfs_n
-    Q0 = np.ones_like(x)
-    Q1 = 1 / np.sqrt(19) * (13 - 16 * rho)
+    Q0 = 1
+    Q1 = _INV_SQRT19 * (13 - 16 * rho)
     Qnm2 = Q0
     Qnm1 = Q1
     for nn in range(2, ns[-1]+1):
@@ -450,7 +503,7 @@ def Qbfs_der(n, x):
         d/dx Qbfs_n(x)
 
     """
-    rho = x ** 2
+    rho = x * x
     # leading-envelope derivative pieces, reused at the bottom
     env = rho * (1 - rho)
     denv_dx = 2*x - 4*x*rho  # 2x - 4x^3
@@ -459,20 +512,19 @@ def Qbfs_der(n, x):
         # Qbfs_0(x) = x^2 - x^4 → derivative = 2x - 4x^3
         return denv_dx
 
-    inv_sqrt19 = 1.0 / np.sqrt(19)
-    Q_curr = inv_sqrt19 * (13 - 16 * rho)
-    dQ_curr = -16 * inv_sqrt19  # scalar; dQ_1/dy
+    Q_curr = _INV_SQRT19 * (13 - 16 * rho)
+    dQ_curr = -16 * _INV_SQRT19  # scalar; dQ_1/dy
     if n == 1:
         # multiply by env-derivative chain: 2x for d/dx of Q(rho)
         return denv_dx * Q_curr + env * (2 * x) * dQ_curr
 
     # auxiliary recurrence on y = rho
-    P_prev = np.ones_like(x) * 2          # P_0(y) = 2
+    P_prev = 2                            # P_0(y) = 2
     P_curr = 6 - 8 * rho                  # P_1(y) = 6 - 8y
     dP_prev = 0                           # dP_0/dy = 0
     dP_curr = -8                          # dP_1/dy = -8
 
-    Q_prev = np.ones_like(x)              # Q_0 = 1
+    Q_prev = 1                            # Q_0 = 1
     dQ_prev = 0                           # dQ_0/dy = 0
 
     prefix = 2 - 4 * rho
@@ -512,10 +564,12 @@ def Qbfs_der_seq(ns, x):
     """
     if not hasattr(ns, '__len__'):
         ns = list(ns)
+    if len(ns) == 0:
+        return np.empty((0, *x.shape), dtype=x.dtype)
     min_i = 0
     out = np.empty((len(ns), *x.shape), dtype=x.dtype)
 
-    rho = x ** 2
+    rho = x * x
     env = rho * (1 - rho)
     denv_dx = 2*x - 4*x*rho
     two_x = 2 * x
@@ -527,27 +581,22 @@ def Qbfs_der_seq(ns, x):
     if min_i == len(ns):
         return out
 
-    inv_sqrt19 = 1.0 / np.sqrt(19)
-    Q_curr = inv_sqrt19 * (13 - 16 * rho)
-    dQ_curr_scalar = -16 * inv_sqrt19  # dQ_1/dy is a scalar
+    Q_curr = _INV_SQRT19 * (13 - 16 * rho)
+    dQ_curr = -16 * _INV_SQRT19  # dQ_1/dy is a scalar
     if ns[min_i] == 1:
-        out[min_i] = denv_dx * Q_curr + env * two_x * dQ_curr_scalar
+        out[min_i] = denv_dx * Q_curr + env * two_x * dQ_curr
         min_i += 1
 
     if min_i == len(ns):
         return out
 
-    # promote dQ_curr to array for the parallel recurrence
-    dQ_curr = np.broadcast_to(np.asarray(dQ_curr_scalar, dtype=x.dtype), x.shape).copy()
-
-    P_prev = np.ones_like(x) * 2
+    P_prev = 2
     P_curr = 6 - 8 * rho
-    # dP needs to be array-shaped from the start to participate in recurrence
-    dP_prev = np.zeros_like(x)
-    dP_curr = np.full_like(x, -8)
+    dP_prev = 0
+    dP_curr = -8
 
-    Q_prev = np.ones_like(x)
-    dQ_prev = np.zeros_like(x)
+    Q_prev = 1
+    dQ_prev = 0
 
     prefix = 2 - 4 * rho
     for nn in range(2, ns[-1]+1):
@@ -596,10 +645,10 @@ def Qcon(n, x):
     c.
 
     """
-    xx = x ** 2
-    xx = 2 * xx - 1
+    x2 = x * x
+    xx = 2 * x2 - 1
     Pn = jacobi(n, 0, 4, xx)
-    return Pn * x ** 4
+    return Pn * x2 * x2
 
 
 def Qcon_seq(ns, x):
@@ -620,9 +669,9 @@ def Qcon_seq(ns, x):
         return has shape (5, 100, 100)
 
     """
-    xx = x ** 2
-    xx = 2 * xx - 1
-    x4 = x ** 4
+    x2 = x * x
+    xx = 2 * x2 - 1
+    x4 = x2 * x2
     Pns = jacobi_seq(ns, 0, 4, xx)
     return Pns * x4
 
@@ -650,8 +699,7 @@ def Qcon_der(n, x):
     """
     xx = 2 * x * x - 1
     x3 = x * x * x
-    Pn = jacobi(n, 0, 4, xx)
-    dPn = jacobi_der(n, 0, 4, xx)
+    Pn, dPn = jacobi_with_der(n, 0, 4, xx)
     return 4 * x3 * Pn + 4 * x3 * (x * x) * dPn
 
 
@@ -676,8 +724,7 @@ def Qcon_der_seq(ns, x):
     xx = 2 * x * x - 1
     x3 = x * x * x
     x5 = x3 * x * x
-    Pns = jacobi_seq(ns, 0, 4, xx)
-    dPns = jacobi_der_seq(ns, 0, 4, xx)
+    Pns, dPns = jacobi_seq_with_der(ns, 0, 4, xx)
     return 4 * x3 * Pns + 4 * x5 * dPns
 
 
@@ -882,7 +929,7 @@ def Q2d(n, m, r, t):
     # for the sake of consistency of impl, I alias r=>u
     # and compute x = u**2 to match the papers
     u = r
-    x = u ** 2
+    x = u * u
     if m == 0:
         return Qbfs(n, r)
 
@@ -980,7 +1027,7 @@ def Q2d_seq(nms, r, t):
     # prefixes / other terms yielded.
 
     u = r
-    x = u ** 2
+    x = u * u
 
     def factory():
         return 0
@@ -996,7 +1043,7 @@ def Q2d_seq(nms, r, t):
             max_ns[m_] = n
         if m > 0:
             m_has_pos.add(m_)
-        else:
+        elif m < 0:
             m_has_neg.add(m_)
 
     # precompute these reusable pieces of data
@@ -1005,6 +1052,8 @@ def Q2d_seq(nms, r, t):
     cos_scales = {}
 
     for absm in max_ns.keys():
+        if absm == 0:
+            continue
         u_scales[absm] = u ** absm
         if absm in m_has_neg:
             sin_scales[absm] = np.sin(absm * t)
@@ -1014,7 +1063,7 @@ def Q2d_seq(nms, r, t):
     seqs = {}
     for m, N in max_ns.items():
         if m == 0:
-            seqs[m] = list(Qbfs_seq(range(N+1), r))
+            seqs[m] = Qbfs_seq(range(N+1), r)
         else:
             seqs[m] = []
             P0 = 1/2
@@ -1102,6 +1151,7 @@ def _qbfs_aux_recurrence(Nmax, u):
     list, list
         Q[0..Nmax] and dQ[0..Nmax]; each entry is an ndarray broadcast to
         the shape of u.
+
     """
     Q0 = np.ones_like(u)
     dQ0 = np.zeros_like(u)
@@ -1110,19 +1160,18 @@ def _qbfs_aux_recurrence(Nmax, u):
     if Nmax == 0:
         return Q_list, dQ_list
 
-    inv_sqrt19 = 1.0 / np.sqrt(19)
-    Q1 = inv_sqrt19 * (13 - 16 * u)
-    dQ1 = np.full_like(u, -16 * inv_sqrt19)
+    Q1 = _INV_SQRT19 * (13 - 16 * u)
+    dQ1 = -16 * _INV_SQRT19
     Q_list.append(Q1)
     dQ_list.append(dQ1)
     if Nmax == 1:
         return Q_list, dQ_list
 
     # parallel P / P' / Q / Q' recurrence on u
-    P_prev = np.full_like(u, 2.0)
+    P_prev = 2.0
     P_curr = 6 - 8 * u
-    dP_prev = np.zeros_like(u)
-    dP_curr = np.full_like(u, -8.0)
+    dP_prev = 0.0
+    dP_curr = -8.0
     Q_prev = Q0
     Q_curr = Q1
     dQ_prev = dQ0
@@ -1157,6 +1206,7 @@ def _q2d_radial_recurrence(Nmax, m, u):
     list, list
         Q[0..Nmax] and dQ[0..Nmax]; each entry is an ndarray broadcast to
         the shape of u.
+
     """
     if m < 1:
         raise ValueError(f'_q2d_radial_recurrence requires m >= 1, got {m}')
@@ -1248,6 +1298,7 @@ def _harmonic_powers(am, x, y):
     -------
     list of (C_k, S_k)
         out[k] = (Re((x+iy)^k), Im((x+iy)^k)) for k in 0..am.
+
     """
     C0 = np.ones_like(x)
     S0 = np.zeros_like(x)
@@ -1433,14 +1484,10 @@ def Q2d_der_seq(nms, r, t):
     # Per-|m| recurrence
     Q_tables = {}
     dQ_tables = {}
+    qbfs_der_table = None
     for am, Nmax in max_ns.items():
         if am == 0:
-            # use the auxiliary Qbfs recurrence; sag = u(1-u) Q, but for polar
-            # derivatives we want d/dr Qbfs_n(r) directly
-            # easier: just call Qbfs_der per-mode below; build value tables
-            # for the auxiliary form so we can reuse for d/dt (which is 0)
-            Q_tables[0] = None
-            dQ_tables[0] = None
+            qbfs_der_table = Qbfs_der_seq(range(Nmax + 1), r)
         else:
             Q_tables[am], dQ_tables[am] = _q2d_radial_recurrence(Nmax, am, u)
 
@@ -1448,7 +1495,7 @@ def Q2d_der_seq(nms, r, t):
     out_dt = np.empty((len(nms), *r.shape), dtype=r.dtype)
     for j, (n, m) in enumerate(nms):
         if m == 0:
-            out_dr[j] = Qbfs_der(n, r)
+            out_dr[j] = qbfs_der_table[n]
             out_dt[j] = 0
             continue
         am = abs(m)
@@ -1530,8 +1577,8 @@ def Q2d_der_xy_seq(nms, x, y):
             continue
         J = Q_tables[am][n]
         Jp = dQ_tables[am][n]
-        C_am, S_am = harm[am]
-        C_amm1, S_amm1 = harm[am - 1]
+        C_am, S_am = harm[am]  # NOQA - guarded by if m == 0 above
+        C_amm1, S_amm1 = harm[am - 1]  # NOQA - guarded by if m == 0 above
         if m > 0:
             H = C_am
             dHdx = am * C_amm1
@@ -1568,7 +1615,6 @@ def change_of_basis_Q2d_to_Pnm(cns, m):
     ndarray
         array of same type as cs holding the coefficients that represent the
         same surface as a sum of shifted Chebyshev polynomials of the third kind
-
 
     """
     if m < 0:
@@ -1640,6 +1686,12 @@ def clenshaw_q2d(cns, m, usq, alphas=None):
 
     """
     x = usq
+    cns = _trim_trailing_zeros(cns)
+    if len(cns) == 0:
+        alphas = _initialize_alphas([0], x, alphas, j=0)
+        alphas[...] = 0
+        return alphas
+
     ds = change_of_basis_Q2d_to_Pnm(cns, m)
     alphas = _initialize_alphas(ds, x, alphas, j=0)
     # Q2d recurrence: P_n = (A_n + B_n x) P_{n-1} - C_n P_{n-2} (Forbes notation;
@@ -1690,6 +1742,12 @@ def clenshaw_q2d_der(cns, m, usq, j=1, alphas=None):
 
     """
     x = usq
+    cns = _trim_trailing_zeros(cns)
+    if len(cns) == 0:
+        alphas = _initialize_alphas([0], x, alphas, j=j)
+        alphas[...] = 0
+        return alphas
+
     ds = change_of_basis_Q2d_to_Pnm(cns, m)
     alphas = _initialize_alphas(cns, x, alphas, j=j)
 
@@ -1747,8 +1805,8 @@ def compute_z_zprime_Q2d(cm0, ams, bms, u, t):
     dr = np.zeros_like(u)
     dt = np.zeros_like(u)
 
-    # this is terrible, need to re-think this
-    if cm0 is not None and len(cm0) > 0:
+    cm0 = _trim_trailing_zeros(cm0)
+    if len(cm0) > 0:
         zm0, zprimem0 = compute_z_zprime_Qbfs(cm0, u, usq)
         z += zm0
         dr += zprimem0
@@ -1765,22 +1823,26 @@ def compute_z_zprime_Q2d(cm0, ams, bms, u, t):
     # to avoid putting an m += 1 at the bottom (too far from init)
     for a_coef, b_coef in zip(ams, bms):
         m += 1
-        # TODO: consider zeroing alphas and re-using it to reduce
-        # alloc pressure inside this func; need care since len of any coef vector
-        # may be unequal
-
-        if len(a_coef) == 0:
+        a_coef = _trim_trailing_zeros(a_coef)
+        b_coef = _trim_trailing_zeros(b_coef)
+        if len(a_coef) == 0 and len(b_coef) == 0:
             continue
 
         # can't use "as" => as keyword
         Na = len(a_coef) - 1
         Nb = len(b_coef) - 1
-        alphas_a = clenshaw_q2d_der(a_coef, m, usq)
-        alphas_b = clenshaw_q2d_der(b_coef, m, usq)
-        Sa = 0.5 * alphas_a[0][0]
-        Sb = 0.5 * alphas_b[0][0]
-        Sprimea = 0.5 * alphas_a[1][0]
-        Sprimeb = 0.5 * alphas_b[1][0]
+        Sa = 0
+        Sb = 0
+        Sprimea = 0
+        Sprimeb = 0
+        if len(a_coef) > 0:
+            alphas_a = clenshaw_q2d_der(a_coef, m, usq)
+            Sa = 0.5 * alphas_a[0][0]
+            Sprimea = 0.5 * alphas_a[1][0]
+        if len(b_coef) > 0:
+            alphas_b = clenshaw_q2d_der(b_coef, m, usq)
+            Sb = 0.5 * alphas_b[0][0]
+            Sprimeb = 0.5 * alphas_b[1][0]
         if m == 1 and Na > 2:
             Sa -= 2/5 * alphas_a[0][3]
             # derivative is same, but instead of 0 index, index=j==1
@@ -1823,6 +1885,44 @@ def compute_z_zprime_Q2d(cm0, ams, bms, u, t):
     return z, dr, dt
 
 
+def compute_z_Q2d(cm0, ams, bms, u, t):
+    """Sag-only sibling of compute_z_zprime_Q2d."""
+    usq = u * u
+    z = np.zeros_like(u)
+
+    cm0 = _trim_trailing_zeros(cm0)
+    if len(cm0) > 0:
+        z += compute_z_Qbfs(cm0, u, usq)
+
+    m = 0
+    for a_coef, b_coef in zip(ams, bms):
+        m += 1
+        a_coef = _trim_trailing_zeros(a_coef)
+        b_coef = _trim_trailing_zeros(b_coef)
+        if len(a_coef) == 0 and len(b_coef) == 0:
+            continue
+
+        Na = len(a_coef) - 1
+        Nb = len(b_coef) - 1
+        Sa = 0
+        Sb = 0
+        if len(a_coef) > 0:
+            alphas_a = clenshaw_q2d(a_coef, m, usq)
+            Sa = 0.5 * alphas_a[0]
+        if len(b_coef) > 0:
+            alphas_b = clenshaw_q2d(b_coef, m, usq)
+            Sb = 0.5 * alphas_b[0]
+        if m == 1 and Na > 2:
+            Sa -= 2/5 * alphas_a[3]
+        if m == 1 and Nb > 2:
+            Sb -= 2/5 * alphas_b[3]
+
+        um = u ** m
+        z += um * (np.cos(m*t) * Sa + np.sin(m*t) * Sb)
+
+    return z
+
+
 def Q2d_nm_c_to_a_b(nms, coefs):
     """Re-structure Q2D coefficients to the form needed by compute_z_zprime_Q2d.
 
@@ -1862,6 +1962,8 @@ def Q2d_nm_c_to_a_b(nms, coefs):
     # => go to dense, ordered arrays
 
     for (n, m), c in zip(nms, coefs):
+        if c == 0:
+            continue
         if m == 0:
             if len(cms) < n+1:
                 cms = expand_and_copy(cms, n)
@@ -1893,8 +1995,18 @@ def Q2d_nm_c_to_a_b(nms, coefs):
             if bc[k][i] is None:
                 bc[k][i] = 0
 
-    max_m_a = max(list(ac.keys()))
-    max_m_b = max(list(bc.keys()))
+    cms = list(_trim_trailing_zeros(cms))
+    for k in list(ac.keys()):
+        ac[k] = list(_trim_trailing_zeros(ac[k]))
+        if len(ac[k]) == 0:
+            del ac[k]
+    for k in list(bc.keys()):
+        bc[k] = list(_trim_trailing_zeros(bc[k]))
+        if len(bc[k]) == 0:
+            del bc[k]
+
+    max_m_a = max(ac.keys(), default=0)
+    max_m_b = max(bc.keys(), default=0)
     max_m = max(max_m_a, max_m_b)
     ac_ret = []
     bc_ret = []

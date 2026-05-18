@@ -2,9 +2,19 @@
 
 from collections import defaultdict
 
+# truenp: host-side index bookkeeping — truenp.abs/unique on (n, m) tuples,
+#         argpartition/argsort for top-k coefficient selection, and Python
+#         list/dict shuffling that never reaches the GPU.
 import numpy as truenp
 
-from .jacobi import jacobi, jacobi_der, jacobi_seq, jacobi_sum_clenshaw_der
+from .jacobi import (
+    jacobi,
+    jacobi_with_der,
+    jacobi_der,
+    jacobi_seq,
+    jacobi_seq_with_der,
+    jacobi_sum_clenshaw_der,
+)
 
 from prysm.mathops import np, kronecker, sign, is_odd
 from prysm.util import sort_xy
@@ -44,7 +54,7 @@ def zernike_nm(n, m, r, t, norm=True):
         zernike mode of order n,m at points r,t
 
     """
-    x = 2 * r ** 2 - 1
+    x = 2 * (r * r) - 1
     am = abs(m)
     n_j = (n - am) // 2
     out = jacobi(n_j, 0, am, x)
@@ -92,7 +102,7 @@ def zernike_nm_seq(nms, r, t, norm=True):
     #
     # benchmarked at 12.26 ns/element (256x256), 4.6GHz CPU = 56 clocks per element
     # ~36% faster than previous impl (12ms => 8.84 ms)
-    x = 2 * r ** 2 - 1
+    x = 2 * (r * r) - 1
     ms = [e[1] for e in nms]
     am = truenp.abs(ms)
     amu = truenp.unique(am)
@@ -118,7 +128,7 @@ def zernike_nm_seq(nms, r, t, norm=True):
     jacobi_seqs_mjn = dict(jacobi_seqs_mjn)
     for k in jacobi_seqs_mjn:
         n_jac = jacobi_seqs_mjn[k]
-        jacobi_seqs[k] = list(jacobi_seq(n_jac, 0, k, x))
+        jacobi_seqs[k] = jacobi_seq(n_jac, 0, k, x)
 
     powers_of_m = {}
     sines = {}
@@ -201,18 +211,21 @@ def zernike_nm_der(n, m, r, t, norm=True):
     #
     # in azimuth it's the other way around: regular old Zernike computation,
     # multiplied by d/dt ( cost )
-    x = 2 * r ** 2 - 1
+    x = 2 * (r * r) - 1
     am = abs(m)
     n_j = (n - am) // 2
     # dv from above == d/dr(R(2r^2-1))
-    dv = (4*r) * jacobi_der(n_j, 0, am, x)
+    if m == 0:
+        dv = (4*r) * jacobi_der(n_j, 0, am, x)
+    else:
+        v, Jp = jacobi_with_der(n_j, 0, am, x)
+        dv = (4*r) * Jp
     if norm:
         znorm = zernike_norm(n, m)
     if m == 0:
         dr = dv
         dt = np.zeros_like(dv)
     else:
-        v = jacobi(n_j, 0, am, x)
         u = r ** am
         du = am * r ** (am-1)
         dr = v * du + u * dv
@@ -267,12 +280,86 @@ def zernike_nm_der_seq(nms, r, t, norm=True):
         trailing dimensions match the inputs (r, t) in shape
 
     """
-    # TODO: actually implement the recurrence relation as in zernike_seq,
-    # instead of just using a loop for API homogenaeity
+    nms = list(nms)
     out = np.empty((len(nms), 2, *r.shape), dtype=r.dtype)
+    if len(nms) == 0:
+        return out
+
+    x = 2 * (r * r) - 1
+
+    max_nj_by_am = defaultdict(int)
+    m_has_pos = set()
+    m_has_neg = set()
+    for n, m in nms:
+        am = abs(m)
+        n_j = (n - am) // 2
+        if n_j < 0:
+            continue
+        if max_nj_by_am[am] < n_j:
+            max_nj_by_am[am] = n_j
+        if m > 0:
+            m_has_pos.add(am)
+        elif m < 0:
+            m_has_neg.add(am)
+
+    jacobi_tables = {}
+    jacobi_der_tables = {}
+    for am, max_nj in max_nj_by_am.items():
+        ns = range(max_nj + 1)
+        jacobi_tables[am], jacobi_der_tables[am] = jacobi_seq_with_der(ns, 0, am, x)
+
+    powers = {}
+    dpowers = {}
+    sines = {}
+    cosines = {}
+    for am in max_nj_by_am:
+        if am == 0:
+            continue
+        if am == 1:
+            powers[am] = r
+            dpowers[am] = np.ones_like(r)
+        else:
+            r_am_minus_1 = r ** (am - 1)
+            powers[am] = r_am_minus_1 * r
+            dpowers[am] = am * r_am_minus_1
+        if am in m_has_pos or am in m_has_neg:
+            cosines[am] = np.cos(am * t)
+            sines[am] = np.sin(am * t)
+
+    four_r = 4 * r
     for j, (n, m) in enumerate(nms):
-        tmp = zernike_nm_der(n, m, r, t, norm=norm)
-        out[j] = tmp
+        am = abs(m)
+        n_j = (n - am) // 2
+        if n_j < 0:
+            out[j] = zernike_nm_der(n, m, r, t, norm=norm)
+            continue
+        v = jacobi_tables[am][n_j]
+        dv = four_r * jacobi_der_tables[am][n_j]
+
+        if m == 0:
+            dr = dv
+            dt = np.zeros_like(dv)
+        else:
+            u = powers[am]
+            du = dpowers[am]
+            dr = v * du + u * dv
+            if m < 0:
+                dr *= sines[am]
+                dt = am * cosines[am]
+            else:
+                dr *= cosines[am]
+                dt = -am * sines[am]
+
+            dt *= u
+            dt *= v
+
+        if norm:
+            znorm = zernike_norm(n, m)
+            dr *= znorm
+            dt *= znorm
+
+        out[j, 0] = dr
+        out[j, 1] = dt
 
     return out
 
@@ -315,8 +402,7 @@ def zernike_nm_der_xy(n, m, x, y, norm=True):
     n_j = (n - am) // 2
     rho_sq = x * x + y * y
     arg = 2 * rho_sq - 1
-    J = jacobi(n_j, 0, am, arg)
-    Jp = jacobi_der(n_j, 0, am, arg)  # d/d(arg) of J
+    J, Jp = jacobi_with_der(n_j, 0, am, arg)
     # d/dx J(rho^2) = Jp * 4x   (chain rule through arg = 2 rho^2 - 1)
     if am == 0:
         dzdx = 4 * x * Jp
@@ -371,12 +457,78 @@ def zernike_nm_der_xy_seq(nms, x, y, norm=True):
         is (dZ/dx, dZ/dy)
 
     """
-    # TODO: dedupe jacobi/Cartesian-harmonic computation across modes,
-    # mirroring zernike_nm_seq.  For now this matches zernike_nm_der_seq's
-    # simple-loop structure for API homogeneity.
+    nms = list(nms)
+    if len(nms) == 0:
+        return np.empty((0, 2, *x.shape), dtype=x.dtype)
+
+    rho_sq = x * x + y * y
+    arg = 2 * rho_sq - 1
+
+    max_nj_by_am = defaultdict(int)
+    for n, m in nms:
+        am = abs(m)
+        n_j = (n - am) // 2
+        if n_j < 0:
+            continue
+        if max_nj_by_am[am] < n_j:
+            max_nj_by_am[am] = n_j
+
+    if not max_nj_by_am:
+        out = np.empty((len(nms), 2, *x.shape), dtype=x.dtype)
+        for j, (n, m) in enumerate(nms):
+            out[j] = zernike_nm_der_xy(n, m, x, y, norm=norm)
+        return out
+
+    jacobi_tables = {}
+    jacobi_der_tables = {}
+    for am, max_nj in max_nj_by_am.items():
+        ns = range(max_nj + 1)
+        jacobi_tables[am], jacobi_der_tables[am] = jacobi_seq_with_der(ns, 0, am, arg)
+
+    max_am = max(max_nj_by_am)
+    if max_am:
+        C_prev = np.ones_like(x)
+        S_prev = np.zeros_like(x)
+        harmonics = [(C_prev, S_prev)]
+        for _ in range(max_am):
+            C_next = x * C_prev - y * S_prev
+            S_next = x * S_prev + y * C_prev
+            harmonics.append((C_next, S_next))
+            C_prev, S_prev = C_next, S_next
+    else:
+        harmonics = None
+
     out = np.empty((len(nms), 2, *x.shape), dtype=x.dtype)
     for j, (n, m) in enumerate(nms):
-        out[j] = zernike_nm_der_xy(n, m, x, y, norm=norm)
+        am = abs(m)
+        n_j = (n - am) // 2
+        if n_j < 0:
+            out[j] = zernike_nm_der_xy(n, m, x, y, norm=norm)
+            continue
+
+        J = jacobi_tables[am][n_j]
+        Jp = jacobi_der_tables[am][n_j]
+
+        if am == 0:
+            dzdx = 4 * x * Jp
+            dzdy = 4 * y * Jp
+        else:
+            C_am, S_am = harmonics[am]  # NOQA - guarded by if am == 0 above
+            C_amm1, S_amm1 = harmonics[am - 1]  # NOQA - guarded by if am == 0 above
+            if m > 0:
+                dzdx = 4 * x * Jp * C_am + am * J * C_amm1
+                dzdy = 4 * y * Jp * C_am - am * J * S_amm1
+            else:
+                dzdx = 4 * x * Jp * S_am + am * J * S_amm1
+                dzdy = 4 * y * Jp * S_am + am * J * C_amm1
+
+        if norm:
+            N = zernike_norm(n, m)
+            dzdx = dzdx * N
+            dzdy = dzdy * N
+
+        out[j, 0] = dzdx
+        out[j, 1] = dzdy
     return out
 
 
@@ -421,6 +573,8 @@ def zernike_sum_der_xy(coefs, nms, x, y, norm=True):
     by_m_cos = {}
     by_m_sin = {}
     for c, (n, m) in zip(coefs, nms):
+        if c == 0:
+            continue
         am = abs(m)
         n_j = (n - am) // 2
         cc = c * zernike_norm(n, m) if norm else c

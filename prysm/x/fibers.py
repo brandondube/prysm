@@ -3,7 +3,17 @@
 #         operates on Python lists of floats from brentq, not GPU arrays.
 import numpy as truenp
 
-from prysm.mathops import np, special, optimize
+from prysm.mathops import np, optimize
+from prysm.polynomials import (
+    besselj,
+    besselj0,
+    besselj1,
+    besselj_ratio_jnm1,
+    besselk,
+    besselk0,
+    besselk1,
+    besselk_ratio_knm1,
+)
 
 
 cutoff = np.pi
@@ -110,25 +120,18 @@ def _ghatak_eq_8_40(b, V, l):  # NOQA
         zero, i.e. at the roots of this function
 
     """
-    jn = special.jn
-    kn = special.kn
-    j0 = special.j0
-    j1 = special.j1
-    k0 = special.k0
-    k1 = special.k1
-
     U = V * np.sqrt(1-b)
     W = V * np.sqrt(b)
     if l >= 1:  # noqa
         # right looks like it may be a typo in Ghatak?  -W in 8.40, not in 8.41
         # however, fig 8.1 only replicates for -W, and the same for fig 8.4
-        left = U * jn(l-1, U) / jn(l, U)
-        right = -W * kn(l-1, W) / kn(l, W)
+        left = U * besselj_ratio_jnm1(l, U)
+        right = -W * besselk_ratio_knm1(l, W)
     else:
-        # left = U * jn(l-1, U) / jn(l, U)
-        # right = -W * kn(l-1, W) / kn(l, W)
-        left = U * j1(U) / j0(U)
-        right = W * k1(W) / k0(W)
+        # left = U * besselj(l-1, U) / besselj(l, U)
+        # right = -W * besselk(l-1, W) / besselk(l, W)
+        left = U * besselj1(U) / besselj0(U)
+        right = W * besselk1(W) / besselk0(W)
     return left-right
 
 
@@ -277,13 +280,6 @@ def compute_LP_modes(V, mode_dict, a, r, t):
         spatial modes
 
     """
-    jn = special.jn
-    kn = special.kn
-    j0 = special.j0
-    j1 = special.j1
-    k0 = special.k0
-    k1 = special.k1
-
     # the boundary condition for a mode to be propagating requires that the
     # field at the edge of the cladding be equal to the edge of the core,
     # so there is no "third region" that is neither within core nor clad and
@@ -309,20 +305,20 @@ def compute_LP_modes(V, mode_dict, a, r, t):
             W = V * np.sqrt(b)
             tmp = np.zeros_like(r)
             if l == 0:  # noqa
-                num_core = j0(U*rnorm[within_core])
-                den_core = j0(U)
-                num_clad = k0(W*rnorm[within_clad])
-                den_clad = k0(W)
+                num_core = besselj0(U*rnorm[within_core])
+                den_core = besselj0(U)
+                num_clad = besselk0(W*rnorm[within_clad])
+                den_clad = besselk0(W)
             elif l == 1:  # noqa
-                num_core = j1(U*rnorm[within_core])
-                den_core = j1(U)
-                num_clad = k1(W*rnorm[within_clad])
-                den_clad = k1(W)
+                num_core = besselj1(U*rnorm[within_core])
+                den_core = besselj1(U)
+                num_clad = besselk1(W*rnorm[within_clad])
+                den_clad = besselk1(W)
             else:
-                num_core = jn(l, U*rnorm[within_core])
-                den_core = jn(l, U)
-                num_clad = kn(l, W*rnorm[within_clad])
-                den_clad = kn(l, W)
+                num_core = besselj(l, U*rnorm[within_core])
+                den_core = besselj(l, U)
+                num_clad = besselk(l, W*rnorm[within_clad])
+                den_clad = besselk(l, W)
 
             tmp[within_core] = num_core/den_core
             tmp[within_clad] = num_clad/den_clad
@@ -365,14 +361,14 @@ def smf_mode_field(V, a, b, r):
     # inside core
     rnorm = r*(1/a)  # faster to divide on scalar, mul on vector
     rinterior = rnorm < 1
-    num = special.j0(U*rnorm[rinterior])
-    den = special.j1(U)
+    num = besselj0(U*rnorm[rinterior])
+    den = besselj1(U)
     out = np.empty_like(r)
     out[rinterior] = num*(1/den)
 
     rexterior = ~rinterior
-    num = special.k0(W*rnorm[rexterior])
-    den = special.k1(W)
+    num = besselk0(W*rnorm[rexterior])
+    den = besselk1(W)
     out[rexterior] = num*(1/den)
     return out
 

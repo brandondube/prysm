@@ -1,5 +1,28 @@
 """Configuration for this instance of prysm."""
+from numbers import Integral
+
 from .mathops import np
+
+
+def _coerce_real_dtype(precision):
+    """Return a concrete real floating dtype from a dtype-like value."""
+    if isinstance(precision, Integral) and not isinstance(precision, bool):
+        precision = f'float{precision}'
+
+    try:
+        dtype = np.dtype(precision)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('precision should be a real floating dtype.') from exc
+
+    if dtype.kind != 'f':
+        raise ValueError('precision should be a real floating dtype.')
+
+    return dtype.type
+
+
+def _complex_dtype_for(real_dtype):
+    """Return the complex dtype associated with a real floating dtype."""
+    return np.result_type(real_dtype, 1j).type
 
 
 class Config(object):
@@ -16,8 +39,8 @@ class Config(object):
 
         Parameters
         ----------
-        precision : int
-            32 or 64, number of bits of precision
+        precision : dtype-like
+            Real floating dtype, or integer bit-depth such as 16, 32, or 64
         phase_cmap : str
             colormap used for plotting optical phases
         image_cmap : str
@@ -47,7 +70,8 @@ class Config(object):
 
         Returns
         -------
-        object : numpy.float32 or numpy.float64
+        object
+            Real floating dtype
             precision used
 
         """
@@ -59,7 +83,8 @@ class Config(object):
 
         Returns
         -------
-        object : numpy.complex64 or numpy.complex128
+        object
+            Complex dtype associated with precision
             precision used for complex arrays
 
         """
@@ -71,24 +96,17 @@ class Config(object):
 
         Parameters
         ----------
-        precision : int, {32, 64}
-            what precision to use; either 32 or 64 bits
+        precision : dtype-like
+            Real floating dtype, or integer bit-depth such as 16, 32, or 64
 
         Raises
         ------
         ValueError
-            if precision is not a valid option
+            if precision is not a real floating dtype
 
         """
-        if precision not in (32, 64):
-            raise ValueError('invalid precision.  Precision should be 32 or 64.')
-
-        if precision == 32:
-            self._precision = np.float32
-            self._precision_complex = np.complex64
-        else:
-            self._precision = np.float64
-            self._precision_complex = np.complex128
+        self._precision = _coerce_real_dtype(precision)
+        self._precision_complex = _complex_dtype_for(self._precision)
 
 
 config = Config()
