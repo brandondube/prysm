@@ -14,6 +14,7 @@ from scipy.special import (
     jv as sps_jv,
     k0 as sps_k0,
     k1 as sps_k1,
+    kve as sps_kve,
     kv as sps_kv,
     jacobi as sps_jac,
     legendre as sps_leg,
@@ -57,16 +58,30 @@ def test_bessel_series_tol_follows_dtype_eps(dtype):
 
 
 def test_besselj0_matches_scipy():
-    np.testing.assert_allclose(polynomials.besselj0(BESSEL_X), sps_j0(BESSEL_X), atol=6e-9, rtol=6e-9)
+    np.testing.assert_allclose(polynomials.besselj0(BESSEL_X), sps_j0(BESSEL_X), atol=2e-14, rtol=2e-14)
 
 
 def test_besselj1_matches_scipy():
-    np.testing.assert_allclose(polynomials.besselj1(BESSEL_X), sps_j1(BESSEL_X), atol=6e-9, rtol=6e-9)
+    np.testing.assert_allclose(polynomials.besselj1(BESSEL_X), sps_j1(BESSEL_X), atol=2e-14, rtol=2e-14)
 
 
 @pytest.mark.parametrize('n', [0, 1, 2, 3, 5, 12, 24])
 def test_besselj_matches_scipy(n):
-    np.testing.assert_allclose(polynomials.besselj(n, BESSEL_X), sps_jv(n, BESSEL_X), atol=1e-8, rtol=1e-8)
+    np.testing.assert_allclose(polynomials.besselj(n, BESSEL_X), sps_jv(n, BESSEL_X), atol=2e-14, rtol=1e-12)
+
+
+def test_high_order_besselj_series_does_not_overflow():
+    x = np.linspace(0, 90, 64)
+    with np.errstate(over='raise', invalid='raise'):
+        out = polynomials.besselj(200, x)
+    np.testing.assert_allclose(out, sps_jv(200, x), atol=1e-14, rtol=1e-10)
+
+
+def test_high_order_besselj_miller_does_not_overflow():
+    x = np.linspace(110, 190, 64)
+    with np.errstate(over='raise', invalid='raise'):
+        out = polynomials.besselj(200, x)
+    np.testing.assert_allclose(out, sps_jv(200, x), atol=1e-14, rtol=1e-10)
 
 
 def test_besselj_negative_order_identity():
@@ -91,16 +106,16 @@ def test_besselj_adjacent_and_ratio():
 
 
 def test_besselk0_matches_scipy():
-    np.testing.assert_allclose(polynomials.besselk0(BESSEL_KX), sps_k0(BESSEL_KX), atol=2e-7, rtol=2e-7)
+    np.testing.assert_allclose(polynomials.besselk0(BESSEL_KX), sps_k0(BESSEL_KX), atol=2e-14, rtol=2e-14)
 
 
 def test_besselk1_matches_scipy():
-    np.testing.assert_allclose(polynomials.besselk1(BESSEL_KX), sps_k1(BESSEL_KX), atol=2e-7, rtol=2e-7)
+    np.testing.assert_allclose(polynomials.besselk1(BESSEL_KX), sps_k1(BESSEL_KX), atol=2e-14, rtol=2e-14)
 
 
 @pytest.mark.parametrize('n', [0, 1, 2, 3, 5, 12])
 def test_besselk_matches_scipy(n):
-    np.testing.assert_allclose(polynomials.besselk(n, BESSEL_KX), sps_kv(n, BESSEL_KX), atol=5e-7, rtol=5e-7)
+    np.testing.assert_allclose(polynomials.besselk(n, BESSEL_KX), sps_kv(n, BESSEL_KX), atol=2e-14, rtol=2e-13)
 
 
 def test_besselk_negative_order_identity():
@@ -122,6 +137,13 @@ def test_besselk_adjacent_and_ratio():
     np.testing.assert_allclose(km1, polynomials.besselk(4, x))
     np.testing.assert_allclose(kn, polynomials.besselk(5, x))
     np.testing.assert_allclose(polynomials.besselk_ratio_knm1(5, x), km1 / kn)
+
+
+def test_high_order_besselk_ratio_does_not_overflow():
+    x = np.linspace(20, 100, 64)
+    with np.errstate(over='raise', invalid='raise'):
+        out = polynomials.besselk_ratio_knm1(200, x)
+    np.testing.assert_allclose(out, sps_kve(199, x) / sps_kve(200, x), atol=1e-14, rtol=1e-12)
 
 
 # XY poly
@@ -360,9 +382,42 @@ def test_zernike_sum_der_xy_matches_loop(norm):
 
     W_l, dWx_l, dWy_l = _zernike_sum_loop(coefs, nms, X, Y, norm)
     W_c, dWx_c, dWy_c = polynomials.zernike_sum_der_xy(coefs, nms, X, Y, norm=norm)
+    W_s = polynomials.zernike_sum(coefs, nms, X, Y, norm=norm)
+    np.testing.assert_allclose(W_s, W_l, atol=1e-12, rtol=1e-12)
     np.testing.assert_allclose(W_c, W_l, atol=1e-12, rtol=1e-12)
     np.testing.assert_allclose(dWx_c, dWx_l, atol=1e-12, rtol=1e-12)
     np.testing.assert_allclose(dWy_c, dWy_l, atol=1e-12, rtol=1e-12)
+
+
+def test_weighted_surface_sum_helpers_match_basis_loops():
+    xs = np.linspace(-0.5, 0.5, 9)
+    X, Y = np.meshgrid(xs, xs, indexing='xy')
+
+    mns = [(0, 0), (1, 0), (0, 2), (2, 1)]
+    coefs = [0.5, -0.25, 0.1, 0.05]
+    z_xy, dx_xy, dy_xy = polynomials.xy_sum_der_xy(
+        coefs, mns, X, Y, cartesian_grid=False)
+    z_ref = sum(c * X**m * Y**n for c, (m, n) in zip(coefs, mns))
+    dx_ref = sum(c * m * X**(m - 1) * Y**n
+                 for c, (m, n) in zip(coefs, mns) if m)
+    dy_ref = sum(c * n * X**m * Y**(n - 1)
+                 for c, (m, n) in zip(coefs, mns) if n)
+    np.testing.assert_allclose(polynomials.xy_sum(
+        coefs, mns, X, Y, cartesian_grid=False), z_ref)
+    np.testing.assert_allclose(z_xy, z_ref)
+    np.testing.assert_allclose(dx_xy, dx_ref)
+    np.testing.assert_allclose(dy_xy, dy_ref)
+
+    orders = [0, 1, 2]
+    jcoefs = [0.2, -0.1, 0.05]
+    z_j, dx_j, dy_j = polynomials.jacobi_radial_sum_der_xy(
+        jcoefs, orders, 0.0, 0.0, X, Y, 1.0)
+    np.testing.assert_allclose(
+        z_j,
+        polynomials.jacobi_radial_sum(jcoefs, orders, 0.0, 0.0, X, Y, 1.0),
+    )
+    assert np.isfinite(dx_j).all()
+    assert np.isfinite(dy_j).all()
 
 
 def test_zernike_sum_der_xy_finite_at_origin():
