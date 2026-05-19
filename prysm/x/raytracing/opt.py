@@ -1,11 +1,13 @@
 """Minor optimization routines."""
 
 from prysm.conf import config
-from prysm.mathops import np
-
+from prysm.mathops import np, optimize
 from . import raygen, spencer_and_murty
-
-from scipy import optimize
+from ._line_math import (
+    closest_point_on_line_to_line,
+    line_intersection_params,
+    unit_vector_between,
+)
 
 
 def _intersect_lines(P1, S1, P2, S2):
@@ -17,10 +19,7 @@ def _intersect_lines(P1, S1, P2, S2):
 
     pair of two lines only.
     """
-    # solution via linear algebra
-    Ax = np.stack([S1, -S2], axis=1)
-    y = P2 - P1
-    return np.linalg.pinv(Ax) @ y
+    return line_intersection_params(P1, S1, P2, S2)
 
 
 def _establish_axis(P1, P2):
@@ -41,22 +40,26 @@ def _establish_axis(P1, P2):
         P1 (same exact PyObject) and direction cosine from P1 -> P2
 
     """
-    diff = P2 - P1
-    # L2 norm: prior code computed sqrt(diff**2).sum() which is the L1 norm and
-    # only accidentally equals L2 when diff has a single nonzero component
-    # (e.g. coaxial systems with diff = [0,0,dz]).
-    euclidean_distance = np.sqrt(np.sum(diff * diff))
-    return diff / euclidean_distance
+    return unit_vector_between(P1, P2)
 
 
-def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
+def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328,
+                         paraxial_fraction=1e-4, method='numerical'):
     """Find the location of the paraxial image.
 
-    The location is found via raytracing and not third-order calculations.
+    Two solver backends are available:
 
-    Two rays are traced very near the optical axis in each X and Y, and the mean
-    distance which produces a zero image height is the result of the solve.  If
-    na is nonzero, then the ray originates at x=y=0 at 1/1000th of the given NA.
+    - ``method='numerical'`` (default) traces 2 rays per axis very near the
+      optical axis and finds where they cross.  Robust, no assumptions about
+      the surface types in the prescription.
+    - ``method='matrix'`` composes the 2x2 ABCD system matrix and solves for
+      the image distance analytically.  Faster, no FP cancellation noise,
+      but assumes every powered surface carries a paraxial vertex curvature
+      ``c`` in ``surf.params``.
+
+    For collimated input (``na == 0``), the matrix and numerical methods
+    agree to ~1e-9 on standard sequential systems; the matrix method is the
+    truth and the numerical method has paraxial-fraction-dependent noise.
 
     Parameters
     ----------
@@ -66,16 +69,23 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
         the z distance (absolute) to solve from
     na : float
         the object-space numerical aperture to use in the solve, if zero the object
-        is at infinity, else a finite conjugate.  1/1000th of the given NA is used
-        in the solve, the NA of the real system may be quite safely provided
-        as an argument.
+        is at infinity, else a finite conjugate.  paraxial_fraction of the given NA
+        is used in the solve, the NA of the real system may be quite safely provided
+        as an argument.  Only used by ``method='numerical'``.
     epd : float
         entrance pupil diameter, if na=0 and epd=0 an error will be generated.
+        Only used by ``method='numerical'``.
     wvl : float
         wavelength of light, microns
-    consider : str, {'x', 'y', 'xy'}
-        which ray directions to consider in performing the solve, defaults to
-        both X and Y.
+    paraxial_fraction : float, optional
+        fraction of the given epd or na used to define "paraxial" rays for the
+        solve.  Default 1e-4 (1/10,000th); reduce if the system is so steep
+        that 1e-4 of the EPD already shows higher-order effects, increase if
+        FP cancellation in the line-intersection is the limiting factor.
+        Only used by ``method='numerical'``.
+    method : {'numerical', 'matrix'}, optional
+        which solver backend to use.  Default ``'numerical'`` preserves the
+        legacy 4-ray solve; ``'matrix'`` uses the ABCD system matrix.
 
     Returns
     -------
@@ -83,12 +93,23 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
         the "P" value to be used with Surface.stop to complete the solve
 
     """
+    if method == 'matrix':
+        from .paraxial import paraxial_image_distance
+        bfd = paraxial_image_distance(prescription, wvl=wvl)
+        last = prescription[-1]
+        out = np.asarray(last.P, dtype=config.precision).copy()
+        out[2] = out[2] + bfd
+        return out
+    if method != 'numerical':
+        raise ValueError(
+            f"method must be 'numerical' or 'matrix', got {method!r}"
+        )
+
     if na == 0 and epd == 0:
         raise ValueError("either na or epd must be nonzero")
 
-    PARAXIAL_FRACTION = 1e-4  # 1/1000th
     if na == 0:
-        r = epd/2*PARAXIAL_FRACTION
+        r = epd/2*paraxial_fraction
         rayfanx = raygen.generate_collimated_ray_fan(2, maxr=r, azimuth=0)
         rayfany = raygen.generate_collimated_ray_fan(2, maxr=r)
         all_rays = raygen.concat_rayfans(rayfanx, rayfany)
@@ -119,7 +140,9 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328):
         return P_out.mean(axis=0)
 
 
-def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan), debug=False):
+def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan),
+            x0=None, bounds=None, tol=1e-12, maxiter=200,
+            strict=True, debug=False, n_ambient=1.0):
     """Aim a ray such that it encounters the jth surface at target.
 
     Parameters
@@ -137,14 +160,29 @@ def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan), debug=False):
     target : iterable of length 3
         the position at which the ray should intersect the target surface
         NaNs indicate to ignore that position in aiming
+    x0 : ndarray of shape (2,), optional
+        initial guess for (Px, Py); defaults to (P[0], P[1])
+    bounds : sequence of (lo, hi) length 2, optional
+        per-axis bounds on Px, Py for L-BFGS-B
+    tol : float, optional
+        L-BFGS-B convergence tolerance
+    maxiter : int, optional
+        L-BFGS-B iteration cap
+    strict : bool, optional
+        if True (default), raise RuntimeError when L-BFGS-B reports a
+        non-success status; if False, return the best-effort answer with no
+        complaint (legacy behaviour).
     debug : bool, optional
         if True, returns the (ray-aiming) optimization result as well as the
         adjustment P
+    n_ambient : float, optional
+        ambient index of refraction used for the aim trace.  Default 1.
 
     Returns
     -------
     ndarray
-        deltas to P which result in ray intersection
+        deltas to P which result in ray intersection.  When `debug=True`,
+        also returns the OptimizeResult.
 
     """
     P = np.asarray(P).astype(config.precision).copy()
@@ -154,13 +192,28 @@ def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan), debug=False):
 
     def optfcn(x):
         P[:2] = x
-        phist, _, _ = spencer_and_murty.raytrace(trace_path, P, S, wvl)
+        phist, _, _ = spencer_and_murty.raytrace(trace_path, P, S, wvl,
+                                                 n_ambient=n_ambient)
         final_position = phist[-1]
         euclidean_dist = (final_position - target)**2
         euclidean_dist = np.nansum(euclidean_dist)/3  # /3 = div by number of axes
         return euclidean_dist
 
-    res = optimize.minimize(optfcn, np.zeros(2), method='L-BFGS-B')
+    if x0 is None:
+        x0 = np.array([P[0], P[1]], dtype=config.precision)
+    else:
+        x0 = np.asarray(x0).astype(config.precision)
+
+    res = optimize.minimize(optfcn, x0, method='L-BFGS-B',
+                            bounds=bounds,
+                            tol=tol,
+                            options={'maxiter': maxiter})
+    if strict and not res.success:
+        raise RuntimeError(
+            f'ray_aim failed to converge: {res.message!r} '
+            f'(final residual={res.fun:.3e}, x={res.x}). '
+            'Pass strict=False to silence, or supply x0 / bounds / tol.'
+        )
     P[:] = 0
     P[:2] = res.x
     if debug:
@@ -178,25 +231,20 @@ def _closest_approach_on_axis(P_chief, S_chief, axis_point, axis_dir):
     point on the axis at the foot of the common perpendicular.
 
     """
-    A = np.asarray(P_chief)
-    Sc = np.asarray(S_chief)
-    B = np.asarray(axis_point)
-    Sa = np.asarray(axis_dir)
-    Sa = Sa / np.sqrt(np.sum(Sa * Sa))
-    w = A - B
-    a = np.sum(Sc * Sc)
-    b = np.sum(Sc * Sa)
-    c = np.sum(Sa * Sa)
-    d = np.sum(Sc * w)
-    e = np.sum(Sa * w)
-    denom = a * c - b * b
-    if abs(denom) < 1e-30:
-        # chief ray parallel to axis -> pupil at infinity along the axis
-        # return the projection of A onto the axis, with a NaN flag in z if you like
-        t = e / c
-        return B + t * Sa
-    t = (a * e - b * d) / denom
-    return B + t * Sa
+    return closest_point_on_line_to_line(P_chief, S_chief,
+                                         axis_point, axis_dir)
+
+
+def _pupil_on_axis(P_chief, S_chief, axis_p1, axis_p2):
+    """Closest-approach point on the line (axis_p1, axis_p2) to the chief ray.
+
+    Shared by locate_ep and locate_xp; the only difference between them is
+    which pair of points defines the optical axis.
+
+    """
+    axis_p1 = np.asarray(axis_p1)
+    S_axis = _establish_axis(axis_p1, np.asarray(axis_p2))
+    return _closest_approach_on_axis(P_chief, S_chief, axis_p1, S_axis)
 
 
 def locate_ep(P_chief, S_chief, P_obj, P_s1):
@@ -225,8 +273,7 @@ def locate_ep(P_chief, S_chief, P_obj, P_s1):
         position of the entrance pupil (X,Y,Z)
 
     """
-    S_axis = _establish_axis(np.asarray(P_obj), np.asarray(P_s1))
-    return _closest_approach_on_axis(P_chief, S_chief, np.asarray(P_obj), S_axis)
+    return _pupil_on_axis(P_chief, S_chief, P_obj, P_s1)
 
 
 def xp_reference_sphere(P_chief, S_chief, axis_point=None, axis_dir=None):
@@ -357,5 +404,127 @@ def locate_xp(P_chief, S_chief, P_img, P_sk):
         position of the exit pupil (X,Y,Z)
 
     """
-    S_axis = _establish_axis(np.asarray(P_img), np.asarray(P_sk))
-    return _closest_approach_on_axis(P_chief, S_chief, np.asarray(P_img), S_axis)
+    return _pupil_on_axis(P_chief, S_chief, P_img, P_sk)
+
+
+# ---------- spot statistics ----------
+
+def _finite_ray_mask(P):
+    """Return a bool mask for rays with finite position coordinates."""
+    P = np.asarray(P)
+    return np.isfinite(P).all(axis=-1)
+
+
+def _valid_mask(status, P=None):
+    """Reduce status and optional positions to a bool valid-ray mask."""
+    if status is None:
+        if P is None:
+            return None
+        return _finite_ray_mask(P)
+
+    valid = np.asarray(status).imag == 0
+    if P is not None:
+        valid = valid & _finite_ray_mask(P)
+    return valid
+
+
+def spot_centroid(P_final, status=None):
+    """Mean (x, y) position of valid rays at a surface plane.
+
+    Parameters
+    ----------
+    P_final : ndarray
+        shape (N, 3) — typically ``raytrace(...).P[-1]``.
+    status : ndarray, optional
+        per-ray complex status from ``raytrace`` (or any equivalent).  If
+        provided, rays with ``status.imag != 0`` are excluded.
+
+    Returns
+    -------
+    ndarray
+        shape (2,) — mean (x, y) of the valid rays.  Returns ``[nan, nan]``
+        if no rays are valid.
+
+    """
+    P_final = np.asarray(P_final)
+    valid = _valid_mask(status, P_final)
+    if valid is not None:
+        P_final = P_final[valid]
+    if P_final.shape[0] == 0:
+        return np.array([np.nan, np.nan])
+    return P_final[..., :2].mean(axis=0)
+
+
+def rms_spot_radius(P_final, status=None, centroid=None):
+    """RMS distance of valid rays from their centroid.
+
+    Parameters
+    ----------
+    P_final : ndarray
+        shape (N, 3) ray positions.
+    status : ndarray, optional
+        per-ray complex status; rays with ``status.imag != 0`` are excluded.
+    centroid : ndarray, optional
+        shape (2,) custom center for the RMS.  If None, the spot centroid
+        of the valid rays is used.
+
+    Returns
+    -------
+    float
+        RMS spot radius in the (x, y) plane.  Returns ``nan`` if no rays
+        are valid.
+
+    """
+    P_final = np.asarray(P_final)
+    valid = _valid_mask(status, P_final)
+    if valid is not None:
+        P_final = P_final[valid]
+    if P_final.shape[0] == 0:
+        return float('nan')
+    if centroid is None:
+        centroid = P_final[..., :2].mean(axis=0)
+    diffs = P_final[..., :2] - np.asarray(centroid)
+    return float(np.sqrt(np.mean(np.sum(diffs * diffs, axis=-1))))
+
+
+def geometric_psf_histogram(P_final, status=None, bins=64, extent=None):
+    """2D histogram of valid rays' (x, y) positions — the geometric PSF.
+
+    Parameters
+    ----------
+    P_final : ndarray
+        shape (N, 3) ray positions.
+    status : ndarray, optional
+        per-ray complex status; rays with ``status.imag != 0`` are excluded.
+    bins : int or [int, int]
+        passed through to ``np.histogram2d``; number of bins per axis.
+    extent : list of (lo, hi) length 2, optional
+        per-axis (x, y) histogram range.  If None, a square window is
+        auto-fit around the valid-ray bounding box with a 5% margin.
+
+    Returns
+    -------
+    H : ndarray
+        2D histogram of shape ``(nx, ny)``.
+    xedges, yedges : ndarray
+        bin edges along the two axes.
+
+    """
+    P_final = np.asarray(P_final)
+    valid = _valid_mask(status, P_final)
+    if valid is not None:
+        P_final = P_final[valid]
+    x = P_final[..., 0]
+    y = P_final[..., 1]
+    if extent is None:
+        if x.size == 0:
+            extent = [(-1.0, 1.0), (-1.0, 1.0)]
+        else:
+            cx = float(x.mean())
+            cy = float(y.mean())
+            r = max(float(np.abs(x - cx).max()),
+                    float(np.abs(y - cy).max())) * 1.05
+            r = max(r, 1e-12)  # avoid zero-width range
+            extent = [(cx - r, cx + r), (cy - r, cy + r)]
+    H, xedges, yedges = np.histogram2d(x, y, bins=bins, range=extent)
+    return H, xedges, yedges
