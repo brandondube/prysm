@@ -127,6 +127,10 @@ def test_newton_solver_valid_mask_all_true_for_simple_sphere():
                        / (1 + np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y))),
                        (1 / 100.) * x / np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y)),
                        (1 / 100.) * y / np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y)),
+                   ),
+                   F=lambda x, y: (
+                       (1 / 100. * (x * x + y * y))
+                       / (1 + np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y)))
                    ))
     P, S = _ray_batch(span=3.0)
     Q, n, valid = surf.intersect(P, S, return_valid=True)
@@ -143,7 +147,7 @@ def test_newton_solver_valid_mask_flags_nonconvergence():
     surf = Surface.conic(c=1 / 5.0, k=-2.0, typ='refl', P=np.array([0., 0., 0.]))
     # build via a generic Surface (forces Newton, not the analytic Conic path)
     bare = Surface(typ='refl', P=np.array([0., 0., 0.]), n=None,
-                   FFp=surf.FFp, params=dict(surf.params))
+                   FFp=surf.FFp, F=surf.F, params=dict(surf.params))
     # a ray nearly parallel to the surface in the steep region won't converge in 1 iter
     P = np.array([[3.5, 0., -50.], [0., 0., -50.]])
     S = np.array([[0.05, 0., np.sqrt(1 - 0.0025)], [0., 0., 1.]])

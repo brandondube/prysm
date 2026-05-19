@@ -269,8 +269,7 @@ def aim_bundle_to_surface(P, S, prescription, surface_index, *,
                           target_xy=(0.0, 0.0), wavelength,
                           n_ambient=1.0, tol=1e-12, maxiter=200,
                           strict=True):
-    """Per-ray stop aim: adjust each ray's launch (Px, Py) so it lands at
-    target_xy on prescription[surface_index].
+    """Per-ray stop aim: adjust each ray's launch (Px, Py) so it lands at target_xy on prescription[surface_index].
 
     Each ray is solved independently via a scipy L-BFGS-B in opt.ray_aim;
     the launch z is preserved (the legacy ray_aim resets z to 0; we
