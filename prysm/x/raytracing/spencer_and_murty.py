@@ -6,31 +6,14 @@
 
 from prysm.mathops import np, row_dot
 
-from .surfaces import (
-    STYPE_REFLECT,
-    STYPE_REFRACT,
-    Plane,
-    Sphere,
-    Conic,
-    OffAxisConic,
-)
-
-
-# Surfaces whose intersect() method has a closed-form geometric solution.
-# Newton-driven surfaces (bare Surface, EvenAsphere, future SurfaceQ2D) get
-# STATUS_NEWTON for non-convergence; closed-form ones get STATUS_MISS for
-# negative-discriminant / outside-supporting-region failures.
-_ANALYTIC_INTERSECT_TYPES = (Plane, Sphere, Conic, OffAxisConic)
-
-
-# Backward-compat alias.  This function used to live here as ``_multi_dot``
-# and was imported by ``prysm/x/optym/activation.py``; the implementation
-# now lives in ``prysm.mathops.row_dot``.  New code should import from there.
-_multi_dot = row_dot
-
-
 SURFACE_INTERSECTION_DEFAULT_MAXITER = 100
 
+# Surface-type constants live here (rather than in surfaces.py) so that
+# spencer_and_murty.raytrace() and paraxial.system_matrix() can import them
+# without cycling through surfaces.py.  surfaces.py imports them from here.
+STYPE_REFLECT = -1
+STYPE_REFRACT = -2
+STYPE_EVAL = -3  # NOQA
 
 # Per-ray status encoding for raytrace().  status is a complex array of shape
 # (N_rays,); the imaginary part picks the failure mode (0 = ok), the real
@@ -143,48 +126,55 @@ def newton_raphson_solve_s(P1, S, FFp, s1=0.0,
     """
     dtype = P1.dtype
     eps = _sanitize_eps(eps, dtype)
-    # need one sj for each ray, but sj likely starts as a scalar
-    # so, make sure it's at least 1D, then broadcast it to the number of rays
-    # finally, add a size 1 final dim to make multiply broadcast rules happy
     nrays = P1.shape[0]
-    sj = np.atleast_1d(s1)
-    sj = np.broadcast_to(sj, (nrays,)).copy()  # copy is needed to make writeable
-    sj = sj.astype(dtype)
+    # Single-alloc init: s1 may be a scalar (broadcasts to all rays) OR a
+    # (nrays,) array of per-ray seeds (from the conic-seeded Newton path).
+    # numpy assignment handles both in one writeable buffer at the right dtype.
+    sj_work = np.empty(nrays, dtype=dtype)
+    sj_work[...] = s1
     # the Pj and r to be returned; we keep these three data structures around
     # so they can be adjusted within the loop
     Pj_out = np.empty_like(P1)
     r_out = np.empty((nrays, 3), dtype=dtype)
+    # mask maps working-buffer-index -> original-ray-index, so converged rays
+    # scatter back to the right Pj_out/r_out slot.  sj_work / S_work / P1_work
+    # shrink in lock-step with mask each iteration, so subsequent iterations
+    # operate on a buffer the size of the still-active set rather than
+    # fancy-indexing into the full inputs every time.
     mask = np.arange(nrays)
+    S_work = S
+    P1_work = P1
     for j in range(maxiter):
-        sj_mask = sj[mask]
-        sj_bcast = sj_mask[:, np.newaxis]
-        S_mask = S[mask]
-        Pj = P1[mask] + sj_bcast * S_mask
+        sj_bcast = sj_work[:, np.newaxis]
+        Pj = P1_work + sj_bcast * S_work
         Xj = Pj[..., 0]
         Yj = Pj[..., 1]
         Zj = Pj[..., 2]
         sagj, r = FFp(Xj, Yj)
         Fj = Zj - sagj
-        Fpj = row_dot(S_mask, r)
-        sjp1 = sj_mask - Fj / Fpj
+        Fpj = row_dot(S_work, r)
+        sjp1 = sj_work - Fj / Fpj
 
-        delta = abs(sjp1 - sj_mask)
+        delta = abs(sjp1 - sj_work)
 
         # this block of code stops computation on rays which have converged,
         # while allowing those which have not yet converged to progress,
         # over "time," the iterations of Newton-Raphson will speed up, in terms
         # of wall clock time.
         rays_which_converged = (delta < eps)
-        sj[mask] = sjp1
         insert_mask = mask[rays_which_converged]
         if insert_mask.size != 0:
             Pj_out[insert_mask] = Pj[rays_which_converged]
             r_out[insert_mask] = r[rays_which_converged]
-            # update the mask for the next iter to only those rays which
-            # did not converge
-            mask = mask[~rays_which_converged]
+            diverged = ~rays_which_converged
+            mask = mask[diverged]
             if mask.size == 0:
                 break  # all rays converged
+            sj_work = sjp1[diverged]
+            S_work = S_work[diverged]
+            P1_work = P1_work[diverged]
+        else:
+            sj_work = sjp1
 
     # NaN out rays which failed to converge (within maxiter)
     if mask.size > 0:
@@ -320,7 +310,7 @@ def transform_to_local_coords(XYZ, P, S, R=None):
 
 
 def refract(n, nprime, S, r):
-    """Use Newton-Raphson iteration to solve Snell's law for the exitant direction cosines.
+    """Solve Snell's law for the exitant direction cosines.
 
     Parameters
     ----------
@@ -413,7 +403,8 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
     A ray originating "at infinity" would have
     P = [Px, Py, -1e99]
     S = [0, 0, 1] # propagating in the +z direction
-    though the value of P is not so important, since S defines the ray as moving in the +z direction only
+    though the value of P is not so important,
+    since S defines the ray as moving in the +z direction only
 
     Parameters
     ----------
@@ -470,6 +461,11 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
     only the first failure surface is recorded.
 
     """
+    # Surfaces whose intersect() has a closed-form geometric solution get
+    # STATUS_MISS on failure (negative discriminant / outside supporting
+    # region); Newton-driven surfaces get STATUS_NEWTON for non-convergence.
+    # Discrimination is via the ``_analytic_intersect`` class attribute set on
+    # Plane/Sphere/Conic/OffAxisConic.
     P = np.asarray(P)
     S = np.asarray(S)
     # promote 1D single-ray inputs to 2D batch shape for the duration of the
@@ -501,7 +497,7 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
         if not valid.all():
             failed = active & ~valid
             if failed.any():
-                if isinstance(surf, _ANALYTIC_INTERSECT_TYPES):
+                if getattr(surf, '_analytic_intersect', False):
                     code = STATUS_MISS
                 else:
                     code = STATUS_NEWTON
@@ -518,6 +514,7 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
         # III - reflection or refraction
         if surf.typ == STYPE_REFLECT:
             Sjp1 = reflect(Sj, r)
+            n_post = nj
         elif surf.typ == STYPE_REFRACT:
             nprime = surf.n(wvl)
             pre_refract = active.copy()
@@ -527,10 +524,22 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
             if tir.any():
                 status[tir] = surf_idx + STATUS_TIR * 1j
                 active = active & ~tir
+            n_post = nprime
         else:
             # other surface types do not bend rays
             Sjp1 = Sj
             Pjp1 = Pj
+            n_post = nj
+        # III.b - grating diffraction (refr/refl only); evanescent ⇒ TIR-like
+        if (surf.grating is not None
+                and surf.typ in (STYPE_REFLECT, STYPE_REFRACT)
+                and active.any()):
+            Sjp1_diff, valid_diff = surf.diffract(Sjp1, r, n_post, wvl)
+            evanescent = active & ~valid_diff
+            if evanescent.any():
+                status[evanescent] = surf_idx + STATUS_TIR * 1j
+                active = active & valid_diff
+            Sjp1 = Sjp1_diff
 
         # IV - back to world coordinates
         if surf.R is None:
@@ -546,6 +555,18 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
         OPL_hist[j+1] = nj * seg_len
         if surf.typ == STYPE_REFRACT:
             nj = nprime
+
+        # Once a ray fails, do not keep propagating finite coordinates through
+        # downstream surfaces.  The first failure surface/mode is encoded in
+        # status; histories from that surface onward are NaN so consumers
+        # cannot mistake them for valid trace data.
+        inactive = ~active
+        if inactive.any():
+            Pjp1 = Pjp1.copy()
+            Sjp1 = Sjp1.copy()
+            Pjp1[inactive] = np.nan
+            Sjp1[inactive] = np.nan
+            OPL_hist[j+1][inactive] = np.nan
         P_hist[j+1] = Pjp1
         S_hist[j+1] = Sjp1
         Pj, Sj = Pjp1, Sjp1

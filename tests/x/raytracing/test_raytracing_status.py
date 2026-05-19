@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from prysm.x.raytracing.surfaces import Surface
+from prysm.x.raytracing.surfaces import Surface, circular_aperture
 from prysm.x.raytracing.spencer_and_murty import (
     raytrace,
     RayTraceResult,
@@ -89,16 +89,26 @@ def test_aperture_clipping_marks_outside_rays():
     # 7 collimated rays from y=-9 to y=+9: outer rays clipped, center inside
     P0, S0 = generate_collimated_ray_fan(7, maxr=9.0, z=-50.0)
     result = raytrace(pres, P0, S0, wvl=0.55)
-    radii_at_surface = np.sqrt(result.P[1, :, 0] ** 2 + result.P[1, :, 1] ** 2)
-    # rays outside r=5 should be clipped
-    expected_clipped = radii_at_surface > 5.0
+    launch_radii = np.sqrt(P0[:, 0] ** 2 + P0[:, 1] ** 2)
+    # collimated +z rays outside r=5 should be clipped at the plane
+    expected_clipped = launch_radii > 5.0
     actual_clipped = result.status.imag == STATUS_CLIP
     np.testing.assert_array_equal(actual_clipped, expected_clipped)
+    assert np.isnan(result.P[1, actual_clipped]).all()
+    assert np.isnan(result.S[1, actual_clipped]).all()
+    assert np.isnan(result.OPL[1, actual_clipped]).all()
     # the surface index is 1-based; the only surface is index 1
     np.testing.assert_array_equal(
         result.status.real[actual_clipped],
         np.full(actual_clipped.sum(), 1.0),
     )
+
+
+def test_circular_aperture_helper_marks_inside_circle():
+    aperture = circular_aperture(2.0)
+    x = np.array([0.0, 2.0, 2.1])
+    y = np.array([0.0, 0.0, 0.0])
+    np.testing.assert_array_equal(aperture(x, y), [True, True, False])
 
 
 def test_clip_persists_through_subsequent_surfaces():
@@ -118,6 +128,11 @@ def test_clip_persists_through_subsequent_surfaces():
         result.status.real[clipped],
         np.full(clipped.sum(), 1.0),
     )
+    # clipped rays are not propagated through later surfaces with plausible
+    # coordinates; their histories are NaN from the clipping surface onward.
+    assert np.isnan(result.P[1:, clipped]).all()
+    assert np.isnan(result.S[1:, clipped]).all()
+    assert np.isnan(result.OPL[1:, clipped]).all()
 
 
 # ---------- analytic miss (STATUS_MISS) ----------
