@@ -123,6 +123,145 @@ def polar_to_cart(rho, phi):
     return x, y
 
 
+def sample_axis(distribution, lo, hi, n, dtype=None):
+    """Generate samples between two endpoints under a named distribution.
+
+    Parameters
+    ----------
+    distribution : str
+        One of 'uniform', 'random', or 'cheby'.  Cheby uses
+        Chebyshev-Gauss-Lobatto nodes mapped monotonically from lo to hi.
+    lo, hi : float
+        Lower and upper endpoints.
+    n : int
+        Number of samples.
+    dtype : dtype, optional
+        Output dtype.  Defaults to prysm's configured precision.
+
+    Returns
+    -------
+    ndarray
+        The sampled coordinate axis.
+
+    """
+    if dtype is None:
+        dtype = config.precision
+    if n == 1:
+        return np.asarray([(lo + hi) / 2.0], dtype=dtype)
+    distribution = distribution.lower()
+    if distribution == 'uniform':
+        return np.linspace(lo, hi, n, dtype=dtype)
+    if distribution == 'random':
+        return np.random.uniform(low=lo, high=hi, size=n).astype(dtype)
+    if distribution == 'cheby':
+        k = np.arange(n)
+        nodes = np.cos(k * np.pi / (n - 1))
+        return ((lo + hi) / 2.0 - (hi - lo) / 2.0 * nodes).astype(dtype)
+    raise ValueError(
+        f'unknown distribution {distribution!r}; '
+        "expected 'uniform', 'random', or 'cheby'"
+    )
+
+
+def promote_3d_point(P, dtype=None):
+    """Coerce a scalar or trailing-coordinate iterable into a 3-vector.
+
+    Scalars are interpreted as a z coordinate and return [0, 0, P].
+    Iterables are right-aligned, so [z], [y, z], and [x, y, z] are all
+    accepted.
+
+    Parameters
+    ----------
+    P : scalar or iterable
+        scalar (interpreted as z), or iterable of length 1, 2, or 3
+        holding the trailing coordinates [z], [y, z], or [x, y, z]
+    dtype : dtype, optional
+        output dtype; defaults to prysm's configured precision
+
+    Returns
+    -------
+    ndarray
+        length-3 vector (x, y, z)
+
+    """
+    if dtype is None:
+        dtype = config.precision
+    if not hasattr(P, '__iter__'):
+        return np.array([0, 0, P], dtype=dtype)
+    out = np.zeros(3, dtype=dtype)
+    out[-len(P):] = P
+    return out
+
+
+def coerce_3d_rotation(R):
+    """Return None, a supplied rotation matrix, or a matrix from Euler angles.
+
+    Parameters
+    ----------
+    R : None, ndarray, list, or tuple
+        if None, returned as-is.  If a list or tuple of Euler angles
+        (Z, Y, X) in degrees, converted via make_rotation_matrix.
+        Otherwise returned unchanged (assumed to already be a 3x3 matrix).
+
+    Returns
+    -------
+    None or ndarray
+        None, or a 3x3 rotation matrix
+
+    """
+    if R is None:
+        return None
+    if type(R) in (list, tuple):
+        R = make_rotation_matrix(R)
+    return R
+
+
+def apply_tilt_decenter(P, R, tilt=None, decenter=None,
+                        tilt_radians=False, dtype=None):
+    """Combine a base 3D position and rotation with tilt/decenter offsets.
+
+    Parameters
+    ----------
+    P : ndarray
+        length-3 position vector
+    R : ndarray or None
+        3x3 base rotation matrix, or None for identity
+    tilt : tuple of float, optional
+        (Z, Y, X) Euler angles applied as an additional rotation on the
+        right of R
+    decenter : array-like, optional
+        length-3 vector added to P
+    tilt_radians : bool, optional
+        if True, tilt is in radians; otherwise degrees
+    dtype : dtype, optional
+        output dtype; defaults to prysm's configured precision
+
+    Returns
+    -------
+    P : ndarray
+        updated length-3 position
+    R : ndarray or None
+        updated 3x3 rotation matrix (or None if no rotations are present)
+
+    """
+    if dtype is None:
+        dtype = config.precision
+    if decenter is not None:
+        decenter = np.asarray(decenter, dtype=dtype)
+        if decenter.shape != (3,):
+            raise ValueError(
+                f'decenter must be a length-3 vector, got shape {decenter.shape}'
+            )
+        P = P + decenter
+    if tilt is not None:
+        R_tilt = make_rotation_matrix(tilt, radians=tilt_radians)
+        if R is None:
+            R = R_tilt
+        else:
+            R = R @ R_tilt
+    return P, R
+
+
 def uniform_cart_to_polar(x, y, data):
     """Interpolate data uniformly sampled in cartesian coordinates to polar coordinates.
 
@@ -287,7 +426,20 @@ def make_rotation_matrix(zyx, radians=False):
 
 
 def promote_3d_transformation_to_homography(M):
-    """Convert a 3D transformation to 4D homography."""
+    """Convert a 3D transformation to 4D homography.
+
+    Parameters
+    ----------
+    M : ndarray
+        3x3 transformation matrix
+
+    Returns
+    -------
+    ndarray
+        4x4 homography with M in the upper-left block and 1 in the (3,3)
+        corner
+
+    """
     out = truenp.zeros((4, 4), dtype=config.precision)
     out[:3, :3] = M
     out[3, 3] = 1
@@ -295,14 +447,44 @@ def promote_3d_transformation_to_homography(M):
 
 
 def promote_affine_transformation_to_homography(Maff):
+    """Convert a 2D affine transformation to a 3x3 homography.
+
+    Parameters
+    ----------
+    Maff : ndarray
+        2x3 affine transformation matrix
+
+    Returns
+    -------
+    ndarray
+        3x3 homography with Maff in the top two rows and [0, 0, 1] in
+        the bottom row
+
+    """
     out = truenp.zeros((3, 3), dtype=config.precision)
     out[:2, :3] = Maff
-    out[3, 3] = 1
+    out[2, 2] = 1
     return out
 
 
 def make_homomorphic_translation_matrix(tx=0, ty=0, tz=0):
-    """Create a homographic transformation matrix for a 3D translation."""
+    """Create a homographic transformation matrix for a 3D translation.
+
+    Parameters
+    ----------
+    tx : float, optional
+        translation along x
+    ty : float, optional
+        translation along y
+    tz : float, optional
+        translation along z
+
+    Returns
+    -------
+    ndarray
+        4x4 homography that translates (x, y, z) by (tx, ty, tz)
+
+    """
     out = np.eye(4, dtype=config.precision)
     out[0, -1] = tx
     out[1, -1] = ty

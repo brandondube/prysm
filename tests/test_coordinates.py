@@ -50,6 +50,18 @@ def test_polar_to_cart(rho, phi):
     assert np.allclose(y, rho * np.sin(phi))
 
 
+def test_sample_axis_cheby_matches_lobatto_endpoints():
+    x = coordinates.sample_axis('cheby', -2, 2, 5)
+    np.testing.assert_allclose(x[[0, -1]], [-2, 2])
+    assert abs(x[2]) < 1e-15
+
+
+def test_promote_3d_point_scalar_and_trailing_values():
+    np.testing.assert_allclose(coordinates.promote_3d_point(5), [0, 0, 5])
+    np.testing.assert_allclose(coordinates.promote_3d_point([2, 5]), [0, 2, 5])
+    np.testing.assert_allclose(coordinates.promote_3d_point([1, 2, 5]), [1, 2, 5])
+
+
 # TODO: tests below here are for function, not accuracy
 
 
