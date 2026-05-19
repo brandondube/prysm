@@ -2,39 +2,17 @@
 
 from prysm.conf import config
 from prysm.mathops import np
-from prysm.coordinates import make_rotation_matrix, polar_to_cart
-
-from .surfaces import _ensure_P_vec
+from prysm.coordinates import (
+    make_rotation_matrix,
+    polar_to_cart,
+    promote_3d_point,
+    sample_axis,
+)
 
 
 def _sample_axis(distribution, lo, hi, n, dtype=None):
-    """Generate n samples between lo and hi (inclusive) under a named scheme.
-
-    Distributions
-    -------------
-    'uniform' : linspace(lo, hi, n)
-    'random'  : uniformly distributed in [lo, hi]
-    'cheby'   : Chebyshev-Gauss-Lobatto nodes mapped monotonically from lo to hi.
-                Includes both endpoints; clusters near them, sparse in the middle.
-
-    """
-    if dtype is None:
-        dtype = config.precision
-    if n == 1:
-        return np.asarray([(lo + hi) / 2.0], dtype=dtype)
-    distribution = distribution.lower()
-    if distribution == 'uniform':
-        return np.linspace(lo, hi, n, dtype=dtype)
-    if distribution == 'random':
-        return np.random.uniform(low=lo, high=hi, size=n).astype(dtype)
-    if distribution == 'cheby':
-        k = np.arange(n)
-        nodes = np.cos(k * np.pi / (n - 1))  # +1 down to -1
-        return ((lo + hi) / 2.0 - (hi - lo) / 2.0 * nodes).astype(dtype)
-    raise ValueError(
-        f'unknown distribution {distribution!r}; '
-        "expected 'uniform', 'random', or 'cheby'"
-    )
+    """Compatibility wrapper around prysm.coordinates.sample_axis."""
+    return sample_axis(distribution, lo, hi, n, dtype=dtype)
 
 
 def concat_rayfans(*rayfans):
@@ -160,12 +138,7 @@ def generate_collimated_ray_fan(nrays, maxr, z=0, minr=None, azimuth=90,
     distribution = distribution.lower()
     if minr is None:
         minr = -maxr
-    S = np.array([0, 0, 1], dtype=dtype)
-    R = make_rotation_matrix((0, yangle, -xangle))
-    S = np.matmul(R, S)
-    # need to see a copy of S for each ray, -> add empty dim and broadcast
-    S = S[np.newaxis, :]
-    S = np.broadcast_to(S, (nrays, 3))
+    S = _make_collimated_S(nrays, yangle=yangle, xangle=xangle)
 
     # now generate the radial part of P
     r = _sample_axis(distribution, minr, maxr, nrays, dtype=dtype)
@@ -220,14 +193,7 @@ def generate_collimated_rect_ray_grid(nrays, maxx, z=0, minx=None, maxy=None, mi
     if miny is None:
         miny = minx
 
-    dtype = config.precision
-    S = np.array([0, 0, 1], dtype=dtype)
-    R = make_rotation_matrix((0, yangle, -xangle))
-    # make_rotation_matrix returns float64; matmul would upcast S, so cast back
-    S = np.matmul(R, S).astype(dtype, copy=False)
-    # need to see a copy of S for each ray, -> add empty dim and broadcast
-    S = S[np.newaxis, :]
-    S = np.broadcast_to(S, (nrays*nrays, 3))
+    S = _make_collimated_S(nrays * nrays, yangle=yangle, xangle=xangle)
 
     # now generate the x and y fans
     x = _sample_axis(distribution, minx, maxx, nrays)
@@ -280,7 +246,7 @@ def generate_finite_ray_fan(nrays, na, P=0, min_na=None, azimuth=90,
     # ray spacing is not uniform as it should be.  Or is this some manifestation
     # of the sine condition?
     # more likely it's the square root since it hides unless the na is big
-    P = _ensure_P_vec(P)
+    P = promote_3d_point(P, dtype=config.precision)
     distribution = distribution.lower()
     if min_na is None:
         min_na = -na
@@ -343,7 +309,7 @@ def _make_collimated_S(npoints, yangle=0, xangle=0):
     """Build the (npoints, 3) direction-cosine matrix for collimated rays."""
     S = np.array([0., 0., 1.], dtype=config.precision)
     R = make_rotation_matrix((0, yangle, -xangle))
-    S = np.matmul(R, S)
+    S = np.matmul(R, S).astype(config.precision, copy=False)
     return np.broadcast_to(S[np.newaxis, :], (npoints, 3))
 
 
