@@ -38,7 +38,6 @@ def test_is_power_of_2_non_powers_of_2(num):
     ('np', 'arange'),
     ('fft', 'fft'),
     ('ndimage', 'gaussian_filter'),
-    ('special', 'jn'),
     ('interpolate', 'interp1d'),
     ('optimize', 'brentq'),
     ('signal', 'windows'),
@@ -58,4 +57,3 @@ def test_set_backend_to_defaults_restores_optimize_and_signal():
     assert mathops.signal._srcmodule is mathops._signal
     assert hasattr(mathops.optimize, 'brentq')
     assert hasattr(mathops.signal, 'windows')
-

@@ -1,7 +1,8 @@
 """Tools for working with Q (Forbes) polynomials."""
-# not special engine, only concerns scalars here
 from collections import defaultdict
 from functools import lru_cache
+
+from scipy.special import factorial, factorial2
 
 from .jacobi import (
     jacobi,
@@ -12,7 +13,7 @@ from .jacobi import (
 )
 from ._clenshaw import _initialize_alphas, _clenshaw_sum, _clenshaw_sum_der
 
-from prysm.mathops import np, special, kronecker, gamma, sign
+from prysm.mathops import np, kronecker, gamma, sign
 from prysm.conf import config
 
 
@@ -782,8 +783,8 @@ def G_q2d(n, m):
 
     """
     if n == 0:
-        num = special.factorial2(2 * m - 1)
-        den = 2 ** (m + 1) * special.factorial(m - 1)
+        num = factorial2(2 * m - 1)
+        den = 2 ** (m + 1) * factorial(m - 1)
         return num / den
     elif n > 0 and m == 1:
         t1num = (2 * n ** 2 - 1) * (n ** 2 - 1)
@@ -824,8 +825,8 @@ def F_q2d(n, m):
     if n == 0 and m == 1:
         return 0.25
     if n == 0:
-        num = m ** 2 * special.factorial2(2 * m - 3)
-        den = 2 ** (m + 1) * special.factorial(m - 1)
+        num = m ** 2 * factorial2(2 * m - 3)
+        den = 2 ** (m + 1) * factorial(m - 1)
         return num / den
     elif n > 0 and m == 1:
         t1num = 4 * (n - 1) ** 2 * n ** 2 + 1

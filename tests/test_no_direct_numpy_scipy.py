@@ -23,6 +23,12 @@ ALLOWED = {
     # mathops itself is the shim; it MUST import numpy / scipy.
     'mathops.py': {'numpy', 'scipy', 'scipy.ndimage', 'scipy.interpolate',
                    'scipy.special', 'scipy.fft', 'scipy.optimize', 'scipy.signal'},
+    # Analytic PSF formulae use SciPy Bessel functions directly.
+    'psf.py': {'scipy.special'},
+    # Forbes Q scalar normalization constants use SciPy factorial helpers.
+    'polynomials/qpoly.py': {'scipy.special'},
+    # Fiber LP mode solving depends on SciPy Bessel ufuncs and zero tables.
+    'x/fibers.py': {'scipy'},
     # plotting wants matplotlib-compatible real-numpy arrays.
     'plotting.py': {'numpy'},
     'x/raytracing/plotting.py': {'numpy'},

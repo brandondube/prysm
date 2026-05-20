@@ -1,17 +1,10 @@
 """Routines for working with optical fibers."""
+# scipy.special is used directly here because fiber LP solving depends on
+# host-side Bessel ufuncs plus Bessel-zero table generators.
+from scipy import special
+
 from prysm.conf import config
 from prysm.mathops import np
-from prysm.polynomials import (
-    besselj,
-    besselj0,
-    besselj1,
-    besselj_ratio_jnm1,
-    besselj_seq,
-    besselk,
-    besselk0,
-    besselk1,
-    besselk_ratio_knm1,
-)
 
 
 _BESSELJ_ZERO_CACHE = {}
@@ -123,25 +116,22 @@ def _ghatak_eq_8_40(b, V, l):  # NOQA
     if l >= 1:  # noqa
         # right looks like it may be a typo in Ghatak?  -W in 8.40, not in 8.41
         # however, fig 8.1 only replicates for -W, and the same for fig 8.4
-        left = U * besselj_ratio_jnm1(l, U)
-        right = -W * besselk_ratio_knm1(l, W)
+        left = U * special.jv(l - 1, U) / special.jv(l, U)
+        right = -W * special.kve(l - 1, W) / special.kve(l, W)
     else:
-        # left = U * besselj(l-1, U) / besselj(l, U)
-        # right = -W * besselk(l-1, W) / besselk(l, W)
-        left = U * besselj1(U) / besselj0(U)
-        right = W * besselk1(W) / besselk0(W)
+        # left = U * J_{l-1}(U) / J_l(U)
+        # right = -W * K_{l-1}(W) / K_l(W)
+        left = U * special.j1(U) / special.j0(U)
+        right = W * special.k1(W) / special.k0(W)
     return left-right
 
 
 def _besselj_positive_zeros(l, x_max):
     """All positive zeros of J_l strictly below x_max, ascending.
 
-    A coarse sign-change scan of J_l on (0, x_max] (one batched bessel call,
-    no poles, no interaction with the Ghatak ratio) seeds Newton refinement
-    using J_l' = J_{l-1} - (l/x) J_l.  This avoids the McMahon-asymptotic
-    pitfall of mis-counting the first few zeros for large l (e.g. j_{27,1}
-    is far below McMahon's k=1 estimate).  Scan cost is O(x_max/pi) bessel
-    evaluations, negligible next to the original Ghatak grid.
+    SciPy's jn_zeros gives the exact cutoff table needed for LP mode counting
+    and bracketing, so this helper only has to request enough zeros to cover
+    x_max and cache the result.
     """
     x_max = float(x_max)
     dtype = np.dtype(config.precision)
@@ -152,46 +142,14 @@ def _besselj_positive_zeros(l, x_max):
         if cached_x_max >= x_max:
             return cached_zeros[cached_zeros < x_max].copy()
 
-    first_zero_floor = 0
-    if l >= 1:
-        # j_{l,1} > l + 1.85 * l**(1/3); below this floor high-order J_l can
-        # underflow to exact zero and create false sign changes.
-        first_zero_floor = l + 1.85 * l ** (1 / 3)
-        if x_max <= first_zero_floor:
-            zeros = np.empty(0, dtype=config.precision)
+    nt = max(8, int(x_max / np.pi) + 8)
+    while True:
+        zeros = np.asarray(special.jn_zeros(l, nt), dtype=config.precision)
+        if zeros[-1] >= x_max:
+            zeros = zeros[zeros < x_max]
             _BESSELJ_ZERO_CACHE[cache_key] = (x_max, zeros)
             return zeros.copy()
-
-    step = np.pi / 4  # consecutive zeros differ by ~pi; pi/4 catches every change
-    x0 = max(0.5, step, first_zero_floor - step)
-    n_pts = max(3, int((x_max - x0) / step) + 2)
-    x_grid = np.linspace(x0, x_max, n_pts).astype(config.precision)
-    if l == 0:
-        J = besselj0(x_grid)
-    elif l == 1:
-        J = besselj1(x_grid)
-    else:
-        J = besselj_seq([l], x_grid)[0]
-
-    sgn = np.sign(J)
-    idx = (sgn[:-1] != sgn[1:]).nonzero()[0]
-    if idx.size == 0:
-        return np.empty(0, dtype=config.precision)
-    x = 0.5 * (x_grid[idx] + x_grid[idx + 1])
-
-    for _ in range(6):
-        if l == 0:
-            J_l = besselj0(x)
-            J_l_prime = -besselj1(x)
-        else:
-            vals = besselj_seq((l - 1, l), x)
-            J_l = vals[1]
-            J_l_prime = vals[0] - (l / x) * J_l
-        x = x - J_l / J_l_prime
-
-    x = np.sort(x[x < x_max])
-    _BESSELJ_ZERO_CACHE[cache_key] = (x_max, x)
-    return x.copy()
+        nt *= 2
 
 
 def _ghatak_u_with_derivative(U, V, ell):
@@ -204,14 +162,13 @@ def _ghatak_u_with_derivative(U, V, ell):
     """
     W = np.sqrt(V * V - U * U)
     if ell == 0:
-        r_J = besselj1(U) / besselj0(U)
-        r_K = besselk1(W) / besselk0(W)
+        r_J = special.j1(U) / special.j0(U)
+        r_K = special.k1(W) / special.k0(W)
         f = U * r_J - W * r_K
         df = U * (r_J * r_J + r_K * r_K)
     else:
-        Jv = besselj_seq((ell - 1, ell), U)
-        r_J = Jv[0] / Jv[1]
-        r_K = besselk_ratio_knm1(ell, W)
+        r_J = special.jv(ell - 1, U) / special.jv(ell, U)
+        r_K = special.kve(ell - 1, W) / special.kve(ell, W)
         f = U * r_J + W * r_K
         df = 2 * ell * (r_J - U * r_K / W) - U * (r_J * r_J + r_K * r_K)
     return f, df
@@ -226,12 +183,8 @@ def _vectorized_safeguarded_newton_u(V, ell, lower, upper, max_iter=28, atol=1e-
     falls back to the bracket midpoint (bisection step).  Brackets shrink
     monotonically using the sign of f at the new point.
 
-    Precision near cutoff modes (V > ~25 and U close to a pole) is set by the
-    prysm bessel module's ~1e-7 J/K accuracy: f near the root has a noise
-    envelope of order df * 1e-7, which for high V and steep modes can be
-    1e-3 or larger.  No root-finder can resolve a sign change finer than that
-    envelope, so a few-iteration plateau at large residual is expected and
-    physically harmless.
+    Near-cutoff modes can have very steep residuals, so bisection remains part
+    of the iteration even though Newton usually lands quickly.
     """
     a = np.asarray(lower).copy()
     b = np.asarray(upper).copy()
@@ -432,20 +385,20 @@ def compute_LP_modes(V, mode_dict, a, r, t):
             W = V * np.sqrt(b)
             tmp = np.zeros_like(r)
             if l == 0:  # noqa
-                num_core = besselj0(U*rnorm[within_core])
-                den_core = besselj0(U)
-                num_clad = besselk0(W*rnorm[within_clad])
-                den_clad = besselk0(W)
+                num_core = special.j0(U*rnorm[within_core])
+                den_core = special.j0(U)
+                num_clad = special.k0(W*rnorm[within_clad])
+                den_clad = special.k0(W)
             elif l == 1:  # noqa
-                num_core = besselj1(U*rnorm[within_core])
-                den_core = besselj1(U)
-                num_clad = besselk1(W*rnorm[within_clad])
-                den_clad = besselk1(W)
+                num_core = special.j1(U*rnorm[within_core])
+                den_core = special.j1(U)
+                num_clad = special.k1(W*rnorm[within_clad])
+                den_clad = special.k1(W)
             else:
-                num_core = besselj(l, U*rnorm[within_core])
-                den_core = besselj(l, U)
-                num_clad = besselk(l, W*rnorm[within_clad])
-                den_clad = besselk(l, W)
+                num_core = special.jv(l, U*rnorm[within_core])
+                den_core = special.jv(l, U)
+                num_clad = special.kv(l, W*rnorm[within_clad])
+                den_clad = special.kv(l, W)
 
             tmp[within_core] = num_core/den_core
             tmp[within_clad] = num_clad/den_clad
@@ -488,14 +441,14 @@ def smf_mode_field(V, a, b, r):
     # inside core
     rnorm = r*(1/a)  # faster to divide on scalar, mul on vector
     rinterior = rnorm < 1
-    num = besselj0(U*rnorm[rinterior])
-    den = besselj1(U)
+    num = special.j0(U*rnorm[rinterior])
+    den = special.j1(U)
     out = np.empty_like(r)
     out[rinterior] = num*(1/den)
 
     rexterior = ~rinterior
-    num = besselk0(W*rnorm[rexterior])
-    den = besselk1(W)
+    num = special.k0(W*rnorm[rexterior])
+    den = special.k1(W)
     out[rexterior] = num*(1/den)
     return out
 

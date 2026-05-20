@@ -39,7 +39,7 @@ For mathematical libraries, import them from :code:`prysm.mathops`.  These inclu
 
 ..code-block :: python
 
-    from prysm.mathops import np, special, fft, interpolate, ndimage
+    from prysm.mathops import np, fft, interpolate, ndimage
 
 prysm's backend can be changed at will by the user.  Importing this way avoids locking the user into numpy or scipy.
 

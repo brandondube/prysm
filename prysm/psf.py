@@ -1,11 +1,13 @@
 """Evaluation routines for point spread functions."""
 import numbers
+
+from scipy.special import j0 as _besselj0, j1 as _besselj1
+
 from prysm.fttools import fftrange
 
 from .mathops import (
     np, jinc,
     ndimage,
-    special,
     optimize,
 )
 from .coordinates import uniform_cart_to_polar
@@ -349,7 +351,7 @@ def _encircled_energy_core(mtf_data, radius, nu_p, dx, dy):
         encircled energy for given radius
 
     """
-    integration_fourier = special.j1(2 * np.pi * radius * nu_p) / nu_p
+    integration_fourier = _besselj1(2 * np.pi * radius * nu_p) / nu_p
     dat = mtf_data * integration_fourier
     return radius * dat.sum() * dx * dy
 
@@ -373,7 +375,7 @@ def _analytical_encircled_energy(fno, wavelength, points):
 
     """
     p = points * np.pi / fno / wavelength
-    return 1 - special.j0(p)**2 - special.j1(p)**2
+    return 1 - _besselj0(p)**2 - _besselj1(p)**2
 
 
 def _inverse_analytic_encircled_energy(fno, wavelength, energy=FIRST_AIRY_ENCIRCLED):

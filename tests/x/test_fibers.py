@@ -51,12 +51,9 @@ def test_find_all_modes_count_matches_cutoff_theory(V, jn_zeros):
 def test_find_all_modes_roots_satisfy_equation(V):
     """Every reported b must zero the dispersion equation.
 
-    The tolerance is loose at high V because the prysm bessel module is
-    limited to ~1e-7 precision by its NR Chebyshev coefficients, and that
-    floor is amplified by the steep df/db of near-cutoff modes (df/db ~ V**2,
-    so a 1e-7 noise floor in J becomes a 1e-3-scale residual for the most
-    weakly-confined LP_{0,m} modes at V=40).  This test guards root validity,
-    not bessel precision.
+    The tolerance is intentionally looser at high V because the dispersion
+    residual is steep for weakly-confined modes close to cutoff.  This test
+    guards root validity, not the last bit of the Bessel evaluation.
     """
     tol = 1e-4 if V <= 25 else 1e-2
     modes = find_all_modes(V)

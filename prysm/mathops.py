@@ -2,7 +2,8 @@
 import warnings
 
 import numpy as np
-from scipy import ndimage, interpolate, special, fft, optimize, signal
+from scipy import ndimage, interpolate, fft, optimize, signal
+from scipy.special import j1 as _besselj1
 
 
 class BackendShim:
@@ -19,14 +20,12 @@ class BackendShim:
 
 _np = np
 _ndimage = ndimage
-_special = special
 _fft = fft
 _interpolate = interpolate
 _optimize = optimize
 _signal = signal
 np = BackendShim(np)
 ndimage = BackendShim(ndimage)
-special = BackendShim(special)
 fft = BackendShim(fft)
 interpolate = BackendShim(interpolate)
 optimize = BackendShim(optimize)
@@ -39,14 +38,12 @@ def set_backend_to_cupy():
     from cupyx.scipy import (
         fft as cpfft,
         ndimage as cpndimage,
-        special as cpspecial,
         interpolate as cpinterpolate,
     )
 
     np._srcmodule = cp
     fft._srcmodule = cpfft
     ndimage._srcmodule = cpndimage
-    special._srcmodule = cpspecial
     interpolate._srcmodule = cpinterpolate
     # cupyx.scipy.signal exists but cupyx.scipy.optimize generally does not;
     # opportunistically remap signal if present, leave optimize on scipy.
@@ -63,7 +60,6 @@ def set_backend_to_defaults():
     np._srcmodule = _np
     fft._srcmodule = _fft
     ndimage._srcmodule = _ndimage
-    special._srcmodule = _special
     interpolate._srcmodule = _interpolate
     optimize._srcmodule = _optimize
     signal._srcmodule = _signal
@@ -76,8 +72,7 @@ def set_backend_to_pytorch():
 
     np._srcmodule = torch
     fft._srcmodule = torch.fft
-    special._srcmodule = torch.special
-    warnings.warn('set_backend_to_pytorch: only np, fft, special remapped; ndimage, interpolate, optimize, signal do not have known torch equivalents.')
+    warnings.warn('set_backend_to_pytorch: only np and fft remapped; ndimage, interpolate, optimize, and signal do not have known torch equivalents.')
     return
 
 
@@ -217,10 +212,10 @@ def jinc(r):
         if r < 1e-8 and r > -1e-8:  # value of jinc for x < 1/2 machine precision  is 0.5
             return 0.5
         else:
-            return special.j1(r) / r
+            return _besselj1(r) / r
     else:
         mask = (r < 1e-8) & (r > -1e-8)
-        out = special.j1(r) / r
+        out = _besselj1(r) / r
         out[mask] = 0.5
         return out
 
