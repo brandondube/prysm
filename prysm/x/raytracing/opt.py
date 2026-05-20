@@ -2,7 +2,7 @@
 
 from prysm.conf import config
 from prysm.mathops import np, optimize
-from . import raygen, spencer_and_murty
+from . import spencer_and_murty
 from ._line_math import (
     closest_point_on_line_to_line,
     line_intersection_params,
@@ -50,8 +50,9 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328,
     Two solver backends are available:
 
     - ``method='numerical'`` (default) traces 2 rays per axis very near the
-      optical axis and finds where they cross.  Robust, no assumptions about
-      the surface types in the prescription.
+      optical axis and finds where they cross for finite-conjugate solves.
+      Collimated solves use the matrix backend to avoid cancellation when
+      the paraxial ray fan becomes extremely small.
     - ``method='matrix'`` composes the 2x2 ABCD system matrix and solves for
       the image distance analytically.  Faster, no FP cancellation noise,
       but assumes every powered surface carries a paraxial vertex curvature
@@ -74,7 +75,7 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328,
         as an argument.  Only used by ``method='numerical'``.
     epd : float
         entrance pupil diameter, if na=0 and epd=0 an error will be generated.
-        Only used by ``method='numerical'``.
+        Only used by finite-conjugate ``method='numerical'`` solves.
     wvl : float
         wavelength of light, microns
     paraxial_fraction : float, optional
@@ -109,35 +110,13 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328,
         raise ValueError("either na or epd must be nonzero")
 
     if na == 0:
-        r = epd/2*paraxial_fraction
-        rayfanx = raygen.generate_collimated_ray_fan(2, maxr=r, azimuth=0)
-        rayfany = raygen.generate_collimated_ray_fan(2, maxr=r)
-        all_rays = raygen.concat_rayfans(rayfanx, rayfany)
-        ps, ss = all_rays
-        phist, shist, _ = spencer_and_murty.raytrace(prescription, ps, ss, wvl)
-        # now solve for intersection between the X rays,
+        return paraxial_image_solve(prescription, z, na=na, epd=epd,
+                                    wvl=wvl, method='matrix')
 
-        # P for the each ray
-        P = phist[-1]
-        Px1 = P[0]
-        Px2 = P[1]
-        Py1 = P[2]
-        Py2 = P[3]
-
-        # S for each ray
-        S = shist[-1]
-        Sx1 = S[0]
-        Sx2 = S[1]
-        Sy1 = S[2]
-        Sy2 = S[3]
-
-        # find the distance along line 1 which results in intersection with line 2
-        sx = _intersect_lines(Px1, Sx1, Px2, Sx2)
-        sy = _intersect_lines(Py1, Sy1, Py2, Sy2)
-        s = np.array([*sx, *sy])
-        # fast-forward all the rays and take the average position
-        P_out = P + s[:, np.newaxis] * S
-        return P_out.mean(axis=0)
+    raise NotImplementedError(
+        "method='numerical' with finite object-space NA is not implemented; "
+        "use method='matrix' for collimated paraxial image solves"
+    )
 
 
 def ray_aim(P, S, prescription, j, wvl, target=(0, 0, np.nan),

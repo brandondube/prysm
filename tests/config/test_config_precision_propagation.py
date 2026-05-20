@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from prysm.conf import config
-from prysm.x.raytracing.surfaces import Surface
+from tests.x.raytracing.surface_helpers import conic, plane
 from prysm.x.raytracing.spencer_and_murty import raytrace
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.analysis import (
@@ -36,8 +36,8 @@ from prysm.x.raytracing import raygen
 def _parabola():
     c = -1 / 80.0
     f = 1.0 / (2.0 * c)
-    s = Surface.conic(c=c, k=-1.0, typ='refl', P=[0, 0, 0])
-    img = Surface.plane(typ='eval', P=[0, 0, f])
+    s = conic(c=c, k=-1.0, typ='refl', P=[0, 0, 0])
+    img = plane(typ='eval', P=[0, 0, f])
     return [s, img]
 
 

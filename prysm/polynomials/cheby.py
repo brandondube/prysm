@@ -346,3 +346,44 @@ def cheby4_der_seq(ns, x):
     cs = (2 * ns + 1) * _cheby_inv_jacobi_at_one(ns, .5, -.5, x.dtype)
     seq = jacobi_der_seq(ns, .5, -.5, x)
     return seq * cs.reshape((-1,) + (1,) * x.ndim)
+
+
+def cheby1_2d_sum(coefs, mns, x, y):
+    """Evaluate a weighted tensor-product Chebyshev-T sum."""
+    mns = tuple(mns)
+    if not mns:
+        return np.zeros_like(x)
+    max_m = max(m for m, _ in mns)
+    max_n = max(n for _, n in mns)
+    Tx = cheby1_seq(range(max_m + 1), x)
+    Ty = cheby1_seq(range(max_n + 1), y)
+    z = np.zeros_like(x)
+    for c, (m, n) in zip(coefs, mns):
+        if c == 0.0:
+            continue
+        z = z + c * Tx[m] * Ty[n]
+    return z
+
+
+def cheby1_2d_sum_der_xy(coefs, mns, x, y, x_norm=1.0, y_norm=1.0):
+    """Evaluate a weighted Chebyshev-T sum and Cartesian derivatives."""
+    mns = tuple(mns)
+    if not mns:
+        z = np.zeros_like(x)
+        return z, z, np.zeros_like(y)
+    max_m = max(m for m, _ in mns)
+    max_n = max(n for _, n in mns)
+    Tx = cheby1_seq(range(max_m + 1), x)
+    Ty = cheby1_seq(range(max_n + 1), y)
+    Tx_d = cheby1_der_seq(range(max_m + 1), x)
+    Ty_d = cheby1_der_seq(range(max_n + 1), y)
+    z = np.zeros_like(x)
+    dzdx = np.zeros_like(x)
+    dzdy = np.zeros_like(x)
+    for c, (m, n) in zip(coefs, mns):
+        if c == 0.0:
+            continue
+        z = z + c * Tx[m] * Ty[n]
+        dzdx = dzdx + c * Tx_d[m] * Ty[n]
+        dzdy = dzdy + c * Tx[m] * Ty_d[n]
+    return z, dzdx / x_norm, dzdy / y_norm

@@ -2,6 +2,11 @@
 import numpy as np
 import pytest
 
+from tests.x.raytracing.surface_helpers import (
+    plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
+    chebyshev, jacobi, toroid, biconic,
+)
+
 from prysm.x.raytracing.surfaces import Surface
 from prysm.x.raytracing.paraxial import (
     system_matrix,
@@ -20,7 +25,7 @@ from prysm.x.raytracing.auto import rc_prescription_from_efl_bfl_sep
 
 def test_system_matrix_single_plane_is_identity():
     """A single plane carries no power and no gap, so M should be I."""
-    rx = [Surface.plane(typ='eval', P=np.array([0., 0., 0.]))]
+    rx = [plane(typ='eval', P=np.array([0., 0., 0.]))]
     M, n = system_matrix(rx, wvl=0.55)
     np.testing.assert_allclose(M, np.eye(2), atol=1e-12)
     assert n == 1.0
@@ -29,8 +34,8 @@ def test_system_matrix_single_plane_is_identity():
 def test_system_matrix_translation_only():
     """Two planes 10 mm apart in n=1: M = [[1, 10], [0, 1]]."""
     rx = [
-        Surface.plane(typ='eval', P=np.array([0., 0., 0.])),
-        Surface.plane(typ='eval', P=np.array([0., 0., 10.])),
+        plane(typ='eval', P=np.array([0., 0., 0.])),
+        plane(typ='eval', P=np.array([0., 0., 10.])),
     ]
     M, n = system_matrix(rx, wvl=0.55)
     np.testing.assert_allclose(M, [[1.0, 10.0], [0.0, 1.0]], atol=1e-12)
@@ -44,9 +49,9 @@ def test_system_matrix_thin_lens_efl():
     # thin lens: thickness ~ 0
     f_lens = 1.0 / ((n_glass - 1) * (1.0 / R1 - 1.0 / R2))
     rx = [
-        Surface.sphere(c=1.0 / R1, typ='refr', P=np.array([0., 0., 0.]),
+        sphere(c=1.0 / R1, typ='refr', P=np.array([0., 0., 0.]),
                        n=lambda wvl: n_glass),
-        Surface.sphere(c=1.0 / R2, typ='refr', P=np.array([0., 0., 1e-9]),
+        sphere(c=1.0 / R2, typ='refr', P=np.array([0., 0., 1e-9]),
                        n=lambda wvl: 1.0),
     ]
     M, n = system_matrix(rx, wvl=0.55)
@@ -58,7 +63,7 @@ def test_system_matrix_thin_lens_efl():
 def test_system_matrix_mirror_flips_sign_of_n():
     """A single mirror: image-space index goes to -1."""
     rx = [
-        Surface.conic(c=1 / 200.0, k=-1.0, typ='refl', P=np.array([0., 0., 0.])),
+        conic(c=1 / 200.0, k=-1.0, typ='refl', P=np.array([0., 0., 0.])),
     ]
     _, n = system_matrix(rx, wvl=0.55)
     assert n == pytest.approx(-1.0)
@@ -72,7 +77,7 @@ def test_image_distance_single_refracting_sphere():
     n_glass = 1.5
     expected = n_glass * R / (n_glass - 1.0)
     rx = [
-        Surface.sphere(c=1.0 / R, typ='refr', P=np.array([0., 0., 0.]),
+        sphere(c=1.0 / R, typ='refr', P=np.array([0., 0., 0.]),
                        n=lambda wvl: n_glass),
     ]
     bfd = paraxial_image_distance(rx)
@@ -84,11 +89,11 @@ def test_image_distance_unchanged_by_eval_plane_after_last_surface():
     R = 50.0
     n_glass = 1.5
     rx_base = [
-        Surface.sphere(c=1.0 / R, typ='refr', P=np.array([0., 0., 0.]),
+        sphere(c=1.0 / R, typ='refr', P=np.array([0., 0., 0.]),
                        n=lambda wvl: n_glass),
     ]
     rx_with_eval = rx_base + [
-        Surface.plane(typ='eval', P=np.array([0., 0., 100.])),
+        plane(typ='eval', P=np.array([0., 0., 100.])),
     ]
     img_z_base = 0.0 + paraxial_image_distance(rx_base)
     img_z_eval = 100.0 + paraxial_image_distance(rx_with_eval)
@@ -96,7 +101,7 @@ def test_image_distance_unchanged_by_eval_plane_after_last_surface():
 
 
 def test_image_distance_no_power_raises():
-    rx = [Surface.plane(typ='eval', P=np.array([0., 0., 0.]))]
+    rx = [plane(typ='eval', P=np.array([0., 0., 0.]))]
     with pytest.raises(ValueError, match='no net power'):
         paraxial_image_distance(rx)
 
@@ -105,9 +110,9 @@ def test_image_distance_no_power_raises():
 
 def test_matrix_vs_numerical_single_sphere():
     rx = [
-        Surface.sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
+        sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
                        n=lambda wvl: 1.5),
-        Surface.plane(typ='eval', P=np.array([0., 0., 100.])),
+        plane(typ='eval', P=np.array([0., 0., 100.])),
     ]
     img_num = paraxial_image_solve(rx, z=0, epd=10.0, method='numerical')
     img_mat = paraxial_image_solve(rx, z=0, method='matrix')
@@ -122,9 +127,9 @@ def test_matrix_vs_numerical_rc_telescope():
     P_sm = np.array([0.0, 0.0, -sep])
     P_img = np.array([0.0, 0.0, bfl - sep])
     rx = [
-        Surface.conic(c1, k1, 'refl', P_pm),
-        Surface.conic(c2, k2, 'refl', P_sm),
-        Surface.plane('eval', P_img),
+        conic(c1, k1, 'refl', P_pm),
+        conic(c2, k2, 'refl', P_sm),
+        plane('eval', P_img),
     ]
     img_num = paraxial_image_solve(rx, z=0, epd=200.0, method='numerical')
     img_mat = paraxial_image_solve(rx, z=0, method='matrix')
@@ -136,7 +141,7 @@ def test_matrix_vs_numerical_rc_telescope():
 
 def test_matrix_method_unknown_raises():
     rx = [
-        Surface.sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
+        sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
                        n=lambda wvl: 1.5),
     ]
     with pytest.raises(ValueError, match="method must be"):
@@ -150,9 +155,9 @@ def test_efl_thin_lens_matches_lensmakers():
     n_glass = 1.5
     f_lens = 1.0 / ((n_glass - 1) * (1.0 / R1 - 1.0 / R2))
     rx = [
-        Surface.sphere(c=1.0 / R1, typ='refr', P=np.array([0., 0., 0.]),
+        sphere(c=1.0 / R1, typ='refr', P=np.array([0., 0., 0.]),
                        n=lambda wvl: n_glass),
-        Surface.sphere(c=1.0 / R2, typ='refr', P=np.array([0., 0., 1e-9]),
+        sphere(c=1.0 / R2, typ='refr', P=np.array([0., 0., 1e-9]),
                        n=lambda wvl: 1.0),
     ]
     efl = effective_focal_length(rx)
@@ -164,8 +169,8 @@ def test_efl_rc_telescope_matches_design():
     efl_design, bfl, sep = 1500.0, 250.0, 400.0
     c1, c2, k1, k2 = rc_prescription_from_efl_bfl_sep(efl_design, bfl, sep)
     rx = [
-        Surface.conic(c1, k1, 'refl', np.array([0., 0., 0.])),
-        Surface.conic(c2, k2, 'refl', np.array([0., 0., -sep])),
+        conic(c1, k1, 'refl', np.array([0., 0., 0.])),
+        conic(c2, k2, 'refl', np.array([0., 0., -sep])),
     ]
     efl = effective_focal_length(rx)
     # signed: the RC design convention may yield negative depending on
@@ -177,7 +182,7 @@ def test_efl_rc_telescope_matches_design():
 
 def test_bfl_matches_image_distance_when_last_surface_is_powered():
     rx = [
-        Surface.sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
+        sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
                        n=lambda wvl: 1.5),
     ]
     bfl = back_focal_length(rx)
@@ -189,12 +194,12 @@ def test_bfl_unchanged_by_trailing_eval_planes():
     """BFL is from the last *powered* surface; adding eval planes after
     must not change it."""
     rx_base = [
-        Surface.sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
+        sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
                        n=lambda wvl: 1.5),
     ]
     rx_eval = rx_base + [
-        Surface.plane(typ='eval', P=np.array([0., 0., 50.])),
-        Surface.plane(typ='eval', P=np.array([0., 0., 75.])),
+        plane(typ='eval', P=np.array([0., 0., 50.])),
+        plane(typ='eval', P=np.array([0., 0., 75.])),
     ]
     np.testing.assert_allclose(back_focal_length(rx_base),
                                back_focal_length(rx_eval), rtol=1e-12)
@@ -208,9 +213,9 @@ def test_ffl_thin_lens_matches_lensmakers():
     n_glass = 1.5
     f_lens = 1.0 / ((n_glass - 1) * (1.0 / R1 - 1.0 / R2))
     rx = [
-        Surface.sphere(c=1.0 / R1, typ='refr', P=np.array([0., 0., 0.]),
+        sphere(c=1.0 / R1, typ='refr', P=np.array([0., 0., 0.]),
                        n=lambda wvl: n_glass),
-        Surface.sphere(c=1.0 / R2, typ='refr', P=np.array([0., 0., 1e-9]),
+        sphere(c=1.0 / R2, typ='refr', P=np.array([0., 0., 1e-9]),
                        n=lambda wvl: 1.0),
     ]
     ffl = front_focal_length(rx)
@@ -221,18 +226,18 @@ def test_ffl_unchanged_by_leading_eval_planes():
     """FFL is from the first powered surface; a leading eval plane must
     not change it."""
     rx_base = [
-        Surface.sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 10.]),
+        sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 10.]),
                        n=lambda wvl: 1.5),
     ]
     rx_eval = [
-        Surface.plane(typ='eval', P=np.array([0., 0., 0.])),
+        plane(typ='eval', P=np.array([0., 0., 0.])),
     ] + rx_base
     np.testing.assert_allclose(front_focal_length(rx_base),
                                front_focal_length(rx_eval), rtol=1e-12)
 
 
 def test_ffl_no_power_raises():
-    rx = [Surface.plane(typ='eval', P=np.array([0., 0., 0.]))]
+    rx = [plane(typ='eval', P=np.array([0., 0., 0.]))]
     with pytest.raises(ValueError, match='no powered surfaces'):
         front_focal_length(rx)
 
@@ -241,9 +246,9 @@ def test_ffl_no_power_raises():
 
 def _thin_lens_prescription(R1=100.0, R2=-100.0, n_glass=1.5, z0=0.0):
     return [
-        Surface.sphere(c=1.0 / R1, typ='refr', P=np.array([0., 0., z0]),
+        sphere(c=1.0 / R1, typ='refr', P=np.array([0., 0., z0]),
                        n=lambda wvl: n_glass),
-        Surface.sphere(c=1.0 / R2, typ='refr',
+        sphere(c=1.0 / R2, typ='refr',
                        P=np.array([0., 0., z0 + 1e-9]),
                        n=lambda wvl: 1.0),
     ]
@@ -306,7 +311,7 @@ def test_first_order_stop_behind_single_lens_places_ep_in_front():
     f = 1.0 / ((n_glass - 1) * (1.0 / R1 - 1.0 / R2))
     t = 0.25 * f
     rx = _thin_lens_prescription(R1=R1, R2=R2, n_glass=n_glass) + [
-        Surface.plane(typ='eval', P=np.array([0., 0., t])),
+        plane(typ='eval', P=np.array([0., 0., t])),
     ]
     stop_diameter = 10.0
     # Pretend EPD is the value that would put a stop_diameter=10 aperture
@@ -333,8 +338,8 @@ def test_first_order_repr_lists_populated_rows_only():
 
 
 def test_first_order_afocal_returns_none_for_power_dependent_fields():
-    rx = [Surface.plane(typ='eval', P=np.array([0., 0., 0.])),
-          Surface.plane(typ='eval', P=np.array([0., 0., 10.]))]
+    rx = [plane(typ='eval', P=np.array([0., 0., 0.])),
+          plane(typ='eval', P=np.array([0., 0., 10.]))]
     fo = first_order(rx)
     assert fo.efl is None
     assert fo.bfl is None

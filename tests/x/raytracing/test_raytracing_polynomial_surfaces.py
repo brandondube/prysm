@@ -2,14 +2,19 @@
 import numpy as np
 import pytest
 
+from tests.x.raytracing.surface_helpers import (
+    plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
+    chebyshev, jacobi, toroid, biconic,
+)
+
 from prysm.x.raytracing.surfaces import (
     Surface,
-    SurfaceZernike,
-    SurfaceXY,
-    SurfaceChebyshev,
-    SurfaceJacobi,
-    _ConicSeededNewtonSurface,
+    ZernikeSag,
+    XYSag,
+    ChebyshevSag,
+    JacobiSag,
 )
+from prysm.x.raytracing.intersections import ConicSeedMixin
 from prysm.x.raytracing.spencer_and_murty import raytrace
 from prysm.x.raytracing.raygen import generate_collimated_rect_ray_grid
 from prysm.polynomials import (
@@ -35,19 +40,19 @@ def _central_difference_xy(FFp, x, y, h=1e-6):
 
 # ---------- shared base / inheritance ----------------------------------------
 
-def test_polynomial_surfaces_inherit_shared_base():
-    """All polynomial-sag surfaces share the conic-seeded Newton intersect."""
-    for cls in (SurfaceZernike, SurfaceXY, SurfaceChebyshev, SurfaceJacobi):
-        assert issubclass(cls, _ConicSeededNewtonSurface), cls.__name__
+def test_polynomial_shapes_use_conic_seeded_newton():
+    """All polynomial sag shapes share the conic-seeded Newton intersect."""
+    for cls in (ZernikeSag, XYSag, ChebyshevSag, JacobiSag):
+        assert issubclass(cls, ConicSeedMixin), cls.__name__
 
 
 # ---------- Zernike ----------------------------------------------------------
 
 def test_zernike_zero_coefs_matches_conic():
     c, k = 1 / 80.0, -1.0
-    s_zern = Surface.zernike(c=c, k=k, normalization_radius=10.0,
+    s_zern = zernike(c=c, k=k, normalization_radius=10.0,
                              nms=[], coefs=[], typ='refl', P=[0, 0, 0])
-    s_conic = Surface.conic(c=c, k=k, typ='refl', P=[0, 0, 0])
+    s_conic = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_z, dx_z, dy_z = s_zern.FFp(x, y)
     z_c, dx_c, dy_c = s_conic.FFp(x, y)
@@ -60,7 +65,7 @@ def test_zernike_sag_matches_library():
     R_n = 8.0
     nms = [(2, 0), (3, 1), (4, 0), (3, -1)]
     coefs = [0.05, -0.02, 0.03, 0.01]
-    s = Surface.zernike(c=0.0, k=0.0, normalization_radius=R_n,
+    s = zernike(c=0.0, k=0.0, normalization_radius=R_n,
                         nms=nms, coefs=coefs, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_s, _, _ = s.FFp(x, y)
@@ -69,7 +74,7 @@ def test_zernike_sag_matches_library():
 
 
 def test_zernike_derivatives_central_diff():
-    s = Surface.zernike(c=1 / 80.0, k=0.0, normalization_radius=10.0,
+    s = zernike(c=1 / 80.0, k=0.0, normalization_radius=10.0,
                         nms=[(2, 0), (4, 0), (3, 1), (3, -1)],
                         coefs=[0.05, 0.02, -0.03, 0.04],
                         typ='refl', P=[0, 0, 0])
@@ -84,9 +89,9 @@ def test_zernike_derivatives_central_diff():
 
 def test_xy_zero_coefs_matches_conic():
     c, k = 1 / 50.0, 0.0
-    s_xy = Surface.xy(c=c, k=k, normalization_radius=1.0,
+    s_xy = xy(c=c, k=k, normalization_radius=1.0,
                       mns=[], coefs=[], typ='refl', P=[0, 0, 0])
-    s_conic = Surface.conic(c=c, k=k, typ='refl', P=[0, 0, 0])
+    s_conic = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_xy, dx_xy, dy_xy = s_xy.FFp(x, y)
     z_c, dx_c, dy_c = s_conic.FFp(x, y)
@@ -99,7 +104,7 @@ def test_xy_sag_matches_direct_polynomial():
     R_n = 5.0
     mns = [(0, 0), (1, 0), (0, 1), (1, 1), (2, 0), (0, 2), (3, 1)]
     coefs = [0.1, 0.05, -0.04, 0.02, 0.01, -0.015, 0.003]
-    s = Surface.xy(c=0.0, k=0.0, normalization_radius=R_n,
+    s = xy(c=0.0, k=0.0, normalization_radius=R_n,
                    mns=mns, coefs=coefs, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid(rmax=2.0, n=7)
     z_s, _, _ = s.FFp(x, y)
@@ -110,7 +115,7 @@ def test_xy_sag_matches_direct_polynomial():
 
 
 def test_xy_derivatives_central_diff():
-    s = Surface.xy(c=1 / 80.0, k=0.0, normalization_radius=10.0,
+    s = xy(c=1 / 80.0, k=0.0, normalization_radius=10.0,
                    mns=[(0, 0), (2, 0), (0, 2), (1, 1), (3, 1), (2, 2)],
                    coefs=[0.0, 0.05, 0.04, 0.02, 0.005, 0.003],
                    typ='refl', P=[0, 0, 0])
@@ -125,9 +130,9 @@ def test_xy_derivatives_central_diff():
 
 def test_chebyshev_zero_coefs_matches_conic():
     c, k = 1 / 50.0, 0.0
-    s_cb = Surface.chebyshev(c=c, k=k, x_norm=10.0, y_norm=10.0,
+    s_cb = chebyshev(c=c, k=k, x_norm=10.0, y_norm=10.0,
                              mns=[], coefs=[], typ='refl', P=[0, 0, 0])
-    s_conic = Surface.conic(c=c, k=k, typ='refl', P=[0, 0, 0])
+    s_conic = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_cb, dx_cb, dy_cb = s_cb.FFp(x, y)
     z_c, dx_c, dy_c = s_conic.FFp(x, y)
@@ -140,7 +145,7 @@ def test_chebyshev_sag_matches_library():
     x_norm, y_norm = 8.0, 6.0
     mns = [(0, 0), (2, 0), (0, 2), (1, 1), (4, 0), (2, 2), (3, 1)]
     coefs = [0.02, 0.05, 0.04, -0.03, 0.01, 0.005, 0.003]
-    s = Surface.chebyshev(c=0.0, k=0.0, x_norm=x_norm, y_norm=y_norm,
+    s = chebyshev(c=0.0, k=0.0, x_norm=x_norm, y_norm=y_norm,
                           mns=mns, coefs=coefs, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_s, _, _ = s.FFp(x, y)
@@ -153,7 +158,7 @@ def test_chebyshev_sag_matches_library():
 
 
 def test_chebyshev_derivatives_central_diff():
-    s = Surface.chebyshev(c=1 / 80.0, k=0.0, x_norm=10.0, y_norm=10.0,
+    s = chebyshev(c=1 / 80.0, k=0.0, x_norm=10.0, y_norm=10.0,
                           mns=[(0, 0), (2, 0), (0, 2), (1, 1), (4, 0)],
                           coefs=[0.01, 0.05, 0.04, -0.02, 0.01],
                           typ='refl', P=[0, 0, 0])
@@ -168,10 +173,10 @@ def test_chebyshev_derivatives_central_diff():
 
 def test_jacobi_zero_coefs_matches_conic():
     c, k = 1 / 50.0, 0.0
-    s_j = Surface.jacobi(c=c, k=k, normalization_radius=10.0,
+    s_j = jacobi(c=c, k=k, normalization_radius=10.0,
                          alpha=0.0, beta=0.0, ns=[], coefs=[],
                          typ='refl', P=[0, 0, 0])
-    s_conic = Surface.conic(c=c, k=k, typ='refl', P=[0, 0, 0])
+    s_conic = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_j, dx_j, dy_j = s_j.FFp(x, y)
     z_c, dx_c, dy_c = s_conic.FFp(x, y)
@@ -185,7 +190,7 @@ def test_jacobi_sag_matches_library():
     alpha, beta = 0.5, 0.5
     ns = [0, 1, 2, 3]
     coefs = [0.01, 0.02, 0.03, -0.01]
-    s = Surface.jacobi(c=0.0, k=0.0, normalization_radius=R_n,
+    s = jacobi(c=0.0, k=0.0, normalization_radius=R_n,
                        alpha=alpha, beta=beta, ns=ns, coefs=coefs,
                        typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
@@ -200,7 +205,7 @@ def test_jacobi_sag_matches_library():
 @pytest.mark.parametrize('alpha,beta', [(0.0, 0.0), (-0.5, -0.5),
                                         (0.5, 0.5), (1.0, 0.0)])
 def test_jacobi_derivatives_central_diff(alpha, beta):
-    s = Surface.jacobi(c=1 / 80.0, k=0.0, normalization_radius=10.0,
+    s = jacobi(c=1 / 80.0, k=0.0, normalization_radius=10.0,
                        alpha=alpha, beta=beta, ns=[0, 1, 2, 3],
                        coefs=[0.0, 0.05, 0.02, -0.01],
                        typ='refl', P=[0, 0, 0])
@@ -213,7 +218,7 @@ def test_jacobi_derivatives_central_diff(alpha, beta):
 
 def test_jacobi_no_origin_singularity():
     """sag and derivatives finite at r=0 even for high orders / near-zero r."""
-    s = Surface.jacobi(c=1 / 80.0, k=0.0, normalization_radius=10.0,
+    s = jacobi(c=1 / 80.0, k=0.0, normalization_radius=10.0,
                        alpha=0.0, beta=0.0, ns=[0, 1, 2, 3, 4, 5],
                        coefs=[0.01, 0.05, -0.03, 0.02, -0.01, 0.005],
                        typ='refl', P=[0, 0, 0])
@@ -232,16 +237,16 @@ def _polynomial_surfaces():
     """Each polynomial-sag surface with a small perturbation; same conic base."""
     c, k = 1 / 80.0, 0.0
     return [
-        Surface.zernike(c=c, k=k, normalization_radius=10.0,
+        zernike(c=c, k=k, normalization_radius=10.0,
                         nms=[(2, 0), (3, 1)], coefs=[0.05, 0.02],
                         typ='refl', P=[0, 0, 0]),
-        Surface.xy(c=c, k=k, normalization_radius=10.0,
+        xy(c=c, k=k, normalization_radius=10.0,
                    mns=[(2, 0), (1, 1)], coefs=[0.05, 0.02],
                    typ='refl', P=[0, 0, 0]),
-        Surface.chebyshev(c=c, k=k, x_norm=10.0, y_norm=10.0,
+        chebyshev(c=c, k=k, x_norm=10.0, y_norm=10.0,
                           mns=[(2, 0), (0, 2)], coefs=[0.05, 0.04],
                           typ='refl', P=[0, 0, 0]),
-        Surface.jacobi(c=c, k=k, normalization_radius=10.0,
+        jacobi(c=c, k=k, normalization_radius=10.0,
                        alpha=0.0, beta=0.0, ns=[1, 2], coefs=[0.05, 0.02],
                        typ='refl', P=[0, 0, 0]),
     ]
@@ -268,20 +273,20 @@ def test_polynomial_surfaces_zero_pert_matches_conic_image_spot():
     c, k = 1 / 80.0, -1.0  # parabolic
     f = -1.0 / (2.0 * c)  # paraxial focus, negative side after reflection
     P, S = generate_collimated_rect_ray_grid(nrays=5, maxx=5, miny=-5, maxy=5)
-    s_image = Surface.plane(typ='eval', P=[0, 0, f])
+    s_image = plane(typ='eval', P=[0, 0, f])
 
-    s_conic = Surface.conic(c=c, k=k, typ='refl', P=[0, 0, 0])
+    s_conic = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
     res_conic = raytrace([s_conic, s_image], P, S, wvl=0.55)
     spot_c = res_conic.P[-1, ..., :2]
 
     polys = [
-        Surface.zernike(c=c, k=k, normalization_radius=10.0,
+        zernike(c=c, k=k, normalization_radius=10.0,
                         nms=[], coefs=[], typ='refl', P=[0, 0, 0]),
-        Surface.xy(c=c, k=k, normalization_radius=10.0,
+        xy(c=c, k=k, normalization_radius=10.0,
                    mns=[], coefs=[], typ='refl', P=[0, 0, 0]),
-        Surface.chebyshev(c=c, k=k, x_norm=10.0, y_norm=10.0,
+        chebyshev(c=c, k=k, x_norm=10.0, y_norm=10.0,
                           mns=[], coefs=[], typ='refl', P=[0, 0, 0]),
-        Surface.jacobi(c=c, k=k, normalization_radius=10.0,
+        jacobi(c=c, k=k, normalization_radius=10.0,
                        alpha=0.0, beta=0.0, ns=[], coefs=[],
                        typ='refl', P=[0, 0, 0]),
     ]

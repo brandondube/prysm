@@ -499,3 +499,43 @@ def jacobi_sum_clenshaw_der(s, alpha, beta, x, j=1, alphas=None):
 
     _clenshaw_sum_der(s, lin, lin_x, c_fn, alphas, j)
     return alphas
+
+
+def jacobi_radial_sum(coefs, ns, alpha, beta, x, y, normalization_radius):
+    """Evaluate a weighted radial Jacobi polynomial sum on x, y points."""
+    ns = tuple(ns)
+    if not ns:
+        return np.zeros_like(x)
+    R = float(normalization_radius)
+    u = 2.0 * (x * x + y * y) / (R * R) - 1.0
+    P = jacobi_seq(ns, alpha, beta, u)
+    z = np.zeros_like(x)
+    for i, c in enumerate(coefs):
+        if c == 0.0:
+            continue
+        z = z + c * P[i]
+    return z
+
+
+def jacobi_radial_sum_der_xy(coefs, ns, alpha, beta, x, y,
+                             normalization_radius):
+    """Evaluate a radial Jacobi sum and its Cartesian derivatives."""
+    ns = tuple(ns)
+    if not ns:
+        z = np.zeros_like(x)
+        return z, z, np.zeros_like(y)
+    R = float(normalization_radius)
+    inv_Rsq = 1.0 / (R * R)
+    u = 2.0 * (x * x + y * y) * inv_Rsq - 1.0
+    P = jacobi_seq(ns, alpha, beta, u)
+    Pp = jacobi_der_seq(ns, alpha, beta, u)
+    z = np.zeros_like(x)
+    dzdu = np.zeros_like(x)
+    for i, c in enumerate(coefs):
+        if c == 0.0:
+            continue
+        z = z + c * P[i]
+        dzdu = dzdu + c * Pp[i]
+    dzdx = dzdu * (4.0 * x * inv_Rsq)
+    dzdy = dzdu * (4.0 * y * inv_Rsq)
+    return z, dzdx, dzdy

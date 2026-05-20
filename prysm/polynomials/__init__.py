@@ -9,30 +9,14 @@ from prysm.mathops import np
 # (e.g., a per-axis derivative split, or a Cartesian/polar pair) are noted
 # inline.
 
-# Bessel functions of the first kind, integer order.  The adjacent-order helper
-# is used by fiber mode root searches, where J_{l-1}(x) / J_l(x) is evaluated
-# repeatedly.
-from .bessel import (  # NOQA
-    besselj0,
-    besselj1,
-    besselj,
-    besselj_seq,
-    besselj_adjacent,
-    besselj_ratio_jnm1,
-    besselk0,
-    besselk1,
-    besselk,
-    besselk_seq,
-    besselk_adjacent,
-    besselk_ratio_knm1,
-)
-
 # Chebyshev (first, second, third, fourth kind)
 from .cheby import (  # NOQA
     cheby1,
     cheby1_seq,
     cheby1_der,
     cheby1_der_seq,
+    cheby1_2d_sum,
+    cheby1_2d_sum_der_xy,
     cheby2,
     cheby2_seq,
     cheby2_der,
@@ -81,6 +65,8 @@ from .jacobi import (  # NOQA
     jacobi_der_seq,
     jacobi_sum_clenshaw,
     jacobi_sum_clenshaw_der,
+    jacobi_radial_sum,
+    jacobi_radial_sum_der_xy,
 )
 
 # Laguerre (used for Laguerre-Gaussian beams)
@@ -132,6 +118,8 @@ from .xy import (  # NOQA
     xy_der_y_seq,
     xy_der_xy,
     xy_der_xy_seq,
+    xy_sum,
+    xy_sum_der_xy,
 )
 
 # Zernike (n, m).  zernike_nm_der is the polar (dr, dt) pair; zernike_nm_der_xy
@@ -145,6 +133,7 @@ from .zernike import (  # NOQA
     zernike_nm_der_seq,
     zernike_nm_der_xy,
     zernike_nm_der_xy_seq,
+    zernike_sum,
     zernike_sum_der_xy,
     zernikes_to_magnitude_angle,
     zernikes_to_magnitude_angle_nmkey,

@@ -2,6 +2,11 @@
 import numpy as np
 import pytest
 
+from tests.x.raytracing.surface_helpers import (
+    plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
+    chebyshev, jacobi, toroid, biconic,
+)
+
 from prysm.x.raytracing.raygen import (
     concat_rayfans,
     split_rayfans,
@@ -144,7 +149,7 @@ def test_newton_solver_valid_mask_flags_nonconvergence():
     """A ray that won't reach the surface within maxiter should be flagged invalid."""
     # use a very low maxiter and a steep curvature so the iteration doesn't
     # have time to converge for off-axis rays
-    surf = Surface.conic(c=1 / 5.0, k=-2.0, typ='refl', P=np.array([0., 0., 0.]))
+    surf = conic(c=1 / 5.0, k=-2.0, typ='refl', P=np.array([0., 0., 0.]))
     # build via a generic Surface (forces Newton, not the analytic Conic path)
     bare = Surface(typ='refl', P=np.array([0., 0., 0.]), n=None,
                    FFp=surf.FFp, F=surf.F, params=dict(surf.params))
@@ -164,7 +169,7 @@ def test_analytic_intersect_valid_mask_flags_no_intersection():
     """An off-axis ray that lies outside the sphere's extent should be
     reported invalid (negative discriminant) by the analytic conic path."""
     # sphere of radius 50 centered at (0,0,50), vertex at origin, axis +z
-    surf = Surface.sphere(c=1 / 50.0, typ='refl', P=np.array([0., 0., 0.]), n=None)
+    surf = sphere(c=1 / 50.0, typ='refl', P=np.array([0., 0., 0.]), n=None)
     # axial ray (hits the vertex) and an off-axis ray with x=60 > R=50 going +z
     # (the implicit sphere equation has no real root for that ray)
     P = np.array([[0., 0., -10.],
@@ -178,7 +183,7 @@ def test_analytic_intersect_valid_mask_flags_no_intersection():
 
 def test_default_intersect_call_unchanged():
     """The 2-tuple unpacking convention must keep working when return_valid is omitted."""
-    surf = Surface.conic(c=1 / 80., k=-1.0, typ='refl', P=np.array([0., 0., 0.]))
+    surf = conic(c=1 / 80., k=-1.0, typ='refl', P=np.array([0., 0., 0.]))
     P, S = _ray_batch(span=3.0)
     result = surf.intersect(P, S)
     assert isinstance(result, tuple)

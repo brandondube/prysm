@@ -2,14 +2,14 @@
 import numpy as np
 import pytest
 
+from tests.x.raytracing.surface_helpers import (
+    plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
+    chebyshev, jacobi, toroid, biconic,
+)
+
 from prysm.x.raytracing.surfaces import (
     Surface,
-    Plane,
-    Sphere,
-    Conic,
-    OffAxisConic,
-    EvenAsphere,
-    SurfaceQ2D,
+    Q2DSag,
     conic_sag,
     conic_sag_der_xy,
     even_asphere_sag,
@@ -134,11 +134,11 @@ def test_xy_derivatives_finite_at_origin(dx, dy):
 
 
 def test_surface_conic_FFp_finite_at_origin():
-    """Surface.conic / off_axis_conic / sphere FFp must not produce NaN/Inf at origin."""
+    """Conic-like FFp paths must not produce NaN/Inf at origin."""
     P = np.array([0.0, 0.0, 0.0])
-    s_conic = Surface.conic(c=1 / 80.0, k=-1.0, typ='refl', P=P)
-    s_oac = Surface.off_axis_conic(c=1 / 80.0, k=-1.0, typ='refl', P=P, dx=3.0, dy=4.0)
-    s_sphere = Surface.sphere(c=1 / 80.0, typ='refl', P=P, n=None)
+    s_conic = conic(c=1 / 80.0, k=-1.0, typ='refl', P=P)
+    s_oac = off_axis_conic(c=1 / 80.0, k=-1.0, typ='refl', P=P, dx=3.0, dy=4.0)
+    s_sphere = sphere(c=1 / 80.0, typ='refl', P=P, n=None)
 
     x = np.array([0.0, 1.0, -2.0])
     y = np.array([0.0, -1.0, 3.0])
@@ -273,7 +273,7 @@ def _ray_batch(seed=0, span=8.0, n=15):
 
 def test_ray_plane_intersect_matches_newton():
     P, S = _ray_batch()
-    surf = Surface.plane('refl', np.array([0.0, 0.0, 0.0]))
+    surf = plane('refl', np.array([0.0, 0.0, 0.0]))
     Q_an, n_an = surf.intersect(P, S)              # analytic via Plane subclass
     Q_nw, n_nw = newton_intersect(P, S, surf.sag_normal)
     np.testing.assert_allclose(Q_an, Q_nw, atol=1e-10)
@@ -283,7 +283,7 @@ def test_ray_plane_intersect_matches_newton():
 @pytest.mark.parametrize('c', [1 / 50.0, -1 / 50.0])
 def test_ray_sphere_intersect_matches_newton(c):
     P, S = _ray_batch(span=4.0)
-    surf = Surface.sphere(c, 'refl', np.array([0.0, 0.0, 0.0]), n=None)
+    surf = sphere(c, 'refl', np.array([0.0, 0.0, 0.0]), n=None)
     Q_an, n_an = surf.intersect(P, S)
     Q_nw, n_nw = newton_intersect(P, S, surf.sag_normal)
     np.testing.assert_allclose(Q_an, Q_nw, atol=1e-9)
@@ -294,7 +294,7 @@ def test_ray_sphere_intersect_matches_newton(c):
                                   (1 / 50.0, 0.7), (-1 / 60.0, -1.0)])
 def test_ray_conic_intersect_matches_newton(c, k):
     P, S = _ray_batch(span=4.0)
-    surf = Surface.conic(c, k, 'refl', np.array([0.0, 0.0, 0.0]))
+    surf = conic(c, k, 'refl', np.array([0.0, 0.0, 0.0]))
     Q_an, n_an = surf.intersect(P, S)
     Q_nw, n_nw = newton_intersect(P, S, surf.sag_normal)
     np.testing.assert_allclose(Q_an, Q_nw, atol=1e-9)
@@ -305,7 +305,7 @@ def test_ray_conic_intersect_matches_newton(c, k):
 def test_ray_off_axis_conic_intersect_matches_newton(dx, dy):
     c = 1 / 80.0
     k = -1.0
-    surf = Surface.off_axis_conic(c, k, 'refl', np.array([0.0, 0.0, 0.0]),
+    surf = off_axis_conic(c, k, 'refl', np.array([0.0, 0.0, 0.0]),
                                   dx=dx, dy=dy)
     P, S = _ray_batch(span=3.0)
     Q_an, n_an = surf.intersect(P, S)
@@ -318,7 +318,7 @@ def test_ray_off_axis_conic_intersect_matches_newton(dx, dy):
 
 def test_paraboloid_axial_ray_returns_vertex():
     """Special case: A_ = 1 + k Sz^2 = 0 for paraboloid + axial ray."""
-    surf = Surface.conic(1.0, -1.0, 'refl', np.array([0.0, 0.0, 0.0]))
+    surf = conic(1.0, -1.0, 'refl', np.array([0.0, 0.0, 0.0]))
     P = np.array([[0.0, 0.0, -5.0]])
     S = np.array([[0.0, 0.0, 1.0]])
     Q, n = surf.intersect(P, S)
@@ -327,9 +327,9 @@ def test_paraboloid_axial_ray_returns_vertex():
 
 
 def test_generic_surface_falls_back_to_newton():
-    """A bare Surface (not a Plane/Sphere/Conic subclass) must still work."""
+    """A bare callable Surface must still work."""
     # build a plain Surface holding the same FFp closure as Sphere, but
-    # without the analytic intersect override
+    # without a shape-level analytic intersect
     c = 1 / 100.0
 
     def FFp(x, y):
@@ -343,7 +343,7 @@ def test_generic_surface_falls_back_to_newton():
 
     bare = Surface(typ='refl', P=np.array([0.0, 0.0, 0.0]), n=None,
                    FFp=FFp, F=F, params={'c': c})
-    sph = Surface.sphere(c, 'refl', np.array([0.0, 0.0, 0.0]), n=None)
+    sph = sphere(c, 'refl', np.array([0.0, 0.0, 0.0]), n=None)
     P, S = _ray_batch(span=5.0)
     Q_bare, _ = bare.intersect(P, S)
     Q_sph, _ = sph.intersect(P, S)
@@ -391,8 +391,8 @@ def test_even_asphere_with_empty_coefs_equals_conic():
     """Empty coefficient list ⇒ EvenAsphere acts as a Conic."""
     c, k = 1 / 80.0, -1.0
     P0 = np.array([0.0, 0.0, 0.0])
-    s_asph = Surface.even_asphere(c, k, (), 'refl', P0)
-    s_conic = Surface.conic(c, k, 'refl', P0)
+    s_asph = even_asphere(c, k, (), 'refl', P0)
+    s_conic = conic(c, k, 'refl', P0)
     P, S = _ray_batch(span=4.0)
     Q_a, n_a = s_asph.intersect(P, S)
     Q_c, n_c = s_conic.intersect(P, S)
@@ -406,7 +406,7 @@ def test_even_asphere_intersect_matches_naive_newton():
     c, k = 1 / 5.0, -0.5
     coefs = (1e-3, 1e-5, 1e-7)
     P0 = np.array([0.0, 0.0, 0.0])
-    s_asph = Surface.even_asphere(c, k, coefs, 'refr', P0, n=lambda w: 1.5)
+    s_asph = even_asphere(c, k, coefs, 'refr', P0, n=lambda w: 1.5)
     # bare Surface using the same FFp
     bare = Surface(typ='refr', P=P0, n=lambda w: 1.5, FFp=s_asph.FFp,
                    F=s_asph.F, params=dict(s_asph.params))
@@ -421,7 +421,7 @@ def test_even_asphere_intersect_converges_with_low_maxiter():
     """The conic-seeded Newton should converge in very few iterations."""
     c, k = 1 / 10.0, -1.0
     coefs = (1e-4, 1e-6)
-    s = Surface.even_asphere(c, k, coefs, 'refr',
+    s = even_asphere(c, k, coefs, 'refr',
                              np.array([0.0, 0.0, 0.0]), n=lambda w: 1.5)
     P, S = _ray_batch(span=2.0)
     # 5 iterations is comfortably enough when seeded from the conic root;
@@ -433,18 +433,18 @@ def test_even_asphere_intersect_converges_with_low_maxiter():
 
 
 def test_raytrace_end_to_end_analytic_vs_newton():
-    """Full-system raytrace: Newton (via generic Surface) and analytic (via subclasses)
+    """Full-system raytrace: Newton (via callable Surface) and analytic (via shapes)
     must agree on every (P, S) and OPL up to Newton tolerance."""
     c1, c2, k1, k2 = 1 / -200.0, 1 / -67.0, -1.0, -2.5
     P_pm = np.array([0.0, 0.0, 0.0])
     P_sm = np.array([0.0, 0.0, -80.0])
     P_img = np.array([0.0, 0.0, 50.0])
 
-    # analytic path: factory methods return Plane/Sphere/Conic/OffAxisConic
+    # analytic path: shape objects provide analytic intersection
     surfs_an = [
-        Surface.conic(c1, k1, 'refl', P_pm),
-        Surface.conic(c2, k2, 'refl', P_sm),
-        Surface.plane('eval', P_img),
+        conic(c1, k1, 'refl', P_pm),
+        conic(c2, k2, 'refl', P_sm),
+        plane('eval', P_img),
     ]
 
     # newton path: build bare Surface with the same FFp closure
@@ -481,16 +481,16 @@ def test_raytrace_end_to_end_analytic_vs_newton():
     np.testing.assert_allclose(OPL_an, OPL_nw, atol=1e-7)
 
 
-# ---------- SurfaceQ2D ----------
+# ---------- Q2DSag ----------
 
 def test_q2d_zero_coefficients_matches_conic():
     """Q2D with all-zero Q coefs is exactly a Conic."""
     c, k = 1 / 200., -1.0
     P_at = np.array([0., 0., 0.])
-    s_q2d = Surface.q2d(c=c, k=k, normalization_radius=20.0,
+    s_q2d = q2d(c=c, k=k, normalization_radius=20.0,
                         cm0=[0.0], ams=[[0.0]], bms=[[0.0]],
                         typ='refl', P=P_at)
-    s_conic = Surface.conic(c=c, k=k, typ='refl', P=P_at)
+    s_conic = conic(c=c, k=k, typ='refl', P=P_at)
     P, S = _ray_batch(span=10.0)
     Q_q, n_q = s_q2d.intersect(P, S)
     Q_c, n_c = s_conic.intersect(P, S)
@@ -498,24 +498,24 @@ def test_q2d_zero_coefficients_matches_conic():
     np.testing.assert_allclose(n_q, n_c, atol=1e-9)
 
 
-def test_q2d_factory_returns_SurfaceQ2D():
-    s = Surface.q2d(c=1 / 100., k=0.0, normalization_radius=10.0,
+def test_q2d_factory_returns_surface_with_q2d_shape():
+    s = q2d(c=1 / 100., k=0.0, normalization_radius=10.0,
                     cm0=[0.0], ams=[[0.0]], bms=[[0.0]],
                     typ='refl', P=np.array([0., 0., 0.]))
-    assert isinstance(s, SurfaceQ2D)
+    assert isinstance(s.shape, Q2DSag)
     # params dict is preserved
     assert s.params['normalization_radius'] == 10.0
 
 
 def test_q2d_FFp_sag_matches_Q2d_and_der_directly():
-    """Surface.q2d's FFp must return the same z as a direct Q2d_and_der call."""
+    """Q2DSag.FFp must return the same z as a direct Q2d_and_der call."""
     from prysm.x.raytracing.surfaces import Q2d_and_der
     c, k = 1 / 200., -1.0
     norm_r = 15.0
     cm0 = (1e-3, 5e-5)
     ams = ((1e-4, 0.0),)
     bms = ((0.0, 0.0),)
-    s = Surface.q2d(c=c, k=k, normalization_radius=norm_r,
+    s = q2d(c=c, k=k, normalization_radius=norm_r,
                     cm0=cm0, ams=ams, bms=bms,
                     typ='refl', P=np.array([0., 0., 0.]))
     rng = np.random.default_rng(7)
@@ -527,7 +527,7 @@ def test_q2d_FFp_sag_matches_Q2d_and_der_directly():
 
 
 def test_q2d_FFp_xy_derivatives_match_finite_diff():
-    """The chain-rule polar→Cartesian conversion in Surface.q2d must agree
+    """The chain-rule polar-to-Cartesian conversion in Q2DSag must agree
     with central differences taken on the sag.  Skip points near r=0 (where
     the function approximates the gradient as zero)."""
     c, k = 1 / 200., -1.0
@@ -535,7 +535,7 @@ def test_q2d_FFp_xy_derivatives_match_finite_diff():
     cm0 = (1e-3, 5e-5)
     ams = ((1e-4,),)
     bms = ((5e-5,),)
-    s = Surface.q2d(c=c, k=k, normalization_radius=norm_r,
+    s = q2d(c=c, k=k, normalization_radius=norm_r,
                     cm0=cm0, ams=ams, bms=bms,
                     typ='refl', P=np.array([0., 0., 0.]))
     rng = np.random.default_rng(9)
@@ -557,8 +557,8 @@ def test_q2d_FFp_xy_derivatives_match_finite_diff():
 
 
 def test_q2d_intersect_finite_at_origin():
-    """An axial ray intersecting a SurfaceQ2D must return a finite (Q, normal)."""
-    s = Surface.q2d(c=1 / 200., k=-1.0, normalization_radius=20.0,
+    """An axial ray intersecting a Q2DSag surface must return a finite (Q, normal)."""
+    s = q2d(c=1 / 200., k=-1.0, normalization_radius=20.0,
                     cm0=[1e-3], ams=[[0.0]], bms=[[0.0]],
                     typ='refl', P=np.array([0., 0., 0.]))
     P = np.array([[0., 0., -100.]])
@@ -571,7 +571,7 @@ def test_q2d_intersect_finite_at_origin():
 def test_q2d_intersect_seeded_newton_converges_quickly():
     """The conic-seeded Newton should reach machine precision in just a few
     iterations because the Q correction is small."""
-    s = Surface.q2d(c=1 / 200., k=-1.0, normalization_radius=20.0,
+    s = q2d(c=1 / 200., k=-1.0, normalization_radius=20.0,
                     cm0=[5e-4], ams=[[0.0]], bms=[[0.0]],
                     typ='refl', P=np.array([0., 0., 0.]))
     P, S = _ray_batch(span=8.0)
@@ -581,12 +581,12 @@ def test_q2d_intersect_seeded_newton_converges_quickly():
 
 
 def test_q2d_with_off_axis_conic_base():
-    """SurfaceQ2D supports a dx/dy-shifted base conic (off-axis paraboloid + Q)."""
-    s = Surface.q2d(c=1 / 200., k=-1.0, normalization_radius=20.0,
+    """Q2DSag supports a dx/dy-shifted base conic (off-axis paraboloid + Q)."""
+    s = q2d(c=1 / 200., k=-1.0, normalization_radius=20.0,
                     cm0=[0.0], ams=[[0.0]], bms=[[0.0]],
                     typ='refl', P=np.array([0., 0., 0.]),
                     dx=0.0, dy=20.0)
-    s_oac = Surface.off_axis_conic(c=1 / 200., k=-1.0, typ='refl',
+    s_oac = off_axis_conic(c=1 / 200., k=-1.0, typ='refl',
                                    P=np.array([0., 0., 0.]),
                                    dy=20.0)
     P, S = _ray_batch(span=8.0)

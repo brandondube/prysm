@@ -6,16 +6,8 @@ from prysm import coordinates
 
 from prysm.coordinates import cart_to_polar
 from prysm import polynomials
-from prysm.polynomials.bessel import _series_tol
 
 from scipy.special import (
-    j0 as sps_j0,
-    j1 as sps_j1,
-    jv as sps_jv,
-    k0 as sps_k0,
-    k1 as sps_k1,
-    kve as sps_kve,
-    kv as sps_kv,
     jacobi as sps_jac,
     legendre as sps_leg,
     chebyt as sps_cheby1,
@@ -32,8 +24,6 @@ rho, phi = cart_to_polar(X, Y)
 
 # for Laguerre, orthogonal on [0,inf]; cutoff at 10 is arbitrary
 XLEFT = np.linspace(0, 10, SAMPLES)
-BESSEL_X = np.linspace(0, 40, 257)
-BESSEL_KX = np.linspace(0.05, 40, 257)
 
 
 @pytest.fixture
@@ -46,104 +36,6 @@ def rho():
 def phi():
     rho, phi = cart_to_polar(X, Y)
     return phi
-
-
-# Bessel functions
-
-
-@pytest.mark.parametrize('dtype', [np.float16, np.float32, np.float64])
-def test_bessel_series_tol_follows_dtype_eps(dtype):
-    x = np.ones(1, dtype=dtype)
-    assert _series_tol(x) == 50 * np.finfo(dtype).eps
-
-
-def test_besselj0_matches_scipy():
-    np.testing.assert_allclose(polynomials.besselj0(BESSEL_X), sps_j0(BESSEL_X), atol=2e-14, rtol=2e-14)
-
-
-def test_besselj1_matches_scipy():
-    np.testing.assert_allclose(polynomials.besselj1(BESSEL_X), sps_j1(BESSEL_X), atol=2e-14, rtol=2e-14)
-
-
-@pytest.mark.parametrize('n', [0, 1, 2, 3, 5, 12, 24])
-def test_besselj_matches_scipy(n):
-    np.testing.assert_allclose(polynomials.besselj(n, BESSEL_X), sps_jv(n, BESSEL_X), atol=2e-14, rtol=1e-12)
-
-
-def test_high_order_besselj_series_does_not_overflow():
-    x = np.linspace(0, 90, 64)
-    with np.errstate(over='raise', invalid='raise'):
-        out = polynomials.besselj(200, x)
-    np.testing.assert_allclose(out, sps_jv(200, x), atol=1e-14, rtol=1e-10)
-
-
-def test_high_order_besselj_miller_does_not_overflow():
-    x = np.linspace(110, 190, 64)
-    with np.errstate(over='raise', invalid='raise'):
-        out = polynomials.besselj(200, x)
-    np.testing.assert_allclose(out, sps_jv(200, x), atol=1e-14, rtol=1e-10)
-
-
-def test_besselj_negative_order_identity():
-    x = np.linspace(0.1, 12, 64)
-    np.testing.assert_allclose(polynomials.besselj(-3, x), -polynomials.besselj(3, x), atol=1e-13, rtol=1e-13)
-
-
-def test_besselj_seq_matches_loop():
-    ns = [0, 1, 2, 5, 12]
-    seq = polynomials.besselj_seq(ns, BESSEL_X)
-    loop = [polynomials.besselj(n, BESSEL_X) for n in ns]
-    for elem, exp in zip(seq, loop):
-        np.testing.assert_allclose(elem, exp)
-
-
-def test_besselj_adjacent_and_ratio():
-    x = np.linspace(1, 20, 128)
-    jm1, jn = polynomials.besselj_adjacent(5, x)
-    np.testing.assert_allclose(jm1, polynomials.besselj(4, x))
-    np.testing.assert_allclose(jn, polynomials.besselj(5, x))
-    np.testing.assert_allclose(polynomials.besselj_ratio_jnm1(5, x), jm1 / jn)
-
-
-def test_besselk0_matches_scipy():
-    np.testing.assert_allclose(polynomials.besselk0(BESSEL_KX), sps_k0(BESSEL_KX), atol=2e-14, rtol=2e-14)
-
-
-def test_besselk1_matches_scipy():
-    np.testing.assert_allclose(polynomials.besselk1(BESSEL_KX), sps_k1(BESSEL_KX), atol=2e-14, rtol=2e-14)
-
-
-@pytest.mark.parametrize('n', [0, 1, 2, 3, 5, 12])
-def test_besselk_matches_scipy(n):
-    np.testing.assert_allclose(polynomials.besselk(n, BESSEL_KX), sps_kv(n, BESSEL_KX), atol=2e-14, rtol=2e-13)
-
-
-def test_besselk_negative_order_identity():
-    x = np.linspace(0.1, 12, 64)
-    np.testing.assert_allclose(polynomials.besselk(-3, x), polynomials.besselk(3, x), atol=1e-13, rtol=1e-13)
-
-
-def test_besselk_seq_matches_loop():
-    ns = [0, 1, 2, 5, 12]
-    seq = polynomials.besselk_seq(ns, BESSEL_KX)
-    loop = [polynomials.besselk(n, BESSEL_KX) for n in ns]
-    for elem, exp in zip(seq, loop):
-        np.testing.assert_allclose(elem, exp)
-
-
-def test_besselk_adjacent_and_ratio():
-    x = np.linspace(1, 20, 128)
-    km1, kn = polynomials.besselk_adjacent(5, x)
-    np.testing.assert_allclose(km1, polynomials.besselk(4, x))
-    np.testing.assert_allclose(kn, polynomials.besselk(5, x))
-    np.testing.assert_allclose(polynomials.besselk_ratio_knm1(5, x), km1 / kn)
-
-
-def test_high_order_besselk_ratio_does_not_overflow():
-    x = np.linspace(20, 100, 64)
-    with np.errstate(over='raise', invalid='raise'):
-        out = polynomials.besselk_ratio_knm1(200, x)
-    np.testing.assert_allclose(out, sps_kve(199, x) / sps_kve(200, x), atol=1e-14, rtol=1e-12)
 
 
 # XY poly

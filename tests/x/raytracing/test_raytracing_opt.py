@@ -2,6 +2,11 @@
 import numpy as np
 import pytest
 
+from tests.x.raytracing.surface_helpers import (
+    plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
+    chebyshev, jacobi, toroid, biconic,
+)
+
 from prysm.x.raytracing.surfaces import Surface
 from prysm.x.raytracing.opt import (
     paraxial_image_solve,
@@ -33,10 +38,10 @@ def test_paraxial_image_solve_single_refracting_sphere():
     expected_image_z = n_glass * R / (n_glass - 1.0)  # 150
 
     prescription = [
-        Surface.sphere(c=1.0 / R, typ='refr', P=np.array([0., 0., 0.]),
+        sphere(c=1.0 / R, typ='refr', P=np.array([0., 0., 0.]),
                        n=lambda wvl: n_glass),
         # eval plane somewhere downstream so the rays haven't converged yet
-        Surface.plane(typ='eval', P=np.array([0., 0., 100.])),
+        plane(typ='eval', P=np.array([0., 0., 100.])),
     ]
     P_img = paraxial_image_solve(prescription, z=0, epd=10.0)
     np.testing.assert_allclose(P_img[2], expected_image_z, rtol=1e-3)
@@ -48,9 +53,9 @@ def test_paraxial_image_solve_paraxial_fraction_kwarg():
     """Sweeping paraxial_fraction across orders of magnitude should give the
     same paraxial image position; the kwarg is therefore live."""
     prescription = [
-        Surface.sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
+        sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
                        n=lambda wvl: 1.5),
-        Surface.plane(typ='eval', P=np.array([0., 0., 100.])),
+        plane(typ='eval', P=np.array([0., 0., 100.])),
     ]
     img_default = paraxial_image_solve(prescription, z=0, epd=10.0)
     img_smaller = paraxial_image_solve(prescription, z=0, epd=10.0,
@@ -68,8 +73,8 @@ def test_paraxial_image_solve_requires_na_or_epd():
 def test_ray_aim_hits_target_on_simple_mirror():
     """Aim a single ray at a transverse target on a flat eval surface."""
     prescription = [
-        Surface.conic(c=1 / 200.0, k=-1.0, typ='refl', P=np.array([0., 0., 0.])),
-        Surface.plane(typ='eval', P=np.array([0., 0., -50.])),  # rays head -z after reflection
+        conic(c=1 / 200.0, k=-1.0, typ='refl', P=np.array([0., 0., 0.])),
+        plane(typ='eval', P=np.array([0., 0., -50.])),  # rays head -z after reflection
     ]
     # incoming collimated ray at (0, ?, -100) → +z; we adjust the (x, y)
     # launch position so the ray hits target=(2, -1, ?) on the eval plane.
@@ -91,8 +96,8 @@ def test_ray_aim_strict_raises_on_failure():
     Inverted bounds (low > high) make L-BFGS-B fail before it even starts.
     """
     prescription = [
-        Surface.conic(c=1 / 200.0, k=-1.0, typ='refl', P=np.array([0., 0., 0.])),
-        Surface.plane(typ='eval', P=np.array([0., 0., -50.])),
+        conic(c=1 / 200.0, k=-1.0, typ='refl', P=np.array([0., 0., 0.])),
+        plane(typ='eval', P=np.array([0., 0., -50.])),
     ]
     P0 = np.array([0., 0., -100.])
     S0 = np.array([0., 0., 1.])
@@ -108,8 +113,8 @@ def test_ray_aim_strict_raises_on_failure():
 def test_ray_aim_strict_false_does_not_raise():
     """strict=False must not raise even if L-BFGS-B reports non-success."""
     prescription = [
-        Surface.conic(c=1 / 200.0, k=-1.0, typ='refl', P=np.array([0., 0., 0.])),
-        Surface.plane(typ='eval', P=np.array([0., 0., -50.])),
+        conic(c=1 / 200.0, k=-1.0, typ='refl', P=np.array([0., 0., 0.])),
+        plane(typ='eval', P=np.array([0., 0., -50.])),
     ]
     P0 = np.array([0., 0., -100.])
     S0 = np.array([0., 0., 1.])
@@ -196,9 +201,9 @@ def test_rc_prescription_paraxial_image_at_bfl():
     P_sm = np.array([0.0, 0.0, -sep])
     P_img = np.array([0.0, 0.0, bfl - sep])  # bfl measured from SM
     prescription = [
-        Surface.conic(c1, k1, 'refl', P_pm),
-        Surface.conic(c2, k2, 'refl', P_sm),
-        Surface.plane('eval', P_img),
+        conic(c1, k1, 'refl', P_pm),
+        conic(c2, k2, 'refl', P_sm),
+        plane('eval', P_img),
     ]
     img = paraxial_image_solve(prescription, z=0, epd=200.0)
     # paraxial image z should match the design BFL location

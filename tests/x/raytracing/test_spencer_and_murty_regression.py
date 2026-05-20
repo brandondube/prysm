@@ -16,6 +16,11 @@ import hashlib
 
 import numpy as np
 
+from tests.x.raytracing.surface_helpers import (
+    plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
+    chebyshev, jacobi, toroid, biconic,
+)
+
 from prysm.x.raytracing.surfaces import Surface
 from prysm.x.raytracing.spencer_and_murty import newton_raphson_solve_s
 
@@ -33,7 +38,7 @@ def _ray_batch():
 
 
 def _asphere():
-    return Surface.even_asphere(1 / 10.0, -1.0, (1e-4, 1e-6), 'refr',
+    return even_asphere(1 / 10.0, -1.0, (1e-4, 1e-6), 'refr',
                                 np.array([0.0, 0.0, 0.0]), n=lambda w: 1.5)
 
 
@@ -115,7 +120,7 @@ def test_all_converge_first_iter_snapshot():
     """Single axial ray on a Plane via the bare Newton path.  Tests the
     fast-exit branch where every ray converges before maxiter completes.
     """
-    surf = Surface.plane('refl', np.array([0.0, 0.0, 0.0]))
+    surf = plane('refl', np.array([0.0, 0.0, 0.0]))
     P = np.array([[0.0, 0.0, -10.0]], dtype=np.float64)
     S = np.array([[0.0, 0.0, 1.0]], dtype=np.float64)
     P1 = P + (-P[:, 2] / S[:, 2])[:, None] * S

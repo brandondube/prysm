@@ -17,6 +17,7 @@ from .jacobi import (
 )
 
 from prysm.mathops import np, kronecker, sign, is_odd
+from prysm.coordinates import cart_to_polar
 from prysm.util import sort_xy
 from prysm.plotting import share_fig_ax
 
@@ -163,6 +164,21 @@ def zernike_nm_seq(nms, r, t, norm=True):
             k += 1
 
     return out
+
+
+def zernike_sum(coefs, nms, x, y, norm=True):
+    """Evaluate a weighted Zernike sum on Cartesian unit-disk coordinates."""
+    nms = tuple(nms)
+    if not nms:
+        return np.zeros_like(x)
+    r, t = cart_to_polar(x, y, vec_to_grid=False)
+    Zk = zernike_nm_seq(nms, r, t, norm=norm)
+    z = np.zeros_like(x)
+    for c, Zi in zip(coefs, Zk):
+        if c == 0.0:
+            continue
+        z = z + c * Zi
+    return z
 
 
 def zernike_nm_der(n, m, r, t, norm=True):

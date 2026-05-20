@@ -298,3 +298,30 @@ def xy_der_xy_seq(mns, x, y, cartesian_grid=True):
         mns, x, y, cartesian_grid,
         _monomial_der_seq, _monomial_der_seq,
     )
+
+
+def xy_sum(coefs, mns, x, y, cartesian_grid=True):
+    """Evaluate a weighted sum of XY monomials."""
+    mns = tuple(mns)
+    if not mns:
+        return np.zeros_like(x)
+    modes = xy_seq(mns, x, y, cartesian_grid=cartesian_grid)
+    return np.tensordot(np.asarray(coefs, dtype=modes.dtype), modes, axes=1)
+
+
+def xy_sum_der_xy(coefs, mns, x, y, cartesian_grid=True):
+    """Evaluate a weighted XY sum and its Cartesian first derivatives."""
+    mns = tuple(mns)
+    if not mns:
+        z = np.zeros_like(x)
+        return z, z, np.zeros_like(y)
+    coefs = np.asarray(coefs)
+    modes = xy_seq(mns, x, y, cartesian_grid=cartesian_grid)
+    dx_modes = xy_der_x_seq(mns, x, y, cartesian_grid=cartesian_grid)
+    dy_modes = xy_der_y_seq(mns, x, y, cartesian_grid=cartesian_grid)
+    if coefs.dtype != modes.dtype:
+        coefs = coefs.astype(modes.dtype)
+    z = np.tensordot(coefs, modes, axes=1)
+    dzdx = np.tensordot(coefs, dx_modes, axes=1)
+    dzdy = np.tensordot(coefs, dy_modes, axes=1)
+    return z, dzdx, dzdy

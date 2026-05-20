@@ -46,13 +46,14 @@ class RayTraceResult:
 
     """
 
-    __slots__ = ('P', 'S', 'OPL', 'status')
+    __slots__ = ('P', 'S', 'OPL', 'status', 'status_record')
 
     def __init__(self, P, S, OPL, status):
         self.P = P
         self.S = S
         self.OPL = OPL
         self.status = status
+        self.status_record = RayStatus.from_encoded(status)
 
     def __iter__(self):
         # legacy 3-tuple unpacking: yield P, S, OPL (status is opt-in via
@@ -70,6 +71,79 @@ class RayTraceResult:
             f'N_surfaces={self.P.shape[0] - 1}, '
             f'valid={int((self.status.imag == 0).sum())})'
         )
+
+
+class RayStatus:
+    """Structured view of per-ray trace status."""
+
+    __slots__ = ('surface', 'code')
+
+    def __init__(self, surface, code):
+        self.surface = surface
+        self.code = code
+
+    @classmethod
+    def from_encoded(cls, status):
+        return cls(status.real.astype(int), status.imag.astype(int))
+
+    @property
+    def encoded(self):
+        return self.surface + 1j * self.code
+
+
+def _failure_code_for_surface(surf):
+    if getattr(surf, '_analytic_intersect', False):
+        return STATUS_MISS
+    return STATUS_NEWTON
+
+
+def _record_failure(status, active, failed, surf_idx, code):
+    failed = active & failed
+    if failed.any():
+        status[failed] = surf_idx + code * 1j
+        active = active & ~failed
+    return active
+
+
+def _apply_aperture_status(surf, Pj, active, status, surf_idx):
+    if surf.aperture is None or not active.any():
+        return active
+    inside = np.asarray(surf.aperture(Pj[..., 0], Pj[..., 1]), dtype=bool)
+    return _record_failure(status, active, ~inside, surf_idx, STATUS_CLIP)
+
+
+def _bend_rays(surf, Sj, r, wvl, nj, active, status, surf_idx):
+    if surf.typ == STYPE_REFLECT:
+        return reflect(Sj, r), nj, active
+    if surf.typ == STYPE_REFRACT:
+        nprime = surf.n(wvl)
+        pre_refract = active.copy()
+        Sjp1 = refract(nj, nprime, Sj, r)
+        tir = pre_refract & np.isnan(Sjp1).any(axis=-1)
+        active = _record_failure(status, active, tir, surf_idx, STATUS_TIR)
+        return Sjp1, nprime, active
+    return Sj, nj, active
+
+
+def _apply_grating_status(surf, Sjp1, r, n_post, wvl, active, status, surf_idx):
+    if (surf.grating is None
+            or surf.typ not in (STYPE_REFLECT, STYPE_REFRACT)
+            or not active.any()):
+        return Sjp1, active
+    Sjp1_diff, valid_diff = surf.diffract(Sjp1, r, n_post, wvl)
+    active = _record_failure(status, active, ~valid_diff, surf_idx, STATUS_TIR)
+    return Sjp1_diff, active
+
+
+def _mark_inactive_history(Pjp1, Sjp1, OPL_segment, active):
+    inactive = ~active
+    if inactive.any():
+        Pjp1 = Pjp1.copy()
+        Sjp1 = Sjp1.copy()
+        Pjp1[inactive] = np.nan
+        Sjp1[inactive] = np.nan
+        OPL_segment[inactive] = np.nan
+    return Pjp1, Sjp1
 
 
 def _sanitize_eps(eps, dtype):
@@ -449,8 +523,8 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
 
     Steps (I, II, III, IV) utilize the functions:
     I   -> transform_to_local_coords
-    II  -> Surface.intersect (analytic on Plane/Sphere/Conic/OffAxisConic,
-           Newton-Raphson via newton_raphson_solve_s on the generic Surface)
+    II  -> Surface.intersect (analytic when the shape supplies it,
+           otherwise Newton-Raphson via newton_raphson_solve_s)
     III -> reflect or refract
     IV  -> transform_to_global_coords
 
@@ -464,8 +538,8 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
     # Surfaces whose intersect() has a closed-form geometric solution get
     # STATUS_MISS on failure (negative discriminant / outside supporting
     # region); Newton-driven surfaces get STATUS_NEWTON for non-convergence.
-    # Discrimination is via the ``_analytic_intersect`` class attribute set on
-    # Plane/Sphere/Conic/OffAxisConic.
+    # Discrimination is via Surface._analytic_intersect, copied from the
+    # shape object during construction.
     P = np.asarray(P)
     S = np.asarray(S)
     # promote 1D single-ray inputs to 2D batch shape for the duration of the
@@ -487,86 +561,34 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
     nj = n_ambient
     for j, surf in enumerate(surfaces):
         surf_idx = j + 1  # 1-based index recorded in status.real
-        # I - transform from global to local coordinates
         P0, Sj = transform_to_local_coords(Pj, surf.P, Sj, surf.R)
-        # II - find ray intersection (analytic if available, else Newton-Raphson)
         Pj, r, valid = surf.intersect(P0, Sj, return_valid=True)
-        # encode geometry / convergence failures: the failure code depends on
-        # which intersect path the surface uses.
-        active = (status.imag == 0)  # rays still propagating
-        if not valid.all():
-            failed = active & ~valid
-            if failed.any():
-                if getattr(surf, '_analytic_intersect', False):
-                    code = STATUS_MISS
-                else:
-                    code = STATUS_NEWTON
-                status[failed] = surf_idx + code * 1j
-                active = active & valid
-        # II.b - aperture clipping (after intersection, before bending)
-        if surf.aperture is not None and active.any():
-            inside = np.asarray(surf.aperture(Pj[..., 0], Pj[..., 1]),
-                                dtype=bool)
-            clipped = active & ~inside
-            if clipped.any():
-                status[clipped] = surf_idx + STATUS_CLIP * 1j
-                active = active & inside
-        # III - reflection or refraction
-        if surf.typ == STYPE_REFLECT:
-            Sjp1 = reflect(Sj, r)
-            n_post = nj
-        elif surf.typ == STYPE_REFRACT:
-            nprime = surf.n(wvl)
-            pre_refract = active.copy()
-            Sjp1 = refract(nj, nprime, Sj, r)
-            # TIR detection: any active ray that newly carries NaN
-            tir = pre_refract & np.isnan(Sjp1).any(axis=-1)
-            if tir.any():
-                status[tir] = surf_idx + STATUS_TIR * 1j
-                active = active & ~tir
-            n_post = nprime
-        else:
-            # other surface types do not bend rays
-            Sjp1 = Sj
-            Pjp1 = Pj
-            n_post = nj
-        # III.b - grating diffraction (refr/refl only); evanescent ⇒ TIR-like
-        if (surf.grating is not None
-                and surf.typ in (STYPE_REFLECT, STYPE_REFRACT)
-                and active.any()):
-            Sjp1_diff, valid_diff = surf.diffract(Sjp1, r, n_post, wvl)
-            evanescent = active & ~valid_diff
-            if evanescent.any():
-                status[evanescent] = surf_idx + STATUS_TIR * 1j
-                active = active & valid_diff
-            Sjp1 = Sjp1_diff
 
-        # IV - back to world coordinates
+        active = (status.imag == 0)
+        if not valid.all():
+            active = _record_failure(status, active, ~valid, surf_idx,
+                                     _failure_code_for_surface(surf))
+
+        active = _apply_aperture_status(surf, Pj, active, status, surf_idx)
+        Sjp1, n_post, active = _bend_rays(surf, Sj, r, wvl, nj, active,
+                                          status, surf_idx)
+        Sjp1, active = _apply_grating_status(surf, Sjp1, r, n_post, wvl,
+                                             active, status, surf_idx)
+
         if surf.R is None:
             Rt = None
         else:
-            # transformation matrix has inverse which is its transpose
             Rt = surf.R.T
         Pjp1, Sjp1 = transform_to_global_coords(Pj, surf.P, Sjp1, Rt)
-        # geometric path of the segment we just traversed (medium index = nj),
-        # computed in the global frame for batch+rotated-surface compatibility
+
         seg = Pjp1 - P_hist[j]
         seg_len = np.sqrt(np.sum(seg * seg, axis=-1))
         OPL_hist[j+1] = nj * seg_len
         if surf.typ == STYPE_REFRACT:
-            nj = nprime
+            nj = n_post
 
-        # Once a ray fails, do not keep propagating finite coordinates through
-        # downstream surfaces.  The first failure surface/mode is encoded in
-        # status; histories from that surface onward are NaN so consumers
-        # cannot mistake them for valid trace data.
-        inactive = ~active
-        if inactive.any():
-            Pjp1 = Pjp1.copy()
-            Sjp1 = Sjp1.copy()
-            Pjp1[inactive] = np.nan
-            Sjp1[inactive] = np.nan
-            OPL_hist[j+1][inactive] = np.nan
+        Pjp1, Sjp1 = _mark_inactive_history(Pjp1, Sjp1, OPL_hist[j+1],
+                                            active)
         P_hist[j+1] = Pjp1
         S_hist[j+1] = Sjp1
         Pj, Sj = Pjp1, Sjp1
