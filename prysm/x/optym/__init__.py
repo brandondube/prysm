@@ -58,4 +58,5 @@ from .optimizers import (  # NOQA
     RAdam,
     Yogi,
     LBFGSB,
+    PrysmLBFGSB,
 )

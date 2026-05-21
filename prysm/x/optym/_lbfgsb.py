@@ -134,6 +134,11 @@ class _LBFGSBBase:
 
     @property
     def _nbfgs_updates(self):
+        # The driver's internal BFGS-update counter.  The slot it lives in
+        # has shifted between scipy versions (F77 → C port re-laid isave),
+        # so do not use this for control flow — count NEW_X events in
+        # step() instead.  Kept for read-only introspection of the
+        # raw driver state.
         return self.isave[30]
 
     @property
@@ -151,8 +156,12 @@ class _LBFGSBBase:
         return np.array_equal(self._last_eval_x, x)
 
     def step(self):
-        """Perform one iteration of optimization."""
-        self.iter += 1
+        """Perform one iteration of optimization.
+
+        Drives the underlying setulb call sequence until it signals a
+        completed iteration (NEW_X), termination (CONVERGENCE), or an
+        error (STOP).  Each NEW_X corresponds to one outer iteration.
+        """
         x_start = self.x.copy()
         f_start = None
         g_start = None
@@ -161,7 +170,10 @@ class _LBFGSBBase:
             f_start = self._last_eval_f
             g_start = self._last_eval_g.copy()
 
-        while self._nbfgs_updates < self.iter:
+        # setulb's task state-machine fires several FG requests during
+        # its line search before declaring NEW_X.  Loop until that
+        # happens; bail on CONVERGENCE/STOP.
+        while True:
             self._call_driver()  # NOQA - defined by subclasses.
             task = self._decode_task()  # NOQA - defined by subclasses.
             if task == 'FG':
@@ -185,11 +197,13 @@ class _LBFGSBBase:
                 raise StopIteration
             if task == 'NEW_X':
                 break
-            if task is None and self._nbfgs_updates < self.iter:
-                raise RuntimeError(
-                    "L-BFGS-B driver returned an unknown task before "
-                    f"completing an iteration: {self._task_diagnostic()}"
-                )
+
+            raise RuntimeError(
+                "L-BFGS-B driver returned an unknown task: "
+                f"{self._task_diagnostic()}"
+            )
+
+        self.iter += 1
 
         if f_start is None:
             f_start, g_start = self.problem.fg(x_start)

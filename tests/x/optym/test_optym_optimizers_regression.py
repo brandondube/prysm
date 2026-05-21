@@ -10,6 +10,8 @@ dumping the first 30 iterates.  Loosen to allclose only if a
 deliberate numerics change is intended.
 
 """
+import warnings
+
 import numpy as np
 import pytest
 
@@ -129,12 +131,26 @@ def test_lbfgsb_step_returns_coherent_triple(x0):
 
 
 def test_lbfgsb_run_to_completes_quietly_on_quadratic(x0):
-    """run_to() must swallow StopIteration with a warning and return cleanly."""
+    """run_to() runs to completion without warning on a non-degenerate
+    quadratic: the driver does not signal CONVERGENCE while there is
+    still progress to make.
+    """
+    opt = LBFGSB(fg, x0)
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')   # any warning fails the test
+        traj = list(opt.run_to(10))
+    assert len(traj) == 10
+
+
+def test_lbfgsb_run_to_warns_when_driver_signals_convergence():
+    """If the underlying driver signals CONVERGENCE (e.g. when the
+    initial point is already a stationary point), run_to swallows the
+    StopIteration and emits a UserWarning instead of propagating.
+    """
+    x0 = np.zeros(4)           # gradient is exactly zero on `fg`
     opt = LBFGSB(fg, x0)
     with pytest.warns(UserWarning, match='L-BFGS-B'):
-        traj = list(opt.run_to(10))
-    # at least one iteration ran before convergence/early-stop
-    assert len(traj) >= 1
+        list(opt.run_to(10))
 
 
 def test_lbfgsb_alias_matches_scipy_version():

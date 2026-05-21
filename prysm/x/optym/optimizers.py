@@ -10,6 +10,7 @@ from .governors import (
 from .problem import as_problem
 
 from ._lbfgsb import LBFGSB  # NOQA - exporting optimizer
+from ._prysm_lbfgsb import PrysmLBFGSB  # NOQA - exporting optimizer
 
 
 def runN(optimizer, N):
