@@ -1,11 +1,12 @@
-"""L-BFGS-B (Byrd-Lu-Nocedal-Zhu 1995), pure-Python, backend-shim friendly.
+"""L-BFGS-B (Byrd-Lu-Nocedal-Zhu 1995 + Morales-Nocedal 2011), pure-Python,
+backend-shim friendly.
 
 Compact L-BFGS representation, generalized Cauchy point, primal direct
-subspace minimization.  All vector and matrix arithmetic flows through
-prysm.mathops.np so the same code runs on numpy, cupy, or any other
-shim-compatible backend.  Scalars from the Wolfe line search live on the
-host; an n-sized iterate, n-sized gradient, m*n history, and 2m-sized
-intermediates live on the backend.
+subspace minimization with the Morales-Nocedal 2011 projection refinement.
+All vector and matrix arithmetic flows through prysm.mathops.np so the same
+code runs on numpy, cupy, or any other shim-compatible backend.  Scalars
+from the Wolfe line search live on the host; an n-sized iterate, n-sized
+gradient, m*n history, and 2m-sized intermediates live on the backend.
 
 Behaves like every other class in optimizers.py: step returns
 (x_pre, f_pre, g_pre); the only StopIteration it raises is when the line
@@ -23,7 +24,14 @@ class PrysmLBFGSB:
 
     Limited-memory BFGS with box constraints.  Implements the algorithm of
     Byrd, Lu, Nocedal, and Zhu, "A Limited-Memory Algorithm for Bound
-    Constrained Optimization", SIAM J. Sci. Comput. 16(5), 1995.
+    Constrained Optimization", SIAM J. Sci. Comput. 16(5), 1995, with the
+    subspace-minimization refinement of Morales and Nocedal, "Remark on
+    Algorithm 778", ACM Trans. Math. Softw. 38(1), 2011: rather than
+    truncating the path from x_k to the unconstrained subspace minimizer
+    x_hat at the first bound it hits, the iterate is taken to be the
+    componentwise projection of x_hat into the box whenever that direction
+    is descent, falling back to BLNZ truncation only when projection
+    yields an ascent direction.
 
     Parameters
     ----------
@@ -353,6 +361,20 @@ class PrysmLBFGSB:
     #
     # so the subspace step requires a single 2k×2k solve plus row-sliced
     # backend mat–vecs.
+    #
+    # The unconstrained subspace minimizer x_hat = xc + Δx may sit outside
+    # the box.  BLNZ 1995 handle this by truncating the path from x_k to
+    # x_hat at the first bound it hits; this can give a uselessly small
+    # step on problems where one coord wants a long move and another sits
+    # near a bound.  Morales-Nocedal 2011 (ACM TOMS 38(1) Art. 7) replace
+    # the truncation with the componentwise projection
+    #
+    #     x_bar = P(x_hat, l, u)
+    #
+    # and take direction d = x_bar - x_k.  d is feasible at α=1 by
+    # construction, so the line search runs over [0, 1].  When d turns out
+    # to be an ascent direction (gᵀd ≥ 0) the algorithm reverts to the
+    # original BLNZ truncation rule.  See step() for the switch.
 
     def _subspace_solve(self, xc, c, free_mask, g):
         """Return the subspace displacement Δx (full length, zero on
@@ -475,8 +497,10 @@ class PrysmLBFGSB:
         """Perform one iteration of optimization.
 
         Compute the generalized Cauchy point, refine via subspace
-        minimization, take a Wolfe line search along the resulting
-        direction with α clipped to keep the iterate inside the box.
+        minimization, project the unconstrained subspace minimizer into
+        the box (Morales-Nocedal 2011), and take a Wolfe line search
+        along the resulting direction.  Falls back to BLNZ-style
+        truncation when the projected direction is not descent.
         """
         x_pre = self.x.copy()
         f, g = self.problem.fg(self.x)
@@ -486,9 +510,25 @@ class PrysmLBFGSB:
 
         xc, c_vec, free_mask = self._cauchy(g)
         dx = self._subspace_solve(xc, c_vec, free_mask, g)
-        p = (xc + dx) - self.x
+        x_hat = xc + dx
 
-        alpha_max = self._max_alpha_inside_box(self.x, p)
+        # Morales-Nocedal 2011: project x_hat into the box and use that as
+        # the trial point.  If the resulting direction is descent, take
+        # the full unit step as the line-search ceiling.  Otherwise revert
+        # to the BLNZ truncation rule that walks from x_k toward x_hat
+        # until the first bound is reached.
+        x_bar = np.minimum(np.maximum(x_hat, self.l), self.u)
+        p_proj = x_bar - self.x
+        gp_proj = float(g @ p_proj)
+        if gp_proj < 0.0:
+            p = p_proj
+            alpha_max = 1.0
+            subspace_mode = 'projected'
+        else:
+            p = x_hat - self.x
+            alpha_max = self._max_alpha_inside_box(self.x, p)
+            subspace_mode = 'truncated'
+
         # No room to move, or the Cauchy+subspace direction degenerated
         # to zero (e.g. every coord is at a bound being pushed into).
         if alpha_max <= 0.0 or float(np.max(np.abs(p))) == 0.0:
@@ -530,5 +570,6 @@ class PrysmLBFGSB:
             'free_vars': free_count,
             'cauchy_breaks': self.n - free_count,
             'subspace_solved': True,
+            'subspace_mode': subspace_mode,
         }
         return x_pre, float(f), g.copy()
