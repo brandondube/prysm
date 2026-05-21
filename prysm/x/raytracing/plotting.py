@@ -1,10 +1,10 @@
 """Plotting functions for raytraces.
 
-This is the one module in prysm.x.raytracing that uses ``import numpy as np``
+This is the one module in prysm.x.raytracing that uses import numpy as np
 directly: matplotlib's renderer only accepts true numpy arrays, so we cannot
-go through the swappable ``prysm.mathops`` backend here.  User-supplied arrays
-(``phist``, ``shist``, ...) may be cupy/torch tensors when alternate backends
-are in use, so each public function calls ``array_to_true_numpy`` at entry.
+go through the swappable prysm.mathops backend here.  User-supplied arrays
+(phist, shist, ...) may be cupy/torch tensors when alternate backends are in
+use, so each public function calls array_to_true_numpy at entry.
 """
 
 from collections.abc import Mapping, Sequence
@@ -12,46 +12,20 @@ from collections.abc import Mapping, Sequence
 from prysm.plotting import share_fig_ax
 from prysm.mathops import array_to_true_numpy
 
+from .spencer_and_murty import RayTraceResult
 from .surfaces import STYPE_REFLECT, STYPE_REFRACT
 
 import numpy as np  # see module docstring; do not "fix" to mathops np
 
 
-def plot_rays(phist, lw=1, ls='-', c='r', alpha=1, zorder=4, x='z', y='y', fig=None, ax=None):
-    """Plot rays in 2D.
+def _require_raytrace_result(result):
+    if not isinstance(result, RayTraceResult):
+        raise TypeError('expected a RayTraceResult')
+    return result
 
-    Parameters
-    ----------
-    phist : list or ndarray
-        the first return from spencer_and_murty.raytrace,
-        iterable of arrays of length 3 (X,Y,Z)
-    lw : float, optional
-        linewidth
-    ls : str, optional
-        line style
-    c : color
-        anything matplotlib interprets as a color, strings, 3-tuples, 4-tuples, ...
-    alpha : float
-        opacity of the rays, 1=fully opaque, 0=fully transparent
-    zorder : int
-        stack order in the plot, higher z orders are on top of lower z orders
-    x : str, {'x', 'y', 'z'}
-        which position to plot on the X axis, defaults to traditional ZY plot
-    y : str, {'x', 'y', 'z'}
-        which position to plot on the X axis, defaults to traditional ZY plot
-    fig : matplotlib.figure.Figure
-        A figure object
-    ax : matplotlib.axes.Axis
-        An axis object
 
-    Returns
-    -------
-    matplotlib.figure.Figure
-        A figure object
-    matplotlib.axes.Axis
-        An axis object
-
-    """
+def _plot_position_history(phist, *, x='z', y='y', lw=1, ls='-', c='r',
+                           alpha=1, zorder=4, fig=None, ax=None):
     fig, ax = share_fig_ax(fig, ax)
 
     ph = np.asarray(array_to_true_numpy(phist))
@@ -71,10 +45,79 @@ def plot_rays(phist, lw=1, ls='-', c='r', alpha=1, zorder=4, x='z', y='y', fig=N
     return fig, ax
 
 
+def plot_ray_paths(result, *, x='z', y='y', lw=1, ls='-', c='r', alpha=1,
+                   zorder=4, fig=None, ax=None):
+    """Plot ray paths from a RayTraceResult.
+
+    Parameters
+    ----------
+    result : RayTraceResult
+        Trace result returned by spencer_and_murty.raytrace.
+    x : str, {'x', 'y', 'z'}
+        Which position to plot on the X axis, defaults to traditional ZY plot.
+    y : str, {'x', 'y', 'z'}
+        Which position to plot on the Y axis, defaults to traditional ZY plot.
+    lw : float, optional
+        linewidth
+    ls : str, optional
+        line style
+    c : color
+        anything matplotlib interprets as a color, strings, 3-tuples, 4-tuples, ...
+    alpha : float
+        opacity of the rays, 1=fully opaque, 0=fully transparent
+    zorder : int
+        stack order in the plot, higher z orders are on top of lower z orders
+    fig : matplotlib.figure.Figure
+        A figure object
+    ax : matplotlib.axes.Axis
+        An axis object
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        A figure object
+    matplotlib.axes.Axis
+        An axis object
+
+    """
+    result = _require_raytrace_result(result)
+    return _plot_position_history(
+        result.P, x=x, y=y, lw=lw, ls=ls, c=c, alpha=alpha,
+        zorder=zorder, fig=fig, ax=ax,
+    )
+
+
+def plot_rays(result, *args, **kwargs):
+    """Deprecated alias for plot_ray_paths."""
+    import warnings
+    warnings.warn(
+        'plot_rays is deprecated; use plot_ray_paths with a RayTraceResult.',
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    if isinstance(result, RayTraceResult):
+        return plot_ray_paths(result, *args, **kwargs)
+    return _plot_position_history(result, *args, **kwargs)
+
+
+def _phist_from_result_or_history(result):
+    if isinstance(result, RayTraceResult):
+        return np.asarray(array_to_true_numpy(result.P))
+
+    import warnings
+    warnings.warn(
+        'passing raw position history to plot_optics is deprecated; pass a '
+        'RayTraceResult instead.',
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    return np.asarray(array_to_true_numpy(result))
+
+
 def _gather_inputs_for_surface_sag(surf, phist, j, points, y):
     if surf.bounding is None:
         # need to look at the raytrace to see bounding limits
-        p = phist[j]  # j+1, first element of phist is the start of the raytrace
+        p = phist[j + 1]
         xx = p[..., 0]
         yy = p[..., 1]
         mask = []
@@ -109,10 +152,10 @@ def _gather_inputs_for_surface_sag(surf, phist, j, points, y):
 
 
 def _axis_extent_from_phist(phist, j, y):
-    p = phist[j]  # j+1, first element of phist is the start of the raytrace
+    p = phist[j + 1]
     axis = 1 if y == 'y' else 0
     coord = p[..., axis]
-    return max(abs(coord.min()), abs(coord.max()))
+    return max(abs(np.nanmin(coord)), abs(np.nanmax(coord)))
 
 
 def _surface_profile(surf, phist, j, points, y, radius=None, clear_radius=None):
@@ -143,12 +186,6 @@ def _surface_profile(surf, phist, j, points, y, radius=None, clear_radius=None):
     return sag, ploty, edge_sag
 
 
-def _paired_refracting_surfaces(prescription, j):
-    if (j + 1) == len(prescription):
-        raise ValueError('cant draw a prescription that terminates on a refracting surface')
-    return prescription[j], prescription[j + 1]
-
-
 def _lens_edge_for(lens_edges, surface_index, pair_index):
     if lens_edges is None:
         return None
@@ -164,24 +201,78 @@ def _lens_edge_for(lens_edges, surface_index, pair_index):
     return lens_edges
 
 
-def _infer_lens_od(surf1, surf2, phist, j, y, lens_edge=None):
+def _surface_index(surf, wvl):
+    if not callable(surf.n):
+        raise ValueError('refracting surfaces must define a callable material')
+    n = surf.n(wvl)
+    if np.isscalar(n):
+        return float(n)
+    n = np.asarray(array_to_true_numpy(n))
+    if n.size != 1:
+        raise ValueError('material evaluation must produce a scalar index')
+    return float(n.reshape(-1)[0])
+
+
+def _is_ambient_index(n, ambient_index, index_atol):
+    return np.isclose(n, ambient_index, rtol=0, atol=index_atol)
+
+
+def lens_groups_from_surfaces(prescription, *, wvl=0.587,
+                              ambient_index=1.0, index_atol=1e-9):
+    """Group consecutive refracting surfaces into physical lens elements.
+
+    Returns
+    -------
+    list of tuple
+        Each tuple contains the prescription indices of one singlet, cemented
+        doublet, triplet, or longer cemented lens group.
+
+    """
+    groups = []
+    active = []
+
+    for j, surf in enumerate(prescription):
+        if surf.typ != STYPE_REFRACT:
+            if active:
+                raise ValueError(
+                    'refracting lens group is interrupted before returning '
+                    'to ambient material'
+                )
+            continue
+
+        n_post = _surface_index(surf, wvl)
+        active.append(j)
+        if _is_ambient_index(n_post, ambient_index, index_atol):
+            if len(active) < 2:
+                raise ValueError('lens groups require at least two refracting surfaces')
+            groups.append(tuple(active))
+            active = []
+
+    if active:
+        raise ValueError(
+            'cant draw a prescription that terminates before returning to '
+            'ambient material'
+        )
+
+    return groups
+
+
+def _infer_lens_group_od(prescription, group, phist, y, lens_edge=None):
     if lens_edge is not None:
         for key in ('od_radius', 'outer_radius', 'radius'):
             if key in lens_edge:
                 return lens_edge[key]
 
     radii = []
-    for surf in (surf1, surf2):
+    for j in group:
+        surf = prescription[j]
         if surf.bounding is not None and 'outer_radius' in surf.bounding:
             radii.append(surf.bounding['outer_radius'])
 
     if radii:
         return max(radii)
 
-    return max(
-        _axis_extent_from_phist(phist, j, y),
-        _axis_extent_from_phist(phist, j + 1, y),
-    )
+    return max(_axis_extent_from_phist(phist, j, y) for j in group)
 
 
 def _lens_edge_features(lens_edge):
@@ -200,6 +291,14 @@ def _surface_clear_radius(lens_edge, which):
     if specific_key in lens_edge:
         return lens_edge[specific_key]
     return lens_edge.get('clear_radius')
+
+
+def _group_surface_clear_radius(lens_edge, surface_number, group_size):
+    if surface_number == 0:
+        return _surface_clear_radius(lens_edge, 'front')
+    if surface_number == group_size - 1:
+        return _surface_clear_radius(lens_edge, 'rear')
+    return _surface_clear_radius(lens_edge, f'surface_{surface_number}')
 
 
 def _feature_applies_to_side(feature, side):
@@ -311,7 +410,38 @@ def _apply_lens_edge_features(sag1, ploty1, edge_sag1, sag2, ploty2, edge_sag2,
     return _build_lens_outline(sag1, ploty1, edge_sag1, sag2, ploty2, edge_sag2, od_radius, features)
 
 
-def plot_optics(prescription, phist, mirror_backing=None, points=100,
+def _build_lens_group_outline(profiles, od_radius, lens_edge):
+    sag1, ploty1, edge_sag1 = profiles[0]
+    sag2, ploty2, edge_sag2 = profiles[-1]
+
+    xx, yy = _apply_lens_edge_features(
+        sag1, ploty1, edge_sag1, sag2, ploty2, edge_sag2, od_radius, lens_edge)
+
+    for sag, ploty, _ in profiles[1:-1]:
+        xx.extend([np.nan, *sag])
+        yy.extend([np.nan, *ploty])
+
+    return xx, yy
+
+
+def _plot_lens_group(prescription, group, phist, points, y, lens_edge,
+                     lw, ls, c, alpha, zorder, ax):
+    od_radius = _infer_lens_group_od(prescription, group, phist, y, lens_edge)
+    profiles = []
+    group_size = len(group)
+    for surface_number, j in enumerate(group):
+        clear_radius = _group_surface_clear_radius(lens_edge, surface_number, group_size)
+        profiles.append(_surface_profile(
+            prescription[j], phist, j, points, y, radius=od_radius,
+            clear_radius=clear_radius,
+        ))
+
+    xx, yy = _build_lens_group_outline(profiles, od_radius, lens_edge)
+    ax.plot(xx, yy, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
+
+
+def plot_optics(prescription, result, *, wvl=0.587, ambient_index=1.0,
+                index_atol=1e-9, mirror_backing=None, points=100,
                 lw=1, ls='-', c='k', alpha=1, zorder=3,
                 x='z', y='y', fig=None, ax=None, lens_edges=None):
     """Draw the optics of a prescription.
@@ -320,9 +450,14 @@ def plot_optics(prescription, phist, mirror_backing=None, points=100,
     ----------
     prescription : iterable of Surface
         a prescription for an optical layout
-    phist : iterable of ndarray
-        the first return of spencer_and_murty.raytrace, the history of positions
-        through a raytrace
+    result : RayTraceResult
+        Trace result returned by spencer_and_murty.raytrace.
+    wvl : float, optional
+        Wavelength in microns used to evaluate post-surface material indices.
+    ambient_index : float, optional
+        Refractive index that closes a physical lens group.
+    index_atol : float, optional
+        Absolute tolerance for comparing material index to ambient_index.
     mirror_backing : TODO
         TODO
     points : int, optional
@@ -346,9 +481,9 @@ def plot_optics(prescription, phist, mirror_backing=None, points=100,
     ax : matplotlib.axes.Axis
         An axis object
     lens_edges : mapping or sequence, optional
-        Mechanical edge geometry for refracting surface pairs.  A mapping is
-        keyed by the first surface index of a pair, or by pair index.  A
-        sequence is aligned to refracting pairs.  Each entry may define
+        Mechanical edge geometry for refracting lens groups.  A mapping is
+        keyed by the first surface index of a group, or by group index.  A
+        sequence is aligned to lens groups.  Each entry may define
         od_radius, clear_radius, clear_radius_front, clear_radius_rear, and
         a features list.  Supported feature kinds are square, square_cut,
         seat, chamfer, and flat.
@@ -364,39 +499,34 @@ def plot_optics(prescription, phist, mirror_backing=None, points=100,
     x = x.lower()
     y = y.lower()
     fig, ax = share_fig_ax(fig, ax)
-    phist = np.asarray(array_to_true_numpy(phist))
+    phist = _phist_from_result_or_history(result)
 
-    # manual iteration due to how lenses are drawn, start from -1 so the
-    # increment can be at the top of a large loop
-    j = -1
+    lens_groups = lens_groups_from_surfaces(
+        prescription, wvl=wvl, ambient_index=ambient_index,
+        index_atol=index_atol,
+    )
+    groups_by_start = {group[0]: (group_index, group)
+                       for group_index, group in enumerate(lens_groups)}
+
+    j = 0
     jj = len(prescription)
-    pair_index = -1
-    while True:
-        j += 1
-        if j == jj:
-            break
+    while j < jj:
         surf = prescription[j]
         if surf.typ == STYPE_REFLECT:
             sag, ploty, _ = _surface_profile(surf, phist, j, points, y)
             # TODO: mirror backing
             ax.plot(sag, ploty, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
-        elif surf.typ == STYPE_REFRACT:
-            pair_index += 1
-            surf1, surf2 = _paired_refracting_surfaces(prescription, j)
-            lens_edge = _lens_edge_for(lens_edges, j, pair_index)
-            od_radius = _infer_lens_od(surf1, surf2, phist, j, y, lens_edge)
-            clear_radius_front = _surface_clear_radius(lens_edge, 'front')
-            clear_radius_rear = _surface_clear_radius(lens_edge, 'rear')
-
-            sag, ploty, edge_sag = _surface_profile(
-                surf1, phist, j, points, y, radius=od_radius, clear_radius=clear_radius_front)
             j += 1
-            sag2, ploty2, edge_sag2 = _surface_profile(
-                surf2, phist, j, points, y, radius=od_radius, clear_radius=clear_radius_rear)
-
-            xx, yy = _apply_lens_edge_features(
-                sag, ploty, edge_sag, sag2, ploty2, edge_sag2, od_radius, lens_edge)
-            ax.plot(xx, yy, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
+        elif surf.typ == STYPE_REFRACT:
+            group_index, group = groups_by_start[j]
+            lens_edge = _lens_edge_for(lens_edges, j, group_index)
+            _plot_lens_group(
+                prescription, group, phist, points, y, lens_edge,
+                lw, ls, c, alpha, zorder, ax,
+            )
+            j = group[-1] + 1
+        else:
+            j += 1
 
     return fig, ax
 
@@ -446,6 +576,92 @@ def plot_transverse_ray_aberration(phist, lw=1, ls='-', c='r', alpha=1, zorder=4
     input_rays = ph[0, ..., axis]
     output_rays = ph[-1, ..., axis]
     ax.plot(input_rays, output_rays, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
+    return fig, ax
+
+
+def _path_length_unit_label(units):
+    units = units.lower()
+    if units in ('wave', 'waves'):
+        return 'waves'
+    if units in ('nm', 'nanometer', 'nanometers'):
+        return 'nm'
+    raise ValueError("units must be 'waves' or 'nm'")
+
+
+def _convert_path_length_units(opd, wavelength, units):
+    units = _path_length_unit_label(units)
+    if units == 'waves':
+        if wavelength is None:
+            raise ValueError('wavelength is required when units="waves"')
+        return opd / float(wavelength), 'OPD [waves]'
+    return opd * 1e3, 'OPD [nm]'
+
+
+def _remove_linear_fit(x, y):
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    valid = np.isfinite(x) & np.isfinite(y)
+    if np.count_nonzero(valid) < 2:
+        return y
+    slope, intercept = np.polyfit(x[valid], y[valid], 1)
+    return y - (slope * x + intercept)
+
+
+def plot_wave_aberration_fan(coord, opd, *, wavelength=None, units='waves',
+                             detrend=True, lw=1, ls='-', c='r', alpha=1,
+                             zorder=4, axis='y', label=None, fig=None,
+                             ax=None):
+    """Plot OPD for a single wave-aberration fan.
+
+    Parameters
+    ----------
+    coord : array_like
+        normalized pupil coordinate.
+    opd : array_like
+        optical path difference in microns.
+    wavelength : float, optional
+        wavelength in microns. Required for units='waves'.
+    units : str, {'waves', 'nm'}
+        vertical axis units.
+    detrend : bool, optional
+        if True, subtract a first-degree fit from the plotted OPD.
+    lw : float, optional
+        linewidth
+    ls : str, optional
+        line style
+    c : color
+        anything matplotlib interprets as a color, strings, 3-tuples, 4-tuples, ...
+    alpha : float
+        opacity of the rays, 1=fully opaque, 0=fully transparent
+    zorder : int
+        stack order in the plot, higher z orders are on top of lower z orders
+    axis : str, {'x', 'y'}
+        pupil axis label.
+    label : str, optional
+        legend label for this fan.
+    fig : matplotlib.figure.Figure
+        A figure object
+    ax : matplotlib.axes.Axis
+        An axis object
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        A figure object
+    matplotlib.axes.Axis
+        An axis object
+
+    """
+    fig, ax = share_fig_ax(fig, ax)
+    coord = np.asarray(array_to_true_numpy(coord), dtype=float)
+    opd = np.asarray(array_to_true_numpy(opd), dtype=float)
+    opd, ylabel = _convert_path_length_units(opd, wavelength, units)
+    if detrend:
+        opd = _remove_linear_fit(coord, opd)
+    ax.plot(coord, opd, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder,
+            label=label)
+    ax.set_xlabel(f'normalized pupil {axis}')
+    ax.set_ylabel(ylabel)
     return fig, ax
 
 
