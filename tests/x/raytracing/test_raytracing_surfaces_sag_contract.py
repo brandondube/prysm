@@ -110,14 +110,9 @@ def test_biconic_F_matches_FFp():
                            typ='refl', P=P0))
 
 
-def test_F_required_by_init():
-    """Constructing a Surface without F must error (contract enforcement)."""
-    def FFp(x, y):
-        z = np.zeros_like(x)
-        return z, z, z
-
+def test_shape_required_by_init():
     with pytest.raises(TypeError):
-        Surface(typ='refl', P=P0, n=None, FFp=FFp)
+        Surface(typ='refl', P=P0, n=None)
 
 
 def test_explicit_shape_constructor_uses_mutable_shape_params():

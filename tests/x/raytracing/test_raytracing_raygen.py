@@ -17,7 +17,7 @@ from prysm.x.raytracing.raygen import (
     generate_collimated_radial_spiral_ray_grid,
     clip_to_aperture,
 )
-from prysm.x.raytracing.surfaces import Surface
+from prysm.x.raytracing.surfaces import CallableShape, Surface
 from prysm.x.raytracing.spencer_and_murty import (
     intersect as newton_intersect,
     newton_raphson_solve_s,
@@ -126,17 +126,19 @@ def _ray_batch(seed=0, span=4.0, n=11):
 
 
 def test_newton_solver_valid_mask_all_true_for_simple_sphere():
-    surf = Surface(typ='refl', P=np.array([0., 0., 0.]), n=None,
-                   FFp=lambda x, y: (
-                       (1 / 100. * (x * x + y * y))
-                       / (1 + np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y))),
-                       (1 / 100.) * x / np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y)),
-                       (1 / 100.) * y / np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y)),
-                   ),
-                   F=lambda x, y: (
-                       (1 / 100. * (x * x + y * y))
-                       / (1 + np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y)))
-                   ))
+    shape = CallableShape(
+        F=lambda x, y: (
+            (1 / 100. * (x * x + y * y))
+            / (1 + np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y)))
+        ),
+        FFp=lambda x, y: (
+            (1 / 100. * (x * x + y * y))
+            / (1 + np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y))),
+            (1 / 100.) * x / np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y)),
+            (1 / 100.) * y / np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y)),
+        ),
+    )
+    surf = Surface(shape=shape, typ='refl', P=np.array([0., 0., 0.]), n=None)
     P, S = _ray_batch(span=3.0)
     Q, n, valid = surf.intersect(P, S, return_valid=True)
     assert valid.shape == (P.shape[0],)
@@ -151,8 +153,9 @@ def test_newton_solver_valid_mask_flags_nonconvergence():
     # have time to converge for off-axis rays
     surf = conic(c=1 / 5.0, k=-2.0, typ='refl', P=np.array([0., 0., 0.]))
     # build via a generic Surface (forces Newton, not the analytic Conic path)
-    bare = Surface(typ='refl', P=np.array([0., 0., 0.]), n=None,
-                   FFp=surf.FFp, F=surf.F, params=dict(surf.params))
+    bare = Surface(shape=CallableShape(surf.F, surf.FFp,
+                                       params=dict(surf.params)),
+                   typ='refl', P=np.array([0., 0., 0.]), n=None)
     # a ray nearly parallel to the surface in the steep region won't converge in 1 iter
     P = np.array([[3.5, 0., -50.], [0., 0., -50.]])
     S = np.array([[0.05, 0., np.sqrt(1 - 0.0025)], [0., 0., 1.]])

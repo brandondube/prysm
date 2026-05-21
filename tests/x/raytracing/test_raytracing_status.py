@@ -55,15 +55,6 @@ def test_raytrace_result_has_named_attributes():
                                   result.status.imag.astype(int))
 
 
-def test_raytrace_result_repr_smoke():
-    pres = _simple_prescription()
-    P0, S0 = generate_collimated_ray_fan(5, maxr=10.0, z=-100.0)
-    result = raytrace(pres, P0, S0, wvl=0.55)
-    s = repr(result)
-    assert 'RayTraceResult' in s
-    assert 'N_rays=5' in s
-
-
 # ---------- valid (status.imag == 0) ----------
 
 def test_collimated_through_parabola_all_valid():

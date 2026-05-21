@@ -479,12 +479,10 @@ class Surface:
 
     def __init__(self, shape=None, interaction=None, pose=None, material=None,
                  aperture=None, grating=None, *, typ=None, P=None, n=None,
-                 FFp=None, F=None, R=None, params=None, bounding=None,
-                 tilt=None, decenter=None, tilt_radians=False):
+                 R=None, bounding=None, tilt=None, decenter=None,
+                 tilt_radians=False):
         if shape is None:
-            if F is None:
-                raise TypeError('Surface requires either a shape or an F callable')
-            shape = CallableShape(F=F, FFp=FFp, params=params)
+            raise TypeError('Surface requires a shape')
         if interaction is None:
             interaction = typ
         if interaction is None:

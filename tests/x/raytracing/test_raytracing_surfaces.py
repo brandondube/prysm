@@ -8,6 +8,7 @@ from tests.x.raytracing.surface_helpers import (
 )
 
 from prysm.x.raytracing.surfaces import (
+    CallableShape,
     Surface,
     Q2DSag,
     conic_sag,
@@ -341,8 +342,8 @@ def test_generic_surface_falls_back_to_newton():
         rsq = x * x + y * y
         return (c * rsq) / (1 + np.sqrt(1 - c * c * rsq))
 
-    bare = Surface(typ='refl', P=np.array([0.0, 0.0, 0.0]), n=None,
-                   FFp=FFp, F=F, params={'c': c})
+    bare = Surface(shape=CallableShape(F=F, FFp=FFp, params={'c': c}),
+                   typ='refl', P=np.array([0.0, 0.0, 0.0]), n=None)
     sph = sphere(c, 'refl', np.array([0.0, 0.0, 0.0]), n=None)
     P, S = _ray_batch(span=5.0)
     Q_bare, _ = bare.intersect(P, S)
@@ -408,8 +409,9 @@ def test_even_asphere_intersect_matches_naive_newton():
     P0 = np.array([0.0, 0.0, 0.0])
     s_asph = even_asphere(c, k, coefs, 'refr', P0, n=lambda w: 1.5)
     # bare Surface using the same FFp
-    bare = Surface(typ='refr', P=P0, n=lambda w: 1.5, FFp=s_asph.FFp,
-                   F=s_asph.F, params=dict(s_asph.params))
+    bare = Surface(shape=CallableShape(s_asph.F, s_asph.FFp,
+                                       params=dict(s_asph.params)),
+                   typ='refr', P=P0, n=lambda w: 1.5)
     P, S = _ray_batch(span=1.5)
     Q_a, n_a = s_asph.intersect(P, S)
     Q_b, n_b = bare.intersect(P, S)
@@ -468,9 +470,10 @@ def test_raytrace_end_to_end_analytic_vs_newton():
     ffp1, f1 = make_conic(c1, k1)
     ffp2, f2 = make_conic(c2, k2)
     surfs_nw = [
-        Surface(typ='refl', P=P_pm, n=None, FFp=ffp1, F=f1),
-        Surface(typ='refl', P=P_sm, n=None, FFp=ffp2, F=f2),
-        Surface(typ='eval', P=P_img, n=None, FFp=plane_FFp, F=plane_F),
+        Surface(shape=CallableShape(f1, ffp1), typ='refl', P=P_pm, n=None),
+        Surface(shape=CallableShape(f2, ffp2), typ='refl', P=P_sm, n=None),
+        Surface(shape=CallableShape(plane_F, plane_FFp),
+                typ='eval', P=P_img, n=None),
     ]
 
     P0, S0 = generate_collimated_ray_fan(11, maxr=20.0, z=-1e3, azimuth=90)

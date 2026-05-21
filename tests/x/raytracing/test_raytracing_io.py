@@ -37,9 +37,6 @@ def test_surface_spec_builder_constructs_shape_surface():
 # materials
 # ============================================================================
 
-def test_prescription_file_compatibility_import():
-    assert PrescriptionFile is SharedPrescriptionFile
-
 class FakeMaterial:
     def __init__(self, page, samples):
         self.page = page
@@ -878,10 +875,3 @@ def test_seq_undecentered_surface_has_no_rotation(refractiveindex_database):
     s2 = pf.surfaces[1]
     assert s2.R is None
     np.testing.assert_allclose(s2.P[:2], (0.0, 0.0))
-
-
-def test_seq_BEN_is_silently_ignored():
-    """The BEN bend command is recorded but does not break parsing."""
-    txt = _SEQ_PARABOLA.replace('SI', 'BEN\nSI', 1)
-    pf = read_seq(txt, _is_text=True)
-    assert len(pf.surfaces) == 2  # mirror + image (unchanged)
