@@ -39,10 +39,10 @@ STATUS_TIR = -2     # geometric: total internal reflection
 
 
 class RayTraceResult:
-    """Structured return type for ``raytrace``.
+    """Structured return type for raytrace.
 
-    Provides attribute access (``result.P``, ``.S``, ``.OPL``, ``.status``)
-    plus iteration support so ``P, S, OPL = raytrace(...)`` keeps working.
+    Provides attribute access (result.P, .S, .OPL, .status)
+    plus iteration support so P, S, OPL = raytrace(...) keeps working.
 
     """
 
@@ -505,12 +505,12 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
     Returns
     -------
     RayTraceResult
-        Vanilla class carrying ``P`` (position history, ``(jj+1, ..., 3)``),
-        ``S`` (direction-cosine history, ``(jj+1, ..., 3)``), ``OPL``
-        (per-segment optical path length history, ``(jj+1, ...)``), and
-        ``status`` (per-ray complex status, see module-level ``STATUS_*``
+        Vanilla class carrying P (position history, (jj+1, ..., 3)),
+        S (direction-cosine history, (jj+1, ..., 3)), OPL
+        (per-segment optical path length history, (jj+1, ...)), and
+        status (per-ray complex status, see module-level STATUS_*
         constants).  Iterating the result yields the legacy 3-tuple
-        ``(P, S, OPL)`` so ``P, S, OPL = raytrace(...)`` keeps working.
+        (P, S, OPL) so P, S, OPL = raytrace(...) keeps working.
 
         OPL_hist[0] is zero by convention.  OPL_hist[j+1] is the OPL of the
         segment from P_hist[j] to P_hist[j+1] (i.e., the path through the
@@ -528,7 +528,7 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
     III -> reflect or refract
     IV  -> transform_to_global_coords
 
-    Surface-level apertures (``surf.aperture``) are checked at step II's
+    Surface-level apertures (surf.aperture) are checked at step II's
     intersection point; rays falling outside are flagged STATUS_CLIP.  TIR
     is detected at step III by post-refract NaN inspection.  Once a ray's
     status becomes non-zero it is excluded from further status updates so
