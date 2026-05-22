@@ -41,6 +41,8 @@ def test_is_power_of_2_non_powers_of_2(num):
     ('interpolate', 'interp1d'),
     ('optimize', 'brentq'),
     ('signal', 'windows'),
+    ('linalg', 'lu_factor'),
+    ('linalg', 'lu_solve'),
 ])
 def test_backend_shim_default_routes_to_scipy_numpy(shim_name, probe_attr):
     shim = getattr(mathops, shim_name)
@@ -52,8 +54,20 @@ def test_set_backend_to_defaults_restores_optimize_and_signal():
     sentinel = object()
     mathops.optimize._srcmodule = sentinel
     mathops.signal._srcmodule = sentinel
+    mathops.linalg._srcmodule = sentinel
     mathops.set_backend_to_defaults()
     assert mathops.optimize._srcmodule is mathops._optimize
     assert mathops.signal._srcmodule is mathops._signal
+    assert mathops.linalg._srcmodule is mathops._linalg
     assert hasattr(mathops.optimize, 'brentq')
     assert hasattr(mathops.signal, 'windows')
+    assert hasattr(mathops.linalg, 'lu_factor')
+
+
+def test_linalg_lu_factor_and_solve():
+    """The default linalg shim wraps scipy.linalg's LU factor/solve."""
+    M = np.array([[4.0, 3.0], [6.0, 3.0]])
+    b = np.array([1.0, 1.0])
+    lu = mathops.linalg.lu_factor(M)
+    x = mathops.linalg.lu_solve(lu, b)
+    np.testing.assert_allclose(M @ x, b)

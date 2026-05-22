@@ -22,7 +22,8 @@ PRYSM_ROOT = Path(__file__).resolve().parent.parent / 'prysm'
 ALLOWED = {
     # mathops itself is the shim; it MUST import numpy / scipy.
     'mathops.py': {'numpy', 'scipy', 'scipy.ndimage', 'scipy.interpolate',
-                   'scipy.special', 'scipy.fft', 'scipy.optimize', 'scipy.signal'},
+                   'scipy.special', 'scipy.fft', 'scipy.optimize', 'scipy.signal',
+                   'scipy.linalg'},
     # Analytic PSF formulae use SciPy Bessel functions directly.
     'psf.py': {'scipy.special'},
     # Forbes Q scalar normalization constants use SciPy factorial helpers.

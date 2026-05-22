@@ -25,7 +25,7 @@ def test_ls_strong_wolfe_optimal_alpha_one_on_identity_quadratic():
 
     xk = np.array([1.0, -2.0])
     pk = -fg(xk)[1]
-    alpha, phi_a, derphi_a = ls_strong_wolfe(fg, xk, pk)
+    alpha, phi_a, derphi_a, g_a = ls_strong_wolfe(fg, xk, pk)
     assert alpha is not None
     np.testing.assert_allclose(alpha, 1.0)
     np.testing.assert_allclose(phi_a, 0.0, atol=1e-12)
@@ -43,7 +43,7 @@ def test_ls_strong_wolfe_brackets_and_zooms_when_alpha_one_overshoots():
 
     xk = np.array([1.0, 1.0])
     pk = -fg(xk)[1]
-    alpha, phi_a, derphi_a = ls_strong_wolfe(fg, xk, pk)
+    alpha, phi_a, derphi_a, g_a = ls_strong_wolfe(fg, xk, pk)
     assert alpha is not None
     assert 0 < alpha < 1.0
     assert _wolfe_holds(fg, xk, pk, alpha, phi_a, derphi_a)
@@ -60,7 +60,7 @@ def test_ls_strong_wolfe_extrapolates_when_alpha_one_undershoots():
 
     xk = np.array([1.0, -1.0])
     pk = -fg(xk)[1]
-    alpha, phi_a, derphi_a = ls_strong_wolfe(fg, xk, pk)
+    alpha, phi_a, derphi_a, g_a = ls_strong_wolfe(fg, xk, pk)
     assert alpha is not None
     assert alpha > 1.0
     assert _wolfe_holds(fg, xk, pk, alpha, phi_a, derphi_a)
@@ -76,7 +76,7 @@ def test_ls_strong_wolfe_respects_maxalpha():
 
     xk = np.array([1.0, -1.0])
     pk = -fg(xk)[1]
-    alpha, phi_a, derphi_a = ls_strong_wolfe(fg, xk, pk, maxalpha=0.5)
+    alpha, phi_a, derphi_a, _ = ls_strong_wolfe(fg, xk, pk, maxalpha=0.5)
     assert alpha is not None
     assert alpha <= 0.5 + 1e-12
     assert _wolfe_holds(fg, xk, pk, alpha, phi_a, derphi_a)
@@ -97,3 +97,29 @@ def test_ls_strong_wolfe_uses_supplied_fgk():
     ls_strong_wolfe(fg, xk, pk, fg_at_xk=pre)
     # at least one fg call (at the trial alpha); none at xk
     assert calls['n'] >= 1
+
+
+def test_ls_strong_wolfe_returns_gradient_at_accepted_alpha():
+    """ls_strong_wolfe's fourth return value is g(xk + alpha*pk); callers
+    that step in direction pk can reuse it and skip a redundant fg."""
+    def fg(x):
+        return float(0.5 * np.sum(x * x)), x
+
+    xk = np.array([1.0, -2.0])
+    pk = -xk
+    alpha, _, _, g_a = ls_strong_wolfe(fg, xk, pk)
+    assert g_a is not None
+    np.testing.assert_allclose(g_a, xk + alpha * pk)
+
+
+def test_ls_strong_wolfe_returns_none_gradient_on_failure():
+    """When no acceptable alpha is found, the gradient slot is None."""
+    # contrived ascent direction: pk parallel to +g
+    def fg(x):
+        return float(0.5 * np.sum(x * x)), x
+
+    xk = np.array([1.0, -2.0])
+    pk = xk  # uphill
+    alpha, _, _, g_a = ls_strong_wolfe(fg, xk, pk)
+    assert alpha is None
+    assert g_a is None

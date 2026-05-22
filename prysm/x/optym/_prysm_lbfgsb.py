@@ -252,20 +252,55 @@ class PrysmLBFGSB:
             return np.inf
         return -df / ddf
 
-    def _cauchy(self, g, W=None, M=None):
+    @staticmethod
+    def _next_dt_min_vec(df, ddf):
+        """Vectorized form of _next_dt_min.  Works element-wise on
+        arrays of df and ddf; same branching semantics applied
+        coordinate by coordinate via np.where.
+        """
+        # divisor guard: ddf<=0 entries will be masked out below, but
+        # the np.where eager-evaluates both branches, so feed a safe
+        # value where ddf would be zero/negative.
+        safe_ddf = np.where(ddf > 0, ddf, 1.0)
+        return np.where(
+            df >= 0, 0.0,
+            np.where(ddf <= 0, np.inf, -df / safe_ddf),
+        )
+
+    def _cauchy(self, g, W=None, M=None, M_lu=None):
         """Generalized Cauchy point along the projected gradient path.
 
-        Implements BLNZ Algorithm CP.  W and M default to freshly built
+        Implements BLNZ Algorithm CP.  W, M, and an LU factorization of
+        M (as returned by linalg.lu_factor) default to freshly built
         matrices; callers that already have them in hand (step()) pass
         them in to avoid the duplicate build.  Returns
             xc        - (n,) Cauchy point
             c         - (2k,) Wᵀ(xc − x) for the subspace solve
             free_mask - (n,) bool, True where xc is interior
+
+        Batched-precompute design (replaces the original per-breakpoint
+        solves):
+
+        - p_j (= p before the j-th breakpoint's rank-1 update) is a
+          cumulative sum  p_0 + Σ_{i<j} g_{b_i} w_{b_i}  -- one big
+          cumsum over the breakpoint-ordered W rows.
+        - c_j is a similar cumsum involving the sequence of dt * p_i.
+        - M⁻¹ p_j and M⁻¹ c_j over every j are then two single batched
+          lu_solve calls against M (since M doesn't change during the
+          sweep), and the per-iteration w_b·M⁻¹{p,c} dot products fall
+          out of one einsum each.
+        - The per-iteration M⁻¹ w_b appears as a column of M⁻¹ Wᵀ that
+          was already precomputed for the wMw diagonal.
+
+        The result is two batched solves and a handful of einsums up
+        front, then a pure-scalar Python loop driving the (df, ddf,
+        dt_min) recurrence — no backend calls inside the loop.
         """
         x = self.x
         n = self.n
         k = self._k
         theta = self.theta
+        theta_h = float(theta)
         dtype = x.dtype
 
         t, sorted_indices = self._compute_breakpoints(g)
@@ -279,65 +314,171 @@ class PrysmLBFGSB:
 
         gtg = float(g @ g)
 
+        # Permute gradient and breakpoint time arrays into visit order
+        # once; the loop reads them as Python floats from a list.
+        g_sorted = g[sorted_indices]
+        t_sorted = t[sorted_indices]
+        # treat 'beyond the last finite breakpoint' as a hard stop; the
+        # rest of the loop body is skipped via the t_b == inf early-exit.
+        finite_mask = np.isfinite(t_sorted)
+        n_active = int(finite_mask.sum())
+
+        # Per-breakpoint scalar inputs always needed when n_active > 0,
+        # regardless of whether history is empty (k == 0).
+        if n_active > 0:
+            idx_a = sorted_indices[:n_active]
+            t_a = t_sorted[:n_active]
+            g_a = g_sorted[:n_active]
+            # dt_j = t_a[j] - t_a[j-1] (t_a[-1] := 0); cumulative path
+            # segment lengths shared by the vectorized state machine and
+            # (when k > 0) the C_before cumsum.
+            dt_seq = np.empty(n_active, dtype=dtype)
+            dt_seq[0] = t_a[0]
+            dt_seq[1:] = t_a[1:] - t_a[:-1]
+
         if k == 0:
-            c = np.zeros(0, dtype=dtype)
-            p = np.zeros(0, dtype=dtype)
-            df = -gtg
-            ddf = float(theta) * gtg
+            df_init = -gtg
+            ddf_init = theta_h * gtg
+            p_final = np.zeros(0, dtype=dtype)
+            c_final = np.zeros(0, dtype=dtype)
+            # No history → no rank-1 corrections from W·M⁻¹W^T.  The
+            # per-breakpoint Δdf, Δddf reduce to just the g² and θ·g²·t
+            # terms below.
+            wb_Mp_arr = wb_Mc_arr = wMw_b_arr = None
         else:
             if W is None:
                 W = self._W()
             if M is None:
                 M = self._M()
-            c = np.zeros(2 * k, dtype=dtype)
-            p = W.T @ d
-            Mp = np.linalg.solve(M, p)
-            df = -gtg
-            ddf = float(theta) * gtg - float(p @ Mp)
+            if M_lu is None:
+                M_lu = linalg.lu_factor(M)
 
-        dt_min = self._next_dt_min(df, ddf)
-        t_old = 0.0
+            p_init = W.T @ d                              # (2k,)
+            Mp_init = linalg.lu_solve(M_lu, p_init)       # (2k,)
+            df_init = -gtg
+            ddf_init = theta_h * gtg - float(p_init @ Mp_init)
 
-        for j in range(n):
-            b = int(sorted_indices[j])
-            t_b = float(t[b])
-            if not np.isfinite(t_b):
-                break
-            dt = t_b - t_old
-            if dt_min < dt:
-                break
-
-            # advance c, df, ddf to t_b (still on segment j), then apply
-            # the rank-one jump for the new active variable b.
-            if k > 0:
-                c = c + dt * p
-            df_at_tb = df + dt * ddf
-
-            g_b = float(g[b])
-            z_b = -t_b * g_b
-            xc[b] = x[b] + z_b
-
-            if k > 0:
-                w_b = W[b, :]
-                Mc = np.linalg.solve(M, c)
-                Mp_seg = np.linalg.solve(M, p)
-                Mw = np.linalg.solve(M, w_b)
-                wb_Mc = float(w_b @ Mc)
-                wb_Mp = float(w_b @ Mp_seg)
-                wb_Mw = float(w_b @ Mw)
-                df = (df_at_tb + g_b * g_b + g_b * float(theta) * z_b
-                      - g_b * wb_Mc)
-                ddf = (ddf - float(theta) * g_b * g_b
-                       - 2.0 * g_b * wb_Mp - g_b * g_b * wb_Mw)
-                p = p + g_b * w_b
+            if n_active == 0:
+                # No breakpoints in finite time — the projected-gradient
+                # path is unconstrained on this step.  Skip the batched
+                # precompute (its dt_seq would degenerate to inf and the
+                # lu_solve would choke on a NaN).
+                p_final = p_init
+                c_final = np.zeros(2 * k, dtype=dtype)
+                wb_Mp_arr = wb_Mc_arr = wMw_b_arr = None
             else:
-                df = df_at_tb + g_b * g_b + g_b * float(theta) * z_b
-                ddf = ddf - float(theta) * g_b * g_b
+                # MinvWT used here for the wMw diagonal; recomputed inside
+                # _subspace_solve via its own M_lu re-use.
+                MinvWT = linalg.lu_solve(M_lu, W.T)            # (2k, n)
+                wMw_diag = np.einsum('ij,ji->i', W, MinvWT)    # (n,)
 
-            d[b] = 0
-            free_mask[b] = False
-            t_old = t_b
-            dt_min = self._next_dt_min(df, ddf)
+                W_a = W[idx_a, :]                              # (n_a, 2k)
+
+                # Build "p before iter j" and "c before iter j" via the
+                # closed-form cumulative sums that fall out of the rank-1
+                # recurrences in BLNZ Algorithm CP.
+                dP_seq = g_a[:, None] * W_a                    # (n_a, 2k)
+                cum_dP = np.cumsum(dP_seq, axis=0)             # (n_a, 2k)
+                P_before = np.concatenate(
+                    [p_init[None, :], p_init[None, :] + cum_dP[:-1, :]],
+                    axis=0,
+                )                                              # (n_a, 2k)
+
+                dC_seq = dt_seq[:, None] * P_before            # (n_a, 2k)
+                cum_dC = np.cumsum(dC_seq, axis=0)             # (n_a, 2k)
+                C_before = np.concatenate(
+                    [np.zeros((1, 2 * k), dtype=dtype), cum_dC[:-1, :]],
+                    axis=0,
+                )                                              # (n_a, 2k)
+
+                # One batched lu_solve replaces n_active separate
+                # M-solves.  lu_solve takes the RHS as (m, k); the
+                # transposes turn our (n_a, 2k) row layout into
+                # column-vectors and back.
+                Mp_array = linalg.lu_solve(M_lu, P_before.T).T  # (n_a, 2k)
+                Mc_array = linalg.lu_solve(M_lu, C_before.T).T  # (n_a, 2k)
+
+                wb_Mp_arr = np.einsum('ij,ij->i', W_a, Mp_array)  # (n_a,)
+                wb_Mc_arr = np.einsum('ij,ij->i', W_a, Mc_array)  # (n_a,)
+                wMw_b_arr = wMw_diag[idx_a]                       # (n_a,)
+
+        # ---- Vectorized (df, ddf, dt_min) state machine ----
+        #
+        # In the per-breakpoint recurrence the only sequentially-coupled
+        # quantities are df and ddf.  ddf is a pure cumulative sum (its
+        # update at iter j doesn't depend on df); df at iter j depends on
+        # ddf at iter j via dt·ddf, but ddf is already cumulative-known.
+        # So we compute the full (n_active+1,) arrays of df / ddf / dt_min
+        # in two cumsums and pick out the break index with one argmax.
+        # That replaces the Python scalar loop entirely and gives the GPU
+        # a path that never round-trips a scalar to host inside the
+        # sweep.
+        if n_active == 0:
+            K = 0
+            dt_min_final = self._next_dt_min(df_init, ddf_init)
+            t_old_final = 0.0
+        else:
+            if k > 0:
+                ddf_step = (-theta_h * g_a * g_a
+                            - 2.0 * g_a * wb_Mp_arr
+                            - g_a * g_a * wMw_b_arr)
+                df_alpha = (g_a * g_a - theta_h * g_a * g_a * t_a
+                            - g_a * wb_Mc_arr)
+            else:
+                ddf_step = -theta_h * g_a * g_a
+                df_alpha = g_a * g_a - theta_h * g_a * g_a * t_a
+            # ddf_at_iter[j] = ddf_init + sum(ddf_step[:j])
+            ddf_at_iter = np.empty(n_active + 1, dtype=dtype)
+            ddf_at_iter[0] = ddf_init
+            ddf_at_iter[1:] = ddf_init + np.cumsum(ddf_step)
+            # df_at_iter[j+1] = df_at_iter[j] + dt_seq[j]*ddf_at_iter[j] + df_alpha[j]
+            df_step = dt_seq * ddf_at_iter[:-1] + df_alpha
+            df_at_iter = np.empty(n_active + 1, dtype=dtype)
+            df_at_iter[0] = df_init
+            df_at_iter[1:] = df_init + np.cumsum(df_step)
+
+            dt_min_at_iter = self._next_dt_min_vec(df_at_iter, ddf_at_iter)
+
+            # Break check at iter j: dt_min_at_iter[j] < dt_seq[j].
+            # First True index along the active prefix is K.  np.argmax
+            # returns 0 on an all-False input, so check that separately.
+            break_pred = dt_min_at_iter[:n_active] < dt_seq
+            if bool(break_pred.any()):
+                K = int(np.argmax(break_pred))
+            else:
+                K = n_active
+            dt_min_final = float(dt_min_at_iter[K])
+            t_old_final = 0.0 if K == 0 else float(t_a[K - 1])
+
+        # Batch-write the per-breakpoint backend updates.  K is the
+        # number of iterations that ran; visited == sorted_indices[:K].
+        if K > 0:
+            visited = sorted_indices[:K]
+            visited_t = t_sorted[:K]
+            visited_g = g_sorted[:K]
+            # z_b = -t_b * g_b, xc[b] = x[b] + z_b
+            xc[visited] = x[visited] - visited_t * visited_g
+            d[visited] = 0
+            free_mask[visited] = False
+
+        if k > 0 and n_active > 0:
+            # p_K and c_K are the values _at_ iter K, recovered from the
+            # precomputed prefix-sum arrays.
+            if K < n_active:
+                p = P_before[K]
+                c = C_before[K]
+            else:
+                # ran every active breakpoint; last update is dP_seq /
+                # dC_seq at index n_active-1, which P_before / C_before
+                # don't include because they store BEFORE-iter state.
+                p = P_before[n_active - 1] + dP_seq[n_active - 1]
+                c = C_before[n_active - 1] + dC_seq[n_active - 1]
+        else:
+            p = p_final
+            c = c_final
+
+        dt_min = dt_min_final
+        t_old = t_old_final
 
         # final partial step along the active segment's d
         if not np.isfinite(dt_min):
@@ -394,11 +535,12 @@ class PrysmLBFGSB:
     # to be an ascent direction (gᵀd ≥ 0) the algorithm reverts to the
     # original BLNZ truncation rule.  See step() for the switch.
 
-    def _subspace_solve(self, xc, c, free_mask, g, W=None, M=None):
+    def _subspace_solve(self, xc, c, free_mask, g, W=None, M=None, M_lu=None):
         """Return the subspace displacement Δx (full length, zero on
         active coords) such that xc + Δx minimizes the quadratic model
-        on the free subspace.  W and M are accepted from the caller to
-        avoid rebuilding the compact representation matrices.
+        on the free subspace.  W, M, and an LU factorization of M are
+        accepted from the caller to share work with _cauchy within the
+        same outer step.
         """
         n = self.n
         k = self._k
@@ -422,8 +564,10 @@ class PrysmLBFGSB:
             W = self._W()
         if M is None:
             M = self._M()
+        if M_lu is None:
+            M_lu = linalg.lu_factor(M)
 
-        Mc = np.linalg.solve(M, c)
+        Mc = linalg.lu_solve(M_lu, c)
         # r_c, full-length, then row-slice to F.
         rc_full = g + theta * zc - W @ Mc
         rc_F = rc_full[free_mask]
@@ -431,6 +575,10 @@ class PrysmLBFGSB:
 
         N = -M + (W_F.T @ W_F) / theta       # (2k, 2k)
         WF_rcF = W_F.T @ rc_F
+        # One-shot solve here; not worth factoring N up front.  Using
+        # np.linalg.solve (vs linalg.solve) sidesteps scipy's noisy
+        # ill-conditioning warnings — N can be poorly scaled near
+        # convergence without that being a correctness problem.
         N_inv = np.linalg.solve(N, WF_rcF)
         # Δx_F = -(1/θ) r_c + (1/θ²) W_F N⁻¹ W_Fᵀ r_c
         dx_F = -rc_F / theta + (W_F @ N_inv) / (theta * theta)
@@ -546,17 +694,23 @@ class PrysmLBFGSB:
             cauchy_breaks = 0
             subspace_mode = 'unbounded'
         else:
-            # Build W and M once per outer iteration; _cauchy and
-            # _subspace_solve both consume them.
+            # Build W, M, and an LU factor of M once per outer iteration;
+            # _cauchy and _subspace_solve both consume them.  The LU
+            # factor is shared by every per-breakpoint M-solve in the
+            # Cauchy sweep and the one in _subspace_solve, replacing
+            # O(breakpoints) full factorizations with O(breakpoints)
+            # back-substitutions.
             if self._k > 0:
                 W = self._W()
                 M = self._M()
+                M_lu = linalg.lu_factor(M)
             else:
                 W = None
                 M = None
+                M_lu = None
 
-            xc, c_vec, free_mask = self._cauchy(g, W, M)
-            dx = self._subspace_solve(xc, c_vec, free_mask, g, W, M)
+            xc, c_vec, free_mask = self._cauchy(g, W, M, M_lu)
+            dx = self._subspace_solve(xc, c_vec, free_mask, g, W, M, M_lu)
             x_hat = xc + dx
 
             # Morales-Nocedal 2011: project x_hat into the box and use that
