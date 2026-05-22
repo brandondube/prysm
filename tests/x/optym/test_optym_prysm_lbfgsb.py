@@ -10,8 +10,10 @@ from prysm.x.optym import (
     MaxIterations,
     PrysmLBFGSB,
     Problem,
+    as_problem,
     run_until,
 )
+from prysm.x.optym._prysm_lbfgsb import _strong_wolfe_lean
 
 
 def _quadratic_fg(x):
@@ -175,6 +177,31 @@ def test_first_step_is_steepest_descent():
     assert cos_sim < -1 + 1e-10
 
 
+def test_internal_wolfe_returns_accepted_gradient():
+    """The optimizer-local Wolfe search should preserve the public helper's
+    important contract: the accepted gradient is returned to the caller.
+    """
+    H = 10.0 * np.eye(2)
+
+    def fg(x):
+        return float(0.5 * x @ H @ x), H @ x
+
+    xk = np.array([1.0, 1.0])
+    fk, gk = fg(xk)
+    pk = -gk
+    alpha, phi_a, derphi_a, g_a = _strong_wolfe_lean(
+        as_problem(fg), xk, pk, (fk, gk),
+    )
+
+    assert alpha is not None
+    assert g_a is not None
+    np.testing.assert_allclose(g_a, H @ (xk + alpha * pk))
+
+    derphi0 = float(gk @ pk)
+    assert phi_a <= fk + 1e-4 * alpha * derphi0 + 1e-12
+    assert abs(derphi_a) <= 0.9 * abs(derphi0) + 1e-12
+
+
 def test_rosenbrock_5d_converges():
     x0 = np.full(5, -1.2, dtype=np.float64)
     opt = PrysmLBFGSB(_rosenbrock_fg, x0, memory=10)
@@ -218,6 +245,19 @@ def test_history_buffer_rolls_at_capacity():
     assert opt._k == 3  # capped at memory
     # most recent ys entries are nonzero
     assert np.all(opt.ys[: opt._k] != 0)
+
+
+def test_history_buffer_keeps_logical_order_after_wrap():
+    opt = PrysmLBFGSB(_quadratic_fg, np.zeros(2), memory=3)
+    for i in range(5):
+        s = np.full(2, i + 1.0)
+        y = np.full(2, i + 2.0)
+        opt._update_history(s, y)
+
+    expected_s = np.array([[3.0, 3.0], [4.0, 4.0], [5.0, 5.0]])
+    expected_y = np.array([[4.0, 4.0], [5.0, 5.0], [6.0, 6.0]])
+    np.testing.assert_array_equal(opt._ordered_rows(opt.S), expected_s)
+    np.testing.assert_array_equal(opt._ordered_rows(opt.Y), expected_y)
 
 
 def test_linesearch_failure_raises_stop_iteration():

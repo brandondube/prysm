@@ -225,13 +225,14 @@ def ls_strong_wolfe(
     # skip an extra fg evaluation at the accepted alpha.
     _cache_alpha = [None]
     _cache_val = [None, None, None]  # phi, derphi, g
+    dot = np.dot
 
     def _eval(alpha):
         if _cache_alpha[0] != alpha:
             fa, ga = problem.fg(xk + alpha * pk)
             _cache_alpha[0] = alpha
             _cache_val[0] = fa
-            _cache_val[1] = np.dot(ga, pk)
+            _cache_val[1] = dot(ga, pk)
             _cache_val[2] = ga
         return _cache_val[0], _cache_val[1]
 
@@ -247,7 +248,7 @@ def ls_strong_wolfe(
         return _eval(alpha)[1]
 
     phi0 = fk
-    derphi0 = np.dot(gk, pk)
+    derphi0 = dot(gk, pk)
 
     alpha0 = 0.0
     alpha1 = 1.0
