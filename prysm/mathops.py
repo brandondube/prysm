@@ -2,6 +2,7 @@
 import warnings
 
 import numpy as np
+import scipy.linalg as _scipy_linalg
 from scipy import ndimage, interpolate, fft, optimize, signal
 from scipy.special import j1 as _besselj1
 
@@ -24,12 +25,20 @@ _fft = fft
 _interpolate = interpolate
 _optimize = optimize
 _signal = signal
+_linalg = _scipy_linalg
 np = BackendShim(np)
 ndimage = BackendShim(ndimage)
 fft = BackendShim(fft)
 interpolate = BackendShim(interpolate)
 optimize = BackendShim(optimize)
 signal = BackendShim(signal)
+# linalg exposes scipy.linalg by default — adds LU factor/solve and other
+# decompositions that aren't on numpy.linalg.  Remapped to cupyx.scipy.linalg
+# by set_backend_to_cupy.  torch.linalg has the routines but with a different
+# signature (lu_factor returns (LU, P) not (lu, piv)); set_backend_to_pytorch
+# leaves linalg on scipy and the caller's responsibility to know which
+# routines are touched.
+linalg = BackendShim(_scipy_linalg)
 
 
 def set_backend_to_cupy():
@@ -52,6 +61,11 @@ def set_backend_to_cupy():
         signal._srcmodule = cpsignal
     except ImportError:
         pass
+    try:
+        from cupyx.scipy import linalg as cplinalg
+        linalg._srcmodule = cplinalg
+    except ImportError:
+        pass
     return
 
 
@@ -63,6 +77,7 @@ def set_backend_to_defaults():
     interpolate._srcmodule = _interpolate
     optimize._srcmodule = _optimize
     signal._srcmodule = _signal
+    linalg._srcmodule = _linalg
     return
 
 
