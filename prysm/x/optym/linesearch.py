@@ -188,6 +188,10 @@ def ls_strong_wolfe(problem, xk, pk, fg_at_xk=None, maxalpha=None, c1=1e-4, c2=0
         f(xk + alpha*pk) at the accepted alpha.
     derphi_a : float or None
         g(xk + alpha*pk) . pk at the accepted alpha.
+    g_a : ndarray or None
+        g(xk + alpha*pk) at the accepted alpha.  Callers that take the
+        next step from xk + alpha*pk can reuse this gradient instead of
+        paying a fresh fg evaluation; None on failure.
 
     """
     problem = as_problem(problem)
@@ -198,9 +202,11 @@ def ls_strong_wolfe(problem, xk, pk, fg_at_xk=None, maxalpha=None, c1=1e-4, c2=0
     # _zoom needs phi(alpha) and derphi(alpha) as separate callables. Each
     # alpha produces a fresh xk+alpha*pk array, so the Problem's internal
     # identity cache cannot bridge phi-then-derphi at the same alpha. Cache
-    # the joint fg result here, keyed on alpha.
+    # the joint fg result here, keyed on alpha.  Also cache the full
+    # gradient ga so the caller can recover it via the return value and
+    # skip an extra fg evaluation at the accepted alpha.
     _cache_alpha = [None]
-    _cache_val = [None, None]  # phi, derphi
+    _cache_val = [None, None, None]  # phi, derphi, g
 
     def _eval(alpha):
         if _cache_alpha[0] != alpha:
@@ -208,7 +214,13 @@ def ls_strong_wolfe(problem, xk, pk, fg_at_xk=None, maxalpha=None, c1=1e-4, c2=0
             _cache_alpha[0] = alpha
             _cache_val[0] = fa
             _cache_val[1] = np.dot(ga, pk)
+            _cache_val[2] = ga
         return _cache_val[0], _cache_val[1]
+
+    def _g_at(alpha):
+        if _cache_alpha[0] != alpha:
+            _eval(alpha)
+        return _cache_val[2]
 
     def phi(alpha):
         return _eval(alpha)[0]
@@ -276,4 +288,5 @@ def ls_strong_wolfe(problem, xk, pk, fg_at_xk=None, maxalpha=None, c1=1e-4, c2=0
         derphi_a0 = derphi_a1
         phi_a1, _ = _eval(alpha1)
 
-    return alpha_star, phi_star, derphi_star
+    g_star = _g_at(alpha_star) if alpha_star is not None else None
+    return alpha_star, phi_star, derphi_star, g_star

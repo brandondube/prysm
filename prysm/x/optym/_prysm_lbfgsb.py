@@ -13,7 +13,7 @@ Behaves like every other class in optimizers.py: step returns
 search reports no acceptable step length.  Termination otherwise is the
 governor's responsibility.
 """
-from prysm.mathops import np
+from prysm.mathops import linalg, np
 
 from .linesearch import ls_strong_wolfe
 from .problem import as_problem
@@ -32,6 +32,16 @@ class PrysmLBFGSB:
     componentwise projection of x_hat into the box whenever that direction
     is descent, falling back to BLNZ truncation only when projection
     yields an ascent direction.
+
+    Choose this over the scipy-backed LBFGSB when any of: (1) the
+    objective lives on a non-numpy backend (cupy, pytorch) where the
+    scipy Fortran wrapper would force a host round-trip per fg call;
+    (2) you want to run at config.precision = 32, which the scipy
+    driver refuses; (3) you want the governor to drive termination
+    without inheriting the scipy task-string state machine.  The pure-
+    Python implementation matches or beats the scipy driver on CPU at
+    n >= 1000 in the Rosenbrock CPU benchmark and is roughly 2x slower
+    for tiny problems (n < 10) due to Python per-call overhead.
 
     Parameters
     ----------
@@ -70,6 +80,12 @@ class PrysmLBFGSB:
             upper_bounds = np.full(self.n, np.inf, dtype=dtype)
         self.l = lower_bounds  # NOQA - mirrors the math
         self.u = upper_bounds
+        # When no coord has a finite bound, the Cauchy point + subspace
+        # solve reduces to the plain L-BFGS step -H_k g.  Skip both and
+        # save one _W + one _M build per step.
+        self._has_bounds = bool(
+            np.any(np.isfinite(lower_bounds)) or np.any(np.isfinite(upper_bounds))
+        )
 
         # history: each row is one (s, y) pair; ys[i] caches s_i . y_i.
         self.S = np.zeros((memory, self.n), dtype=dtype)
@@ -236,10 +252,12 @@ class PrysmLBFGSB:
             return np.inf
         return -df / ddf
 
-    def _cauchy(self, g):
+    def _cauchy(self, g, W=None, M=None):
         """Generalized Cauchy point along the projected gradient path.
 
-        Implements BLNZ Algorithm CP.  Returns
+        Implements BLNZ Algorithm CP.  W and M default to freshly built
+        matrices; callers that already have them in hand (step()) pass
+        them in to avoid the duplicate build.  Returns
             xc        - (n,) Cauchy point
             c         - (2k,) Wᵀ(xc − x) for the subspace solve
             free_mask - (n,) bool, True where xc is interior
@@ -266,11 +284,11 @@ class PrysmLBFGSB:
             p = np.zeros(0, dtype=dtype)
             df = -gtg
             ddf = float(theta) * gtg
-            W = None
-            M = None
         else:
-            W = self._W()
-            M = self._M()
+            if W is None:
+                W = self._W()
+            if M is None:
+                M = self._M()
             c = np.zeros(2 * k, dtype=dtype)
             p = W.T @ d
             Mp = np.linalg.solve(M, p)
@@ -376,10 +394,11 @@ class PrysmLBFGSB:
     # to be an ascent direction (gᵀd ≥ 0) the algorithm reverts to the
     # original BLNZ truncation rule.  See step() for the switch.
 
-    def _subspace_solve(self, xc, c, free_mask, g):
+    def _subspace_solve(self, xc, c, free_mask, g, W=None, M=None):
         """Return the subspace displacement Δx (full length, zero on
         active coords) such that xc + Δx minimizes the quadratic model
-        on the free subspace.
+        on the free subspace.  W and M are accepted from the caller to
+        avoid rebuilding the compact representation matrices.
         """
         n = self.n
         k = self._k
@@ -399,8 +418,10 @@ class PrysmLBFGSB:
             dx[free_mask] = dx_F
             return dx
 
-        W = self._W()
-        M = self._M()
+        if W is None:
+            W = self._W()
+        if M is None:
+            M = self._M()
 
         Mc = np.linalg.solve(M, c)
         # r_c, full-length, then row-slice to F.
@@ -439,6 +460,11 @@ class PrysmLBFGSB:
         H_0 is the diagonal scaling (s_{k-1} . y_{k-1}) / (y_{k-1} . y_{k-1}),
         which is the standard choice and equivalent to 1/theta_k in the
         compact representation.
+
+        Used both for cross-validating the compact-form direction _Hg
+        (Phase 3 tests) and as the production unconstrained-step path,
+        where it is several times faster than _Hg because it never
+        materializes the (n, 2k) W or (2k, 2k) M matrices.
         """
         k = self._k
         q = g.copy()
@@ -508,26 +534,49 @@ class PrysmLBFGSB:
         if g.ndim != 1:
             g = g.ravel()
 
-        xc, c_vec, free_mask = self._cauchy(g)
-        dx = self._subspace_solve(xc, c_vec, free_mask, g)
-        x_hat = xc + dx
-
-        # Morales-Nocedal 2011: project x_hat into the box and use that as
-        # the trial point.  If the resulting direction is descent, take
-        # the full unit step as the line-search ceiling.  Otherwise revert
-        # to the BLNZ truncation rule that walks from x_k toward x_hat
-        # until the first bound is reached.
-        x_bar = np.minimum(np.maximum(x_hat, self.l), self.u)
-        p_proj = x_bar - self.x
-        gp_proj = float(g @ p_proj)
-        if gp_proj < 0.0:
-            p = p_proj
-            alpha_max = 1.0
-            subspace_mode = 'projected'
+        if not self._has_bounds:
+            # Cauchy + subspace solve reduces to the L-BFGS direction
+            # -H_k g when no bound is finite.  The two-loop recursion
+            # delivers -H_k g without materializing the (n, 2k) W or
+            # (2k, 2k) M matrices, which is a clear win in the absence
+            # of bounds where neither is reused.
+            p = self._two_loop(g)
+            alpha_max = np.inf
+            free_mask_count = self.n
+            cauchy_breaks = 0
+            subspace_mode = 'unbounded'
         else:
-            p = x_hat - self.x
-            alpha_max = self._max_alpha_inside_box(self.x, p)
-            subspace_mode = 'truncated'
+            # Build W and M once per outer iteration; _cauchy and
+            # _subspace_solve both consume them.
+            if self._k > 0:
+                W = self._W()
+                M = self._M()
+            else:
+                W = None
+                M = None
+
+            xc, c_vec, free_mask = self._cauchy(g, W, M)
+            dx = self._subspace_solve(xc, c_vec, free_mask, g, W, M)
+            x_hat = xc + dx
+
+            # Morales-Nocedal 2011: project x_hat into the box and use that
+            # as the trial point.  If the resulting direction is descent,
+            # take the full unit step as the line-search ceiling.  Otherwise
+            # revert to the BLNZ truncation rule that walks from x_k toward
+            # x_hat until the first bound is reached.
+            x_bar = np.minimum(np.maximum(x_hat, self.l), self.u)
+            p_proj = x_bar - self.x
+            gp_proj = float(g @ p_proj)
+            if gp_proj < 0.0:
+                p = p_proj
+                alpha_max = 1.0
+                subspace_mode = 'projected'
+            else:
+                p = x_hat - self.x
+                alpha_max = self._max_alpha_inside_box(self.x, p)
+                subspace_mode = 'truncated'
+            free_mask_count = int(free_mask.sum())
+            cauchy_breaks = self.n - free_mask_count
 
         # No room to move, or the Cauchy+subspace direction degenerated
         # to zero (e.g. every coord is at a bound being pushed into).
@@ -535,7 +584,7 @@ class PrysmLBFGSB:
             self.last_step_metadata = {'reason': 'no_descent'}
             raise StopIteration
 
-        alpha, _, _ = ls_strong_wolfe(
+        alpha, _, _, g_new = ls_strong_wolfe(
             self.problem, self.x, p,
             fg_at_xk=(f, g),
             maxalpha=alpha_max,
@@ -546,29 +595,30 @@ class PrysmLBFGSB:
             self.last_step_metadata = {'reason': 'linesearch_fail'}
             raise StopIteration
 
+        # The Wolfe search has already evaluated (f, g) at xk + alpha*pk
+        # via its internal cache; reuse the gradient instead of paying
+        # an extra fg for it.
+        if g_new.ndim != 1:
+            g_new = g_new.ravel()
+
         s = alpha * p
         x_new = self.x + s
         # Defensive clip: the Wolfe search may walk fractionally past a
         # bound under floating-point roundoff even with maxalpha set.
+        # The clipped point is within an ULP of x_new, so the cached
+        # g_new is still the right representative for the curvature update.
         x_new = np.minimum(np.maximum(x_new, self.l), self.u)
         s = x_new - self.x  # honor the clip in the history update too
-
-        # Wolfe returns g·pk but not g itself; pay one extra fg for g_new.
-        _, g_new = self.problem.fg(x_new)
-        self.nfev += 1
-        if g_new.ndim != 1:
-            g_new = g_new.ravel()
 
         y = g_new - g
         self._update_history(s, y)
 
         self.x = x_new
         self.iter += 1
-        free_count = int(free_mask.sum())
         self.last_step_metadata = {
             'alpha': float(alpha),
-            'free_vars': free_count,
-            'cauchy_breaks': self.n - free_count,
+            'free_vars': free_mask_count,
+            'cauchy_breaks': cauchy_breaks,
             'subspace_solved': True,
             'subspace_mode': subspace_mode,
         }
