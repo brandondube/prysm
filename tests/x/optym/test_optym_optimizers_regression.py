@@ -187,6 +187,18 @@ def test_lbfgsb_alias_matches_scipy_version():
         assert LBFGSB is F77LBFGSB
 
 
+@pytest.mark.skipif(not _scipy_has_c_lbfgsb(), reason='C driver only')
+def test_c_lbfgsb_decodes_abnormal_task(x0):
+    """SciPy's C driver can return status code 8 (ABNORMAL); it should be
+    treated as a known failed termination, not as an unknown task.
+    """
+    opt = CLBFGSB(fg, x0)
+    opt.task[0] = 8
+    opt.task[1] = 0
+    assert opt._decode_task() == 'ABNORMAL'
+    assert opt._task_diagnostic() == 'ABNORMAL'
+
+
 def test_all_optimizers_return_old_x_convention(x0):
     """Regression: every optimizer's step() returns the iterate at which
     (f, g) was evaluated — not the post-update iterate.  After step(),

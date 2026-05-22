@@ -31,6 +31,59 @@ _C_TASK_NEW_X = 1
 _C_TASK_FG = 3
 _C_TASK_CONVERGENCE = 4
 _C_TASK_STOP = 5
+_C_TASK_WARNING = 6
+_C_TASK_ERROR = 7
+_C_TASK_ABNORMAL = 8
+
+
+_C_STATUS_MESSAGES = {
+    _C_TASK_NEW_X: "NEW_X",
+    _C_TASK_FG: "FG",
+    _C_TASK_CONVERGENCE: "CONVERGENCE",
+    _C_TASK_STOP: "STOP",
+    _C_TASK_WARNING: "WARNING",
+    _C_TASK_ERROR: "ERROR",
+    _C_TASK_ABNORMAL: "ABNORMAL",
+}
+
+
+_C_TASK_MESSAGES = {
+    0: "",
+    301: "",
+    302: "",
+    401: "NORM OF PROJECTED GRADIENT <= PGTOL",
+    402: "RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+    501: "CPU EXCEEDING THE TIME LIMIT",
+    502: "TOTAL NO. OF F,G EVALUATIONS EXCEEDS LIMIT",
+    503: "PROJECTED GRADIENT IS SUFFICIENTLY SMALL",
+    504: "TOTAL NO. OF ITERATIONS REACHED LIMIT",
+    505: "CALLBACK REQUESTED HALT",
+    601: "ROUNDING ERRORS PREVENT PROGRESS",
+    602: "STP = STPMAX",
+    603: "STP = STPMIN",
+    604: "XTOL TEST SATISFIED",
+    701: "NO FEASIBLE SOLUTION",
+    702: "FACTR < 0",
+    703: "FTOL < 0",
+    704: "GTOL < 0",
+    705: "XTOL < 0",
+    706: "STP < STPMIN",
+    707: "STP > STPMAX",
+    708: "STPMIN < 0",
+    709: "STPMAX < STPMIN",
+    710: "INITIAL G >= 0",
+    711: "M <= 0",
+    712: "N <= 0",
+    713: "INVALID NBD",
+}
+
+
+class _DriverStop:
+    """StopIteration payload for non-error driver termination."""
+
+    def __init__(self, success, message):
+        self.success = success
+        self.message = message
 
 
 class _LBFGSBBase:
@@ -203,6 +256,12 @@ class _LBFGSBBase:
                     "L-BFGS-B driver thinks something is wrong with the "
                     f"problem; task: {self._task_diagnostic()}"
                 )  # NOQA - defined by subclasses.
+            if task == "ABNORMAL":
+                self.last_step_metadata = {
+                    "task": self._task_diagnostic(),
+                    "reason": "abnormal_termination",
+                }
+                raise StopIteration(_DriverStop(False, self._task_diagnostic()))
             if task == "CONVERGENCE":
                 raise StopIteration
             if task == "NEW_X":
@@ -408,6 +467,12 @@ class CLBFGSB(_LBFGSBBase):
             return "CONVERGENCE"
         if code == _C_TASK_STOP:
             return "STOP"
+        if code == _C_TASK_ABNORMAL:
+            return "ABNORMAL"
+        if code == _C_TASK_WARNING:
+            return "ABNORMAL"
+        if code == _C_TASK_ERROR:
+            return "STOP"
         return None
 
     def _store_fg(self, f, g):
@@ -418,7 +483,13 @@ class CLBFGSB(_LBFGSBBase):
         return float(self.f)
 
     def _task_diagnostic(self):
-        return f"code {int(self.task[0])}"
+        status_code = int(self.task[0])
+        task_code = int(self.task[1])
+        status = _C_STATUS_MESSAGES.get(status_code, f"code {status_code}")
+        message = _C_TASK_MESSAGES.get(task_code, f"task code {task_code}")
+        if message:
+            return f"{status}: {message}"
+        return status
 
 
 # Public alias — picks the right driver for the installed SciPy.
