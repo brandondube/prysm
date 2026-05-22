@@ -13,10 +13,186 @@ Behaves like every other class in optimizers.py: step returns
 search reports no acceptable step length.  Termination otherwise is the
 governor's responsibility.
 """
+import math
+
 from prysm.mathops import linalg, np
 
-from .linesearch import ls_strong_wolfe
 from .problem import as_problem
+
+
+def _wolfe_eval(problem, xk, pk, alpha, dot):
+    """Evaluate f, directional derivative, and gradient at xk + alpha*pk."""
+    f, g = problem.fg(xk + alpha * pk)
+    if g.ndim != 1:
+        g = g.ravel()
+    return float(f), float(dot(g, pk)), g
+
+
+def _wolfe_quadmin(a, fa, fpa, b, fb):
+    """Quadratic interpolant minimizer for scalar Wolfe zoom."""
+    try:
+        db = b - a
+        B = (fb - fa - fpa * db) / (db * db)
+        xmin = a - fpa / (2.0 * B)
+    except ArithmeticError:
+        return None
+    if not math.isfinite(xmin):
+        return None
+    return xmin
+
+
+def _wolfe_cubicmin(a, fa, fpa, b, fb, c, fc):
+    """Cubic interpolant minimizer for scalar Wolfe zoom."""
+    try:
+        db = b - a
+        dc = c - a
+        denom = (db * dc) ** 2 * (db - dc)
+        rhs0 = fb - fa - fpa * db
+        rhs1 = fc - fa - fpa * dc
+        A = (dc * dc * rhs0 - db * db * rhs1) / denom
+        B = (-dc ** 3 * rhs0 + db ** 3 * rhs1) / denom
+        radical = B * B - 3.0 * A * fpa
+        xmin = a + (-B + math.sqrt(radical)) / (3.0 * A)
+    except (ArithmeticError, ValueError):
+        return None
+    if not math.isfinite(xmin):
+        return None
+    return xmin
+
+
+def _strong_wolfe_zoom(
+    problem, xk, pk,
+    a_lo, a_hi,
+    phi_lo, phi_hi,
+    derphi_lo,
+    phi0, derphi0,
+    c1, c2, dot,
+):
+    """Zoom stage for the optimizer-local strong-Wolfe line search."""
+    maxiter = 10
+    delta1 = 0.2
+    delta2 = 0.1
+    phi_rec = phi0
+    a_rec = 0.0
+
+    for i in range(maxiter + 1):
+        dalpha = a_hi - a_lo
+        if dalpha < 0:
+            a, b = a_hi, a_lo
+        else:
+            a, b = a_lo, a_hi
+
+        a_j = None
+        if i > 0:
+            cchk = delta1 * dalpha
+            a_j = _wolfe_cubicmin(
+                a_lo, phi_lo, derphi_lo,
+                a_hi, phi_hi,
+                a_rec, phi_rec,
+            )
+            if a_j is not None and (a_j > b - cchk or a_j < a + cchk):
+                a_j = None
+
+        if a_j is None:
+            qchk = delta2 * dalpha
+            a_j = _wolfe_quadmin(a_lo, phi_lo, derphi_lo, a_hi, phi_hi)
+            if a_j is None or a_j > b - qchk or a_j < a + qchk:
+                a_j = a_lo + 0.5 * dalpha
+
+        phi_aj, derphi_aj, g_aj = _wolfe_eval(problem, xk, pk, a_j, dot)
+        if (phi_aj > phi0 + c1 * a_j * derphi0) or (phi_aj >= phi_lo):
+            phi_rec = phi_hi
+            a_rec = a_hi
+            a_hi = a_j
+            phi_hi = phi_aj
+            continue
+
+        if abs(derphi_aj) <= -c2 * derphi0:
+            return a_j, phi_aj, derphi_aj, g_aj
+
+        if derphi_aj * (a_hi - a_lo) >= 0:
+            phi_rec = phi_hi
+            a_rec = a_hi
+            a_hi = a_lo
+            phi_hi = phi_lo
+        else:
+            phi_rec = phi_lo
+            a_rec = a_lo
+        a_lo = a_j
+        phi_lo = phi_aj
+        derphi_lo = derphi_aj
+
+    return None, None, None, None
+
+
+def _strong_wolfe_lean(
+    problem, xk, pk,
+    fg_at_xk,
+    maxalpha=None,
+    c1=1e-4,
+    c2=0.9,
+    maxiter=10,
+):
+    """Strong-Wolfe line search specialized for PrysmLBFGSB.step().
+
+    This is intentionally internal: it assumes the caller already owns a
+    Problem object and precomputed (f, g) at xk.  Keeping the bracket and
+    zoom state explicit avoids per-step closures and cache containers in
+    the public line-search helper while preserving the same returned
+    accepted gradient.
+    """
+    fk, gk = fg_at_xk
+    dot = np.dot
+    phi0 = float(fk)
+    derphi0 = float(dot(gk, pk))
+
+    alpha0 = 0.0
+    alpha1 = 1.0
+    if maxalpha is not None:
+        alpha1 = min(alpha1, maxalpha)
+
+    phi_a0 = phi0
+    derphi_a0 = derphi0
+    phi_a1, derphi_a1, g_a1 = _wolfe_eval(problem, xk, pk, alpha1, dot)
+
+    for i in range(maxiter):
+        if alpha1 == 0 or (maxalpha is not None and alpha0 == maxalpha):
+            break
+
+        if (phi_a1 > phi0 + c1 * alpha1 * derphi0) or (i > 0 and phi_a1 >= phi_a0):
+            return _strong_wolfe_zoom(
+                problem, xk, pk,
+                alpha0, alpha1,
+                phi_a0, phi_a1,
+                derphi_a0,
+                phi0, derphi0,
+                c1, c2, dot,
+            )
+
+        if abs(derphi_a1) <= -c2 * derphi0:
+            return alpha1, phi_a1, derphi_a1, g_a1
+
+        if derphi_a1 >= 0:
+            return _strong_wolfe_zoom(
+                problem, xk, pk,
+                alpha1, alpha0,
+                phi_a1, phi_a0,
+                derphi_a1,
+                phi0, derphi0,
+                c1, c2, dot,
+            )
+
+        alpha2 = 2.0 * alpha1
+        if maxalpha is not None:
+            alpha2 = min(alpha2, maxalpha)
+
+        alpha0 = alpha1
+        alpha1 = alpha2
+        phi_a0 = phi_a1
+        derphi_a0 = derphi_a1
+        phi_a1, derphi_a1, g_a1 = _wolfe_eval(problem, xk, pk, alpha1, dot)
+
+    return None, None, None, None
 
 
 class PrysmLBFGSB:
@@ -39,9 +215,9 @@ class PrysmLBFGSB:
     (2) you want to run at config.precision = 32, which the scipy
     driver refuses; (3) you want the governor to drive termination
     without inheriting the scipy task-string state machine.  The pure-
-    Python implementation matches or beats the scipy driver on CPU at
-    n >= 1000 in the Rosenbrock CPU benchmark and is roughly 2x slower
-    for tiny problems (n < 10) due to Python per-call overhead.
+    Python implementation closes the gap with the scipy driver as n grows
+    in the Rosenbrock CPU benchmark, but remains slower for tiny problems
+    due to Python per-call overhead.
 
     Parameters
     ----------
@@ -91,7 +267,10 @@ class PrysmLBFGSB:
         self.S = np.zeros((memory, self.n), dtype=dtype)
         self.Y = np.zeros((memory, self.n), dtype=dtype)
         self.ys = np.zeros(memory, dtype=dtype)
+        self.rho = np.zeros(memory, dtype=dtype)
+        self._alphas = np.empty(memory, dtype=dtype)
         self._k = 0  # valid history count, capped at memory
+        self._hist_next = 0  # next slot to overwrite once history is full
 
         # theta = (y_{k-1} . y_{k-1}) / (s_{k-1} . y_{k-1}); 1 before any
         # update so the initial Hessian approximation is the identity.
@@ -136,21 +315,34 @@ class PrysmLBFGSB:
     #
     # so a single 2k×2k solve gives the direction.
 
+    def _hist_slot(self, i):
+        """Physical row for logical history index i, ordered oldest-newest."""
+        if self._k < self.m:
+            return i
+        return (self._hist_next + i) % self.m
+
+    def _ordered_rows(self, rows):
+        """History rows in oldest-newest order, using at most two chunks."""
+        k = self._k
+        if k < self.m or self._hist_next == 0:
+            return rows[:k]
+
+        i = self._hist_next
+        return np.concatenate([rows[i:], rows[:i]], axis=0)
+
     def _W(self):
         """The (n, 2k) compact matrix W_k = [Y_k, θ_k S_k]."""
-        k = self._k
-        Y_T = self.Y[:k].T
-        S_T = self.S[:k].T
+        Y_T = self._ordered_rows(self.Y).T
+        S_T = self._ordered_rows(self.S).T
         return np.concatenate([Y_T, self.theta * S_T], axis=1)
 
     def _M(self):
         """The (2k, 2k) middle matrix from the compact representation."""
-        k = self._k
-        S = self.S[:k]
-        Y = self.Y[:k]
+        S = self._ordered_rows(self.S)
+        Y = self._ordered_rows(self.Y)
         SY = S @ Y.T               # (i,j) = s_i · y_j
         SS = S @ S.T               # (i,j) = s_i · s_j
-        D = np.diag(self.ys[:k])
+        D = np.diag(self._ordered_rows(self.ys))
         # strict lower triangular (zero out diagonal and above)
         L = SY - np.triu(SY)
         top = np.concatenate([-D, L.T], axis=1)
@@ -616,22 +808,29 @@ class PrysmLBFGSB:
         """
         k = self._k
         q = g.copy()
-        alphas = [None] * k
+        alphas = self._alphas
+        S = self.S
+        Y = self.Y
+        rho = self.rho
+        dot = np.dot
         for i in range(k - 1, -1, -1):
-            alpha_i = np.dot(self.S[i], q) / self.ys[i]
-            q = q - alpha_i * self.Y[i]
+            slot = self._hist_slot(i)
+            alpha_i = dot(S[slot], q) * rho[slot]
+            q -= alpha_i * Y[slot]
             alphas[i] = alpha_i
 
         if k > 0:
-            y_last = self.Y[k - 1]
-            gamma = self.ys[k - 1] / np.dot(y_last, y_last)
+            slot = self._hist_slot(k - 1)
+            y_last = Y[slot]
+            gamma = self.ys[slot] / dot(y_last, y_last)
             r = gamma * q
         else:
             r = q
 
         for i in range(k):
-            beta_i = np.dot(self.Y[i], r) / self.ys[i]
-            r = r + self.S[i] * (alphas[i] - beta_i)
+            slot = self._hist_slot(i)
+            beta_i = dot(Y[slot], r) * rho[slot]
+            r += S[slot] * (alphas[i] - beta_i)
 
         return -r
 
@@ -642,8 +841,9 @@ class PrysmLBFGSB:
         positive-definiteness invariant; non-conforming pairs are silently
         skipped (Nocedal & Wright Sec. 7.2).
         """
-        sy = float(np.dot(s, y))
-        yy = float(np.dot(y, y))
+        dot = np.dot
+        sy = float(dot(s, y))
+        yy = float(dot(y, y))
         eps = float(np.finfo(self.x.dtype).eps)
         if sy <= eps * max(yy, 1.0):
             return
@@ -653,18 +853,16 @@ class PrysmLBFGSB:
             slot = self._k
             self._k += 1
         else:
-            # roll the buffer left and write to the last slot.  Use an
-            # explicit .copy() of the source slice; some backends do not
-            # promise correct behavior for overlapping in-place slice
-            # assignments.
-            self.S[:-1] = self.S[1:].copy()
-            self.Y[:-1] = self.Y[1:].copy()
-            self.ys[:-1] = self.ys[1:].copy()
-            slot = m - 1
+            # Circular buffer: overwrite the oldest pair and advance the
+            # logical start.  Consumers read history in oldest-newest order
+            # via _hist_slot or _ordered_rows, so no physical roll is needed.
+            slot = self._hist_next
+            self._hist_next = (self._hist_next + 1) % m
 
         self.S[slot] = s
         self.Y[slot] = y
         self.ys[slot] = sy
+        self.rho[slot] = 1 / sy
         self.theta = np.asarray(yy / sy, dtype=self.x.dtype)
 
     def step(self):
@@ -689,7 +887,7 @@ class PrysmLBFGSB:
             # (2k, 2k) M matrices, which is a clear win in the absence
             # of bounds where neither is reused.
             p = self._two_loop(g)
-            alpha_max = np.inf
+            alpha_max = None
             free_mask_count = self.n
             cauchy_breaks = 0
             subspace_mode = 'unbounded'
@@ -734,11 +932,11 @@ class PrysmLBFGSB:
 
         # No room to move, or the Cauchy+subspace direction degenerated
         # to zero (e.g. every coord is at a bound being pushed into).
-        if alpha_max <= 0.0 or float(np.max(np.abs(p))) == 0.0:
+        if (alpha_max is not None and alpha_max <= 0.0) or not bool(np.any(p)):
             self.last_step_metadata = {'reason': 'no_descent'}
             raise StopIteration
 
-        alpha, _, _, g_new = ls_strong_wolfe(
+        alpha, _, _, g_new = _strong_wolfe_lean(
             self.problem, self.x, p,
             fg_at_xk=(f, g),
             maxalpha=alpha_max,
@@ -757,12 +955,13 @@ class PrysmLBFGSB:
 
         s = alpha * p
         x_new = self.x + s
-        # Defensive clip: the Wolfe search may walk fractionally past a
-        # bound under floating-point roundoff even with maxalpha set.
-        # The clipped point is within an ULP of x_new, so the cached
-        # g_new is still the right representative for the curvature update.
-        x_new = np.minimum(np.maximum(x_new, self.l), self.u)
-        s = x_new - self.x  # honor the clip in the history update too
+        if self._has_bounds:
+            # Defensive clip: the Wolfe search may walk fractionally past a
+            # bound under floating-point roundoff even with maxalpha set.
+            # The clipped point is within an ULP of x_new, so the cached
+            # g_new is still the right representative for the curvature update.
+            x_new = np.minimum(np.maximum(x_new, self.l), self.u)
+            s = x_new - self.x  # honor the clip in the history update too
 
         y = g_new - g
         self._update_history(s, y)
