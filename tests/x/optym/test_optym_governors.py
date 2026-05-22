@@ -115,16 +115,20 @@ def test_max_evaluations_reads_optimizer_nfev():
     assert result.nfev >= 1
 
 
-def test_step_record_snapshots_mutable_arrays():
+def test_step_record_aliases_inputs():
+    """StepRecord stores its iterate / gradient inputs by reference; it
+    does not take defensive copies.  Per-step copies on every governor
+    observation are expensive at large n, and every optimizer in this
+    module is responsible for returning step results that won't be
+    mutated by a subsequent step.  Optimizers whose internal state IS a
+    mutable buffer (e.g. scipy L-BFGS-B's Fortran driver) keep that
+    buffer separate from self.x and snapshot at each accepted iteration.
+    """
     x = np.array([1.0])
     g = np.array([2.0])
     x_next = np.array([3.0])
     record = StepRecord(None, 1, x, 4.0, g, x_next)
 
-    x[...] = 10.0
-    g[...] = 20.0
-    x_next[...] = 30.0
-
-    np.testing.assert_array_equal(record.x, [1.0])
-    np.testing.assert_array_equal(record.g, [2.0])
-    np.testing.assert_array_equal(record.x_next, [3.0])
+    assert record.x is x
+    assert record.g is g
+    assert record.x_next is x_next
