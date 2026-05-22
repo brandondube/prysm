@@ -1,4 +1,5 @@
 """A submodule which allows the user to swap out the backend for mathematics."""
+from numbers import Number
 import warnings
 
 import numpy as np
@@ -19,6 +20,7 @@ class BackendShim:
 
 
 _np = np
+_scalar_types = (Number, _np.generic)
 _ndimage = ndimage
 _fft = fft
 _interpolate = interpolate
@@ -105,15 +107,23 @@ def array_to_true_numpy(*args):
 
     out = []
     for arg in args:
+        if isinstance(arg, _scalar_types):
+            out.append(arg)
+            continue
+
         if isinstance(arg, _np.ndarray):
             out.append(arg)
+            continue
+
         # cupy
         if hasattr(arg, 'get'):
             out.append(arg.get())
+            continue
 
         # PyTorch
         if hasattr(arg, 'numpy'):
             out.append(arg.numpy(force=True))
+            continue
 
     if len(out) == 1:
         return out[0]
