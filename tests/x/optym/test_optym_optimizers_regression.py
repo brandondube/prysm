@@ -24,6 +24,9 @@ from prysm.x.optym import (
     AdaMomentum,
     Yogi,
     LBFGSB,
+    MaxIterations,
+    rosenbrock,
+    run_until,
 )
 from prysm.x.optym._lbfgsb import CLBFGSB, F77LBFGSB, _scipy_has_c_lbfgsb
 
@@ -140,6 +143,29 @@ def test_lbfgsb_run_to_completes_quietly_on_quadratic(x0):
         warnings.simplefilter('error')   # any warning fails the test
         traj = list(opt.run_to(10))
     assert len(traj) == 10
+
+
+def test_lbfgsb_run_until_rosenbrock_does_not_stop_after_one_iteration():
+    opt = LBFGSB(rosenbrock, np.array([-1.2, 1.0]))
+    result = run_until(opt, MaxIterations(5), maxiter=5)
+
+    assert result.nit == 5
+    assert result.message == 'maximum iterations reached'
+    assert not result.success
+
+
+def test_lbfgsb_keeps_driver_state_private_and_returns_copies(x0):
+    opt = LBFGSB(fg, x0)
+    x_returned, _, g_returned = opt.step()
+    x_after = opt.x
+
+    x_returned[...] = 100
+    g_returned[...] = 100
+    x_after[...] = 100
+
+    np.testing.assert_array_equal(opt.x, opt._x)
+    assert not np.array_equal(opt.x, x_returned)
+    assert not np.array_equal(opt.x, x_after)
 
 
 def test_lbfgsb_run_to_warns_when_driver_signals_convergence():

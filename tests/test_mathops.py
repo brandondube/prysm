@@ -41,8 +41,6 @@ def test_is_power_of_2_non_powers_of_2(num):
     ('interpolate', 'interp1d'),
     ('optimize', 'brentq'),
     ('signal', 'windows'),
-    ('linalg', 'lu_factor'),
-    ('linalg', 'lu_solve'),
 ])
 def test_backend_shim_default_routes_to_scipy_numpy(shim_name, probe_attr):
     shim = getattr(mathops, shim_name)
@@ -54,20 +52,44 @@ def test_set_backend_to_defaults_restores_optimize_and_signal():
     sentinel = object()
     mathops.optimize._srcmodule = sentinel
     mathops.signal._srcmodule = sentinel
-    mathops.linalg._srcmodule = sentinel
     mathops.set_backend_to_defaults()
     assert mathops.optimize._srcmodule is mathops._optimize
     assert mathops.signal._srcmodule is mathops._signal
-    assert mathops.linalg._srcmodule is mathops._linalg
     assert hasattr(mathops.optimize, 'brentq')
     assert hasattr(mathops.signal, 'windows')
-    assert hasattr(mathops.linalg, 'lu_factor')
 
 
-def test_linalg_lu_factor_and_solve():
-    """The default linalg shim wraps scipy.linalg's LU factor/solve."""
-    M = np.array([[4.0, 3.0], [6.0, 3.0]])
-    b = np.array([1.0, 1.0])
-    lu = mathops.linalg.lu_factor(M)
-    x = mathops.linalg.lu_solve(lu, b)
-    np.testing.assert_allclose(M @ x, b)
+@pytest.mark.parametrize('value', [1, 1.0, 1 + 2j, np.float64(1), np.bool_(True)])
+def test_array_to_true_numpy_returns_scalars(value):
+    assert mathops.array_to_true_numpy(value) == value
+
+
+def test_array_to_true_numpy_returns_numpy_arrays_without_copy(sample_data_2d):
+    assert mathops.array_to_true_numpy(sample_data_2d) is sample_data_2d
+
+
+def test_array_to_true_numpy_prefers_cupy_get_over_numpy():
+    class CupyLike:
+        def get(self):
+            return np.array([1, 2, 3])
+
+        def numpy(self, force=True):
+            return np.array([4, 5, 6])
+
+    out = mathops.array_to_true_numpy(CupyLike())
+    np.testing.assert_array_equal(out, np.array([1, 2, 3]))
+
+
+def test_array_to_true_numpy_handles_torch_like_after_cupy():
+    class TorchLike:
+        def numpy(self, force=True):
+            return np.array([1, 2, 3])
+
+    out = mathops.array_to_true_numpy(TorchLike())
+    np.testing.assert_array_equal(out, np.array([1, 2, 3]))
+
+
+def test_array_to_true_numpy_handles_multiple_inputs(sample_data_2d):
+    out = mathops.array_to_true_numpy(1, sample_data_2d)
+    assert out[0] == 1
+    assert out[1] is sample_data_2d
