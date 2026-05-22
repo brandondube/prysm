@@ -172,13 +172,13 @@ class _LBFGSBBase:
         completed iteration (NEW_X), termination (CONVERGENCE), or an
         error (STOP).  Each NEW_X corresponds to one outer iteration.
         """
-        x_start = self._x
+        x_start = self._x.copy()
         f_start = None
         g_start = None
 
         if self._cached_eval_matches(x_start):
             f_start = self._last_eval_f
-            g_start = self._last_eval_g
+            g_start = self._last_eval_g.copy()
 
         # setulb's task state-machine fires several FG requests during
         # its line search before declaring NEW_X.  Loop until that
@@ -187,7 +187,7 @@ class _LBFGSBBase:
             self._call_driver()  # NOQA - defined by subclasses.
             task = self._decode_task()  # NOQA - defined by subclasses.
             if task == "FG":
-                f, g = self.problem.fg(self._x)
+                f, g = self.problem.fg(self._x.copy())
                 self.nfev += 1
                 if g.ndim != 1:
                     g = g.ravel()
@@ -215,7 +215,7 @@ class _LBFGSBBase:
         self.iter += 1
 
         if f_start is None:
-            f_start, g_start = self.problem.fg(x_start)
+            f_start, g_start = self.problem.fg(x_start.copy())
             self.nfev += 1
             if g_start.ndim != 1:
                 g_start = g_start.ravel()
@@ -308,7 +308,7 @@ class F77LBFGSB(_LBFGSBBase):
             self.u,
             self.nbd,
             self.f,
-            self.g,
+            self._g,
             self.factr,
             self.pgtol,
             self.wa,
@@ -336,7 +336,7 @@ class F77LBFGSB(_LBFGSBBase):
 
     def _store_fg(self, f, g):
         self.f[:] = f
-        self.g[:] = g
+        self._g[:] = g
 
     def _read_f(self):
         return float(self.f[0])
@@ -385,7 +385,7 @@ class CLBFGSB(_LBFGSBBase):
             self.u,
             self.nbd,
             self.f,
-            self.g,
+            self._g,
             self.factr,
             self.pgtol,
             self.wa,
@@ -412,7 +412,7 @@ class CLBFGSB(_LBFGSBBase):
 
     def _store_fg(self, f, g):
         self.f[...] = f
-        self.g[:] = g
+        self._g[:] = g
 
     def _read_f(self):
         return float(self.f)

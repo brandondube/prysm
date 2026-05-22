@@ -57,3 +57,39 @@ def test_set_backend_to_defaults_restores_optimize_and_signal():
     assert mathops.signal._srcmodule is mathops._signal
     assert hasattr(mathops.optimize, 'brentq')
     assert hasattr(mathops.signal, 'windows')
+
+
+@pytest.mark.parametrize('value', [1, 1.0, 1 + 2j, np.float64(1), np.bool_(True)])
+def test_array_to_true_numpy_returns_scalars(value):
+    assert mathops.array_to_true_numpy(value) == value
+
+
+def test_array_to_true_numpy_returns_numpy_arrays_without_copy(sample_data_2d):
+    assert mathops.array_to_true_numpy(sample_data_2d) is sample_data_2d
+
+
+def test_array_to_true_numpy_prefers_cupy_get_over_numpy():
+    class CupyLike:
+        def get(self):
+            return np.array([1, 2, 3])
+
+        def numpy(self, force=True):
+            return np.array([4, 5, 6])
+
+    out = mathops.array_to_true_numpy(CupyLike())
+    np.testing.assert_array_equal(out, np.array([1, 2, 3]))
+
+
+def test_array_to_true_numpy_handles_torch_like_after_cupy():
+    class TorchLike:
+        def numpy(self, force=True):
+            return np.array([1, 2, 3])
+
+    out = mathops.array_to_true_numpy(TorchLike())
+    np.testing.assert_array_equal(out, np.array([1, 2, 3]))
+
+
+def test_array_to_true_numpy_handles_multiple_inputs(sample_data_2d):
+    out = mathops.array_to_true_numpy(1, sample_data_2d)
+    assert out[0] == 1
+    assert out[1] is sample_data_2d

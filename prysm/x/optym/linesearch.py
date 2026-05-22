@@ -1,5 +1,4 @@
 """Line searching routines."""
-from prysm.mathops import np
 
 # truenp: _cubicmin / _quadmin operate on quasi-scalars (cubic/quadratic
 #         minimizers with hand-coded 2×2 linear solves and errstate guards).
@@ -7,7 +6,10 @@ from prysm.mathops import np
 #         to truenp to enforce host execution.
 import numpy as truenp
 
+from prysm.mathops import array_to_true_numpy, np
+
 from .problem import as_problem
+
 
 def _cubicmin(a, fa, fpa, b, fb, c, fc):
     """
@@ -20,19 +22,21 @@ def _cubicmin(a, fa, fpa, b, fb, c, fc):
     # f(x) = A *(x-a)^3 + B*(x-a)^2 + C*(x-a) + D
     # this function operates on quasi-scalars; do not run on GPU
     np = truenp
-    with np.errstate(divide='raise', over='raise', invalid='raise'):
+    fa, fpa, b, fb, fc = array_to_true_numpy(fa, fpa, b, fb, fc)
+    with np.errstate(divide="raise", over="raise", invalid="raise"):
         try:
             C = fpa
             db = b - a
             dc = c - a
             denom = (db * dc) ** 2 * (db - dc)
             d1 = np.empty((2, 2))
-            d1[0, 0] = dc ** 2
-            d1[0, 1] = -db ** 2
-            d1[1, 0] = -dc ** 3
-            d1[1, 1] = db ** 3
-            [A, B] = np.dot(d1, np.asarray([fb - fa - C * db,
-                                            fc - fa - C * dc]).flatten())
+            d1[0, 0] = dc**2
+            d1[0, 1] = -(db**2)
+            d1[1, 0] = -(dc**3)
+            d1[1, 1] = db**3
+            [A, B] = np.dot(
+                d1, np.asarray([fb - fa - C * db, fc - fa - C * dc]).flatten()
+            )
             A /= denom
             B /= denom
             radical = B * B - 3 * A * C
@@ -53,7 +57,8 @@ def _quadmin(a, fa, fpa, b, fb):
     # f(x) = B*(x-a)^2 + C*(x-a) + D
     # this function operates on quasi-scalars; do not run on GPU
     np = truenp
-    with np.errstate(divide='raise', over='raise', invalid='raise'):
+    fa, fpa, b, fb = array_to_true_numpy(fa, fpa, b, fb)
+    with np.errstate(divide="raise", over="raise", invalid="raise"):
         try:
             D = fa
             C = fpa
@@ -67,8 +72,20 @@ def _quadmin(a, fa, fpa, b, fb):
     return xmin
 
 
-def _zoom(a_lo, a_hi, phi_lo, phi_hi, derphi_lo,
-          phi, derphi, phi0, derphi0, c1, c2, extra_condition):
+def _zoom(
+    a_lo,
+    a_hi,
+    phi_lo,
+    phi_hi,
+    derphi_lo,
+    phi,
+    derphi,
+    phi0,
+    derphi0,
+    c1,
+    c2,
+    extra_condition,
+):
     """Zoom stage of approximate linesearch satisfying strong Wolfe conditions.
 
     Part of the optimization algorithm in `scalar_search_wolfe2`.
@@ -108,32 +125,31 @@ def _zoom(a_lo, a_hi, phi_lo, phi_hi, derphi_lo,
         # derphi_lo and phi_hi if the result is still too close to the
         # end points (or out of the interval) then use bisection
 
-        if (i > 0):
+        if i > 0:
             cchk = delta1 * dalpha
-            a_j = _cubicmin(a_lo, phi_lo, derphi_lo, a_hi, phi_hi,
-                            a_rec, phi_rec)
+            a_j = _cubicmin(a_lo, phi_lo, derphi_lo, a_hi, phi_hi, a_rec, phi_rec)
         if (i == 0) or (a_j is None) or (a_j > b - cchk) or (a_j < a + cchk):
             qchk = delta2 * dalpha
             a_j = _quadmin(a_lo, phi_lo, derphi_lo, a_hi, phi_hi)
-            if (a_j is None) or (a_j > b-qchk) or (a_j < a+qchk):
-                a_j = a_lo + 0.5*dalpha
+            if (a_j is None) or (a_j > b - qchk) or (a_j < a + qchk):
+                a_j = a_lo + 0.5 * dalpha
 
         # Check new value of a_j
 
         phi_aj = phi(a_j)
-        if (phi_aj > phi0 + c1*a_j*derphi0) or (phi_aj >= phi_lo):
+        if (phi_aj > phi0 + c1 * a_j * derphi0) or (phi_aj >= phi_lo):
             phi_rec = phi_hi
             a_rec = a_hi
             a_hi = a_j
             phi_hi = phi_aj
         else:
             derphi_aj = derphi(a_j)
-            if abs(derphi_aj) <= -c2*derphi0 and extra_condition(a_j, phi_aj):
+            if abs(derphi_aj) <= -c2 * derphi0 and extra_condition(a_j, phi_aj):
                 a_star = a_j
                 val_star = phi_aj
                 valprime_star = derphi_aj
                 break
-            if derphi_aj*(a_hi - a_lo) >= 0:
+            if derphi_aj * (a_hi - a_lo) >= 0:
                 phi_rec = phi_hi
                 a_rec = a_hi
                 a_hi = a_lo
@@ -145,7 +161,7 @@ def _zoom(a_lo, a_hi, phi_lo, phi_hi, derphi_lo,
             phi_lo = phi_aj
             derphi_lo = derphi_aj
         i += 1
-        if (i > maxiter):
+        if i > maxiter:
             # Failed to find a conforming step size
             a_star = None
             val_star = None
@@ -154,7 +170,9 @@ def _zoom(a_lo, a_hi, phi_lo, phi_hi, derphi_lo,
     return a_star, val_star, valprime_star
 
 
-def ls_strong_wolfe(problem, xk, pk, fg_at_xk=None, maxalpha=None, c1=1e-4, c2=0.9, maxiter=10):
+def ls_strong_wolfe(
+    problem, xk, pk, fg_at_xk=None, maxalpha=None, c1=1e-4, c2=0.9, maxiter=10
+):
     """Line search satisfying the strong Wolfe conditions.
 
     Finds a step length alpha along direction pk from xk satisfying
@@ -243,8 +261,18 @@ def ls_strong_wolfe(problem, xk, pk, fg_at_xk=None, maxalpha=None, c1=1e-4, c2=0
         # → minimum is bracketed between alpha0 and alpha1; zoom in.
         if (phi_a1 > phi0 + c1 * alpha1 * derphi0) or (i > 0 and phi_a1 >= phi_a0):
             alpha_star, phi_star, derphi_star = _zoom(
-                alpha0, alpha1, phi_a0, phi_a1, derphi_a0,
-                phi, derphi, phi0, derphi0, c1, c2, _extra,
+                alpha0,
+                alpha1,
+                phi_a0,
+                phi_a1,
+                derphi_a0,
+                phi,
+                derphi,
+                phi0,
+                derphi0,
+                c1,
+                c2,
+                _extra,
             )
             break
 
@@ -260,8 +288,18 @@ def ls_strong_wolfe(problem, xk, pk, fg_at_xk=None, maxalpha=None, c1=1e-4, c2=0
         # with the interval reversed.
         if derphi_a1 >= 0:
             alpha_star, phi_star, derphi_star = _zoom(
-                alpha1, alpha0, phi_a1, phi_a0, derphi_a1,
-                phi, derphi, phi0, derphi0, c1, c2, _extra,
+                alpha1,
+                alpha0,
+                phi_a1,
+                phi_a0,
+                derphi_a1,
+                phi,
+                derphi,
+                phi0,
+                derphi0,
+                c1,
+                c2,
+                _extra,
             )
             break
 
