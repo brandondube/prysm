@@ -3,24 +3,14 @@
 from prysm.mathops import np
 
 
-def _snapshot(value):
-    """Return a defensive copy when possible.
-
-    Parameters
-    ----------
-    value : Any
-        Value to snapshot.
-
-    Returns
-    -------
-    Any
-        Copy of `value` when it exposes a copy method, otherwise `value`
-        itself.
-
-    """
-    if hasattr(value, 'copy'):
-        return value.copy()
-    return value
+# StepRecord aliases its iterate / gradient inputs rather than taking a
+# defensive copy.  Per-step copies are expensive at large n and most
+# optimizers already produce a fresh array each step (Adam, GD, Prysm-
+# LBFGSB all rebind `self.x` to a new array per update; problem.fg
+# returns a fresh gradient).  The only odd one is the scipy LBFGSB
+# wrapper, whose Fortran/C driver mutates a single iterate buffer in
+# place; that wrapper snapshots into self.x at each NEW_X and is
+# responsible for returning safe-to-keep arrays from step().
 
 
 class StepRecord:
@@ -76,10 +66,10 @@ class StepRecord:
                  metadata=None):
         self.optimizer = optimizer
         self.iteration = int(iteration)
-        self.x = _snapshot(x)
+        self.x = x
         self.f = float(f)
-        self.g = _snapshot(g)
-        self.x_next = _snapshot(x_next)
+        self.g = g
+        self.x_next = x_next
         self.metadata = {} if metadata is None else dict(metadata)
 
 
