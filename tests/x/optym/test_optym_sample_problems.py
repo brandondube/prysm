@@ -4,6 +4,10 @@ import pytest
 
 from prysm.x.optym import himmelblau, rastrigin, rosenbrock, sphere
 from prysm.x.optym.sample_problems import (
+    HimmelblauProblem,
+    RastriginProblem,
+    RosenbrockProblem,
+    SphereProblem,
     himmelblau as himmelblau_from_module,
     rastrigin as rastrigin_from_module,
     rosenbrock as rosenbrock_from_module,
@@ -26,6 +30,12 @@ def finite_difference_gradient(fg, x, step=1e-6):
     return g
 
 
+def finite_difference_hvp(problem, x, v, step=1e-6):
+    xp = x + step * v
+    xm = x - step * v
+    return (problem.g(xp) - problem.g(xm)) / (2 * step)
+
+
 @pytest.mark.parametrize(
     'func, x',
     [
@@ -39,6 +49,61 @@ def test_sample_problem_gradients_match_finite_difference(func, x):
     _, g = func(x)
     g_fd = finite_difference_gradient(func, x)
     np.testing.assert_allclose(g, g_fd, rtol=1e-6, atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    'problem, func, x, v',
+    [
+        (
+            SphereProblem(),
+            sphere,
+            np.array([1.5, -2.0, 0.25]),
+            np.array([0.5, -1.0, 2.0]),
+        ),
+        (
+            RosenbrockProblem(),
+            rosenbrock,
+            np.array([-1.2, 1.0, 0.5]),
+            np.array([0.25, -1.5, 0.75]),
+        ),
+        (
+            RastriginProblem(),
+            rastrigin,
+            np.array([0.25, -0.5, 1.25]),
+            np.array([1.0, -0.25, 0.5]),
+        ),
+        (
+            HimmelblauProblem(),
+            himmelblau,
+            np.array([-2.5, 3.0]),
+            np.array([0.5, -1.5]),
+        ),
+    ],
+)
+def test_sample_problem_classes_provide_analytic_hooks(problem, func, x, v):
+    assert problem.has_f
+    assert problem.has_g
+    assert problem.has_fg
+    assert problem.has_h
+    assert problem.has_hvp
+
+    f, g = func(x)
+    pf, pg = problem.fg(x)
+    np.testing.assert_allclose(problem.f(x), f)
+    np.testing.assert_allclose(problem.g(x), g)
+    np.testing.assert_allclose(pf, f)
+    np.testing.assert_allclose(pg, g)
+
+    h = problem.h(x)
+    hv = problem.hvp(x, v)
+    np.testing.assert_allclose(h, h.T)
+    np.testing.assert_allclose(h @ v.ravel(), hv.ravel())
+    np.testing.assert_allclose(
+        hv,
+        finite_difference_hvp(problem, x, v),
+        rtol=1e-5,
+        atol=1e-5,
+    )
 
 
 def test_sphere_minimum():
@@ -89,6 +154,17 @@ def test_sample_problems_reject_invalid_dimensions():
 
 
 def test_sample_problems_are_exported_from_package_and_module():
+    from prysm.x.optym import (
+        HimmelblauProblem as HimmelblauProblemFromPackage,
+        RastriginProblem as RastriginProblemFromPackage,
+        RosenbrockProblem as RosenbrockProblemFromPackage,
+        SphereProblem as SphereProblemFromPackage,
+    )
+
+    assert SphereProblemFromPackage is SphereProblem
+    assert RosenbrockProblemFromPackage is RosenbrockProblem
+    assert RastriginProblemFromPackage is RastriginProblem
+    assert HimmelblauProblemFromPackage is HimmelblauProblem
     assert sphere is sphere_from_module
     assert rosenbrock is rosenbrock_from_module
     assert rastrigin is rastrigin_from_module

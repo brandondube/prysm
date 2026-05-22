@@ -51,6 +51,69 @@ def _step_metadata(optimizer):
     return metadata
 
 
+def _as_bound_array(bound, x0, default):
+    if bound is None:
+        return np.full(x0.shape, default, dtype=x0.dtype)
+
+    bound = np.asarray(bound, dtype=x0.dtype)
+    if bound.shape == x0.shape:
+        return bound
+    if bound.size == x0.size:
+        return bound.reshape(x0.shape)
+    raise ValueError('bounds must have the same shape or size as x0')
+
+
+def _init_bounds(optimizer, x0, lower_bounds, upper_bounds):
+    lower_bounds = _as_bound_array(lower_bounds, x0, -np.inf)
+    upper_bounds = _as_bound_array(upper_bounds, x0, np.inf)
+    if bool(np.any(lower_bounds > upper_bounds)):
+        raise ValueError('lower_bounds must be <= upper_bounds')
+
+    optimizer.l = lower_bounds  # NOQA - mirrors L-BFGS-B naming
+    optimizer.u = upper_bounds
+    optimizer._has_bounds = bool(
+        np.any(np.isfinite(lower_bounds)) or np.any(np.isfinite(upper_bounds))
+    )
+    optimizer.x = _project_bounds(optimizer, optimizer.x)
+    optimizer.last_step_metadata = {}
+
+
+def _project_bounds(optimizer, x):
+    if not optimizer._has_bounds:
+        return x
+    return np.minimum(np.maximum(x, optimizer.l), optimizer.u)
+
+
+def _project_gradient(optimizer, g):
+    """Zero gradient components blocked by active box constraints."""
+    if not optimizer._has_bounds:
+        return g
+
+    x = optimizer.x
+    at_lower = np.isfinite(optimizer.l) & (x <= optimizer.l) & (g > 0)
+    at_upper = np.isfinite(optimizer.u) & (x >= optimizer.u) & (g < 0)
+    blocked = at_lower | at_upper
+    if bool(np.any(blocked)):
+        return np.where(blocked, np.zeros_like(g), g)
+    return g
+
+
+def _store_bounded_step_metadata(optimizer, g_step):
+    if not optimizer._has_bounds:
+        optimizer.last_step_metadata = {}
+        return
+
+    x = optimizer.x
+    at_lower = np.isfinite(optimizer.l) & (x <= optimizer.l)
+    at_upper = np.isfinite(optimizer.u) & (x >= optimizer.u)
+    active_bounds = at_lower | at_upper
+    optimizer.last_step_metadata = {
+        'projected_gradient': g_step,
+        'active_bounds': active_bounds,
+        'bounded_variables': int(active_bounds.sum()),
+    }
+
+
 def run_until(optimizer, governor, *, maxiter=None):
     """Run an optimizer until a governor decides to stop.
 
@@ -116,11 +179,14 @@ class _Accumulator:
 
     Holds a per-parameter accumulator initialized to zeros that subclass
     step methods update with some function of the gradient.  The
-    problem, x, alpha, eps, iter state is the same as
+    problem, x, alpha, bounds, eps, iter state is the same as
     every other optimizer in this module.
 
     Subclasses with additional hyperparameters override __init__ to call
-    super().__init__(fg, x0, alpha) and then set their extras.
+    super().__init__(fg, x0, alpha, lower_bounds, upper_bounds) and then set
+    their extras.  Bounds are enforced by projecting iterates into the box;
+    active-bound gradient components that point out of the box are zeroed
+    before updating the accumulator.
 
     Subclass contract for step:
         return (x, f, g) where (f, g) were evaluated at x (the
@@ -128,11 +194,12 @@ class _Accumulator:
         iterate.
 
     """
-    def __init__(self, fg, x0, alpha):
+    def __init__(self, fg, x0, alpha, lower_bounds=None, upper_bounds=None):
         self.problem = as_problem(fg)
         self.x0 = x0
         self.alpha = alpha
         self.x = x0.copy()
+        _init_bounds(self, x0, lower_bounds, upper_bounds)
         self.accumulator = np.zeros_like(self.x)
         self.eps = np.finfo(x0.dtype).eps
         self.iter = 0
@@ -143,22 +210,26 @@ class _MomentBased:
 
     Holds first- and second-moment buffers m and v initialized to
     zeros that subclass step methods update from the gradient.  Two
-    decay rates beta1 and beta2 live here too.
+    decay rates beta1 and beta2 live here too.  Bounds are enforced by
+    projecting iterates into the box; active-bound gradient components that
+    point out of the box are zeroed before updating the moments.
 
     Subclasses with additional hyperparameters (e.g. RAdam's rhoinf)
     override __init__ to call super().__init__(fg, x0, alpha, beta1,
-    beta2) and then set their extras.
+    beta2, lower_bounds, upper_bounds) and then set their extras.
 
     Subclass contract for step: see :class:`_Accumulator`.
 
     """
-    def __init__(self, fg, x0, alpha, beta1=0.9, beta2=0.999):
+    def __init__(self, fg, x0, alpha, beta1=0.9, beta2=0.999,
+                 lower_bounds=None, upper_bounds=None):
         self.problem = as_problem(fg)
         self.x0 = x0
         self.alpha = alpha
         self.beta1 = beta1
         self.beta2 = beta2
         self.x = x0.copy()
+        _init_bounds(self, x0, lower_bounds, upper_bounds)
         self.m = np.zeros_like(x0)
         self.v = np.zeros_like(x0)
         self.eps = np.finfo(x0.dtype).eps
@@ -180,7 +251,7 @@ class GradientDescent:
     of optimization if they wish.  The cost function is not used, nor higher
     order information.
     """
-    def __init__(self, fg, x0, alpha):
+    def __init__(self, fg, x0, alpha, lower_bounds=None, upper_bounds=None):
         """Create a new GradientDescent optimizer.
 
         Parameters
@@ -195,20 +266,25 @@ class GradientDescent:
             the user may mutate self.alpha over the course of optimization
             with no negative effects (except optimization blowing up from a bad
             choice of new alpha)
+        lower_bounds, upper_bounds : ndarray, optional
+            per-variable hard bounds.  None means unconstrained on that side.
 
         """
         self.problem = as_problem(fg)
         self.x0 = x0
         self.alpha = alpha
         self.x = x0.copy()
+        _init_bounds(self, x0, lower_bounds, upper_bounds)
         self.iter = 0
 
     def step(self):
         """Perform one iteration of optimization."""
         f, g = self.problem.fg(self.x)
+        g_step = _project_gradient(self, g)
         x = self.x
-        self.x = x - self.alpha*g
+        self.x = _project_bounds(self, x - self.alpha*g_step)
         self.iter += 1
+        _store_bounded_step_metadata(self, g_step)
         return x, f, g
 
 
@@ -248,10 +324,13 @@ class AdaGrad(_Accumulator):
     def step(self):
         """Perform one iteration of optimization."""
         f, g = self.problem.fg(self.x)
-        self.accumulator += (g*g)
+        g_step = _project_gradient(self, g)
+        self.accumulator += (g_step*g_step)
         x = self.x
-        self.x = x - self.alpha * g / (np.sqrt(self.accumulator)+self.eps)
+        step = self.alpha * g_step / (np.sqrt(self.accumulator)+self.eps)
+        self.x = _project_bounds(self, x - step)
         self.iter += 1
+        _store_bounded_step_metadata(self, g_step)
         return x, f, g
 
 
@@ -285,18 +364,22 @@ class RMSProp(_Accumulator):
         https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf
 
     """
-    def __init__(self, fg, x0, alpha, gamma=0.9):
-        super().__init__(fg, x0, alpha)
+    def __init__(self, fg, x0, alpha, gamma=0.9,
+                 lower_bounds=None, upper_bounds=None):
+        super().__init__(fg, x0, alpha, lower_bounds, upper_bounds)
         self.gamma = gamma
 
     def step(self):
         """Perform one iteration of optimization."""
         gamma = self.gamma
         f, g = self.problem.fg(self.x)
-        self.accumulator = gamma*self.accumulator + (1-gamma)*(g*g)
+        g_step = _project_gradient(self, g)
+        self.accumulator = gamma*self.accumulator + (1-gamma)*(g_step*g_step)
         x = self.x
-        self.x = x - self.alpha * g / (np.sqrt(self.accumulator)+self.eps)
+        step = self.alpha * g_step / (np.sqrt(self.accumulator)+self.eps)
+        self.x = _project_bounds(self, x - step)
         self.iter += 1
+        _store_bounded_step_metadata(self, g_step)
         return x, f, g
 
 
@@ -337,15 +420,18 @@ class Adam(_MomentBased):
         beta1 = self.beta1
         beta2 = self.beta2
         f, g = self.problem.fg(self.x)
+        g_step = _project_gradient(self, g)
         # update momentum estimates
-        self.m = beta1*self.m + (1-beta1) * g
-        self.v = beta2*self.v + (1-beta2) * (g*g)
+        self.m = beta1*self.m + (1-beta1) * g_step
+        self.v = beta2*self.v + (1-beta2) * (g_step*g_step)
 
         mhat = self.m / (1 - beta1**self.iter)
         vhat = self.v / (1 - beta2**self.iter)
 
         x = self.x
-        self.x = x - self.alpha * mhat/(np.sqrt(vhat)+self.eps)
+        step = self.alpha * mhat/(np.sqrt(vhat)+self.eps)
+        self.x = _project_bounds(self, x - step)
+        _store_bounded_step_metadata(self, g_step)
         return x, f, g
 
 
@@ -381,8 +467,10 @@ class RAdam(_MomentBased):
         http://arxiv.org/abs/1412.6980
 
     """
-    def __init__(self, fg, x0, alpha, beta1=0.9, beta2=0.999):
-        super().__init__(fg, x0, alpha, beta1, beta2)
+    def __init__(self, fg, x0, alpha, beta1=0.9, beta2=0.999,
+                 lower_bounds=None, upper_bounds=None):
+        super().__init__(fg, x0, alpha, beta1, beta2,
+                         lower_bounds, upper_bounds)
         self.rhoinf = 2 / (1 - beta2) - 1
 
     def step(self):
@@ -394,9 +482,10 @@ class RAdam(_MomentBased):
         beta2k = beta2**k
 
         f, g = self.problem.fg(self.x)
-        gsq = g*g
+        g_step = _project_gradient(self, g)
+        gsq = g_step*g_step
         # update momentum estimates
-        self.m = beta1*self.m + (1-beta1) * g
+        self.m = beta1*self.m + (1-beta1) * g_step
         self.v = beta2*self.v + (1-beta2) * (gsq)
         # torch exp_avg_sq.mul_(beta2).addcmul_(grad,grad,value=1-beta2)
         # == v
@@ -415,9 +504,10 @@ class RAdam(_MomentBased):
             num = (rho - 4) * (rho - 2) * rhoinf
             den = (rhoinf - 4) * (rhoinf - 2) * rho
             r = np.sqrt(num/den)
-            self.x = x - self.alpha * r * mhat * l
+            self.x = _project_bounds(self, x - self.alpha * r * mhat * l)
         else:
-            self.x = x - self.alpha * g
+            self.x = _project_bounds(self, x - self.alpha * g_step)
+        _store_bounded_step_metadata(self, g_step)
         return x, f, g
 
 
@@ -456,15 +546,17 @@ class AdaMomentum(_MomentBased):
         beta1 = self.beta1
         beta2 = self.beta2
         f, g = self.problem.fg(self.x)
+        g_step = _project_gradient(self, g)
         # update momentum estimates
-        self.m = beta1*self.m + (1-beta1) * g
+        self.m = beta1*self.m + (1-beta1) * g_step
         self.v = beta2*self.v + (1-beta2) * (self.m*self.m) + self.eps
 
         mhat = self.m / (1 - beta1**self.iter)
         vhat = self.v / (1 - beta2**self.iter)
 
         x = self.x
-        self.x = x - self.alpha * mhat/np.sqrt(vhat)
+        self.x = _project_bounds(self, x - self.alpha * mhat/np.sqrt(vhat))
+        _store_bounded_step_metadata(self, g_step)
         return x, f, g
 
 
@@ -506,14 +598,17 @@ class Yogi(_MomentBased):
         beta1 = self.beta1
         beta2 = self.beta2
         f, g = self.problem.fg(self.x)
-        gsq = g*g
+        g_step = _project_gradient(self, g)
+        gsq = g_step*g_step
         # update momentum estimates
-        self.m = beta1*self.m + (1-beta1) * g
+        self.m = beta1*self.m + (1-beta1) * g_step
         self.v = self.v - (1-beta2) * np.sign(self.v - gsq)*gsq
 
         mhat = self.m  # for symmetry to ADAM
         vhat = np.sqrt(self.v+self.eps)
 
         x = self.x
-        self.x = x - self.alpha * mhat/(np.sqrt(vhat)+self.eps)
+        step = self.alpha * mhat/(np.sqrt(vhat)+self.eps)
+        self.x = _project_bounds(self, x - step)
+        _store_bounded_step_metadata(self, g_step)
         return x, f, g

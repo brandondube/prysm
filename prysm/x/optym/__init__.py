@@ -16,6 +16,10 @@ from .cost import (  # NOQA
 )
 
 from .sample_problems import (  # NOQA
+    SphereProblem,
+    RosenbrockProblem,
+    RastriginProblem,
+    HimmelblauProblem,
     sphere,
     rosenbrock,
     rastrigin,
