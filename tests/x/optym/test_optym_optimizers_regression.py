@@ -58,6 +58,17 @@ def run_traj(opt):
     return xs, fs
 
 
+FIRST_ORDER_OPTIMIZERS = [
+    (GradientDescent, {'alpha': 0.1}),
+    (AdaGrad, {'alpha': 0.1}),
+    (RMSProp, {'alpha': 0.1}),
+    (Adam, {'alpha': 0.1}),
+    (RAdam, {'alpha': 0.1}),
+    (AdaMomentum, {'alpha': 0.1}),
+    (Yogi, {'alpha': 0.1}),
+]
+
+
 @pytest.fixture
 def x0():
     # fresh copy each test — optimizers .copy() internally but be safe
@@ -192,15 +203,7 @@ def test_all_optimizers_return_old_x_convention(x0):
     (f, g) was evaluated — not the post-update iterate.  After step(),
     opt.x holds the new iterate; the returned x is the previous one.
     """
-    for cls, kwargs in [
-        (GradientDescent, {'alpha': 0.1}),
-        (AdaGrad, {'alpha': 0.1}),
-        (RMSProp, {'alpha': 0.1}),
-        (Adam, {'alpha': 0.1}),
-        (RAdam, {'alpha': 0.1}),
-        (AdaMomentum, {'alpha': 0.1}),
-        (Yogi, {'alpha': 0.1}),
-    ]:
+    for cls, kwargs in FIRST_ORDER_OPTIMIZERS:
         opt = cls(fg, x0.copy(), **kwargs)
         x_before = opt.x.copy()
         x_returned, f, g = opt.step()
@@ -213,3 +216,115 @@ def test_all_optimizers_return_old_x_convention(x0):
         np.testing.assert_allclose(f, f_check)
         # opt.x is now the new iterate (not equal to the old one)
         assert not np.array_equal(opt.x, x_before)
+
+
+@pytest.mark.parametrize('cls, kwargs', FIRST_ORDER_OPTIMIZERS)
+def test_first_order_optimizers_default_bounds_are_unconstrained(cls, kwargs):
+    x0 = np.array([1.0, -2.0], dtype=np.float32)
+    opt = cls(fg, x0, **kwargs)
+    assert opt.l.shape == x0.shape
+    assert opt.u.shape == x0.shape
+    assert opt.l.dtype == x0.dtype
+    assert opt.u.dtype == x0.dtype
+    assert not opt._has_bounds
+    assert np.all(np.isneginf(opt.l))
+    assert np.all(np.isposinf(opt.u))
+
+
+@pytest.mark.parametrize('cls, kwargs', FIRST_ORDER_OPTIMIZERS)
+def test_first_order_optimizers_project_x0_and_each_step(cls, kwargs):
+    def outward_fg(x):
+        return float(np.sum(x)), np.ones_like(x)
+
+    x0 = np.array([-2.0, 2.0])
+    lb = np.array([0.0, 0.0])
+    ub = np.array([1.0, 1.0])
+    opt = cls(outward_fg, x0, lower_bounds=lb, upper_bounds=ub, **kwargs)
+
+    np.testing.assert_array_equal(opt.x, np.array([0.0, 1.0]))
+    x_returned, _, _ = opt.step()
+
+    np.testing.assert_array_equal(x_returned, np.array([0.0, 1.0]))
+    assert np.all(opt.x >= lb)
+    assert np.all(opt.x <= ub)
+    assert opt.last_step_metadata['bounded_variables'] >= 1
+
+
+@pytest.mark.parametrize('cls, kwargs', FIRST_ORDER_OPTIMIZERS)
+def test_active_bound_masks_outward_gradient_but_allows_inward_motion(cls, kwargs):
+    gradient = np.array([1.0])
+
+    def fg_with_mutable_gradient(x):
+        return float(gradient[0] * x[0]), gradient.copy()
+
+    x0 = np.array([0.0])
+    lb = np.array([0.0])
+    ub = np.array([1.0])
+    opt = cls(fg_with_mutable_gradient, x0,
+              lower_bounds=lb, upper_bounds=ub, **kwargs)
+
+    _, _, g = opt.step()
+    np.testing.assert_array_equal(g, np.array([1.0]))
+    np.testing.assert_array_equal(
+        opt.last_step_metadata['projected_gradient'],
+        np.array([0.0]),
+    )
+    np.testing.assert_array_equal(opt.x, lb)
+
+    gradient[0] = -1.0
+    opt.step()
+    assert opt.x[0] > lb[0]
+
+
+def test_adam_does_not_accumulate_outward_momentum_at_active_bound():
+    def fg_lower_active(x):
+        return float(x[0]), np.array([1.0])
+
+    opt = Adam(
+        fg_lower_active,
+        np.array([0.0]),
+        alpha=0.1,
+        lower_bounds=np.array([0.0]),
+        upper_bounds=np.array([1.0]),
+    )
+    opt.step()
+
+    np.testing.assert_array_equal(opt.x, np.array([0.0]))
+    np.testing.assert_array_equal(opt.m, np.array([0.0]))
+    np.testing.assert_array_equal(opt.v, np.array([0.0]))
+
+
+def test_adagrad_does_not_accumulate_outward_gradient_at_active_bound():
+    def fg_lower_active(x):
+        return float(x[0]), np.array([1.0])
+
+    opt = AdaGrad(
+        fg_lower_active,
+        np.array([0.0]),
+        alpha=0.1,
+        lower_bounds=np.array([0.0]),
+        upper_bounds=np.array([1.0]),
+    )
+    opt.step()
+
+    np.testing.assert_array_equal(opt.x, np.array([0.0]))
+    np.testing.assert_array_equal(opt.accumulator, np.array([0.0]))
+
+
+def test_first_order_bounds_validate_shape_and_order():
+    with pytest.raises(ValueError, match='same shape or size'):
+        GradientDescent(
+            fg,
+            np.array([0.0, 1.0]),
+            alpha=0.1,
+            lower_bounds=np.array([0.0, 0.0, 0.0]),
+        )
+
+    with pytest.raises(ValueError, match='lower_bounds'):
+        GradientDescent(
+            fg,
+            np.array([0.0, 1.0]),
+            alpha=0.1,
+            lower_bounds=np.array([1.0, 0.0]),
+            upper_bounds=np.array([0.0, 1.0]),
+        )
