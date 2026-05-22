@@ -1,13 +1,13 @@
 """L-BFGS-B optimizer, wrapper around low-level scipy interface."""
+
 import warnings
 
 import numpy as np  # can't be our shim since this interacts with C
-
 import scipy
-
 from scipy.optimize import _lbfgsb
 
 from .problem import as_problem
+
 
 def _scipy_has_c_lbfgsb():
     """True if scipy ships the C port of L-BFGS-B (>= 1.15).
@@ -17,7 +17,7 @@ def _scipy_has_c_lbfgsb():
     output array was added, and task is now an int array (not a 60-byte
     char array) whose first element encodes the request code.
     """
-    parts = scipy.__version__.split('.')
+    parts = scipy.__version__.split(".")
     try:
         major, minor = int(parts[0]), int(parts[1])
     except (ValueError, IndexError):
@@ -37,24 +37,24 @@ class _LBFGSBBase:
     """Shared scaffolding for L-BFGS-B drivers (F77 and C ports).
 
     Holds the part of the L-BFGS-B state that is identical between the two
-    drivers — problem, bounds, ``nbd``, ``x``, ``g``, ``wa``, ``iwa``,
-    ``lsave/isave/dsave``, the magic ``factr=pgtol=0`` settings to defeat
-    early convergence, and the ``step`` / ``run_to`` orchestration.
+    drivers — problem, bounds, nbd, x, g, wa, iwa,
+    lsave/isave/dsave, the magic factr=pgtol=0 settings to defeat
+    early convergence, and the step / run_to orchestration.
 
     The pieces that differ between the F77 and C drivers are factored out
     into a small set of hooks that subclasses implement:
 
-    * ``_int_dtype()`` — integer dtype for the work arrays.
-    * ``_init_driver_state()`` — allocate driver-specific buffers (``f``,
-      ``task``, ``csave``/``ln_task`` as applicable, plus the initial
-      ``'START'`` poke for F77).
-    * ``_call_driver()`` — one invocation of ``setulb`` with the
+    * _int_dtype() — integer dtype for the work arrays.
+    * _init_driver_state() — allocate driver-specific buffers (f,
+      task, csave/ln_task as applicable, plus the initial
+      'START' poke for F77).
+    * _call_driver() — one invocation of setulb with the
       driver-appropriate argument list.
-    * ``_decode_task()`` — return one of ``'FG'``, ``'NEW_X'``,
-      ``'CONVERGENCE'``, ``'STOP'``, or ``None``.
-    * ``_store_fg(f, g)`` — write ``f`` and ``g`` into the driver's buffers.
-    * ``_read_f()`` — current ``f`` as a Python float.
-    * ``_task_diagnostic()`` — human-readable task string for error messages.
+    * _decode_task() — return one of 'FG', 'NEW_X',
+      'CONVERGENCE', 'STOP', or None.
+    * _store_fg(f, g) — write f and g into the driver's buffers.
+    * _read_f() — current f as a Python float.
+    * _task_diagnostic() — human-readable task string for error messages.
 
     """
 
@@ -64,7 +64,7 @@ class _LBFGSBBase:
         Parameters
         ----------
         fg : callable or Problem
-            either ``fg(x) -> (f, g)`` or a Problem-shaped object; see
+            either fg(x) -> (f, g) or a Problem-shaped object; see
             :func:`as_problem`.
         x0 : ndarray
             the parameter vector immediately prior to optimization.
@@ -72,7 +72,7 @@ class _LBFGSBBase:
             number of recent gradient vectors used for the approximate
             Newton step (typical 10–30).
         lower_bounds, upper_bounds : ndarray, optional
-            hard bounds per variable; ``None`` is unconstrained.
+            hard bounds per variable; None is unconstrained.
 
         """
         self.problem = as_problem(fg)
@@ -96,16 +96,16 @@ class _LBFGSBBase:
         finite_l = np.isfinite(self.l)
         finite_u = np.isfinite(self.u)
         nbd[finite_l & ~finite_u] = 1
-        nbd[finite_l & finite_u]  = 2  # NOQA
+        nbd[finite_l & finite_u] = 2  # NOQA
         nbd[~finite_l & finite_u] = 3
         self.nbd = nbd
 
         m, n = self.m, self.n
-        self.x = x0.copy()
-        self.g = np.zeros(n, dtype=ffloat_dtype)
+        self._x = x0.copy()
+        self._g = np.zeros(n, dtype=ffloat_dtype)
         # wa sizing per lbfgsb.f (11*m**2 == 11*m*m)
-        self.wa = np.zeros(2*m*n + 11*m*m + 5*n + 8*m, dtype=ffloat_dtype)
-        self.iwa = np.zeros(3*n, dtype=int_dtype)
+        self.wa = np.zeros(2 * m * n + 11 * m * m + 5 * n + 8 * m, dtype=ffloat_dtype)
+        self.iwa = np.zeros(3 * n, dtype=int_dtype)
         self.lsave = np.zeros(4, dtype=int_dtype)
         self.isave = np.zeros(44, dtype=int_dtype)
         self.dsave = np.zeros(29, dtype=ffloat_dtype)
@@ -124,13 +124,23 @@ class _LBFGSBBase:
 
         self._init_driver_state()  # NOQA - defined by subclasses.
 
+    @property
+    def x(self):
+        """Current iterate as a snapshot, not the driver's mutable buffer."""
+        return self._x.copy()
+
+    @property
+    def g(self):
+        """Current iterate as a snapshot, not the driver's mutable buffer."""
+        return self._g.copy()
+
     def _view_s(self):
         m, n = self.m, self.n
-        return self.wa[0:m*n].reshape(m, n)[:self._valid_space_sy]
+        return self.wa[0 : m * n].reshape(m, n)[: self._valid_space_sy]
 
     def _view_y(self):
         m, n = self.m, self.n
-        return self.wa[m*n:2*m*n].reshape(m, n)[:self._valid_space_sy]
+        return self.wa[m * n : 2 * m * n].reshape(m, n)[: self._valid_space_sy]
 
     @property
     def _nbfgs_updates(self):
@@ -162,13 +172,13 @@ class _LBFGSBBase:
         completed iteration (NEW_X), termination (CONVERGENCE), or an
         error (STOP).  Each NEW_X corresponds to one outer iteration.
         """
-        x_start = self.x.copy()
+        x_start = self._x
         f_start = None
         g_start = None
 
         if self._cached_eval_matches(x_start):
             f_start = self._last_eval_f
-            g_start = self._last_eval_g.copy()
+            g_start = self._last_eval_g
 
         # setulb's task state-machine fires several FG requests during
         # its line search before declaring NEW_X.  Loop until that
@@ -176,31 +186,30 @@ class _LBFGSBBase:
         while True:
             self._call_driver()  # NOQA - defined by subclasses.
             task = self._decode_task()  # NOQA - defined by subclasses.
-            if task == 'FG':
-                f, g = self.problem.fg(self.x)
+            if task == "FG":
+                f, g = self.problem.fg(self._x)
                 self.nfev += 1
                 if g.ndim != 1:
                     g = g.ravel()
-                self._record_eval(self.x, f, g)
-                if np.array_equal(self.x, x_start):
+                self._record_eval(self._x, f, g)
+                if np.array_equal(self._x, x_start):
                     f_start = float(f)
                     g_start = g.copy()
                 self._store_fg(f, g)  # NOQA - defined by subclasses.
                 continue
 
-            if task == 'STOP':
+            if task == "STOP":
                 raise ValueError(
                     "L-BFGS-B driver thinks something is wrong with the "
                     f"problem; task: {self._task_diagnostic()}"
                 )  # NOQA - defined by subclasses.
-            if task == 'CONVERGENCE':
+            if task == "CONVERGENCE":
                 raise StopIteration
-            if task == 'NEW_X':
+            if task == "NEW_X":
                 break
 
             raise RuntimeError(
-                "L-BFGS-B driver returned an unknown task: "
-                f"{self._task_diagnostic()}"
+                f"L-BFGS-B driver returned an unknown task: {self._task_diagnostic()}"
             )
 
         self.iter += 1
@@ -213,10 +222,10 @@ class _LBFGSBBase:
             self._record_eval(x_start, f_start, g_start)
 
         self.last_step_metadata = {
-            'task': self._task_diagnostic(),
-            'nbfgs_updates': int(self._nbfgs_updates),
+            "task": self._task_diagnostic(),
+            "nbfgs_updates": int(self._nbfgs_updates),
         }
-        return x_start, float(f_start), g_start.copy()
+        return x_start.copy(), float(f_start), g_start.copy()
 
     def run_to(self, N):
         """Run the optimizer until its iteration count equals N."""
@@ -224,7 +233,9 @@ class _LBFGSBBase:
             try:
                 yield self.step()
             except StopIteration:
-                warnings.warn(f'L-BFGS-B can make no further progress; stopped on iteration {self.iter}/N iterations')
+                warnings.warn(
+                    f"L-BFGS-B can make no further progress; stopped on iteration {self.iter}/N iterations"
+                )
                 break
 
 
@@ -284,26 +295,43 @@ class F77LBFGSB(_LBFGSBBase):
 
     def _init_driver_state(self):
         self.f = np.array([0], dtype=np.float64)
-        self.task = np.zeros(1, dtype='S60')  # 60-byte ASCII task string
-        self.csave = np.zeros(1, dtype='S60')
-        self.task[:] = 'START'
+        self.task = np.zeros(1, dtype="S60")  # 60-byte ASCII task string
+        self.csave = np.zeros(1, dtype="S60")
+        self.task[:] = "START"
         self.iprint = 0
 
     def _call_driver(self):
-        _lbfgsb.setulb(self.m, self.x, self.l, self.u, self.nbd, self.f, self.g,
-                       self.factr, self.pgtol, self.wa, self.iwa, self.task, self.iprint,
-                       self.csave, self.lsave, self.isave, self.dsave, self.maxls)
+        _lbfgsb.setulb(
+            self.m,
+            self._x,
+            self.l,
+            self.u,
+            self.nbd,
+            self.f,
+            self.g,
+            self.factr,
+            self.pgtol,
+            self.wa,
+            self.iwa,
+            self.task,
+            self.iprint,
+            self.csave,
+            self.lsave,
+            self.isave,
+            self.dsave,
+            self.maxls,
+        )
 
     def _decode_task(self):
-        task = self.task.tobytes().strip(b'\x00').strip()
-        if task.startswith(b'FG'):
-            return 'FG'
-        if task.startswith(b'NEW_X'):
-            return 'NEW_X'
-        if task.startswith(b'CONV'):
-            return 'CONVERGENCE'
-        if task.startswith(b'STOP'):
-            return 'STOP'
+        task = self.task.tobytes().strip(b"\x00").strip()
+        if task.startswith(b"FG"):
+            return "FG"
+        if task.startswith(b"NEW_X"):
+            return "NEW_X"
+        if task.startswith(b"CONV"):
+            return "CONVERGENCE"
+        if task.startswith(b"STOP"):
+            return "STOP"
         return None
 
     def _store_fg(self, f, g):
@@ -314,7 +342,7 @@ class F77LBFGSB(_LBFGSBBase):
         return float(self.f[0])
 
     def _task_diagnostic(self):
-        return self.task.tobytes().strip(b'\x00').strip().decode('UTF-8')
+        return self.task.tobytes().strip(b"\x00").strip().decode("UTF-8")
 
 
 class CLBFGSB(_LBFGSBBase):
@@ -324,19 +352,20 @@ class CLBFGSB(_LBFGSBBase):
     but targets the C port of L-BFGS-B that replaced the Fortran 77 driver
     in SciPy 1.15.  The differences vs. the Fortran driver are internal:
 
-    * ``csave`` and ``iprint`` are no longer arguments to ``setulb``.
-    * A new two-element integer ``ln_task`` workspace array is required.
-    * ``task`` is a length-2 integer array; ``task[0]`` carries the request
+    * csave and iprint are no longer arguments to setulb.
+    * A new two-element integer ln_task workspace array is required.
+    * task is a length-2 integer array; task[0] carries the request
       code (3=FG, 1=NEW_X, 4=CONVERGENCE, 5=STOP).
 
     See :class:`F77LBFGSB` for parameter documentation; this class accepts
-    the same arguments and exposes the same ``step``/``run_to`` interface.
+    the same arguments and exposes the same step/run_to interface.
     """
 
     def _int_dtype(self):
         # mirror the C driver's dtype choice (depends on ILP64 LAPACK)
         try:
             from scipy.linalg.lapack import HAS_ILP64
+
             return np.int64 if HAS_ILP64 else np.int32
         except ImportError:
             return np.int32
@@ -349,22 +378,36 @@ class CLBFGSB(_LBFGSBBase):
         self.ln_task = np.zeros(2, dtype=int_dtype)
 
     def _call_driver(self):
-        _lbfgsb.setulb(self.m, self.x, self.l, self.u, self.nbd,
-                       self.f, self.g, self.factr, self.pgtol,
-                       self.wa, self.iwa, self.task,
-                       self.lsave, self.isave, self.dsave,
-                       self.maxls, self.ln_task)
+        _lbfgsb.setulb(
+            self.m,
+            self._x,
+            self.l,
+            self.u,
+            self.nbd,
+            self.f,
+            self.g,
+            self.factr,
+            self.pgtol,
+            self.wa,
+            self.iwa,
+            self.task,
+            self.lsave,
+            self.isave,
+            self.dsave,
+            self.maxls,
+            self.ln_task,
+        )
 
     def _decode_task(self):
         code = int(self.task[0])
         if code == _C_TASK_FG:
-            return 'FG'
+            return "FG"
         if code == _C_TASK_NEW_X:
-            return 'NEW_X'
+            return "NEW_X"
         if code == _C_TASK_CONVERGENCE:
-            return 'CONVERGENCE'
+            return "CONVERGENCE"
         if code == _C_TASK_STOP:
-            return 'STOP'
+            return "STOP"
         return None
 
     def _store_fg(self, f, g):
@@ -375,7 +418,7 @@ class CLBFGSB(_LBFGSBBase):
         return float(self.f)
 
     def _task_diagnostic(self):
-        return f'code {int(self.task[0])}'
+        return f"code {int(self.task[0])}"
 
 
 # Public alias — picks the right driver for the installed SciPy.
