@@ -300,10 +300,12 @@ def find_all_modes(V, count_only=False):
     dict
         keys of l, values of b for each m [0, 1, ...], or integer counts when
         count_only is True
-        for example
-        {
-            0: (0.9, 0.6, 0.3)
-        }
+        for example::
+
+            {
+                0: (0.9, 0.6, 0.3)
+            }
+
         would be a three-mode fiber, with no azimuthally variant modes
 
     """

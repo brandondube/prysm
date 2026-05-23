@@ -290,7 +290,7 @@ def zernike_nm_der_seq(nms, r, t, norm=True):
     Returns
     -------
     ndarray
-        shape of (len(nms), 2, *r.shape)
+        shape begins with (len(nms), 2) followed by r.shape
         leading dimension is derivative w.r.t each term
         second dimension is (radial, azimuthal)
         trailing dimensions match the inputs (r, t) in shape
@@ -469,7 +469,7 @@ def zernike_nm_der_xy_seq(nms, x, y, norm=True):
     Returns
     -------
     ndarray
-        shape (len(nms), 2, *x.shape); leading dim is mode index, second dim
+        shape begins with (len(nms), 2) followed by x.shape; leading dim is mode index, second dim
         is (dZ/dx, dZ/dy)
 
     """
@@ -551,9 +551,9 @@ def zernike_nm_der_xy_seq(nms, x, y, norm=True):
 def zernike_sum_der_xy(coefs, nms, x, y, norm=True):
     """Synthesize a Zernike-coefficient sum and its xy partial derivatives in one Clenshaw pass.
 
-    Computes W(x,y) = sum_i coefs[i] * Z_{n_i, m_i}(x,y) along with dW/dx and
+    Computes W(x, y) = sum_i coefs[i] * Z_{n_i, m_i}(x, y) along with dW/dx and
     dW/dy.  Never materializes individual mode arrays: per pixel, peak memory
-    is O(max radial coefs at any single |m|) instead of O(len(nms)).
+    is O(max radial coefs at any single absolute m) instead of O(len(nms)).
 
     Singularity-free at the origin (uses the same J(rho^2) * H(x,y) factoring
     as zernike_nm_der_xy).
@@ -718,7 +718,7 @@ def zernikes_to_magnitude_angle_nmkey(coefs):
     Returns
     -------
     dict
-        dict keyed by tuples of (n, |m|) with values of (rho, phi) where rho is the magnitudes, and phi the phase
+        dict keyed by tuples of (n, absolute m) with values of (rho, phi) where rho is the magnitudes, and phi the phase
 
     """
     def mkary():  # default for defaultdict
@@ -748,7 +748,7 @@ def zernikes_to_magnitude_angle_nmkey(coefs):
 def zernikes_to_magnitude_angle(coefs):
     """Convert Zernike polynomial set to a magnitude and phase representation.
 
-    This function is identical to zernikes_to_magnitude_angle_nmkey, except its keys are strings instead of (n, |m|)
+    This function is identical to zernikes_to_magnitude_angle_nmkey, except its keys are strings instead of (n, absolute m)
 
     Parameters
     ----------

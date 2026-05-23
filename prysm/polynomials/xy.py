@@ -48,7 +48,7 @@ def xy(m, n, x, y, cartesian_grid=True):
     Returns
     -------
     ndarray
-        x^m * y^n evaluated on the input grid
+        x^m times y^n evaluated on the input grid
 
     """
     if cartesian_grid:
@@ -58,9 +58,9 @@ def xy(m, n, x, y, cartesian_grid=True):
 
 
 def xy_der_x(m, n, x, y, cartesian_grid=True):
-    """Partial derivative w.r.t. x of the XY monomial x^m * y^n.
+    """Partial derivative w.r.t. x of the XY monomial x^m times y^n.
 
-    Returns m * x^(m-1) * y^n; zero everywhere when m == 0.
+    Returns m times x^(m-1) times y^n; zero everywhere when m == 0.
 
     Parameters
     ----------
@@ -80,7 +80,7 @@ def xy_der_x(m, n, x, y, cartesian_grid=True):
     Returns
     -------
     ndarray
-        d/dx of x^m * y^n evaluated on the input grid
+        d/dx of x^m times y^n evaluated on the input grid
 
     """
     if cartesian_grid:
@@ -96,7 +96,7 @@ def xy_der_x(m, n, x, y, cartesian_grid=True):
 def xy_der_y(m, n, x, y, cartesian_grid=True):
     """Partial derivative w.r.t. y of the XY monomial x^m * y^n.
 
-    Returns n * x^m * y^(n-1); zero everywhere when n == 0.
+    Returns n times x^m times y^(n-1); zero everywhere when n == 0.
 
     Parameters
     ----------
@@ -116,7 +116,7 @@ def xy_der_y(m, n, x, y, cartesian_grid=True):
     Returns
     -------
     ndarray
-        d/dy of x^m * y^n evaluated on the input grid
+        d/dy of x^m times y^n evaluated on the input grid
 
     """
     if cartesian_grid:
@@ -131,7 +131,7 @@ def xy_der_y(m, n, x, y, cartesian_grid=True):
 def xy_der_xy(m, n, x, y, cartesian_grid=True):
     """Mixed partial derivative d^2/dxdy of the XY monomial x^m * y^n.
 
-    Returns m * n * x^(m-1) * y^(n-1); zero everywhere when m == 0 or n == 0.
+    Returns m times n times x^(m-1) times y^(n-1); zero everywhere when m == 0 or n == 0.
 
     Parameters
     ----------
@@ -151,7 +151,7 @@ def xy_der_xy(m, n, x, y, cartesian_grid=True):
     Returns
     -------
     ndarray
-        d^2/dxdy of x^m * y^n evaluated on the input grid
+        d^2/dxdy of x^m times y^n evaluated on the input grid
 
     """
     if cartesian_grid:
@@ -234,7 +234,7 @@ def xy_seq(mns, x, y, cartesian_grid=True):
     Returns
     -------
     ndarray
-        has shape (len(mns), *broadcast(x, y).shape), in the same order as mns
+        has shape (len(mns), broadcast(x, y).shape), in the same order as mns
 
     """
     return _xy_seq_with(
@@ -246,13 +246,13 @@ def xy_seq(mns, x, y, cartesian_grid=True):
 def xy_der_x_seq(mns, x, y, cartesian_grid=True):
     """Partial derivative w.r.t. x of the XY monomial seq.
 
-    Parameters mirror xy_seq.  The (m, n) output is m * x^(m-1) * y^n;
+    Parameters mirror xy_seq.  The (m, n) output is m times x^(m-1) times y^n;
     entries with m == 0 are zero.
 
     Returns
     -------
     ndarray
-        has shape (len(mns), *broadcast(x, y).shape); d/dx of x^m * y^n in
+        has shape (len(mns), broadcast(x, y).shape); d/dx of x^m times y^n in
         the same order as mns
 
     """
@@ -265,13 +265,13 @@ def xy_der_x_seq(mns, x, y, cartesian_grid=True):
 def xy_der_y_seq(mns, x, y, cartesian_grid=True):
     """Partial derivative w.r.t. y of the XY monomial seq.
 
-    Parameters mirror xy_seq.  The (m, n) output is n * x^m * y^(n-1);
+    Parameters mirror xy_seq.  The (m, n) output is n times x^m times y^(n-1);
     entries with n == 0 are zero.
 
     Returns
     -------
     ndarray
-        has shape (len(mns), *broadcast(x, y).shape); d/dy of x^m * y^n in
+        has shape (len(mns), broadcast(x, y).shape); d/dy of x^m times y^n in
         the same order as mns
 
     """
@@ -284,13 +284,13 @@ def xy_der_y_seq(mns, x, y, cartesian_grid=True):
 def xy_der_xy_seq(mns, x, y, cartesian_grid=True):
     """Mixed partial derivative d^2/dxdy of the XY monomial seq.
 
-    Parameters mirror xy_seq.  The (m, n) output is m*n * x^(m-1) * y^(n-1);
+    Parameters mirror xy_seq.  The (m, n) output is m*n times x^(m-1) times y^(n-1);
     entries where m == 0 or n == 0 are zero.
 
     Returns
     -------
     ndarray
-        has shape (len(mns), *broadcast(x, y).shape); d^2/dxdy of x^m * y^n
+        has shape (len(mns), broadcast(x, y).shape); d^2/dxdy of x^m times y^n
         in the same order as mns
 
     """

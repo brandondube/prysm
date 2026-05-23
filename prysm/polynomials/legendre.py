@@ -42,7 +42,7 @@ def legendre_seq(ns, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
@@ -84,7 +84,7 @@ def legendre_der_seq(ns, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 

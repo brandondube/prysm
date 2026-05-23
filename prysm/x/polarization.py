@@ -488,10 +488,12 @@ def jones_adapter(prop_func):
     leverage the independence of the 4 "polarized" components of an optical system expressed
     as a Jones matrix
 
-    J = [
-        [J00,J01],
-        [J10,J11]
-    ]
+    J is::
+
+        [
+            [J00, J01],
+            [J10, J11]
+        ]
 
     The elements of this matrix can be propagated as incoherent wavefronts to express the polarized
     response of an optical system. All `jones_adapter` does is call a given propagation function

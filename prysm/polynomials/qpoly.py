@@ -208,7 +208,7 @@ def clenshaw_qbfs(cs, usq, alphas=None):
         the variable u^2 from oe-18-19-19700
     alphas : ndarray, optional
         array to store the alpha sums in,
-        the surface is u^2(1-u^2) * (2 * (alphas[0]+alphas[1])
+        the surface is u^2(1-u^2) times 2 times (alphas[0]+alphas[1])
         if not None, alphas should be of shape (len(s), x.shape)
         see _initialize_alphas if you desire more information
 
@@ -254,12 +254,12 @@ def clenshaw_qbfs_der(cs, usq, j=1, alphas=None):
     alphas : ndarray, optional
         array to store the alpha sums in,
         if x = u * u, then
-        S   = (x * (1 - x)) * 2 * (alphas[0][0] + alphas[0][1])
+        S   = (x times (1 - x)) times 2 times (alphas[0][0] + alphas[0][1])
         S'  = ... .. the same, but alphas[1][0] and alphas[1][1]
         S'' = ... ... ... ... ... ... [2][0] ... ... ..[1][1]
         etc
 
-        if not None, alphas should be of shape (j+1, len(cs), *x.shape)
+        if not None, alphas should have shape (j+1, len(cs)) followed by x.shape
         see _initialize_alphas if you desire more information
 
     Returns
@@ -419,7 +419,7 @@ def Qbfs_seq(ns, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
@@ -560,7 +560,7 @@ def Qbfs_der_seq(ns, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape); the i-th plane is d/dx Qbfs_{ns[i]}(x)
+        has shape (len(ns),) followed by x.shape; the i-th plane is d/dx Qbfs_{ns[i]}(x)
 
     """
     if not hasattr(ns, '__len__'):
@@ -665,7 +665,7 @@ def Qcon_seq(ns, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
@@ -719,7 +719,7 @@ def Qcon_der_seq(ns, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape); the i-th plane is d/dx Qcon_{ns[i]}(x)
+        has shape (len(ns),) followed by x.shape; the i-th plane is d/dx Qcon_{ns[i]}(x)
 
     """
     xx = 2 * x * x - 1
@@ -1016,7 +1016,7 @@ def Q2d_seq(nms, r, t):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
@@ -1144,8 +1144,8 @@ def Q2d_seq(nms, r, t):
 def _qbfs_aux_recurrence(Nmax, u):
     """Tables of the auxiliary Qbfs polynomial Q_n(u) and dQ_n/du.
 
-    These are the unprefixed Qbfs polynomials — i.e., Qbfs_n(x) =
-    x^2(1-x^2) * Q_n(x^2). Used by Q2d Cartesian derivatives when m=0.
+    These are the unprefixed Qbfs polynomials; i.e., Qbfs_n(x) =
+    x^2(1-x^2) times Q_n(x^2). Used by Q2d Cartesian derivatives when m=0.
 
     Returns
     -------
@@ -1200,7 +1200,7 @@ def _q2d_radial_recurrence(Nmax, m, u):
     """Tables of Q_n^m(u) and dQ_n^m/du for n=0..Nmax, m >= 1.
 
     Where u = rho^2 in Forbes' parlance. This computes the radial part
-    *without* the u^m or trig prefix.
+    without the u^m or trig prefix.
 
     Returns
     -------
@@ -1369,7 +1369,7 @@ def Q2d_der_xy(n, m, x, y):
     """Cartesian partial derivatives of the 2D Q polynomial Q2d_n^m.
 
     Computed directly in (x, y) via the harmonic decomposition
-    r^|m| cos(m t) = Re((x + i y)^|m|) (and Im for m<0), so the result is
+    r^abs(m) cos(m t) = Re((x + i y)^abs(m)) (and Im for m<0), so the result is
     smooth at the origin with no 1/r singularity.
 
     Parameters
@@ -1440,7 +1440,7 @@ def Q2d_der_seq(nms, r, t):
     Returns
     -------
     ndarray, ndarray
-        arrays of shape (len(nms), *r.shape); the first is d/dr, the second
+        arrays of shape (len(nms),) followed by r.shape; the first is d/dr, the second
         is d/dt, in the same order as nms
 
     """
@@ -1534,7 +1534,7 @@ def Q2d_der_xy_seq(nms, x, y):
     Returns
     -------
     ndarray, ndarray
-        arrays of shape (len(nms), *x.shape); the first is d/dx, the second
+        arrays of shape (len(nms),) followed by x.shape; the first is d/dx, the second
         is d/dy, in the same order as nms
 
     """
@@ -1607,7 +1607,7 @@ def change_of_basis_Q2d_to_Pnm(cns, m):
     ----------
     cns : iterable
         seq of polynomial coefficients, from order n=0..len(cs)-1 and a given
-        m (not |m|, but m, i.e. either "-2" or "+2" but not both)
+        m (not absolute m, but m, i.e. either "-2" or "+2" but not both)
     m : int
         azimuthal order
 
@@ -1674,16 +1674,16 @@ def clenshaw_q2d(cns, m, usq, alphas=None):
         the variable u^2 from oe-18-19-19700
     alphas : ndarray, optional
         array to store the alpha sums in,
-        the surface is u^2(1-u^2) * (2 * (alphas[0]+alphas[1])
-        if not None, alphas should be of shape (len(s), *x.shape)
+        the surface is u^2(1-u^2) times 2 times (alphas[0]+alphas[1])
+        if not None, alphas should have shape (len(s),) followed by x.shape
         see _initialize_alphas if you desire more information
 
     Returns
     -------
     alphas
         array containing components to compute the surface sag
-        sum(cn Qn) = .5 alphas[0] - 2/5 alphas[3], if m=1 and N>2,
-                     .5 alphas[0], otherwise
+        sum(cn Qn) is .5 alphas[0] - 2/5 alphas[3] if m=1 and N>2,
+        and .5 alphas[0] otherwise.
 
     """
     x = usq
@@ -1733,7 +1733,7 @@ def clenshaw_q2d_der(cns, m, usq, j=1, alphas=None):
         derivative order
     alphas : ndarray, optional
         array to store the alpha sums in,
-        if not None, alphas should be of shape (j+1, len(cs), *x.shape)
+        if not None, alphas should have shape (j+1, len(cs)) followed by x.shape
         see _initialize_alphas if you desire more information
 
     Returns

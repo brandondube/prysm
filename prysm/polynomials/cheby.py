@@ -50,7 +50,7 @@ def cheby1_seq(ns, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
@@ -91,7 +91,7 @@ def cheby1_der_seq(ns, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
@@ -132,7 +132,7 @@ def cheby2_seq(ns, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
@@ -173,7 +173,7 @@ def cheby2_der_seq(ns, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
@@ -214,7 +214,7 @@ def cheby3_seq(ns, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
@@ -255,7 +255,7 @@ def cheby3_der_seq(ns, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
@@ -296,7 +296,7 @@ def cheby4_seq(ns, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
@@ -337,7 +337,7 @@ def cheby4_der_seq(ns, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 

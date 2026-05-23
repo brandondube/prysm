@@ -28,10 +28,8 @@ def shack_hartmann(pitch, n, efl, wavelength, x, y,
     y : ndarray
         y coordinates that define the space of the beam, mm
     aperture : callable, optional
-        the aperture can either be:
-        f(lenslet_semidiameter, x=x, y=y, **kwargs)
-        or
-        f(lenslet_semidiameter, r=r, **kwargs)
+        the aperture can either take x and y keyword arguments, or take an r
+        keyword argument.
         typically,  it will be either prysm.geometry.circle or prysm.geometry.rectangle
     aperture_kwargs : dict, optional
         the keyword arguments for the aperture function, if any
@@ -42,26 +40,31 @@ def shack_hartmann(pitch, n, efl, wavelength, x, y,
     Returns
     -------
     ndarray
-        complex ndarray, such that:
-        wf2 = wf * shack_hartmann_complex_screen(... efl=efl)
-        wf3 = wf2.free_space(efl=efl)
-        wf3 represents the complex E-field at the detector, you are likely
-            interested in wf3.intensity
+        complex ndarray; for example::
+
+            wf2 = wf * shack_hartmann_complex_screen(... efl=efl)
+            wf3 = wf2.free_space(efl=efl)
+
+        wf3 represents the complex E-field at the detector; you are likely
+        interested in wf3.intensity
 
     Notes
     -----
     There are many subtle constraints when simulating Shack-Hartmann sensors:
-    1) there must be enough samples across a lenslet to avoid aliasing the phase screen
-        i.e., (2pi i / wvl)(r^2 / 2f) evolves slowly; implying that somewhat larger
-        F/# lenslets are easier to sample well, or relatively large arrays are required.
-        For low-order aberrations at the input in moderate amplitudes, >= 32 samples per
-        lenslet is OK, although 64 to 128 or more samples per lenslet should be used for
-        beams containing high order aberrations in any meaningful quantity.  For a 64x64
-        lenslet array, the lower bound of 32 samples per lenslet = 2048 array
-    2) there must be dense enough sampling in the output plane to well sample each point
-    spready function, i.e. dx <= (lambda*fno_lenslet)/2
-    3) the F/# of the lenslet must be _small_ enough that the lenslets' point spread
-    functions only minimally overlap
+
+    1. There must be enough samples across a lenslet to avoid aliasing the
+       phase screen.  The phase term (2pi i / wvl)(r^2 / 2f) should evolve
+       slowly; somewhat larger F/# lenslets are easier to sample well, or
+       relatively large arrays are required.  For low-order aberrations at the
+       input in moderate amplitudes, >= 32 samples per lenslet is OK, although
+       64 to 128 or more samples per lenslet should be used for beams
+       containing high order aberrations in any meaningful quantity.  For a
+       64x64 lenslet array, the lower bound of 32 samples per lenslet is a
+       2048 array.
+    2. There must be dense enough sampling in the output plane to well sample
+       each point spread function, i.e. dx <= (lambda*fno_lenslet)/2.
+    3. The F/# of the lenslet must be small enough that the lenslets' point
+       spread functions only minimally overlap.
 
     """
     if not hasattr(n, '__iter__'):

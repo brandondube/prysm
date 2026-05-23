@@ -150,7 +150,7 @@ def jacobi_seq(ns, alpha, beta, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
@@ -220,7 +220,7 @@ def jacobi_seq_with_der(ns, alpha, beta, x):
     Returns
     -------
     ndarray, ndarray
-        P_n and dP_n/dx arrays, each shaped (len(ns), *x.shape)
+        P_n and dP_n/dx arrays, each shaped as (len(ns),) followed by x.shape
 
     """
     if not hasattr(ns, '__len__'):
@@ -319,7 +319,7 @@ def jacobi_der_seq(ns, alpha, beta, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
@@ -474,7 +474,7 @@ def jacobi_sum_clenshaw_der(s, alpha, beta, x, j=1, alphas=None):
         with n=0 being the non-derivative terms.
 
         for a given n, the value of alphas[0] is the nth derivative of the surface sum
-        if not None, alphas should be of shape (j+1, len(s), *x.shape)
+        if not None, alphas should have shape (j+1, len(s)) followed by x.shape
         see _initialize_alphas if you desire more information
 
     Returns

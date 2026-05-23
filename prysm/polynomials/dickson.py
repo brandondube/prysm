@@ -101,7 +101,7 @@ def dickson1_seq(ns, alpha, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
@@ -197,7 +197,7 @@ def dickson1_der_seq(ns, alpha, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape); the i-th plane is d/dx D_{ns[i]}(x)
+        has shape (len(ns),) followed by x.shape; the i-th plane is d/dx D_{ns[i]}(x)
 
     """
     if not hasattr(ns, '__len__'):
@@ -292,7 +292,7 @@ def dickson2_der_seq(ns, alpha, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape); the i-th plane is d/dx E_{ns[i]}(x)
+        has shape (len(ns),) followed by x.shape; the i-th plane is d/dx E_{ns[i]}(x)
 
     """
     if not hasattr(ns, '__len__'):
@@ -349,7 +349,7 @@ def dickson2_seq(ns, alpha, x):
     Returns
     -------
     ndarray
-        has shape (len(ns), *x.shape)
+        has shape (len(ns),) followed by x.shape
         e.g., for 5 modes and x of dimension 100x100,
         return has shape (5, 100, 100)
 
