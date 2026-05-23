@@ -2,7 +2,6 @@
 from functools import reduce
 
 from .mathops import np
-from .conf import config
 
 
 def brewsters_angle(n0, n1, deg=True):
@@ -73,6 +72,14 @@ def snell_aor(n0, n1, theta, deg=True):
     if deg:
         theta = np.radians(theta)
     return np.lib.scimath.arcsin(n0/n1 * np.sin(theta))
+
+
+def _cos_snell(n0, n1, theta):
+    """Compute cos(theta_1) from Snell's law."""
+    sint = n0/n1 * np.sin(theta)
+    cost = np.lib.scimath.sqrt(1 - sint * sint)
+    tir = (np.imag(sint) == 0) & (np.real(sint) > 1)
+    return np.where(tir, -cost, cost)
 
 
 def fresnel_rs(n0, n1, theta0, theta1):
@@ -458,15 +465,15 @@ def multilayer_stack_rt(indices, thicknesses, wavelength, polarization, substrat
         axis; any trailing axes are vectorized calculation dimensions.
     thicknesses : ndarray
         thickness of each film layer, microns.  Must be broadcastable to the
-        same shape as ``indices``.
+        same shape as indices.
     wavelength : float
         wavelength of light, microns
     polarization : str, {'p', 's'}
         the polarization state
     substrate_index : float or ndarray
         refractive index of the medium after the final film layer.  May be a
-        scalar, or broadcastable to the trailing dimensions of ``indices`` and
-        ``thicknesses``.
+        scalar, or broadcastable to the trailing dimensions of indices and
+        thicknesses.
     aoi : float, optional
         angle of incidence, degrees
     ambient_index : float, optional
@@ -480,26 +487,18 @@ def multilayer_stack_rt(indices, thicknesses, wavelength, polarization, substrat
     """
     # digest inputs a little bit
     polarization = polarization.lower()
+    if polarization not in ('p', 's'):
+        raise ValueError("unknown polarization, use p or s")
+
     aoi = np.radians(aoi)
     indices, thicknesses = _as_layer_arrays(indices, thicknesses)
     layer_shape = indices.shape
     nlayers = layer_shape[0]
     calculation_shape = layer_shape[1:]
 
-    # input munging:
-    # downstream routines require shape (N, 2, 2) for batched matmul
-    # input shape is (Nlayers, ...more)
-    # we are ultimately going to loop over Nlayers, but we need to flatten
-    # the last dimension(s) and move them to the front
-    # then within this function, because things do not naturally align to the
-    # first axis, there are lots of awkward checks to see if we're multi-dimensional,
-    # and if we are do the same thing but called slightly differently
-    #
-    # there's no way (that I know of) around that
-
     if indices.ndim > 1:
-        indices = np.moveaxis(indices.reshape((nlayers, -1)), 1, 0)
-        thicknesses = np.moveaxis(thicknesses.reshape((nlayers, -1)), 1, 0)
+        indices = indices.reshape((nlayers, -1))
+        thicknesses = thicknesses.reshape((nlayers, -1))
 
         substrate_index = np.asarray(substrate_index)
         try:
@@ -507,44 +506,54 @@ def multilayer_stack_rt(indices, thicknesses, wavelength, polarization, substrat
         except ValueError as exc:
             raise ValueError('substrate_index must be broadcastable to the trailing layer dimensions') from exc
 
-    angles = np.empty(thicknesses.shape, dtype=config.precision_complex)
-    substrate_angle = snell_aor(ambient_index, substrate_index, aoi, deg=False)
+    cost0 = np.cos(aoi)
+    term1 = 1 / (2 * ambient_index * cost0)
 
-    # do the first loop by hand to handle ambient vacuum gracefully
-    if angles.ndim > 1:
-        for i in range(angles.shape[1]):
-            angles[:,i] = snell_aor(ambient_index, indices[:,i], aoi, deg=False)
-    else:
-        for i in range(len(angles)):
-            angles[i] = snell_aor(ambient_index, indices[i], aoi, deg=False)
+    m00 = m01 = m10 = m11 = None
+    for layer in range(nlayers):
+        n = indices[layer]
+        d = thicknesses[layer]
+        cost = _cos_snell(ambient_index, n, aoi)
+        beta = (2 * np.pi * n * d * cost) / wavelength
+        sinb, cosb = np.sin(beta), np.cos(beta)
+
+        if polarization == 'p':
+            upper_right = -1j * sinb * cost / n
+            lower_left = -1j * n * sinb / cost
+        else:
+            upper_right = -1j * sinb / (cost * n)
+            lower_left = -1j * n * sinb * cost
+
+        if layer == 0:
+            m00 = cosb
+            m01 = upper_right
+            m10 = lower_left
+            m11 = cosb
+            continue
+
+        new00 = m00 * cosb + m01 * lower_left
+        new01 = m00 * upper_right + m01 * cosb
+        new10 = m10 * cosb + m11 * lower_left
+        m11 = m10 * upper_right + m11 * cosb
+        m00, m01, m10 = new00, new01, new10
+
+    substrate_cost = _cos_snell(ambient_index, substrate_index, aoi)
 
     if polarization == 'p':
-        fn1 = characteristic_matrix_p
-        fn2 = multilayer_matrix_p
-    elif polarization == 's':
-        fn1 = characteristic_matrix_s
-        fn2 = multilayer_matrix_s
+        q0 = m00 * substrate_cost + m01 * substrate_index
+        q1 = m10 * substrate_cost + m11 * substrate_index
+        A00 = term1 * (ambient_index * q0 + cost0 * q1)
+        A10 = term1 * (ambient_index * q0 - cost0 * q1)
     else:
-        raise ValueError("unknown polarization, use p or s")
+        substrate_admittance = substrate_index * substrate_cost
+        q0 = m00 + m01 * substrate_admittance
+        q1 = m10 + m11 * substrate_admittance
+        ambient_admittance = ambient_index * cost0
+        A00 = term1 * (ambient_admittance * q0 + q1)
+        A10 = term1 * (ambient_admittance * q0 - q1)
 
-    Mjs = []
-    if angles.ndim > 1:
-        for i in range(angles.shape[1]):
-            Mjs.append(fn1(wavelength, thicknesses[:, i], indices[:, i], angles[:, i]))
-    else:
-        for i in range(len(angles)):
-            Mjs.append(fn1(wavelength, thicknesses[i], indices[i], angles[i]))
-
-    if Mjs[0].ndim > 2:
-        Mjs = [np.moveaxis(M, 2, 0) for M in Mjs]
-
-    if angles.ndim > 1:
-        A = fn2(ambient_index, aoi, Mjs, substrate_index, substrate_angle)
-    else:
-        A = fn2(ambient_index, aoi, Mjs, substrate_index, substrate_angle)
-
-    r = rtot(A)
-    t = ttot(A)
+    r = A10 / A00
+    t = 1 / A00
 
     if indices.ndim > 1:
         r = r.reshape(calculation_shape)
