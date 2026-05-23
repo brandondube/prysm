@@ -87,3 +87,6 @@ docs/source/user_guide/foo.png
 
 # how development works
 nb/*
+
+# refractiveindex database
+_riidb/*
