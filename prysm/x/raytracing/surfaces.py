@@ -31,6 +31,7 @@ from .intersections import (
     ray_plane_intersect,
     ray_sphere_intersect,
 )
+from ._line_math import normalize_vector
 from .sags import (
     Q2d_and_der,
     Q2d_sag,
@@ -529,8 +530,7 @@ class Surface:
             return S_specular, np.ones(S_specular.shape[:-1], dtype=bool)
         period, g_vec, order = self.grating
         g_vec = np.asarray(g_vec, dtype=S_specular.dtype)
-        n_norm = np.sqrt((r * r).sum(-1, keepdims=True))
-        n_hat = r / n_norm
+        n_hat = normalize_vector(r, axis=-1)
         q = g_vec / period
         q_dot_n = (q * n_hat).sum(-1, keepdims=True)
         q_tan = q - q_dot_n * n_hat

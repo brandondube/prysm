@@ -5,6 +5,7 @@
 # from numpy.core.umath_tests import inner1d
 
 from prysm.mathops import np, row_dot
+from ._line_math import normalize_vector
 
 SURFACE_INTERSECTION_DEFAULT_MAXITER = 100
 
@@ -405,6 +406,8 @@ def refract(n, nprime, S, r):
         Sprime, a length 3 vector containing the exitant direction cosines
 
     """
+    S, r = np.atleast_2d(S, r)
+    r = normalize_vector(r, axis=-1)
     mu = n/nprime
     musq = mu * mu
     cosI = row_dot(r, S)

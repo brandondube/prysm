@@ -3,6 +3,12 @@
 from prysm.mathops import np
 
 
+def normalize_vector(v, axis=-1):
+    """Return v scaled to unit length along axis."""
+    v = np.asarray(v)
+    return v / np.linalg.norm(v, axis=axis, keepdims=True)
+
+
 def unit_vector_between(P1, P2):
     """Return the unit vector pointing from P1 to P2.
 
@@ -20,8 +26,7 @@ def unit_vector_between(P1, P2):
 
     """
     diff = np.asarray(P2) - np.asarray(P1)
-    dist = np.linalg.norm(diff)
-    return diff / dist
+    return normalize_vector(diff, axis=-1)
 
 
 def line_intersection_params(P1, S1, P2, S2):
@@ -88,8 +93,7 @@ def closest_point_on_line_to_line(P, S, axis_point, axis_dir):
     A = np.asarray(P)
     Sc = np.asarray(S)
     B = np.asarray(axis_point)
-    Sa = np.asarray(axis_dir)
-    Sa = Sa / np.sqrt(np.sum(Sa * Sa))
+    Sa = normalize_vector(axis_dir, axis=-1)
     w = A - B
     a = np.dot(Sc, Sc)
     b = np.dot(Sc, Sa)
