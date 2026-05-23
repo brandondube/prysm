@@ -41,54 +41,6 @@ def test_exact_functional():
         assert pt.ndim == 0
 
 
-def test_plot2d_all_none():
-    data = np.random.rand(100, 100)
-    rd = rdata.RichData(data, 1., 1.)
-    fig, ax = rd.plot2d()
-    assert fig
-    plt.close(fig)
-
-
-def test_plot2d_given_xlim():
-    data = np.random.rand(100, 100)
-    rd = rdata.RichData(data, 1., 1.)
-    fig, ax = rd.plot2d(xlim=1)
-    assert fig
-    plt.close(fig)
-
-
-def test_plot2d_given_ylim():
-    data = np.random.rand(100, 100)
-    rd = rdata.RichData(data, 1., 1.)
-    fig, ax = rd.plot2d(ylim=1)
-    assert fig
-    plt.close(fig)
-
-
-def test_plot2d_given_clim():
-    data = np.random.rand(100, 100)
-    rd = rdata.RichData(data, 1., 1.)
-    fig, ax = rd.plot2d(clim=10)
-    assert fig
-    plt.close(fig)
-
-
-def test_plot2d_given_power():
-    data = np.random.rand(100, 100)
-    rd = rdata.RichData(data, 1., 1.)
-    fig, ax = rd.plot2d(power=1/4)
-    assert fig
-    plt.close(fig)
-
-
-def test_plot2d_log():
-    data = np.random.rand(100, 100)
-    rd = rdata.RichData(data, 1., 1.)
-    fig, ax = rd.plot2d(log=True)
-    assert fig
-    plt.close(fig)
-
-
 def test_xyrt_synthesis_for_no_xytr_as_expected():
     data = np.random.rand(10, 10)
     dx = 1.234
@@ -142,12 +94,36 @@ def test_slices_various_interped_profiles_function():
     assert np.isfinite(azstd).all()
 
 
-def test_slice_plot_all_flavors():
-    data = np.random.rand(11, 11)
-    dx = 1.234
-    rd = rdata.RichData(data, dx, None)
+def test_plot2d_applies_limits_and_color_limits():
+    data = np.arange(100, dtype=float).reshape(10, 10)
+    rd = rdata.RichData(data, 0.5, 1.0)
+
+    fig, ax = rd.plot2d(xlim=1, ylim=1, clim=(10, 90))
+
+    assert ax.get_xlim() == pytest.approx((-1, 1))
+    assert ax.get_ylim() == pytest.approx((-1, 1))
+    assert ax.images[0].get_clim() == (10, 90)
+    plt.close(fig)
+
+
+def test_plot2d_log_uses_log_normalization():
+    data = np.arange(1, 101, dtype=float).reshape(10, 10)
+    rd = rdata.RichData(data, 1.0, 1.0)
+
+    fig, ax = rd.plot2d(log=True)
+
+    assert ax.images[0].norm.__class__.__name__ == 'LogNorm'
+    plt.close(fig)
+
+
+def test_slice_plot_selects_requested_slice_and_inverts_x():
+    data = np.arange(121, dtype=float).reshape(11, 11)
+    rd = rdata.RichData(data, 1.0, None)
     slc = rd.slices(twosided=True)
-    fig, ax = slc.plot(alpha=None, lw=None, zorder=None, slices='x', show_legend=True, invert_x=True)
-    assert fig
-    assert ax
+
+    fig, ax = slc.plot(slices='x', show_legend=True, invert_x=True)
+
+    assert len(ax.lines) == 1
+    assert ax.xaxis_inverted()
+    assert ax.get_legend() is not None
     plt.close(fig)

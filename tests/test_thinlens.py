@@ -17,12 +17,13 @@ def test_magnification_unity_case():
     assert thinlens.object_dist_to_mag(efl, objdist) == -1
 
 
-@pytest.mark.parametrize('objdist', [1.01, 3, -1, -2])
-def test_magnification_general(objdist):
+@pytest.mark.parametrize('objdist', [1.25, 3, -1, -2])
+def test_magnification_matches_thin_lens_formula(objdist):
     efl = 1
+
     result = thinlens.object_dist_to_mag(efl, objdist)
-    assert result != np.nan
-    assert result != np.inf
+
+    assert result == pytest.approx(efl / (efl - objdist))
 
 
 @pytest.mark.parametrize('mag', [0, 1, 2, 3, 3.05])
@@ -35,9 +36,13 @@ def test_mag_to_fno_inf_case(inf_fno):
     assert thinlens.mag_to_fno(m, inf_fno) == inf_fno
 
 
-@pytest.mark.parametrize('mag', [0, 1, 2, 3, 1.05, -1, -2, -3, -1.05])
-def test_mag_to_fno_general(mag, inf_fno):  # TODO: not purely functional
-    assert thinlens.mag_to_fno(mag, inf_fno)
+@pytest.mark.parametrize('mag', [0, 1, -2, 3.05])
+def test_mag_to_fno_matches_working_f_number_formula(mag, inf_fno):
+    pupil_mag = 0.5
+
+    result = thinlens.mag_to_fno(mag, inf_fno, pupil_mag)
+
+    assert result == pytest.approx((1 + abs(mag) / pupil_mag) * inf_fno)
 
 
 def test_mag_to_fno_reacts_to_pupil_mag():
@@ -57,8 +62,14 @@ def test_object_to_image_distance_unity_case():
     assert thinlens.object_to_image_dist(efl, obj) == -obj
 
 
-def test_imagedist_epd_to_fno():  # purely functional test
-    assert thinlens.image_dist_epd_to_fno(10, 50)
+def test_image_distance_epd_to_fno_matches_na_conversion():
+    image_distance = 10
+    epd = 5
+
+    fno = thinlens.image_dist_epd_to_fno(image_distance, epd)
+    na = thinlens.image_dist_epd_to_na(image_distance, epd)
+
+    assert fno == pytest.approx(thinlens.na_to_fno(na))
 
 
 def test_image_displacement_to_defocus_all_cases():

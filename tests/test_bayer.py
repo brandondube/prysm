@@ -33,12 +33,34 @@ def test_demosaic_malvar_right_shape(cfa):
     assert trichrom.shape == (N, N, 3)
 
 
-@pytest.mark.parametrize('cfa', TEST_CFAs)
-def test_wb_prescale_functions(cfa):
-    data = np.random.rand(N, N)
-    bayer.wb_prescale(data, 1, 2, 3, 4, cfa)
+def test_wb_prescale_applies_cfa_order_in_place():
+    mosaic = np.ones((4, 4), dtype=float)
+
+    bayer.wb_prescale(mosaic, 2, 3, 5, 7, cfa='rggb')
+
+    np.testing.assert_array_equal(mosaic[bayer.top_left], 2)
+    np.testing.assert_array_equal(mosaic[bayer.top_right], 3)
+    np.testing.assert_array_equal(mosaic[bayer.bottom_left], 5)
+    np.testing.assert_array_equal(mosaic[bayer.bottom_right], 7)
 
 
-def test_wb_postscale_functions():
-    data = np.random.rand(N, N, 3)
-    bayer.wb_postscale(data, 1, 2, 3)
+def test_wb_prescale_safe_desaturates_all_channels_by_largest_ratio():
+    mosaic = np.ones((2, 2), dtype=float)
+    mosaic[bayer.top_left] = 12
+
+    bayer.wb_prescale(mosaic, 2, 4, 6, 8, cfa='rggb', safe=True, saturation=6)
+
+    np.testing.assert_allclose(mosaic[bayer.top_left], 12)
+    np.testing.assert_allclose(mosaic[bayer.top_right], 2)
+    np.testing.assert_allclose(mosaic[bayer.bottom_left], 3)
+    np.testing.assert_allclose(mosaic[bayer.bottom_right], 4)
+
+
+def test_wb_postscale_applies_rgb_gains_in_place():
+    rgb = np.ones((2, 2, 3), dtype=float)
+
+    bayer.wb_postscale(rgb, 2, 3, 5)
+
+    np.testing.assert_array_equal(rgb[..., 0], 2)
+    np.testing.assert_array_equal(rgb[..., 1], 3)
+    np.testing.assert_array_equal(rgb[..., 2], 5)

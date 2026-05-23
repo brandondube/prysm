@@ -78,6 +78,38 @@ def test_deepstack_matches_2D_thickness(pol):
     assert np.allclose(R_vectorized, looped_Rs)
 
 
+@pytest.mark.parametrize('pol', ['s', 'p'])
+def test_deepstack_matches_2D_indices_thickness_and_substrate(pol):
+    x = np.linspace(0, 1, 12).reshape(3, 4)
+    indices = []
+    thicknesses = []
+    for layer in range(5):
+        indices.append(1.35 + 0.12 * layer + 0.01j * layer + 1e-3 * x)
+        thicknesses.append(wvl / (4 + layer) * (1 + 0.05 * x))
+    substrate = n_C7980 + 0.02 * x
+
+    looped_rs = []
+    looped_ts = []
+    for idx in np.ndindex(x.shape):
+        indices_at_point = [n[idx] for n in indices]
+        thicknesses_at_point = [t[idx] for t in thicknesses]
+        r, t = thinfilm.multilayer_stack_rt(
+            indices_at_point,
+            thicknesses_at_point,
+            wvl,
+            pol,
+            substrate[idx],
+            aoi=23,
+        )
+        looped_rs.append(r)
+        looped_ts.append(t)
+
+    r, t = thinfilm.multilayer_stack_rt(indices, thicknesses, wvl, pol, substrate, aoi=23)
+
+    assert np.allclose(r, np.asarray(looped_rs).reshape(x.shape))
+    assert np.allclose(t, np.asarray(looped_ts).reshape(x.shape))
+
+
 def test_substrate_index_matches_vectorized_shape():
     thicknesses_mgf2 = np.array([wvl/4, wvl/3, wvl/2])
     nmgf2 = np.full(thicknesses_mgf2.shape, n_MgF2)
@@ -91,6 +123,14 @@ def test_substrate_index_matches_vectorized_shape():
         substrate,
     )
     assert r.shape == thicknesses_mgf2.shape
+
+
+def test_cos_snell_matches_snell_aor_branch_for_tir():
+    theta = np.radians(np.array([-60, 0, 60]))
+    from_snell = np.cos(thinfilm.snell_aor(1.5, 1, theta, deg=False))
+    direct = thinfilm._cos_snell(1.5, 1, theta)
+
+    assert np.allclose(direct, from_snell)
 
 
 def test_indices_and_thicknesses_must_broadcast():

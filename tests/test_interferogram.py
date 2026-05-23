@@ -9,6 +9,7 @@ from prysm.geometry import circle
 
 import matplotlib
 matplotlib.use('Agg')
+from matplotlib import pyplot as plt
 
 
 @pytest.fixture(scope='function')
@@ -39,36 +40,12 @@ def test_std_is_correct(sample_i):
     assert 44.591 == pytest.approx(sample_i.std, abs=1e-2)
 
 
-@pytest.mark.skip(reason='constantly failing on CI even though the core works fine on no less than 5 PCs')
-def test_pvr_is_correct(sample_i):
-    assert 299.814 == pytest.approx(sample_i.pvr(24), abs=1e-2)
-
-
 def test_sa_is_correct(sample_i):
     assert 29.552 == pytest.approx(sample_i.Sa, abs=1e3)
 
 
 def test_strehl_is_correct(sample_i):
     assert 0.938 == pytest.approx(sample_i.strehl, abs=1e3)
-
-@pytest.mark.skip(reason='constantly failing on CI even though the core works fine on no less than 5 PCs')
-def test_bandlimited_rms_is_correct(sample_i_mutate):
-    assert 11.527 == pytest.approx(sample_i_mutate.bandlimited_rms(1, 10), abs=1e-2)
-
-
-def test_spike_clip_functions(sample_i_mutate):
-    sample_i_mutate.spike_clip(3)
-    assert sample_i_mutate
-
-
-def test_tis_functions(sample_i_mutate):
-    sample_i_mutate.fill()
-    assert sample_i_mutate.total_integrated_scatter(0.4, 0)
-
-
-def test_save_ascii_functions(sample_i, tmpdir):
-    sample_i.save_zygo_ascii(tmpdir / 'z.asc')
-
 
 def test_doublecrop_has_no_effect(sample_i_mutate):
     sample_i_mutate.crop()
@@ -93,69 +70,86 @@ def test_make_window_passes_array():
 
 
 @pytest.mark.parametrize('win', ['welch', 'hanning'])
-def test_make_window_functions_for_known_geometries(win):
-    signal = np.empty((10, 10))
+def test_make_window_known_geometries_are_center_weighted(win):
+    signal = np.empty((11, 11))
+
     window = make_window(signal, 1, win)
-    assert window.any()
+
+    assert window[5, 5] == pytest.approx(1)
+    assert window[0, 0] < window[5, 5]
 
 
-def test_synthesize_from_psd_functions():
-    assert Interferogram.render_from_psd(100, 64, rms=5, a=1e4, b=1/100, c=2)
+def test_synthesize_from_psd_sets_requested_rms():
+    i = Interferogram.render_from_psd(100, 64, rms=5, a=1e4, b=1/100, c=2)
+
+    assert i.rms == pytest.approx(5, rel=0.15)
 
 
-def test_pad_functions(sample_i_mutate):
-    assert sample_i_mutate.pad(np.nan, samples=5)
+def test_pad_and_recenter_preserve_valid_data(sample_i_mutate):
+    original_shape = sample_i_mutate.shape
+
+    padded = sample_i_mutate.pad(np.nan, samples=5)
+    recentered = padded.recenter()
+
+    assert padded.shape[0] == original_shape[0] + 5
+    assert recentered.shape == padded.shape
+    assert np.isfinite(recentered.data).any()
 
 
-def test_recenter_functions(sample_i_mutate):
-    assert sample_i_mutate.recenter()
+def test_spike_clip_replaces_outlier(sample_i_mutate):
+    sample_i_mutate.data[0, 0] = 1e9
+
+    sample_i_mutate.spike_clip(3)
+
+    assert sample_i_mutate.data[0, 0] != 1e9
 
 
-def test_fit_psd(sample_i_mutate):
+def test_total_integrated_scatter_is_positive_for_filled_sample(sample_i_mutate):
+    sample_i_mutate.fill()
+
+    tis = sample_i_mutate.total_integrated_scatter(0.4, 0)
+
+    assert tis > 0
+
+
+def test_save_ascii_writes_nonempty_file(sample_i, tmpdir):
+    path = tmpdir / 'z.asc'
+
+    sample_i.save_zygo_ascii(path)
+
+    assert path.size() > 0
+
+
+def test_fit_psd_returns_positive_model_parameters(sample_i_mutate):
     with np.testing.suppress_warnings() as sup:
         sup.filter(RuntimeWarning)
         a, b, c = fit_psd(*sample_i_mutate.psd().slices().azavg)
-    assert a
-    assert b
-    assert c
+
+    assert a > 0
+    assert b > 0
+    assert c > 0
 
 
-def test_print_does_not_throw(sample_i):
-    import contextlib
-    import io
+def test_constructor_default_dx_and_meta_wavelength():
+    i = Interferogram(np.zeros((2, 2)), meta={'Wavelength': 1.23})
 
-    s = io.StringIO()
-    with contextlib.redirect_stdout(s):
-        print(sample_i)
-
-    assert sample_i
+    assert i.dx == 0
+    assert i.meta['Wavelength'] == 1.23
 
 
-def test_constructor_accepts_no_dx():
-    z = np.random.rand(128, 128)
-    i = Interferogram(z)
-    assert i
+def test_bandlimited_rms_works_with_frequency_specs(sample_i_mutate):
+    assert sample_i_mutate.bandlimited_rms(flow=1, fhigh=10) > 0
 
 
-def test_bandlimited_rms_works_with_frequency_specs(sample_i):
-    assert sample_i.bandlimited_rms(flow=1, fhigh=10)
-
-
-def test_can_make_with_meta_wavelength_dict():
-    # this basically tests that getting the wavelength property
-    # from a dat or datx file works
-    meta = {'Wavelength': 1.}
-    z = np.random.rand(2, 2)
-    i = Interferogram(z, meta=meta)
-    assert i
-
-
-def test_crop_mask_works():
-    z = np.random.rand(32, 32)
+def test_crop_mask_reduces_array_size():
+    z = np.ones((32, 32))
     i = Interferogram(z, dx=1)
-    i.mask(circle(10, i.r))
+
+    i.mask(circle(5, i.r))
     i.crop()
-    assert i
+
+    assert i.shape[0] < z.shape[0]
+    assert i.shape[1] < z.shape[1]
 
 
 def test_random_subaperture_mask_works():
@@ -172,12 +166,17 @@ def test_random_subaperture_mask_works():
     ((0.1, 0.2), 'bp'),
     ((0.1, 0.2), 'br')
 ])
-def test_filter_functions(sample_i_mutate, fc, typ):
+def test_filter_reduces_or_preserves_shape(sample_i_mutate, fc, typ):
+    shape = sample_i_mutate.shape
+
     sample_i_mutate.filter(fc, typ)
-    assert sample_i_mutate
+
+    assert sample_i_mutate.shape == shape
+    assert np.isfinite(sample_i_mutate.data).all()
 
 
-def test_interferogram_functions(sample_i_mutate):
+def test_interferogram_plot_labels_axes(sample_i_mutate):
     fig, ax = sample_i_mutate.interferogram()
-    assert fig
-    assert ax
+
+    assert len(ax.images) == 1
+    plt.close(fig)

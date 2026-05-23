@@ -26,6 +26,72 @@ def test_obj_oriented_wavefront_focusing_reverses():
     assert np.allclose(wf.data, wf2.data)
 
 
+@pytest.mark.parametrize('Q', [1, 1.5, 2])
+def test_focus_backprop_is_adjoint(Q):
+    rng = np.random.default_rng(789)
+    x = rng.normal(size=(9, 12)) + 1j * rng.normal(size=(9, 12))
+    y = rng.normal(size=propagation.focus(x, Q=Q).shape)
+    y = y + 1j * rng.normal(size=y.shape)
+
+    lhs = np.vdot(propagation.focus(x, Q=Q), y)
+    rhs = np.vdot(x, propagation.focus_backprop(y, Q=Q))
+
+    np.testing.assert_allclose(lhs, rhs, atol=1e-12)
+
+
+@pytest.mark.parametrize('Q', [1, 1.5, 2])
+def test_unfocus_backprop_is_adjoint(Q):
+    rng = np.random.default_rng(987)
+    x = rng.normal(size=(9, 12)) + 1j * rng.normal(size=(9, 12))
+    y = rng.normal(size=propagation.unfocus(x, Q=Q).shape)
+    y = y + 1j * rng.normal(size=y.shape)
+
+    lhs = np.vdot(propagation.unfocus(x, Q=Q), y)
+    rhs = np.vdot(x, propagation.unfocus_backprop(y, Q=Q))
+
+    np.testing.assert_allclose(lhs, rhs, atol=1e-12)
+
+
+def test_wavefront_focus_backprop_metadata_and_data():
+    rng = np.random.default_rng(135)
+    dx = 0.25
+    efl = 10
+    Q = 2
+    data = rng.normal(size=(8, 8)) + 1j * rng.normal(size=(8, 8))
+    wf = propagation.Wavefront(dx=dx, cmplx_field=data, wavelength=HeNe, space='pupil')
+    psf = wf.focus(efl=efl, Q=Q)
+    grad_data = rng.normal(size=psf.data.shape) + 1j * rng.normal(size=psf.data.shape)
+    grad = propagation.Wavefront(dx=psf.dx, cmplx_field=grad_data,
+                                 wavelength=HeNe, space='psf')
+
+    back = grad.focus_backprop(efl=efl, Q=Q)
+
+    np.testing.assert_allclose(back.data, propagation.focus_backprop(grad_data, Q=Q))
+    assert back.data.shape == wf.data.shape
+    assert back.dx == pytest.approx(wf.dx)
+    assert back.space == 'pupil'
+
+
+def test_wavefront_unfocus_backprop_metadata_and_data():
+    rng = np.random.default_rng(246)
+    dx = 0.1
+    efl = 10
+    Q = 2
+    data = rng.normal(size=(8, 8)) + 1j * rng.normal(size=(8, 8))
+    wf = propagation.Wavefront(dx=dx, cmplx_field=data, wavelength=HeNe, space='psf')
+    pupil = wf.unfocus(efl=efl, Q=Q)
+    grad_data = rng.normal(size=pupil.data.shape) + 1j * rng.normal(size=pupil.data.shape)
+    grad = propagation.Wavefront(dx=pupil.dx, cmplx_field=grad_data,
+                                 wavelength=HeNe, space='pupil')
+
+    back = grad.unfocus_backprop(efl=efl, Q=Q)
+
+    np.testing.assert_allclose(back.data, propagation.unfocus_backprop(grad_data, Q=Q))
+    assert back.data.shape == wf.data.shape
+    assert back.dx == pytest.approx(wf.dx)
+    assert back.space == 'psf'
+
+
 def test_unfocus_fft_mdft_equivalent_Wavefront():
     z = np.random.rand(128, 128)
     dx = 1
@@ -48,12 +114,15 @@ def test_focus_fft_mdft_equivalent_Wavefront():
     assert np.allclose(focus_fft.data, focus_mdft.data)
 
 
-def test_frespace_functions():
-    dx = 1
+def test_free_space_zero_distance_is_identity():
     z = np.random.rand(SAMPLES, SAMPLES)
-    wf = propagation.Wavefront(dx=dx, cmplx_field=z, wavelength=HeNe, space='pupil')
-    wf = wf.free_space(1, 1)
-    assert wf
+    wf = propagation.Wavefront(dx=1, cmplx_field=z, wavelength=HeNe, space='pupil')
+
+    out = wf.free_space(0)
+
+    np.testing.assert_allclose(out.data, wf.data, atol=1e-12)
+    assert out.dx == wf.dx
+    assert out.wavelength == wf.wavelength
 
 
 def test_talbot_distance_correct():
@@ -72,18 +141,12 @@ def test_fresnel_number_correct():
     assert fres == (a**2 / (z * wvl))
 
 
-def test_can_mul_wavefronts():
-    data = np.random.rand(2, 2).astype(np.complex128)
+def test_wavefront_multiply_and_divide_apply_to_data():
+    data = np.arange(4, dtype=float).reshape(2, 2).astype(np.complex128)
     wf = propagation.Wavefront(cmplx_field=data, dx=1, wavelength=.6328)
-    wf2 = wf * 2
-    assert wf2
 
-
-def test_can_div_wavefronts():
-    data = np.random.rand(2, 2).astype(np.complex128)
-    wf = propagation.Wavefront(cmplx_field=data, dx=1, wavelength=.6328)
-    wf2 = wf / 2
-    assert wf2
+    np.testing.assert_allclose((wf * 2).data, data * 2)
+    np.testing.assert_allclose((wf / 2).data, data / 2)
 
 
 def test_wavefront_scalar_arithmetic_operand_order():
@@ -189,12 +252,14 @@ def test_babinet_backprop_returns_fpm_and_lyot_gradients():
     assert lyot_bar.data[ly, lx] == pytest.approx(fd_lyot, rel=1e-6, abs=1e-8)
 
 
-def test_precomputed_angular_spectrum_functions():
-    data = np.random.rand(2, 2)
+def test_precomputed_angular_spectrum_matches_direct_zero_distance():
+    data = np.random.rand(4, 4)
     wf = propagation.Wavefront(cmplx_field=data, dx=1, wavelength=.6328)
-    tf = propagation.angular_spectrum_transfer_function(2, wf.wavelength, wf.dx, 1)
-    wf2 = wf.free_space(tf=tf)
-    assert wf2
+    tf = propagation.angular_spectrum_transfer_function(wf.data.shape, wf.wavelength, wf.dx, z=0)
+
+    out = wf.free_space(tf=tf)
+
+    np.testing.assert_allclose(out.data, wf.data, atol=1e-12)
 
 
 def test_thinlens_hopkins_agree():

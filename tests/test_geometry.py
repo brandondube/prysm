@@ -3,30 +3,26 @@ import math
 
 import pytest
 
-import numpy as np
-
 from prysm import geometry, coordinates
 
 
-@pytest.mark.parametrize('sides, samples', [
-    [5,  128],
-    [10, 128],
-    [25, 128],
-    [5,  256],
-    [25, 68]])
-def test_regular_polygon(sides, samples):
-    x, y = coordinates.make_xy_grid(samples, diameter=2)
-    mask = geometry.regular_polygon(sides, 1, x, y)
-    assert isinstance(mask, np.ndarray)
-    assert mask.shape == (samples, samples)
+@pytest.mark.parametrize('sides', [5, 8])
+def test_regular_polygon_contains_center_and_excludes_far_corners(sides):
+    x, y = coordinates.make_xy_grid(65, diameter=2)
+
+    mask = geometry.regular_polygon(sides, 0.5, x, y)
+
+    assert mask[32, 32]
+    assert not mask[0, 0]
 
 
-@pytest.mark.parametrize('sigma, samples', [
-    [0.5, 128],
-    [5,   256]])
-def test_gaussian(sigma, samples):
-    x, y = coordinates.make_xy_grid(samples, diameter=2)
-    assert type(geometry.gaussian(sigma, x, y)) is np.ndarray
+def test_gaussian_peaks_at_center_and_falls_off_radially():
+    x, y = coordinates.make_xy_grid(65, diameter=2)
+
+    mask = geometry.gaussian(0.5, x, y)
+
+    assert mask[32, 32] == pytest.approx(1)
+    assert mask[32, 40] > mask[32, 48]
 
 
 def test_rotated_ellipse_fails_if_minor_is_bigger_than_major():
@@ -36,16 +32,16 @@ def test_rotated_ellipse_fails_if_minor_is_bigger_than_major():
         geometry.rotated_ellipse(width_major=major, width_minor=minor, x=None, y=None)
 
 
-@pytest.mark.parametrize('maj, min, majang', [
-    [1, 0.5, 0],
-    [1, 1, 5],
-    [0.8, 0.1, 90]])
-def test_rotated_ellipse(maj, min, majang):
-    x, y = coordinates.make_xy_grid(32, diameter=2)
-    assert type(geometry.rotated_ellipse(x=x, y=y,
-                                         width_major=maj,
-                                         width_minor=min,
-                                         major_axis_angle=majang)) is np.ndarray
+def test_rotated_ellipse_major_axis_rotation_changes_support():
+    x, y = coordinates.make_xy_grid(65, diameter=2)
+
+    horizontal = geometry.rotated_ellipse(0.8, 0.2, x, y, major_axis_angle=0)
+    vertical = geometry.rotated_ellipse(0.8, 0.2, x, y, major_axis_angle=90)
+
+    assert horizontal[32, 50]
+    assert not horizontal[50, 32]
+    assert vertical[50, 32]
+    assert not vertical[32, 50]
 
 
 def test_circle_correct_area():
@@ -70,13 +66,6 @@ def test_truecircle_correct_area():
     assert mask.sum() == pytest.approx(expected_area_of_circle, abs=1.5)
 
 
-@pytest.mark.parametrize('vanes', [2, 3, 5, 6, 10])
-def test_generate_spider_doesnt_error(vanes):
-    x, y = coordinates.make_xy_grid(32, diameter=2)
-    mask = geometry.spider(vanes, 1, x, y)
-    assert isinstance(mask, np.ndarray)
-
-
 def test_rectangle_correct_area():
     # really this test should be done for a rectangle that is less than the
     # entire array
@@ -86,10 +75,16 @@ def test_rectangle_correct_area():
     assert mask.sum() == expected
 
 
-def test_rectangle_doesnt_break_angle():
-    x, y = coordinates.make_xy_grid(16, diameter=2)
-    mask = geometry.rectangle(1, x, y, angle=45)
-    assert mask.any()
+def test_rectangle_angle_90_swaps_width_and_height():
+    x, y = coordinates.make_xy_grid(65, diameter=2)
+
+    horizontal = geometry.rectangle(0.8, x, y, height=0.2)
+    vertical = geometry.rectangle(0.8, x, y, height=0.2, angle=90)
+
+    assert horizontal[32, 50]
+    assert not horizontal[50, 32]
+    assert vertical[50, 32]
+    assert not vertical[32, 50]
 
 
 def test_offset_circle():
@@ -100,14 +95,21 @@ def test_offset_circle():
     assert s == 29  # 29 = roundup of 3^2 * pi
 
 
-def test_annulus_functions():
-    x, y = coordinates.make_xy_grid(32, dx=1)
-    r = np.hypot(x, y)
-    annul = geometry.annulus(5, 6, r)
-    assert annul.any()
+def test_annulus_excludes_center_and_outer_region():
+    x, y = coordinates.make_xy_grid(65, diameter=2)
+    r, _ = coordinates.cart_to_polar(x, y)
+
+    mask = geometry.annulus(0.2, 0.5, r)
+
+    assert not mask[32, 32]
+    assert mask[32, 48]
+    assert not mask[32, 0]
 
 
-def test_rectangle_with_corner_fillets_function():
-    x, y = coordinates.make_xy_grid(32, dx=1)
-    mask = geometry.rectangle_with_corner_fillets(10, 10, 2, x, y)
-    assert mask.any()
+def test_rectangle_with_corner_fillets_removes_corners():
+    x, y = coordinates.make_xy_grid(65, dx=1)
+
+    mask = geometry.rectangle_with_corner_fillets(20, 20, 4, x, y)
+
+    assert mask[32, 32]
+    assert not mask[12, 12]

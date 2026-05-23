@@ -62,30 +62,16 @@ def test_promote_3d_point_scalar_and_trailing_values():
     np.testing.assert_allclose(coordinates.promote_3d_point([1, 2, 5]), [1, 2, 5])
 
 
-# TODO: tests below here are for function, not accuracy
+def test_uniform_cart_to_polar_preserves_constant_field():
+    x = np.linspace(-1, 1, TEST_SAMPLES)
+    y = np.linspace(-1, 1, TEST_SAMPLES)
+    dat = np.ones((TEST_SAMPLES, TEST_SAMPLES))
 
-
-def test_uniform_cart_polar_functions(data_2d):
-    x, y, dat = data_2d
     rho, phi, result = coordinates.uniform_cart_to_polar(x, y, dat)
-    assert type(rho) is np.ndarray
-    assert type(phi) is np.ndarray
-    assert type(result) is np.ndarray
 
-
-# TODO: add a test that this returns expected points for a known function
-# def test_resample_2d_does_not_distort(data_2d):
-#     x, y, dat = data_2d
-#     xx, yy = np.meshgrid(x, y)
-#     resampled = coordinates.resample_2d(dat, (x, y), (xx, yy))
-#     assert np.allclose(dat, resampled)
-
-
-# def test_resample_2d_complex_does_not_distort(data_2d_complex):
-#     x, y, dat = data_2d_complex
-#     xx, yy = np.meshgrid(x, y)
-#     resampled = coordinates.resample_2d_complex(dat, (x, y), (xx, yy))
-#     assert np.allclose(dat, resampled)
+    assert rho[0] == 0
+    assert phi[0] == 0
+    np.testing.assert_allclose(result, 1)
 
 
 @pytest.mark.skip('changed rotation order, need to re-do scipy match')
@@ -98,33 +84,27 @@ def test_make_rotation_matrix_matches_scipy():
     assert np.allclose(sp, pry)
 
 
-def test_plane_warping_pipeline_functions(data_2d):
-    x, y, z = data_2d
-    x, y = np.meshgrid(x, y)
-    shape = x.shape
-    R = coordinates.make_rotation_matrix((1, 2, 3))
-    oy, ox = [(s-1)/2 for s in shape]
-    y, x = [np.arange(s) for s in shape]
-    y, x = np.meshgrid(y, x)
-    Tin = coordinates.make_homomorphic_translation_matrix(-ox, -oy)
-    Tout = coordinates.make_homomorphic_translation_matrix(ox, oy)
-    R = coordinates.promote_3d_transformation_to_homography(R)
-    Mfwd = Tout@(R@Tin)
-    Mfwd = coordinates.drop_z_3d_transformation(Mfwd)
-    Mifwd = np.linalg.inv(Mfwd)
-    xfwd, yfwd = coordinates.apply_homography(Mifwd, x, y)
-    zp = coordinates.warp(z, xfwd, yfwd)
-    assert zp.any()
+def test_warp_identity_coordinates_returns_input():
+    z = np.arange(16, dtype=float).reshape(4, 4)
+    yy, xx = np.indices(z.shape)
+
+    out = coordinates.warp(z, xx, yy)
+
+    np.testing.assert_allclose(out, z, atol=1e-14)
 
 
-def test_distort_annular_grid_functions(data_2d):
-    x, y, _ = data_2d
-    r = np.hypot(x, y)
-    rprime = coordinates.distort_annular_grid(r, 0.2)
-    assert rprime.any()
+def test_distort_annular_grid_maps_obscuration_to_zero_and_outer_radius_to_one():
+    r = np.asarray([0.2, 0.6, 1.0])
+
+    out = coordinates.distort_annular_grid(r, eps=0.2)
+
+    np.testing.assert_allclose(out, [0.0, 0.5, 1.0])
 
 
-def test_chebygauss_quadrature_xy_functions():
-    x, y = coordinates.chebygauss_quadrature_xy(2)
-    assert x.any()
-    assert y.any()
+def test_chebygauss_quadrature_xy_honors_radius_and_center():
+    x, y = coordinates.chebygauss_quadrature_xy(3, radius=2, center=(10, -5))
+    radii = np.hypot(x - 10, y + 5)
+
+    assert x.shape == y.shape == (21,)
+    assert radii.max() < 2
+    assert radii.min() > 0

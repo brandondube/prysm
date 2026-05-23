@@ -3,6 +3,7 @@ import os
 import tempfile
 
 import numpy as np
+import pytest
 
 from prysm import io, sample_data
 
@@ -17,19 +18,20 @@ def test_read_zygodat():
     assert 'lateral_resolution' in result['meta']
 
 
-# def test_read_zygodat():
-#     p = sample_files('dat')
-#     result = io.read_zygo_dat(p)
-#     assert 'phase' in result
-#     assert 'intensity' in result
-#     assert 'lateral_resolution' in result['meta']
-
-
-def test_write_zygodat_functions():
+def test_write_zygodat_roundtrips_phase_and_lateral_resolution(tmp_path):
     p = sample_files('dat')
     dct = io.read_zygo_dat(p)
-    tf = tempfile.TemporaryFile('wb')
-    io.write_zygo_dat(tf, dct['phase'], dct['meta']['lateral_resolution'])
+    path = tmp_path / 'roundtrip.dat'
+
+    with open(path, 'wb') as fid:
+        io.write_zygo_dat(fid, dct['phase'], dct['meta']['lateral_resolution'])
+
+    reread = io.read_zygo_dat(path)
+    assert reread['meta']['lateral_resolution'] == pytest.approx(
+        dct['meta']['lateral_resolution'] * 1e-3
+    )
+    assert reread['phase'].shape == dct['phase'].shape
+#     assert 'lateral_resolution' in result['meta']
 
 
 def test_codev_gridint_roundtrip():
@@ -75,9 +77,14 @@ def test_codev_gridint_read_from_fixture():
     assert meta['wavelength'] == 1.0
 
 
-def test_write_codev_zfr_int_functions():
-    coefs = np.random.rand(16)
-    with tempfile.NamedTemporaryFile('w', delete=False) as tf:
-        tf.close()
-        io.write_codev_zfr_int(coefs, tf.name)
-        os.unlink(tf.name)
+def test_write_codev_zfr_int_writes_nonzero_coefficients(tmp_path):
+    path = tmp_path / 'coefs.int'
+    coefs = np.zeros(16)
+    coefs[3] = 1.25
+    coefs[7] = -2.5
+
+    io.write_codev_zfr_int(coefs, path)
+
+    text = path.read_text()
+    assert '1.250000000' in text
+    assert '-2.500000000' in text

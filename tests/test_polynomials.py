@@ -92,46 +92,23 @@ def test_xy_poly_seq_cross_terms():
 # - Q poly
 
 
-@pytest.mark.parametrize('n', [0, 1, 2, 3, 4, 5, 6])
-def test_qbfs_functions(n, rho):
-    sag = polynomials.Qbfs(n, rho)
-    assert sag.any()
+def test_qbfs_first_two_orders_match_closed_form(rho):
+    rho2 = rho * rho
+    c_q = rho2 * (1 - rho2)
+
+    np.testing.assert_allclose(polynomials.Qbfs(0, rho), c_q)
+    np.testing.assert_allclose(polynomials.Qbfs(1, rho), (13 - 16 * rho2) * c_q / np.sqrt(19))
 
 
-def test_qbfs_seq_functions(rho):
-    ns = [1, 2, 3, 4, 5, 6]
-    gen = polynomials.Qbfs_seq(ns, rho)
-    assert len(list(gen)) == len(ns)
+def test_qbfs_and_qcon_sequences_match_scalar_evaluation(rho):
+    ns = [0, 1, 2, 3]
 
+    qbfs_seq = list(polynomials.Qbfs_seq(ns, rho))
+    qcon_seq = list(polynomials.Qcon_seq(ns, rho))
 
-@pytest.mark.parametrize('n', [0, 1, 2, 3, 4, 5, 6])
-def test_qcon_functions(n, rho):
-    sag = polynomials.Qcon(n, rho)
-    assert sag.any()
-
-
-def test_qcon_seq_functions(rho):
-    ns = [1, 2, 3, 4, 5, 6]
-    gen = polynomials.Qcon_seq(ns, rho)
-    assert len(list(gen)) == len(ns)
-
-# there are truth tables in the paper, which are not used here.  Some of them contain
-# typos, so the test would have to be very loose, e.g. 0.05 atol.  A visual check
-# is equally valuable, so we only check functionality here.
-
-
-@pytest.mark.parametrize('nm', [
-    (1, 1),
-    (2, 0),
-    (3, 1),
-    (2, 2),
-    (2, -2),
-    (4, 0),
-    (7, 7),
-])
-def test_2d_Q(nm, rho, phi):
-    sag = polynomials.Q2d(*nm, rho, phi)
-    assert sag.any()
+    for i, n in enumerate(ns):
+        np.testing.assert_allclose(qbfs_seq[i], polynomials.Qbfs(n, rho))
+        np.testing.assert_allclose(qcon_seq[i], polynomials.Qcon(n, rho))
 
 
 def test_2d_Q_seq_same_as_loop(rho, phi):
@@ -163,11 +140,6 @@ def test_ansij_roudn_trips(j):
     n, m = polynomials.ansi_j_to_nm(j)
     jj = polynomials.nm_to_ansi_j(n, m)
     assert j == jj
-
-
-def test_ansi_2_term_can_construct(rho, phi):
-    ary = polynomials.zernike_nm(3, 1, rho, phi)
-    assert ary.any()
 
 
 def test_zernike_seq_same_as_loop(rho, phi):
@@ -342,24 +314,18 @@ def test_zernike_sum_der_xy_handles_single_mode_and_duplicates():
     np.testing.assert_allclose(dy3, dyref, atol=1e-14)
 
 
-def test_zernike_to_magang_functions():
-    # data has piston, tt, power, sph, ast, cma, tre = 7 unique things
+def test_zernikes_to_magnitude_angle_combines_sine_cosine_pairs():
     data = [
-        (0, 0, 1),
-        (1, 1, 1),
-        (1, -1, 1),
-        (2, 0, 1),
-        (4, 0, 1),
-        (2, 2, 1),
-        (2, -2, 1),
-        (3, 1, 1),
-        (3, -1, 1),
-        (3, 3, 1),
-        (3, -3, 1)
+        (2, 2, 3),
+        (2, -2, 4),
+        (2, 0, 5),
     ]
+
     magang = polynomials.zernikes_to_magnitude_angle(data)
-    # TODO: also test correct magnitude and angle
-    assert len(magang) == 7
+
+    assert magang['Defocus'] == (5, 0)
+    assert magang['Primary Astigmatism'][0] == pytest.approx(5)
+    assert magang['Primary Astigmatism'][1] == pytest.approx(np.degrees(np.arctan2(3, 4)))
 
 
 def test_zernike_topn_correct():
@@ -381,20 +347,6 @@ def test_zernike_topn_correct():
     ]
     res = polynomials.top_n(data, 5)
     assert exp == res
-
-
-def test_barplot_functions():
-    coefs = [0, 1, 2]
-    names = ['Foo', 'Bar', 'Baz']
-    fig, ax = polynomials.zernike_barplot(coefs, names)
-    assert fig, ax
-
-
-def test_barplot_magnitudes_functions():
-    coefs = [0, 1, 2]
-    nms = [polynomials.noll_to_nm(j) for j in range(1, 4)]
-    fig, ax = polynomials.zernike_barplot_magnitudes(coefs, nms)
-    assert fig, ax
 
 
 @pytest.mark.parametrize('n', [0, 1, 2, 3, 4])
@@ -528,11 +480,14 @@ def test_dickson1_alpha1_cheby(n):
     assert np.allclose(d, 2*c)
 
 
-# no known identities
-@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
-def test_dickson2_functions(n):
-    d = polynomials.dickson2(n, 1, X)
-    assert d.any()
+@pytest.mark.parametrize('n', [2, 3, 4, 5])
+def test_dickson2_satisfies_recurrence(n):
+    alpha = 1.25
+
+    lhs = polynomials.dickson2(n, alpha, X)
+    rhs = X * polynomials.dickson2(n - 1, alpha, X) - alpha * polynomials.dickson2(n - 2, alpha, X)
+
+    np.testing.assert_allclose(lhs, rhs)
 
 
 def test_dickson1_seq_matches_loop():
@@ -791,22 +746,6 @@ def test_clenshaw_der_zeros_above_polynomial_degree():
     np.testing.assert_allclose(res[1, 0], 2.0 * np.ones_like(xs))
     np.testing.assert_allclose(res[2, 0], np.zeros_like(xs))
     np.testing.assert_allclose(res[3, 0], np.zeros_like(xs))
-
-
-@pytest.mark.parametrize('n', [1, 2, 3])
-def test_cheby3_functions(n):
-    # no analogous functions in scipy or numpy, so no match someone else
-    # note alpha, beta from A&S, very simple
-    P = polynomials.cheby3(n, X)
-    assert P.any()
-
-
-@pytest.mark.parametrize('n', [1, 2, 3])
-def test_cheby4_functions(n):
-    # no analogous functions in scipy or numpy, so no match someone else
-    # note alpha, beta from A&S, very simple
-    P = polynomials.cheby4(n, X)
-    assert P.any()
 
 
 def test_cheby3_seq_matches_loop():
