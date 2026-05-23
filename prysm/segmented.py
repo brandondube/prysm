@@ -183,7 +183,7 @@ class CompositeHexagonalAperture:
         Parameters
         ----------
         basis_func : callable
-            a function with signature basis_func(orders, [x, y or r, t], **kwargs)
+            a function with signature basis_func(orders, [x, y or r, t], keyword arguments)
             for example, zernike_nm_sequence from prysm.polyomials fits the bill
         orders : iterable
             sequence of polynomial orders or indices.
@@ -476,7 +476,7 @@ class CompositeKeystoneAperture:
         Parameters
         ----------
         basis_func : callable
-            a function with signature basis_func(orders, [x, y or r, t], **kwargs)
+            a function with signature basis_func(orders, [x, y or r, t], keyword arguments)
             for example, zernike_nm_sequence from prysm.polyomials fits the bill
         orders : iterable
             sequence of polynomial orders or indices.
