@@ -12,6 +12,7 @@ dependencies:
   - scikit-image
   - imageio
   - jupyterlab
+  - pandoc
   - pip
   - pip:
       - nbsphinx
