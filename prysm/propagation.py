@@ -17,6 +17,13 @@ def _maybe_pad(wavefunction, Q):
     return wavefunction
 
 
+def _shape_before_pad(padded_shape, Q):
+    """Infer the input shape from the padded shape and padding factor."""
+    if Q == 1:
+        return padded_shape
+    return tuple(int(s // Q) for s in padded_shape)
+
+
 def _phase_prefix(wavelength):
     """Phase prefix or scale factor such that mul w/ OPD in nm produces radians.
     """
@@ -44,6 +51,29 @@ def focus(wavefunction, Q):
     return impulse_response
 
 
+def focus_backprop(wavefunction, Q):
+    """Backpropagate gradient through :func:`focus`.
+
+    Parameters
+    ----------
+    wavefunction : ndarray
+        gradient at the PSF plane
+    Q : float
+        oversampling / padding factor used for the forward propagation
+
+    Returns
+    -------
+    ndarray
+        gradient at the pupil plane
+
+    """
+    padded_grad = fft.fftshift(fft.ifft2(fft.ifftshift(wavefunction), norm='ortho'))
+    out_shape = _shape_before_pad(wavefunction.shape, Q)
+    if out_shape != wavefunction.shape:
+        return crop_center(padded_grad, out_shape)
+    return padded_grad
+
+
 def unfocus(wavefunction, Q):
     """Propagate a PSF plane to a pupil plane.
 
@@ -64,34 +94,57 @@ def unfocus(wavefunction, Q):
     return fft.fftshift(fft.ifft2(fft.ifftshift(padded_wavefront), norm='ortho'))
 
 
+def unfocus_backprop(wavefunction, Q):
+    """Backpropagate gradient through :func:`unfocus`.
+
+    Parameters
+    ----------
+    wavefunction : ndarray
+        gradient at the pupil plane
+    Q : float
+        oversampling / padding factor used for the forward propagation
+
+    Returns
+    -------
+    ndarray
+        gradient at the PSF plane
+
+    """
+    padded_grad = fft.fftshift(fft.fft2(fft.ifftshift(wavefunction), norm='ortho'))
+    out_shape = _shape_before_pad(wavefunction.shape, Q)
+    if out_shape != wavefunction.shape:
+        return crop_center(padded_grad, out_shape)
+    return padded_grad
+
+
 def coordinates_for_focus(pupil_dx, pupil_samples, focal_dx, focal_samples,
                           wavelength, efl, focal_shift=(0, 0)):
     """Coordinate / frequency vectors for an MDFT-based pupil ↔ focal propagation.
 
-    The Fraunhofer kernel is ``exp(-2πi · x_pupil · x_focal / (λ · efl))``. This
-    returns the input pupil coordinates ``(x, y)`` and the spatial frequencies
-    ``(fx, fy)`` that pair with them, where ``fx = x_focal / (λ · efl)``.
+    The Fraunhofer kernel is exp(-2πi · x_pupil · x_focal / (λ · efl)). This
+    returns the input pupil coordinates (x, y) and the spatial frequencies
+    (fx, fy) that pair with them, where fx = x_focal / (λ · efl).
 
     For end users, prefer :func:`prepare_executor`, which wraps this and bakes
     the optical normalization into the executor. If you do build the executor
-    by hand, multiply its result by ``pupil_dx * focal_dx / (wavelength * efl)``.
+    by hand, multiply its result by pupil_dx * focal_dx / (wavelength * efl).
 
     Parameters
     ----------
     pupil_dx : float
         pupil-plane sample spacing, mm
     pupil_samples : int or (int, int)
-        pupil samples; a single int is treated as square, a tuple as ``(rows, cols)``
+        pupil samples; a single int is treated as square, a tuple as (rows, cols)
     focal_dx : float
         focal-plane sample spacing, microns
     focal_samples : int or (int, int)
-        focal samples; a single int is treated as square, a tuple as ``(rows, cols)``
+        focal samples; a single int is treated as square, a tuple as (rows, cols)
     wavelength : float
         wavelength of light, microns
     efl : float
         effective focal length, mm
     focal_shift : (float, float)
-        ``(x, y)`` translation of the focal grid center, microns
+        (x, y) translation of the focal grid center, microns
 
     Returns
     -------
@@ -127,30 +180,30 @@ def prepare_executor(pupil_dx, pupil_samples, focal_dx, focal_samples,
 
     Wraps :func:`coordinates_for_focus` and the executor constructor in one
     call. The optical normalization scalar
-    ``pupil_dx * focal_dx / (wavelength * efl)`` is baked into the executor's
-    ``norm``, so applying the executor produces a unitary-equivalent
+    pupil_dx * focal_dx / (wavelength * efl) is baked into the executor's
+    norm, so applying the executor produces a unitary-equivalent
     propagated field. The returned operator is in the focus orientation:
 
-    - Focus:    ``executor(pupil_data)`` produces focal data
-    - Unfocus:  ``executor.adjoint(focal_data)`` produces pupil data
+    - Focus:    executor(pupil_data) produces focal data
+    - Unfocus:  executor.adjoint(focal_data) produces pupil data
       (MDFT only — CZT has no adjoint and would need a separate operator
       built in the focal → pupil orientation).
 
     The pupil and focal sample spacings are also stashed on the returned
-    operator as ``executor.pupil_dx`` and ``executor.focal_dx`` for callers
-    that need them (e.g. to label an output ``Wavefront``).
+    operator as executor.pupil_dx and executor.focal_dx for callers
+    that need them (e.g. to label an output Wavefront).
 
     Parameters
     ----------
     pupil_dx, pupil_samples, focal_dx, focal_samples, wavelength, efl, focal_shift
         See :func:`coordinates_for_focus`.
     kind : {'mdft', 'czt'}, optional
-        Executor type to build. Default ``'mdft'``.
+        Executor type to build. Default 'mdft'.
 
     Returns
     -------
     MDFT or CZT
-        operator suitable for passing to ``focus_dft``, ``unfocus_dft``, etc.
+        operator suitable for passing to focus_dft, unfocus_dft, etc.
 
     """
     x, y, fx, fy = coordinates_for_focus(
@@ -178,7 +231,7 @@ def focus_dft(wavefunction, executor):
         the pupil-plane field; shape must match what the executor was built for.
     executor : MDFT or CZT
         a focus-orientation operator (e.g. from :func:`prepare_executor`).
-        Optical normalization is expected to be baked into ``executor.norm``.
+        Optical normalization is expected to be baked into executor.norm.
 
     Returns
     -------
@@ -219,8 +272,8 @@ def unfocus_dft(wavefunction, executor):
     wavefunction : ndarray
         the focal-plane field
     executor : MDFT or CZT
-        for MDFT, the focus-orientation operator (same as for ``focus_dft``);
-        the inverse is taken via ``executor.adjoint``. For CZT, the operator
+        for MDFT, the focus-orientation operator (same as for focus_dft);
+        the inverse is taken via executor.adjoint. For CZT, the operator
         must be built in the focal → pupil orientation since CZT has no
         adjoint.
 
@@ -450,10 +503,10 @@ def angular_spectrum_transfer_function(samples, wvl, dx, z):
 def to_fpm_and_back(wavefunction, fpm, executor, return_more=False):
     """Propagate to a focal plane mask, apply it, and return.
 
-    Composition of :func:`focus_dft`, multiplication by ``fpm``, and
+    Composition of :func:`focus_dft`, multiplication by fpm, and
     :func:`unfocus_dft`. The same MDFT executor is used for both legs (its
     adjoint provides the inverse). To invoke Babinet's principle, pass
-    ``fpm=1 - fpm``.
+    fpm=1 - fpm.
 
     Parameters
     ----------
@@ -503,8 +556,8 @@ def to_fpm_and_back_backprop(wavefunction, fpm, executor, return_more=False,
         if True, return (Eabar, Ebbar, intermediate)
         else return Eabar
     return_fpm_grad : bool, optional
-        if True, also return the gradient with respect to ``fpm``. Requires
-        ``field_at_fpm`` from the matching forward propagation.
+        if True, also return the gradient with respect to fpm. Requires
+        field_at_fpm from the matching forward propagation.
     field_at_fpm : Wavefront or ndarray, optional
         focal-plane field before the FPM from the forward propagation
 
@@ -512,7 +565,7 @@ def to_fpm_and_back_backprop(wavefunction, fpm, executor, return_more=False,
     -------
     ndarray or tuple of ndarray
         gradient at the input pupil; optionally also the intermediate gradients
-        and/or the gradient with respect to ``fpm``
+        and/or the gradient with respect to fpm
 
     """
     if isinstance(executor, CZT):
@@ -876,6 +929,34 @@ class Wavefront:
 
         return Wavefront(data, self.wavelength, dx, space='psf')
 
+    def focus_backprop(self, efl, Q=2):
+        """Backpropagate gradient through :meth:`focus`.
+
+        self carries the gradient at the PSF plane; the returned Wavefront
+        carries the gradient at the pupil plane.
+
+        Parameters
+        ----------
+        efl : float
+            focusing distance used for the forward propagation, millimeters
+        Q : float
+            padding factor used for the forward propagation
+
+        Returns
+        -------
+        Wavefront
+            gradient at the pupil plane
+
+        """
+        if self.space != 'psf':
+            raise ValueError('can only backpropagate from a psf to pupil plane')
+
+        samples = self.data.shape[1]
+        data = focus_backprop(self.data, Q=Q)
+        dx = psf_sample_to_pupil_sample(self.dx, samples, self.wavelength, efl)
+
+        return Wavefront(data, self.wavelength, dx, space='pupil')
+
     def unfocus(self, efl, Q=2):
         """Perform a "psf" to "pupil" plane propagation.
 
@@ -904,23 +985,51 @@ class Wavefront:
 
         return Wavefront(data, self.wavelength, dx, space='pupil')
 
+    def unfocus_backprop(self, efl, Q=2):
+        """Backpropagate gradient through :meth:`unfocus`.
+
+        self carries the gradient at the pupil plane; the returned Wavefront
+        carries the gradient at the PSF plane.
+
+        Parameters
+        ----------
+        efl : float
+            un-focusing distance used for the forward propagation, millimeters
+        Q : float
+            padding factor used for the forward propagation
+
+        Returns
+        -------
+        Wavefront
+            gradient at the PSF plane
+
+        """
+        if self.space != 'pupil':
+            raise ValueError('can only backpropagate from a pupil to psf plane')
+
+        samples = self.data.shape[1]
+        data = unfocus_backprop(self.data, Q=Q)
+        dx = pupil_sample_to_psf_sample(self.dx, samples, self.wavelength, efl)
+
+        return Wavefront(data, self.wavelength, dx, space='psf')
+
     def prepare_executor(self, efl, dx, samples, shift=(0, 0), kind='mdft'):
         """Build a reusable MDFT/CZT focus executor for this wavefront.
 
         Wraps :func:`prepare_executor` (which itself wraps
         :func:`coordinates_for_focus` and the executor constructor). The
-        interpretation of ``(dx, samples)`` depends on the wavefront's space:
+        interpretation of (dx, samples) depends on the wavefront's space:
 
-        - If ``self.space == 'pupil'``: ``self.dx`` and ``self.data.shape`` are
-          the pupil-side parameters; ``dx`` (microns) and ``samples`` describe
+        - If self.space == 'pupil': self.dx and self.data.shape are
+          the pupil-side parameters; dx (microns) and samples describe
           the focal plane.
-        - If ``self.space == 'psf'``: ``self.dx`` and ``self.data.shape`` are
-          the focal-side parameters; ``dx`` (mm) and ``samples`` describe the
+        - If self.space == 'psf': self.dx and self.data.shape are
+          the focal-side parameters; dx (mm) and samples describe the
           pupil plane.
 
         The returned executor is in the focus orientation and works for either
-        direction — pass it to ``focus_dft`` or ``unfocus_dft`` (which uses
-        ``executor.adjoint`` for MDFT).
+        direction — pass it to focus_dft or unfocus_dft (which uses
+        executor.adjoint for MDFT).
 
         Parameters
         ----------
@@ -931,9 +1040,9 @@ class Wavefront:
         samples : int or (int, int)
             sample count of the other plane
         shift : (float, float)
-            ``(x, y)`` translation of the focal grid, microns
+            (x, y) translation of the focal grid, microns
         kind : {'mdft', 'czt'}, optional
-            executor type to build. Default ``'mdft'``.
+            executor type to build. Default 'mdft'.
 
         Returns
         -------
@@ -967,7 +1076,7 @@ class Wavefront:
         Returns
         -------
         Wavefront
-            the wavefront at the psf plane (dx from ``executor.focal_dx``)
+            the wavefront at the psf plane (dx from executor.focal_dx)
 
         """
         if self.space != 'pupil':
@@ -978,7 +1087,7 @@ class Wavefront:
     def focus_dft_backprop(self, executor):
         """Backpropagate gradient through :meth:`focus_dft`.
 
-        ``self`` carries the gradient at the psf plane; the returned Wavefront
+        self carries the gradient at the psf plane; the returned Wavefront
         carries the gradient at the pupil plane.
 
         Parameters
@@ -989,7 +1098,7 @@ class Wavefront:
         Returns
         -------
         Wavefront
-            gradient at the pupil plane (dx from ``executor.pupil_dx``)
+            gradient at the pupil plane (dx from executor.pupil_dx)
 
         """
         if self.space != 'psf':
@@ -1004,13 +1113,13 @@ class Wavefront:
         ----------
         executor : MDFT or CZT
             for MDFT, the focus-orientation operator (same one used for
-            ``focus_dft``); for CZT, an operator built in the focal → pupil
+            focus_dft); for CZT, an operator built in the focal → pupil
             orientation.
 
         Returns
         -------
         Wavefront
-            wavefront at the pupil plane (dx from ``executor.pupil_dx``)
+            wavefront at the pupil plane (dx from executor.pupil_dx)
 
         """
         if self.space != 'psf':
@@ -1029,7 +1138,7 @@ class Wavefront:
         Returns
         -------
         Wavefront
-            gradient at the focal plane (dx from ``executor.focal_dx``)
+            gradient at the focal plane (dx from executor.focal_dx)
 
         """
         if self.space != 'pupil':
@@ -1071,7 +1180,7 @@ class Wavefront:
                                  return_fpm_grad=False, field_at_fpm=None):
         """Backprop the to_fpm_and_back propagation.
 
-        ``self`` carries the gradient at the next pupil (output of the forward
+        self carries the gradient at the next pupil (output of the forward
         to_fpm_and_back); the returned Wavefront carries the gradient at the
         original input pupil.
 
@@ -1085,8 +1194,8 @@ class Wavefront:
             if True, return (Eabar, Ebbar, intermediate) as Wavefronts
             else return Eabar
         return_fpm_grad : bool, optional
-            if True, also return the gradient with respect to ``fpm``.
-            Requires ``field_at_fpm`` from the matching forward propagation.
+            if True, also return the gradient with respect to fpm.
+            Requires field_at_fpm from the matching forward propagation.
         field_at_fpm : Wavefront or ndarray, optional
             focal-plane field before the FPM from the forward propagation
 
@@ -1094,7 +1203,7 @@ class Wavefront:
         -------
         Wavefront or tuple of Wavefront
             gradient at the input pupil; optionally also the intermediate
-            gradients and/or the gradient with respect to ``fpm``
+            gradients and/or the gradient with respect to fpm
 
         """
         pak = to_fpm_and_back_backprop(self.data, fpm=fpm, executor=executor,
@@ -1204,15 +1313,15 @@ class Wavefront:
             same operator as the forward call.
         field_at_fpm : Wavefront or ndarray, optional
             focal-plane field before the FPM from the matching forward call.
-            Required when ``return_fpm_grad`` is True.
+            Required when return_fpm_grad is True.
         field_at_lyot : Wavefront or ndarray, optional
             pupil-plane field before the Lyot stop from the matching forward
-            call. Required when ``return_lyot_grad`` is True.
+            call. Required when return_lyot_grad is True.
         return_fpm_grad : bool, optional
             if True, also return the gradient with respect to the original
-            ``fpm`` argument passed to :meth:`babinet`.
+            fpm argument passed to :meth:`babinet`.
         return_lyot_grad : bool, optional
-            if True, also return the gradient with respect to ``lyot``.
+            if True, also return the gradient with respect to lyot.
 
         Returns
         -------
