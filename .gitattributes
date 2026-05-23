@@ -1,0 +1,62 @@
+# Normalize text files to LF in the repository, regardless of platform.
+* text=auto eol=lf
+
+# Python source and common project text files.
+*.py text eol=lf
+*.pyi text eol=lf
+*.pyx text eol=lf
+*.pxd text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.rst text eol=lf
+*.txt text eol=lf
+
+# Shell and build scripts.
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+Makefile text eol=lf
+makefile text eol=lf
+
+# Documentation and notebook files.
+*.ipynb text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.js text eol=lf
+
+# Keep Windows scripts with CRLF when intentionally present.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files.
+*.bmp binary
+*.gif binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary
+*.png binary
+*.tif binary
+*.tiff binary
+*.webp binary
+*.zip binary
+*.gz binary
+*.bz2 binary
+*.xz binary
+*.7z binary
+*.tar binary
+*.whl binary
+*.so binary
+*.dylib binary
+*.dll binary
+*.pyd binary
+*.npy binary
+*.npz binary
+*.h5 binary
+*.hdf5 binary
