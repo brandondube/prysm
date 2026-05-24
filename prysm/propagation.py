@@ -716,7 +716,9 @@ class Wavefront:
     @property
     def intensity(self):
         """Intensity, abs(w)^2."""
-        return RichData(abs(self.data)**2, self.dx, self.wavelength)
+        data = self.data
+        data = (data.real * data.real) + (data.imag * data.imag)
+        return RichData(data, self.dx, self.wavelength)
 
     @property
     def phase(self):
