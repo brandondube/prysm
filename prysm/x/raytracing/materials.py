@@ -180,7 +180,7 @@ def _require_database_type():
 def load_material_db():
     """Load the refractiveindex.info database from the prysm repo root."""
     dbtype = _require_database_type()
-    path = Path(__file__).resolve().parent.parent.parent.parent / 'refractive.db'
+    path = Path(__file__).resolve().parent.parent.parent.parent / '_riidb' / 'refractive.db'
     db = dbtype(path)
     if not path.exists():
         db.create_database_from_url()
