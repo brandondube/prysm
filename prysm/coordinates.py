@@ -586,11 +586,19 @@ def solve_for_planar_homography(src, dst):
     x2, y2 = dst.T
     # TODO: sensitive to numerical precision?
     A = np.zeros((2*N, 9), dtype=config.precision)
-    for i in range(N):
-        # A[i]   = [-x1,    -y1,    -1, 0, 0, 0, x2x1,        x2y1,        x2   ]
-        A[2*i]   = [-x1[i], -y1[i], -1, 0, 0, 0, x2[i]*x1[i], x2[i]*y1[i], x2[i]]  # NOQA
-        # A[i+1] = [0, 0, 0, -x1,    -y1,    -1, y2x1,        y2y1,        y2   ]
-        A[2*i+1] = [0, 0, 0, -x1[i], -y1[i], -1, y2[i]*x1[i], y2[i]*y1[i], y2[i]]
+    A[0::2, 0] = -x1
+    A[0::2, 1] = -y1
+    A[0::2, 2] = -1
+    A[0::2, 6] = x2 * x1
+    A[0::2, 7] = x2 * y1
+    A[0::2, 8] = x2
+
+    A[1::2, 3] = -x1
+    A[1::2, 4] = -y1
+    A[1::2, 5] = -1
+    A[1::2, 6] = y2 * x1
+    A[1::2, 7] = y2 * y1
+    A[1::2, 8] = y2
 
     ATA = A.T@A
     U, sigma, Vt = np.linalg.svd(ATA)

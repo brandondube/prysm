@@ -337,32 +337,22 @@ def spider(vanes, width, x, y, rotation=0, center=(0, 0), rotation_is_rad=False)
         array, 0 inside the spider and 1 outside
 
     """
-    # generate the basic grid
-    width = width / 2
+    half_width = width / 2
     x0, y0 = center
-    r, p = cart_to_polar(x-x0, y-y0)
+    x = x - x0
+    y = y - y0
+    if not rotation_is_rad:
+        rotation = np.radians(rotation)
 
-    if rotation != 0:
-        if not rotation_is_rad:
-            rotation = np.radians(rotation)
-        p = p - rotation
-
-    # compute some constants
-    rotation = np.radians(360 / vanes)
-
-    # initialize a blank mask
+    step = 2 * np.pi / vanes
     mask = np.zeros(x.shape, dtype=bool)
     for multiple in range(vanes):
-        # iterate through the vanes and generate a mask for each
-        # adding it to the initialized mask
-        offset = rotation * multiple
-        if offset != 0:
-            pp = p + offset
-        else:
-            pp = p
-
-        xxx, yyy = polar_to_cart(r, pp)
-        mask_ = (xxx > 0) & (abs(yyy) < width)
+        angle = step * multiple - rotation
+        c = np.cos(angle)
+        s = np.sin(angle)
+        along = x * c - y * s
+        across = x * s + y * c
+        mask_ = (along > 0) & (abs(across) < half_width)
         mask |= mask_
 
     return ~mask
@@ -399,16 +389,10 @@ def offset_circle(radius, x, y, center):
 
 def _circle_arc(t0, t1, r, N, center=(0, 0)):
     cx, cy = center
-    span = t1-t0
-    incr = span/N
-    pts = []
-    for j in range(N):
-        theta = t0+(incr*j)
-        x = cx + np.cos(theta) * r
-        y = cy + np.sin(theta) * r
-        pts.append((x, y))
-
-    return pts
+    theta = t0 + ((t1 - t0) / N) * np.arange(N)
+    x = cx + np.cos(theta) * r
+    y = cy + np.sin(theta) * r
+    return list(zip(x, y))
 
 
 def _qhull_points_for_rectangle_with_corner_fillets(width, height, cradius, x, y, center=(0, 0), rotation=0):

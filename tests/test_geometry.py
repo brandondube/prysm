@@ -106,6 +106,26 @@ def test_annulus_excludes_center_and_outer_region():
     assert not mask[32, 0]
 
 
+def test_spider_blocks_expected_axis():
+    x, y = coordinates.make_xy_grid(65, diameter=2)
+
+    mask = geometry.spider(1, 0.2, x, y)
+
+    assert not mask[32, 48]
+    assert mask[32, 16]
+    assert mask[48, 32]
+
+
+def test_spider_rotation_degrees_matches_radians():
+    x, y = coordinates.make_xy_grid(65, diameter=2)
+
+    deg = geometry.spider(4, 0.05, x, y, rotation=15)
+    rad = geometry.spider(4, 0.05, x, y, rotation=math.radians(15),
+                          rotation_is_rad=True)
+
+    assert (deg == rad).all()
+
+
 def test_rectangle_with_corner_fillets_removes_corners():
     x, y = coordinates.make_xy_grid(65, dx=1)
 

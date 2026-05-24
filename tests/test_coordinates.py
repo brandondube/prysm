@@ -93,6 +93,25 @@ def test_warp_identity_coordinates_returns_input():
     np.testing.assert_allclose(out, z, atol=1e-14)
 
 
+def test_solve_for_planar_homography_maps_source_to_destination():
+    src = np.asarray([
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1],
+        [0.25, 0.75],
+    ], dtype=float)
+    dst = src @ np.asarray([[1.2, -0.1], [0.1, 1.1]]).T
+    dst += np.asarray([0.1, -0.2])
+
+    H = coordinates.solve_for_planar_homography(src, dst)
+    src_h = np.column_stack([src, np.ones(len(src))])
+    mapped = src_h @ H.T
+    mapped = mapped[:, :2] / mapped[:, 2:]
+
+    np.testing.assert_allclose(mapped, dst, atol=1e-12)
+
+
 def test_distort_annular_grid_maps_obscuration_to_zero_and_outer_radius_to_one():
     r = np.asarray([0.2, 0.6, 1.0])
 
