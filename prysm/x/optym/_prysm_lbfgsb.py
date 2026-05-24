@@ -283,6 +283,9 @@ class PrysmLBFGSB:
         self.iter = 0
         self.nfev = 0
         self.last_step_metadata = {}
+        # number of coords driven to a bound by the last _cauchy sweep;
+        # set each call, read by step() for telemetry without a reduction.
+        self._cauchy_breaks = 0
 
     # ---------------- compact L-BFGS representation ----------------
     #
@@ -485,14 +488,16 @@ class PrysmLBFGSB:
           was already precomputed for the wMw diagonal.
 
         The result is two batched solves and a handful of einsums up
-        front, then a pure-scalar Python loop driving the (df, ddf,
-        dt_min) recurrence — no backend calls inside the loop.
+        front, then a fully vectorized (df, ddf, dt_min) state machine:
+        ddf is a pure cumsum and df is a cumsum given ddf, so the whole
+        recurrence and its first-minimizer break index reduce to two
+        cumsums and one argmax — no Python loop and no per-breakpoint
+        backend calls.
         """
         x = self.x
         n = self.n
         k = self._k
         theta = self.theta
-        theta_h = float(theta)
         dtype = x.dtype
 
         t, sorted_indices = self._compute_breakpoints(g)
@@ -504,10 +509,13 @@ class PrysmLBFGSB:
         free_mask = np.ones(n, dtype=bool)
         xc = x.copy()
 
-        gtg = float(g @ g)
+        # 0-d backend scalar, not a host float: gtg only ever seeds the
+        # df/ddf cumsum arrays (device) below, so keeping it on the
+        # backend saves a device->host sync in the common path.  It is
+        # materialized to host only in the no-finite-breakpoint branch.
+        gtg = g @ g
 
-        # Permute gradient and breakpoint time arrays into visit order
-        # once; the loop reads them as Python floats from a list.
+        # Permute gradient and breakpoint time arrays into visit order once.
         g_sorted = g[sorted_indices]
         t_sorted = t[sorted_indices]
         # treat 'beyond the last finite breakpoint' as a hard stop; the
@@ -530,7 +538,7 @@ class PrysmLBFGSB:
 
         if k == 0:
             df_init = -gtg
-            ddf_init = theta_h * gtg
+            ddf_init = theta * gtg
             p_final = np.zeros(0, dtype=dtype)
             c_final = np.zeros(0, dtype=dtype)
             # No history → no rank-1 corrections from W·M⁻¹W^T.  The
@@ -548,7 +556,7 @@ class PrysmLBFGSB:
             p_init = W.T @ d                              # (2k,)
             Mp_init = linalg.lu_solve(M_lu, p_init)       # (2k,)
             df_init = -gtg
-            ddf_init = theta_h * gtg - float(p_init @ Mp_init)
+            ddf_init = theta * gtg - p_init @ Mp_init
 
             if n_active == 0:
                 # No breakpoints in finite time — the projected-gradient
@@ -607,18 +615,19 @@ class PrysmLBFGSB:
         # sweep.
         if n_active == 0:
             K = 0
-            dt_min_final = self._next_dt_min(df_init, ddf_init)
+            # Scalar branch path: materialize the two 0-d seeds to host.
+            dt_min_final = self._next_dt_min(float(df_init), float(ddf_init))
             t_old_final = 0.0
         else:
             if k > 0:
-                ddf_step = (-theta_h * g_a * g_a
+                ddf_step = (-theta * g_a * g_a
                             - 2.0 * g_a * wb_Mp_arr
                             - g_a * g_a * wMw_b_arr)
-                df_alpha = (g_a * g_a - theta_h * g_a * g_a * t_a
+                df_alpha = (g_a * g_a - theta * g_a * g_a * t_a
                             - g_a * wb_Mc_arr)
             else:
-                ddf_step = -theta_h * g_a * g_a
-                df_alpha = g_a * g_a - theta_h * g_a * g_a * t_a
+                ddf_step = -theta * g_a * g_a
+                df_alpha = g_a * g_a - theta * g_a * g_a * t_a
             # ddf_at_iter[j] = ddf_init + sum(ddf_step[:j])
             ddf_at_iter = np.empty(n_active + 1, dtype=dtype)
             ddf_at_iter[0] = ddf_init
@@ -641,6 +650,13 @@ class PrysmLBFGSB:
                 K = n_active
             dt_min_final = float(dt_min_at_iter[K])
             t_old_final = 0.0 if K == 0 else float(t_a[K - 1])
+
+        # K is exactly the number of coords driven to a bound during the
+        # sweep, so free_mask ends with n - K free entries.  Stash it for
+        # step()'s telemetry: free_mask.sum() == n - K identically, so the
+        # caller derives both free-var and break counts from K and skips a
+        # device->host reduction sync.
+        self._cauchy_breaks = K
 
         # Batch-write the per-breakpoint backend updates.  K is the
         # number of iterations that ran; visited == sorted_indices[:K].
@@ -927,8 +943,10 @@ class PrysmLBFGSB:
                 p = x_hat - self.x
                 alpha_max = self._max_alpha_inside_box(self.x, p)
                 subspace_mode = 'truncated'
-            free_mask_count = int(free_mask.sum())
-            cauchy_breaks = self.n - free_mask_count
+            # _cauchy set self._cauchy_breaks = K; free_mask has exactly
+            # n - K free entries, so derive both without re-reducing it.
+            cauchy_breaks = self._cauchy_breaks
+            free_mask_count = self.n - cauchy_breaks
 
         # No room to move, or the Cauchy+subspace direction degenerated
         # to zero (e.g. every coord is at a bound being pushed into).
