@@ -52,6 +52,39 @@ def test_mdft_nbytes_reports_basis_size():
     assert op.nbytes() == 2 * samples * samples * 16
 
 
+@pytest.mark.parametrize(
+    'input_shape,output_shape,forward_left_first,adjoint_left_first',
+    [
+        ((3, 9), (2, 9), True, False),
+        ((9, 3), (9, 2), False, True),
+    ],
+)
+def test_mdft_rectangular_multiply_order_matches_explicit_chain(
+        input_shape, output_shape, forward_left_first, adjoint_left_first):
+    rng = np.random.default_rng(123)
+    ny, nx = input_shape
+    my, mx = output_shape
+    x = fftrange(nx).astype(float)
+    y = fftrange(ny).astype(float)
+    fx = fftrange(mx).astype(float) / nx
+    fy = fftrange(my).astype(float) / ny
+    op = MDFT(x, y, fx, fy, norm=0.25)
+
+    assert op._forward_left_first is forward_left_first
+    assert op._adjoint_left_first is adjoint_left_first
+
+    inp = rng.normal(size=input_shape) + 1j * rng.normal(size=input_shape)
+    grad = rng.normal(size=output_shape) + 1j * rng.normal(size=output_shape)
+
+    fwd = op(inp)
+    expected_fwd = (op.Ey @ inp @ op.Ex.T) * op.norm
+    np.testing.assert_allclose(fwd, expected_fwd, atol=1e-12)
+
+    adj = op.adjoint(grad)
+    expected_adj = (op.Ey.conj().T @ grad @ op.Ex.conj()) * op.norm
+    np.testing.assert_allclose(adj, expected_adj, atol=1e-12)
+
+
 @pytest.mark.parametrize('shape', ARRAY_SIZES_FOR_PAD)
 def test_pad2d_cropcenter_adjoints(shape):
     inp = np.random.rand(shape, shape)

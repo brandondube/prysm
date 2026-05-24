@@ -191,8 +191,19 @@ class MDFT:
         self.Ey = np.exp(prefix * np.outer(fy, y))  # shape (len(fy), len(y))
         self.norm = norm
 
+        Nx = len(x)
+        Ny = len(y)
+        Mx = len(fx)
+        My = len(fy)
+        self._forward_left_first = My * Nx * (Ny + Mx) <= Ny * Mx * (Nx + My)
+        self._adjoint_left_first = Ny * Mx * (My + Nx) <= My * Nx * (Mx + Ny)
+
     def __call__(self, ary):
         """Apply the forward DFT to ``ary``."""
+        if not self._forward_left_first:
+            out = ary @ self.Ex.T
+            out = self.Ey @ out
+            return out * self.norm
         return (self.Ey @ ary @ self.Ex.T) * self.norm
 
     def adjoint(self, grad):
@@ -203,6 +214,12 @@ class MDFT:
         ``MDFT`` of opposite sign that maps the *output* shape back to the
         *input* shape) up to scaling.
         """
+        if not self._adjoint_left_first:
+            EyH = self.Ey.conj().T
+            ExC = self.Ex.conj()
+            out = grad @ ExC
+            out = EyH @ out
+            return out * self.norm
         return (self.Ey.conj().T @ grad @ self.Ex.conj()) * self.norm
 
     def nbytes(self):
@@ -270,17 +287,17 @@ class CZT:
         if self.sign == 1:
             ary = np.conj(ary) if np.iscomplexobj(ary) else ary
         gb = ary * self._bcol
-        gb = gb * self._brow
+        gb *= self._brow
         GB = fft.fft2(gb, (self._Ky, self._Kx))
-        GB = GB * self._Hcol
-        GB = GB * self._Hrow
+        GB *= self._Hcol
+        GB *= self._Hrow
         out = fft.ifft2(GB)
-        out = out[:self._My, :self._Mx]
-        out = out * self._acol
-        out = out * self._arow
+        out = out[:self._My, :self._Mx] * self._acol
+        out *= self._arow
         if self.sign == 1:
             out = np.conj(out)
-        return out * self.norm
+        out *= self.norm
+        return out
 
     def adjoint(self, grad):
         """Adjoint not implemented for CZT (matches prior behavior)."""
