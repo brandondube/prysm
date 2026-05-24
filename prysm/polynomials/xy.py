@@ -300,11 +300,65 @@ def xy_der_xy_seq(mns, x, y, cartesian_grid=True):
     )
 
 
+def _monomial_table(maxk, z, dtype=None):
+    """Array of powers z^0 through z^maxk for a 1D coordinate axis."""
+    z = z.reshape(-1)
+    if dtype is None:
+        dtype = z.dtype
+    out = np.empty((maxk + 1, z.size), dtype=dtype)
+    out[0] = 1
+    for k in range(1, maxk + 1):
+        out[k] = out[k - 1] * z
+    return out
+
+
+def _xy_coefficient_matrices(coefs, mns, dtype):
+    """Pack sparse XY coefficients into dense power tables."""
+    mns2 = truenp.asarray(mns)
+    maxm, maxn = mns2.max(axis=0)
+    coefs = np.asarray(coefs, dtype=dtype)
+
+    mat = np.zeros((maxn + 1, maxm + 1), dtype=coefs.dtype)
+    dx_mat = np.zeros_like(mat)
+    dy_mat = np.zeros_like(mat)
+    for c, (m, n) in zip(coefs, mns2):
+        mat[n, m] += c
+        if m:
+            dx_mat[n, m - 1] += c * m
+        if n:
+            dy_mat[n - 1, m] += c * n
+
+    return mat, dx_mat, dy_mat
+
+
+def _xy_sum_cartesian(coefs, mns, x, y, with_derivatives):
+    """Evaluate an XY sum on a Cartesian grid via separable matrix products."""
+    x, y = optimize_xy_separable(x, y)
+    mns2 = truenp.asarray(mns)
+    maxm, maxn = mns2.max(axis=0)
+    dtype = truenp.result_type(x.dtype, y.dtype)
+    x_powers = _monomial_table(maxm, x, dtype=dtype)
+    y_powers = _monomial_table(maxn, y, dtype=dtype)
+
+    mat, dx_mat, dy_mat = _xy_coefficient_matrices(
+        coefs, mns2, dtype=x_powers.dtype,
+    )
+    z = y_powers.T @ mat @ x_powers
+    if not with_derivatives:
+        return z
+
+    dzdx = y_powers.T @ dx_mat @ x_powers
+    dzdy = y_powers.T @ dy_mat @ x_powers
+    return z, dzdx, dzdy
+
+
 def xy_sum(coefs, mns, x, y, cartesian_grid=True):
     """Evaluate a weighted sum of XY monomials."""
     mns = tuple(mns)
     if not mns:
         return np.zeros_like(x)
+    if cartesian_grid and x.ndim > 1:
+        return _xy_sum_cartesian(coefs, mns, x, y, with_derivatives=False)
     modes = xy_seq(mns, x, y, cartesian_grid=cartesian_grid)
     return np.tensordot(np.asarray(coefs, dtype=modes.dtype), modes, axes=1)
 
@@ -315,6 +369,8 @@ def xy_sum_der_xy(coefs, mns, x, y, cartesian_grid=True):
     if not mns:
         z = np.zeros_like(x)
         return z, z, np.zeros_like(y)
+    if cartesian_grid and x.ndim > 1:
+        return _xy_sum_cartesian(coefs, mns, x, y, with_derivatives=True)
     coefs = np.asarray(coefs)
     modes = xy_seq(mns, x, y, cartesian_grid=cartesian_grid)
     dx_modes = xy_der_x_seq(mns, x, y, cartesian_grid=cartesian_grid)

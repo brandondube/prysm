@@ -284,6 +284,22 @@ def test_weighted_surface_sum_helpers_match_basis_loops():
     assert np.isfinite(dy_j).all()
 
 
+def test_xy_sum_cartesian_grid_matches_generic_path_with_duplicates():
+    xs = np.linspace(-0.5, 0.5, 11)
+    X, Y = np.meshgrid(xs, xs, indexing='xy')
+    mns = [(0, 0), (1, 0), (0, 2), (2, 1), (2, 1)]
+    coefs = [0.5, -0.25, 0.1, 0.05, -0.02]
+
+    z_fast = polynomials.xy_sum(coefs, mns, X, Y, cartesian_grid=True)
+    z_ref = polynomials.xy_sum(coefs, mns, X, Y, cartesian_grid=False)
+    np.testing.assert_allclose(z_fast, z_ref)
+
+    fast = polynomials.xy_sum_der_xy(coefs, mns, X, Y, cartesian_grid=True)
+    ref = polynomials.xy_sum_der_xy(coefs, mns, X, Y, cartesian_grid=False)
+    for fast_elem, ref_elem in zip(fast, ref):
+        np.testing.assert_allclose(fast_elem, ref_elem)
+
+
 def test_zernike_sum_der_xy_finite_at_origin():
     nms = [(2, 0), (3, 1), (3, -1), (4, 0), (5, 5)]
     coefs = [0.3, -1.2, 0.5, 0.1, 0.7]
