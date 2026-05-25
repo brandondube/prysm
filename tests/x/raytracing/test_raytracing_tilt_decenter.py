@@ -29,7 +29,8 @@ def test_decenter_changes_intersection_point():
     surf = plane(typ='eval', P=nominal, decenter=[0., 0., 3.0])
     P0 = np.array([0., 0., -10.])
     S0 = np.array([0., 0., 1.])
-    phist, _, _ = raytrace([surf], P0, S0, wvl=0.55)
+    trace = raytrace([surf], P0, S0, wvl=0.55)
+    phist = trace.P
     np.testing.assert_allclose(phist[-1, 2], 3.0, atol=1e-12)
 
 
@@ -84,7 +85,8 @@ def test_tilted_mirror_reflects_at_double_angle():
                          tilt=(0., np.degrees(alpha), 0.))
     P0 = np.array([0., 0., -10.])
     S0 = np.array([0., 0., 1.])
-    _, shist, _ = raytrace([surf], P0, S0, wvl=0.55)
+    trace = raytrace([surf], P0, S0, wvl=0.55)
+    shist = trace.S
     S_out = shist[-1]
     # for an input along +z hitting a mirror tilted by alpha about y, the
     # reflected ray makes angle 2*alpha with the -z axis in the xz plane
@@ -104,8 +106,12 @@ def test_zero_tilt_zero_decenter_match_no_perturbation():
                             tilt=(0., 0., 0.), decenter=(0., 0., 0.))
     P0 = np.array([1., 0., -10.])
     S0 = np.array([0., 0., 1.])
-    pa, sa, _ = raytrace([surf_a], P0, S0, wvl=0.55)
-    pb, sb, _ = raytrace([surf_b], P0, S0, wvl=0.55)
+    trace_a = raytrace([surf_a], P0, S0, wvl=0.55)
+    trace_b = raytrace([surf_b], P0, S0, wvl=0.55)
+    pa = trace_a.P
+    sa = trace_a.S
+    pb = trace_b.P
+    sb = trace_b.S
     np.testing.assert_allclose(pa, pb, atol=1e-12)
     np.testing.assert_allclose(sa, sb, atol=1e-12)
 

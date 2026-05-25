@@ -94,10 +94,10 @@ def test_lateral_color_dtype_follows_config_precision(precision):
 # ---------- launch / raygen -------------------------------------------------
 
 def test_sampling_chief_dtype_follows_config_precision(precision):
-    P, S = Sampling.chief().build(extent=1.0)
+    pupil_xy = Sampling.chief().build(extent=1.0)
     expected = _expected_dtype(precision)
-    assert P.dtype == expected
-    assert S.dtype == expected
+    assert pupil_xy.shape == (1, 2)
+    assert pupil_xy.dtype == expected
 
 
 def test_raygen_rect_S_dtype_follows_config_precision(precision):

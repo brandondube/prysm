@@ -27,7 +27,7 @@ def test_surface_param_round_trips_setter():
     assert g() == pytest.approx(1 / 50.0)
     s(1 / 100.0)
     assert g() == pytest.approx(1 / 100.0)
-    # the FFp closure should see the new value next call
+    # the sag_derivatives closure should see the new value next call
     assert rx[0].params['c'] == pytest.approx(1 / 100.0)
 
 

@@ -18,6 +18,7 @@ from prysm.x.raytracing.raygen import (
     clip_to_aperture,
 )
 from prysm.x.raytracing.surfaces import CallableShape, Surface
+from prysm.x.raytracing.sags import gradient_to_unit_normal
 from prysm.x.raytracing.spencer_and_murty import (
     intersect as newton_intersect,
     newton_raphson_solve_s,
@@ -25,6 +26,12 @@ from prysm.x.raytracing.spencer_and_murty import (
 
 
 # ---------- raygen ----------
+
+def _sag_and_normal_from_derivatives(sag_derivatives):
+    def sag_and_normal(x, y):
+        z, Fx, Fy = sag_derivatives(x, y)
+        return z, gradient_to_unit_normal(Fx, Fy)
+    return sag_and_normal
 
 def test_generate_collimated_ray_fan_uniform():
     P, S = generate_collimated_ray_fan(11, maxr=10.0, z=-50.0, azimuth=90)
@@ -126,17 +133,22 @@ def _ray_batch(seed=0, span=4.0, n=11):
 
 
 def test_newton_solver_valid_mask_all_true_for_simple_sphere():
-    shape = CallableShape(
-        F=lambda x, y: (
+    def sag(x, y):
+        return (
             (1 / 100. * (x * x + y * y))
             / (1 + np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y)))
-        ),
-        FFp=lambda x, y: (
-            (1 / 100. * (x * x + y * y))
-            / (1 + np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y))),
+        )
+
+    def sag_derivatives(x, y):
+        return (
+            sag(x, y),
             (1 / 100.) * x / np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y)),
             (1 / 100.) * y / np.sqrt(1 - (1 / 100.) ** 2 * (x * x + y * y)),
-        ),
+        )
+
+    shape = CallableShape(
+        sag,
+        _sag_and_normal_from_derivatives(sag_derivatives),
     )
     surf = Surface(shape=shape, typ='refl', P=np.array([0., 0., 0.]), n=None)
     P, S = _ray_batch(span=3.0)
@@ -153,7 +165,7 @@ def test_newton_solver_valid_mask_flags_nonconvergence():
     # have time to converge for off-axis rays
     surf = conic(c=1 / 5.0, k=-2.0, typ='refl', P=np.array([0., 0., 0.]))
     # build via a generic Surface (forces Newton, not the analytic Conic path)
-    bare = Surface(shape=CallableShape(surf.F, surf.FFp,
+    bare = Surface(shape=CallableShape(surf.sag, surf.sag_and_normal,
                                        params=dict(surf.params)),
                    typ='refl', P=np.array([0., 0., 0.]), n=None)
     # a ray nearly parallel to the surface in the steep region won't converge in 1 iter
