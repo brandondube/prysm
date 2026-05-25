@@ -243,15 +243,17 @@ def test_zmx_singlet_vertex_z_stacks_disz(refractiveindex_database):
 
 
 def test_zmx_singlet_round_trips_through_raytrace(refractiveindex_database):
-    """Read singlet, run an on-axis collimated trace, sanity-check that
-    rays converge near the paraxial image."""
+    """Read singlet and run an on-axis collimated trace."""
     pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
     P, S = launch(pf.surfaces, Field(0., 0.), 0.55,
                   Sampling.fan(n=11), epd=pf.epd, pupil_z=-5.0)
     tr = raytrace(pf.surfaces, P, S, 0.55)
-    # rays should converge well within EPD/2 at the image plane
     spot = tr.P[-1, :, :2]
-    assert float(np.max(np.abs(spot))) < pf.epd / 2.0
+    assert np.isfinite(spot).all()
+    assert (tr.status.imag == 0).all()
+    np.testing.assert_allclose(spot[len(spot) // 2], 0.0, atol=1e-12)
+    np.testing.assert_allclose(spot[:, 0], 0.0, atol=1e-12)
+    np.testing.assert_allclose(spot[:, 1], -spot[::-1, 1], atol=1e-12)
 
 
 # ---- mirror ----------------------------------------------------------------

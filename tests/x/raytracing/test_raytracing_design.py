@@ -32,8 +32,8 @@ def test_curvature_of_roundtrip():
     assert g() == 1 / 80.0
     set_(1 / 100.0)
     assert s.params['c'] == 1 / 100.0
-    # FFp picks up the change
-    z, _, _ = s.FFp(np.array([1.0]), np.array([0.0]))
+    # sag picks up the change
+    z = s.shape.sag(np.array([1.0]), np.array([0.0]))
     assert z[0] != 1.0 / (2 * 80.0)  # was: 1/160; now uses c=1/100
 
 

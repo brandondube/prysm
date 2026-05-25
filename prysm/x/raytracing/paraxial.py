@@ -28,6 +28,8 @@ def _paraxial_curvature(surf):
     unrecognised surface types are treated as having no power.
 
     """
+    if hasattr(surf, 'shape'):
+        return float(getattr(surf.shape, 'c', 0.0))
     if surf.params is not None and 'c' in surf.params:
         return float(surf.params['c'])
     return 0.0
