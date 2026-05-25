@@ -151,6 +151,13 @@ shared kernel in :code:`prysm.polynomials._clenshaw`, and the :code:`len == 1`
 mode-axis padding is now handled centrally so callers no longer need to guard
 the single-mode degenerate case at each Clenshaw call site.
 
+The polynomial sum helpers used by x/raytracing polynomial sag surfaces have
+also been broadened.  Chebyshev, Jacobi, Zernike, and XY expansions now expose
+evaluate-and-differentiate helpers that return surface height and Cartesian
+slopes in one pass where possible.  This is primarily an internal acceleration
+and consistency improvement for freeform raytracing surfaces, but the routines
+are available to users building their own polynomial-surface workflows.
+
 Propagation
 -----------
 
@@ -337,6 +344,12 @@ Note that other numpy/scipy-like APIs can also be used, and these are simply
 convenience functions; there is no special support for either library beyond
 these simple functions.
 
+The math operations shim now exposes :attr:`prysm.mathops.linalg` for backend
+linear algebra routines, alongside :attr:`prysm.mathops.np` and
+:attr:`prysm.mathops.fft`.  :func:`~prysm.mathops.array_to_true_numpy` also
+passes scalar values through without forcing array materialization, which
+reduces overhead in optimizer and line-search bookkeeping.
+
 * the :func:`~prysm._richdata.RichData.plot2d` method of RichData now has an
   :code:`extend` keyword argument, which controls the extension of the colorbar
   beyond the color limits
@@ -376,6 +389,18 @@ optimally spaced spiral sampling patterns
 A suite of functions has been added for working with homographies, a type of 3D
 transformation that can used for projecting surfaces onto inclined planes and
 other geometric manipulations:
+
+* :func:`~prysm.coordinates.sample_axis` generates common 1D sample
+  distributions used by ray and pupil sampling code
+
+* :func:`~prysm.coordinates.promote_3d_point` promotes 2D or scalar points to
+  explicit 3D coordinates
+
+* :func:`~prysm.coordinates.coerce_3d_rotation` normalizes rotation inputs to a
+  3x3 rotation matrix
+
+* :func:`~prysm.coordinates.apply_tilt_decenter` applies a rotation and
+  decenter to 3D points
 
 * :func:`~prysm.coordinates.make_rotation_matrix` returns a 3x3 rotation matrix
 
@@ -439,11 +464,46 @@ the sibling functions :func:`~prysm.thinfilm.brewsters_angle` and
 Thin Lens
 ---------
 
+The thin lens module has grown into a more general collection of first-order
+optics formulas.  New helpers cover focal power, conjugates, pupil diameter,
+and common thick-lens reductions:
+
+* :func:`~prysm.thinlens.object_image_to_efl` computes focal length from a
+  pair of object and image conjugates
+
+* :func:`~prysm.thinlens.efl_to_power` and
+  :func:`~prysm.thinlens.power_to_efl` convert between effective focal length
+  and optical power
+
+* :func:`~prysm.thinlens.efl_to_fno`, :func:`~prysm.thinlens.fno_to_efl`,
+  and :func:`~prysm.thinlens.fno_to_epd` convert between focal length,
+  f-number, and entrance pupil diameter
+
+* :func:`~prysm.thinlens.mag_to_image_dist` computes image distance from
+  focal length and signed magnification
+
+* :func:`~prysm.thinlens.singlet_power`,
+  :func:`~prysm.thinlens.singlet_bfl`, and
+  :func:`~prysm.thinlens.singlet_ffl` provide first-order properties of a
+  thick singlet
+
+* :func:`~prysm.thinlens.twolens_power`,
+  :func:`~prysm.thinlens.twolens_ffl`, and
+  :func:`~prysm.thinlens.twolens_separation` provide additional two-thin-lens
+  formulas
+
 * :func:`~prysm.thinlens.image_shift_to_tilt` converts image displacement to
   wavefront tilt
 
 * :func:`~prysm.thinlens.tilt_to_image_shift` converts wavefront tilt to image
   displacement
+
+:func:`~prysm.thinlens.mag_to_object_dist` now correctly inverts
+:func:`~prysm.thinlens.object_dist_to_mag`.
+:func:`~prysm.thinlens.twolens_bfl` now returns the first-order back focal
+length of the two-lens system.  :func:`~prysm.thinlens.singlet_efl` now uses
+the thick-lens term with the element index and scales the result by the
+ambient index.
 
 
 Refractive
@@ -465,42 +525,21 @@ functions, activation functions, and gradient-based optimizers
 x/optym
 -------
 
-The interface of this package is very different to :code:`scipy.optimize` and it
-offers numerous optimizers and building blocks from the machine learning world.
+Optym is a new optimization experimental package.  It provides numerous optimizers, as well as mechanisms for enforcing intelligent stopping conditions on running optimizers, and a different way of representing an optimization problem that allows for optimizers to only compute what they need to compute at a given time.  This means the interface is very different to :code:`scipy.optimize`.  It is the authors' belief that this interface is superior.  Independent of the interface, all optimizers support arithmetic at any precision, and can run on CPU or GPU, as well as any of the interchangeable backends.  This gives optym a wide open domain of applicability, including extremely rapid optimization of very high dimensional problems entirely on GPU, such as coronagraph mask design.
+
+The basic building blocks are the user providing a minimal function :code:`cost(x) -> (f, g)` where f is the scalar cost function, and g is d/dx of f.  This can be provided as a more formal :class:`~prysm.x.optym.problem.Problem` object which can be more computationally efficient with certain optimizers.  This is driven to the minimum value of f using an optimizer.  Optimizers have a simple API: the user calls :code:`.step() -> (x, f, g)` to iterate one step, returning the value of the parameter vector, cost, and gradient *before* the step.  The new x vector is then accessible at :code:`optimizer.x`.  In most cases, you will not step the optimizer directly; instead calling :func:`~prysm.x.optym.optimizers.run_until` to run until a stopping condition is met, or :func:`~prysm.x.optym.optimizers.run_for` to run for a fixed number of steps.  :code:`run_until` can be given any :class:`~prysm.x.optym.governor.Governor` to define one or more stopping condition.  When multiple governors are given, the first of them to call stop will end iteration.
+
 In addition to API level documentation that describes each of these items in
-detail, a new :doc:`../tutorials/Optimization Basics` tutorial has been created which
-demonstrates how to use the module, as well as a how-to on
-:doc:`../how-tos/Differentiable Optical Models` which demonstrates how to use the
-algorithmic differentiation capabilities built into prysm to perform phase
-retrieval with x/optym.  Users are encouraged to build on these examples to
-create their own code to perform tasks such as focus diverse phase retrieval (or
-other forms of diversity), coronagraph mask design or other inverse design
-problems and similar tasks
+detail, there are several new optimization-related tutorials and how-tos:
 
-The optimization tools now include governed runners and convergence plotting.
-The :func:`~prysm.x.optym.optimizers.run_until` runner pairs any step-based
-optimizer with reusable governors such as
-:class:`~prysm.x.optym.governors.MaxIterations`,
-:class:`~prysm.x.optym.governors.FunctionTolerance`,
-:class:`~prysm.x.optym.governors.GradientTolerance`,
-:class:`~prysm.x.optym.governors.StepTolerance`,
-:class:`~prysm.x.optym.governors.MaxEvaluations`, and
-:class:`~prysm.x.optym.governors.ConstraintTolerance`.  The
-:func:`~prysm.x.optym.plotting.plot_convergence` helper plots objective value,
-gradient norm, and active bounded-variable counts from the resulting step
-records.  See :doc:`../how-tos/Advanced Optimization with Problem and Governors`
-for a complete example using :class:`~prysm.x.optym.problem.Problem`,
-L-BFGS-B bounds, governors, and convergence plotting.
+* :doc:`../tutorials/Optimization Basics` for first onramp
+* :doc:`../how-tos/Differentiable Optical Models` to use the algorithmic differentiation added in this release to optimize optical models
+* :doc:`../how-tos/Advanced Optimization with Problem and Governors` which describes more advanced usage.
 
-Benchmark sample problems are available as ready-to-use :code:`(f, g)`
-callables for optimizer examples, smoke tests, and comparisons:
-
-* :func:`~prysm.x.optym.sample_problems.sphere`
-* :func:`~prysm.x.optym.sample_problems.rosenbrock`
-* :func:`~prysm.x.optym.sample_problems.rastrigin`
-* :func:`~prysm.x.optym.sample_problems.himmelblau`
+A stronge Wolfe conditions line searcher is available via :func:`~prysm.x.optym.linesearch.ls_strong_wolfe`.
 
 Optimizers
+^^^^^^^^^^^
 
 * :class:`~prysm.x.optym.optimizers.GradientDescent`
 * :class:`~prysm.x.optym.optimizers.AdaGrad`
@@ -510,22 +549,42 @@ Optimizers
 * :class:`~prysm.x.optym.optimizers.Yogi`
 * :class:`~prysm.x.optym.optimizers.AdaMomentum`
 * :class:`~prysm.x.optym.optimizers.LBFGSB`
+* :class:`~prysm.x.optym.optimizers.PrysmLBFGSB`
+* :class:`~prysm.x.optym.least_squares.DampedLeastSquares`
 
-All have full support for GPUs and 32-bit numbers, except for LBFGSB which is
-CPU-only and double precision only.  The public LBFGSB alias dispatches to the
-SciPy Fortran or C L-BFGS-B driver as appropriate for the installed SciPy
-version; :class:`~prysm.x.optym._lbfgsb.F77LBFGSB` and
-:class:`~prysm.x.optym._lbfgsb.CLBFGSB` remain available when a specific driver
-is desired.
+LBFGSB is a wrapper around the low level scipy L-BFGS-B driver, in prysm's interface.  It wraps the Fortran optimizer for older versions of scipy, or the new C driver for newer versions of scipy.  PrysmLBFGSB is a bespoke, pure python/numpy/numpy-like implementation which is competitive in speed on large problems, and slower on very small problems due to python overheads.  It supports reduced precision such as 32-bit, and can run on the GPU if the backend is swapped to CuPy.  The LBFGSB driver is CPU and 64-bit only.  Damped Least Squares supports all lagrangian constraints, equality, greater than, less than.  All other optimizers support box constraints, l < x < u.
 
-Problem definition, line search, and operators
+All optimizers run on a :class:`~prysm.x.optym.problem.Problem`, or :code:`def cost(x) -> (f, g)`, which is automatically converted into a problem.  Run the optimizer by calling step in a loop, or run_until/run_for.
 
-* :class:`~prysm.x.optym.problem.Problem`
-* :func:`~prysm.x.optym.problem.as_problem`
-* :func:`~prysm.x.optym.linesearch.ls_strong_wolfe`
-* :class:`~prysm.x.optym.operators.SpatialGradient2D`
+Governors
+^^^^^^^^^
+
+These are what trigger the end of iteration with :func:`~prysm.x.optym.optimizers.run_until`.
+
+* :class:`~prysm.x.optym.governors.MaxIterations`
+* :class:`~prysm.x.optym.governors.FunctionTolerance`
+* :class:`~prysm.x.optym.governors.GradientTolerance`
+* :class:`~prysm.x.optym.governors.StepTolerance`
+* :class:`~prysm.x.optym.governors.MaxEvaluations`
+* :class:`~prysm.x.optym.governors.ConstraintTolerance`.
+
+The convergence may be plotted using :func:`~prysm.x.optym.plotting.plot_convergence`.
+
+Benchmark and sample problems
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* :class:`~prysm.x.optym.sample_problems.Sphere` or :func:`~prysm.x.optym.sample_problems.sphere`
+* :class:`~prysm.x.optym.sample_problems.Rosenbrock` or :func:`~prysm.x.optym.sample_problems.rosenbrock`
+* :class:`~prysm.x.optym.sample_problems.Rastrigin` or :func:`~prysm.x.optym.sample_problems.rastrigin`
+* :class:`~prysm.x.optym.sample_problems.Himmelblau` or :func:`~prysm.x.optym.sample_problems.himmelblau`
+
+Problem forms of these come pre-populated with f, g, fg, h, and hvp methods.  You can use them with optimizers, or use them as examples of building a Problem.
+
+
+Activation functions, discretizers, cost/loss functions, and operators are differentiable building blocks for building optimization problems:
 
 Activation functions and discretizers
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * :class:`~prysm.x.optym.activation.Softmax`
 * :class:`~prysm.x.optym.activation.GumbelSoftmax`
@@ -536,10 +595,16 @@ Activation functions and discretizers
 * :class:`~prysm.x.optym.activation.Sigmoid`
 
 Cost or loss functions
+^^^^^^^^^^^^^^^^^^^^^^^
 
 * :func:`~prysm.x.optym.cost.mean_square_error`
 * :func:`~prysm.x.optym.cost.bias_and_gain_invariant_error`
 * :func:`~prysm.x.optym.cost.negative_loglikelihood`
+
+operators
+^^^^^^^^^
+
+* :class:`~prysm.x.optym.operators.SpatialGradient2D`
 
 x/polarization
 --------------
@@ -551,11 +616,13 @@ propagation of Jones states.  A tutorial is available at
 :doc:`../how-tos/Polarized Propagation`.
 
 Jones Vectors
+^^^^^^^^^^^^^^
 
 * :func:`~prysm.x.polarization.linear_pol_vector`
 * :func:`~prysm.x.polarization.circular_pol_vector`
 
 Jones Matrices
+^^^^^^^^^^^^^^^
 
 * :func:`~prysm.x.polarization.jones_rotation_matrix`
 * :func:`~prysm.x.polarization.linear_retarder`
@@ -593,6 +660,14 @@ The main user-facing routines are:
 * :func:`~prysm.x.fibers.smf_mode_field`
 
 * :func:`~prysm.x.fibers.mode_overlap_integral`
+
+* :func:`~prysm.x.fibers.multimode_coupling`
+
+* :func:`~prysm.x.fibers.critical_angle`
+
+* :func:`~prysm.x.fibers.marcuse_mfr_from_V`
+
+* :func:`~prysm.x.fibers.petermann_mfr_from_V`
 
 The tutorial on :doc:`../tutorials/Single Mode Fibers` covers basic usage.
 Multimode fibers have the same as single mode except
@@ -671,10 +746,54 @@ x/dm
 x/raytracing
 ------------
 
-Some work has been done on computing OPD, improving ray aiming, and surfaces
-that are more generally off axis in each of x and y. This module is still a ways
-away from prime time. An enormous improvement in capability will come in the
-next update, with improved documentation brought up alongside it.
+The sequential raytracing module has been substantially reworked.  The surface
+API is now built around explicit sag-shape objects and a simpler
+:code:`Surface` container instead of the previous factory/metaclass-heavy
+implementation.  Built-in shapes include planes, spheres, conics, off-axis
+conics, even aspheres, Forbes Q2D, Zernike, XY, Chebyshev, Jacobi, toroid, and
+biconic sags, with consistent :code:`F` / :code:`FFp` height-and-slope
+contracts.  The Spencer-and-Murty tracer now carries richer status information
+through apertures, interaction failures, gratings, and inactive rays.
+
+A new :code:`Prescription` wrapper provides an ergonomic sequential-system
+interface over the low-level surface list.  It stores fields, wavelengths, EPD,
+ambient index, and reference wavelength; can build simple refractive sequences;
+can solve and set the paraxial image plane or target focal length; and exposes
+one-call launch, trace, RMS spot, focus optimization, transverse ray fan, wave
+aberration fan, and layout/fan plotting helpers.
+
+The launch and first-order layers have grown into reusable user APIs:
+:code:`Field` describes finite or angular object fields, :code:`Sampling`
+constructs chief-ray, fan, cross, rectangular, hexagonal, and radial-spiral
+pupil samplings, and :code:`launch` creates the corresponding ray bundles.
+The new paraxial solver reports system matrix quantities, image distance,
+effective focal length, front/back focal length, and a
+:code:`FirstOrderProperties` bundle.
+
+Analysis, design, and tolerancing tools have been added around the tracer.
+Analysis routines now cover transverse ray aberration, wavefront OPD and
+Zernike fitting, distortion, field curvature, axial color, and lateral color.
+The design layer introduces variable factories for curvature, radius, conic
+constant, indexed coefficients, position, and air/glass thickness; operands
+for RMS spot radius, ray height, boresight, EFL, BFL, paraxial image distance,
+wavefront RMS, Zernike coefficients, distortion, and field curvature; and a
+problem wrapper compatible with x/optym least-squares solvers.  The tolerance
+layer adds perturbation distributions, finite-difference sensitivity tables,
+and Monte Carlo tolerance runs.
+
+Zemax :code:`.zmx` and Code V :code:`.seq` readers can now construct prysm
+surface prescriptions, including support code for glass-name lookup through
+the optional refractiveindex.info SQLite database.  The materials module also
+provides :code:`air`, :code:`vacuum`, :code:`glass`, :code:`lookup`, and
+:code:`load_material_db` helpers, and parsing recognizes mirror/ambient special
+cases.
+
+Plotting has been expanded from simple ray-path views to prescription-aware
+optical layout plots, transverse ray aberration plots, wave-aberration fan
+plots, spot diagrams, and lens-outline construction for refractive groups.
+Geometric helpers for ray-plane, ray-sphere, ray-conic, line-intersection, and
+closest-approach calculations have been factored into small modules so surface
+intersection and analysis code share the same math.
 
 
 Performance Optimizations
@@ -729,6 +848,9 @@ Packaging has moved from setuptools configuration in :code:`setup.py`,
 hatchling.  The minimum supported Python version is now 3.10.  The top-level
 :code:`prysm.__version__` attribute has also been removed; use
 :code:`importlib.metadata.version('prysm')` instead.
+
+Project linting has moved to Ruff, and the direct numpy/scipy import guard has
+been broadened in tests to keep backend-shim compatible code honest.
 
 Numerous features related to MTF benches have been removed.  The code was
 extremely old, had incomplete test coverage, and is rarely used:
