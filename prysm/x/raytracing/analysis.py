@@ -88,13 +88,15 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None):
 
 def wavefront(prescription, P, S, wavelength, *,
               n_ambient=1.0, chief_index=None,
-              axis_point=None, axis_dir=None):
+              axis_point=None, axis_dir=None, P_xp=None,
+              pupil_coords=None, field=None, output='length'):
     """Trace and compute OPD on the chief-ray-centered reference sphere.
 
     Composes spencer_and_murty.raytrace, opt.xp_reference_sphere, and
     opt.opd_from_raytrace.  For a centered system, axis defaults pin the
     optical axis to z through the origin.  For tilted / decentered
-    systems, supply axis_point and axis_dir.
+    systems, supply axis_point and axis_dir.  To use a lens-design reference
+    sphere, pass P_xp as the paraxial exit-pupil center.
 
     Parameters
     ----------
@@ -111,12 +113,31 @@ def wavefront(prescription, P, S, wavelength, *,
     axis_point, axis_dir : iterable, optional
         point on, and direction of, the optical axis.  Defaults: origin
         and +z.
+    P_xp : iterable, optional
+        exit-pupil reference point.  If omitted, it is estimated from the
+        chief ray and optical axis.  For lens-design OPD fans, use the
+        paraxial exit-pupil center, e.g. (0, 0, xp_z).
+    pupil_coords : tuple of array_like, optional
+        x and y pupil coordinates to return and to use for angular-field
+        tilt correction.  This is useful when P has been propagated to a
+        physical object-side plane for correct OPL accumulation but the
+        desired pupil coordinate remains the entrance-pupil coordinate.
+    field : Field, optional
+        angular field used to remove the launch-plane tilt from collimated
+        object-space bundles.  No tilt correction is applied when omitted.
+    output : str, optional
+        'length' returns OPD in prescription length units with prysm's
+        sign convention (longer ray OPL is positive).  'waves' returns
+        lens-design wavefront-error convention in waves, chief == 0,
+        equivalent to -(OPD + launch_tilt) / wavelength.  The 'waves'
+        conversion assumes the prescription is in millimeters and wavelength
+        is in microns (waves = OPD_mm / (wavelength_um * 1e-3)).
 
     Returns
     -------
     opd : ndarray, shape (N,)
         OPD relative to chief, on the reference sphere centered at the
-        chief-ray image point.
+        chief-ray image point.  Units and sign are controlled by output.
     x_pupil, y_pupil : ndarray, shape (N,)
         launch (x, y) coordinates — the canonical pupil parameterization.
 
@@ -131,9 +152,12 @@ def wavefront(prescription, P, S, wavelength, *,
 
     P_chief_final = trace.P[-1, chief_index]
     S_chief_final = trace.S[-1, chief_index]
-    _, _, P_xp = xp_reference_sphere(P_chief_final, S_chief_final,
-                                     axis_point=axis_point,
-                                     axis_dir=axis_dir)
+    if P_xp is None:
+        _, _, P_xp = xp_reference_sphere(P_chief_final, S_chief_final,
+                                         axis_point=axis_point,
+                                         axis_dir=axis_dir)
+    else:
+        P_xp = np.asarray(P_xp, dtype=P.dtype)
     valid_indices = np.nonzero(valid)[0]
     filtered_chief = int(np.nonzero(valid_indices == chief_index)[0][0])
     opd = opd_from_raytrace(trace.P[:, valid], trace.S[:, valid],
@@ -141,7 +165,26 @@ def wavefront(prescription, P, S, wavelength, *,
                             P_img=P_chief_final, P_xp=P_xp,
                             n_image=n_ambient,
                             chief_index=filtered_chief)
-    return opd, P[valid, 0], P[valid, 1]
+    if pupil_coords is None:
+        x_pupil = P[valid, 0]
+        y_pupil = P[valid, 1]
+    else:
+        x_pupil = np.asarray(pupil_coords[0])[valid]
+        y_pupil = np.asarray(pupil_coords[1])[valid]
+
+    if field is not None:
+        ax, ay = field.angle_radians()
+        tilt = np.sin(ax) * x_pupil + np.sin(ay) * y_pupil
+        opd = opd + tilt
+
+    if output == 'length':
+        pass
+    elif output == 'waves':
+        opd = -opd / (float(wavelength) * 1e-3)
+    else:
+        raise ValueError(f"output must be 'length' or 'waves', got {output!r}")
+
+    return opd, x_pupil, y_pupil
 
 
 def wavefront_zernike_fit(opd, x_pupil, y_pupil, nms, *,
@@ -201,13 +244,15 @@ def wavefront_zernike_fit(opd, x_pupil, y_pupil, nms, *,
 # ---------- distortion ------------------------------------------------------
 
 def distortion(prescription, fields, wavelength, *, epd, n_ambient=1.0,
-               paraxial_fraction=1e-4):
+               paraxial_fraction=1e-4, distortion_type='f-tan',
+               pupil_z=None):
     """Per-field image-plane error of the chief ray vs a paraxial proxy.
 
     For each field, traces the real chief ray and a paraxial proxy chief
-    ray (same direction, scaled down by paraxial_fraction).  Distortion is
-    the deviation of the real chief landing from the linear (scaled)
-    paraxial landing.
+    ray (same direction, scaled down by paraxial_fraction).  By default,
+    distortion is measured against the lens-design f-tan ideal image
+    height.  The scaled-angle proxy is available with
+    distortion_type='linear-angle'.
 
     Parameters
     ----------
@@ -224,6 +269,14 @@ def distortion(prescription, fields, wavelength, *, epd, n_ambient=1.0,
         ambient index.
     paraxial_fraction : float
         scale factor for the paraxial-proxy field angles.  Default 1e-4.
+    distortion_type : str, optional
+        'f-tan' (default) or 'linear-angle'.  f-tan compares real chief-ray
+        landing against a paraxial focal scale times tan(field angle).
+        linear-angle scales the tiny-field chief-ray landing directly by
+        1/paraxial_fraction.
+    pupil_z : float, optional
+        z position of the entrance pupil used for chief-ray launch.  If
+        omitted, launch() defaults to the first surface vertex.
 
     Returns
     -------
@@ -244,7 +297,7 @@ def distortion(prescription, fields, wavelength, *, epd, n_ambient=1.0,
     chief = Sampling.chief()
     for i, field in enumerate(fields):
         P_r, S_r = launch(prescription, field, wavelength, chief,
-                          epd=epd, n_ambient=n_ambient)
+                          epd=epd, n_ambient=n_ambient, pupil_z=pupil_z)
         tr_r = raytrace(prescription, P_r, S_r, wavelength,
                         n_ambient=n_ambient)
         real_xy[i] = tr_r.P[-1, 0, :2]
@@ -256,10 +309,27 @@ def distortion(prescription, fields, wavelength, *, epd, n_ambient=1.0,
             kind='angle', unit='deg',
         )
         P_p, S_p = launch(prescription, small, wavelength, chief,
-                          epd=epd, n_ambient=n_ambient)
+                          epd=epd, n_ambient=n_ambient, pupil_z=pupil_z)
         tr_p = raytrace(prescription, P_p, S_p, wavelength,
                         n_ambient=n_ambient)
-        paraxial_xy[i] = tr_p.P[-1, 0, :2] / paraxial_fraction
+        if distortion_type == 'linear-angle':
+            paraxial_xy[i] = tr_p.P[-1, 0, :2] / paraxial_fraction
+        elif distortion_type == 'f-tan':
+            small_slopes = np.array([
+                np.tan(ax * paraxial_fraction),
+                np.tan(ay * paraxial_fraction),
+            ], dtype=config.precision)
+            field_slopes = np.array([np.tan(ax), np.tan(ay)],
+                                    dtype=config.precision)
+            focal_scale = np.zeros(2, dtype=config.precision)
+            nonzero = np.abs(small_slopes) > 0.0
+            focal_scale[nonzero] = tr_p.P[-1, 0, :2][nonzero] / small_slopes[nonzero]
+            paraxial_xy[i] = focal_scale * field_slopes
+        else:
+            raise ValueError(
+                "distortion_type must be 'f-tan' or 'linear-angle', got "
+                f"{distortion_type!r}"
+            )
 
         denom = float(np.hypot(*paraxial_xy[i]))
         if denom > 0.0:
