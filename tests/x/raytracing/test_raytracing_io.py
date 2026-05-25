@@ -6,10 +6,9 @@ import numpy as np
 import pytest
 
 from prysm.x.raytracing import materials
-from prysm.x.raytracing.io_zemax import read_zmx, PrescriptionFile
+from prysm.x.raytracing.io_zemax import read_zmx
 from prysm.x.raytracing.io_codev import read_seq
 from prysm.x.raytracing._surface_spec import SurfaceSpec, build_surface
-from prysm.x.raytracing._prescription import PrescriptionFile as SharedPrescriptionFile
 from prysm.x.raytracing.surfaces import (
     ConicSag, EvenAsphereSag, PlaneSag, ToroidSag, BiconicSag,
     ZernikeSag, XYSag,
@@ -210,7 +209,7 @@ def test_zmx_parses_singlet_surface_count(refractiveindex_database):
 def test_zmx_singlet_header_fields(refractiveindex_database):
     pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
     assert pf.epd == 10.0
-    assert pf.wavelengths == [0.55]
+    assert list(pf.wavelengths.values()) == [0.55]
     assert pf.stop_index == 0  # Zemax SURF 1 -> our index 0
     assert pf.unit == 'mm'
 
@@ -558,7 +557,8 @@ GO
 
 def test_seq_header_wavelengths_and_reference(refractiveindex_database):
     pf = read_seq(_SEQ_HEADER, _is_text=True, database=refractiveindex_database)
-    np.testing.assert_allclose(pf.wavelengths, [486.13, 587.56, 656.27])
+    np.testing.assert_allclose(list(pf.wavelengths.values()),
+                               [486.13, 587.56, 656.27])
 
 
 def test_seq_yan_becomes_field_list(refractiveindex_database):

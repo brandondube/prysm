@@ -24,12 +24,12 @@ are stripped.
 
 """
 
-from .surfaces import PlaneSag, Surface
+from .surfaces import PlaneSag
 from . import materials as _materials
 from ._indexing import fringe_to_nm, xy_j_to_mn
 from ._io_common import fields_from_xy, read_text_or_path
-from ._prescription import PrescriptionFile
-from ._surface_spec import SurfaceSpec, build_surface
+from .lensdata import LensData
+from ._surface_spec import SurfaceSpec, build_shape
 
 
 # ---------- tokenizer -------------------------------------------------------
@@ -293,66 +293,65 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
     if not surfaces:
         raise ValueError('no surfaces found in .seq text')
 
-    # Walk vertex z, skipping OBJECT THI (so first real surface lands at z=0)
-    z = 0.0
-    vertex_z = []
-    for sd in surfaces:
-        vertex_z.append(z)
-        thi = sd.get('thi', 0.0)
-        if sd.get('_is_object'):
-            # object thickness establishes object distance; we skip from
-            # the running z (object is upstream of surface 1 at z=0)
-            continue
-        z += thi
+    # Field objects from YAN / XAN
+    fields = fields_from_xy(header['xan'], header['yan'],
+                            kind='angle', unit='deg')
+    ref_idx = header.get('reference_wvl_index')
+    wavelengths = header['wavelengths']
+    reference_wavelength = None
+    if ref_idx is not None and 1 <= ref_idx <= len(wavelengths):
+        reference_wavelength = float(wavelengths[ref_idx - 1])
 
-    out_surfaces = []
-    out_origin = []
+    ld = LensData(
+        epd=header['epd'], fields=fields, wavelengths=wavelengths,
+        reference_wavelength=reference_wavelength, unit=header['unit'],
+        source_path=path_for_meta, source_format='codev',
+        extras=header['extras'],
+    )
+
+    # Build rows.  The object surface only carries object-space thickness,
+    # which lands the first real surface at z=0; we skip it.  Per-surface
+    # Code V decenter/tilt (DEC/ADE/BDE/CDE) becomes a decenter-and-return
+    # (DAR) coordinate break local to that surface.
+    surface_origins = []  # row index among compiled surfaces -> seq surface idx
+    # Code V encodes post-mirror gaps as negative thicknesses on an unfolded
+    # axis; LensData folds the frame at each reflection and keeps thickness
+    # positive.  Convert by negating the gap once per preceding reflection.
+    n_refl = 0
     for idx, sd in enumerate(surfaces):
         if sd.get('_is_object'):
             continue
         if sd.get('_is_image'):
-            # image plane (typ='eval')
-            img = Surface(shape=PlaneSag(), typ='eval',
-                          P=[0.0, 0.0, vertex_z[idx]])
-            out_surfaces.append(img)
-            out_origin.append(idx)
+            sign = -1.0 if (n_refl % 2) else 1.0
+            ld.add(PlaneSag(), typ='eval',
+                   thickness=sign * float(sd.get('thi', 0.0)))
+            surface_origins.append(idx)
             continue
-        s = _build_surface(sd, vertex_z[idx], radius_mode, database)
-        out_surfaces.append(s)
-        out_origin.append(idx)
+        spec, tilt, decenter = _build_spec(sd, radius_mode, database)
+        if spec.typ == 'refl':
+            n_refl += 1
+        sign = -1.0 if (n_refl % 2) else 1.0
+        if tilt is not None or decenter is not None:
+            ld.add_coordbreak(
+                decenter=decenter or (0.0, 0.0, 0.0),
+                tilt=tilt or (0.0, 0.0, 0.0), kind='dar')
+        ld.add(build_shape(spec), thickness=sign * float(sd.get('thi', 0.0)),
+               material=spec.n, typ=spec.typ)
+        surface_origins.append(idx)
 
-    # translate STO from 1-based-among-real-surfaces to our index
-    stop_index = None
+    # translate STO (1-based among real surfaces) to a compiled-surface index
     if stop_surface_idx is not None:
-        # count physical surfaces (skip OBJECT and IMAGE flags)
-        # the STO command was recorded as 1-based on the running real
-        # surface count; map back via out_origin
         real_counter = 0
-        target = stop_surface_idx
-        for k, origin_idx in enumerate(out_origin):
+        for k, origin_idx in enumerate(surface_origins):
             sd = surfaces[origin_idx]
-            if sd.get('_is_object') or sd.get('_is_image'):
+            if sd.get('_is_image'):
                 continue
             real_counter += 1
-            if real_counter == target:
-                stop_index = k
+            if real_counter == stop_surface_idx:
+                ld.stop_index = k
                 break
 
-    # Field objects from YAN / XAN
-    fields = fields_from_xy(header['xan'], header['yan'],
-                            kind='angle', unit='deg')
-
-    return PrescriptionFile(
-        surfaces=out_surfaces,
-        wavelengths=header['wavelengths'],
-        epd=header['epd'],
-        stop_index=stop_index,
-        fields=fields,
-        unit=header['unit'],
-        source_path=path_for_meta,
-        source_format='codev',
-        extras=header['extras'],
-    )
+    return ld
 
 
 def _consume_inline(args, sd, radius_mode):
@@ -380,8 +379,13 @@ def _consume_inline(args, sd, radius_mode):
             i += 1  # unknown inline token; skip silently
 
 
-def _build_surface(sd, vertex_z, radius_mode, database=None):
-    """Turn one parsed Code V surface dict into a prysm Surface."""
+def _build_spec(sd, radius_mode, database=None):
+    """Turn one parsed Code V surface dict into a (SurfaceSpec, tilt, decenter).
+
+    The spec has no pose (P=None); tilt/decenter are returned separately so the
+    reader can emit them as a coordinate break.
+
+    """
     c_y = _resolve_c(sd, 'cuy', 'rdy')
     c_x = _resolve_c(sd, 'cux', 'rdx')
     k_y = float(sd.get('ccy', 0.0))
@@ -395,53 +399,49 @@ def _build_surface(sd, vertex_z, radius_mode, database=None):
     is_mirror = (n_callable is _materials.MIRROR)
     typ = 'refl' if is_mirror else 'refr'
     n_arg = None if is_mirror else n_callable
-    P = [0.0, 0.0, float(vertex_z)]
 
-    # tilt / decenter kwargs (Code V uses degrees by default for ADE/BDE/CDE)
+    # tilt / decenter (Code V uses degrees by default for ADE/BDE/CDE).  prysm
+    # tilt convention is (rz, ry, rx); Code V ADE=alpha about X, BDE=beta about
+    # Y, CDE=gamma about Z.
     tilt = None
     decenter = None
     if any(sd.get(k, 0.0) != 0.0 for k in ('ade', 'bde', 'cde')):
-        # prysm tilt convention is (rz, ry, rx).  Code V: ADE = tilt
-        # about X axis (alpha), BDE = about Y (beta), CDE = about Z
-        # (gamma).
         tilt = (float(sd.get('cde', 0.0)),
                 float(sd.get('bde', 0.0)),
                 float(sd.get('ade', 0.0)))
     if sd.get('dec_x', 0.0) != 0.0 or sd.get('dec_y', 0.0) != 0.0:
         decenter = (float(sd['dec_x']), float(sd['dec_y']), 0.0)
 
-    common = dict(tilt=tilt, decenter=decenter)
+    def spec(kind, params):
+        return SurfaceSpec(kind, typ, None, n_arg, params)
 
     # Zernike (Fringe) surface
     if sd.get('zfr_coefs') is not None:
         coefs = sd['zfr_coefs']
         nrr = sd.get('nrr') or 1.0
         nms = [fringe_to_nm(j) for j in range(1, len(coefs) + 1)]
-        return build_surface(SurfaceSpec(
-            'zernike', typ, P, n_arg,
-            dict(c=c_y, k=k_y, normalization_radius=float(nrr),
-                 nms=nms, coefs=tuple(coefs), norm=False),
-            **common))
+        return (spec('zernike',
+                     dict(c=c_y, k=k_y, normalization_radius=float(nrr),
+                          nms=nms, coefs=tuple(coefs), norm=False)),
+                tilt, decenter)
 
     # XY polynomial surface
     if sd.get('xyp_coefs') is not None:
         coefs = sd['xyp_coefs']
         nrr = sd.get('nrr') or 1.0
         mns = [xy_j_to_mn(j) for j in range(1, len(coefs) + 1)]
-        return build_surface(SurfaceSpec(
-            'xy', typ, P, n_arg,
-            dict(c=c_y, k=k_y, normalization_radius=float(nrr),
-                 mns=mns, coefs=tuple(coefs)),
-            **common))
+        return (spec('xy',
+                     dict(c=c_y, k=k_y, normalization_radius=float(nrr),
+                          mns=mns, coefs=tuple(coefs))),
+                tilt, decenter)
 
     # Biconic (anisotropic curvature on the two axes)
     if c_x is not None or k_x is not None:
         cx_resolved = c_x if c_x is not None else c_y
         kx_resolved = float(k_x) if k_x is not None else 0.0
-        return build_surface(SurfaceSpec(
-            'biconic', typ, P, n_arg,
-            dict(c_x=cx_resolved, c_y=c_y, k_x=kx_resolved, k_y=k_y),
-            **common))
+        return (spec('biconic',
+                     dict(c_x=cx_resolved, c_y=c_y, k_x=kx_resolved, k_y=k_y)),
+                tilt, decenter)
 
     if sd.get('is_asphere'):
         coefs_dict = sd.get('asphere_coefs', {})
@@ -451,12 +451,84 @@ def _build_surface(sd, vertex_z, radius_mode, database=None):
                           for i in range(1, n_coefs + 1))
         else:
             coefs = ()
-        return build_surface(SurfaceSpec(
-            'even_asphere', typ, P, n_arg,
-            dict(c=c_y, k=k_y, coefs=coefs), **common))
+        return (spec('even_asphere', dict(c=c_y, k=k_y, coefs=coefs)),
+                tilt, decenter)
 
-    return build_surface(SurfaceSpec('conic', typ, P, n_arg,
-                                     dict(c=c_y, k=k_y), **common))
+    return (spec('conic', dict(c=c_y, k=k_y)), tilt, decenter)
+
+
+def _glass_name(material, typ):
+    """Best-effort Code V glass token for a LensData material."""
+    from .spencer_and_murty import STYPE_REFLECT
+    from .surfaces import _map_stype
+    if _map_stype(typ) == STYPE_REFLECT:
+        return 'REFL'
+    if material is None:
+        return None
+    page_info = getattr(material, 'page_info', None)
+    if page_info and page_info.get('page'):
+        return page_info['page']
+    return None  # air or an un-nameable callable -> blank (air)
+
+
+def write_seq(lensdata):
+    """Serialize a LensData to Code V .seq text (rotationally symmetric subset).
+
+    Writes curvature mode (CUM), so curvatures export directly without radius
+    reciprocals.  Post-reflection gaps are written with the Code V negative-
+    thickness (unfolded-axis) convention -- the inverse of the import fold.
+    Coordinate breaks export DEC/ADE/BDE/CDE with the Code V left-handed sign
+    convention applied at this boundary only.
+
+    """
+    from .lensdata import CoordBreak
+    lines = ['LEN', 'CUM', 'DIM M']
+    wvls = list(lensdata.wavelengths.values())
+    if wvls:
+        lines.append('WL ' + ' '.join(f'{w:g}' for w in wvls))
+    if lensdata.epd is not None:
+        lines.append(f'EPD {lensdata.epd:g}')
+    if lensdata.fields:
+        lines.append('YAN ' + ' '.join(f'{f.hy:g}' for f in lensdata.fields))
+    lines.append('SO ; THI 1E10')
+
+    n_refl = 0
+    for row in lensdata.rows:
+        if isinstance(row, CoordBreak):
+            dx, dy, _ = (float(v) for v in row.decenter)
+            rz, ry, rx = (float(v) for v in row.tilt)
+            if dx or dy:
+                lines.append(f'DEC {dx:g} {dy:g}')
+            # Code V ADE/BDE are left-handed about X/Y; invert on export
+            if rx:
+                lines.append(f'ADE {-rx:g}')
+            if ry:
+                lines.append(f'BDE {-ry:g}')
+            if rz:
+                lines.append(f'CDE {rz:g}')
+            continue
+        shape = row.build_shape()
+        params = shape.params or {}
+        from .spencer_and_murty import STYPE_EVAL
+        from .surfaces import _map_stype
+        is_eval = _map_stype(row.typ) == STYPE_EVAL
+        is_refl = _glass_name(row.material, row.typ) == 'REFL'
+        if is_refl:
+            n_refl += 1
+        sign = -1.0 if (n_refl % 2) else 1.0
+        thi = sign * float(row.thickness)
+        if is_eval:
+            lines.append('SI')
+            continue
+        parts = ['S', f'CUY {params.get("c", 0.0):g}', f'THI {thi:g}']
+        if params.get('k', 0.0):
+            parts.insert(2, f'CCY {params["k"]:g}')
+        glass = _glass_name(row.material, row.typ)
+        if glass:
+            parts.append(f'GLA {glass}')
+        lines.append(' ; '.join(parts))
+    lines.append('GO')
+    return '\n'.join(lines) + '\n'
 
 
 def _resolve_c(sd, cu_key, rd_key):

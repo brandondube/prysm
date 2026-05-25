@@ -32,44 +32,41 @@ class SurfaceSpec:
     grating: object = None
 
 
-def build_surface(spec):
-    """Build a Surface from a normalized parser spec."""
-    common = dict(typ=spec.typ, P=spec.P, n=spec.n, R=spec.R,
-                  bounding=spec.bounding, aperture=spec.aperture,
-                  tilt=spec.tilt, decenter=spec.decenter,
-                  tilt_radians=spec.tilt_radians, grating=spec.grating)
+def build_shape(spec):
+    """Build the Shape object for a normalized parser spec (no pose)."""
     kind = spec.kind
     p = spec.params
     if kind == 'plane':
-        return Surface(shape=PlaneSag(), **common)
+        return PlaneSag()
     if kind == 'conic':
-        return Surface(shape=ConicSag(p.get('c', 0.0), p.get('k', 0.0)),
-                       **common)
+        return ConicSag(p.get('c', 0.0), p.get('k', 0.0))
     if kind == 'even_asphere':
-        return Surface(shape=EvenAsphereSag(p.get('c', 0.0),
-                                            p.get('k', 0.0),
-                                            p.get('coefs', ())),
-                       **common)
+        return EvenAsphereSag(p.get('c', 0.0), p.get('k', 0.0),
+                              p.get('coefs', ()))
     if kind == 'toroid':
-        return Surface(shape=ToroidSag(p['c_x'], p['c_y'], p['k_y'],
-                                       p.get('coefs_y', ())),
-                       **common)
+        return ToroidSag(p['c_x'], p['c_y'], p['k_y'], p.get('coefs_y', ()))
     if kind == 'biconic':
-        return Surface(shape=BiconicSag(p['c_x'], p['c_y'],
-                                        p.get('k_x', 0.0),
-                                        p.get('k_y', 0.0)),
-                       **common)
+        return BiconicSag(p['c_x'], p['c_y'], p.get('k_x', 0.0),
+                          p.get('k_y', 0.0))
     if kind == 'zernike':
-        return Surface(shape=ZernikeSag(
-            p.get('c', 0.0), p.get('k', 0.0), p['normalization_radius'],
-            p['nms'], p['coefs'], norm=p.get('norm', True),
-        ), **common)
+        return ZernikeSag(p.get('c', 0.0), p.get('k', 0.0),
+                          p['normalization_radius'], p['nms'], p['coefs'],
+                          norm=p.get('norm', True))
     if kind == 'xy':
-        return Surface(shape=XYSag(
-            p.get('c', 0.0), p.get('k', 0.0), p['normalization_radius'],
-            p['mns'], p['coefs'],
-        ), **common)
+        return XYSag(p.get('c', 0.0), p.get('k', 0.0),
+                     p['normalization_radius'], p['mns'], p['coefs'])
     raise NotImplementedError(f'unknown surface spec kind {kind!r}')
 
 
-__all__ = ['SurfaceSpec', 'build_surface']
+def build_surface(spec):
+    """Build a posed Surface from a normalized parser spec."""
+    return Surface(
+        shape=build_shape(spec),
+        typ=spec.typ, P=spec.P, n=spec.n, R=spec.R,
+        bounding=spec.bounding, aperture=spec.aperture,
+        tilt=spec.tilt, decenter=spec.decenter,
+        tilt_radians=spec.tilt_radians, grating=spec.grating,
+    )
+
+
+__all__ = ['SurfaceSpec', 'build_surface', 'build_shape']

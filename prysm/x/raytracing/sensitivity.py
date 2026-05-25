@@ -1,18 +1,12 @@
-"""Jacobians of merit functions w.r.t. prescription parameters.
+"""Jacobian of a scalar merit w.r.t. a LensData's dense free vector.
 
-Two backends are exposed via the ``method`` kwarg of :func:`merit_jacobian`:
+Two backends via the ``method`` kwarg of :func:`merit_jacobian_free`:
 
-- ``'fd'`` (default): central finite differences.  Always works regardless
-  of which numerical backend ``prysm.mathops`` is pointing at.
-- ``'autograd'``: PyTorch reverse-mode automatic differentiation.  Requires
-  the prysm backend to be torch (``prysm.mathops.set_backend_to_pytorch()``)
-  so that the surface sag_and_normal callbacks and the merit function are torch-traced
-  end-to-end.
-
-Parameters are addressed via (getter, setter) callable pairs.  The helper
-:func:`surface_param` constructs one from a ``(surface_index, param_name)``
-tuple, which is convenient for the common case of perturbing a stored value
-in ``Surface.params``.
+- ``'fd'`` (default): central finite differences over the free vector.  Works
+  regardless of which numerical backend ``prysm.mathops`` points at.
+- ``'autograd'``: PyTorch reverse-mode autodiff through ``update`` ->
+  ``to_surfaces`` -> merit.  Requires the prysm backend to be torch
+  (``prysm.mathops.set_backend_to_pytorch()``).
 
 """
 
@@ -20,131 +14,68 @@ from prysm.conf import config
 from prysm.mathops import np
 
 
-def surface_param(prescription, surface_index, param_name):
-    """Build a ``(getter, setter)`` pair targeting one entry of a surface's
-    ``params`` dict.
+def merit_jacobian_free(lensdata, merit, method='fd', step=1e-6):
+    """Gradient of a scalar merit w.r.t. a LensData's dense free vector.
 
-    Mutating the entry through ``setter`` is visible to the sag_and_normal closure on
-    that surface (which reads ``params[name]`` on every call), so subsequent
-    raytraces will see the perturbed value.
-
-    """
-    params = prescription[surface_index].params
-    if params is None or param_name not in params:
-        raise KeyError(
-            f'surface {surface_index} has no parameter {param_name!r} '
-            '(check Surface.params)'
-        )
-
-    def getter():
-        return params[param_name]
-
-    def setter(v):
-        params[param_name] = v
-
-    return getter, setter
-
-
-def vertex_z_param(prescription, surface_index):
-    """``(getter, setter)`` for the z coordinate of a surface's vertex.
-
-    Useful for perturbing surface spacings.
-
-    """
-    P = prescription[surface_index].P
-
-    def getter():
-        return float(P[2])
-
-    def setter(v):
-        P[2] = v
-
-    return getter, setter
-
-
-def _jacobian_fd(prescription, parameters, merit, step, merit_kwargs):
-    n_p = len(parameters)
-    J = np.empty(n_p, dtype=config.precision)
-    for i, (g, s) in enumerate(parameters):
-        v0 = float(g())
-        h = step * (abs(v0) if v0 != 0.0 else 1.0)
-        s(v0 + h)
-        fp = float(merit(prescription, **merit_kwargs))
-        s(v0 - h)
-        fm = float(merit(prescription, **merit_kwargs))
-        s(v0)
-        J[i] = (fp - fm) / (2.0 * h)
-    return J
-
-
-def _jacobian_autograd(prescription, parameters, merit, merit_kwargs):
-    if np.__name__ != 'torch':
-        raise RuntimeError(
-            "method='autograd' requires the prysm backend to be torch.  "
-            "Call prysm.mathops.set_backend_to_pytorch() before invoking."
-        )
-    import torch  # noqa: F401 — required so that np.__name__ check is meaningful
-    originals = [g() for g, _ in parameters]
-    leaves = [
-        # autograd path requires torch backend; `np.float64` here resolves
-        # to `torch.float64` via the mathops shim.  We deliberately don't
-        # use `config.precision` because that is captured as a numpy dtype
-        # at config-init time and torch.tensor's dtype kwarg requires a
-        # torch.dtype, not a numpy one.
-        np.tensor(float(v), dtype=np.float64, requires_grad=True)
-        for v in originals
-    ]
-    for (g, s), leaf in zip(parameters, leaves):
-        s(leaf)
-    try:
-        loss = merit(prescription, **merit_kwargs)
-        loss.backward()
-        J = np.empty(len(parameters), dtype=config.precision)
-        for i, leaf in enumerate(leaves):
-            grad = leaf.grad
-            J[i] = 0.0 if grad is None else float(grad)
-    finally:
-        for (g, s), v in zip(parameters, originals):
-            s(v)
-    return J
-
-
-def merit_jacobian(prescription, parameters, merit,
-                   method='fd', step=1e-6, **merit_kwargs):
-    """Jacobian of ``merit(prescription, **merit_kwargs)`` w.r.t. each
-    parameter.
+    The merit is a zero-argument callable returning the scalar figure of merit
+    of the LensData in its current state.  ``method='fd'`` perturbs each free
+    DOF with central differences (mutating the free vector in place and
+    restoring it on return).  ``method='autograd'`` differentiates through
+    ``update`` -> ``to_surfaces`` -> merit, and requires the prysm backend to
+    be torch.
 
     Parameters
     ----------
-    prescription : sequence of Surface
-        the prescription in its current (nominal) state.  In FD mode this
-        sequence is mutated transiently and restored before return.  In
-        autograd mode it is mutated to leaf tensors and restored similarly.
-    parameters : sequence of (getter, setter)
-        callable pairs targeting each scalar parameter.  Use
-        :func:`surface_param` or :func:`vertex_z_param` to build the common
-        cases.
+    lensdata : LensData
+        system whose free vector is differentiated.  Restored to its nominal
+        free vector before return.
     merit : callable
-        ``merit(prescription, **merit_kwargs) -> scalar`` (Python float for
-        ``method='fd'``; torch scalar tensor for ``method='autograd'``).
+        ``merit() -> scalar`` evaluating the current LensData state.
     method : {'fd', 'autograd'}, optional
         differentiation backend.  Default ``'fd'``.
     step : float, optional
-        FD step size, scaled by ``|v0|`` (or 1 if v0 == 0) per parameter.
-        Default 1e-6 — appropriate for fp64 finite differences on smooth
-        merits.  Only used by ``method='fd'``.
-    **merit_kwargs
-        forwarded to ``merit`` on every evaluation.
+        FD step, scaled by ``|x_i|`` (or 1 if zero) per DOF.  Default 1e-6.
 
     Returns
     -------
     J : ndarray
-        shape ``(len(parameters),)`` — gradient of the scalar merit w.r.t.
-        each parameter, in the order the parameters were supplied.
+        shape ``(n_free,)`` gradient of the merit w.r.t. the free vector.
 
     """
+    x0 = lensdata.pack()
+    n = len(x0)
     if method == 'fd':
-        return _jacobian_fd(prescription, parameters, merit, step, merit_kwargs)
+        J = np.empty(n, dtype=config.precision)
+        try:
+            for i in range(n):
+                v0 = float(x0[i])
+                h = step * (abs(v0) if v0 != 0.0 else 1.0)
+                x = np.array(x0, copy=True)
+                x[i] = v0 + h
+                lensdata.update(x)
+                fp = float(merit())
+                x[i] = v0 - h
+                lensdata.update(x)
+                fm = float(merit())
+                J[i] = (fp - fm) / (2.0 * h)
+        finally:
+            lensdata.update(x0)
+        return J
     if method == 'autograd':
-        return _jacobian_autograd(prescription, parameters, merit, merit_kwargs)
+        if np.__name__ != 'torch':
+            raise RuntimeError(
+                "method='autograd' requires the prysm backend to be torch.  "
+                "Call prysm.mathops.set_backend_to_pytorch() before invoking."
+            )
+        leaf = np.tensor(np.array(x0, dtype=np.float64), requires_grad=True)
+        try:
+            lensdata.update(leaf)
+            loss = merit()
+            loss.backward()
+            grad = leaf.grad
+            J = (np.zeros(n, dtype=config.precision)
+                 if grad is None else np.array(grad))
+        finally:
+            lensdata.update(x0)
+        return J
     raise ValueError(f"method must be 'fd' or 'autograd', got {method!r}")

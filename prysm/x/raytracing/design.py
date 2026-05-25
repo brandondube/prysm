@@ -39,7 +39,7 @@ from prysm.x.optym.least_squares import (  # NOQA - re-export for users
 )
 
 from .spencer_and_murty import raytrace
-from .sensitivity import merit_jacobian as _merit_jacobian
+from .sensitivity import merit_jacobian_free as _merit_jacobian_free
 from .opt import rms_spot_radius, opd_from_raytrace, xp_reference_sphere
 from .paraxial import (
     effective_focal_length,
@@ -47,120 +47,6 @@ from .paraxial import (
     paraxial_image_distance,
 )
 from . import analysis as _analysis
-
-
-# ---------- Variables --------------------------------------------------------
-
-def curvature_of(surf, name='c'):
-    """``(getter, setter)`` for ``surf.params[name]`` (default ``'c'``).
-
-    Use ``name='c_x'`` or ``name='c_y'`` for biconic / toroid surfaces.
-
-    """
-    p = surf.params
-    if p is None or name not in p:
-        raise KeyError(
-            f'surface has no parameter {name!r} (check Surface.params)'
-        )
-    return (lambda: p[name]), (lambda v: p.__setitem__(name, v))
-
-
-def radius_of(surf, name='c'):
-    """``(getter, setter)`` for radius of curvature ``R = 1 / c``.
-
-    Mutates the underlying ``params[name]`` (curvature) — calling the
-    setter with ``v = R`` writes ``params[name] = 1 / R``.  Use this
-    instead of ``curvature_of`` when the design problem is naturally
-    expressed in radii (Zemax / lens-design convention).
-
-    """
-    p = surf.params
-    if p is None or name not in p:
-        raise KeyError(
-            f'surface has no parameter {name!r} (check Surface.params)'
-        )
-    return (lambda: 1.0 / p[name]), (lambda v: p.__setitem__(name, 1.0 / v))
-
-
-def kappa_of(surf, name='k'):
-    """``(getter, setter)`` for ``surf.params[name]`` (conic constant).
-
-    Use ``name='k_x'`` or ``name='k_y'`` for biconic surfaces.
-
-    """
-    p = surf.params
-    if p is None or name not in p:
-        raise KeyError(
-            f'surface has no parameter {name!r} (check Surface.params)'
-        )
-    return (lambda: p[name]), (lambda v: p.__setitem__(name, v))
-
-
-def coef_of(surf, list_name, idx):
-    """``(getter, setter)`` for one entry of an indexed coefficient list
-    on ``surf.params``.
-
-    Use for asphere coefficients (``list_name='coefs'``), toroid
-    coefficients (``'coefs_y'``), polynomial-surface coefficients, etc.
-
-    The factories store these lists as tuples (immutable) for
-    constructor safety; the setter rebuilds the tuple with the entry
-    replaced.  If you intend to vary many coefficients of the same
-    list, wrap the rebuild in a system-builder callable instead — the
-    per-set tuple-rebuild cost is negligible per parameter but adds up
-    quickly under finite differences if many coefs are varied.
-
-    """
-    p = surf.params
-    if p is None or list_name not in p:
-        raise KeyError(
-            f'surface has no parameter list {list_name!r} '
-            '(check Surface.params)'
-        )
-
-    def getter():
-        return p[list_name][idx]
-
-    def setter(v):
-        seq = p[list_name]
-        if isinstance(seq, tuple):
-            new = list(seq)
-            new[idx] = v
-            p[list_name] = tuple(new)
-        else:
-            seq[idx] = v
-
-    return getter, setter
-
-
-def position_of(surf, axis):
-    """``(getter, setter)`` for ``surf.P[axis]`` where ``axis ∈ {0, 1, 2}``.
-
-    Equivalent to a decenter perturbation along the chosen axis:
-    ``axis=2`` is the standard "vertex z" used in
-    ``sensitivity.vertex_z_param``; ``axis=0`` and ``axis=1`` perturb
-    decenter along x and y.
-
-    """
-    P = surf.P
-    return (lambda: float(P[axis])), (lambda v: P.__setitem__(axis, v))
-
-
-def thickness_after(surf, next_surf):
-    """``(getter, setter)`` for the z-distance ``next_surf.P[2] - surf.P[2]``.
-
-    Setting a thickness ``t`` writes ``next_surf.P[2] = surf.P[2] + t``.
-    Surfaces upstream of ``next_surf`` are unaffected (the perturbation
-    is local to this gap).  Surfaces *downstream* of ``next_surf`` are
-    also unaffected — if you want to insert a thickness without sliding
-    everything else along, use a system-builder callable that re-lays
-    out the prescription instead.
-
-    """
-    return (
-        lambda: float(next_surf.P[2] - surf.P[2]),
-        lambda t: next_surf.P.__setitem__(2, surf.P[2] + t),
-    )
 
 
 # ---------- Trace cache ------------------------------------------------------
@@ -449,32 +335,52 @@ class FieldCurvature(_OperandBase):
 
 # ---------- Problem ----------------------------------------------------------
 
+def _is_lensdata(model):
+    """A LensData duck-types as a system with a free vector + compiler."""
+    return (hasattr(model, 'pack') and hasattr(model, 'update')
+            and hasattr(model, 'to_surfaces'))
+
+
 class Problem:
     """A design-optimization problem.
 
-    Variables are evaluated in place on the shared ``prescription``:
-    setting ``x[i]`` calls ``variables[i][1](x[i])``, mutating the
-    prescription.
+    Two modes, selected by the first argument:
 
-    Methods:
-    - :meth:`x0` — initial parameter vector from the current state
-    - :meth:`residuals` — per-operand weighted residual vector
-    - :meth:`merit` — scalar sum of squared residuals
-    - :meth:`jacobian` — gradient of ``merit`` w.r.t. ``x`` (FD or
-      torch autograd; reuses ``sensitivity.merit_jacobian``)
+    - **LensData** — ``Problem(lensdata, operands)``.  The free vector is the
+      LensData's packed DOFs; ``x`` is scattered back with ``lensdata.update``,
+      the system recompiled, and the operands evaluated against the compiled
+      surfaces.  This is the canonical path.
+    - **Legacy surface list** — ``Problem(surfaces, variables, operands)``.
+      ``variables`` are ``(getter, setter)`` pairs that mutate the surfaces in
+      place.  Retained for the (deprecated) Prescription design session.
+
+    Methods: :meth:`x0`, :meth:`residuals`, :meth:`merit`, :meth:`jacobian`.
 
     """
 
-    def __init__(self, prescription, variables, operands):
-        self.prescription = prescription
-        self.variables = list(variables)
-        self.operands = list(operands)
+    def __init__(self, model, variables=None, operands=None):
+        if _is_lensdata(model):
+            self.lensdata = model
+            self.prescription = model  # duck-types as a surface sequence
+            ops = operands if operands is not None else variables
+            self.operands = list(ops or [])
+            self.variables = None
+        else:
+            self.lensdata = None
+            self.prescription = model
+            self.variables = list(variables or [])
+            self.operands = list(operands or [])
 
     def x0(self):
-        """Initial parameter vector from the current prescription state."""
+        """Initial parameter vector from the current system state."""
+        if self.lensdata is not None:
+            return self.lensdata.pack()
         return np.array([float(g()) for g, _ in self.variables])
 
     def _set_x(self, x):
+        if self.lensdata is not None:
+            self.lensdata.update(x)
+            return
         for (_, s), v in zip(self.variables, x):
             s(float(v))
 
@@ -524,11 +430,17 @@ class Problem:
     def jacobian(self, x, method='fd', step=1e-6):
         """Gradient of the scalar merit w.r.t. x (length n_params).
 
-        Wraps sensitivity.merit_jacobian.  method='fd' (default) uses
-        central differences; method='autograd' requires the prysm backend
-        to be torch.
+        method='fd' (default) uses central differences; method='autograd'
+        requires the prysm backend to be torch.
 
         """
+        if self.lensdata is None:
+            raise TypeError(
+                'Problem.jacobian requires a LensData model (the free vector); '
+                'build the problem as Problem(lensdata, operands) and mark DOFs '
+                'with lensdata.vary(...)'
+            )
         self._set_x(x)
-        return _merit_jacobian(self.prescription, self.variables,
-                               self._eval_merit, method=method, step=step)
+        return _merit_jacobian_free(
+            self.lensdata, lambda: self._eval_merit(self.prescription),
+            method=method, step=step)

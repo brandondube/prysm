@@ -29,12 +29,12 @@ instead of read_zmx.
 
 from prysm.mathops import np
 
-from .surfaces import PlaneSag, Surface
+from .surfaces import PlaneSag
 from . import materials as _materials
 from ._indexing import noll_to_nm, xy_j_to_mn
 from ._io_common import fields_from_xy, read_text_or_path
-from ._prescription import PrescriptionFile
-from ._surface_spec import SurfaceSpec, build_surface
+from .lensdata import LensData
+from ._surface_spec import SurfaceSpec, build_shape
 
 
 # ---------- low-level tokenizer ---------------------------------------------
@@ -242,8 +242,12 @@ def _parse_block(idx, body_lines):
 
 # ---------- block -> Surface ------------------------------------------------
 
-def _make_surface(block, vertex_z, database):
-    """Build one prysm Surface from a parsed Zemax SURF block."""
+def _make_spec(block, database):
+    """Build a (pose-free) SurfaceSpec from a parsed Zemax SURF block.
+
+    Returns a _CoordinateBreak sentinel for COORDBRK pseudo-surfaces.
+
+    """
     surf_type = block.get('type', 'STANDARD')
     c = block.get('curv', 0.0)
     k = block.get('coni', 0.0)
@@ -251,16 +255,13 @@ def _make_surface(block, vertex_z, database):
     n_callable = _materials.lookup(glas, database=database)
     is_mirror = (n_callable is _materials.MIRROR)
     typ = 'refl' if is_mirror else 'refr'
-    if not is_mirror and (glas == '' or glas is None):
-        # explicit air on the post-medium: typ remains 'refr' with n=air
-        # (matches Zemax convention: missing GLAS == air after surface)
-        pass
     n_arg = None if is_mirror else n_callable
-    P = [0.0, 0.0, float(vertex_z)]
+
+    def spec(kind, params):
+        return SurfaceSpec(kind, typ, None, n_arg, params)
 
     if surf_type == 'STANDARD':
-        return build_surface(SurfaceSpec('conic', typ, P, n_arg,
-                                         dict(c=c, k=k)))
+        return spec('conic', dict(c=c, k=k))
 
     if surf_type == 'EVENASPH':
         # PARM 1 = a4, PARM 2 = a6, PARM 3 = a8, ...
@@ -270,8 +271,7 @@ def _make_surface(block, vertex_z, database):
         else:
             n_coefs = max(coefs_dict)
             coefs = tuple(coefs_dict.get(i, 0.0) for i in range(1, n_coefs + 1))
-        return build_surface(SurfaceSpec('even_asphere', typ, P, n_arg,
-                                         dict(c=c, k=k, coefs=coefs)))
+        return spec('even_asphere', dict(c=c, k=k, coefs=coefs))
 
     if surf_type == 'TOROIDAL':
         # PARM 1 = radius_of_rotation (= 1/c_x); CURV = c_y, CONI = k_y
@@ -293,17 +293,15 @@ def _make_surface(block, vertex_z, database):
                             for i in range(1, n_coefs + 1))
         else:
             coefs_y = ()
-        return build_surface(SurfaceSpec(
-            'toroid', typ, P, n_arg,
-            dict(c_x=c_x, c_y=c_y, k_y=k_y, coefs_y=coefs_y)))
+        return spec('toroid',
+                    dict(c_x=c_x, c_y=c_y, k_y=k_y, coefs_y=coefs_y))
 
     if surf_type == 'BICONICX':
         # PARM 1 = c_x; PARM 2 = k_x.  CURV = c_y, CONI = k_y
         c_x = float(block.get('parm', {}).get(1, 0.0))
         k_x = float(block.get('parm', {}).get(2, 0.0))
-        return build_surface(SurfaceSpec(
-            'biconic', typ, P, n_arg,
-            dict(c_x=c_x, c_y=float(c), k_x=k_x, k_y=float(k))))
+        return spec('biconic',
+                    dict(c_x=c_x, c_y=float(c), k_x=k_x, k_y=float(k)))
 
     if surf_type == 'ZERNSAG':
         p = block.get('parm', {})
@@ -322,15 +320,13 @@ def _make_surface(block, vertex_z, database):
                     if k >= 4 and v != 0.0}
         if not xdat:
             # no Zernike content -> degenerate to a Conic base
-            return build_surface(SurfaceSpec('conic', typ, P, n_arg,
-                                             dict(c=c, k=k)))
+            return spec('conic', dict(c=c, k=k))
         max_j = max(xdat)
         nms = [noll_to_nm(j) for j in range(1, max_j + 1)]
         coefs = tuple(float(xdat.get(j, 0.0)) for j in range(1, max_j + 1))
-        return build_surface(SurfaceSpec(
-            'zernike', typ, P, n_arg,
-            dict(c=c, k=k, normalization_radius=float(norm_r),
-                 nms=nms, coefs=coefs, norm=True)))
+        return spec('zernike',
+                    dict(c=c, k=k, normalization_radius=float(norm_r),
+                         nms=nms, coefs=coefs, norm=True))
 
     if surf_type == 'XYPOLY':
         p = block.get('parm', {})
@@ -343,15 +339,13 @@ def _make_surface(block, vertex_z, database):
             # norm radius)
             xdat = {(k - 1): v for k, v in p.items() if k >= 2 and v != 0.0}
         if not xdat:
-            return build_surface(SurfaceSpec('conic', typ, P, n_arg,
-                                             dict(c=c, k=k)))
+            return spec('conic', dict(c=c, k=k))
         max_j = max(xdat)
         mns = [xy_j_to_mn(j) for j in range(1, max_j + 1)]
         coefs = tuple(float(xdat.get(j, 0.0)) for j in range(1, max_j + 1))
-        return build_surface(SurfaceSpec(
-            'xy', typ, P, n_arg,
-            dict(c=c, k=k, normalization_radius=float(norm_r),
-                 mns=mns, coefs=coefs)))
+        return spec('xy',
+                    dict(c=c, k=k, normalization_radius=float(norm_r),
+                         mns=mns, coefs=coefs))
 
     if surf_type == 'COORDBRK':
         # not a real surface; return a sentinel handled by the caller
@@ -387,6 +381,69 @@ class _CoordinateBreak:
 
 # ---------- top-level reader ------------------------------------------------
 
+def write_zmx(lensdata):
+    """Serialize a LensData to Zemax .zmx text (rotationally symmetric subset).
+
+    Emits OBJECT (surface 0), the surface rows, and the IMAGE plane.  Post-
+    reflection gaps use Zemax's negative-thickness (unfolded-axis) convention,
+    the inverse of the import fold.  Coordinate breaks export as COORDBRK
+    pseudo-surfaces.
+
+    """
+    from .lensdata import CoordBreak
+    from .spencer_and_murty import STYPE_EVAL, STYPE_REFLECT
+    from .surfaces import _map_stype
+
+    lines = ['VERS 100000 0', 'MODE SEQ']
+    if lensdata.unit:
+        lines.append(f'UNIT {lensdata.unit.upper()}')
+    if lensdata.epd is not None:
+        lines.append(f'ENPD {lensdata.epd:g}')
+    if lensdata.stop_index is not None:
+        # +1: our compiled-surface index -> Zemax 1-based SURF idx (OBJECT=0)
+        lines.append(f'STOP {lensdata.stop_index + 1}')
+    for w in lensdata.wavelengths.values():
+        lines.append(f'WAVL {w:g}')
+
+    lines += ['SURF 0', '  TYPE STANDARD', '  CURV 0.0', '  DISZ INFINITY']
+
+    surf_no = 0
+    n_refl = 0
+    for row in lensdata.rows:
+        surf_no += 1
+        if isinstance(row, CoordBreak):
+            dx, dy, _ = (float(v) for v in row.decenter)
+            rz, ry, rx = (float(v) for v in row.tilt)
+            sign = -1.0 if (n_refl % 2) else 1.0
+            lines += [f'SURF {surf_no}', '  TYPE COORDBRK',
+                      f'  DISZ {sign * float(row.thickness):g}',
+                      f'  PARM 1 {dx:g}', f'  PARM 2 {dy:g}',
+                      f'  PARM 3 {rx:g}', f'  PARM 4 {ry:g}',
+                      f'  PARM 5 {rz:g}']
+            continue
+        shape = row.build_shape()
+        params = shape.params or {}
+        is_eval = _map_stype(row.typ) == STYPE_EVAL
+        is_refl = _map_stype(row.typ) == STYPE_REFLECT
+        if is_refl:
+            n_refl += 1
+        sign = -1.0 if (n_refl % 2) else 1.0
+        disz = sign * float(row.thickness)
+        block = [f'SURF {surf_no}', '  TYPE STANDARD',
+                 f'  CURV {params.get("c", 0.0):g}']
+        if params.get('k', 0.0):
+            block.append(f'  CONI {params["k"]:g}')
+        block.append(f'  DISZ {disz:g}')
+        if is_refl:
+            block.append('  GLAS MIRROR')
+        elif not is_eval:
+            page = getattr(row.material, 'page_info', None)
+            if page and page.get('page'):
+                block.append(f'  GLAS {page["page"]}')
+        lines += block
+    return '\n'.join(lines) + '\n'
+
+
 def read_zmx(path_or_text, *, _is_text=False, database=None):
     """Read a Zemax .zmx text file into a PrescriptionFile.
 
@@ -420,86 +477,60 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
     # parse each block
     parsed = [_parse_block(idx, body) for idx, body in surf_blocks]
 
-    # build vertex-z trail, skipping COORDBRK-induced perturbations from
-    # the running z (Zemax COORDBRK does contribute its DISZ to z; we
-    # honour that)
-    z = 0.0
-    vertex_z = []
-    for blk in parsed:
-        vertex_z.append(z)
+    def _gap(blk):
         d = blk.get('disz', 0.0)
-        if not np.isfinite(d):
-            # OBJECT at infinity: DISZ is INFINITY on surface 0 typically
-            d = 0.0
-        z += d
+        return 0.0 if not np.isfinite(d) else float(d)
 
-    # First pass: build raw surfaces, applying any COORDBRK that
-    # immediately precedes a real surface.  Skip OBJECT (idx 0).
-    surfaces = []
-    pending_tilt = None
-    pending_decenter = None
-    surface_origin_idx = []  # parallel to surfaces; gives the original Zemax idx
+    ld = LensData(
+        epd=header['epd'], fields=header['fields'],
+        wavelengths=header['wavelengths'], unit=header['unit'],
+        source_path=path_for_meta, source_format='zemax',
+        extras=header['extras'],
+    )
+
+    # Determine which parsed block is the image surface (last real surface).
+    real_indices = [i for i, blk in enumerate(parsed)
+                    if not (i == 0 and blk.get('idx', i) == 0)
+                    and blk.get('type', 'STANDARD') != 'COORDBRK']
+    image_block_i = real_indices[-1] if real_indices else None
+
+    surface_origin_idx = []  # parallel to compiled surfaces -> Zemax SURF idx
+    # Zemax encodes post-mirror gaps as negative thicknesses on an unfolded
+    # axis; LensData folds the frame at each reflection and keeps thickness
+    # positive.  Convert by negating the gap once per preceding reflection.
+    n_refl = 0
     for i, blk in enumerate(parsed):
-        if blk.get('idx', i) == 0 and i == 0:
-            # OBJECT surface: skip but record DISZ already in vertex_z[1]
-            continue
+        if i == 0 and blk.get('idx', i) == 0:
+            continue  # OBJECT surface
         surf_type = blk.get('type', 'STANDARD')
         if surf_type == 'COORDBRK':
             cb = _CoordinateBreak(blk)
-            t, d = cb.tilt_decenter()
-            pending_tilt = t
-            pending_decenter = d
+            tilt, decenter = cb.tilt_decenter()
+            sign = -1.0 if (n_refl % 2) else 1.0
+            ld.add_coordbreak(decenter=decenter, tilt=tilt, kind='basic',
+                              thickness=sign * _gap(blk))
             continue
-        s = _make_surface(blk, vertex_z[i], database)
-        if pending_tilt is not None or pending_decenter is not None:
-            # apply by mutating P / R via Surface's own pathway: rebuild
-            # with tilt= and decenter= would require re-issuing the
-            # factory call; simplest is to mutate after the fact using
-            # the same composition rule in surfaces._apply_tilt_decenter.
-            from .surfaces import _apply_tilt_decenter, _none_or_rotmat
-            R = _none_or_rotmat(s.R)
-            new_P, new_R = _apply_tilt_decenter(
-                s.P, R, pending_tilt, pending_decenter, tilt_radians=False,
-            )
-            s.P = new_P
-            s.R = new_R
-            pending_tilt = None
-            pending_decenter = None
-        # if the LAST real surface has no GLAS (just air post-medium) and
-        # is the IMAGE plane, demote to typ='eval'
-        surfaces.append(s)
+        spec = _make_spec(blk, database)
+        if spec.typ == 'refl':
+            n_refl += 1
+        sign = -1.0 if (n_refl % 2) else 1.0
+        thickness = sign * _gap(blk)
+        # the image surface, if flat, becomes an eval plane
+        if i == image_block_i and spec.kind == 'conic' \
+                and spec.params.get('c', 0.0) == 0.0 \
+                and spec.params.get('k', 0.0) == 0.0:
+            ld.add(PlaneSag(), typ='eval', thickness=thickness)
+        else:
+            ld.add(build_shape(spec), thickness=thickness,
+                   material=spec.n, typ=spec.typ)
         surface_origin_idx.append(blk.get('idx', i))
 
-    # the last surface is IMAGE — rebuild as a proper Plane(typ='eval')
-    # if it is flat (c=0, k=0), so it gets the closed-form plane intersect.
-    if surfaces:
-        last = surfaces[-1]
-        is_flat = (last.params is None
-                   or (last.params.get('c', 0.0) == 0.0
-                       and last.params.get('k', 0.0) == 0.0))
-        if is_flat:
-            last_z = float(last.P[2])
-            surfaces[-1] = Surface(shape=PlaneSag(), typ='eval',
-                                   P=[0.0, 0.0, last_z])
-
-    # translate Zemax stop index (1-based, refers to Zemax SURF idx) to
-    # the index inside our `surfaces` list (which has OBJECT stripped)
+    # translate Zemax stop index (1-based SURF idx) to the compiled-surface idx
     stop_origin = header.get('stop_index_zemax')
-    stop_index = None
     if stop_origin is not None:
         try:
-            stop_index = surface_origin_idx.index(stop_origin)
+            ld.stop_index = surface_origin_idx.index(stop_origin)
         except ValueError:
-            stop_index = None
+            ld.stop_index = None
 
-    return PrescriptionFile(
-        surfaces=surfaces,
-        wavelengths=header['wavelengths'],
-        epd=header['epd'],
-        stop_index=stop_index,
-        fields=header['fields'],
-        unit=header['unit'],
-        source_path=path_for_meta,
-        source_format='zemax',
-        extras=header['extras'],
-    )
+    return ld

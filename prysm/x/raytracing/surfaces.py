@@ -596,7 +596,9 @@ class ZernikeSag(ConicSeedMixin, Shape):
     def __init__(self, c, k, normalization_radius, nms, coefs, norm=True):
         """Initialize a Zernike sag shape."""
         nms = tuple((int(nn), int(mm)) for nn, mm in nms)
-        coefs = tuple(float(co) for co in coefs)
+        # coefs are numeric DOFs; keep them tensor-clean (no float() coercion)
+        # so they survive an autograd graph when rebuilt from a torch theta.
+        coefs = tuple(coefs)
         if len(nms) != len(coefs):
             raise ValueError(
                 f'nms and coefs must be parallel; got {len(nms)} and {len(coefs)}'
@@ -646,7 +648,8 @@ class XYSag(ConicSeedMixin, Shape):
     def __init__(self, c, k, normalization_radius, mns, coefs):
         """Initialize an x-y polynomial sag shape."""
         mns = tuple((int(mm), int(nn)) for mm, nn in mns)
-        coefs = tuple(float(co) for co in coefs)
+        # coefs are numeric DOFs; keep them tensor-clean (no float() coercion).
+        coefs = tuple(coefs)
         if len(mns) != len(coefs):
             raise ValueError(
                 f'mns and coefs must be parallel; got {len(mns)} and {len(coefs)}'
@@ -697,7 +700,8 @@ class ChebyshevSag(ConicSeedMixin, Shape):
     def __init__(self, c, k, x_norm, y_norm, mns, coefs):
         """Initialize a Chebyshev sag shape."""
         mns = tuple((int(mm), int(nn)) for mm, nn in mns)
-        coefs = tuple(float(co) for co in coefs)
+        # coefs are numeric DOFs; keep them tensor-clean (no float() coercion).
+        coefs = tuple(coefs)
         if len(mns) != len(coefs):
             raise ValueError(
                 f'mns and coefs must be parallel; got {len(mns)} and {len(coefs)}'
@@ -748,7 +752,8 @@ class JacobiSag(ConicSeedMixin, Shape):
     def __init__(self, c, k, normalization_radius, alpha, beta, ns, coefs):
         """Initialize a radial Jacobi sag shape."""
         ns = tuple(int(nn) for nn in ns)
-        coefs = tuple(float(co) for co in coefs)
+        # coefs are numeric DOFs; keep them tensor-clean (no float() coercion).
+        coefs = tuple(coefs)
         if len(ns) != len(coefs):
             raise ValueError(
                 f'ns and coefs must be parallel; got {len(ns)} and {len(coefs)}'

@@ -1,0 +1,1138 @@
+"""LensData: the editable, optimizable, serializable spine of a system.
+
+LensData owns the sequential rows of an optical system, all of its numeric
+degrees of freedom (curvature, conic, asphere coefficients, thickness, and --
+once coordinate breaks land -- tilt and decenter), and the system metadata
+(entrance pupil diameter, fields, wavelengths, ambient index, stop, units,
+provenance).  The compiled list[Surface] that the kernel traces is a cheap,
+throwaway artifact rebuilt from the rows on demand by :meth:`LensData.to_surfaces`.
+
+This is the Phase 1 core spine: SurfaceRow + a declaration-only CoordBreak, a
+ParamSpec that addresses scalar DOFs by named slot, the fast rotationally
+symmetric (axial) layout, and the optimizer surface (pack / update / bounds).
+Coordinate-break layout, solves, pickups, IO, and the design rewrite arrive in
+later phases.
+
+"""
+
+import math
+import warnings
+
+from prysm.conf import config
+from prysm.mathops import np
+
+from .materials import MIRROR
+from .surfaces import (
+    BiconicSag,
+    ChebyshevSag,
+    ConicSag,
+    EvenAsphereSag,
+    JacobiSag,
+    OffAxisConicSag,
+    PlaneSag,
+    Q2DSag,
+    SphereSag,
+    Surface,
+    ToroidSag,
+    XYSag,
+    ZernikeSag,
+    circular_aperture,
+    _map_stype,
+)
+from .paraxial import paraxial_image_distance
+from .spencer_and_murty import STYPE_EVAL, STYPE_REFLECT
+
+
+_DEG2RAD = math.pi / 180.0
+
+
+def R_rh(rz, ry, rx, radians=False):
+    """Right-handed rotation matrix from (rz, ry, rx), backend-pure.
+
+    Matches prysm.coordinates.make_rotation_matrix's ZYX convention
+    (M = Rx @ Ry @ Rz) but is built entirely through prysm.mathops.np so
+    it works under numpy, cupy, and torch and is differentiable w.r.t. tensor
+    angle inputs (the tilt DOFs of a coordinate break).  Angles are in degrees
+    unless radians is True.
+
+    Parameters
+    ----------
+    rz, ry, rx : float or array
+        Rotation angles about the z, y, and x axes.
+    radians : bool, optional
+        If True, the angles are radians; otherwise degrees.
+
+    Returns
+    -------
+    ndarray
+        3x3 rotation matrix (local-to-global).
+
+    """
+    k = 1.0 if radians else _DEG2RAD
+    alpha = rx * k
+    beta = ry * k
+    gamma = rz * k
+    ca = np.cos(alpha)
+    sa = np.sin(alpha)
+    cb = np.cos(beta)
+    sb = np.sin(beta)
+    cg = np.cos(gamma)
+    sg = np.sin(gamma)
+    zero = ca * 0.0
+    one = zero + 1.0
+    Rx = np.stack([
+        np.stack([one, zero, zero]),
+        np.stack([zero, ca, -sa]),
+        np.stack([zero, sa, ca]),
+    ])
+    Ry = np.stack([
+        np.stack([cb, zero, sb]),
+        np.stack([zero, one, zero]),
+        np.stack([-sb, zero, cb]),
+    ])
+    Rz = np.stack([
+        np.stack([cg, -sg, zero]),
+        np.stack([sg, cg, zero]),
+        np.stack([zero, zero, one]),
+    ])
+    return Rx @ Ry @ Rz
+
+
+# 180-degree rotation about x: reverses the local +z (and +y) axes.  Folds the
+# running frame at a normal-incidence mirror so downstream rows march along the
+# reflected beam while staying a proper (det +1) rotation.
+_FLIP_Z = np.asarray([[1.0, 0.0, 0.0],
+                      [0.0, -1.0, 0.0],
+                      [0.0, 0.0, -1.0]], dtype=config.precision)
+
+
+def _ben_auto_gamma(alpha_deg, beta_deg):
+    """Code V BEN auto-roll gamma (degrees) that keeps the folded axis level.
+
+    gamma = atan2(-sin(alpha) sin(beta), cos(alpha) + cos(beta)); zero when
+    either alpha or beta is zero.  Verified against the Code V manual worked
+    example (alpha = beta = 45 deg -> gamma = -19.471 deg).
+
+    """
+    a = alpha_deg * _DEG2RAD
+    b = beta_deg * _DEG2RAD
+    num = -np.sin(a) * np.sin(b)
+    den = np.cos(a) + np.cos(b)
+    return np.arctan2(num, den) / _DEG2RAD
+
+
+def _as_mat(R):
+    """Return a concrete 3x3 matrix (identity if R is None)."""
+    if R is None:
+        return np.eye(3, dtype=config.precision)
+    return R
+
+
+def _local_to_global(Rgl):
+    """Local->global rotation from a global->local matrix (or None)."""
+    return _as_mat(Rgl).T
+
+
+def _compose_global_to_local(Rgl, local_rot):
+    """Compose an additional rotation expressed in the current local frame."""
+    return _as_mat(local_rot) @ _as_mat(Rgl)
+
+
+def _axial_step(thickness):
+    """A length-3 step of thickness along the local +z axis."""
+    step = np.zeros(3, dtype=config.precision)
+    step[2] = thickness
+    return step
+
+
+def _none_if_identity(Rgl):
+    """Collapse a near-identity rotation to None so the kernel skips it."""
+    if Rgl is None:
+        return None
+    if np.allclose(np.asarray(Rgl), np.eye(3)):
+        return None
+    return Rgl
+
+
+def _apply_decenter_tilt(o, Rgl, decenter, tilt):
+    """Apply a coordinate-break decenter then tilt to the running frame.
+
+    Decenter is along the current local axes; tilt = R_rh(rz, ry, rx) composes
+    onto the global->local rotation.  Returns the new (o, Rgl).
+
+    """
+    o = o + _local_to_global(Rgl) @ decenter
+    Rt = R_rh(tilt[0], tilt[1], tilt[2])
+    return o, _compose_global_to_local(Rgl, Rt)
+
+
+class _FrameState:
+    """Mutable running frame for the general (coordinate-break) layout scan.
+
+    o is the global origin, Rgl the running global->local rotation (or
+    None for identity).  frames records each placed surface's frame for RET.
+    pending_pose carries a one-shot DAR decenter/tilt for the next surface;
+    pending_fold carries a BEN fold (rz, ry, rx) consumed at the next
+    reflecting surface.
+
+    """
+
+    __slots__ = ('o', 'Rgl', 'frames', 'pending_pose', 'pending_fold')
+
+    def __init__(self):
+        self.o = np.zeros(3, dtype=config.precision)
+        self.Rgl = None
+        self.frames = {}
+        self.pending_pose = None
+        self.pending_fold = None
+
+    def advance(self, thickness):
+        """Step the origin along the current local +z by thickness."""
+        self.o = self.o + _local_to_global(self.Rgl) @ _axial_step(thickness)
+
+
+# ---------------------------------------------------------------------------
+# Shape adapters: how each Shape decomposes into numeric DOFs + static metadata
+# ---------------------------------------------------------------------------
+
+class _ShapeAdapter:
+    """Maps a Shape class to its numeric DOFs, static metadata, and builder.
+
+    scalar_dofs are single-value DOFs; vector_dofs are flat coefficient
+    blocks of arbitrary (structurally fixed) length.  The assembled parameter
+    array for a row lays the scalars out first, in order, then concatenates the
+    vector blocks.  meta_keys name the static structural parameters that are
+    carried verbatim and are needed to rebuild the shape.  categories maps a
+    human category name ('curvature', 'conic', 'coefs', ...) to the DOF keys it
+    selects, for the bulk vary/freeze/constrain helpers.
+
+    """
+
+    __slots__ = ('cls', 'scalar_dofs', 'vector_dofs', 'meta_keys',
+                 'categories', 'build')
+
+    def __init__(self, cls, scalar_dofs=(), vector_dofs=(), meta_keys=(),
+                 categories=None, build=None):
+        self.cls = cls
+        self.scalar_dofs = tuple(scalar_dofs)
+        self.vector_dofs = tuple(vector_dofs)
+        self.meta_keys = tuple(meta_keys)
+        self.categories = dict(categories or {})
+        self.build = build
+
+
+def _adapter(cls, **kwargs):
+    return _ShapeAdapter(cls, **kwargs)
+
+
+_SHAPE_ADAPTERS = {
+    PlaneSag: _adapter(
+        PlaneSag,
+        build=lambda p: PlaneSag(),
+    ),
+    SphereSag: _adapter(
+        SphereSag,
+        scalar_dofs=('c',),
+        categories={'curvature': ['c'], 'radius': ['c']},
+        build=lambda p: SphereSag(p['c']),
+    ),
+    ConicSag: _adapter(
+        ConicSag,
+        scalar_dofs=('c', 'k'),
+        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k']},
+        build=lambda p: ConicSag(p['c'], p['k']),
+    ),
+    OffAxisConicSag: _adapter(
+        OffAxisConicSag,
+        scalar_dofs=('c', 'k'),
+        meta_keys=('dx', 'dy'),
+        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k']},
+        build=lambda p: OffAxisConicSag(p['c'], p['k'], dx=p['dx'], dy=p['dy']),
+    ),
+    EvenAsphereSag: _adapter(
+        EvenAsphereSag,
+        scalar_dofs=('c', 'k'),
+        vector_dofs=('coefs',),
+        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
+                    'coefs': ['coefs']},
+        build=lambda p: EvenAsphereSag(p['c'], p['k'], p['coefs']),
+    ),
+    Q2DSag: _adapter(
+        Q2DSag,
+        scalar_dofs=('c', 'k'),
+        meta_keys=('normalization_radius', 'cm0', 'ams', 'bms', 'dx', 'dy'),
+        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k']},
+        build=lambda p: Q2DSag(p['c'], p['k'], p['normalization_radius'],
+                               p['cm0'], p['ams'], p['bms'],
+                               dx=p['dx'], dy=p['dy']),
+    ),
+    ZernikeSag: _adapter(
+        ZernikeSag,
+        scalar_dofs=('c', 'k'),
+        vector_dofs=('coefs',),
+        meta_keys=('normalization_radius', 'nms', 'norm'),
+        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
+                    'coefs': ['coefs']},
+        build=lambda p: ZernikeSag(p['c'], p['k'], p['normalization_radius'],
+                                   p['nms'], p['coefs'], norm=p['norm']),
+    ),
+    XYSag: _adapter(
+        XYSag,
+        scalar_dofs=('c', 'k'),
+        vector_dofs=('coefs',),
+        meta_keys=('normalization_radius', 'mns'),
+        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
+                    'coefs': ['coefs']},
+        build=lambda p: XYSag(p['c'], p['k'], p['normalization_radius'],
+                              p['mns'], p['coefs']),
+    ),
+    ChebyshevSag: _adapter(
+        ChebyshevSag,
+        scalar_dofs=('c', 'k'),
+        vector_dofs=('coefs',),
+        meta_keys=('x_norm', 'y_norm', 'mns'),
+        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
+                    'coefs': ['coefs']},
+        build=lambda p: ChebyshevSag(p['c'], p['k'], p['x_norm'], p['y_norm'],
+                                     p['mns'], p['coefs']),
+    ),
+    JacobiSag: _adapter(
+        JacobiSag,
+        scalar_dofs=('c', 'k'),
+        vector_dofs=('coefs',),
+        meta_keys=('normalization_radius', 'alpha', 'beta', 'ns'),
+        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
+                    'coefs': ['coefs']},
+        build=lambda p: JacobiSag(p['c'], p['k'], p['normalization_radius'],
+                                  p['alpha'], p['beta'], p['ns'], p['coefs']),
+    ),
+    ToroidSag: _adapter(
+        ToroidSag,
+        scalar_dofs=('c_x', 'c_y', 'k_y'),
+        vector_dofs=('coefs_y',),
+        categories={'curvature': ['c_x', 'c_y'], 'conic': ['k_y'],
+                    'coefs': ['coefs_y']},
+        build=lambda p: ToroidSag(p['c_x'], p['c_y'], p['k_y'], p['coefs_y']),
+    ),
+    BiconicSag: _adapter(
+        BiconicSag,
+        scalar_dofs=('c_x', 'c_y', 'k_x', 'k_y'),
+        categories={'curvature': ['c_x', 'c_y'], 'conic': ['k_x', 'k_y']},
+        build=lambda p: BiconicSag(p['c_x'], p['c_y'], p['k_x'], p['k_y']),
+    ),
+}
+
+
+def _adapter_for(shape):
+    try:
+        return _SHAPE_ADAPTERS[type(shape)]
+    except KeyError:
+        raise TypeError(
+            f'shape {type(shape).__name__} is not registered with LensData; '
+            f'add a _ShapeAdapter for it in lensdata._SHAPE_ADAPTERS'
+        ) from None
+
+
+def _bounds_for_dof(nominal, lo, hi, relative, is_radius):
+    """Compute ordered (lo, hi) DOF bounds for one constrained slot.
+
+    nominal is the stored DOF (curvature c for the 'radius'/'curvature'
+    categories).  For 'radius' (is_radius) the user-facing quantity is the
+    radius R = 1/c; bounds are computed in R then mapped back to curvature.
+    Returns None when the bound is degenerate (zero nominal under a relative
+    bound), signaling the slot should be left unbounded.
+
+    """
+    if is_radius:
+        if nominal == 0.0:
+            if relative is not None:
+                warnings.warn(
+                    'relative radius bound on a flat (c=0) surface is '
+                    'degenerate; leaving it unbounded', stacklevel=3)
+            return None
+        quantity = 1.0 / nominal
+    else:
+        quantity = nominal
+
+    if relative is not None:
+        if quantity == 0.0:
+            warnings.warn(
+                'relative bound on a zero nominal is degenerate; leaving it '
+                'unbounded', stacklevel=3)
+            return None
+        qlo = quantity * (1.0 - relative)
+        qhi = quantity * (1.0 + relative)
+    else:
+        qlo = -np.inf if lo is None else float(lo)
+        qhi = np.inf if hi is None else float(hi)
+
+    if is_radius:
+        # map radius bounds back to curvature (1/R); the reciprocal flips order
+        clo = 0.0 if np.isinf(qhi) else 1.0 / qhi
+        chi = 0.0 if np.isinf(qlo) else 1.0 / qlo
+        blo, bhi = clo, chi
+    else:
+        blo, bhi = qlo, qhi
+
+    if blo > bhi:
+        blo, bhi = bhi, blo
+    return (blo, bhi)
+
+
+def _as_material_callable(material):
+    """Coerce a material spec into an n(wvl) callable or None.
+
+    Refractive surfaces need a callable index; reflective/eval surfaces never
+    have their index queried, so MIRROR and None both compile to None.  A bare
+    number is wrapped in a constant callable.
+
+    """
+    if material is None or material is MIRROR or material == MIRROR:
+        return None
+    if callable(material):
+        return material
+    value = float(material)
+    return lambda wvl: value
+
+
+# ---------------------------------------------------------------------------
+# Rows
+# ---------------------------------------------------------------------------
+
+class SurfaceRow:
+    """One sequential optical surface in a LensData system.
+
+    Stores the shape as a kind + a flat numeric parameter array (its natural
+    DOFs) plus the static structural metadata needed to rebuild it, the gap to
+    the next surface (thickness, a DOF), the interaction type, the material,
+    and aperture/bounding data.
+
+    """
+
+    def __init__(self, shape, *, thickness=0.0, material=None, typ='refr',
+                 semidiameter=None, aperture=None, bounding=None, grating=None):
+        adapter = _adapter_for(shape)
+        params = []
+        key_offsets = {}
+        sp = shape.params or {}
+        for key in adapter.scalar_dofs:
+            key_offsets[key] = (len(params), 1)
+            params.append(sp[key])
+        for key in adapter.vector_dofs:
+            vals = list(sp[key])
+            key_offsets[key] = (len(params), len(vals))
+            params.extend(vals)
+
+        self.shape_kind = type(shape)
+        self.adapter = adapter
+        self.params = (np.asarray(params, dtype=config.precision)
+                       if params else np.zeros(0, dtype=config.precision))
+        self.key_offsets = key_offsets
+        self.meta = {key: sp[key] for key in adapter.meta_keys}
+
+        categories = {}
+        for cat, keys in adapter.categories.items():
+            offs = []
+            for key in keys:
+                start, length = key_offsets[key]
+                offs.extend(range(start, start + length))
+            categories[cat] = offs
+        self.categories = categories
+
+        self.thickness = thickness
+        self.material = material
+        self.typ = typ
+        self.semidiameter = semidiameter
+        if aperture is None and semidiameter is not None:
+            aperture = circular_aperture(semidiameter)
+        self.aperture = aperture
+        if bounding is None and semidiameter is not None:
+            bounding = {'outer_radius': float(semidiameter)}
+        self.bounding = bounding
+        self.grating = grating
+
+    @property
+    def is_reflective(self):
+        """True if this surface reflects (folds the layout frame)."""
+        return _map_stype(self.typ) == STYPE_REFLECT
+
+    def build_shape(self):
+        """Rebuild the Shape object from the current parameter array + meta."""
+        p = dict(self.meta)
+        for key, (start, length) in self.key_offsets.items():
+            if length == 1:
+                p[key] = self.params[start]
+            else:
+                p[key] = self.params[start:start + length]
+        return self.adapter.build(p)
+
+    def dof_slots(self, row_index):
+        """Yield ('shape'/'thickness', row_index, offset) for every scalar DOF."""
+        for off in range(len(self.params)):
+            yield ('shape', row_index, off)
+        yield ('thickness', row_index, 0)
+
+    def copy(self):
+        new = object.__new__(SurfaceRow)
+        new.shape_kind = self.shape_kind
+        new.adapter = self.adapter
+        new.params = np.array(self.params, copy=True)
+        new.key_offsets = dict(self.key_offsets)
+        new.meta = dict(self.meta)
+        new.categories = {k: list(v) for k, v in self.categories.items()}
+        new.thickness = self.thickness
+        new.material = self.material
+        new.typ = self.typ
+        new.semidiameter = self.semidiameter
+        new.aperture = self.aperture
+        new.bounding = self.bounding
+        new.grating = self.grating
+        return new
+
+
+class CoordBreak:
+    """A right-handed coordinate break (declaration only in Phase 1).
+
+    Carries a decenter (dx, dy, dz) and a tilt (rz, ry, rx) in degrees -- both
+    DOFs -- plus the Code V break kind and gap thickness.  It emits no Surface;
+    its layout semantics (frame fold/restore) arrive in Phase 3.
+
+    """
+
+    def __init__(self, *, decenter=(0.0, 0.0, 0.0), tilt=(0.0, 0.0, 0.0),
+                 kind='basic', ret_target=None, thickness=0.0):
+        self.decenter = np.asarray(decenter, dtype=config.precision)
+        self.tilt = np.asarray(tilt, dtype=config.precision)
+        self.kind = kind
+        self.ret_target = ret_target
+        self.thickness = thickness
+
+    def dof_slots(self, row_index):
+        """Yield decenter / tilt / thickness DOF slots for this break."""
+        for off in range(3):
+            yield ('decenter', row_index, off)
+        for off in range(3):
+            yield ('tilt', row_index, off)
+        yield ('thickness', row_index, 0)
+
+    def copy(self):
+        new = object.__new__(CoordBreak)
+        new.decenter = np.array(self.decenter, copy=True)
+        new.tilt = np.array(self.tilt, copy=True)
+        new.kind = self.kind
+        new.ret_target = self.ret_target
+        new.thickness = self.thickness
+        return new
+
+
+# ---------------------------------------------------------------------------
+# Parameter specification: named slots <-> dense free vector
+# ---------------------------------------------------------------------------
+
+class ParamSpec:
+    """Maps each scalar DOF slot to a (row, group, offset) address and tracks
+    which slots are free and their box bounds.
+
+    A *slot* is the tuple (group, row_index, offset) where group is one
+    of 'shape', 'thickness', 'decenter', 'tilt'.  The free subset is gathered
+    into a dense contiguous vector for the optimizer by :meth:`pack`, and
+    scattered back by :meth:`scatter`.  Free flags and bounds live in dicts
+    keyed by slot, so appending rows never invalidates existing selections.
+
+    """
+
+    def __init__(self, lensdata):
+        self._ld = lensdata
+        self._free = {}     # slot -> True
+        self._bounds = {}   # slot -> (lo, hi)
+
+    # -- slot enumeration --
+    def slots(self):
+        """Ordered list of every scalar DOF slot, row by row."""
+        out = []
+        for r, row in enumerate(self._ld.rows):
+            out.extend(row.dof_slots(r))
+        return out
+
+    def free_slots(self):
+        """Ordered list of the slots currently marked free."""
+        return [s for s in self.slots() if self._free.get(s, False)]
+
+    # -- value access --
+    def get_value(self, slot):
+        group, r, off = slot
+        row = self._ld.rows[r]
+        if group == 'shape':
+            return row.params[off]
+        if group == 'thickness':
+            return row.thickness
+        if group == 'decenter':
+            return row.decenter[off]
+        if group == 'tilt':
+            return row.tilt[off]
+        raise KeyError(group)
+
+    def set_value(self, slot, value):
+        group, r, off = slot
+        row = self._ld.rows[r]
+        if group == 'shape':
+            row.params[off] = value
+        elif group == 'thickness':
+            row.thickness = value
+        elif group == 'decenter':
+            row.decenter[off] = value
+        elif group == 'tilt':
+            row.tilt[off] = value
+        else:
+            raise KeyError(group)
+
+    # -- optimizer surface --
+    def pack(self):
+        """Gather the free DOFs into a dense contiguous vector."""
+        free = self.free_slots()
+        out = np.empty(len(free), dtype=config.precision)
+        for i, slot in enumerate(free):
+            out[i] = self.get_value(slot)
+        return out
+
+    def scatter(self, x):
+        """Write a dense free vector back into the rows.
+
+        Under the numpy backend this writes in place (cheap).  Under a
+        differentiable backend (torch) it rebuilds the affected per-row arrays
+        functionally so the autograd graph from the free vector to the emitted
+        surfaces is preserved (no in-place leaf mutation).
+
+        """
+        free = self.free_slots()
+        if len(x) != len(free):
+            raise ValueError(
+                f'expected {len(free)} free DOFs, got {len(x)}'
+            )
+        if np.__name__ == 'numpy':
+            for slot, value in zip(free, x):
+                self.set_value(slot, value)
+            return
+
+        # tensor backend: functional per-row reconstruction
+        by_row_group = {}
+        for i, slot in enumerate(free):
+            group, r, off = slot
+            by_row_group.setdefault((r, group), []).append((off, x[i]))
+        for (r, group), items in by_row_group.items():
+            row = self._ld.rows[r]
+            if group == 'thickness':
+                row.thickness = items[0][1]
+            elif group == 'shape':
+                vals = [row.params[j] for j in range(len(row.params))]
+                for off, v in items:
+                    vals[off] = v
+                row.params = np.stack(vals)
+            elif group == 'decenter':
+                vals = [row.decenter[j] for j in range(3)]
+                for off, v in items:
+                    vals[off] = v
+                row.decenter = np.stack(vals)
+            elif group == 'tilt':
+                vals = [row.tilt[j] for j in range(3)]
+                for off, v in items:
+                    vals[off] = v
+                row.tilt = np.stack(vals)
+
+    def bounds(self):
+        """Return (lo, hi) arrays parallel to the free vector."""
+        free = self.free_slots()
+        lo = np.empty(len(free), dtype=config.precision)
+        hi = np.empty(len(free), dtype=config.precision)
+        for i, slot in enumerate(free):
+            blo, bhi = self._bounds.get(slot, (-np.inf, np.inf))
+            lo[i] = blo
+            hi[i] = bhi
+        return lo, hi
+
+
+# ---------------------------------------------------------------------------
+# LensData
+# ---------------------------------------------------------------------------
+
+class LensData:
+    """The canonical, editable representation of a sequential optical system.
+
+    Build one row at a time with :meth:`add` (chainable) or via the IO readers.
+    :meth:`to_surfaces` compiles the rows into a throwaway list[Surface] the
+    kernel can trace; LensData also duck-types as that surface sequence (it is
+    iterable, sized, and indexable).  The optimizer talks to :meth:`pack`,
+    :meth:`update`, and :meth:`bounds`.
+
+    """
+
+    def __init__(self, *, epd=None, fields=None, wavelengths=None,
+                 reference_wavelength=None, n_ambient=1.0, stop_index=None,
+                 unit=None, source_path=None, source_format=None, extras=None):
+        self.rows = []
+        self.spec = ParamSpec(self)
+        self.epd = epd
+        self.fields = _coerce_fields(fields)
+        self.wavelengths = _coerce_wavelengths(wavelengths)
+        if reference_wavelength is None and self.wavelengths:
+            reference_wavelength = next(iter(self.wavelengths))
+        self.reference_wavelength = reference_wavelength
+        self.n_ambient = float(n_ambient)
+        self.stop_index = stop_index
+        self.unit = unit
+        self.source_path = source_path
+        self.source_format = source_format
+        self.extras = dict(extras) if extras else {}
+        self._pickups = []      # (target_slots, source_slots, scale, offset)
+        self._image_solve = None  # (surface_row_index, wavelength)
+        self._dependent = set()  # slots driven by a pickup/solve (never free)
+        self._surfaces_cache = None
+
+    # -- construction --
+    def add(self, shape, *, thickness=0.0, material=None, typ='refr',
+            semidiameter=None, aperture=None, bounding=None, grating=None):
+        """Append a surface row.  Returns self for chaining."""
+        self.rows.append(SurfaceRow(
+            shape, thickness=thickness, material=material, typ=typ,
+            semidiameter=semidiameter, aperture=aperture, bounding=bounding,
+            grating=grating,
+        ))
+        self._invalidate()
+        return self
+
+    def add_coordbreak(self, *, decenter=(0.0, 0.0, 0.0), tilt=(0.0, 0.0, 0.0),
+                       kind='basic', ret_target=None, thickness=0.0):
+        """Append a coordinate break (declaration only in Phase 1)."""
+        self.rows.append(CoordBreak(
+            decenter=decenter, tilt=tilt, kind=kind, ret_target=ret_target,
+            thickness=thickness,
+        ))
+        self._invalidate()
+        return self
+
+    def _invalidate(self):
+        self._surfaces_cache = None
+
+    # -- compilation --
+    def to_surfaces(self):
+        """Compile the rows into a list of posed Surface objects.
+
+        Systems with no coordinate breaks take the fast rotationally symmetric
+        (axial) path: surfaces lie on the z axis at the cumulative sum of
+        preceding thicknesses with no rotation (R=None), and reflective
+        surfaces fold the layout direction (downstream surfaces step toward
+        decreasing global z).  Systems containing coordinate breaks take the
+        general path: a forward scan accumulating the running frame (origin o,
+        global->local rotation Rgl), emitting a posed Surface per surface row
+        and folding/saving frames at coordinate breaks.
+
+        """
+        if self._surfaces_cache is not None:
+            return self._surfaces_cache
+
+        self._resolve_dependencies()
+        surfaces = self._compile_surfaces()
+        self._surfaces_cache = surfaces
+        return surfaces
+
+    def _compile_surfaces(self):
+        """Compile rows -> surfaces with no caching or dependency resolution."""
+        if any(isinstance(row, CoordBreak) for row in self.rows):
+            return self._to_surfaces_general()
+        return self._to_surfaces_axial()
+
+    def _resolve_dependencies(self):
+        """Apply pickups then solves so layout/trace/merit always agree.
+
+        Pickups derive a dependent DOF as scale*independent + offset.  The
+        image-distance solve sets a gap thickness to the paraxial image
+        distance of the powered surfaces, auto-placing the image plane.  Both
+        are backend-pure (no float() coercion) so they stay differentiable.
+
+        """
+        for targets, sources, scale, offset in self._pickups:
+            for t, s in zip(targets, sources):
+                self.spec.set_value(t, scale * self.spec.get_value(s) + offset)
+        if self._image_solve is not None:
+            surf_idx, wvl = self._image_solve
+            lens = [s for s in self._compile_surfaces() if s.typ != STYPE_EVAL]
+            pid = paraxial_image_distance(
+                lens, wvl=self.wavelength(wvl), n_ambient=self.n_ambient)
+            self.rows[surf_idx].thickness = pid
+
+    def _build_surface(self, row, P, R=None):
+        return Surface(
+            shape=row.build_shape(), typ=row.typ, P=P, R=R,
+            n=_as_material_callable(row.material),
+            bounding=row.bounding, aperture=row.aperture, grating=row.grating,
+        )
+
+    def _to_surfaces_axial(self):
+        surfaces = []
+        z = 0.0
+        sign = 1.0
+        for row in self.rows:
+            surfaces.append(self._build_surface(row, P=[0.0, 0.0, z]))
+            if row.is_reflective:
+                sign = -sign
+            z = z + sign * row.thickness
+        return surfaces
+
+    def _to_surfaces_general(self):
+        surfaces = []
+        state = _FrameState()
+
+        for idx, row in enumerate(self.rows):
+            if isinstance(row, CoordBreak):
+                self._apply_coordbreak(row, state)
+                continue
+
+            # surface placement (honor a one-shot DAR pose without perturbing
+            # the running axis)
+            if state.pending_pose is not None:
+                o_s, Rgl_s = _apply_decenter_tilt(state.o, state.Rgl,
+                                                  *state.pending_pose)
+                state.pending_pose = None
+            else:
+                o_s, Rgl_s = state.o, state.Rgl
+            surfaces.append(self._build_surface(
+                row, P=o_s, R=_none_if_identity(Rgl_s)))
+            state.frames[idx] = (o_s, Rgl_s)
+
+            # fold the running frame at a reflecting surface so downstream rows
+            # lie on the reflected beam.  A pending BEN fold (re-apply tilt +
+            # auto-gamma) bends the axis along the reflected beam; otherwise the
+            # normal-incidence fold reverses the local z axis.
+            if row.is_reflective:
+                if state.pending_fold is not None:
+                    state.Rgl = _compose_global_to_local(
+                        state.Rgl, R_rh(*state.pending_fold))
+                    state.pending_fold = None
+                else:
+                    state.Rgl = _compose_global_to_local(state.Rgl, _FLIP_Z)
+            # advance the gap along the (folded) local +z
+            state.o = (state.o
+                       + _local_to_global(state.Rgl)
+                       @ _axial_step(row.thickness))
+
+        return surfaces
+
+    def _apply_coordbreak(self, cb, state):
+        kind = cb.kind
+        decenter = cb.decenter
+        tilt = cb.tilt
+
+        if kind == 'dar':
+            # decenter-and-return: the decenter/tilt apply only to the next
+            # surface; the running axis is untouched.  Advance the break gap
+            # along the unperturbed axis.
+            state.pending_pose = (decenter, tilt)
+            state.advance(cb.thickness)
+            return
+
+        if kind == 'ret':
+            # return-to-surface: restore the recorded frame of a prior row,
+            # undoing intervening tilts/decenters/thicknesses.
+            if cb.ret_target is None or cb.ret_target not in state.frames:
+                raise ValueError(
+                    f'RET coordinate break targets row {cb.ret_target!r}, '
+                    'which has not been placed yet'
+                )
+            state.o, state.Rgl = state.frames[cb.ret_target]
+            state.advance(cb.thickness)
+            return
+
+        if kind == 'rev':
+            # reverse: inverse of a matching basic break (negated tilt applied
+            # first, then the decenter subtracted), for coupling before/after.
+            Rt = R_rh(tilt[0], tilt[1], tilt[2])
+            state.Rgl = _compose_global_to_local(state.Rgl, _as_mat(Rt).T)
+            state.o = state.o - _local_to_global(state.Rgl) @ decenter
+            state.advance(cb.thickness)
+            return
+
+        if kind == 'ben':
+            # decenter-and-bend: orient the mirror by the tilt now; register a
+            # fold (re-apply alpha, beta + the auto-computed gamma) consumed at
+            # the next reflecting surface to bend the axis by twice the tilt.
+            state.o, state.Rgl = _apply_decenter_tilt(state.o, state.Rgl,
+                                                      decenter, tilt)
+            gamma = _ben_auto_gamma(tilt[2], tilt[1])
+            state.pending_fold = (gamma, tilt[1], tilt[2])
+            state.advance(cb.thickness)
+            return
+
+        if kind != 'basic':
+            raise ValueError(
+                f"unknown coordinate-break kind {kind!r}; expected one of "
+                "'basic', 'dar', 'ret', 'rev', 'ben'"
+            )
+
+        # basic: cumulative decenter + tilt, persists for all succeeding rows
+        state.o, state.Rgl = _apply_decenter_tilt(state.o, state.Rgl,
+                                                  decenter, tilt)
+        state.advance(cb.thickness)
+
+    @property
+    def surfaces(self):
+        """The compiled surface list (cached; invalidated on edits)."""
+        return self.to_surfaces()
+
+    # -- sequence protocol (duck-type as a surface list) --
+    def __len__(self):
+        return len(self.to_surfaces())
+
+    def __iter__(self):
+        return iter(self.to_surfaces())
+
+    def __getitem__(self, item):
+        return self.to_surfaces()[item]
+
+    # -- optimizer surface --
+    def pack(self):
+        """Dense contiguous vector of the free DOFs."""
+        return self.spec.pack()
+
+    def update(self, x):
+        """Scatter a free vector into the rows, resolve dependents, invalidate."""
+        self.spec.scatter(x)
+        self._resolve_dependencies()
+        self._invalidate()
+        return self
+
+    def bounds(self):
+        """(lo, hi) arrays parallel to the free vector."""
+        return self.spec.bounds()
+
+    # -- variable selection (category x surface-range) --
+    def vary(self, category, surfaces='all'):
+        """Mark a category of DOFs free over a range of surfaces.
+
+        category is one of 'curvature', 'radius', 'conic', 'coefs',
+        'thickness', 'tilt', 'decenter'.  surfaces selects rows: int,
+        list of ints, slice, or 'all' (default).  Applying a category to a row
+        that lacks it is a silent no-op.
+
+        """
+        for slot in self._category_slots(category, surfaces):
+            if slot not in self._dependent:
+                self.spec._free[slot] = True
+        return self
+
+    def freeze(self, category, surfaces='all'):
+        """Inverse of :meth:`vary`."""
+        for slot in self._category_slots(category, surfaces):
+            self.spec._free.pop(slot, None)
+        return self
+
+    def vary_all(self):
+        """Mark every scalar DOF free (except pickup/solve dependents)."""
+        for slot in self.spec.slots():
+            if slot not in self._dependent:
+                self.spec._free[slot] = True
+        return self
+
+    def freeze_all(self):
+        """Mark every scalar DOF fixed."""
+        self.spec._free.clear()
+        return self
+
+    def constrain(self, category, *, lo=None, hi=None, relative=None,
+                  surfaces='all'):
+        """Set box bounds on a category of DOFs over a range of surfaces.
+
+        Bounds are expressed in the NAMED quantity and converted to the stored
+        DOF.  'radius' bounds are radii (converted to curvature); 'curvature',
+        'conic', 'coefs', 'thickness', 'tilt', 'decenter' bound the DOF
+        directly.
+
+        Two modes:
+
+        - absolute: constrain('thickness', lo=0.0, hi=50.0) -- an open
+          side (lo or hi None) is left unbounded (-/+ inf).
+        - relative: constrain('radius', relative=0.1) -- bounds are the
+          nominal value +/- 10%, anchored at call time, ordered for negative
+          nominals.  A zero nominal makes a relative bound degenerate: the DOF
+          is left unbounded and a warning is issued.
+
+        Applying a category to a surface that lacks it is a silent no-op.
+
+        """
+        if relative is None and lo is None and hi is None:
+            raise ValueError('constrain needs lo/hi (absolute) or relative')
+        is_radius = category == 'radius'
+        for slot in self._category_slots(category, surfaces):
+            nominal = float(self.spec.get_value(slot))
+            bounds = _bounds_for_dof(nominal, lo, hi, relative, is_radius)
+            if bounds is None:
+                self.spec._bounds.pop(slot, None)
+            else:
+                self.spec._bounds[slot] = bounds
+        return self
+
+    # -- pickups and solves (dependent DOFs, resolved on compile) --
+    def pickup(self, category, surface, *, from_surface, from_category=None,
+               scale=1.0, offset=0.0):
+        """Make a DOF a pickup of another: dependent = scale*source + offset.
+
+        Example: ld.pickup('curvature', 1, from_surface=0, scale=-1.0)
+        couples surface 1's curvature to the negative of surface 0's (a
+        symmetric element).  The dependent DOF is frozen (removed from the free
+        vector) and recomputed whenever the system is compiled, so it never
+        drifts from its source.  Pure arithmetic, fully differentiable.
+
+        """
+        from_category = from_category or category
+        targets = self._category_slots(category, surface)
+        sources = self._category_slots(from_category, from_surface)
+        if not targets or not sources:
+            raise ValueError(
+                f'pickup found no {category!r}/{from_category!r} DOFs on the '
+                'requested surfaces'
+            )
+        if len(targets) != len(sources):
+            raise ValueError(
+                f'pickup target ({len(targets)} DOFs) and source '
+                f'({len(sources)} DOFs) must have equal length'
+            )
+        for t in targets:
+            self.spec._free.pop(t, None)
+            self._dependent.add(t)
+        self._pickups.append((targets, sources, float(scale), float(offset)))
+        self._invalidate()
+        return self
+
+    def solve_image_distance(self, surface=None, *, wavelength=None):
+        """Solve a gap so the image plane sits at the paraxial image.
+
+        The thickness of surface (default: the powered surface just before
+        the trailing eval plane) is set to the paraxial image distance of the
+        powered surfaces every time the system is compiled.  The solved
+        thickness is frozen.  Backend-pure, so it is differentiable.
+
+        """
+        if surface is None:
+            evals = [i for i, r in enumerate(self.rows)
+                     if isinstance(r, SurfaceRow)
+                     and _map_stype(r.typ) == STYPE_EVAL]
+            if not evals:
+                raise ValueError(
+                    'solve_image_distance needs an eval (image) plane to place'
+                )
+            eval_idx = max(evals)
+            lens_rows = [i for i in range(eval_idx)
+                         if isinstance(self.rows[i], SurfaceRow)]
+            if not lens_rows:
+                raise ValueError('no powered surface precedes the image plane')
+            surface = max(lens_rows)
+        else:
+            surface = surface % len(self.rows)
+        self._image_solve = (surface, wavelength)
+        slot = ('thickness', surface, 0)
+        self.spec._free.pop(slot, None)
+        self._dependent.add(slot)
+        self._invalidate()
+        return self
+
+    def _select_rows(self, surfaces):
+        n = len(self.rows)
+        if surfaces == 'all' or surfaces is None:
+            return list(range(n))
+        if isinstance(surfaces, slice):
+            return list(range(*surfaces.indices(n)))
+        if isinstance(surfaces, int):
+            return [surfaces % n]
+        return [int(s) % n for s in surfaces]
+
+    def _category_slots(self, category, surfaces):
+        slots = []
+        for r in self._select_rows(surfaces):
+            row = self.rows[r]
+            if category == 'thickness':
+                slots.append(('thickness', r, 0))
+            elif category in ('tilt', 'decenter'):
+                if isinstance(row, CoordBreak):
+                    for off in range(3):
+                        slots.append((category, r, off))
+            else:  # shape category
+                if isinstance(row, SurfaceRow):
+                    for off in row.categories.get(category, ()):
+                        slots.append(('shape', r, off))
+        return slots
+
+    # -- metadata resolution --
+    def wavelength(self, wavelength=None):
+        """Resolve a wavelength name or scalar to microns."""
+        if wavelength is None:
+            wavelength = self.reference_wavelength
+        if isinstance(wavelength, str):
+            return float(self.wavelengths[wavelength])
+        return float(wavelength)
+
+    def field(self, field=None):
+        """Resolve a field index, scalar y angle, tuple, or Field."""
+        if field is None:
+            if not self.fields:
+                return Field(0.0, 0.0)
+            return self.fields[0]
+        if isinstance(field, int):
+            return self.fields[field]
+        return _coerce_field(field)
+
+    # -- copy --
+    def copy(self):
+        """Return a deep-ish copy: rows cloned, metadata copied, DOF
+        selection (free flags + bounds) preserved."""
+        new = LensData(
+            epd=self.epd, fields=list(self.fields),
+            wavelengths=dict(self.wavelengths),
+            reference_wavelength=self.reference_wavelength,
+            n_ambient=self.n_ambient, stop_index=self.stop_index,
+            unit=self.unit, source_path=self.source_path,
+            source_format=self.source_format, extras=dict(self.extras),
+        )
+        new.rows = [row.copy() for row in self.rows]
+        new.spec._free = dict(self.spec._free)
+        new.spec._bounds = dict(self.spec._bounds)
+        new._pickups = [(list(t), list(s), sc, off)
+                        for t, s, sc, off in self._pickups]
+        new._image_solve = self._image_solve
+        new._dependent = set(self._dependent)
+        return new
+
+    def __repr__(self):
+        return (f'LensData(n_rows={len(self.rows)}, epd={self.epd}, '
+                f'n_free={len(self.spec.free_slots())})')
+
+
+# ---------------------------------------------------------------------------
+# metadata coercion (shared with the old Prescription helpers)
+# ---------------------------------------------------------------------------
+
+def _coerce_field(field):
+    if isinstance(field, Field):
+        return field
+    if np.isscalar(field):
+        return Field(0.0, float(field))
+    return Field(float(field[0]), float(field[1]))
+
+
+def _coerce_fields(fields):
+    if fields is None:
+        return []
+    return [_coerce_field(field) for field in fields]
+
+
+def _coerce_wavelengths(wavelengths):
+    if wavelengths is None:
+        return {}
+    if hasattr(wavelengths, 'items'):
+        return dict(wavelengths)
+    return {str(i): float(w) for i, w in enumerate(wavelengths)}
+
+
+# imported at module end to avoid a circular import at package load time
+from .launch import Field  # noqa: E402
+
+
+__all__ = ['LensData', 'SurfaceRow', 'CoordBreak', 'ParamSpec', 'R_rh']
