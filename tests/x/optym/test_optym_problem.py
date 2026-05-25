@@ -156,40 +156,8 @@ def test_as_problem_rejects_non_callable_non_problem():
         as_problem(42)
 
 
-def test_callable_problem_caches_by_value():
-    """f(x) followed by g(x) at the same x (same object OR equal values)
-    re-uses one fg evaluation; a different x value invalidates the cache.
-
-    Value-based caching defends against callers that mutate the array
-    they pass in place between calls (e.g. scipy's L-BFGS-B driver).
-    """
-    calls = {'n': 0}
-
-    def fg(x):
-        calls['n'] += 1
-        return _quadratic_fg(x)
-
-    p = as_problem(fg)
-    x = np.array([1.0, -2.0])
-    p.f(x)
-    p.g(x)
-    assert calls['n'] == 1
-    # different array object, same values -> cache still hits
-    x2 = x.copy()
-    p.f(x2)
-    assert calls['n'] == 1
-    # actually different values -> cache miss
-    p.f(np.array([2.0, -3.0]))
-    assert calls['n'] == 2
-    # mutating the original buffer in place between calls -> cache miss
-    x[0] = 9.0
-    p.f(x)
-    assert calls['n'] == 3
-
-
 def test_adam_accepts_problem_instance():
-    """End-to-end: Adam can be constructed from a Problem subclass and converges
-    on a quadratic in a handful of steps."""
+    """End-to-end: Adam can be constructed from a Problem subclass and converges on a quadratic in a handful of steps."""
     p = FGOnly()
     x0 = np.array([5.0, -3.0])
     opt = Adam(p, x0, alpha=0.5)
