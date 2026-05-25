@@ -6,7 +6,7 @@ Two backends are exposed via the ``method`` kwarg of :func:`merit_jacobian`:
   of which numerical backend ``prysm.mathops`` is pointing at.
 - ``'autograd'``: PyTorch reverse-mode automatic differentiation.  Requires
   the prysm backend to be torch (``prysm.mathops.set_backend_to_pytorch()``)
-  so that the surface FFp callbacks and the merit function are torch-traced
+  so that the surface sag_and_normal callbacks and the merit function are torch-traced
   end-to-end.
 
 Parameters are addressed via (getter, setter) callable pairs.  The helper
@@ -24,7 +24,7 @@ def surface_param(prescription, surface_index, param_name):
     """Build a ``(getter, setter)`` pair targeting one entry of a surface's
     ``params`` dict.
 
-    Mutating the entry through ``setter`` is visible to the FFp closure on
+    Mutating the entry through ``setter`` is visible to the sag_and_normal closure on
     that surface (which reads ``params[name]`` on every call), so subsequent
     raytraces will see the perturbed value.
 

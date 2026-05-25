@@ -22,6 +22,7 @@ from .spencer_and_murty import (
     STYPE_EVAL,
     STYPE_REFLECT,
     STYPE_REFRACT,
+    resolve_tol_sag,
 )
 from .intersections import (
     SURFACE_INTERSECTION_DEFAULT_MAXITER,
@@ -35,22 +36,19 @@ from ._line_math import normalize_vector
 from .sags import (
     Q2d_and_der,
     Q2d_sag,
-    _add_conic_base_F,
-    _add_conic_base_FFp,
-    _conic_base_xy,
-    _conic_base_xy_F,
+    _add_conic_base_derivatives,
+    _add_conic_base_sag,
+    _conic_base_xy_sag,
     conic_sag,
+    conic_sag_and_normal,
     conic_sag_der,
     conic_sag_der_xy,
-    der_direction_cosine_spheroid,
+    der_direction_cosine_conic,
     even_asphere_sag,
     even_asphere_sag_der_xy,
-    off_axis_conic_der,
-    off_axis_conic_sag,
-    off_axis_conic_sag_der_xy,
-    off_axis_conic_sigma,
-    off_axis_conic_sigma_der,
-    phi_spheroid,
+    gradient_to_unit_normal,
+    plane_sag_and_normal,
+    phi_conic,
     product_rule,
     sphere_sag,
     sphere_sag_der,
@@ -58,13 +56,28 @@ from .sags import (
 
 
 def circular_aperture(radius, x0=0.0, y0=0.0):
-    """Create a circular surface aperture predicate."""
+    """Create a circular surface aperture predicate.
+
+    Parameters
+    ----------
+    radius : float
+        Radius of the clear aperture.
+    x0, y0 : float, optional
+        Center of the aperture in local surface coordinates.
+
+    Returns
+    -------
+    callable
+        Predicate returning True for points inside or on the aperture.
+
+    """
     radius = float(radius)
     x0 = float(x0)
     y0 = float(y0)
     rsq = radius * radius
 
     def aperture(x, y):
+        """Evaluate whether local coordinates are inside the aperture."""
         dx = x - x0
         dy = y - y0
         return dx * dx + dy * dy <= rsq
@@ -73,20 +86,24 @@ def circular_aperture(radius, x0=0.0, y0=0.0):
 
 
 def _ensure_P_vec(P):
+    """Promote a point-like object to a 3-vector using configured precision."""
     return promote_3d_point(P, dtype=config.precision)
 
 
 def _none_or_rotmat(R):
+    """Return None or a coerced 3D rotation matrix."""
     return coerce_3d_rotation(R)
 
 
 def _apply_tilt_decenter(P, R, tilt, decenter, tilt_radians):
+    """Apply optional tilt and decenter to a surface pose."""
     return apply_tilt_decenter(P, R, tilt=tilt, decenter=decenter,
                                tilt_radians=tilt_radians,
                                dtype=config.precision)
 
 
 def _map_stype(typ):
+    """Map a surface interaction name or integer to an STYPE constant."""
     if isinstance(typ, int):
         return typ
     typ_lc = typ.lower()
@@ -103,12 +120,14 @@ def _map_stype(typ):
 
 
 def _validate_n_and_typ(n, typ):
+    """Validate that refractive surfaces have a refractive-index model."""
     if typ == STYPE_REFRACT and n is None:
         raise ValueError('refractive surfaces must have a refractive index function, not None')
 
 
 def _common_surface_kwargs(R=None, bounding=None, aperture=None, tilt=None,
                            decenter=None, tilt_radians=False, grating=None):
+    """Collect common surface keyword arguments into a dictionary."""
     return dict(R=R, bounding=bounding, aperture=aperture, tilt=tilt,
                 decenter=decenter, tilt_radians=tilt_radians,
                 grating=grating)
@@ -118,116 +137,344 @@ class Shape:
     """Base class for sag-bearing shape objects."""
 
     analytic_intersect = False
+    finite_difference_step = None
 
     def __init__(self, **params):
+        """Initialize a shape with parameter storage.
+
+        Parameters
+        ----------
+        **params
+            Shape parameters exposed both through params and attribute
+            lookup.
+
+        """
         self.params = params or None
 
-    def F(self, x, y):
+    def __getattr__(self, name):
+        """Look up shape parameters as attributes."""
+        params = self.__dict__.get('params')
+        if params is not None and name in params:
+            return params[name]
+        raise AttributeError(name)
+
+    def sag(self, x, y):
+        """Evaluate surface sag at local coordinates.
+
+        Parameters
+        ----------
+        x, y : ndarray
+            Local surface coordinates.
+
+        Returns
+        -------
+        ndarray
+            Surface sag.
+
+        """
         raise NotImplementedError
 
-    def FFp(self, x, y):
-        raise NotImplementedError
+    def sag_and_normal(self, x, y):
+        """Sag and unit surface normal at x, y.
+
+        The base implementation differentiates sag with central finite
+        differences; shapes with closed-form derivatives override this.
+
+        Parameters
+        ----------
+        x, y : ndarray
+            local surface coordinates.
+
+        Returns
+        -------
+        z : ndarray
+            surface sag at x, y.
+        n_hat : ndarray
+            shape (..., 3) unit surface normals.
+
+        """
+        x = np.asarray(x)
+        y = np.asarray(y)
+        z = self.sag(x, y)
+        if self.finite_difference_step is None:
+            try:
+                eps = np.sqrt(np.finfo(x.dtype).eps)
+            except ValueError:
+                eps = np.sqrt(np.finfo(config.precision).eps)
+                x = x.astype(config.precision)
+                y = y.astype(config.precision)
+            h = eps * np.maximum(1.0, np.maximum(np.abs(x), np.abs(y)))
+        else:
+            h = np.asarray(self.finite_difference_step, dtype=x.dtype)
+        Fx = (self.sag(x + h, y) - self.sag(x - h, y)) / (2.0 * h)
+        Fy = (self.sag(x, y + h) - self.sag(x, y - h)) / (2.0 * h)
+        return z, gradient_to_unit_normal(Fx, Fy)
 
 
 class CallableShape(Shape):
-    """Shape wrapper for user-supplied F/FFp callables."""
+    """Shape wrapper for user-supplied sag and optional normal callables."""
 
-    def __init__(self, F, FFp, params=None):
-        self._F = F
-        self._FFp = FFp
+    def __init__(self, sag, sag_and_normal=None, params=None):
+        """Create a callable-backed shape.
+
+        Parameters
+        ----------
+        sag : callable
+            Function of x, y returning surface sag.
+        sag_and_normal : callable, optional
+            Function of x, y returning sag and unit surface normal.
+        params : dict, optional
+            Metadata or shape parameters to expose through params.
+
+        """
+        if sag is None:
+            raise TypeError('CallableShape requires sag')
+        self._sag = sag
+        self._sag_and_normal = sag_and_normal
         self.params = params
 
-    def F(self, x, y):
-        return self._F(x, y)
+    def sag(self, x, y):
+        """Evaluate the wrapped sag callable."""
+        return self._sag(x, y)
 
-    def FFp(self, x, y):
-        return self._FFp(x, y)
+    def sag_and_normal(self, x, y):
+        """Evaluate sag and normal from the wrapped callable or finite differences."""
+        if self._sag_and_normal is None:
+            return super().sag_and_normal(x, y)
+        return self._sag_and_normal(x, y)
 
 
 class PlaneSag(Shape):
+    """Plane sag shape for the local surface z = 0."""
+
     analytic_intersect = True
 
     def __init__(self):
+        """Initialize a plane sag shape."""
         super().__init__()
 
-    def F(self, x, y):
-        zero = np.array([0.], dtype=x.dtype)
-        return np.broadcast_to(zero, x.shape)
+    def sag(self, x, y):
+        """Evaluate zero sag for a plane."""
+        return np.zeros_like(x)
 
-    def FFp(self, x, y):
-        z = self.F(x, y)
-        return z, z, z
+    def sag_and_normal(self, x, y):
+        """Evaluate plane sag and unit normal."""
+        return plane_sag_and_normal(x, y)
 
-    def intersect(self, P, S, sag_normal, eps=None, maxiter=None,
+    def intersect(self, P, S, sag_and_normal=None, tol_sag=None, eps=None,
+                  maxiter=None,
                   return_valid=False):
+        """Intersect rays with the plane.
+
+        Parameters
+        ----------
+        P : ndarray
+            Ray origins in the surface local frame.
+        S : ndarray
+            Unit direction cosines.
+        sag_and_normal : callable, optional
+            Ignored; accepted for the common shape-intersection interface.
+        tol_sag, eps : float, optional
+            Ignored convergence tolerances.
+        maxiter : int, optional
+            Ignored iteration limit.
+        return_valid : bool, optional
+            If True, return a validity mask.
+
+        Returns
+        -------
+        Q : ndarray
+            Intersection points.
+        n : ndarray
+            Unit surface normals.
+        valid : ndarray, optional
+            Boolean validity mask, only returned when return_valid is True.
+
+        """
         return ray_plane_intersect(P, S, return_valid=return_valid)
 
 
 class SphereSag(Shape):
+    """Spherical sag shape.
+
+    Parameters
+    ----------
+    c : float
+        Vertex curvature, reciprocal radius of curvature.
+
+    """
+
     analytic_intersect = True
 
     def __init__(self, c):
+        """Initialize a spherical sag shape."""
         super().__init__(c=c)
 
-    def F(self, x, y):
+    def sag(self, x, y):
+        """Evaluate spherical sag at local coordinates."""
         return sphere_sag(self.params['c'], x * x + y * y)
 
-    def FFp(self, x, y):
-        c = self.params['c']
-        rsq = x * x + y * y
-        phi = phi_spheroid(c, 0.0, rsq)
-        z = sphere_sag(c, rsq, phi=phi)
-        return z, (c * x) / phi, (c * y) / phi
+    def sag_and_normal(self, x, y):
+        """Evaluate spherical sag and unit normal."""
+        return conic_sag_and_normal(self.params['c'], 0.0, x, y)
 
-    def intersect(self, P, S, sag_normal, eps=None, maxiter=None,
+    def intersect(self, P, S, sag_and_normal=None, tol_sag=None, eps=None,
+                  maxiter=None,
                   return_valid=False):
+        """Intersect rays with the sphere.
+
+        Parameters
+        ----------
+        P : ndarray
+            Ray origins in the surface local frame.
+        S : ndarray
+            Unit direction cosines.
+        sag_and_normal : callable, optional
+            Ignored; accepted for the common shape-intersection interface.
+        tol_sag, eps : float, optional
+            Ignored convergence tolerances.
+        maxiter : int, optional
+            Ignored iteration limit.
+        return_valid : bool, optional
+            If True, return a validity mask.
+
+        Returns
+        -------
+        Q : ndarray
+            Intersection points.
+        n : ndarray
+            Unit surface normals.
+        valid : ndarray, optional
+            Boolean validity mask, only returned when return_valid is True.
+
+        """
         return ray_sphere_intersect(P, S, self.params['c'],
                                     return_valid=return_valid)
 
 
 class ConicSag(Shape):
+    """Conic sag shape.
+
+    Parameters
+    ----------
+    c : float
+        Vertex curvature, reciprocal radius of curvature.
+    k : float
+        Conic constant.
+
+    """
+
     analytic_intersect = True
 
     def __init__(self, c, k):
+        """Initialize a conic sag shape."""
         super().__init__(c=c, k=k)
 
-    def F(self, x, y):
-        return _conic_base_xy_F(self.params['c'], self.params['k'], x, y)
+    def sag(self, x, y):
+        """Evaluate conic sag at local coordinates."""
+        return _conic_base_xy_sag(self.params['c'], self.params['k'], x, y)
 
-    def FFp(self, x, y):
-        return _conic_base_xy(self.params['c'], self.params['k'], x, y)
+    def sag_and_normal(self, x, y):
+        """Evaluate conic sag and unit normal."""
+        return conic_sag_and_normal(self.params['c'], self.params['k'], x, y)
 
-    def intersect(self, P, S, sag_normal, eps=None, maxiter=None,
+    def intersect(self, P, S, sag_and_normal=None, tol_sag=None, eps=None,
+                  maxiter=None,
                   return_valid=False):
+        """Intersect rays with the conic.
+
+        Parameters
+        ----------
+        P : ndarray
+            Ray origins in the surface local frame.
+        S : ndarray
+            Unit direction cosines.
+        sag_and_normal : callable, optional
+            Ignored; accepted for the common shape-intersection interface.
+        tol_sag, eps : float, optional
+            Ignored convergence tolerances.
+        maxiter : int, optional
+            Ignored iteration limit.
+        return_valid : bool, optional
+            If True, return a validity mask.
+
+        Returns
+        -------
+        Q : ndarray
+            Intersection points.
+        n : ndarray
+            Unit surface normals.
+        valid : ndarray, optional
+            Boolean validity mask, only returned when return_valid is True.
+
+        """
         p = self.params
         return ray_conic_intersect(P, S, p['c'], p['k'],
                                    return_valid=return_valid)
 
 
 class OffAxisConicSag(Shape):
+    """Off-axis conic sag shape.
+
+    Parameters
+    ----------
+    c : float
+        Parent conic vertex curvature.
+    k : float
+        Parent conic constant.
+    dx, dy : float, optional
+        Coordinate offsets from the off-axis surface to the parent conic.
+
+    """
+
     analytic_intersect = True
 
     def __init__(self, c, k, dx=0.0, dy=0.0):
+        """Initialize an off-axis conic sag shape."""
         super().__init__(c=c, k=k, dx=dx, dy=dy)
 
-    def F(self, x, y):
+    def sag(self, x, y):
+        """Evaluate off-axis conic sag at local coordinates."""
         p = self.params
         X = x + p['dx']
         Y = y + p['dy']
         return conic_sag(p['c'], p['k'], X * X + Y * Y)
 
-    def FFp(self, x, y):
+    def sag_and_normal(self, x, y):
+        """Evaluate off-axis conic sag and unit normal."""
         p = self.params
-        c, k = p['c'], p['k']
-        X = x + p['dx']
-        Y = y + p['dy']
-        aggregate = X * X + Y * Y
-        phi = phi_spheroid(c, k, aggregate)
-        z = (c * aggregate) / (1 + phi)
-        return z, (c * X) / phi, (c * Y) / phi
+        return conic_sag_and_normal(p['c'], p['k'], x + p['dx'], y + p['dy'])
 
-    def intersect(self, P, S, sag_normal, eps=None, maxiter=None,
+    def intersect(self, P, S, sag_and_normal=None, tol_sag=None, eps=None,
+                  maxiter=None,
                   return_valid=False):
+        """Intersect rays with the off-axis conic.
+
+        Parameters
+        ----------
+        P : ndarray
+            Ray origins in the surface local frame.
+        S : ndarray
+            Unit direction cosines.
+        sag_and_normal : callable, optional
+            Ignored; accepted for the common shape-intersection interface.
+        tol_sag, eps : float, optional
+            Ignored convergence tolerances.
+        maxiter : int, optional
+            Ignored iteration limit.
+        return_valid : bool, optional
+            If True, return a validity mask.
+
+        Returns
+        -------
+        Q : ndarray
+            Intersection points.
+        n : ndarray
+            Unit surface normals.
+        valid : ndarray, optional
+            Boolean validity mask, only returned when return_valid is True.
+
+        """
         p = self.params
         return ray_conic_intersect(P, S, p['c'], p['k'],
                                    dx=p['dx'], dy=p['dy'],
@@ -235,27 +482,63 @@ class OffAxisConicSag(Shape):
 
 
 class EvenAsphereSag(ConicSeedMixin, Shape):
+    """Even asphere sag shape with a conic base.
+
+    Parameters
+    ----------
+    c : float
+        Vertex curvature.
+    k : float
+        Conic constant.
+    coefs : sequence of float
+        Even asphere coefficients.
+
+    """
+
     def __init__(self, c, k, coefs):
+        """Initialize an even asphere sag shape."""
         coefs = tuple(coefs) if coefs is not None else ()
         super().__init__(c=c, k=k, coefs=coefs)
 
-    def F(self, x, y):
+    def sag(self, x, y):
+        """Evaluate even asphere sag at local coordinates."""
         p = self.params
         return even_asphere_sag(p['c'], p['k'], p['coefs'], x * x + y * y)
 
-    def FFp(self, x, y):
+    def sag_and_normal(self, x, y):
+        """Evaluate even asphere sag and unit normal."""
         p = self.params
         rsq = x * x + y * y
-        phi = phi_spheroid(p['c'], p['k'], rsq)
+        phi = phi_conic(p['c'], p['k'], rsq)
         z = even_asphere_sag(p['c'], p['k'], p['coefs'], rsq)
         dx, dy = even_asphere_sag_der_xy(p['c'], p['k'], p['coefs'],
                                          x, y, phi=phi)
-        return z, dx, dy
+        return z, gradient_to_unit_normal(dx, dy)
 
 
 class Q2DSag(ConicSeedMixin, Shape):
+    """Q2D asphere sag shape with a conic base.
+
+    Parameters
+    ----------
+    c : float
+        Vertex curvature.
+    k : float
+        Conic constant.
+    normalization_radius : float
+        Radius used to normalize the polynomial coordinates.
+    cm0 : sequence of float
+        Rotationally symmetric Q-polynomial coefficients.
+    ams, bms : sequence of sequence of float
+        Azimuthal Q-polynomial coefficient groups.
+    dx, dy : float, optional
+        Coordinate offsets applied during Q2D evaluation.
+
+    """
+
     def __init__(self, c, k, normalization_radius, cm0, ams, bms,
                  dx=0.0, dy=0.0):
+        """Initialize a Q2D sag shape."""
         cm0 = tuple(cm0) if cm0 is not None else (0.0,)
         ams = tuple(tuple(am) for am in ams)
         bms = tuple(tuple(bm) for bm in bms)
@@ -263,13 +546,15 @@ class Q2DSag(ConicSeedMixin, Shape):
                          normalization_radius=float(normalization_radius),
                          cm0=cm0, ams=ams, bms=bms, dx=dx, dy=dy)
 
-    def F(self, x, y):
+    def sag(self, x, y):
+        """Evaluate Q2D sag at local coordinates."""
         p = self.params
         return Q2d_sag(p['cm0'], p['ams'], p['bms'],
                        x, y, p['normalization_radius'],
                        p['c'], p['k'], dx=p['dx'], dy=p['dy'])
 
-    def FFp(self, x, y):
+    def sag_and_normal(self, x, y):
+        """Evaluate Q2D sag and unit normal."""
         p = self.params
         z, dr, dt = Q2d_and_der(p['cm0'], p['ams'], p['bms'],
                                 x, y, p['normalization_radius'],
@@ -285,11 +570,31 @@ class Q2DSag(ConicSeedMixin, Shape):
         if np.any(on_axis):
             ddx = np.where(on_axis, np.zeros_like(ddx), ddx)
             ddy = np.where(on_axis, np.zeros_like(ddy), ddy)
-        return z, ddx, ddy
+        return z, gradient_to_unit_normal(ddx, ddy)
 
 
 class ZernikeSag(ConicSeedMixin, Shape):
+    """Zernike polynomial sag shape with a conic base.
+
+    Parameters
+    ----------
+    c : float
+        Vertex curvature.
+    k : float
+        Conic constant.
+    normalization_radius : float
+        Radius used to normalize x and y before polynomial evaluation.
+    nms : sequence of tuple of int
+        Zernike (n, m) mode indices.
+    coefs : sequence of float
+        Zernike coefficients parallel to nms.
+    norm : bool, optional
+        If True, use normalized Zernike polynomials.
+
+    """
+
     def __init__(self, c, k, normalization_radius, nms, coefs, norm=True):
+        """Initialize a Zernike sag shape."""
         nms = tuple((int(nn), int(mm)) for nn, mm in nms)
         coefs = tuple(float(co) for co in coefs)
         if len(nms) != len(coefs):
@@ -300,24 +605,46 @@ class ZernikeSag(ConicSeedMixin, Shape):
                          normalization_radius=float(normalization_radius),
                          nms=nms, coefs=coefs, norm=bool(norm))
 
-    def F(self, x, y):
+    def sag(self, x, y):
+        """Evaluate Zernike sag at local coordinates."""
         p = self.params
         norm_r = p['normalization_radius']
         z_p = zernike_sum(p['coefs'], p['nms'],
                           x / norm_r, y / norm_r, norm=p['norm'])
-        return _add_conic_base_F(p['c'], p['k'], x, y, z_p)
+        return _add_conic_base_sag(p['c'], p['k'], x, y, z_p)
 
-    def FFp(self, x, y):
+    def sag_and_normal(self, x, y):
+        """Evaluate Zernike sag and unit normal."""
         p = self.params
         norm_r = p['normalization_radius']
         z_p, ddx_p, ddy_p = zernike_sum_der_xy(
             p['coefs'], p['nms'], x / norm_r, y / norm_r, norm=p['norm'])
-        return _add_conic_base_FFp(p['c'], p['k'], x, y,
-                                   z_p, ddx_p / norm_r, ddy_p / norm_r)
+        z, ddx, ddy = _add_conic_base_derivatives(
+            p['c'], p['k'], x, y, z_p, ddx_p / norm_r, ddy_p / norm_r,
+        )
+        return z, gradient_to_unit_normal(ddx, ddy)
 
 
 class XYSag(ConicSeedMixin, Shape):
+    """Power-series x-y polynomial sag shape with a conic base.
+
+    Parameters
+    ----------
+    c : float
+        Vertex curvature.
+    k : float
+        Conic constant.
+    normalization_radius : float
+        Radius used to normalize x and y before polynomial evaluation.
+    mns : sequence of tuple of int
+        Polynomial (m, n) powers.
+    coefs : sequence of float
+        Polynomial coefficients parallel to mns.
+
+    """
+
     def __init__(self, c, k, normalization_radius, mns, coefs):
+        """Initialize an x-y polynomial sag shape."""
         mns = tuple((int(mm), int(nn)) for mm, nn in mns)
         coefs = tuple(float(co) for co in coefs)
         if len(mns) != len(coefs):
@@ -328,25 +655,47 @@ class XYSag(ConicSeedMixin, Shape):
                          normalization_radius=float(normalization_radius),
                          mns=mns, coefs=coefs)
 
-    def F(self, x, y):
+    def sag(self, x, y):
+        """Evaluate x-y polynomial sag at local coordinates."""
         p = self.params
         norm_r = p['normalization_radius']
         z_p = xy_sum(p['coefs'], p['mns'], x / norm_r, y / norm_r,
                      cartesian_grid=False)
-        return _add_conic_base_F(p['c'], p['k'], x, y, z_p)
+        return _add_conic_base_sag(p['c'], p['k'], x, y, z_p)
 
-    def FFp(self, x, y):
+    def sag_and_normal(self, x, y):
+        """Evaluate x-y polynomial sag and unit normal."""
         p = self.params
         norm_r = p['normalization_radius']
         z_p, ddx_p, ddy_p = xy_sum_der_xy(
             p['coefs'], p['mns'], x / norm_r, y / norm_r,
             cartesian_grid=False)
-        return _add_conic_base_FFp(p['c'], p['k'], x, y,
-                                   z_p, ddx_p / norm_r, ddy_p / norm_r)
+        z, ddx, ddy = _add_conic_base_derivatives(
+            p['c'], p['k'], x, y, z_p, ddx_p / norm_r, ddy_p / norm_r,
+        )
+        return z, gradient_to_unit_normal(ddx, ddy)
 
 
 class ChebyshevSag(ConicSeedMixin, Shape):
+    """Chebyshev polynomial sag shape with a conic base.
+
+    Parameters
+    ----------
+    c : float
+        Vertex curvature.
+    k : float
+        Conic constant.
+    x_norm, y_norm : float
+        Normalization scales for x and y.
+    mns : sequence of tuple of int
+        Chebyshev (m, n) polynomial orders.
+    coefs : sequence of float
+        Polynomial coefficients parallel to mns.
+
+    """
+
     def __init__(self, c, k, x_norm, y_norm, mns, coefs):
+        """Initialize a Chebyshev sag shape."""
         mns = tuple((int(mm), int(nn)) for mm, nn in mns)
         coefs = tuple(float(co) for co in coefs)
         if len(mns) != len(coefs):
@@ -356,24 +705,48 @@ class ChebyshevSag(ConicSeedMixin, Shape):
         super().__init__(c=c, k=k, x_norm=float(x_norm), y_norm=float(y_norm),
                          mns=mns, coefs=coefs)
 
-    def F(self, x, y):
+    def sag(self, x, y):
+        """Evaluate Chebyshev sag at local coordinates."""
         p = self.params
         z_p = cheby1_2d_sum(p['coefs'], p['mns'],
                             x / p['x_norm'], y / p['y_norm'])
-        return _add_conic_base_F(p['c'], p['k'], x, y, z_p)
+        return _add_conic_base_sag(p['c'], p['k'], x, y, z_p)
 
-    def FFp(self, x, y):
+    def sag_and_normal(self, x, y):
+        """Evaluate Chebyshev sag and unit normal."""
         p = self.params
         xn = p['x_norm']
         yn = p['y_norm']
         z_p, ddx_p, ddy_p = cheby1_2d_sum_der_xy(
             p['coefs'], p['mns'], x / xn, y / yn, xn, yn)
-        return _add_conic_base_FFp(p['c'], p['k'], x, y,
-                                   z_p, ddx_p, ddy_p)
+        z, ddx, ddy = _add_conic_base_derivatives(
+            p['c'], p['k'], x, y, z_p, ddx_p, ddy_p,
+        )
+        return z, gradient_to_unit_normal(ddx, ddy)
 
 
 class JacobiSag(ConicSeedMixin, Shape):
+    """Radial Jacobi polynomial sag shape with a conic base.
+
+    Parameters
+    ----------
+    c : float
+        Vertex curvature.
+    k : float
+        Conic constant.
+    normalization_radius : float
+        Radius used to normalize the radial coordinate.
+    alpha, beta : float
+        Jacobi polynomial parameters.
+    ns : sequence of int
+        Jacobi polynomial orders.
+    coefs : sequence of float
+        Polynomial coefficients parallel to ns.
+
+    """
+
     def __init__(self, c, k, normalization_radius, alpha, beta, ns, coefs):
+        """Initialize a radial Jacobi sag shape."""
         ns = tuple(int(nn) for nn in ns)
         coefs = tuple(float(co) for co in coefs)
         if len(ns) != len(coefs):
@@ -385,63 +758,98 @@ class JacobiSag(ConicSeedMixin, Shape):
                          alpha=float(alpha), beta=float(beta),
                          ns=ns, coefs=coefs)
 
-    def F(self, x, y):
+    def sag(self, x, y):
+        """Evaluate radial Jacobi sag at local coordinates."""
         p = self.params
         z_p = jacobi_radial_sum(p['coefs'], p['ns'], p['alpha'], p['beta'],
                                 x, y, p['normalization_radius'])
-        return _add_conic_base_F(p['c'], p['k'], x, y, z_p)
+        return _add_conic_base_sag(p['c'], p['k'], x, y, z_p)
 
-    def FFp(self, x, y):
+    def sag_and_normal(self, x, y):
+        """Evaluate radial Jacobi sag and unit normal."""
         p = self.params
         z_p, ddx_p, ddy_p = jacobi_radial_sum_der_xy(
             p['coefs'], p['ns'], p['alpha'], p['beta'],
             x, y, p['normalization_radius'])
-        return _add_conic_base_FFp(p['c'], p['k'], x, y,
-                                   z_p, ddx_p, ddy_p)
+        z, ddx, ddy = _add_conic_base_derivatives(
+            p['c'], p['k'], x, y, z_p, ddx_p, ddy_p,
+        )
+        return z, gradient_to_unit_normal(ddx, ddy)
 
 
 class ToroidSag(ConicSeedMixin, Shape):
+    """Toroidal sag shape.
+
+    Parameters
+    ----------
+    c_x, c_y : float
+        Curvatures in the x and y directions.
+    k_y : float
+        Conic constant for the y-direction section.
+    coefs_y : sequence of float
+        Even-asphere coefficients for the y-direction section.
+
+    """
+
     def __init__(self, c_x, c_y, k_y, coefs_y):
+        """Initialize a toroidal sag shape."""
         coefs_y = tuple(coefs_y) if coefs_y is not None else ()
         super().__init__(c_x=float(c_x), c_y=float(c_y), k_y=float(k_y),
                          coefs_y=coefs_y)
 
     def seed_conic(self):
+        """Return a conic seed for Newton intersection."""
         p = self.params
         return 0.5 * (p['c_x'] + p['c_y']), 0.0, 0.0, 0.0
 
-    def F(self, x, y):
+    def sag(self, x, y):
+        """Evaluate toroidal sag at local coordinates."""
         p = self.params
         z_x = sphere_sag(p['c_x'], x * x)
         z_y = even_asphere_sag(p['c_y'], p['k_y'], p['coefs_y'], y * y)
         return z_x + z_y
 
-    def FFp(self, x, y):
+    def sag_and_normal(self, x, y):
+        """Evaluate toroidal sag and unit normal."""
         p = self.params
         xsq = x * x
         ysq = y * y
-        phi_x = phi_spheroid(p['c_x'], 0.0, xsq)
+        phi_x = phi_conic(p['c_x'], 0.0, xsq)
         z_x = sphere_sag(p['c_x'], xsq, phi=phi_x)
         ddx = (p['c_x'] * x) / phi_x
         zero = np.zeros_like(y)
         z_y = even_asphere_sag(p['c_y'], p['k_y'], p['coefs_y'], ysq)
         _, ddy = even_asphere_sag_der_xy(p['c_y'], p['k_y'],
                                          p['coefs_y'], zero, y)
-        return z_x + z_y, ddx, ddy
+        return z_x + z_y, gradient_to_unit_normal(ddx, ddy)
 
 
 class BiconicSag(ConicSeedMixin, Shape):
+    """Biconic sag shape.
+
+    Parameters
+    ----------
+    c_x, c_y : float
+        Curvatures in the x and y directions.
+    k_x, k_y : float
+        Conic constants in the x and y directions.
+
+    """
+
     def __init__(self, c_x, c_y, k_x, k_y):
+        """Initialize a biconic sag shape."""
         super().__init__(c_x=float(c_x), c_y=float(c_y),
                          k_x=float(k_x), k_y=float(k_y))
 
     def seed_conic(self):
+        """Return a conic seed for Newton intersection."""
         p = self.params
         c_seed = 0.5 * (p['c_x'] + p['c_y'])
         k_seed = 0.5 * (p['k_x'] + p['k_y'])
         return c_seed, k_seed, 0.0, 0.0
 
-    def F(self, x, y):
+    def sag(self, x, y):
+        """Evaluate biconic sag at local coordinates."""
         p = self.params
         c_x = p['c_x']
         c_y = p['c_y']
@@ -451,7 +859,8 @@ class BiconicSag(ConicSeedMixin, Shape):
                       - (1.0 + p['k_y']) * c_y * c_y * ysq)
         return (c_x * xsq + c_y * ysq) / (1 + phi)
 
-    def FFp(self, x, y):
+    def sag_and_normal(self, x, y):
+        """Evaluate biconic sag and unit normal."""
         p = self.params
         c_x = p['c_x']
         c_y = p['c_y']
@@ -470,7 +879,7 @@ class BiconicSag(ConicSeedMixin, Shape):
         den = phi * one_plus_phi * one_plus_phi
         ddx = c_x * x * (two_phi_one_plus_phi + num * one_plus_kx * c_x) / den
         ddy = c_y * y * (two_phi_one_plus_phi + num * one_plus_ky * c_y) / den
-        return z, ddx, ddy
+        return z, gradient_to_unit_normal(ddx, ddy)
 
 
 class Surface:
@@ -482,6 +891,39 @@ class Surface:
                  aperture=None, grating=None, *, typ=None, P=None, n=None,
                  R=None, bounding=None, tilt=None, decenter=None,
                  tilt_radians=False):
+        """Initialize a posed optical surface.
+
+        Parameters
+        ----------
+        shape : Shape
+            Sag-bearing shape object.
+        interaction : str or int, optional
+            Surface interaction, one of reflect, refract, eval, or an STYPE
+            constant.  If omitted, typ is used.
+        pose : tuple or object, optional
+            Surface pose as (P, R) or an object with P and R attributes.
+        material : callable or float, optional
+            Refractive-index model or value.  If omitted, n is used.
+        aperture : callable, optional
+            Aperture predicate evaluated in local surface coordinates.
+        grating : tuple, optional
+            Diffraction grating data as (period, grating_vector, order).
+        typ : str or int, optional
+            Legacy alias for interaction.
+        P : array_like, optional
+            Surface vertex position.
+        n : callable or float, optional
+            Legacy alias for material.
+        R : array_like, optional
+            Surface rotation matrix.
+        bounding : object, optional
+            Bounding data carried by the surface.
+        tilt, decenter : array_like, optional
+            Pose adjustments applied after P and R are resolved.
+        tilt_radians : bool, optional
+            If True, tilt values are interpreted as radians.
+
+        """
         if shape is None:
             raise TypeError('Surface requires a shape')
         if interaction is None:
@@ -514,18 +956,34 @@ class Surface:
         self.bounding = bounding
         self.aperture = aperture
         self.grating = grating
-        self.F = shape.F
-        self.FFp = shape.FFp
+        self.sag = shape.sag
+        self.sag_and_normal = shape.sag_and_normal
         self._analytic_intersect = bool(getattr(shape, 'analytic_intersect', False))
 
-    def sag_normal(self, x, y):
-        z, Fx, Fy = self.FFp(x, y)
-        Fz = np.array([1.], dtype=config.precision)
-        Fz = np.broadcast_to(Fz, Fx.shape)
-        der = np.stack([-Fx, -Fy, Fz], axis=1)
-        return z, der
-
     def diffract(self, S_specular, r, n_post, wvl):
+        """Apply diffraction from the surface grating.
+
+        Parameters
+        ----------
+        S_specular : ndarray
+            Specular outgoing direction cosines.
+        r : ndarray
+            Local surface point or normal-defining vector used to determine
+            the grating plane normal.
+        n_post : float or ndarray
+            Refractive index after the surface.
+        wvl : float
+            Wavelength in the same units as the grating period.
+
+        Returns
+        -------
+        S_out : ndarray
+            Diffracted direction cosines, or S_specular where diffraction is
+            invalid or no grating is present.
+        valid : ndarray
+            Boolean mask indicating valid diffracted rays.
+
+        """
         if self.grating is None:
             return S_specular, np.ones(S_specular.shape[:-1], dtype=bool)
         period, g_vec, order = self.grating
@@ -545,14 +1003,44 @@ class Surface:
         S_diff = np.where(valid[..., np.newaxis], S_diff, S_specular)
         return S_diff, valid
 
-    def intersect(self, P, S, eps=None, maxiter=None, return_valid=False):
+    def intersect(self, P, S, tol_sag=None, eps=None, maxiter=None,
+                  return_valid=False):
+        """Intersect rays with the surface shape.
+
+        Parameters
+        ----------
+        P : ndarray
+            Ray origins in the surface local frame.
+        S : ndarray
+            Unit direction cosines in the surface local frame.
+        tol_sag : float, optional
+            Absolute convergence tolerance on the surface residual.
+        eps : float, optional
+            Deprecated alias for tol_sag.
+        maxiter : int, optional
+            Maximum Newton iterations for non-analytic shapes.
+        return_valid : bool, optional
+            If True, return a validity mask.
+
+        Returns
+        -------
+        Q : ndarray
+            Intersection points.
+        n : ndarray
+            Unit surface normals.
+        valid : ndarray, optional
+            Boolean validity mask, only returned when return_valid is True.
+
+        """
+        tol_sag = resolve_tol_sag(tol_sag, eps)
         if hasattr(self.shape, 'intersect'):
-            return self.shape.intersect(P, S, self.sag_normal, eps=eps,
+            return self.shape.intersect(P, S, self.sag_and_normal,
+                                        tol_sag=tol_sag,
                                         maxiter=maxiter,
                                         return_valid=return_valid)
         if maxiter is None:
             maxiter = SURFACE_INTERSECTION_DEFAULT_MAXITER
-        return newton_intersect(P, S, self.sag_normal, eps=eps,
+        return newton_intersect(P, S, self.sag_and_normal, tol_sag=tol_sag,
                                 maxiter=maxiter,
                                 return_valid=return_valid)
 
@@ -578,8 +1066,8 @@ __all__ = [
     'Surface',
     'circular_aperture',
     'product_rule',
-    'phi_spheroid',
-    'der_direction_cosine_spheroid',
+    'phi_conic',
+    'der_direction_cosine_conic',
     'sphere_sag',
     'sphere_sag_der',
     'conic_sag',
@@ -587,11 +1075,6 @@ __all__ = [
     'conic_sag_der_xy',
     'even_asphere_sag',
     'even_asphere_sag_der_xy',
-    'off_axis_conic_sag',
-    'off_axis_conic_der',
-    'off_axis_conic_sigma',
-    'off_axis_conic_sigma_der',
-    'off_axis_conic_sag_der_xy',
     'Q2d_and_der',
     'Q2d_sag',
     'ray_plane_intersect',

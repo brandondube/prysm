@@ -47,7 +47,7 @@ def _md5(arr):
 
 
 def test_bare_newton_snapshot():
-    """Cold-start Newton from s1=0 on an EvenAsphere FFp.  Exercises the
+    """Cold-start Newton from s1=0 on an EvenAsphere sag_and_normal.  Exercises the
     'all rays start active' code path through `newton_raphson_solve_s`.
     """
     P, S = _ray_batch()
@@ -56,12 +56,12 @@ def test_bare_newton_snapshot():
     m = S[..., 2]
     P1 = P + (-Z0 / m)[:, None] * S
 
-    Pj, r, valid = newton_raphson_solve_s(P1, S, surf.sag_normal,
+    Pj, r, valid = newton_raphson_solve_s(P1, S, surf.sag_and_normal,
                                           s1=0.0, return_valid=True)
 
     assert int(valid.sum()) == 289
     assert _md5(Pj) == '18ce403132974180314561a5395e221e'
-    assert _md5(r) == 'c31c2ef4e5ec3a2dc181418ba6a2e2ce'
+    assert _md5(r) == '8f4840cf4e8bc2d97e27449fa275481d'
 
 
 def test_conic_seeded_newton_snapshot():
@@ -72,8 +72,8 @@ def test_conic_seeded_newton_snapshot():
     Pj, r, valid = surf.intersect(P, S, return_valid=True)
 
     assert int(valid.sum()) == 289
-    assert _md5(Pj) == 'd4faa6259ab9629dba7c2f6a8080e418'
-    assert _md5(r) == '56e79c39e16cdb097261137f8f449fe6'
+    assert _md5(Pj) == '8b11cd56568a37d7b21ab7e7d65f8bc5'
+    assert _md5(r) == '5563da1aa29829c8e3ec99c723be43d8'
 
 
 def test_partial_nonconvergence_snapshot():
@@ -87,7 +87,7 @@ def test_partial_nonconvergence_snapshot():
     m = S[..., 2]
     P1 = P + (-Z0 / m)[:, None] * S
 
-    Pj, r, valid = newton_raphson_solve_s(P1, S, surf.sag_normal,
+    Pj, r, valid = newton_raphson_solve_s(P1, S, surf.sag_and_normal,
                                           s1=0.0, maxiter=2,
                                           return_valid=True)
 
@@ -107,7 +107,7 @@ def test_oblique_mixed_convergence_snapshot():
     S = np.array([[0.0, 0.0, 1.0], [0.9, 0.0, np.sqrt(1 - 0.81)]], dtype=np.float64)
     P1 = P + (-P[:, 2] / S[:, 2])[:, None] * S
 
-    Pj, r, valid = newton_raphson_solve_s(P1, S, surf.sag_normal,
+    Pj, r, valid = newton_raphson_solve_s(P1, S, surf.sag_and_normal,
                                           s1=0.0, maxiter=5,
                                           return_valid=True)
     assert valid.tolist() == [True, False]
@@ -125,7 +125,7 @@ def test_all_converge_first_iter_snapshot():
     S = np.array([[0.0, 0.0, 1.0]], dtype=np.float64)
     P1 = P + (-P[:, 2] / S[:, 2])[:, None] * S
 
-    Pj, r, valid = newton_raphson_solve_s(P1, S, surf.sag_normal,
+    Pj, r, valid = newton_raphson_solve_s(P1, S, surf.sag_and_normal,
                                           s1=0.0, maxiter=10,
                                           return_valid=True)
     assert valid.tolist() == [True]

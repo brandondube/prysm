@@ -7,7 +7,7 @@ design loop:
   factories below (``curvature_of``, ``radius_of``, ``kappa_of``,
   ``coef_of``, ``position_of``, ``thickness_after``) cover the common
   cases by name; arbitrary scalars can always be wrapped manually.
-  Variables mutate the prescription in place — the FFp closures on
+  Variables mutate the prescription in place — the sag_and_normal closures on
   each surface read ``params`` per call so perturbations are picked up
   on the next trace without rebuilding.
 - **Operands** are vanilla classes with

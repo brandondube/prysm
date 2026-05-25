@@ -1,13 +1,13 @@
 """Spencer & Murty's General Ray-Trace algorithm."""
 
 # don't uncomment this line, this is a very obscure import
-# not using it at the moment for GPU compatability
+# not using it at the moment for GPU compatibility
 # from numpy.core.umath_tests import inner1d
 
 from prysm.mathops import np, row_dot
-from ._line_math import normalize_vector
 
 SURFACE_INTERSECTION_DEFAULT_MAXITER = 100
+DEFAULT_TOL_SAG = 1e-12
 
 # Surface-type constants live here (rather than in surfaces.py) so that
 # spencer_and_murty.raytrace() and paraxial.system_matrix() can import them
@@ -42,8 +42,7 @@ STATUS_TIR = -2     # geometric: total internal reflection
 class RayTraceResult:
     """Structured return type for raytrace.
 
-    Provides attribute access (result.P, .S, .OPL, .status)
-    plus iteration support so P, S, OPL = raytrace(...) keeps working.
+    Provides attribute access (result.P, .S, .OPL, .status).
 
     """
 
@@ -55,16 +54,6 @@ class RayTraceResult:
         self.OPL = OPL
         self.status = status
         self.status_record = RayStatus.from_encoded(status)
-
-    def __iter__(self):
-        # legacy 3-tuple unpacking: yield P, S, OPL (status is opt-in via
-        # attribute access).
-        yield self.P
-        yield self.S
-        yield self.OPL
-
-    def __len__(self):
-        return 3
 
     def __repr__(self):
         return (
@@ -113,13 +102,13 @@ def _apply_aperture_status(surf, Pj, active, status, surf_idx):
     return _record_failure(status, active, ~inside, surf_idx, STATUS_CLIP)
 
 
-def _bend_rays(surf, Sj, r, wvl, nj, active, status, surf_idx):
+def _bend_rays(surf, Sj, n_hat, wvl, nj, active, status, surf_idx):
     if surf.typ == STYPE_REFLECT:
-        return reflect(Sj, r), nj, active
+        return reflect(Sj, n_hat), nj, active
     if surf.typ == STYPE_REFRACT:
         nprime = surf.n(wvl)
         pre_refract = active.copy()
-        Sjp1 = refract(nj, nprime, Sj, r)
+        Sjp1 = refract(nj, nprime, Sj, n_hat)
         tir = pre_refract & np.isnan(Sjp1).any(axis=-1)
         active = _record_failure(status, active, tir, surf_idx, STATUS_TIR)
         return Sjp1, nprime, active
@@ -147,23 +136,34 @@ def _mark_inactive_history(Pjp1, Sjp1, OPL_segment, active):
     return Pjp1, Sjp1
 
 
-def _sanitize_eps(eps, dtype):
-    if eps is None:
-        try:
-            # 100x eps being hard-coded is a little not great, but user can
-            # defeat with their own eps.  An editable module variable requires
-            # globals() to be retrieved, which is icky.  Don't want to thread
-            # a control for "fctr" all the way to the top for this.
-            # note: some rays dead stall in fp64 at 7.105427357601002e-15
-            # 100*eps ~= 2e-14
-            return np.finfo(dtype).eps * 100
-        except:  # NOQA - cannot predict error type in numpy-like libs
-            return 1e-14
+def resolve_tol_sag(tol_sag=DEFAULT_TOL_SAG, eps=None):
+    """Resolve the surface-residual convergence tolerance.
 
-    return eps
+    A non-None eps (the legacy step-tolerance keyword) takes precedence over
+    tol_sag; a None tol_sag falls back to DEFAULT_TOL_SAG.
+
+    Parameters
+    ----------
+    tol_sag : float or None
+        absolute convergence tolerance on the surface residual Z - sag.
+    eps : float or None, optional
+        deprecated alias for tol_sag; used when not None.
+
+    Returns
+    -------
+    float
+        the resolved tolerance.
+
+    """
+    if eps is not None:
+        return eps
+    if tol_sag is None:
+        return DEFAULT_TOL_SAG
+    return tol_sag
 
 
-def newton_raphson_solve_s(P1, S, FFp, s1=0.0,
+def newton_raphson_solve_s(P1, S, sag_and_normal, s1=0.0,
+                           tol_sag=DEFAULT_TOL_SAG,
                            eps=None,
                            maxiter=SURFACE_INTERSECTION_DEFAULT_MAXITER,
                            return_valid=False):
@@ -178,39 +178,39 @@ def newton_raphson_solve_s(P1, S, FFp, s1=0.0,
     S : ndarray
         shape (3,) or (N,3), any float dtype
         (k,l,m) incident direction cosines
-    FFp : callable of signature F(x,y) -> z, [Nx, Ny, Nz]
-        a function which returns the surface sag at point x, y as well as
-        the X, Y, Z partial derivatives at that point
+    sag_and_normal : callable
+        Function returning surface sag and unit normal at x, y.
     s1 : float
         initial guess for the length along the ray from (X1, Y1, 0) to reach the surface
-    eps : float
-        tolerance for convergence of Newton's method
+    tol_sag : float
+        Absolute convergence tolerance on the surface residual Z - sag.
     maxiter : int
         maximum number of iterations to allow
     return_valid : bool, optional
         if True, also return a length-N boolean mask indicating which rays
-        converged within `maxiter`.  Non-converged rays still appear in
-        Pj/r as NaN, but the mask makes the failure explicit.
+        converged within maxiter.  Non-converged rays still appear in
+        Pj/n_hat as NaN, but the mask makes the failure explicit.
 
     Returns
     -------
-    Pj, r : ndarray, ndarray
-        final position of the ray intersection, and the surface normal at that point.
-        if return_valid is True, also returns a length-N boolean array.
+    Pj, n_hat : ndarray, ndarray
+        final position of the ray intersection, and the unit surface normal
+        at that point.  if return_valid is True, also returns a length-N
+        boolean array.
 
     """
+    tol_sag = resolve_tol_sag(tol_sag, eps)
     dtype = P1.dtype
-    eps = _sanitize_eps(eps, dtype)
     nrays = P1.shape[0]
     # Single-alloc init: s1 may be a scalar (broadcasts to all rays) OR a
     # (nrays,) array of per-ray seeds (from the conic-seeded Newton path).
     # numpy assignment handles both in one writeable buffer at the right dtype.
     sj_work = np.empty(nrays, dtype=dtype)
     sj_work[...] = s1
-    # the Pj and r to be returned; we keep these three data structures around
+    # the Pj and n_hat to be returned; we keep these data structures around
     # so they can be adjusted within the loop
     Pj_out = np.empty_like(P1)
-    r_out = np.empty((nrays, 3), dtype=dtype)
+    n_out = np.empty((nrays, 3), dtype=dtype)
     # mask maps working-buffer-index -> original-ray-index, so converged rays
     # scatter back to the right Pj_out/r_out slot.  sj_work / S_work / P1_work
     # shrink in lock-step with mask each iteration, so subsequent iterations
@@ -219,51 +219,47 @@ def newton_raphson_solve_s(P1, S, FFp, s1=0.0,
     mask = np.arange(nrays)
     S_work = S
     P1_work = P1
-    for j in range(maxiter):
-        sj_bcast = sj_work[:, np.newaxis]
-        Pj = P1_work + sj_bcast * S_work
+    for _ in range(maxiter):
+        Pj = P1_work + sj_work[:, np.newaxis] * S_work
         Xj = Pj[..., 0]
         Yj = Pj[..., 1]
         Zj = Pj[..., 2]
-        sagj, r = FFp(Xj, Yj)
+        sagj, n_hat = sag_and_normal(Xj, Yj)
         Fj = Zj - sagj
-        Fpj = row_dot(S_work, r)
-        sjp1 = sj_work - Fj / Fpj
 
-        delta = abs(sjp1 - sj_work)
-
-        # this block of code stops computation on rays which have converged,
-        # while allowing those which have not yet converged to progress,
-        # over "time," the iterations of Newton-Raphson will speed up, in terms
-        # of wall clock time.
-        rays_which_converged = (delta < eps)
-        insert_mask = mask[rays_which_converged]
-        if insert_mask.size != 0:
-            Pj_out[insert_mask] = Pj[rays_which_converged]
-            r_out[insert_mask] = r[rays_which_converged]
-            diverged = ~rays_which_converged
-            mask = mask[diverged]
+        converged = np.abs(Fj) < tol_sag
+        if converged.any():
+            insert_idx = mask[converged]
+            Pj_out[insert_idx] = Pj[converged]
+            n_out[insert_idx] = n_hat[converged]
+            survive = ~converged
+            mask = mask[survive]
             if mask.size == 0:
-                break  # all rays converged
-            sj_work = sjp1[diverged]
-            S_work = S_work[diverged]
-            P1_work = P1_work[diverged]
-        else:
-            sj_work = sjp1
+                break
+            sj_work = sj_work[survive]
+            S_work = S_work[survive]
+            P1_work = P1_work[survive]
+            n_hat = n_hat[survive]
+            Fj = Fj[survive]
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            Fpj = row_dot(S_work, n_hat) / n_hat[..., 2]
+        sj_work = sj_work - Fj / Fpj
 
     # NaN out rays which failed to converge (within maxiter)
     if mask.size > 0:
         Pj_out[mask] = np.nan
-        r_out[mask] = np.nan
+        n_out[mask] = np.nan
     if return_valid:
         valid = np.ones(nrays, dtype=bool)
         if mask.size > 0:
             valid[mask] = False
-        return Pj_out, r_out, valid
-    return Pj_out, r_out
+        return Pj_out, n_out, valid
+    return Pj_out, n_out
 
 
-def intersect(P0, S, FFp, s1=0,
+def intersect(P0, S, sag_and_normal, s1=0,
+              tol_sag=DEFAULT_TOL_SAG,
               eps=None,
               maxiter=SURFACE_INTERSECTION_DEFAULT_MAXITER,
               return_valid=False):
@@ -278,40 +274,44 @@ def intersect(P0, S, FFp, s1=0,
     S : ndarray
         shape (3,) or (N,3), any float dtype
         (k,l,m) incident direction cosines
-    FFp : callable of signature F(x,y) -> z, [Nx, Ny, Nz]
-        a function which returns the surface sag at point x, y as well as
-        the X, Y, Z partial derivatives at that point
+    sag_and_normal : callable
+        Function returning surface sag and unit normal at x, y.
     s1 : float
         initial guess for the length along the ray from (X1, Y1, 0) to reach the surface
-    eps : float
-        tolerance for convergence of Newton's method
+    tol_sag : float
+        absolute convergence tolerance on the surface residual Z - sag.
+    eps : float, optional
+        deprecated alias for tol_sag; used when not None.
     maxiter : int
         maximum number of iterations to allow
     return_valid : bool, optional
         if True, also return a length-N boolean mask flagging rays that
-        converged within `maxiter`.
+        converged within maxiter.
 
     Returns
     -------
-    Pj, r : ndarray, ndarray
-        final position of the ray intersection, and the surface normal at that point.
-        if return_valid is True, also returns a length-N boolean array.
+    Pj, n_hat : ndarray, ndarray
+        final position of the ray intersection, and the unit surface normal
+        at that point.  if return_valid is True, also returns a length-N
+        boolean array.
 
     """
-    eps = _sanitize_eps(eps, P0.dtype)
+    tol_sag = resolve_tol_sag(tol_sag, eps)
     # batch support -- ellipsis skip any early dimensions, then replace
     # dot with a multiply
     P0, S = np.atleast_2d(P0, S)
     # go to z=0
     Z0 = P0[..., 2]
     m = S[..., 2]
-    s0 = -Z0/m
+    with np.errstate(divide='ignore', invalid='ignore'):
+        s0 = -Z0/m
     # Eq. 7, in vector form (extra computation on Z is cheaper than breaking apart P and S)
     # the newaxis on s0 turns (N,) -> (N,1) so that multiply's broadcast rules work
     P1 = P0 + s0[:, np.newaxis] * S
     # P1 is (N,3)
     # then use newton's method to find and go to the intersection
-    return newton_raphson_solve_s(P1, S, FFp, s1, eps, maxiter,
+    return newton_raphson_solve_s(P1, S, sag_and_normal, s1,
+                                  tol_sag=tol_sag, maxiter=maxiter,
                                   return_valid=return_valid)
 
 
@@ -377,14 +377,14 @@ def transform_to_local_coords(XYZ, P, S, R=None):
         XYZ2, S = np.atleast_2d(XYZ2, S)
         # in regular matmul, 3x3 @ (3,) has a 1 appended to the dimension
         # of the second array to make it into a column vector
-        # for batch compatability, we do that manually
+        # for batch compatibility, we do that manually
         XYZ2 = np.matmul(R, XYZ2[..., np.newaxis]).squeeze(-1)
         S = np.matmul(R, S[..., np.newaxis]).squeeze(-1)
 
     return XYZ2, S
 
 
-def refract(n, nprime, S, r):
+def refract(n, nprime, S, n_hat):
     """Solve Snell's law for the exitant direction cosines.
 
     Parameters
@@ -396,9 +396,9 @@ def refract(n, nprime, S, r):
     S : ndarray
         shape (3,) or (N,3), any float dtype
         (k,l,m) incident direction cosines
-    r : ndarray
+    n_hat : ndarray
         shape (3,) or (N,3), any float dtype
-        surface normals (Fx, Fy, 1)
+        unit surface normals.
 
     Returns
     -------
@@ -406,26 +406,17 @@ def refract(n, nprime, S, r):
         Sprime, a length 3 vector containing the exitant direction cosines
 
     """
-    S, r = np.atleast_2d(S, r)
-    r = normalize_vector(r, axis=-1)
+    S, n_hat = np.atleast_2d(S, n_hat)
     mu = n/nprime
-    musq = mu * mu
-    cosI = row_dot(r, S)
-    cosIsq = cosI * cosI
-    # the inline newaxis-es are terrible for readability, but serve a performance purpose
-    # broadcast the square root to 2D, so that fewer very expensive sqrt ops are done
-    # then, in the second term, broadcast cosI for compatability with S and r
-    # since it is needed there
-    # TIR rays produce a negative sqrt argument; the resulting NaN is the
-    # expected signal (raytrace inspects it to flag STATUS_TIR), so silence
-    # the FP warning at the source.
+    cosI = row_dot(n_hat, S)
+    sinT_sq = mu * mu * (1.0 - cosI * cosI)
     with np.errstate(invalid='ignore'):
-        first_term = np.sqrt(1 - musq * (1 - cosIsq))[:, np.newaxis] * r
-    second_term = mu * (S - cosI[:, np.newaxis] * r)
-    return first_term + second_term
+        cosT = np.sqrt(1.0 - sinT_sq)
+    factor = np.sign(cosI) * cosT - mu * cosI
+    return mu * S + factor[:, np.newaxis] * n_hat
 
 
-def reflect(S, r):
+def reflect(S, n_hat):
     """Reflect a ray off of a surface.
 
     Parameters
@@ -433,9 +424,9 @@ def reflect(S, r):
     S : ndarray
         shape (3,) or (N,3), any float dtype
         (k,l,m) incident direction cosines
-    r : ndarray
+    n_hat : ndarray
         shape (3,) or (N,3), any float dtype
-        surface normals (Fx, Fy, 1)
+        unit surface normals.
 
     Returns
     -------
@@ -446,20 +437,12 @@ def reflect(S, r):
     # at least 2D turns (3,) -> (1,3) where 1 = batch reflect count
     # this allows us to use the same code for vector operations on many
     # S, r or on one S, r
-    S, r = np.atleast_2d(S, r)
-    rnorm = row_dot(r, r)
-
-    # paragraph above Eq. 45, mu=1
-    # and see that definition of a including
-    # mu=1 does not require multiply by mu (1)
-    cosI = row_dot(S, r) / rnorm
-
-    # newaxis for batch support, (N) -> (N,1) shape
-    cosI = cosI[:, np.newaxis]
-    return S - 2 * cosI * r
+    S, n_hat = np.atleast_2d(S, n_hat)
+    cosI = row_dot(S, n_hat)
+    return S - 2.0 * cosI[:, np.newaxis] * n_hat
 
 
-def raytrace(surfaces, P, S, wvl, n_ambient=1):
+def raytrace(surfaces, P, S, wvl, n_ambient=1, tol_sag=DEFAULT_TOL_SAG):
     """Perform a raytrace through a sequence of surfaces.
 
     Notes
@@ -488,8 +471,7 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
     surfaces : iterable
         the surfaces to trace through;
         a surface is defined by the interface:
-        surf.F(x,y) -> z sag
-        surf.Fp(x,y) -> (Fx, Fy, 1) derivatives (with S&M convention for 1 in z)
+        surf.sag_and_normal(x,y) -> z sag, unit normal
         surf.typ in {STYPE}
         surf.P, surface global coordinates, [X,Y,Z]
         surf.R, surface rotation matrix (may be None)
@@ -512,8 +494,7 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
         S (direction-cosine history, (jj+1, ..., 3)), OPL
         (per-segment optical path length history, (jj+1, ...)), and
         status (per-ray complex status, see module-level STATUS_*
-        constants).  Iterating the result yields the legacy 3-tuple
-        (P, S, OPL) so P, S, OPL = raytrace(...) keeps working.
+        constants).
 
         OPL_hist[0] is zero by convention.  OPL_hist[j+1] is the OPL of the
         segment from P_hist[j] to P_hist[j+1] (i.e., the path through the
@@ -565,7 +546,8 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1):
     for j, surf in enumerate(surfaces):
         surf_idx = j + 1  # 1-based index recorded in status.real
         P0, Sj = transform_to_local_coords(Pj, surf.P, Sj, surf.R)
-        Pj, r, valid = surf.intersect(P0, Sj, return_valid=True)
+        Pj, r, valid = surf.intersect(P0, Sj, tol_sag=tol_sag,
+                                      return_valid=True)
 
         active = (status.imag == 0)
         if not valid.all():

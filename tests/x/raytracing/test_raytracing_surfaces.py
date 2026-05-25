@@ -9,21 +9,19 @@ from tests.x.raytracing.surface_helpers import (
 
 from prysm.x.raytracing.surfaces import (
     CallableShape,
+    Shape,
     Surface,
     Q2DSag,
     conic_sag,
+    conic_sag_and_normal,
     conic_sag_der_xy,
     even_asphere_sag,
     even_asphere_sag_der_xy,
-    off_axis_conic_sag,
-    off_axis_conic_sag_der_xy,
-    off_axis_conic_der,
-    off_axis_conic_sigma,
-    off_axis_conic_sigma_der,
     ray_plane_intersect,
     ray_sphere_intersect,
     ray_conic_intersect,
 )
+from prysm.x.raytracing.sags import _q2d_sigma_inv_der, gradient_to_unit_normal
 from prysm.x.raytracing.spencer_and_murty import (
     intersect as newton_intersect,
     raytrace,
@@ -39,38 +37,36 @@ def _polar_grid(rmax=5.0, n=21):
     return R, T
 
 
-@pytest.mark.parametrize('dx,dy', [(0.0, 0.0), (3.0, 0.0), (0.0, 4.0), (3.0, 4.0), (-2.0, 5.0)])
-@pytest.mark.parametrize('kappa', [0.0, -1.0, -0.5, 0.7])
-def test_off_axis_conic_der_matches_numerical(dx, dy, kappa):
-    c = 1 / 80.0
-    r, t = _polar_grid()
-    h = 1e-5
+def _sag_and_normal_from_derivatives(sag_derivatives):
+    def sag_and_normal(x, y):
+        z, Fx, Fy = sag_derivatives(x, y)
+        return z, gradient_to_unit_normal(Fx, Fy)
+    return sag_and_normal
 
-    dr_an, dt_an = off_axis_conic_der(c, kappa, r, t, dx, dy)
-    z_rp = off_axis_conic_sag(c, kappa, r + h, t, dx, dy)
-    z_rm = off_axis_conic_sag(c, kappa, r - h, t, dx, dy)
-    dr_num = (z_rp - z_rm) / (2 * h)
 
-    z_tp = off_axis_conic_sag(c, kappa, r, t + h, dx, dy)
-    z_tm = off_axis_conic_sag(c, kappa, r, t - h, dx, dy)
-    dt_num = (z_tp - z_tm) / (2 * h)
-
-    np.testing.assert_allclose(dr_an, dr_num, rtol=1e-5, atol=1e-7)
-    np.testing.assert_allclose(dt_an, dt_num, rtol=1e-5, atol=1e-7)
+def _sag_derivs(shape, x, y):
+    """Recover (z, dz/dx, dz/dy) from a shape's sag_and_normal unit normal."""
+    z, n_hat = shape.sag_and_normal(x, y)
+    nz = n_hat[..., 2]
+    return z, -n_hat[..., 0] / nz, -n_hat[..., 1] / nz
 
 
 @pytest.mark.parametrize('dx,dy', [(3.0, 4.0), (-2.0, 5.0)])
-def test_off_axis_conic_sigma_der_matches_numerical(dx, dy):
+def test_q2d_sigma_inv_der_matches_numerical(dx, dy):
     c = 1 / 80.0
     kappa = -1.0
     r, t = _polar_grid()
+    x = r * np.cos(t)
+    y = r * np.sin(t)
     h = 1e-5
 
-    # the *_sigma_der function returns derivatives of 1/sigma
     def inv_sigma(rr, tt):
-        return 1.0 / off_axis_conic_sigma(c, kappa, rr, tt, dx, dy)
+        xx = rr * np.cos(tt)
+        yy = rr * np.sin(tt)
+        _, n_hat = conic_sag_and_normal(c, kappa, xx + dx, yy + dy)
+        return 1.0 / n_hat[..., 2]
 
-    dr_an, dt_an = off_axis_conic_sigma_der(c, kappa, r, t, dx, dy)
+    dr_an, dt_an = _q2d_sigma_inv_der(c, kappa, x, y, r, t, dx, dy)
     dr_num = (inv_sigma(r + h, t) - inv_sigma(r - h, t)) / (2 * h)
     dt_num = (inv_sigma(r, t + h) - inv_sigma(r, t - h)) / (2 * h)
 
@@ -102,20 +98,18 @@ def test_conic_sag_der_xy_matches_numerical(kappa):
 
 @pytest.mark.parametrize('dx,dy', [(0.0, 0.0), (3.0, 0.0), (0.0, 4.0), (3.0, 4.0), (-2.0, 5.0)])
 @pytest.mark.parametrize('kappa', [0.0, -1.0, -0.5, 0.7])
-def test_off_axis_conic_sag_der_xy_matches_numerical(dx, dy, kappa):
+def test_shifted_conic_sag_der_xy_matches_numerical(dx, dy, kappa):
     c = 1 / 80.0
     x, y = _xy_grid()
     h = 1e-5
 
     def sag(xx, yy):
-        # build sag in xy directly, matching the closed form used by FFp
-        X = xx + dx
-        Y = yy + dy
-        A = X * X + Y * Y
-        phi = np.sqrt(1 - (1 + kappa) * c * c * A)
-        return (c * A) / (1 + phi)
+        z, _ = conic_sag_and_normal(c, kappa, xx + dx, yy + dy)
+        return z
 
-    ddx_an, ddy_an = off_axis_conic_sag_der_xy(c, kappa, x, y, dx=dx, dy=dy)
+    _, n_hat = conic_sag_and_normal(c, kappa, x + dx, y + dy)
+    ddx_an = -n_hat[..., 0] / n_hat[..., 2]
+    ddy_an = -n_hat[..., 1] / n_hat[..., 2]
     ddx_num = (sag(x + h, y) - sag(x - h, y)) / (2 * h)
     ddy_num = (sag(x, y + h) - sag(x, y - h)) / (2 * h)
     np.testing.assert_allclose(ddx_an, ddx_num, rtol=1e-5, atol=1e-7)
@@ -128,14 +122,16 @@ def test_xy_derivatives_finite_at_origin(dx, dy):
     c = 1 / 80.0
     kappa = -1.0
     zero = np.array(0.0)
-    ddx, ddy = off_axis_conic_sag_der_xy(c, kappa, zero, zero, dx=dx, dy=dy)
+    _, n_hat = conic_sag_and_normal(c, kappa, zero + dx, zero + dy)
+    ddx = -n_hat[..., 0] / n_hat[..., 2]
+    ddy = -n_hat[..., 1] / n_hat[..., 2]
     assert np.isfinite(ddx) and np.isfinite(ddy)
     if dx == 0.0 and dy == 0.0:
         assert ddx == 0.0 and ddy == 0.0
 
 
-def test_surface_conic_FFp_finite_at_origin():
-    """Conic-like FFp paths must not produce NaN/Inf at origin."""
+def test_surface_conic_derivatives_finite_at_origin():
+    """Conic-like sag_derivatives paths must not produce NaN/Inf at origin."""
     P = np.array([0.0, 0.0, 0.0])
     s_conic = conic(c=1 / 80.0, k=-1.0, typ='refl', P=P)
     s_oac = off_axis_conic(c=1 / 80.0, k=-1.0, typ='refl', P=P, dx=3.0, dy=4.0)
@@ -144,20 +140,10 @@ def test_surface_conic_FFp_finite_at_origin():
     x = np.array([0.0, 1.0, -2.0])
     y = np.array([0.0, -1.0, 3.0])
     for s in (s_conic, s_oac, s_sphere):
-        z, ddx, ddy = s.FFp(x, y)
+        z, ddx, ddy = _sag_derivs(s.shape, x, y)
         assert np.all(np.isfinite(z))
         assert np.all(np.isfinite(ddx))
         assert np.all(np.isfinite(ddy))
-
-
-def test_off_axis_conic_sag_axis_swap_symmetry():
-    """An x-shift at angle t should equal a y-shift at angle pi/2 - t (axis swap)."""
-    c = 1 / 80.0
-    kappa = -1.0
-    r, t = _polar_grid()
-    z_dx = off_axis_conic_sag(c, kappa, r, t, dx=3.0, dy=0.0)
-    z_dy_swapped = off_axis_conic_sag(c, kappa, r, np.pi / 2 - t, dx=0.0, dy=3.0)
-    np.testing.assert_allclose(z_dx, z_dy_swapped, rtol=1e-12, atol=1e-12)
 
 
 # ---------- Q2d_and_der prelude (Phase 3.0b) ----------
@@ -236,11 +222,11 @@ def test_Q2d_and_der_treats_1d_inputs_per_point():
     assert dt.shape == (10,)
 
 
-def test_Q2d_and_der_zero_coefficients_matches_off_axis_conic_sag():
+def test_Q2d_and_der_zero_coefficients_matches_conic_sag_and_normal():
     """When all Q coefficients are zero, Q2d_and_der's sag must equal the bare
     conic sag.  See note above re: 2D-shape inputs to bypass cart_to_polar's
     vec_to_grid auto-meshgrid."""
-    from prysm.coordinates import polar_to_cart, cart_to_polar
+    from prysm.coordinates import polar_to_cart
     from prysm.x.raytracing.surfaces import Q2d_and_der
     c = 1 / 80.0
     k = -1.0
@@ -251,8 +237,7 @@ def test_Q2d_and_der_zero_coefficients_matches_off_axis_conic_sag():
     x, y = polar_to_cart(r, t)
     z_q, _, _ = Q2d_and_der([0.0], [[0.0]], [[0.0]], x, y, norm_r, c, k)
     # bare on-axis conic sag at the same (x, y)
-    rr, tt = cart_to_polar(x, y, vec_to_grid=False)
-    z_conic = off_axis_conic_sag(c, k, rr, tt, dx=0, dy=0)
+    z_conic, _ = conic_sag_and_normal(c, k, x, y)
     np.testing.assert_allclose(z_q, z_conic, rtol=1e-12, atol=1e-12)
 
 
@@ -276,7 +261,7 @@ def test_ray_plane_intersect_matches_newton():
     P, S = _ray_batch()
     surf = plane('refl', np.array([0.0, 0.0, 0.0]))
     Q_an, n_an = surf.intersect(P, S)              # analytic via Plane subclass
-    Q_nw, n_nw = newton_intersect(P, S, surf.sag_normal)
+    Q_nw, n_nw = newton_intersect(P, S, surf.sag_and_normal)
     np.testing.assert_allclose(Q_an, Q_nw, atol=1e-10)
     np.testing.assert_allclose(n_an, n_nw, atol=1e-12)
 
@@ -286,7 +271,7 @@ def test_ray_sphere_intersect_matches_newton(c):
     P, S = _ray_batch(span=4.0)
     surf = sphere(c, 'refl', np.array([0.0, 0.0, 0.0]), n=None)
     Q_an, n_an = surf.intersect(P, S)
-    Q_nw, n_nw = newton_intersect(P, S, surf.sag_normal)
+    Q_nw, n_nw = newton_intersect(P, S, surf.sag_and_normal)
     np.testing.assert_allclose(Q_an, Q_nw, atol=1e-9)
     np.testing.assert_allclose(n_an, n_nw, atol=1e-9)
 
@@ -297,7 +282,7 @@ def test_ray_conic_intersect_matches_newton(c, k):
     P, S = _ray_batch(span=4.0)
     surf = conic(c, k, 'refl', np.array([0.0, 0.0, 0.0]))
     Q_an, n_an = surf.intersect(P, S)
-    Q_nw, n_nw = newton_intersect(P, S, surf.sag_normal)
+    Q_nw, n_nw = newton_intersect(P, S, surf.sag_and_normal)
     np.testing.assert_allclose(Q_an, Q_nw, atol=1e-9)
     np.testing.assert_allclose(n_an, n_nw, atol=1e-9)
 
@@ -310,7 +295,7 @@ def test_ray_off_axis_conic_intersect_matches_newton(dx, dy):
                                   dx=dx, dy=dy)
     P, S = _ray_batch(span=3.0)
     Q_an, n_an = surf.intersect(P, S)
-    Q_nw, n_nw = newton_intersect(P, S, surf.sag_normal)
+    Q_nw, n_nw = newton_intersect(P, S, surf.sag_and_normal)
     # Newton's per-ray convergence tolerance ~100*eps; with off-axis offsets
     # the absolute values grow, so allow a slightly looser comparison
     np.testing.assert_allclose(Q_an, Q_nw, atol=1e-8)
@@ -329,27 +314,51 @@ def test_paraboloid_axial_ray_returns_vertex():
 
 def test_generic_surface_falls_back_to_newton():
     """A bare callable Surface must still work."""
-    # build a plain Surface holding the same FFp closure as Sphere, but
-    # without a shape-level analytic intersect
+    # build a plain Surface with the same sag and normal as Sphere, but without
+    # a shape-level analytic intersect
     c = 1 / 100.0
 
-    def FFp(x, y):
+    def sag_derivatives(x, y):
         rsq = x * x + y * y
         phi = np.sqrt(1 - c * c * rsq)
         return (c * rsq) / (1 + phi), (c * x) / phi, (c * y) / phi
 
-    def F(x, y):
+    def sag(x, y):
         rsq = x * x + y * y
         return (c * rsq) / (1 + np.sqrt(1 - c * c * rsq))
 
-    bare = Surface(shape=CallableShape(F=F, FFp=FFp, params={'c': c}),
-                   typ='refl', P=np.array([0.0, 0.0, 0.0]), n=None)
+    bare = Surface(
+        shape=CallableShape(
+            sag,
+            _sag_and_normal_from_derivatives(sag_derivatives),
+            params={'c': c},
+        ),
+        typ='refl', P=np.array([0.0, 0.0, 0.0]), n=None,
+    )
     sph = sphere(c, 'refl', np.array([0.0, 0.0, 0.0]), n=None)
     P, S = _ray_batch(span=5.0)
     Q_bare, _ = bare.intersect(P, S)
     Q_sph, _ = sph.intersect(P, S)
     # the analytic Sphere result and Newton on a generic Surface should agree
     np.testing.assert_allclose(Q_bare, Q_sph, atol=1e-9)
+
+
+def test_shape_with_only_sag_uses_finite_difference_normals():
+    class Paraboloid(Shape):
+        def sag(self, x, y):
+            return 0.01 * (x * x + y * y)
+
+    surf = Surface(shape=Paraboloid(), typ='refl',
+                   P=np.array([0.0, 0.0, 0.0]))
+    x = np.array([1.0, 0.0])
+    y = np.array([0.0, -2.0])
+    z, n_hat = surf.sag_and_normal(x, y)
+    expected_z = 0.01 * (x * x + y * y)
+    expected_n = np.stack([-0.02 * x, -0.02 * y, np.ones_like(x)], axis=-1)
+    expected_n = expected_n / np.linalg.norm(expected_n, axis=-1,
+                                             keepdims=True)
+    np.testing.assert_allclose(z, expected_z, atol=1e-14)
+    np.testing.assert_allclose(n_hat, expected_n, atol=1e-8)
 
 
 # ---------- Even asphere ----------
@@ -403,13 +412,13 @@ def test_even_asphere_with_empty_coefs_equals_conic():
 
 def test_even_asphere_intersect_matches_naive_newton():
     """EvenAsphere.intersect (conic-seeded Newton) must match the
-    bare-Surface Newton starting from t=0, on the same FFp."""
+    bare-Surface Newton starting from t=0, on the same sag and normal."""
     c, k = 1 / 5.0, -0.5
     coefs = (1e-3, 1e-5, 1e-7)
     P0 = np.array([0.0, 0.0, 0.0])
     s_asph = even_asphere(c, k, coefs, 'refr', P0, n=lambda w: 1.5)
-    # bare Surface using the same FFp
-    bare = Surface(shape=CallableShape(s_asph.F, s_asph.FFp,
+    # bare Surface using the same sag and normal
+    bare = Surface(shape=CallableShape(s_asph.sag, s_asph.sag_and_normal,
                                        params=dict(s_asph.params)),
                    typ='refr', P=P0, n=lambda w: 1.5)
     P, S = _ray_batch(span=1.5)
@@ -449,39 +458,42 @@ def test_raytrace_end_to_end_analytic_vs_newton():
         plane('eval', P_img),
     ]
 
-    # newton path: build bare Surface with the same FFp closure
+    # newton path: build bare Surface with the same sag and normal
     def make_conic(cc, kk):
-        def FFp(x, y):
+        def sag_derivatives(x, y):
             rsq = x * x + y * y
             phi = np.sqrt(1 - (1 + kk) * cc * cc * rsq)
             return (cc * rsq) / (1 + phi), (cc * x) / phi, (cc * y) / phi
-        def F(x, y):
+
+        def sag(x, y):
             rsq = x * x + y * y
             return (cc * rsq) / (1 + np.sqrt(1 - (1 + kk) * cc * cc * rsq))
-        return FFp, F
 
-    def plane_FFp(x, y):
+        return sag, _sag_and_normal_from_derivatives(sag_derivatives)
+
+    def plane_sag_and_normal(x, y):
         zero = np.broadcast_to(np.array([0.0], dtype=x.dtype), x.shape)
-        return zero, zero, zero
+        normal = np.stack([zero, zero, np.ones_like(zero)], axis=-1)
+        return zero, normal
 
-    def plane_F(x, y):
+    def plane_sag(x, y):
         return np.broadcast_to(np.array([0.0], dtype=x.dtype), x.shape)
 
-    ffp1, f1 = make_conic(c1, k1)
-    ffp2, f2 = make_conic(c2, k2)
+    f1, n1 = make_conic(c1, k1)
+    f2, n2 = make_conic(c2, k2)
     surfs_nw = [
-        Surface(shape=CallableShape(f1, ffp1), typ='refl', P=P_pm, n=None),
-        Surface(shape=CallableShape(f2, ffp2), typ='refl', P=P_sm, n=None),
-        Surface(shape=CallableShape(plane_F, plane_FFp),
+        Surface(shape=CallableShape(f1, n1), typ='refl', P=P_pm, n=None),
+        Surface(shape=CallableShape(f2, n2), typ='refl', P=P_sm, n=None),
+        Surface(shape=CallableShape(plane_sag, plane_sag_and_normal),
                 typ='eval', P=P_img, n=None),
     ]
 
     P0, S0 = generate_collimated_ray_fan(11, maxr=20.0, z=-1e3, azimuth=90)
-    P_an, S_an, OPL_an = raytrace(surfs_an, P0, S0, wvl=0.55)
-    P_nw, S_nw, OPL_nw = raytrace(surfs_nw, P0, S0, wvl=0.55)
-    np.testing.assert_allclose(P_an, P_nw, atol=1e-7)
-    np.testing.assert_allclose(S_an, S_nw, atol=1e-9)
-    np.testing.assert_allclose(OPL_an, OPL_nw, atol=1e-7)
+    trace_an = raytrace(surfs_an, P0, S0, wvl=0.55)
+    trace_nw = raytrace(surfs_nw, P0, S0, wvl=0.55)
+    np.testing.assert_allclose(trace_an.P, trace_nw.P, atol=1e-7)
+    np.testing.assert_allclose(trace_an.S, trace_nw.S, atol=1e-9)
+    np.testing.assert_allclose(trace_an.OPL, trace_nw.OPL, atol=1e-7)
 
 
 # ---------- Q2DSag ----------
@@ -510,8 +522,8 @@ def test_q2d_factory_returns_surface_with_q2d_shape():
     assert s.params['normalization_radius'] == 10.0
 
 
-def test_q2d_FFp_sag_matches_Q2d_and_der_directly():
-    """Q2DSag.FFp must return the same z as a direct Q2d_and_der call."""
+def test_q2d_derivative_sag_matches_Q2d_and_der_directly():
+    """Q2DSag.shape.sag must return the same z as a direct Q2d_and_der call."""
     from prysm.x.raytracing.surfaces import Q2d_and_der
     c, k = 1 / 200., -1.0
     norm_r = 15.0
@@ -524,12 +536,12 @@ def test_q2d_FFp_sag_matches_Q2d_and_der_directly():
     rng = np.random.default_rng(7)
     x = rng.uniform(-3, 3, size=10)
     y = rng.uniform(-3, 3, size=10)
-    z_ffp, _, _ = s.FFp(x, y)
+    z_der = s.shape.sag(x, y)
     z_direct, _, _ = Q2d_and_der(cm0, ams, bms, x, y, norm_r, c, k)
-    np.testing.assert_allclose(z_ffp, z_direct, atol=1e-12)
+    np.testing.assert_allclose(z_der, z_direct, atol=1e-12)
 
 
-def test_q2d_FFp_xy_derivatives_match_finite_diff():
+def test_q2d_xy_derivatives_match_finite_diff():
     """The chain-rule polar-to-Cartesian conversion in Q2DSag must agree
     with central differences taken on the sag.  Skip points near r=0 (where
     the function approximates the gradient as zero)."""
@@ -550,9 +562,9 @@ def test_q2d_FFp_xy_derivatives_match_finite_diff():
     y = (radii * np.sin(angles))
     h = 1e-5
 
-    z, ddx_an, ddy_an = s.FFp(x, y)
-    z_xp, _, _ = s.FFp(x + h, y); z_xm, _, _ = s.FFp(x - h, y)
-    z_yp, _, _ = s.FFp(x, y + h); z_ym, _, _ = s.FFp(x, y - h)
+    z, ddx_an, ddy_an = _sag_derivs(s.shape, x, y)
+    z_xp = s.shape.sag(x + h, y); z_xm = s.shape.sag(x - h, y)
+    z_yp = s.shape.sag(x, y + h); z_ym = s.shape.sag(x, y - h)
     ddx_num = (z_xp - z_xm) / (2 * h)
     ddy_num = (z_yp - z_ym) / (2 * h)
     np.testing.assert_allclose(ddx_an, ddx_num, atol=1e-5, rtol=1e-4)

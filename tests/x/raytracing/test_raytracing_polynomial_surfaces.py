@@ -30,11 +30,18 @@ def _xy_grid(rmax=4.0, n=9):
     return x, y
 
 
-def _central_difference_xy(FFp, x, y, h=1e-6):
-    z_xp, _, _ = FFp(x + h, y)
-    z_xm, _, _ = FFp(x - h, y)
-    z_yp, _, _ = FFp(x, y + h)
-    z_ym, _, _ = FFp(x, y - h)
+def _sag_derivs(shape, x, y):
+    """Recover (z, dz/dx, dz/dy) from a shape's sag_and_normal unit normal."""
+    z, n_hat = shape.sag_and_normal(x, y)
+    nz = n_hat[..., 2]
+    return z, -n_hat[..., 0] / nz, -n_hat[..., 1] / nz
+
+
+def _central_difference_xy(sag, x, y, h=1e-6):
+    z_xp = sag(x + h, y)
+    z_xm = sag(x - h, y)
+    z_yp = sag(x, y + h)
+    z_ym = sag(x, y - h)
     return (z_xp - z_xm) / (2 * h), (z_yp - z_ym) / (2 * h)
 
 
@@ -54,8 +61,8 @@ def test_zernike_zero_coefs_matches_conic():
                              nms=[], coefs=[], typ='refl', P=[0, 0, 0])
     s_conic = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    z_z, dx_z, dy_z = s_zern.FFp(x, y)
-    z_c, dx_c, dy_c = s_conic.FFp(x, y)
+    z_z, dx_z, dy_z = _sag_derivs(s_zern.shape, x, y)
+    z_c, dx_c, dy_c = _sag_derivs(s_conic.shape, x, y)
     np.testing.assert_allclose(z_z, z_c, atol=1e-12)
     np.testing.assert_allclose(dx_z, dx_c, atol=1e-12)
     np.testing.assert_allclose(dy_z, dy_c, atol=1e-12)
@@ -68,7 +75,7 @@ def test_zernike_sag_matches_library():
     s = zernike(c=0.0, k=0.0, normalization_radius=R_n,
                         nms=nms, coefs=coefs, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    z_s, _, _ = s.FFp(x, y)
+    z_s = s.shape.sag(x, y)
     z_lib, _, _ = zernike_sum_der_xy(coefs, nms, x / R_n, y / R_n, norm=True)
     np.testing.assert_allclose(z_s, z_lib, atol=1e-12)
 
@@ -79,8 +86,8 @@ def test_zernike_derivatives_central_diff():
                         coefs=[0.05, 0.02, -0.03, 0.04],
                         typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    _, dx_an, dy_an = s.FFp(x, y)
-    dx_num, dy_num = _central_difference_xy(s.FFp, x, y)
+    _, dx_an, dy_an = _sag_derivs(s.shape, x, y)
+    dx_num, dy_num = _central_difference_xy(s.shape.sag, x, y)
     np.testing.assert_allclose(dx_an, dx_num, rtol=2e-5, atol=1e-7)
     np.testing.assert_allclose(dy_an, dy_num, rtol=2e-5, atol=1e-7)
 
@@ -93,8 +100,8 @@ def test_xy_zero_coefs_matches_conic():
                       mns=[], coefs=[], typ='refl', P=[0, 0, 0])
     s_conic = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    z_xy, dx_xy, dy_xy = s_xy.FFp(x, y)
-    z_c, dx_c, dy_c = s_conic.FFp(x, y)
+    z_xy, dx_xy, dy_xy = _sag_derivs(s_xy.shape, x, y)
+    z_c, dx_c, dy_c = _sag_derivs(s_conic.shape, x, y)
     np.testing.assert_allclose(z_xy, z_c, atol=1e-12)
     np.testing.assert_allclose(dx_xy, dx_c, atol=1e-12)
     np.testing.assert_allclose(dy_xy, dy_c, atol=1e-12)
@@ -107,7 +114,7 @@ def test_xy_sag_matches_direct_polynomial():
     s = xy(c=0.0, k=0.0, normalization_radius=R_n,
                    mns=mns, coefs=coefs, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid(rmax=2.0, n=7)
-    z_s, _, _ = s.FFp(x, y)
+    z_s = s.shape.sag(x, y)
     xn = x / R_n
     yn = y / R_n
     z_ref = sum(c * xn ** m * yn ** n for c, (m, n) in zip(coefs, mns))
@@ -120,8 +127,8 @@ def test_xy_derivatives_central_diff():
                    coefs=[0.0, 0.05, 0.04, 0.02, 0.005, 0.003],
                    typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    _, dx_an, dy_an = s.FFp(x, y)
-    dx_num, dy_num = _central_difference_xy(s.FFp, x, y)
+    _, dx_an, dy_an = _sag_derivs(s.shape, x, y)
+    dx_num, dy_num = _central_difference_xy(s.shape.sag, x, y)
     np.testing.assert_allclose(dx_an, dx_num, rtol=2e-5, atol=1e-7)
     np.testing.assert_allclose(dy_an, dy_num, rtol=2e-5, atol=1e-7)
 
@@ -134,8 +141,8 @@ def test_chebyshev_zero_coefs_matches_conic():
                              mns=[], coefs=[], typ='refl', P=[0, 0, 0])
     s_conic = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    z_cb, dx_cb, dy_cb = s_cb.FFp(x, y)
-    z_c, dx_c, dy_c = s_conic.FFp(x, y)
+    z_cb, dx_cb, dy_cb = _sag_derivs(s_cb.shape, x, y)
+    z_c, dx_c, dy_c = _sag_derivs(s_conic.shape, x, y)
     np.testing.assert_allclose(z_cb, z_c, atol=1e-12)
     np.testing.assert_allclose(dx_cb, dx_c, atol=1e-12)
     np.testing.assert_allclose(dy_cb, dy_c, atol=1e-12)
@@ -148,7 +155,7 @@ def test_chebyshev_sag_matches_library():
     s = chebyshev(c=0.0, k=0.0, x_norm=x_norm, y_norm=y_norm,
                           mns=mns, coefs=coefs, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    z_s, _, _ = s.FFp(x, y)
+    z_s = s.shape.sag(x, y)
     Tx = cheby1_seq(range(max(m for m, _ in mns) + 1), x / x_norm)
     Ty = cheby1_seq(range(max(n for _, n in mns) + 1), y / y_norm)
     z_ref = np.zeros_like(x)
@@ -163,8 +170,8 @@ def test_chebyshev_derivatives_central_diff():
                           coefs=[0.01, 0.05, 0.04, -0.02, 0.01],
                           typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    _, dx_an, dy_an = s.FFp(x, y)
-    dx_num, dy_num = _central_difference_xy(s.FFp, x, y)
+    _, dx_an, dy_an = _sag_derivs(s.shape, x, y)
+    dx_num, dy_num = _central_difference_xy(s.shape.sag, x, y)
     np.testing.assert_allclose(dx_an, dx_num, rtol=2e-5, atol=1e-7)
     np.testing.assert_allclose(dy_an, dy_num, rtol=2e-5, atol=1e-7)
 
@@ -178,8 +185,8 @@ def test_jacobi_zero_coefs_matches_conic():
                          typ='refl', P=[0, 0, 0])
     s_conic = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    z_j, dx_j, dy_j = s_j.FFp(x, y)
-    z_c, dx_c, dy_c = s_conic.FFp(x, y)
+    z_j, dx_j, dy_j = _sag_derivs(s_j.shape, x, y)
+    z_c, dx_c, dy_c = _sag_derivs(s_conic.shape, x, y)
     np.testing.assert_allclose(z_j, z_c, atol=1e-12)
     np.testing.assert_allclose(dx_j, dx_c, atol=1e-12)
     np.testing.assert_allclose(dy_j, dy_c, atol=1e-12)
@@ -194,7 +201,7 @@ def test_jacobi_sag_matches_library():
                        alpha=alpha, beta=beta, ns=ns, coefs=coefs,
                        typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    z_s, _, _ = s.FFp(x, y)
+    z_s = s.shape.sag(x, y)
     rsq = x * x + y * y
     u = 2 * rsq / (R_n * R_n) - 1
     Pn = jacobi_seq(ns, alpha, beta, u)
@@ -210,8 +217,8 @@ def test_jacobi_derivatives_central_diff(alpha, beta):
                        coefs=[0.0, 0.05, 0.02, -0.01],
                        typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    _, dx_an, dy_an = s.FFp(x, y)
-    dx_num, dy_num = _central_difference_xy(s.FFp, x, y)
+    _, dx_an, dy_an = _sag_derivs(s.shape, x, y)
+    dx_num, dy_num = _central_difference_xy(s.shape.sag, x, y)
     np.testing.assert_allclose(dx_an, dx_num, rtol=2e-5, atol=1e-7)
     np.testing.assert_allclose(dy_an, dy_num, rtol=2e-5, atol=1e-7)
 
@@ -224,7 +231,7 @@ def test_jacobi_no_origin_singularity():
                        typ='refl', P=[0, 0, 0])
     x = np.array([0.0, 1e-12, 1.0])
     y = np.array([0.0, 1e-12, 0.5])
-    z, dx, dy = s.FFp(x, y)
+    z, dx, dy = _sag_derivs(s.shape, x, y)
     assert np.isfinite(z).all()
     assert np.isfinite(dx).all()
     assert np.isfinite(dy).all()
@@ -262,7 +269,7 @@ def test_polynomial_surfaces_intersect_lands_on_surface(_polynomial_surfaces):
     for surf in _polynomial_surfaces:
         Q, _, valid = surf.intersect(P, S, return_valid=True)
         assert valid.all(), f'{type(surf).__name__} intersect failed'
-        z, _, _ = surf.FFp(Q[..., 0], Q[..., 1])
+        z = surf.shape.sag(Q[..., 0], Q[..., 1])
         np.testing.assert_allclose(Q[..., 2], z, atol=1e-9,
                                    err_msg=type(surf).__name__)
 

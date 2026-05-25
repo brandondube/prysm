@@ -3,10 +3,13 @@
 from prysm.mathops import np
 
 from .spencer_and_murty import (
+    DEFAULT_TOL_SAG,
     SURFACE_INTERSECTION_DEFAULT_MAXITER,
     intersect as newton_intersect,
     newton_raphson_solve_s,
+    resolve_tol_sag,
 )
+from .sags import conic_sag_and_normal
 
 
 def ray_plane_intersect(P, S, return_valid=False):
@@ -27,7 +30,7 @@ def ray_plane_intersect(P, S, return_valid=False):
     Q : ndarray
         shape (N, 3) intersection points
     n : ndarray
-        shape (N, 3) surface normals in S&M form (-Fx, -Fy, 1) = (0, 0, 1)
+        shape (N, 3) unit surface normals.
     valid : ndarray, optional
         shape (N,) boolean; only returned when return_valid is True.
 
@@ -123,7 +126,7 @@ def ray_conic_intersect(P, S, c, kappa, dx=0.0, dy=0.0, return_valid=False):
     Q : ndarray
         shape (N, 3) intersection points
     n : ndarray
-        shape (N, 3) surface normals in S&M form (-Fx, -Fy, 1)
+        shape (N, 3) unit surface normals.
     valid : ndarray, optional
         shape (N,) boolean; only returned when return_valid is True.
 
@@ -147,14 +150,7 @@ def ray_conic_intersect(P, S, c, kappa, dx=0.0, dy=0.0, return_valid=False):
         Xq = Q[..., 0] + dx
         Yq = Q[..., 1] + dy
         phi_arg = 1.0 - (1.0 + kappa) * c * c * (Xq * Xq + Yq * Yq)
-        # rays that landed outside the supporting region get phi_arg < 0; clip
-        # before sqrt so the normal computation doesn't propagate NaNs through
-        # the valid rays in the same batch.
-        phi = np.sqrt(np.where(phi_arg < 0, np.zeros_like(phi_arg), phi_arg))
-        nx = -c * Xq / phi
-        ny = -c * Yq / phi
-    nz = np.ones_like(nx)
-    n = np.stack([nx, ny, nz], axis=-1)
+        _, n = conic_sag_and_normal(c, kappa, Xq, Yq)
     if return_valid:
         return Q, n, disc_nonneg & (phi_arg >= 0)
     return Q, n
@@ -181,7 +177,7 @@ def ray_sphere_intersect(P, S, c, return_valid=False):
     Q : ndarray
         intersection points
     n : ndarray
-        surface normals in S&M form
+        unit surface normals.
     valid : ndarray, optional
         shape (N,) boolean; only returned when return_valid is True.
 
@@ -196,24 +192,29 @@ class ConicSeedMixin:
         p = self.params
         return p['c'], p['k'], p.get('dx', 0.0), p.get('dy', 0.0)
 
-    def intersect(self, P, S, sag_normal, eps=None, maxiter=None,
+    def intersect(self, P, S, sag_and_normal,
+                  tol_sag=DEFAULT_TOL_SAG, eps=None, maxiter=None,
                   return_valid=False):
+        tol_sag = resolve_tol_sag(tol_sag, eps)
         if maxiter is None:
             maxiter = SURFACE_INTERSECTION_DEFAULT_MAXITER
         P, S = np.atleast_2d(P, S)
         Sz = S[..., 2]
-        s0 = -P[..., 2] / Sz
-        P1 = P + s0[..., np.newaxis] * S
-        c_seed, k_seed, dx_seed, dy_seed = self.seed_conic()
-        Q_conic, _ = ray_conic_intersect(P1, S, c_seed, k_seed,
-                                         dx=dx_seed, dy=dy_seed)
-        s1 = Q_conic[..., 2] / Sz
-        return newton_raphson_solve_s(P1, S, sag_normal,
-                                      s1=s1, eps=eps, maxiter=maxiter,
+        with np.errstate(divide='ignore', invalid='ignore'):
+            s0 = -P[..., 2] / Sz
+            P1 = P + s0[..., np.newaxis] * S
+            c_seed, k_seed, dx_seed, dy_seed = self.seed_conic()
+            Q_conic, _ = ray_conic_intersect(P1, S, c_seed, k_seed,
+                                             dx=dx_seed, dy=dy_seed)
+            s1 = Q_conic[..., 2] / Sz
+        return newton_raphson_solve_s(P1, S, sag_and_normal,
+                                      s1=s1, tol_sag=tol_sag,
+                                      maxiter=maxiter,
                                       return_valid=return_valid)
 
 __all__ = [
     'SURFACE_INTERSECTION_DEFAULT_MAXITER',
+    'DEFAULT_TOL_SAG',
     'newton_intersect',
     'newton_raphson_solve_s',
     'ray_plane_intersect',

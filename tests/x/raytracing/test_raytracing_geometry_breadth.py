@@ -27,11 +27,18 @@ def _xy_grid(rmax=4.0, n=9):
     return x, y
 
 
-def _central_difference_xy(FFp, x, y, h=1e-6):
-    z_xp, _, _ = FFp(x + h, y)
-    z_xm, _, _ = FFp(x - h, y)
-    z_yp, _, _ = FFp(x, y + h)
-    z_ym, _, _ = FFp(x, y - h)
+def _sag_derivs(shape, x, y):
+    """Recover (z, dz/dx, dz/dy) from a shape's sag_and_normal unit normal."""
+    z, n_hat = shape.sag_and_normal(x, y)
+    nz = n_hat[..., 2]
+    return z, -n_hat[..., 0] / nz, -n_hat[..., 1] / nz
+
+
+def _central_difference_xy(sag, x, y, h=1e-6):
+    z_xp = sag(x + h, y)
+    z_xm = sag(x - h, y)
+    z_yp = sag(x, y + h)
+    z_ym = sag(x, y - h)
     return (z_xp - z_xm) / (2 * h), (z_yp - z_ym) / (2 * h)
 
 
@@ -51,11 +58,11 @@ def test_toroid_sag_along_axes_matches_components():
     s = toroid(c_x=c_x, c_y=c_y, k_y=k_y, coefs_y=coefs_y,
                        typ='refl', P=[0, 0, 0])
     x = np.linspace(-5, 5, 11)
-    z_at_y0, _, _ = s.FFp(x, np.zeros_like(x))
+    z_at_y0 = s.shape.sag(x, np.zeros_like(x))
     z_sphere_x = sphere_sag(c_x, x * x)
     np.testing.assert_allclose(z_at_y0, z_sphere_x, atol=1e-12)
     y = np.linspace(-5, 5, 11)
-    z_at_x0, _, _ = s.FFp(np.zeros_like(y), y)
+    z_at_x0 = s.shape.sag(np.zeros_like(y), y)
     z_asphere_y = even_asphere_sag(c_y, k_y, coefs_y, y * y)
     np.testing.assert_allclose(z_at_x0, z_asphere_y, atol=1e-12)
 
@@ -67,7 +74,7 @@ def test_toroid_sag_is_additive_loft():
     s = toroid(c_x=c_x, c_y=c_y, k_y=k_y, coefs_y=coefs_y,
                        typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    z_actual, _, _ = s.FFp(x, y)
+    z_actual = s.shape.sag(x, y)
     z_expected = sphere_sag(c_x, x * x) + even_asphere_sag(c_y, k_y, coefs_y, y * y)
     np.testing.assert_allclose(z_actual, z_expected, atol=1e-12)
 
@@ -76,8 +83,8 @@ def test_toroid_derivatives_central_diff():
     s = toroid(c_x=1 / 80.0, c_y=1 / 60.0, k_y=-0.3, coefs_y=(2e-6,),
                        typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    _, dx_an, dy_an = s.FFp(x, y)
-    dx_num, dy_num = _central_difference_xy(s.FFp, x, y)
+    _, dx_an, dy_an = _sag_derivs(s.shape, x, y)
+    dx_num, dy_num = _central_difference_xy(s.shape.sag, x, y)
     np.testing.assert_allclose(dx_an, dx_num, rtol=2e-5, atol=1e-7)
     np.testing.assert_allclose(dy_an, dy_num, rtol=2e-5, atol=1e-7)
 
@@ -92,7 +99,7 @@ def test_toroid_intersect_lands_on_surface():
     S = np.array([[0.0, 0.0, 1.0]] * 3)
     Q, _, valid = s.intersect(P, S, return_valid=True)
     assert valid.all()
-    z, _, _ = s.FFp(Q[..., 0], Q[..., 1])
+    z = s.shape.sag(Q[..., 0], Q[..., 1])
     np.testing.assert_allclose(Q[..., 2], z, atol=1e-9)
 
 
@@ -122,8 +129,8 @@ def test_biconic_degenerates_to_conic():
     s_b = biconic(c_x=c, c_y=c, k_x=k, k_y=k, typ='refl', P=[0, 0, 0])
     s_c = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    z_b, dx_b, dy_b = s_b.FFp(x, y)
-    z_c, dx_c, dy_c = s_c.FFp(x, y)
+    z_b, dx_b, dy_b = _sag_derivs(s_b.shape, x, y)
+    z_c, dx_c, dy_c = _sag_derivs(s_c.shape, x, y)
     np.testing.assert_allclose(z_b, z_c, atol=1e-12)
     np.testing.assert_allclose(dx_b, dx_c, atol=1e-12)
     np.testing.assert_allclose(dy_b, dy_c, atol=1e-12)
@@ -134,8 +141,8 @@ def test_biconic_derivatives_central_diff():
                         k_x=-0.5, k_y=-1.0,
                         typ='refl', P=[0, 0, 0])
     x, y = _xy_grid()
-    _, dx_an, dy_an = s.FFp(x, y)
-    dx_num, dy_num = _central_difference_xy(s.FFp, x, y)
+    _, dx_an, dy_an = _sag_derivs(s.shape, x, y)
+    dx_num, dy_num = _central_difference_xy(s.shape.sag, x, y)
     np.testing.assert_allclose(dx_an, dx_num, rtol=2e-5, atol=1e-7)
     np.testing.assert_allclose(dy_an, dy_num, rtol=2e-5, atol=1e-7)
 
@@ -149,7 +156,7 @@ def test_biconic_intersect_lands_on_surface():
     S = np.array([[0.0, 0.0, 1.0]] * 3)
     Q, _, valid = s.intersect(P, S, return_valid=True)
     assert valid.all()
-    z, _, _ = s.FFp(Q[..., 0], Q[..., 1])
+    z = s.shape.sag(Q[..., 0], Q[..., 1])
     np.testing.assert_allclose(Q[..., 2], z, atol=1e-9)
 
 
