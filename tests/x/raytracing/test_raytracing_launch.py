@@ -9,7 +9,8 @@ from tests.x.raytracing.surface_helpers import (
 
 from prysm.x.raytracing.surfaces import Surface
 from prysm.x.raytracing.spencer_and_murty import raytrace
-from prysm.x.raytracing.launch import Field, Sampling, launch, aim_bundle_to_surface
+from prysm.x.raytracing.launch import Field, Sampling, launch
+from prysm.x.raytracing.opt import aim_rays
 
 
 # ---------- Field -----------------------------------------------------------
@@ -29,9 +30,14 @@ def test_field_angle_radians_rad():
 
 
 def test_field_height_rejects_angle_radians():
-    f = Field(hx=2.0, hy=0.0, kind='height')
+    f = Field(hx=2.0, hy=0.0, kind='height', object_z=-10.0)
     with pytest.raises(ValueError):
         f.angle_radians()
+
+
+def test_field_height_requires_object_z():
+    with pytest.raises(ValueError):
+        Field(hx=2.0, hy=0.0, kind='height')
 
 
 def test_field_rejects_bad_kind():
@@ -48,28 +54,26 @@ def test_field_rejects_bad_unit():
 
 def test_sampling_chief():
     s = Sampling.chief()
-    P, S = s.build(extent=10.0)
-    assert P.shape == (1, 3)
-    np.testing.assert_array_equal(P[0], [0., 0., 0.])
-    np.testing.assert_array_equal(S[0], [0., 0., 1.])
+    xy = s.build(extent=10.0)
+    assert xy.shape == (1, 2)
+    np.testing.assert_array_equal(xy[0], [0., 0.])
 
 
 def test_sampling_fan_y_axis():
     s = Sampling.fan(n=11, axis='y')
-    P, S = s.build(extent=5.0)
-    assert P.shape == (11, 3)
-    # azimuth=90 → fan in y
-    np.testing.assert_allclose(P[:, 0], 0.0, atol=1e-12)
-    assert P[0, 1] == pytest.approx(-5.0)
-    assert P[-1, 1] == pytest.approx(5.0)
+    xy = s.build(extent=5.0)
+    assert xy.shape == (11, 2)
+    np.testing.assert_allclose(xy[:, 0], 0.0, atol=1e-12)
+    assert xy[0, 1] == pytest.approx(-5.0)
+    assert xy[-1, 1] == pytest.approx(5.0)
 
 
 def test_sampling_fan_x_axis():
     s = Sampling.fan(n=7, axis='x')
-    P, _ = s.build(extent=2.0)
-    np.testing.assert_allclose(P[:, 1], 0.0, atol=1e-12)
-    assert P[0, 0] == pytest.approx(-2.0)
-    assert P[-1, 0] == pytest.approx(2.0)
+    xy = s.build(extent=2.0)
+    np.testing.assert_allclose(xy[:, 1], 0.0, atol=1e-12)
+    assert xy[0, 0] == pytest.approx(-2.0)
+    assert xy[-1, 0] == pytest.approx(2.0)
 
 
 def test_sampling_fan_rejects_bad_axis():
@@ -79,21 +83,21 @@ def test_sampling_fan_rejects_bad_axis():
 
 def test_sampling_cross_count_is_2n():
     s = Sampling.cross(n=11)
-    P, _ = s.build(extent=3.0)
-    assert P.shape == (22, 3)
+    xy = s.build(extent=3.0)
+    assert xy.shape == (22, 2)
 
 
 def test_sampling_rect_grid_count():
     s = Sampling.rect(n=5)
-    P, _ = s.build(extent=1.0)
-    assert P.shape == (25, 3)
+    xy = s.build(extent=1.0)
+    assert xy.shape == (25, 2)
 
 
 def test_sampling_hex_count():
     # 1 + 3 * nrings * (nrings + 1)
     s = Sampling.hex(nrings=3)
-    P, _ = s.build(extent=10.0)
-    assert P.shape[0] == 1 + 3 * 3 * 4
+    xy = s.build(extent=10.0)
+    assert xy.shape == (1 + 3 * 3 * 4, 2)
 
 
 def test_sampling_unknown_kind_raises():
@@ -148,11 +152,34 @@ def test_launch_requires_epd_for_non_chief():
         launch(presc, Field(0., 0.), 0.55e-3, Sampling.fan(n=5))
 
 
-def test_launch_rejects_height_field_in_v1():
+def test_launch_pupil_extent_overrides_epd():
     presc = _simple_collimating_mirror()
-    with pytest.raises(NotImplementedError):
-        launch(presc, Field(2.0, 0.0, kind='height'),
-               0.55e-3, Sampling.chief(), epd=0.0)
+    P, _ = launch(presc, Field(0., 0.), 0.55e-3,
+                  Sampling.fan(n=5, axis='y'), epd=2.0,
+                  pupil_extent=7.0)
+    assert P[:, 1].max() == pytest.approx(7.0)
+
+
+def test_launch_finite_conjugate_starts_at_object_point():
+    presc = _simple_collimating_mirror()
+    field = Field(0.5, -0.25, kind='height', object_z=-20.0)
+    P, S = launch(presc, field, 0.55e-3, Sampling.rect(n=4), epd=2.0)
+    np.testing.assert_allclose(P[:, 0], 0.5)
+    np.testing.assert_allclose(P[:, 1], -0.25)
+    np.testing.assert_allclose(P[:, 2], -20.0)
+    np.testing.assert_allclose(np.linalg.norm(S, axis=-1), 1.0)
+
+
+def test_launch_finite_conjugate_directions_pass_through_pupil():
+    presc = _simple_collimating_mirror()
+    field = Field(0.0, 0.0, kind='height', object_z=-15.0)
+    P, S = launch(presc, field, 0.55e-3, Sampling.rect(n=3), epd=2.0,
+                  pupil_z=0.0)
+    dt = (0.0 - P[:, 2]) / S[:, 2]
+    arrived = P + dt[:, np.newaxis] * S
+    np.testing.assert_allclose(arrived[:, :2],
+                               Sampling.rect(n=3).build(1.0),
+                               atol=1e-12)
 
 
 def test_launch_collimated_beam_traces_to_focus():
@@ -167,7 +194,7 @@ def test_launch_collimated_beam_traces_to_focus():
     assert float(np.max(np.abs(spot_y))) < 1e-10
 
 
-# ---------- aim_bundle_to_surface ------------------------------------------
+# ---------- aim-to-surface -------------------------------------------------
 
 def _refractive_singlet_with_internal_stop(n_glass=1.5):
     """A two-surface lens with an extra plane between them acting as a stop."""
@@ -185,23 +212,21 @@ def test_aim_chief_to_stop_center_lands_at_zero():
     # chief at modest field
     P, S = launch(presc, Field(0., 2., unit='deg'), 0.55,
                   Sampling.chief(), epd=4.0, pupil_z=-10.0)
-    P_aim = aim_bundle_to_surface(P, S, presc, surface_index=1,
-                                  target_xy=(0.0, 0.0),
-                                  wavelength=0.55, tol=1e-12)
+    P_aim, _ = aim_rays(P, S, presc, surface_index=1,
+                        target_xy=(0.0, 0.0), wvl=0.55, tol=1e-12)
     trace = raytrace(presc, P_aim, S, 0.55)
     # at stop (surface index 1 in the prescription), x and y should be near 0
     np.testing.assert_allclose(trace.P[2, 0, :2], (0., 0.), atol=1e-7)
 
 
 def test_aim_preserves_launch_z():
-    """aim_bundle_to_surface must restore the launch z (legacy ray_aim resets to 0)."""
+    """aim_rays must preserve the launch z while ray aiming."""
     presc = _refractive_singlet_with_internal_stop()
     P, S = launch(presc, Field(0., 1., unit='deg'), 0.55,
                   Sampling.fan(n=3), epd=4.0, pupil_z=-10.0)
     z_before = P[:, 2].copy()
-    P_aim = aim_bundle_to_surface(P, S, presc, surface_index=1,
-                                  target_xy=(0.0, 0.0),
-                                  wavelength=0.55, tol=1e-9)
+    P_aim, _ = aim_rays(P, S, presc, surface_index=1,
+                        target_xy=(0.0, 0.0), wvl=0.55, tol=1e-9)
     np.testing.assert_array_equal(P_aim[:, 2], z_before)
 
 

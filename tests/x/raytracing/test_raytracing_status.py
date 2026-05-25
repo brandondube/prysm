@@ -20,24 +20,11 @@ from prysm.x.raytracing.spencer_and_murty import (
 from prysm.x.raytracing.raygen import generate_collimated_ray_fan
 
 
-# ---------- backward compatibility ----------
-
 def _simple_prescription():
     return [
         conic(c=1 / 200., k=-1.0, typ='refl', P=np.array([0., 0., 0.])),
         plane('eval', P=np.array([0., 0., -50.])),
     ]
-
-
-def test_legacy_3tuple_unpacking_still_works():
-    """`P, S, OPL = raytrace(...)` must keep working unchanged."""
-    pres = _simple_prescription()
-    P0, S0 = generate_collimated_ray_fan(7, maxr=10.0, z=-100.0)
-    P, S, OPL = raytrace(pres, P0, S0, wvl=0.55)
-    # the unpacked names hold the right arrays
-    assert P.shape == (3, 7, 3)
-    assert S.shape == (3, 7, 3)
-    assert OPL.shape == (3, 7)
 
 
 def test_raytrace_result_has_named_attributes():

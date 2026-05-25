@@ -1,67 +1,50 @@
-"""Field / Sampling / launch / stop-aim ergonomics.
-
-Collapses the standard "build a launch bundle for one (field, wavelength,
-pupil sampling) combination" recipe into a single call.
-
-- Field: a vanilla (hx, hy, kind, unit) record.  kind='angle' for collimated
-  systems; kind='height' for finite-conjugate object planes.
-- Sampling: pupil sampling pattern (chief / fan / cross / rect / hex /
-  spiral); built from classmethod factories that return a self-describing
-  object whose .build(extent) returns pupil-relative (P, S).
-- launch: combines a Field, a Sampling, and a prescription to produce
-  absolute (P, S) ready for raytrace.  Optional aim_to triggers per-ray
-  stop aiming via aim_bundle_to_surface.
-- aim_bundle_to_surface: vectorized wrapper around opt.ray_aim that
-  preserves the launch z (which the legacy ray_aim resets to zero).
-
-"""
+"""Field, Sampling, launch, and stop-aim ergonomics."""
 
 from prysm.conf import config
 from prysm.mathops import np
 
-from .raygen import (
-    generate_collimated_ray_fan,
-    generate_collimated_rect_ray_grid,
-    generate_collimated_hex_ray_grid,
-    generate_collimated_radial_spiral_ray_grid,
-    concat_rayfans,
-)
-from .opt import ray_aim
+from . import raygen
+from .opt import aim_rays
 
-
-# ---------- Field -----------------------------------------------------------
 
 class Field:
-    """A field point: (hx, hy) angular or height pair.
+    """A field point.
 
-    For collimated (object at infinity) systems use kind='angle' and
-    pass (hx, hy) in `unit` ('deg' or 'rad').  For finite-conjugate
-    object planes use kind='height' and pass (hx, hy) in length units.
+    kind='angle' describes a collimated source.  kind='height' describes a
+    finite-conjugate object point and requires object_z.
 
     """
 
-    __slots__ = ('hx', 'hy', 'kind', 'unit')
+    __slots__ = ('hx', 'hy', 'kind', 'unit', 'object_z')
 
-    def __init__(self, hx=0.0, hy=0.0, kind='angle', unit='deg'):
+    def __init__(self, hx=0.0, hy=0.0, kind='angle', unit='deg',
+                 object_z=None):
         if kind not in ('angle', 'height'):
             raise ValueError(
                 f"Field kind must be 'angle' or 'height', got {kind!r}"
             )
         if kind == 'angle' and unit not in ('deg', 'rad'):
             raise ValueError(
-                f"Field unit must be 'deg' or 'rad' when kind='angle', got {unit!r}"
+                f"Field unit must be 'deg' or 'rad' for kind='angle', "
+                f'got {unit!r}'
+            )
+        if kind == 'height' and object_z is None:
+            raise ValueError(
+                "Field kind='height' requires object_z (absolute z of "
+                'the object plane)'
             )
         self.hx = float(hx)
         self.hy = float(hy)
         self.kind = kind
         self.unit = unit
+        self.object_z = None if object_z is None else float(object_z)
 
     def angle_radians(self):
         """Return (hx, hy) in radians.  Only valid for kind='angle'."""
         if self.kind != 'angle':
             raise ValueError(
                 "Field.angle_radians: kind must be 'angle', got "
-                f"{self.kind!r}"
+                f'{self.kind!r}'
             )
         if self.unit == 'rad':
             return self.hx, self.hy
@@ -69,23 +52,17 @@ class Field:
 
     def __repr__(self):
         if self.kind == 'angle':
-            return f'Field(hx={self.hx}, hy={self.hy}, unit={self.unit!r})'
-        return f'Field(hx={self.hx}, hy={self.hy}, kind=height)'
+            return (f'Field(hx={self.hx}, hy={self.hy}, '
+                    f'unit={self.unit!r})')
+        return (f'Field(hx={self.hx}, hy={self.hy}, kind=height, '
+                f'object_z={self.object_z})')
 
-
-# ---------- Sampling --------------------------------------------------------
 
 class Sampling:
     """Pupil sampling pattern.
 
-    Use the classmethod factories (Sampling.fan, .cross, .rect, .hex,
-    .spiral, .chief) to construct.  build(extent) returns (P, S) in
-    pupil-relative coordinates: P has shape (N, 3) with z=0 and (x, y)
-    sampling the requested pattern; S has shape (N, 3) of unit +z
-    direction cosines (pre-tilt; the launcher applies the field tilt).
-
-    The `extent` argument to build() is the pattern's outer half-extent
-    (typically EPD/2 for collimated systems).
+    Construct via the classmethod factories.  build(extent) returns a
+    shape (N, 2) array of pupil xy coordinates.
 
     """
 
@@ -96,70 +73,92 @@ class Sampling:
         self.opts = opts
 
     def build(self, extent):
-        """Generate (P, S) at pupil z=0, scaled to the given extent."""
+        """Pupil sample coordinates scaled to the given extent.
+
+        Parameters
+        ----------
+        extent : float
+            outer half-extent of the pattern (typically EPD/2), in the same
+            length units as the pupil.
+
+        Returns
+        -------
+        ndarray
+            shape (N, 2) array of pupil (x, y) sample coordinates.
+
+        """
         kind = self.kind
         if kind == 'chief':
-            P = np.zeros((1, 3), dtype=config.precision)
-            S = np.zeros((1, 3), dtype=config.precision)
-            S[0, 2] = 1.0
-            return P, S
+            return np.zeros((1, 2), dtype=config.precision)
         if kind == 'fan':
-            n = self.opts['n']
-            azimuth = self.opts.get('azimuth', 90)
-            return generate_collimated_ray_fan(n, maxr=extent, azimuth=azimuth)
+            P, _ = raygen.generate_collimated_ray_fan(
+                self.opts['n'], maxr=extent,
+                azimuth=self.opts.get('azimuth', 90),
+                distribution=self.opts.get('distribution', 'uniform'))
+            return P[:, :2]
         if kind == 'cross':
             n = self.opts['n']
-            fx = generate_collimated_ray_fan(n, maxr=extent, azimuth=0)
-            fy = generate_collimated_ray_fan(n, maxr=extent, azimuth=90)
-            return concat_rayfans(fx, fy)
+            dist = self.opts.get('distribution', 'uniform')
+            Px, _ = raygen.generate_collimated_ray_fan(
+                n, maxr=extent, azimuth=0, distribution=dist)
+            Py, _ = raygen.generate_collimated_ray_fan(
+                n, maxr=extent, azimuth=90, distribution=dist)
+            return np.concatenate([Px[:, :2], Py[:, :2]], axis=0)
         if kind == 'rect':
-            n = self.opts['n']
-            return generate_collimated_rect_ray_grid(n, maxx=extent)
+            P, _ = raygen.generate_collimated_rect_ray_grid(
+                self.opts['n'], maxx=extent,
+                distribution=self.opts.get('distribution', 'uniform'))
+            return P[:, :2]
         if kind == 'hex':
             nrings = self.opts['nrings']
             spacing = self.opts.get('spacing')
             if spacing is None:
-                spacing = extent / nrings
-            return generate_collimated_hex_ray_grid(nrings, spacing)
+                spacing = extent / nrings if nrings > 0 else 0.0
+            P, _ = raygen.generate_collimated_hex_ray_grid(nrings, spacing)
+            return P[:, :2]
         if kind == 'spiral':
-            nrings = self.opts['nrings']
-            return generate_collimated_radial_spiral_ray_grid(
-                nrings, maxr=extent,
+            P, _ = raygen.generate_collimated_radial_spiral_ray_grid(
+                self.opts['nrings'], maxr=extent,
                 samples_per_ring=self.opts.get('samples_per_ring'),
-                radial_distribution=self.opts.get('radial_distribution', 'cheby'),
-                include_center=self.opts.get('include_center', True),
-            )
+                radial_distribution=self.opts.get(
+                    'radial_distribution', 'cheby'),
+                include_center=self.opts.get('include_center', True))
+            return P[:, :2]
         raise ValueError(f'unknown sampling kind {kind!r}')
 
     @classmethod
     def chief(cls):
-        """A single chief ray (1 ray at the pupil origin)."""
+        """A single chief ray at the pupil origin."""
         return cls('chief')
 
     @classmethod
-    def fan(cls, n=11, axis='y'):
-        """A 1D fan of n rays along the chosen axis ('x' or 'y')."""
+    def fan(cls, n=11, axis='y', distribution='uniform'):
+        """A 1D fan of n rays along axis ('x' or 'y').
+
+        distribution selects the radial spacing of the fan samples.
+
+        """
         if axis == 'y':
             azi = 90
         elif axis == 'x':
             azi = 0
         else:
             raise ValueError(f"axis must be 'x' or 'y', got {axis!r}")
-        return cls('fan', n=int(n), azimuth=azi)
+        return cls('fan', n=int(n), azimuth=azi, distribution=distribution)
 
     @classmethod
-    def cross(cls, n=11):
-        """An X+Y fan, 2*n total rays (the central ray appears twice)."""
-        return cls('cross', n=int(n))
+    def cross(cls, n=11, distribution='uniform'):
+        """An x and y fan, 2*n rays total (the central ray appears twice)."""
+        return cls('cross', n=int(n), distribution=distribution)
 
     @classmethod
-    def rect(cls, n=21):
-        """A rectangular n*n grid."""
-        return cls('rect', n=int(n))
+    def rect(cls, n=21, distribution='uniform'):
+        """A rectangular n by n grid of rays."""
+        return cls('rect', n=int(n), distribution=distribution)
 
     @classmethod
     def hex(cls, nrings=5, spacing=None):
-        """A hexapolar grid of nrings concentric rings (1+3*nrings*(nrings+1) rays)."""
+        """A hexapolar grid of nrings concentric rings."""
         return cls('hex', nrings=int(nrings), spacing=spacing)
 
     @classmethod
@@ -173,67 +172,11 @@ class Sampling:
 
     def __repr__(self):
         opts = ', '.join(f'{k}={v!r}' for k, v in self.opts.items())
-        return f'Sampling({self.kind!r}{", " + opts if opts else ""})'
+        sep = ', ' if opts else ''
+        return f'Sampling({self.kind!r}{sep}{opts})'
 
 
-# ---------- launch ----------------------------------------------------------
-
-def launch(prescription, field, wavelength, sampling, *,
-           epd=None, n_ambient=1.0, pupil_z=None,
-           aim_to=None, aim_target=(0.0, 0.0)):
-    """Build (P, S) for one (field, wavelength) launch bundle.
-
-    Currently supports collimated (kind='angle') Field only; finite-
-    conjugate launches will follow.
-
-    Parameters
-    ----------
-    prescription : sequence of Surface
-    field : Field
-        the field point.  kind='angle' is required in this version.
-    wavelength : float
-        wavelength in microns.  Only consumed when aim_to is set (the
-        aim trace needs it); has no effect on the launch geometry itself.
-    sampling : Sampling
-        pupil sampling pattern.
-    epd : float
-        entrance pupil diameter; sampling is built with extent = epd/2.
-        Required for non-chief samplings.
-    n_ambient : float
-        ambient index of refraction (only used during aim).
-    pupil_z : float, optional
-        z position of the entrance pupil; rays start at this z.  Default:
-        the first surface's vertex z.  For systems with an EP not at the
-        first surface (most common: pupil image-side of a mirror), supply
-        pupil_z explicitly.
-    aim_to : int, optional
-        if given, run vectorized stop aiming so each ray hits surface
-        prescription[aim_to] at aim_target.  Useful for chief / marginal
-        / vignetted ray studies.
-    aim_target : (float, float), optional
-        target xy at the aimed surface.  Default (0, 0) (chief-ray aim).
-
-    Returns
-    -------
-    P, S : ndarray, ndarray
-        shape (N, 3) launch positions and direction cosines.
-
-    """
-    if field.kind != 'angle':
-        raise NotImplementedError(
-            "launch() currently supports only collimated kind='angle' "
-            "fields; finite-conjugate (kind='height') launches will be "
-            "added later"
-        )
-    if sampling.kind != 'chief' and epd is None:
-        raise ValueError(
-            f'sampling kind {sampling.kind!r} needs an entrance pupil '
-            'diameter; pass epd=...'
-        )
-
-    extent = 0.0 if epd is None else float(epd) / 2.0
-    Pp, _Sp = sampling.build(extent)
-
+def _collimated_PS(pupil_xy, pupil_z, field):
     ax, ay = field.angle_radians()
     Sx = float(np.sin(ax))
     Sy = float(np.sin(ay))
@@ -244,77 +187,109 @@ def launch(prescription, field, wavelength, sampling, *,
             'beam direction is not physical'
         )
     Sz = float(np.sqrt(Sz_sq))
-    S = np.broadcast_to(np.array([Sx, Sy, Sz], dtype=Pp.dtype),
-                        Pp.shape).copy()
+    n_rays = pupil_xy.shape[0]
+    P = np.empty((n_rays, 3), dtype=pupil_xy.dtype)
+    P[:, :2] = pupil_xy
+    P[:, 2] = pupil_z
+    S = np.broadcast_to(
+        np.array([Sx, Sy, Sz], dtype=pupil_xy.dtype),
+        (n_rays, 3),
+    ).copy()
+    return P, S
+
+
+def _finite_PS(pupil_xy, pupil_z, field):
+    n_rays = pupil_xy.shape[0]
+    obj = np.array([field.hx, field.hy, field.object_z],
+                   dtype=pupil_xy.dtype)
+    P = np.broadcast_to(obj, (n_rays, 3)).copy()
+    target = np.empty((n_rays, 3), dtype=pupil_xy.dtype)
+    target[:, :2] = pupil_xy
+    target[:, 2] = pupil_z
+    direction = target - P
+    norm = np.sqrt(np.sum(direction * direction, axis=-1, keepdims=True))
+    if not np.all(norm > 0):
+        raise ValueError(
+            'one or more pupil samples coincide with the object point; '
+            'cannot build a finite-conjugate direction'
+        )
+    return P, direction / norm
+
+
+def launch(prescription, field, wavelength, sampling, *,
+           epd=None, pupil_extent=None, n_ambient=1.0, pupil_z=None,
+           aim_to=None, aim_target=(0.0, 0.0)):
+    """Build (P, S) for one field, wavelength, and pupil sampling.
+
+    Combines a Field, a Sampling pattern, and a prescription into absolute
+    launch positions and direction cosines ready for raytrace.  kind='angle'
+    fields launch a collimated bundle; kind='height' fields launch a
+    finite-conjugate bundle diverging from the object point.
+
+    Parameters
+    ----------
+    prescription : sequence of Surface
+        the system to launch into; only prescription[0].P (and prescription
+        up to aim_to) is consulted here.
+    field : Field
+        the field point.  kind='angle' or kind='height'.
+    wavelength : float
+        wavelength in microns.  Only consumed when aim_to is set (the aim
+        trace needs it); it has no effect on the launch geometry itself.
+    sampling : Sampling
+        pupil sampling pattern.
+    epd : float, optional
+        entrance pupil diameter; the pattern is built with extent = epd/2.
+        Required for non-chief samplings unless pupil_extent is given.
+    pupil_extent : float, optional
+        pattern outer half-extent, used in place of epd/2 when given.
+    n_ambient : float, optional
+        ambient index of refraction (only used during aim).
+    pupil_z : float, optional
+        z position the rays start at.  Default: the first surface vertex z.
+        Supply explicitly when the entrance pupil is not at the first
+        surface.
+    aim_to : int, optional
+        if given, run per-ray stop aiming so each ray lands at aim_target on
+        prescription[aim_to].
+    aim_target : (float, float), optional
+        target xy at the aimed surface.  Default (0, 0) (chief-ray aim).
+
+    Returns
+    -------
+    P, S : ndarray, ndarray
+        shape (N, 3) launch positions and direction cosines.
+
+    """
+    if sampling.kind != 'chief' and epd is None and pupil_extent is None:
+        raise ValueError(
+            f'sampling kind {sampling.kind!r} needs an entrance pupil '
+            'size; pass epd=... or pupil_extent=...'
+        )
+
+    if pupil_extent is not None:
+        extent = float(pupil_extent)
+    elif epd is not None:
+        extent = float(epd) / 2.0
+    else:
+        extent = 0.0
+    pupil_xy = sampling.build(extent)
+    if pupil_xy.dtype != config.precision:
+        pupil_xy = pupil_xy.astype(config.precision)
 
     if pupil_z is None:
         pupil_z = float(prescription[0].P[2])
-    P = Pp.astype(Pp.dtype, copy=True)
-    P[:, 2] = pupil_z
+    pupil_z = float(pupil_z)
+
+    if field.kind == 'angle':
+        P, S = _collimated_PS(pupil_xy, pupil_z, field)
+    else:
+        P, S = _finite_PS(pupil_xy, pupil_z, field)
 
     if aim_to is not None:
-        P = aim_bundle_to_surface(
-            P, S, prescription, aim_to,
-            target_xy=aim_target,
-            wavelength=wavelength,
+        P, _ = aim_rays(
+            P, S, prescription, aim_to, aim_target, wavelength,
             n_ambient=n_ambient,
         )
 
     return P, S
-
-
-# ---------- aim -------------------------------------------------------------
-
-def aim_bundle_to_surface(P, S, prescription, surface_index, *,
-                          target_xy=(0.0, 0.0), wavelength,
-                          n_ambient=1.0, tol=1e-12, maxiter=200,
-                          strict=True):
-    """Per-ray stop aim: adjust each ray's launch (Px, Py) so it lands at target_xy on prescription[surface_index].
-
-    Each ray is solved independently via a scipy L-BFGS-B in opt.ray_aim;
-    the launch z is preserved (the legacy ray_aim resets z to 0; we
-    restore it after each call).  This O(N) loop is the simple and robust
-    implementation; a vectorized version is possible but rarely
-    bottlenecks design problems compared to merit evaluation cost.
-
-    Parameters
-    ----------
-    P, S : ndarray, shape (N, 3)
-        nominal launch positions and direction cosines (e.g. from
-        Sampling.build + a launch() pre-aim).
-    prescription : sequence of Surface
-    surface_index : int
-        which surface to aim at; rays land at target_xy on this surface.
-    target_xy : (float, float), optional
-        target landing XY in the surface's own local frame.  (0, 0) is the
-        chief-ray aim (centered on the stop / aimed surface).
-    wavelength : float
-        wavelength for the aim trace, in microns.
-    n_ambient : float
-        ambient index of refraction.
-    tol, maxiter : float, int
-        L-BFGS-B convergence settings; forwarded to opt.ray_aim.
-    strict : bool, optional
-        if True (default), raise on per-ray aim failure; if False, leave
-        the failed ray at its nominal P.
-
-    Returns
-    -------
-    P : ndarray, shape (N, 3)
-        launch positions with (x, y) adjusted.  z is preserved.
-
-    """
-    P = np.asarray(P).copy()
-    S = np.asarray(S)
-    target = (float(target_xy[0]), float(target_xy[1]), float('nan'))
-    n_rays = P.shape[0]
-    for i in range(n_rays):
-        z_i = float(P[i, 2])
-        new_P = ray_aim(
-            P[i], S[i], prescription, surface_index, wavelength,
-            target=target, tol=tol, maxiter=maxiter, strict=strict,
-            n_ambient=n_ambient,
-        )
-        new_P[2] = z_i
-        P[i] = new_P
-    return P
