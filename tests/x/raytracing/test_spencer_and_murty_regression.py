@@ -1,18 +1,18 @@
-"""Bit-equality snapshot regression for the Newton-Raphson ray-surface solver.
+"""Snapshot regression for the Newton-Raphson ray-surface solver.
 
 Locks down the f64 output of `newton_raphson_solve_s` and the conic-seeded
-`EvenAsphere.intersect` path against a hand-built ray batch.  The snapshot
-hashes are computed from the *current* implementation; a refactor that is
-truly arithmetic-identical (same operations in the same order) will leave
-them untouched.  A change that perturbs the loop's floating-point trace —
-even within Newton tolerance — will flip the hash and force a deliberate
-re-snapshot.
+`EvenAsphere.intersect` path against a hand-built ray batch, comparing to
+reference arrays committed under `_snapshots/`.  The references are compared
+with `np.allclose` rather than byte-equality: off-axis rays converge to
+values that differ in the last few ULPs across platforms (libm sin/cos/sqrt
+and FMA contraction differ between macOS-arm and Linux-x86), so a bit-exact
+hash is not portable.  The tolerance is tight enough to catch a real
+algorithmic regression while tolerating last-bit platform noise.
 
-If you intentionally change the algorithm (different convergence test,
-different ordering, different dtype handling), re-run with `-s` and update
-the constants below from the printed values.
+If you intentionally change the algorithm, regenerate the `_snapshots/*.npy`
+files from the current implementation.
 """
-import hashlib
+import os
 
 import numpy as np
 
@@ -23,6 +23,12 @@ from tests.x.raytracing.surface_helpers import (
 
 from prysm.x.raytracing.surfaces import Surface
 from prysm.x.raytracing.spencer_and_murty import newton_raphson_solve_s
+
+_SNAP_DIR = os.path.join(os.path.dirname(__file__), '_snapshots')
+
+
+def _ref(name):
+    return np.load(os.path.join(_SNAP_DIR, name))
 
 
 def _ray_batch():
@@ -42,10 +48,6 @@ def _asphere():
                                 np.array([0.0, 0.0, 0.0]), n=lambda w: 1.5)
 
 
-def _md5(arr):
-    return hashlib.md5(np.ascontiguousarray(arr).tobytes()).hexdigest()
-
-
 def test_bare_newton_snapshot():
     """Cold-start Newton from s1=0 on an EvenAsphere sag_and_normal.  Exercises the
     'all rays start active' code path through `newton_raphson_solve_s`.
@@ -60,8 +62,8 @@ def test_bare_newton_snapshot():
                                           s1=0.0, return_valid=True)
 
     assert int(valid.sum()) == 289
-    assert _md5(Pj) == '18ce403132974180314561a5395e221e'
-    assert _md5(r) == '8f4840cf4e8bc2d97e27449fa275481d'
+    assert np.allclose(Pj, _ref('bare_newton_Pj.npy'), rtol=0, atol=1e-10)
+    assert np.allclose(r, _ref('bare_newton_r.npy'), rtol=0, atol=1e-10)
 
 
 def test_conic_seeded_newton_snapshot():
@@ -72,8 +74,8 @@ def test_conic_seeded_newton_snapshot():
     Pj, r, valid = surf.intersect(P, S, return_valid=True)
 
     assert int(valid.sum()) == 289
-    assert _md5(Pj) == '8b11cd56568a37d7b21ab7e7d65f8bc5'
-    assert _md5(r) == '5563da1aa29829c8e3ec99c723be43d8'
+    assert np.allclose(Pj, _ref('conic_seeded_Pj.npy'), rtol=0, atol=1e-10)
+    assert np.allclose(r, _ref('conic_seeded_r.npy'), rtol=0, atol=1e-10)
 
 
 def test_partial_nonconvergence_snapshot():
@@ -94,8 +96,8 @@ def test_partial_nonconvergence_snapshot():
     # snapshot: 1 ray converges in 2 iters, 288 hit maxiter
     assert int(valid.sum()) == 1
     assert int(np.isnan(Pj[:, 0]).sum()) == 288
-    # the one survivor's coordinates are pinned for arithmetic-identity
-    assert _md5(Pj[valid]) == 'ee8eddadc83566bf5f561abe01e47986'
+    # the one survivor's coordinates are pinned
+    assert np.allclose(Pj[valid], _ref('partial_survivor_Pj.npy'), rtol=0, atol=1e-10)
 
 
 def test_oblique_mixed_convergence_snapshot():
