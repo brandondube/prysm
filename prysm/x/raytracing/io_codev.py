@@ -1,7 +1,7 @@
 """Code V .seq (sequential lens) prescription reader.
 
-Parses a sequential .seq into a list of Surface objects plus header
-metadata, mirroring the PrescriptionFile contract of io_zemax.
+Parses a sequential .seq into a LensData (sequential rows + metadata),
+mirroring the contract of io_zemax.read_zmx.
 
 Supported subset (raise informative error otherwise):
 - Header: TITLE, DIM, WL, REF, EPD, YAN, XAN, RDM/CUM
@@ -24,7 +24,7 @@ are stripped.
 
 """
 
-from .surfaces import PlaneSag
+from .surfaces import ConicSag, PlaneSag, SphereSag
 from . import materials as _materials
 from ._indexing import fringe_to_nm, xy_j_to_mn
 from ._io_common import fields_from_xy, read_text_or_path
@@ -102,7 +102,7 @@ def _new_surface_dict():
 
 
 def read_seq(path_or_text, *, _is_text=False, database=None):
-    """Read a Code V .seq file into a PrescriptionFile.
+    """Read a Code V .seq file into a LensData.
 
     Parameters
     ----------
@@ -114,7 +114,7 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
 
     Returns
     -------
-    PrescriptionFile
+    LensData
 
     """
     text, path_for_meta = read_text_or_path(path_or_text, is_text=_is_text)
@@ -401,14 +401,14 @@ def _build_spec(sd, radius_mode, database=None):
     n_arg = None if is_mirror else n_callable
 
     # tilt / decenter (Code V uses degrees by default for ADE/BDE/CDE).  prysm
-    # tilt convention is (rz, ry, rx); Code V ADE=alpha about X, BDE=beta about
-    # Y, CDE=gamma about Z.
+    # tilt convention is (rz, ry, rx); Code V alpha/beta are left-handed, so
+    # invert ADE/BDE at this boundary only.
     tilt = None
     decenter = None
     if any(sd.get(k, 0.0) != 0.0 for k in ('ade', 'bde', 'cde')):
         tilt = (float(sd.get('cde', 0.0)),
-                float(sd.get('bde', 0.0)),
-                float(sd.get('ade', 0.0)))
+                -float(sd.get('bde', 0.0)),
+                -float(sd.get('ade', 0.0)))
     if sd.get('dec_x', 0.0) != 0.0 or sd.get('dec_y', 0.0) != 0.0:
         decenter = (float(sd['dec_x']), float(sd['dec_y']), 0.0)
 
@@ -471,6 +471,35 @@ def _glass_name(material, typ):
     return None  # air or an un-nameable callable -> blank (air)
 
 
+def _ensure_seq_writable_shape(shape_kind, is_eval):
+    """Reject rows that would be lossy in the current .seq writer."""
+    if is_eval:
+        return
+    if shape_kind in (ConicSag, PlaneSag, SphereSag):
+        return
+    raise NotImplementedError(
+        f'write_seq cannot export {shape_kind.__name__} without losing shape '
+        'data; supported writer shapes are ConicSag, SphereSag, and PlaneSag.'
+    )
+
+
+def _coordbreak_seq_lines(row):
+    """Code V decenter/tilt commands for a LensData CoordBreak."""
+    dx, dy, _ = (float(v) for v in row.decenter)
+    rz, ry, rx = (float(v) for v in row.tilt)
+    lines = []
+    if dx or dy:
+        lines.append(f'DEC {dx:g} {dy:g}')
+    # Code V ADE/BDE are left-handed about X/Y; invert on export.
+    if rx:
+        lines.append(f'ADE {-rx:g}')
+    if ry:
+        lines.append(f'BDE {-ry:g}')
+    if rz:
+        lines.append(f'CDE {rz:g}')
+    return lines
+
+
 def write_seq(lensdata):
     """Serialize a LensData to Code V .seq text (rotationally symmetric subset).
 
@@ -493,25 +522,22 @@ def write_seq(lensdata):
     lines.append('SO ; THI 1E10')
 
     n_refl = 0
+    pending_coordbreak = None
     for row in lensdata.rows:
         if isinstance(row, CoordBreak):
-            dx, dy, _ = (float(v) for v in row.decenter)
-            rz, ry, rx = (float(v) for v in row.tilt)
-            if dx or dy:
-                lines.append(f'DEC {dx:g} {dy:g}')
-            # Code V ADE/BDE are left-handed about X/Y; invert on export
-            if rx:
-                lines.append(f'ADE {-rx:g}')
-            if ry:
-                lines.append(f'BDE {-ry:g}')
-            if rz:
-                lines.append(f'CDE {rz:g}')
+            if pending_coordbreak is not None:
+                raise NotImplementedError(
+                    'write_seq cannot export consecutive CoordBreak rows '
+                    'without an intervening surface'
+                )
+            pending_coordbreak = row
             continue
-        shape = row.build_shape()
-        params = shape.params or {}
         from .spencer_and_murty import STYPE_EVAL
         from .surfaces import _map_stype
         is_eval = _map_stype(row.typ) == STYPE_EVAL
+        _ensure_seq_writable_shape(row.shape_kind, is_eval)
+        shape = row.build_shape()
+        params = shape.params or {}
         is_refl = _glass_name(row.material, row.typ) == 'REFL'
         if is_refl:
             n_refl += 1
@@ -519,6 +545,9 @@ def write_seq(lensdata):
         thi = sign * float(row.thickness)
         if is_eval:
             lines.append('SI')
+            if pending_coordbreak is not None:
+                lines.extend(_coordbreak_seq_lines(pending_coordbreak))
+                pending_coordbreak = None
             continue
         parts = ['S', f'CUY {params.get("c", 0.0):g}', f'THI {thi:g}']
         if params.get('k', 0.0):
@@ -527,6 +556,13 @@ def write_seq(lensdata):
         if glass:
             parts.append(f'GLA {glass}')
         lines.append(' ; '.join(parts))
+        if pending_coordbreak is not None:
+            lines.extend(_coordbreak_seq_lines(pending_coordbreak))
+            pending_coordbreak = None
+    if pending_coordbreak is not None:
+        raise NotImplementedError(
+            'write_seq cannot export a trailing CoordBreak with no surface'
+        )
     lines.append('GO')
     return '\n'.join(lines) + '\n'
 

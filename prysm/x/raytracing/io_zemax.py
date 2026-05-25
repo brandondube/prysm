@@ -13,8 +13,8 @@ The header is parsed for: WAVL (wavelengths), ENPD (entrance pupil
 diameter), STOP (stop surface index), FNUM, FTYP/XFLN/YFLN (fields),
 UNIT (length units).
 
-Returns a PrescriptionFile vanilla class carrying .surfaces (the list
-ready for raytrace) plus all the metadata fields.
+Returns a LensData carrying the sequential rows (compiled to .surfaces on
+demand) plus all the metadata fields.
 
 Out of scope (raises informative NotImplementedError):
 - Multi-configuration (MNCA / MOFF) data
@@ -29,7 +29,7 @@ instead of read_zmx.
 
 from prysm.mathops import np
 
-from .surfaces import PlaneSag
+from .surfaces import ConicSag, PlaneSag, SphereSag
 from . import materials as _materials
 from ._indexing import noll_to_nm, xy_j_to_mn
 from ._io_common import fields_from_xy, read_text_or_path
@@ -394,6 +394,17 @@ def write_zmx(lensdata):
     from .spencer_and_murty import STYPE_EVAL, STYPE_REFLECT
     from .surfaces import _map_stype
 
+    def ensure_writable_shape(shape_kind, is_eval):
+        if is_eval:
+            return
+        if shape_kind in (ConicSag, PlaneSag, SphereSag):
+            return
+        raise NotImplementedError(
+            f'write_zmx cannot export {shape_kind.__name__} without losing '
+            'shape data; supported writer shapes are ConicSag, SphereSag, '
+            'and PlaneSag.'
+        )
+
     lines = ['VERS 100000 0', 'MODE SEQ']
     if lensdata.unit:
         lines.append(f'UNIT {lensdata.unit.upper()}')
@@ -421,9 +432,10 @@ def write_zmx(lensdata):
                       f'  PARM 3 {rx:g}', f'  PARM 4 {ry:g}',
                       f'  PARM 5 {rz:g}']
             continue
+        is_eval = _map_stype(row.typ) == STYPE_EVAL
+        ensure_writable_shape(row.shape_kind, is_eval)
         shape = row.build_shape()
         params = shape.params or {}
-        is_eval = _map_stype(row.typ) == STYPE_EVAL
         is_refl = _map_stype(row.typ) == STYPE_REFLECT
         if is_refl:
             n_refl += 1
@@ -445,7 +457,7 @@ def write_zmx(lensdata):
 
 
 def read_zmx(path_or_text, *, _is_text=False, database=None):
-    """Read a Zemax .zmx text file into a PrescriptionFile.
+    """Read a Zemax .zmx text file into a LensData.
 
     Parameters
     ----------
@@ -460,7 +472,7 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
 
     Returns
     -------
-    PrescriptionFile
+    LensData
 
     """
     text, path_for_meta = read_text_or_path(path_or_text, is_text=_is_text)

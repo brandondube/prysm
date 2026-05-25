@@ -14,38 +14,33 @@ with a perturbation distribution:
   MonteCarloResult exposes .merits (raw array), .summary() (stats
   dict), and .yield_at(threshold) (fraction with merit <= threshold).
 
-Perturbations are vanilla Perturbation objects whose .normal /
-.normal_relative / .uniform / .triangular classmethods take a
-(getter, setter) pair from a Variable factory plus a sigma or
-half-width.  An optional name= kwarg labels the row in the resulting
-table (default: empty string).
+Perturbations target a single LensData DOF slot, addressed by a category
+('curvature', 'radius', 'conic', 'coefs', 'thickness', 'tilt', 'decenter')
+and a surface index.  The .normal / .normal_relative / .uniform / .triangular
+classmethods capture the slot's nominal value at construction and store a step
+(one-sigma or half-width).  An optional name= kwarg labels the table row.
 
 Limitations to keep in mind:
 - Perturbations are independent / orthogonal; correlated perturbations
   (e.g. glass index vs temperature) require a custom sampler.
-- The merit callable receives the perturbed prescription and must
-  return a scalar.  Use operand_as_merit() to wrap a design.py
-  operand.
+- The merit callable receives the perturbed LensData and must return a
+  scalar.  Use operand_as_merit() to wrap a design.py operand.
 
 Example
 -------
-    from prysm.x.raytracing.design import curvature_of, kappa_of, thickness_after
     from prysm.x.raytracing.tolerance import (
         Perturbation, sensitivity_table, monte_carlo, operand_as_merit,
     )
     from prysm.x.raytracing.design import RmsSpotRadius
-    P, S = launch(presc, Field(0., 0.), 0.55, Sampling.hex(nrings=4), epd=10.0)
+    P, S = launch(ld, Field(0., 0.), 0.55, Sampling.hex(nrings=4), epd=10.0)
     perts = [
-        Perturbation.normal_relative(curvature_of(presc[0]), 0.001, name='c1'),
-        Perturbation.normal(kappa_of(presc[0]), 0.01, name='k1'),
-        Perturbation.normal(thickness_after(presc[0], presc[1]), 0.02,
-                            name='t1'),
+        Perturbation.normal_relative(ld, 'curvature', 0, 0.001, name='c1'),
+        Perturbation.normal(ld, 'conic', 0, 0.01, name='k1'),
+        Perturbation.normal(ld, 'thickness', 0, 0.02, name='t1'),
     ]
     merit = operand_as_merit(RmsSpotRadius(P, S, wavelength=0.55))
-    table = sensitivity_table(presc, perts, merit)
-    print(table)
-    result = monte_carlo(presc, perts, merit, n_trials=1000, seed=42)
-    print(result.summary())
+    table = sensitivity_table(ld, perts, merit)
+    result = monte_carlo(ld, perts, merit, n_trials=1000, seed=42)
 
 """
 
@@ -55,38 +50,51 @@ from prysm.mathops import np
 from .design import _TraceCache
 
 
+def _resolve_slot(lensdata, category, surface):
+    """Resolve a (category, surface) pair to a single LensData DOF slot."""
+    slots = lensdata._category_slots(category, surface)
+    if len(slots) != 1:
+        raise ValueError(
+            f'perturbation target {category!r} on surface {surface!r} resolved '
+            f'to {len(slots)} DOFs; tolerancing needs exactly one scalar DOF'
+        )
+    return slots[0]
+
+
 # ---------- Perturbation ----------------------------------------------------
 
 class Perturbation:
-    """A (getter, setter) variable plus a sampling distribution.
+    """A single LensData DOF slot plus a sampling distribution.
 
     Built via the classmethod factories Perturbation.normal /
-    .normal_relative / .uniform / .triangular; each captures the
-    parameter's nominal value at construction and stores a step
-    (one-sigma or half-width) used as the default for sensitivity FD.
-
-    Direct construction is supported for custom samplers but rarely
-    needed.
+    .normal_relative / .uniform / .triangular; each captures the slot's
+    nominal value at construction and stores a step (one-sigma or
+    half-width) used as the default for sensitivity FD.
 
     """
 
-    __slots__ = ('name', 'getter', 'setter', 'sampler', 'nominal', 'step')
+    __slots__ = ('name', 'lensdata', 'slot', 'sampler', 'nominal', 'step')
 
-    def __init__(self, getter, setter, sampler, nominal, step, name=''):
+    def __init__(self, lensdata, slot, sampler, nominal, step, name=''):
         self.name = str(name)
-        self.getter = getter
-        self.setter = setter
+        self.lensdata = lensdata
+        self.slot = slot
         self.sampler = sampler  # callable(rng) -> sampled float
         self.nominal = float(nominal)
         self.step = float(step)
+
+    def set(self, value):
+        """Set the targeted DOF and invalidate the compiled system."""
+        self.lensdata.spec.set_value(self.slot, value)
+        self.lensdata._invalidate()
 
     def sample(self, rng):
         """Draw one sample from this perturbation's distribution."""
         return float(self.sampler(rng))
 
     def reset(self):
-        """Restore the prescription parameter to its nominal value."""
-        self.setter(self.nominal)
+        """Restore the targeted DOF to its nominal value."""
+        self.set(self.nominal)
 
     def __repr__(self):
         return (
@@ -95,67 +103,57 @@ class Perturbation:
         )
 
     @classmethod
-    def normal(cls, variable, sigma, name=''):
+    def normal(cls, lensdata, category, surface, sigma, name=''):
         """Normal(nominal, sigma) distribution.  sigma is absolute."""
-        g, s = variable
-        nom = float(g())
+        slot = _resolve_slot(lensdata, category, surface)
+        nom = float(lensdata.spec.get_value(slot))
         sigma = float(sigma)
 
         def sampler(rng):
             return float(rng.normal(nom, sigma))
 
-        return cls(g, s, sampler, nom, sigma, name)
+        return cls(lensdata, slot, sampler, nom, sigma, name)
 
     @classmethod
-    def normal_relative(cls, variable, sigma_rel, name=''):
-        """Normal distribution with sigma = sigma_rel * |nominal|.
+    def normal_relative(cls, lensdata, category, surface, sigma_rel, name=''):
+        """Normal distribution with sigma = sigma_rel * |nominal DOF|.
 
-        Useful for parameters whose tolerance scales with the value
-        itself (curvature, radius).  For parameters with nominal == 0
-        this collapses to a delta function -- use .normal with an
-        explicit absolute sigma in that case.
+        For a DOF whose nominal is 0 this collapses to a delta function --
+        use .normal with an explicit absolute sigma in that case.
 
         """
-        g, s = variable
-        nom = float(g())
+        slot = _resolve_slot(lensdata, category, surface)
+        nom = float(lensdata.spec.get_value(slot))
         sigma = abs(nom) * float(sigma_rel)
 
         def sampler(rng):
             return float(rng.normal(nom, sigma))
 
-        return cls(g, s, sampler, nom, sigma, name)
+        return cls(lensdata, slot, sampler, nom, sigma, name)
 
     @classmethod
-    def uniform(cls, variable, half_width, name=''):
-        """Uniform distribution over (nominal - half_width, nominal + half_width).
-
-        Convention matches the lens-design "+/- t" tolerance form.
-
-        """
-        g, s = variable
-        nom = float(g())
+    def uniform(cls, lensdata, category, surface, half_width, name=''):
+        """Uniform over (nominal - half_width, nominal + half_width)."""
+        slot = _resolve_slot(lensdata, category, surface)
+        nom = float(lensdata.spec.get_value(slot))
         hw = abs(float(half_width))
-        lo = nom - hw
-        hi = nom + hw
 
         def sampler(rng):
-            return float(rng.uniform(lo, hi))
+            return float(rng.uniform(nom - hw, nom + hw))
 
-        return cls(g, s, sampler, nom, hw, name)
+        return cls(lensdata, slot, sampler, nom, hw, name)
 
     @classmethod
-    def triangular(cls, variable, half_width, name=''):
+    def triangular(cls, lensdata, category, surface, half_width, name=''):
         """Triangular distribution centered on nominal with half-width hw."""
-        g, s = variable
-        nom = float(g())
+        slot = _resolve_slot(lensdata, category, surface)
+        nom = float(lensdata.spec.get_value(slot))
         hw = abs(float(half_width))
-        lo = nom - hw
-        hi = nom + hw
 
         def sampler(rng):
-            return float(rng.triangular(lo, nom, hi))
+            return float(rng.triangular(nom - hw, nom, nom + hw))
 
-        return cls(g, s, sampler, nom, hw, name)
+        return cls(lensdata, slot, sampler, nom, hw, name)
 
 
 # ---------- operand_as_merit ------------------------------------------------
@@ -264,12 +262,12 @@ def sensitivity_table(prescription, perturbations, merit, *, step=None):
             })
             continue
         try:
-            p.setter(p.nominal + h)
+            p.set(p.nominal + h)
             m_plus = float(merit(prescription))
-            p.setter(p.nominal - h)
+            p.set(p.nominal - h)
             m_minus = float(merit(prescription))
         finally:
-            p.setter(p.nominal)
+            p.set(p.nominal)
         rows.append({
             'name': p.name,
             'nominal': p.nominal,
@@ -382,7 +380,7 @@ def monte_carlo(prescription, perturbations, merit, n_trials, *,
         for trial in range(int(n_trials)):
             for i, p in enumerate(perturbations):
                 v = p.sample(rng)
-                p.setter(v)
+                p.set(v)
                 if record_samples:
                     sampled_x[trial, i] = v
             merits[trial] = float(merit(prescription))

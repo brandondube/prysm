@@ -8,7 +8,7 @@ from prysm.x.raytracing import LensData
 from prysm.x.raytracing import materials
 from prysm.x.raytracing.io_codev import read_seq, write_seq
 from prysm.x.raytracing.io_zemax import read_zmx, write_zmx
-from prysm.x.raytracing.surfaces import ConicSag, PlaneSag
+from prysm.x.raytracing.surfaces import ConicSag, EvenAsphereSag, PlaneSag
 
 
 def _air(wvl):
@@ -57,6 +57,28 @@ def test_seq_round_trip_mirror_sign_convention():
     assert float(np.asarray(back.surfaces[-1].P)[2]) == pytest.approx(-50.0)
 
 
+def test_seq_round_trip_codev_alpha_beta_signs():
+    text = """\
+LEN
+CUM
+SO ; THI 1E10
+S ; CUY 0 ; THI 0 ; ADE 5 ; BDE -2 ; CDE 3
+SI
+GO
+"""
+    back = read_seq(write_seq(read_seq(text, _is_text=True)), _is_text=True)
+    cb = back.rows[0]
+    np.testing.assert_allclose(np.asarray(cb.tilt), [3.0, 2.0, -5.0])
+
+
+def test_seq_export_rejects_unsupported_shape_without_loss():
+    ld = (LensData()
+          .add(EvenAsphereSag(0.01, 0.0, (1e-4,)), thickness=1.0)
+          .add(PlaneSag(), typ='eval'))
+    with pytest.raises(NotImplementedError, match='EvenAsphereSag'):
+        write_seq(ld)
+
+
 def test_zmx_round_trip_refractive():
     ld = make_refractive()
     back = read_zmx(write_zmx(ld), _is_text=True)
@@ -78,3 +100,11 @@ def test_zmx_export_carries_stop_index():
     ld.stop_index = 1
     back = read_zmx(write_zmx(ld), _is_text=True)
     assert back.stop_index == 1
+
+
+def test_zmx_export_rejects_unsupported_shape_without_loss():
+    ld = (LensData()
+          .add(EvenAsphereSag(0.01, 0.0, (1e-4,)), thickness=1.0)
+          .add(PlaneSag(), typ='eval'))
+    with pytest.raises(NotImplementedError, match='EvenAsphereSag'):
+        write_zmx(ld)

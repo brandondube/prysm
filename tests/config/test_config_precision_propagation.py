@@ -26,11 +26,11 @@ from prysm.x.raytracing.tolerance import (
     monte_carlo,
 )
 from prysm.x.raytracing.design import (
-    curvature_of,
     RmsSpotRadius,
     Problem,
 )
-from prysm.x.raytracing import raygen
+from prysm.x.raytracing import LensData, raygen
+from prysm.x.raytracing.surfaces import ConicSag, PlaneSag
 
 
 def _parabola():
@@ -39,6 +39,15 @@ def _parabola():
     s = conic(c=c, k=-1.0, typ='refl', P=[0, 0, 0])
     img = plane(typ='eval', P=[0, 0, f])
     return [s, img]
+
+
+def _parabola_ld():
+    """LensData twin of _parabola — concave mirror, image folded to z=-40."""
+    c = -1 / 80.0
+    f = abs(1.0 / (2.0 * c))
+    return (LensData(epd=4.0, wavelengths=[0.55e-3])
+            .add(ConicSag(c, -1.0), typ='refl', thickness=f)
+            .add(PlaneSag(), typ='eval'))
 
 
 @pytest.fixture(params=[32, 64])
@@ -112,15 +121,14 @@ def test_raygen_rect_S_dtype_follows_config_precision(precision):
 
 def test_monte_carlo_merits_dtype_follows_config_precision(precision):
     """MonteCarloResult.merits / nominals dtype mirrors config.precision."""
-    presc = _parabola()
+    ld = _parabola_ld()
 
     def merit(p):
         return 0.0
 
     # one trivial perturbation; sigma=0 so each trial reports nominal.
-    g, s = curvature_of(presc[0])
-    pert = Perturbation.normal((g, s), sigma=0.0, name='c0')
-    res = monte_carlo(presc, [pert], merit, n_trials=3,
+    pert = Perturbation.normal(ld, 'curvature', 0, sigma=0.0, name='c0')
+    res = monte_carlo(ld, [pert], merit, n_trials=3,
                       seed=42, record_samples=True)
     expected = _expected_dtype(precision)
     assert res.merits.dtype == expected
@@ -131,11 +139,11 @@ def test_monte_carlo_merits_dtype_follows_config_precision(precision):
 # ---------- design ----------------------------------------------------------
 
 def test_problem_residuals_dtype_follows_config_precision(precision):
-    presc = _parabola()
-    P, S = launch(presc, Field(0., 0.), 0.55e-3,
+    ld = _parabola_ld()
+    P, S = launch(ld, Field(0., 0.), 0.55e-3,
                   Sampling.fan(n=5), epd=4.0, pupil_z=-10.0)
-    g, s = curvature_of(presc[0])
     op = RmsSpotRadius(P=P, S=S, wavelength=0.55e-3, target=0.0, weight=1.0)
-    prob = Problem(presc, [(g, s)], [op])
+    ld.vary('curvature', surfaces=0)
+    prob = Problem(ld, [op])
     out = prob.residuals(prob.x0())
     assert out.dtype == _expected_dtype(precision)

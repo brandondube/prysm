@@ -5,6 +5,7 @@ from prysm.mathops import np
 
 from . import raygen
 from .opt import aim_rays
+from ._meta import lensdata_epd
 
 
 class Field:
@@ -241,6 +242,7 @@ def launch(prescription, field, wavelength, sampling, *,
     epd : float, optional
         entrance pupil diameter; the pattern is built with extent = epd/2.
         Required for non-chief samplings unless pupil_extent is given.
+        Defaults from the LensData epd when the prescription is a LensData.
     pupil_extent : float, optional
         pattern outer half-extent, used in place of epd/2 when given.
     n_ambient : float, optional
@@ -261,6 +263,8 @@ def launch(prescription, field, wavelength, sampling, *,
         shape (N, 3) launch positions and direction cosines.
 
     """
+    if epd is None and pupil_extent is None:
+        epd = lensdata_epd(prescription, None)  # default from LensData if any
     if sampling.kind != 'chief' and epd is None and pupil_extent is None:
         raise ValueError(
             f'sampling kind {sampling.kind!r} needs an entrance pupil '

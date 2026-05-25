@@ -1065,6 +1065,8 @@ class LensData:
         """Resolve a wavelength name or scalar to microns."""
         if wavelength is None:
             wavelength = self.reference_wavelength
+        if wavelength is None:
+            return 0.6328
         if isinstance(wavelength, str):
             return float(self.wavelengths[wavelength])
         return float(wavelength)

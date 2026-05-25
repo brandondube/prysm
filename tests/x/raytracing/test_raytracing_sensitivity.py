@@ -1,49 +1,20 @@
-"""Tests for prysm.x.raytracing.sensitivity — merit Jacobians."""
+"""Tests for prysm.x.raytracing.sensitivity — merit Jacobian over a LensData's
+dense free vector (``merit_jacobian_free``).
+
+The Problem-level wiring (FD vs numeric merit, restore, autograd gating through
+``Problem.jacobian``) lives in test_raytracing_lensdata_design.py; this module
+pins ``merit_jacobian_free`` directly against analytic paraxial derivatives.
+"""
 import numpy as np
 import pytest
 
-from tests.x.raytracing.surface_helpers import (
-    plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
-    chebyshev, jacobi, toroid, biconic,
+from prysm.x.raytracing import LensData
+from prysm.x.raytracing.surfaces import ConicSag
+from prysm.x.raytracing.sensitivity import merit_jacobian_free
+from prysm.x.raytracing.paraxial import (
+    paraxial_image_distance,
+    effective_focal_length,
 )
-
-from prysm.x.raytracing.surfaces import Surface
-from prysm.x.raytracing.sensitivity import (
-    merit_jacobian,
-    surface_param,
-    vertex_z_param,
-)
-from prysm.x.raytracing.paraxial import paraxial_image_distance, effective_focal_length
-
-
-# ---------- surface_param helper ----------
-
-def test_surface_param_round_trips_setter():
-    rx = [
-        sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
-                       n=lambda wvl: 1.5),
-    ]
-    g, s = surface_param(rx, 0, 'c')
-    assert g() == pytest.approx(1 / 50.0)
-    s(1 / 100.0)
-    assert g() == pytest.approx(1 / 100.0)
-    # the sag_derivatives closure should see the new value next call
-    assert rx[0].params['c'] == pytest.approx(1 / 100.0)
-
-
-def test_surface_param_unknown_key_raises():
-    rx = [plane(typ='eval', P=np.array([0., 0., 0.]))]
-    with pytest.raises(KeyError):
-        surface_param(rx, 0, 'c')  # plane has no params
-
-
-def test_vertex_z_param_round_trips():
-    rx = [plane(typ='eval', P=np.array([0., 0., 5.]))]
-    g, s = vertex_z_param(rx, 0)
-    assert g() == pytest.approx(5.0)
-    s(7.0)
-    assert g() == pytest.approx(7.0)
-    assert rx[0].P[2] == pytest.approx(7.0)
 
 
 # ---------- FD against analytic d(BFD)/dc for a single sphere ----------
@@ -56,12 +27,12 @@ def test_fd_jacobian_single_sphere_curvature():
     c0 = 1.0 / 50.0
     expected = -n_glass / ((n_glass - 1.0) * c0 * c0)
 
-    rx = [
-        sphere(c=c0, typ='refr', P=np.array([0., 0., 0.]),
-                       n=lambda wvl: n_glass),
-    ]
-    params = [surface_param(rx, 0, 'c')]
-    J = merit_jacobian(rx, params, paraxial_image_distance, step=1e-7)
+    ld = LensData(wavelengths=[0.55e-3]).add(
+        ConicSag(c0, 0.0), typ='refr', material=lambda wvl: n_glass,
+        thickness=0.0)
+    ld.vary('curvature', surfaces=0)
+    J = merit_jacobian_free(
+        ld, lambda: float(paraxial_image_distance(ld, wvl=0.55e-3)), step=1e-7)
     np.testing.assert_allclose(J[0], expected, rtol=1e-5)
 
 
@@ -74,57 +45,40 @@ def test_fd_jacobian_efl_doublet_curvatures():
     f = 1.0 / ((n_glass - 1.0) * (c1 - c2))
     expected_dfdc1 = -f * f * (n_glass - 1.0)
     expected_dfdc2 = +f * f * (n_glass - 1.0)
-    rx = [
-        sphere(c=c1, typ='refr', P=np.array([0., 0., 0.]),
-                       n=lambda wvl: n_glass),
-        sphere(c=c2, typ='refr', P=np.array([0., 0., 1e-9]),
-                       n=lambda wvl: 1.0),
-    ]
-    params = [surface_param(rx, 0, 'c'), surface_param(rx, 1, 'c')]
-    J = merit_jacobian(rx, params, effective_focal_length, step=1e-7)
+    ld = (LensData(wavelengths=[0.55e-3])
+          .add(ConicSag(c1, 0.0), typ='refr', material=lambda wvl: n_glass,
+               thickness=1e-9)
+          .add(ConicSag(c2, 0.0), typ='refr', material=lambda wvl: 1.0,
+               thickness=0.0))
+    ld.vary('curvature', surfaces=[0, 1])
+    J = merit_jacobian_free(
+        ld, lambda: float(effective_focal_length(ld, wvl=0.55e-3)), step=1e-7)
     np.testing.assert_allclose(J[0], expected_dfdc1, rtol=1e-5)
     np.testing.assert_allclose(J[1], expected_dfdc2, rtol=1e-5)
 
 
-def test_fd_jacobian_restores_prescription_state():
-    """After Jacobian evaluation, the prescription must be back to its
-    nominal state (no transient mutation leaks out)."""
-    rx = [
-        sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
-                       n=lambda wvl: 1.5),
-    ]
-    c_before = rx[0].params['c']
-    params = [surface_param(rx, 0, 'c')]
-    merit_jacobian(rx, params, paraxial_image_distance)
-    assert rx[0].params['c'] == pytest.approx(c_before)
-
-
-def test_fd_jacobian_handles_zero_valued_parameter():
-    """A parameter starting at zero must use an absolute step (h = step), not
-    a relative step that would collapse to 0."""
-    n_glass = 1.5
-    rx = [
-        sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
-                       n=lambda wvl: n_glass),
-        plane(typ='eval', P=np.array([0., 0., 0.])),  # z=0, perturb me
-    ]
-    # perturbing the eval plane's z does not change the BFD (paraxial image
-    # is independent of where you stick a downstream eval plane in the
-    # matrix walk because BFD is from the last surface vertex; moving the
-    # eval plane *is* moving that vertex though, so dBFD/dz_eval = -1).
-    params = [vertex_z_param(rx, 1)]
-    J = merit_jacobian(rx, params, paraxial_image_distance, step=1e-6)
-    np.testing.assert_allclose(J[0], -1.0, atol=1e-6)
+def test_fd_jacobian_restores_free_vector():
+    """After Jacobian evaluation the LensData is back to its nominal free
+    vector (no transient perturbation leaks out)."""
+    ld = LensData(wavelengths=[0.55e-3]).add(
+        ConicSag(1 / 50.0, 0.0), typ='refr', material=lambda wvl: 1.5,
+        thickness=0.0)
+    ld.vary('curvature', surfaces=0)
+    x0 = ld.pack()
+    merit_jacobian_free(
+        ld, lambda: float(paraxial_image_distance(ld, wvl=0.55e-3)))
+    np.testing.assert_allclose(ld.pack(), x0)
 
 
 def test_fd_jacobian_unknown_method_raises():
-    rx = [
-        sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
-                       n=lambda wvl: 1.5),
-    ]
-    params = [surface_param(rx, 0, 'c')]
+    ld = LensData(wavelengths=[0.55e-3]).add(
+        ConicSag(1 / 50.0, 0.0), typ='refr', material=lambda wvl: 1.5,
+        thickness=0.0)
+    ld.vary('curvature', surfaces=0)
     with pytest.raises(ValueError, match="method must be"):
-        merit_jacobian(rx, params, paraxial_image_distance, method='nope')
+        merit_jacobian_free(
+            ld, lambda: float(paraxial_image_distance(ld, wvl=0.55e-3)),
+            method='nope')
 
 
 # ---------- autograd backend gating ----------
@@ -132,10 +86,11 @@ def test_fd_jacobian_unknown_method_raises():
 def test_autograd_method_requires_torch_backend():
     """With the default numpy backend, asking for 'autograd' must error
     helpfully rather than silently producing nonsense."""
-    rx = [
-        sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
-                       n=lambda wvl: 1.5),
-    ]
-    params = [surface_param(rx, 0, 'c')]
+    ld = LensData(wavelengths=[0.55e-3]).add(
+        ConicSag(1 / 50.0, 0.0), typ='refr', material=lambda wvl: 1.5,
+        thickness=0.0)
+    ld.vary('curvature', surfaces=0)
     with pytest.raises(RuntimeError, match='backend to be torch'):
-        merit_jacobian(rx, params, paraxial_image_distance, method='autograd')
+        merit_jacobian_free(
+            ld, lambda: float(paraxial_image_distance(ld, wvl=0.55e-3)),
+            method='autograd')

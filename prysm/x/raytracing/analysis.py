@@ -34,6 +34,17 @@ from .opt import (
 )
 from .paraxial import paraxial_image_distance
 from .launch import Field, Sampling, launch
+from ._meta import lensdata_wavelength, lensdata_epd
+
+
+def _require_epd(prescription, epd):
+    """Resolve epd from an explicit value or the LensData; error if neither."""
+    epd = lensdata_epd(prescription, epd)
+    if epd is None:
+        raise TypeError(
+            'epd is required; pass epd=... or supply a LensData carrying it.'
+        )
+    return epd
 
 
 # ---------- transverse ray aberration --------------------------------------
@@ -243,8 +254,8 @@ def wavefront_zernike_fit(opd, x_pupil, y_pupil, nms, *,
 
 # ---------- distortion ------------------------------------------------------
 
-def distortion(prescription, fields, wavelength, *, epd, n_ambient=1.0,
-               paraxial_fraction=1e-4, distortion_type='f-tan',
+def distortion(prescription, fields, wavelength=None, *, epd=None,
+               n_ambient=1.0, paraxial_fraction=1e-4, distortion_type='f-tan',
                pupil_z=None):
     """Per-field image-plane error of the chief ray vs a paraxial proxy.
 
@@ -289,6 +300,8 @@ def distortion(prescription, fields, wavelength, *, epd, n_ambient=1.0,
         field where paraxial landing is the origin.
 
     """
+    wavelength = lensdata_wavelength(prescription, wavelength)
+    epd = _require_epd(prescription, epd)
     fields = list(fields)
     n = len(fields)
     real_xy = np.zeros((n, 2), dtype=config.precision)
@@ -355,7 +368,7 @@ def _line_intersection_z(P0, S0, P1, S1):
     return 0.5 * (float(Q0[2]) + float(Q1[2]))
 
 
-def field_curvature(prescription, fields, wavelength, *, epd,
+def field_curvature(prescription, fields, wavelength=None, *, epd=None,
                     n_ambient=1.0, marginal_fraction=0.7):
     """Sagittal and tangential focus shifts per field point.
 
@@ -390,6 +403,8 @@ def field_curvature(prescription, fields, wavelength, *, epd,
         the chief.
 
     """
+    wavelength = lensdata_wavelength(prescription, wavelength)
+    epd = _require_epd(prescription, epd)
     fields = list(fields)
     n = len(fields)
     sagittal_z = np.zeros(n, dtype=config.precision)
@@ -448,7 +463,7 @@ def axial_color(prescription, wavelengths, *, n_ambient=1.0):
     ], dtype=config.precision)
 
 
-def lateral_color(prescription, fields, wavelengths, *, epd, n_ambient=1.0):
+def lateral_color(prescription, fields, wavelengths, *, epd=None, n_ambient=1.0):
     """Chief-ray image-plane landing at every (field, wavelength) pair.
 
     The lateral chromatic aberration at field i is the difference between
@@ -473,6 +488,7 @@ def lateral_color(prescription, fields, wavelengths, *, epd, n_ambient=1.0):
         chief-ray (x, y) at the image plane.
 
     """
+    epd = _require_epd(prescription, epd)
     fields = list(fields)
     wavelengths = list(wavelengths)
     n_f = len(fields)

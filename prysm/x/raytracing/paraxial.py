@@ -18,6 +18,12 @@ from prysm.conf import config
 from prysm.mathops import np
 
 from .spencer_and_murty import STYPE_REFLECT, STYPE_REFRACT
+from ._meta import (
+    lensdata_wavelength,
+    lensdata_epd,
+    lensdata_stop_index,
+    lensdata_n_ambient,
+)
 
 
 def _paraxial_curvature(surf):
@@ -78,7 +84,7 @@ def _walk_matrix(prescription, wvl, n_ambient, *,
     return M, n
 
 
-def system_matrix(prescription, wvl=0.6328, n_ambient=1.0):
+def system_matrix(prescription, wvl=None, n_ambient=None):
     """Compose the 2x2 ABCD system matrix for a sequential prescription.
 
     Walks the prescription in order: between consecutive surfaces a
@@ -92,12 +98,17 @@ def system_matrix(prescription, wvl=0.6328, n_ambient=1.0):
     prescription : sequence of Surface
         the prescription to analyse.  Surfaces with a c entry in
         surf.params contribute paraxial power; planes and eval surfaces
-        do not.
-    wvl : float
+        do not.  When a LensData is passed, wvl defaults to its reference
+        wavelength.
+    wvl : float or str, optional
         wavelength in microns (passed to each refractive surface's n
-        callback).  Has no effect on a purely reflective prescription.
-    n_ambient : float
-        index in object space.
+        callback).  A string names a wavelength of the LensData.  None
+        (default) resolves to the LensData reference wavelength, or 0.6328
+        for a bare Surface sequence.  Has no effect on a purely reflective
+        prescription.
+    n_ambient : float, optional
+        Index in object space. Defaults from a LensData n_ambient when omitted,
+        else 1.0.
 
     Returns
     -------
@@ -108,10 +119,12 @@ def system_matrix(prescription, wvl=0.6328, n_ambient=1.0):
         prescription contains an odd number of reflections.
 
     """
+    wvl = lensdata_wavelength(prescription, wvl)
+    n_ambient = lensdata_n_ambient(prescription, n_ambient)
     return _walk_matrix(prescription, wvl, n_ambient)
 
 
-def paraxial_image_distance(prescription, wvl=0.6328, n_ambient=1.0):
+def paraxial_image_distance(prescription, wvl=None, n_ambient=None):
     """Signed distance from the last surface vertex to the paraxial image plane for a collimated on-axis input.
 
     For a marginal ray launched at (y0, u0 = 0), the image plane is the
@@ -152,7 +165,7 @@ def paraxial_image_distance(prescription, wvl=0.6328, n_ambient=1.0):
     return -A * n_final / C
 
 
-def effective_focal_length(prescription, wvl=0.6328, n_ambient=1.0):
+def effective_focal_length(prescription, wvl=None, n_ambient=None):
     """System effective focal length (EFL) from the ABCD matrix.
 
     EFL = -n_ambient / C, where C is the system matrix entry coupling input
@@ -160,6 +173,7 @@ def effective_focal_length(prescription, wvl=0.6328, n_ambient=1.0):
     positive EFL for a converging system seen from object space.
 
     """
+    n_ambient = lensdata_n_ambient(prescription, n_ambient)
     M, _ = system_matrix(prescription, wvl=wvl, n_ambient=n_ambient)
     C = M[1, 0]
     if abs(C) < 1e-30:
@@ -169,7 +183,7 @@ def effective_focal_length(prescription, wvl=0.6328, n_ambient=1.0):
     return -float(n_ambient) / C
 
 
-def back_focal_length(prescription, wvl=0.6328, n_ambient=1.0):
+def back_focal_length(prescription, wvl=None, n_ambient=None):
     """System back focal length (BFL) — distance from the last *powered* surface vertex to the rear focal point.
 
     Equivalent to paraxial_image_distance when the prescription ends at
@@ -192,7 +206,7 @@ def back_focal_length(prescription, wvl=0.6328, n_ambient=1.0):
     return bfd_from_end + extra
 
 
-def front_focal_length(prescription, wvl=0.6328, n_ambient=1.0):
+def front_focal_length(prescription, wvl=None, n_ambient=None):
     """System front focal length (FFL) — distance from the front focal point to the first *powered* surface vertex.
 
     Sign convention: positive when the front focal point lies upstream of
@@ -211,6 +225,7 @@ def front_focal_length(prescription, wvl=0.6328, n_ambient=1.0):
         raise ValueError(
             'prescription contains no powered surfaces; FFL is undefined.'
         )
+    n_ambient = lensdata_n_ambient(prescription, n_ambient)
     M, _ = system_matrix(prescription, wvl=wvl, n_ambient=n_ambient)
     C = M[1, 0]
     D = M[1, 1]
@@ -348,7 +363,7 @@ class FirstOrderProperties:
         return '\n'.join(line for line in lines if line is not None)
 
 
-def first_order(prescription, wvl=0.6328, n_ambient=1.0, *,
+def first_order(prescription, wvl=None, n_ambient=None, *,
                 epd=None, stop_index=None):
     """Compute paraxial first-order properties of a prescription.
 
@@ -358,21 +373,26 @@ def first_order(prescription, wvl=0.6328, n_ambient=1.0, *,
     FirstOrderProperties instance whose __repr__ is a multi-line
     summary suitable for printing.
 
+    When a LensData is passed, wvl, epd, and stop_index each default to the
+    corresponding system metadata it carries.
+
     Parameters
     ----------
     prescription : sequence of Surface
-    wvl : float
-        wavelength in microns.
+    wvl : float or str, optional
+        wavelength in microns (or a LensData wavelength name).  None defaults
+        to the LensData reference wavelength, else 0.6328.
     n_ambient : float
         object-space index.
     epd : float, optional
         entrance pupil diameter.  When supplied, F-number and image-space
         NA are computed; combined with stop_index, pupil diameters as
-        well.
+        well.  Defaults from the LensData epd when omitted.
     stop_index : int, optional
         index of the aperture stop within prescription.  When
         supplied, paraxial entrance and exit pupil z-positions are
-        computed.  Convention: the stop is treated as an aperture in a
+        computed.  Defaults from the LensData stop_index when omitted.
+        Convention: the stop is treated as an aperture in a
         plane (no refraction at the stop in the EP path); the stop's own
         refraction, if any, is carried by the post-stop matrix used for
         XP location.
@@ -385,6 +405,10 @@ def first_order(prescription, wvl=0.6328, n_ambient=1.0, *,
         None.
 
     """
+    wvl = lensdata_wavelength(prescription, wvl)
+    n_ambient = lensdata_n_ambient(prescription, n_ambient)
+    epd = lensdata_epd(prescription, epd)
+    stop_index = lensdata_stop_index(prescription, stop_index)
     out = FirstOrderProperties()
     n_surfaces = len(prescription)
     if n_surfaces == 0:

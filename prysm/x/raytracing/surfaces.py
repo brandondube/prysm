@@ -125,14 +125,6 @@ def _validate_n_and_typ(n, typ):
         raise ValueError('refractive surfaces must have a refractive index function, not None')
 
 
-def _common_surface_kwargs(R=None, bounding=None, aperture=None, tilt=None,
-                           decenter=None, tilt_radians=False, grating=None):
-    """Collect common surface keyword arguments into a dictionary."""
-    return dict(R=R, bounding=bounding, aperture=aperture, tilt=tilt,
-                decenter=decenter, tilt_radians=tilt_radians,
-                grating=grating)
-
-
 class Shape:
     """Base class for sag-bearing shape objects."""
 

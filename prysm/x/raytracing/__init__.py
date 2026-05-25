@@ -1,6 +1,6 @@
 """Sequential Ray Tracing."""
 
-from .prescription import Prescription
+from .lensdata import CoordBreak, LensData, SurfaceRow
 from .launch import Field, Sampling, launch
 from .spencer_and_murty import (
     DEFAULT_TOL_SAG,
@@ -74,7 +74,9 @@ FRAUNHOFER_LINES_UM = {
 
 __all__ = [
     'FRAUNHOFER_LINES_UM',
-    'Prescription',
+    'LensData',
+    'SurfaceRow',
+    'CoordBreak',
     'raytrace',
     'refract',
     'reflect',

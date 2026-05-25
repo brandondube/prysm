@@ -1,30 +1,29 @@
-"""Design layer: Variables, Operands, and the ``Problem`` class.
+"""Design layer: Operands and the `Problem` class.
 
-A thin layer over the kernel that turns a sequential prescription into a
-design loop:
+A thin layer over the kernel that turns a :class:`LensData` into a design
+loop:
 
-- **Variables** are ``(getter, setter)`` callable pairs.  The typed
-  factories below (``curvature_of``, ``radius_of``, ``kappa_of``,
-  ``coef_of``, ``position_of``, ``thickness_after``) cover the common
-  cases by name; arbitrary scalars can always be wrapped manually.
-  Variables mutate the prescription in place — the sag_and_normal closures on
-  each surface read ``params`` per call so perturbations are picked up
-  on the next trace without rebuilding.
+- **Variables** are the LensData's free DOFs.  Mark them with
+  `lensdata.vary(...)` / `freeze(...)`; the dense free vector
+  (`lensdata.pack()`) is what the optimizer mutates.  `Problem` reads
+  and writes that vector via `pack` / `update`, so there is no separate
+  variable layer — the system re-lays-out from the free vector on every eval.
 - **Operands** are vanilla classes with
-  ``__call__(prescription, cache) -> scalar`` plus a ``target`` and
-  ``weight``.  Trace-based operands ask the per-call cache for their
-  ray-trace; paraxial operands compute directly from the prescription.
-- **Problem** wraps a prescription + variables + operands.
-  ``residuals(x)`` returns the per-operand weighted residual vector for
-  ``scipy.optimize.least_squares``; ``merit(x)`` returns the scalar sum
-  of squared residuals for ``scipy.optimize.minimize``; ``jacobian(x)``
-  reuses ``sensitivity.merit_jacobian`` to compute the gradient of the
-  scalar merit (FD or torch autograd).
+  `__call__(prescription, cache) -> scalar` plus a `target` and
+  `weight`.  Trace-based operands ask the per-call cache for their
+  ray-trace; paraxial operands compute directly from the prescription.  A
+  LensData duck-types as the compiled surface sequence the operands consume.
+- **Problem** wraps a LensData + operands.
+  `residuals(x)` returns the per-operand weighted residual vector for
+  `scipy.optimize.least_squares`; `merit(x)` returns the scalar sum
+  of squared residuals for `scipy.optimize.minimize`; `jacobian(x)`
+  reuses `sensitivity.merit_jacobian_free` to compute the gradient of the
+  scalar merit (FD or torch autograd) w.r.t. the free vector.
 
-A trace cache is created fresh on each ``residuals`` / ``merit`` call so
+A trace cache is created fresh on each `residuals` / `merit` call so
 multiple operands sharing the same launch bundle and wavelength evaluate
 the trace once per call.  The cache lifetime is one merit call, not
-global; cache hits are based on object identity (``id(P)``, ``id(S)``,
+global; cache hits are based on object identity (`id(P)`, `id(S)`,
 and the float wavelength), so operands should hold references to the
 same launch arrays rather than copies.
 
@@ -40,7 +39,7 @@ from prysm.x.optym.least_squares import (  # NOQA - re-export for users
 
 from .spencer_and_murty import raytrace
 from .sensitivity import merit_jacobian_free as _merit_jacobian_free
-from .opt import rms_spot_radius, opd_from_raytrace, xp_reference_sphere
+from .opt import rms_spot_radius
 from .paraxial import (
     effective_focal_length,
     back_focal_length,
@@ -52,11 +51,11 @@ from . import analysis as _analysis
 # ---------- Trace cache ------------------------------------------------------
 
 class _TraceCache:
-    """Per-merit-call ray-trace cache keyed by ``(id(P), id(S), wvl)``.
+    """Per-merit-call ray-trace cache keyed by `(id(P), id(S), wvl)`.
 
     Two operands sharing the same launch bundle and wavelength evaluate
     the trace once per merit call.  Identity-based keying assumes the
-    user retains the same ``P``, ``S`` array objects across operands
+    user retains the same `P`, `S` array objects across operands
     (the operand constructors capture references).
 
     Not thread-safe; not reusable across merit calls.
@@ -82,7 +81,7 @@ class _TraceCache:
 
     @property
     def n_traces(self):
-        """Number of underlying ``raytrace`` calls made (cache misses)."""
+        """Number of underlying `raytrace` calls made (cache misses)."""
         return self._n_traces
 
 
@@ -342,47 +341,34 @@ def _is_lensdata(model):
 
 
 class Problem:
-    """A design-optimization problem.
+    """A design-optimization problem over a LensData's free vector.
 
-    Two modes, selected by the first argument:
-
-    - **LensData** — ``Problem(lensdata, operands)``.  The free vector is the
-      LensData's packed DOFs; ``x`` is scattered back with ``lensdata.update``,
-      the system recompiled, and the operands evaluated against the compiled
-      surfaces.  This is the canonical path.
-    - **Legacy surface list** — ``Problem(surfaces, variables, operands)``.
-      ``variables`` are ``(getter, setter)`` pairs that mutate the surfaces in
-      place.  Retained for the (deprecated) Prescription design session.
+    `Problem(lensdata, operands)`.  The free vector is the LensData's packed
+    DOFs (mark them with `lensdata.vary(...)`); `x` is scattered back with
+    `lensdata.update`, the system recompiled, and the operands evaluated
+    against the compiled surfaces.
 
     Methods: :meth:`x0`, :meth:`residuals`, :meth:`merit`, :meth:`jacobian`.
 
     """
 
-    def __init__(self, model, variables=None, operands=None):
-        if _is_lensdata(model):
-            self.lensdata = model
-            self.prescription = model  # duck-types as a surface sequence
-            ops = operands if operands is not None else variables
-            self.operands = list(ops or [])
-            self.variables = None
-        else:
-            self.lensdata = None
-            self.prescription = model
-            self.variables = list(variables or [])
-            self.operands = list(operands or [])
+    def __init__(self, lensdata, operands=None):
+        if not _is_lensdata(lensdata):
+            raise TypeError(
+                'Problem requires a LensData (it needs pack/update/to_surfaces '
+                'to own the free vector); got '
+                f'{type(lensdata).__name__}.'
+            )
+        self.lensdata = lensdata
+        self.prescription = lensdata  # duck-types as a surface sequence
+        self.operands = list(operands or [])
 
     def x0(self):
-        """Initial parameter vector from the current system state."""
-        if self.lensdata is not None:
-            return self.lensdata.pack()
-        return np.array([float(g()) for g, _ in self.variables])
+        """Initial parameter vector — the LensData's packed free vector."""
+        return self.lensdata.pack()
 
     def _set_x(self, x):
-        if self.lensdata is not None:
-            self.lensdata.update(x)
-            return
-        for (_, s), v in zip(self.variables, x):
-            s(float(v))
+        self.lensdata.update(x)
 
     def residuals(self, x, return_cache=False):
         """Per-operand weighted residual vector [w_i * (op_i - target_i)].
@@ -407,7 +393,7 @@ class Problem:
 
         Does not set parameters; callers responsible for that.  Shared
         by merit() (which sets x first) and jacobian() (which delegates
-        parameter setting to merit_jacobian).
+        parameter setting to merit_jacobian_free).
 
         """
         cache = _TraceCache(prescription)
@@ -434,12 +420,6 @@ class Problem:
         requires the prysm backend to be torch.
 
         """
-        if self.lensdata is None:
-            raise TypeError(
-                'Problem.jacobian requires a LensData model (the free vector); '
-                'build the problem as Problem(lensdata, operands) and mark DOFs '
-                'with lensdata.vary(...)'
-            )
         self._set_x(x)
         return _merit_jacobian_free(
             self.lensdata, lambda: self._eval_merit(self.prescription),

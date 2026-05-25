@@ -17,7 +17,9 @@ from .spencer_and_murty import (
     transform_to_global_coords,
     transform_to_local_coords,
 )
+from .analysis import transverse_ray_aberration
 from .surfaces import STYPE_REFLECT, STYPE_REFRACT
+from ._meta import lensdata_wavelength
 
 import numpy as np  # see module docstring; do not "fix" to mathops np
 
@@ -576,7 +578,7 @@ def _wall_path(x0, x1, outer_y, features, side, endpoint_names):
     return xs, ys
 
 
-def plot_optics(prescription, result, *, wvl=0.587, ambient_index=1.0,
+def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
                 index_atol=1e-9, mirror_backing=None, points=100,
                 lw=1, ls='-', c='k', alpha=1, zorder=3,
                 x='z', y='y', fig=None, ax=None, lens_edges=None):
@@ -590,6 +592,7 @@ def plot_optics(prescription, result, *, wvl=0.587, ambient_index=1.0,
         Trace result returned by spencer_and_murty.raytrace.
     wvl : float, optional
         Wavelength in microns used to evaluate post-surface material indices.
+        Defaults from the LensData reference wavelength, else 0.6328.
     ambient_index : float, optional
         Refractive index that closes a physical lens group.
     index_atol : float, optional
@@ -639,6 +642,7 @@ def plot_optics(prescription, result, *, wvl=0.587, ambient_index=1.0,
         An axis object
 
     """
+    wvl = lensdata_wavelength(prescription, wvl)
     x = x.lower()
     y = y.lower()
     fig, ax = share_fig_ax(fig, ax)
@@ -770,14 +774,15 @@ def plot_optics(prescription, result, *, wvl=0.587, ambient_index=1.0,
     return fig, ax
 
 
-def plot_transverse_ray_aberration(phist, lw=1, ls='-', c='r', alpha=1, zorder=4, axis='y', fig=None, ax=None):
+def plot_transverse_ray_aberration(phist, lw=1, ls='-', c='r', alpha=1,
+                                   zorder=4, axis='y', fig=None, ax=None,
+                                   chief_index=None, status=None):
     """Plot the transverse ray aberration for a single ray fan.
 
     Parameters
     ----------
-    phist : list or ndarray
-        the first return from spencer_and_murty.raytrace,
-        iterable of arrays of length 3 (X,Y,Z)
+    phist : RayTraceResult, list, or ndarray
+        Trace result or position history from spencer_and_murty.raytrace.
     lw : float, optional
         linewidth
     ls : str, optional
@@ -794,6 +799,11 @@ def plot_transverse_ray_aberration(phist, lw=1, ls='-', c='r', alpha=1, zorder=4
         A figure object
     ax : matplotlib.axes.Axis
         An axis object
+    chief_index : int, optional
+        row index of the chief ray; default N//2.
+    status : ndarray, optional
+        per-ray status from raytrace.  Invalid rays are excluded when
+        provided.
 
     Returns
     -------
@@ -805,16 +815,23 @@ def plot_transverse_ray_aberration(phist, lw=1, ls='-', c='r', alpha=1, zorder=4
     """
     fig, ax = share_fig_ax(fig, ax)
 
+    if isinstance(phist, RayTraceResult):
+        result = phist
+        phist = result.P
+        if status is None:
+            status = result.status
+
     ph = np.asarray(array_to_true_numpy(phist))
-    sieve = {
-        'x': 0,
-        'y': 1,
-    }
-    axis = axis.lower()
-    axis = sieve[axis]
-    input_rays = ph[0, ..., axis]
-    output_rays = ph[-1, ..., axis]
-    ax.plot(input_rays, output_rays, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
+    if status is not None:
+        status = np.asarray(array_to_true_numpy(status))
+
+    input_rays, output_rays = transverse_ray_aberration(
+        ph, axis=axis.lower(), chief_index=chief_index, status=status,
+    )
+    input_rays = np.asarray(array_to_true_numpy(input_rays))
+    output_rays = np.asarray(array_to_true_numpy(output_rays))
+    ax.plot(input_rays, output_rays, c=c, lw=lw, ls=ls, alpha=alpha,
+            zorder=zorder)
     return fig, ax
 
 

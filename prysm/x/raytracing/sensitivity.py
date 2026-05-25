@@ -1,12 +1,12 @@
 """Jacobian of a scalar merit w.r.t. a LensData's dense free vector.
 
-Two backends via the ``method`` kwarg of :func:`merit_jacobian_free`:
+Two backends via the `method` kwarg of :func:`merit_jacobian_free`:
 
-- ``'fd'`` (default): central finite differences over the free vector.  Works
-  regardless of which numerical backend ``prysm.mathops`` points at.
-- ``'autograd'``: PyTorch reverse-mode autodiff through ``update`` ->
-  ``to_surfaces`` -> merit.  Requires the prysm backend to be torch
-  (``prysm.mathops.set_backend_to_pytorch()``).
+- `'fd'` (default): central finite differences over the free vector.  Works
+  regardless of which numerical backend `prysm.mathops` points at.
+- `'autograd'`: PyTorch reverse-mode autodiff through `update` ->
+  `to_surfaces` -> merit.  Requires the prysm backend to be torch
+  (`prysm.mathops.set_backend_to_pytorch()`).
 
 """
 
@@ -18,10 +18,10 @@ def merit_jacobian_free(lensdata, merit, method='fd', step=1e-6):
     """Gradient of a scalar merit w.r.t. a LensData's dense free vector.
 
     The merit is a zero-argument callable returning the scalar figure of merit
-    of the LensData in its current state.  ``method='fd'`` perturbs each free
+    of the LensData in its current state.  `method='fd'` perturbs each free
     DOF with central differences (mutating the free vector in place and
-    restoring it on return).  ``method='autograd'`` differentiates through
-    ``update`` -> ``to_surfaces`` -> merit, and requires the prysm backend to
+    restoring it on return).  `method='autograd'` differentiates through
+    `update` -> `to_surfaces` -> merit, and requires the prysm backend to
     be torch.
 
     Parameters
@@ -30,16 +30,16 @@ def merit_jacobian_free(lensdata, merit, method='fd', step=1e-6):
         system whose free vector is differentiated.  Restored to its nominal
         free vector before return.
     merit : callable
-        ``merit() -> scalar`` evaluating the current LensData state.
+        `merit() -> scalar` evaluating the current LensData state.
     method : {'fd', 'autograd'}, optional
-        differentiation backend.  Default ``'fd'``.
+        differentiation backend.  Default `'fd'`.
     step : float, optional
-        FD step, scaled by ``|x_i|`` (or 1 if zero) per DOF.  Default 1e-6.
+        FD step, scaled by `|x_i|` (or 1 if zero) per DOF.  Default 1e-6.
 
     Returns
     -------
     J : ndarray
-        shape ``(n_free,)`` gradient of the merit w.r.t. the free vector.
+        shape `(n_free,)` gradient of the merit w.r.t. the free vector.
 
     """
     x0 = lensdata.pack()

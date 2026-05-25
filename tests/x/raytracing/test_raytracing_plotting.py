@@ -12,6 +12,7 @@ from prysm.x.raytracing.plotting import (
     mirror_substrate_outline,
     plot_optics,
     plot_ray_paths,
+    plot_transverse_ray_aberration,
     plot_wave_aberration_fan,
 )
 from prysm.x.raytracing.spencer_and_murty import RayTraceResult
@@ -185,6 +186,38 @@ def test_plot_ray_paths_uses_raytrace_result_positions():
         for ray_index, line in enumerate(ax.lines):
             np.testing.assert_allclose(line.get_xdata(), P[:, ray_index, 2])
             np.testing.assert_allclose(line.get_ydata(), P[:, ray_index, 1])
+    finally:
+        plt.close(fig)
+
+
+def test_plot_transverse_ray_aberration_plots_chief_relative_fan():
+    P = np.asarray([
+        [[0., -1., 0.], [0., 0., 0.], [0., 1., 0.]],
+        [[0., 9., 1.], [0., 10., 1.], [0., 12., 1.]],
+    ])
+
+    fig, ax = plot_transverse_ray_aberration(P, axis='y')
+    try:
+        line = ax.lines[0]
+        np.testing.assert_allclose(line.get_xdata(), [-1., 0., 1.])
+        np.testing.assert_allclose(line.get_ydata(), [-1., 0., 2.])
+    finally:
+        plt.close(fig)
+
+
+def test_plot_transverse_ray_aberration_accepts_raytrace_result_status():
+    P = np.asarray([
+        [[0., -1., 0.], [0., 0., 0.], [0., 1., 0.]],
+        [[0., 9., 1.], [0., 10., 1.], [0., 12., 1.]],
+    ])
+    result = RayTraceResult(P, np.zeros_like(P), np.zeros(P.shape[:-1]),
+                            np.asarray([1 + 2j, 0 + 0j, 0 + 0j]))
+
+    fig, ax = plot_transverse_ray_aberration(result, axis='y')
+    try:
+        line = ax.lines[0]
+        np.testing.assert_allclose(line.get_xdata(), [0., 1.])
+        np.testing.assert_allclose(line.get_ydata(), [0., 2.])
     finally:
         plt.close(fig)
 
