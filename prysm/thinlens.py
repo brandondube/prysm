@@ -1,4 +1,4 @@
-"""A collection of thin lens equations for system modeling."""
+"""First-order optics equations for system modeling."""
 
 from .mathops import np
 
@@ -49,6 +49,121 @@ def image_to_object_dist(efl, image_distance):
     """
     ret = 1 / efl - 1 / image_distance
     return 1 / ret
+
+
+def object_image_to_efl(object_distance, image_distance):
+    """Compute focal length from a pair of conjugate distances.
+
+    Parameters
+    ----------
+    object_distance : float or ndarray
+        signed object distance from the front principal plane
+    image_distance : float or ndarray
+        signed image distance from the rear principal plane
+
+    Returns
+    -------
+    float or ndarray
+        focal length, in the same units as the inputs
+
+    """
+    power = 1 / image_distance - 1 / object_distance
+    return 1 / power
+
+
+def efl_to_power(efl, n=1):
+    """Convert effective focal length to optical power.
+
+    Parameters
+    ----------
+    efl : float or ndarray
+        effective focal length
+    n : float, optional
+        refractive index of the surrounding medium
+
+    Returns
+    -------
+    float or ndarray
+        optical power, in inverse units of efl
+
+    """
+    return n / efl
+
+
+def power_to_efl(power, n=1):
+    """Convert optical power to effective focal length.
+
+    Parameters
+    ----------
+    power : float or ndarray
+        optical power
+    n : float, optional
+        refractive index of the surrounding medium
+
+    Returns
+    -------
+    float or ndarray
+        effective focal length
+
+    """
+    return n / power
+
+
+def efl_to_fno(efl, epd):
+    """Compute f/# from effective focal length and entrance pupil diameter.
+
+    Parameters
+    ----------
+    efl : float or ndarray
+        effective focal length
+    epd : float
+        entrance pupil diameter
+
+    Returns
+    -------
+    float or ndarray
+        f/number
+
+    """
+    return abs(efl) / epd
+
+
+def fno_to_efl(fno, epd):
+    """Compute effective focal length from f/# and entrance pupil diameter.
+
+    Parameters
+    ----------
+    fno : float or ndarray
+        f/number
+    epd : float
+        entrance pupil diameter
+
+    Returns
+    -------
+    float or ndarray
+        effective focal length
+
+    """
+    return fno * epd
+
+
+def fno_to_epd(fno, efl):
+    """Compute entrance pupil diameter from f/# and effective focal length.
+
+    Parameters
+    ----------
+    fno : float or ndarray
+        f/number
+    efl : float
+        effective focal length
+
+    Returns
+    -------
+    float or ndarray
+        entrance pupil diameter
+
+    """
+    return abs(efl) / fno
 
 
 def image_dist_epd_to_na(image_distance, epd):
@@ -161,7 +276,26 @@ def mag_to_object_dist(efl, mag):
         object distance
 
     """
-    return efl * ((1/mag) + 1)
+    return efl * (1 - 1/mag)
+
+
+def mag_to_image_dist(efl, mag):
+    """Compute the image distance for a given focal length and magnification.
+
+    Parameters
+    ----------
+    efl : float
+        focal length of the lens
+    mag : float
+        signed magnification
+
+    Returns
+    -------
+    float
+        image distance
+
+    """
+    return efl * (1 - mag)
 
 
 def linear_to_long_mag(lateral_mag):
@@ -291,6 +425,33 @@ def tilt_to_image_shift(W111, fno):
     return 2*(W111*fno)
 
 
+def singlet_power(c1, c2, t, n, n_ambient=1.):
+    """Optical power of a thick singlet.
+
+    Parameters
+    ----------
+    c1 : float
+        curvature of S1
+    c2 : float
+        curvature of S2
+    t : float
+        vertex-to-vertex thickness
+    n : float
+        refractive index
+    n_ambient: float
+        refractive index of the ambient medium ("air")
+
+    Returns
+    -------
+    float
+        optical power in the ambient medium
+
+    """
+    phi1 = (n - n_ambient) * c1
+    phi2 = (n_ambient - n) * c2
+    return phi1 + phi2 - t/n * phi1 * phi2
+
+
 def singlet_efl(c1, c2, t, n, n_ambient=1.):
     """EFL of a singlet.
 
@@ -313,10 +474,62 @@ def singlet_efl(c1, c2, t, n, n_ambient=1.):
         EFL
 
     """
+    phi = singlet_power(c1, c2, t, n, n_ambient)
+    return n_ambient / phi
+
+
+def singlet_bfl(c1, c2, t, n, n_ambient=1.):
+    """Back focal length of a thick singlet.
+
+    Parameters
+    ----------
+    c1 : float
+        curvature of S1
+    c2 : float
+        curvature of S2
+    t : float
+        vertex-to-vertex thickness
+    n : float
+        refractive index
+    n_ambient: float
+        refractive index of the ambient medium ("air")
+
+    Returns
+    -------
+    float
+        signed distance from S2 to the rear focal point
+
+    """
     phi1 = (n - n_ambient) * c1
+    efl = singlet_efl(c1, c2, t, n, n_ambient)
+    return efl * (1 - t/n * phi1)
+
+
+def singlet_ffl(c1, c2, t, n, n_ambient=1.):
+    """Front focal length of a thick singlet.
+
+    Parameters
+    ----------
+    c1 : float
+        curvature of S1
+    c2 : float
+        curvature of S2
+    t : float
+        vertex-to-vertex thickness
+    n : float
+        refractive index
+    n_ambient: float
+        refractive index of the ambient medium ("air")
+
+    Returns
+    -------
+    float
+        signed distance from S1 to the front focal point
+
+    """
     phi2 = (n_ambient - n) * c2
-    phi = phi1 + phi2 - t/n_ambient * phi1*phi2
-    return 1/phi
+    efl = singlet_efl(c1, c2, t, n, n_ambient)
+    return -efl * (1 - t/n * phi2)
 
 
 def twolens_efl(efl1, efl2, separation):
@@ -343,6 +556,27 @@ def twolens_efl(efl1, efl2, separation):
     return 1 / phi_tot
 
 
+def twolens_power(efl1, efl2, separation):
+    """Compute the optical power for two thin lenses in air.
+
+    Parameters
+    ----------
+    efl1 : float
+        EFL of the first lens
+    efl2 : float
+        EFL of the second lens
+    separation : float
+        separation of the two lenses
+
+    Returns
+    -------
+    float
+        optical power of the two lens system
+
+    """
+    return 1 / twolens_efl(efl1, efl2, separation)
+
+
 def twolens_bfl(efl1, efl2, separation):
     """Use thick lens equations to compute the back focal length for two elements separated by some distance.
 
@@ -364,5 +598,52 @@ def twolens_bfl(efl1, efl2, separation):
     """
     phi1 = 1 / efl1
     numerator = 1 - separation * phi1
-    denomenator = twolens_efl(efl1, efl2, separation)
-    return numerator / denomenator
+    efl = twolens_efl(efl1, efl2, separation)
+    return numerator * efl
+
+
+def twolens_ffl(efl1, efl2, separation):
+    """Compute the front focal length for two thin lenses in air.
+
+    Parameters
+    ----------
+    efl1 : float
+        EFL of the first lens
+    efl2 : float
+        EFL of the second lens
+    separation : float
+        separation of the two lenses
+
+    Returns
+    -------
+    float
+        front focal length of the two lens system
+
+    """
+    phi2 = 1 / efl2
+    efl = twolens_efl(efl1, efl2, separation)
+    return -efl * (1 - separation * phi2)
+
+
+def twolens_separation(efl1, efl2, efl):
+    """Compute the separation required for a target two-lens EFL.
+
+    Parameters
+    ----------
+    efl1 : float
+        EFL of the first lens
+    efl2 : float
+        EFL of the second lens
+    efl : float
+        target EFL of the two-lens system
+
+    Returns
+    -------
+    float
+        separation between the two lenses
+
+    """
+    phi1 = 1 / efl1
+    phi2 = 1 / efl2
+    phi = 1 / efl
+    return (phi1 + phi2 - phi) / (phi1 * phi2)
