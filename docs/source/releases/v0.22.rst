@@ -4,39 +4,19 @@ prysm v0.22
 
 Released (eventually)
 
-Version 0.22 marks the final version of prysm prior to 1.0, in which
-compatibility and API stability will be guaranteed. In preparation for this, the
-library has been split into mature code such as coordinates, geometry,
-propagation, or polynomials, and less mature code in :code:`prysm.x`-perimental
-(shorthand, x or x/). The compatibility guarantee of 1.0 will not extend to x.
-In general, there may be an additional batch of breaking changes in the 0.22 =>
-1.0 update.
+This release, the first in several years, marks the beginning of a split
+between the core library which will have better stability between releases,
+and a new :code:`prysm.x`-perimental (shorthand, x or x/) directory for new
+modules which have not had the ~10 years of development that the core library has.
 
 
-The new x/ modules are detailed in the release notes below.  This release
-brings a number of new features for modeling specific types of wavefront
-sensors, and alternate segmentation geometry in segmented telescopes. All
-optical propagation routines now feature convenient gradient backpropagation
-equivalents for extremely fast optimization of optical models to learn
-parameters, perform phase retrieval, etc.  Models made with this semi-manual
-backpropagation code are typically over an order of magnitude faster than other
-packages using machine learning libraries such as Jax or Pytorch to do the
-backpropagation, and allow certain operations like array insertion and cropping
-that are forbidden by other libraries.
+The new x/ modules are detailed in the release notes below.
 
-`dygdug <https://github.com/brandondube/dygdug>`_ has been created as an
-external module of prysm dedicated to coronagraphy, similar to the x
-submodule.  dygdug is not being released as 1.0 and will likely go through years
-of breaking changes to improve the ergonomics and performance of the API.  A
-significant aspect of dygdug will be the full support for algorithmic
-differentiation of the models and tools for performing advanced gradient-based
-optimization of coronagraphs, both to design nominal solutions and perform
-wavefront control of real systems.  For the highest performance, the
-differentiation has been done by hand.
+.. toctree::
+   :maxdepth: 2
 
-
-Changes by module
-=================
+Core library
+============
 
 Polynomials
 -----------
@@ -316,8 +296,8 @@ when initializing a :class:`~prysm.detector.Detector` instance.  This adds the
 capability to simulate detector nonlinearity that is homogeneous over the whole
 array
 
-More convenient backend swaps, misc
------------------------------------
+Interchangeable backend
+-----------------------
 
 The global :attr:`prysm.conf.config.precision` setting now accepts any real
 floating dtype-like value, not only the previous :code:`32` and :code:`64`
@@ -342,13 +322,12 @@ integer selectors.  The matching complex dtype is inferred automatically.
 
 Note that other numpy/scipy-like APIs can also be used, and these are simply
 convenience functions; there is no special support for either library beyond
-these simple functions.
+these functions.
 
 The math operations shim now exposes :attr:`prysm.mathops.linalg` for backend
-linear algebra routines, alongside :attr:`prysm.mathops.np` and
-:attr:`prysm.mathops.fft`.  :func:`~prysm.mathops.array_to_true_numpy` also
-passes scalar values through without forcing array materialization, which
-reduces overhead in optimizer and line-search bookkeeping.
+linear algebra routines, there is also a new :func:`~prysm.mathops.array_to_true_numpy`
+that converts arrays from other libraries into numpy arrays for plotting,
+serialization, etc.
 
 * the :func:`~prysm._richdata.RichData.plot2d` method of RichData now has an
   :code:`extend` keyword argument, which controls the extension of the colorbar
@@ -464,12 +443,10 @@ the sibling functions :func:`~prysm.thinfilm.brewsters_angle` and
 Thin Lens
 ---------
 
-The thin lens module has grown into a more general collection of first-order
-optics formulas.  New helpers cover focal power, conjugates, pupil diameter,
-and common thick-lens reductions:
+Several new functions have been added:
 
 * :func:`~prysm.thinlens.object_image_to_efl` computes focal length from a
-  pair of object and image conjugates
+  pair of object and image conjugates assuming thin lens imaging
 
 * :func:`~prysm.thinlens.efl_to_power` and
   :func:`~prysm.thinlens.power_to_efl` convert between effective focal length
@@ -482,15 +459,17 @@ and common thick-lens reductions:
 * :func:`~prysm.thinlens.mag_to_image_dist` computes image distance from
   focal length and signed magnification
 
-* :func:`~prysm.thinlens.singlet_power`,
-  :func:`~prysm.thinlens.singlet_bfl`, and
-  :func:`~prysm.thinlens.singlet_ffl` provide first-order properties of a
-  thick singlet
+* :func:`~prysm.thinlens.singlet_power`; power of a thin lens
 
-* :func:`~prysm.thinlens.twolens_power`,
-  :func:`~prysm.thinlens.twolens_ffl`, and
-  :func:`~prysm.thinlens.twolens_separation` provide additional two-thin-lens
-  formulas
+* :func:`~prysm.thinlens.singlet_bfl`; back focal length
+
+* :func:`~prysm.thinlens.singlet_ffl`; front focal length
+
+* :func:`~prysm.thinlens.twolens_power`; power of a two-thin-lens system
+
+* :func:`~prysm.thinlens.twolens_ffl`; front focal length of a two-thin-lens system
+
+* :func:`~prysm.thinlens.twolens_separation`; separation between two-thin-lens system
 
 * :func:`~prysm.thinlens.image_shift_to_tilt` converts image displacement to
   wavefront tilt
@@ -498,12 +477,15 @@ and common thick-lens reductions:
 * :func:`~prysm.thinlens.tilt_to_image_shift` converts wavefront tilt to image
   displacement
 
-:func:`~prysm.thinlens.mag_to_object_dist` now correctly inverts
-:func:`~prysm.thinlens.object_dist_to_mag`.
-:func:`~prysm.thinlens.twolens_bfl` now returns the first-order back focal
-length of the two-lens system.  :func:`~prysm.thinlens.singlet_efl` now uses
-the thick-lens term with the element index and scales the result by the
-ambient index.
+* :func:`~prysm.thinlens.mag_to_object_dist` now correctly inverts
+  :func:`~prysm.thinlens.object_dist_to_mag`.
+
+* :func:`~prysm.thinlens.twolens_bfl` now returns the first-order back focal
+  length of the two-lens system.
+
+* :func:`~prysm.thinlens.singlet_efl` now uses
+  the thick-lens term with the element index and scales the result by the
+  ambient index.
 
 
 Refractive
@@ -516,18 +498,41 @@ Refractive
 eXperimental Modules
 ====================
 
-A total of seven new x/ modules have been introduced in this release.  Half of
-them concern modeling different kinds of interferometers or wavefront sensors,
-while the remaining half are general and widely applicable.  The largest of the
-new additions is :code:`x/optym`, a package for optimization with several cost
-functions, activation functions, and gradient-based optimizers
+A total of seven new x/ modules have been introduced in this release.  The
+most substantial is the new optimization module, as well as upgrades to
+raytracing.  Additional modules include polarization, fibers, several types
+of interferometers and the shack-hartmann wavefront sensor, as well as
+deformable mirrors.
 
 x/optym
 -------
 
-Optym is a new optimization experimental package.  It provides numerous optimizers, as well as mechanisms for enforcing intelligent stopping conditions on running optimizers, and a different way of representing an optimization problem that allows for optimizers to only compute what they need to compute at a given time.  This means the interface is very different to :code:`scipy.optimize`.  It is the authors' belief that this interface is superior.  Independent of the interface, all optimizers support arithmetic at any precision, and can run on CPU or GPU, as well as any of the interchangeable backends.  This gives optym a wide open domain of applicability, including extremely rapid optimization of very high dimensional problems entirely on GPU, such as coronagraph mask design.
+Optym is a new optimization experimental package.  It provides numerous
+optimizers, as well as mechanisms for enforcing intelligent stopping
+conditions on running optimizers, and a different way of representing
+an optimization problem that allows for optimizers to only compute what they
+need to compute at a given time.  This means the interface is very different
+to :code:`scipy.optimize`.  It is the authors' belief that this interface is
+superior.  Independent of the interface, all optimizers support arithmetic at
+any precision, and can run on CPU or GPU, as well as any of the interchangeable
+backends.  This gives optym a wide open domain of applicability, including
+extremely rapid optimization of very high dimensional problems entirely on GPU,
+such as coronagraph mask design.
 
-The basic building blocks are the user providing a minimal function :code:`cost(x) -> (f, g)` where f is the scalar cost function, and g is d/dx of f.  This can be provided as a more formal :class:`~prysm.x.optym.problem.Problem` object which can be more computationally efficient with certain optimizers.  This is driven to the minimum value of f using an optimizer.  Optimizers have a simple API: the user calls :code:`.step() -> (x, f, g)` to iterate one step, returning the value of the parameter vector, cost, and gradient *before* the step.  The new x vector is then accessible at :code:`optimizer.x`.  In most cases, you will not step the optimizer directly; instead calling :func:`~prysm.x.optym.optimizers.run_until` to run until a stopping condition is met, or :func:`~prysm.x.optym.optimizers.run_for` to run for a fixed number of steps.  :code:`run_until` can be given any :class:`~prysm.x.optym.governor.Governor` to define one or more stopping condition.  When multiple governors are given, the first of them to call stop will end iteration.
+The basic building blocks are the user providing a minimal function
+:code:`cost(x) -> (f, g)` where f is the scalar cost function, and g is d/dx of f.
+This can be provided as a more formal :class:`~prysm.x.optym.problem.Problem`
+object which can be more computationally efficient with certain optimizers.
+This is driven to the minimum value of f using an optimizer.  Optimizers
+have a simple API: the user calls :code:`.step() -> (x, f, g)` to iterate
+one step, returning the value of the parameter vector, cost, and gradient
+*before* the step.  The new x vector is then accessible at :code:`optimizer.x`.
+In most cases, you will not step the optimizer directly; instead calling
+:func:`~prysm.x.optym.optimizers.run_until` to run until a stopping condition
+is met, or :func:`~prysm.x.optym.optimizers.run_for` to run for a fixed number
+of steps.  :code:`run_until` can be given any
+:class:`~prysm.x.optym.governor.Governor` to define one or more stopping condition.
+When multiple governors are given, the first of them to call stop will end iteration.
 
 In addition to API level documentation that describes each of these items in
 detail, there are several new optimization-related tutorials and how-tos:
@@ -536,63 +541,109 @@ detail, there are several new optimization-related tutorials and how-tos:
 * :doc:`../how-tos/Differentiable Optical Models` to use the algorithmic differentiation added in this release to optimize optical models
 * :doc:`../how-tos/Advanced Optimization with Problem and Governors` which describes more advanced usage.
 
-A stronge Wolfe conditions line searcher is available via :func:`~prysm.x.optym.linesearch.ls_strong_wolfe`.
+A strong Wolfe conditions line searcher is available via :func:`~prysm.x.optym.linesearch.ls_strong_wolfe`.
 
 Optimizers
 ^^^^^^^^^^^
 
 * :class:`~prysm.x.optym.optimizers.GradientDescent`
+
 * :class:`~prysm.x.optym.optimizers.AdaGrad`
+
 * :class:`~prysm.x.optym.optimizers.RMSProp`
+
 * :class:`~prysm.x.optym.optimizers.Adam`
+
 * :class:`~prysm.x.optym.optimizers.RAdam`
+
 * :class:`~prysm.x.optym.optimizers.Yogi`
+
 * :class:`~prysm.x.optym.optimizers.AdaMomentum`
+
 * :class:`~prysm.x.optym.optimizers.LBFGSB`
+
 * :class:`~prysm.x.optym.optimizers.PrysmLBFGSB`
+
 * :class:`~prysm.x.optym.least_squares.DampedLeastSquares`
 
-LBFGSB is a wrapper around the low level scipy L-BFGS-B driver, in prysm's interface.  It wraps the Fortran optimizer for older versions of scipy, or the new C driver for newer versions of scipy.  PrysmLBFGSB is a bespoke, pure python/numpy/numpy-like implementation which is competitive in speed on large problems, and slower on very small problems due to python overheads.  It supports reduced precision such as 32-bit, and can run on the GPU if the backend is swapped to CuPy.  The LBFGSB driver is CPU and 64-bit only.  Damped Least Squares supports all lagrangian constraints, equality, greater than, less than.  All other optimizers support box constraints, l < x < u.
+LBFGSB is a wrapper around the low level scipy L-BFGS-B driver, in prysm's
+interface.  It wraps the Fortran optimizer for older versions of scipy,
+or the new C driver for newer versions of scipy.  PrysmLBFGSB is a bespoke,
+pure python/numpy/numpy-like implementation which is competitive in speed on
+large problems, and slower on very small problems due to python overheads.
+It supports reduced precision such as 32-bit, and can run on the GPU if the
+backend is swapped to CuPy.  The LBFGSB driver is CPU and 64-bit only.
+Damped Least Squares supports all lagrangian constraints, equality, greater
+than, less than.  All other optimizers support box constraints, l < x < u.
 
-All optimizers run on a :class:`~prysm.x.optym.problem.Problem`, or :code:`def cost(x) -> (f, g)`, which is automatically converted into a problem.  Run the optimizer by calling step in a loop, or run_until/run_for.
+The point of equality is approximately a thousand variables.  For smaller
+problems, PrysmLBFGSB is a factor of a few (2-5x) slower than the Scipy driver
+due to python overhead.  This may be reduced when using the python JIT
+:code:`PYTHON_JIT=1 python3.15 my_script.py`.
+
+The :code:`PrysmLBFGSB` uses some different methods of solving for the
+cauchy point and then performing subspace minimization.  It appears to be
+able to converge more reliably and in many cases in fewer iterations than
+the scipy L-BFGS-B driver.
+
+All optimizers run on a :class:`~prysm.x.optym.problem.Problem`,
+or :code:`def cost(x) -> (f, g)`, which is automatically converted into a
+problem.  Run the optimizer by calling step in a loop, or run_until/run_for.
 
 Governors
 ^^^^^^^^^
 
 These are what trigger the end of iteration with :func:`~prysm.x.optym.optimizers.run_until`.
 
-* :class:`~prysm.x.optym.governors.MaxIterations`
-* :class:`~prysm.x.optym.governors.FunctionTolerance`
-* :class:`~prysm.x.optym.governors.GradientTolerance`
-* :class:`~prysm.x.optym.governors.StepTolerance`
-* :class:`~prysm.x.optym.governors.MaxEvaluations`
-* :class:`~prysm.x.optym.governors.ConstraintTolerance`.
+* :class:`~prysm.x.optym.governors.MaxIterations`; limit # of iterations
+
+* :class:`~prysm.x.optym.governors.FunctionTolerance`; # stop when :code:`f` reaches a certain value
+
+* :class:`~prysm.x.optym.governors.GradientTolerance`; # stop when :code:`||g||` reaches a certain value
+
+* :class:`~prysm.x.optym.governors.StepTolerance`; # stop when :code:`||x_new - x_old||` reaches a certain value
+
+* :class:`~prysm.x.optym.governors.MaxEvaluations`; # stop when # of function evaluations reaches a certain value
+
+* :class:`~prysm.x.optym.governors.ConstraintTolerance`; # stop when the specified number of variables are pinned at a boundary
 
 The convergence may be plotted using :func:`~prysm.x.optym.plotting.plot_convergence`.
 
 Benchmark and sample problems
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* :class:`~prysm.x.optym.sample_problems.Sphere` or :func:`~prysm.x.optym.sample_problems.sphere`
-* :class:`~prysm.x.optym.sample_problems.Rosenbrock` or :func:`~prysm.x.optym.sample_problems.rosenbrock`
-* :class:`~prysm.x.optym.sample_problems.Rastrigin` or :func:`~prysm.x.optym.sample_problems.rastrigin`
-* :class:`~prysm.x.optym.sample_problems.Himmelblau` or :func:`~prysm.x.optym.sample_problems.himmelblau`
+* :class:`~prysm.x.optym.sample_problems.SphereProblem` or :func:`~prysm.x.optym.sample_problems.sphere`
 
-Problem forms of these come pre-populated with f, g, fg, h, and hvp methods.  You can use them with optimizers, or use them as examples of building a Problem.
+* :class:`~prysm.x.optym.sample_problems.RosenbrockProblem` or :func:`~prysm.x.optym.sample_problems.rosenbrock`
+
+* :class:`~prysm.x.optym.sample_problems.RastriginProblem` or :func:`~prysm.x.optym.sample_problems.rastrigin`
+
+* :class:`~prysm.x.optym.sample_problems.HimmelblauProblem` or :func:`~prysm.x.optym.sample_problems.himmelblau`
+
+Problem forms of these come pre-populated with f, g, fg, h, and hvp methods.
+You can use them with optimizers, or use them as examples of building a Problem.
 
 
-Activation functions, discretizers, cost/loss functions, and operators are differentiable building blocks for building optimization problems:
+Activation functions, discretizers, cost/loss functions, and operators are
+differentiable building blocks for building optimization problems:
 
 Activation functions and discretizers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * :class:`~prysm.x.optym.activation.Softmax`
-* :class:`~prysm.x.optym.activation.GumbelSoftmax`
-* :class:`~prysm.x.optym.activation.DiscreteEncoder`
+
 * :class:`~prysm.x.optym.activation.Tanh`
+
 * :class:`~prysm.x.optym.activation.Arctan`
+
 * :class:`~prysm.x.optym.activation.Softplus`
+
 * :class:`~prysm.x.optym.activation.Sigmoid`
+
+* :class:`~prysm.x.optym.activation.DiscreteEncoder`; a method of using Softmax to softly quantize variables
+
+* :class:`~prysm.x.optym.activation.GumbelSoftmax`; softmax with gumbel distribution stochastic noise
+
 
 Cost or loss functions
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -619,23 +670,31 @@ Jones Vectors
 ^^^^^^^^^^^^^^
 
 * :func:`~prysm.x.polarization.linear_pol_vector`
+
 * :func:`~prysm.x.polarization.circular_pol_vector`
 
 Jones Matrices
 ^^^^^^^^^^^^^^^
 
 * :func:`~prysm.x.polarization.jones_rotation_matrix`
+
 * :func:`~prysm.x.polarization.linear_retarder`
+
 * :func:`~prysm.x.polarization.linear_diattenuator`
+
 * :func:`~prysm.x.polarization.linear_polarizer`
+
 * :func:`~prysm.x.polarization.half_wave_plate`
+
 * :func:`~prysm.x.polarization.quarter_wave_plate`
 
 Conversion to Mueller matrices and simple data reduction with Pauli spin
 matrices:
 
 * :func:`~prysm.x.polarization.jones_to_mueller`
+
 * :func:`~prysm.x.polarization.pauli_spin_matrix`
+
 * :func:`~prysm.x.polarization.pauli_coefficients`
 
 x/fibers
