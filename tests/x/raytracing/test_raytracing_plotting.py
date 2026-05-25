@@ -9,12 +9,13 @@ from matplotlib import pyplot as plt
 
 from prysm.x.raytracing.plotting import (
     lens_groups_from_surfaces,
+    mirror_substrate_outline,
     plot_optics,
     plot_ray_paths,
     plot_wave_aberration_fan,
 )
 from prysm.x.raytracing.spencer_and_murty import RayTraceResult
-from prysm.x.raytracing.surfaces import PlaneSag, Surface
+from prysm.x.raytracing.surfaces import OffAxisConicSag, PlaneSag, Surface
 
 
 def _refracting_plane(z, outer_radius=1, inner_radius=None, n=1.0):
@@ -30,6 +31,22 @@ def _refracting_plane(z, outer_radius=1, inner_radius=None, n=1.0):
         typ='refr',
         P=np.asarray([0., 0., z]),
         n=lambda wvl: n,
+        bounding=bounding,
+    )
+
+
+def _reflecting_surface(shape, z=0, outer_radius=1, inner_radius=None):
+    if outer_radius is None:
+        bounding = None
+    else:
+        bounding = {'outer_radius': outer_radius}
+    if inner_radius is not None:
+        bounding['inner_radius'] = inner_radius
+
+    return Surface(
+        shape=shape,
+        typ='refl',
+        P=np.asarray([0., 0., z]),
         bounding=bounding,
     )
 
@@ -274,3 +291,144 @@ def test_plot_optics_group_od_uses_largest_aperture_in_group():
 
     assert np.nanmax(y) == 2.0
     assert np.nanmin(y) == -2.0
+
+
+def test_plot_optics_draws_mirror_optical_surface_by_default():
+    prescription = [_reflecting_surface(PlaneSag(), outer_radius=1)]
+
+    x, y = _line_from_plot(prescription)
+
+    np.testing.assert_allclose(x, np.zeros(5))
+    np.testing.assert_allclose(y, np.linspace(-1, 1, 5))
+
+
+def test_plot_optics_draws_parallel_mirror_substrate():
+    prescription = [_reflecting_surface(PlaneSag(), outer_radius=1)]
+    backing = {0: {'mode': 'parallel', 'thickness': 2, 'side': 1}}
+
+    x, y = _line_from_plot(prescription, mirror_backing=backing)
+
+    np.testing.assert_allclose(x[:5], np.zeros(5))
+    assert np.any((y[:-1] == 1) & (y[1:] == 1) & (x[:-1] == 0) & (x[1:] == 2))
+    assert np.any((y[:-1] == -1) & (y[1:] == -1) & (x[:-1] == 2) & (x[1:] == 0))
+    np.testing.assert_allclose(x[6:11], np.full(5, 2.0))
+
+
+def test_plot_optics_accepts_global_mirror_backing_config():
+    prescription = [_reflecting_surface(PlaneSag(), outer_radius=1)]
+    backing = {'mode': 'parallel', 'thickness': 2, 'side': 1}
+
+    x, _ = _line_from_plot(prescription, mirror_backing=backing)
+
+    np.testing.assert_allclose(x[6:11], np.full(5, 2.0))
+
+
+def test_mirror_substrate_outline_applies_surface_decenter():
+    surf = Surface(
+        shape=PlaneSag(),
+        typ='refl',
+        P=np.asarray([0., 10., 5.]),
+        bounding={'outer_radius': 1},
+    )
+    result = _trace_result([surf])
+
+    x, y = mirror_substrate_outline(
+        surf, result, backing={'mode': 'parallel', 'thickness': 2, 'side': 1},
+        points=5,
+    )
+
+    np.testing.assert_allclose(x[:5], np.full(5, 5.0))
+    np.testing.assert_allclose(y[:5], np.linspace(9, 11, 5))
+    np.testing.assert_allclose(x[6:11], np.full(5, 7.0))
+
+
+def test_mirror_substrate_outline_can_center_on_ray_footprint():
+    surf = Surface(
+        shape=PlaneSag(),
+        typ='refl',
+        P=np.asarray([0., 0., 0.]),
+        bounding={'outer_radius': 1},
+    )
+    P = np.asarray([
+        [[0., 9., -1.], [0., 10., -1.], [0., 11., -1.]],
+        [[0., 9., 0.], [0., 10., 0.], [0., 11., 0.]],
+    ])
+    result = RayTraceResult(
+        P, np.zeros_like(P), np.zeros(P.shape[:-1]),
+        np.zeros(P.shape[1], dtype=np.complex128),
+    )
+
+    x, y = mirror_substrate_outline(
+        surf, result, backing={
+            'mode': 'parallel',
+            'thickness': 2,
+            'side': 1,
+            'center': 'rays',
+        },
+        points=5,
+    )
+
+    np.testing.assert_allclose(x[:5], np.zeros(5))
+    np.testing.assert_allclose(y[:5], np.linspace(9, 11, 5))
+    np.testing.assert_allclose(x[6:11], np.full(5, 2.0))
+
+
+def test_mirror_substrate_outline_applies_surface_tilt_in_xz_projection():
+    surf = Surface(
+        shape=PlaneSag(),
+        typ='refl',
+        P=np.asarray([0., 0., 0.]),
+        R=(0, -45, 0),
+        bounding={'outer_radius': 1},
+    )
+    result = _trace_result([surf])
+
+    x, y = mirror_substrate_outline(
+        surf, result, backing={'mode': 'parallel', 'thickness': 2, 'side': 1},
+        points=5, x='z', y='x',
+    )
+
+    front_x = np.asarray(x[:5])
+    front_y = np.asarray(y[:5])
+    assert not np.allclose(front_x, front_x[0])
+    assert not np.allclose(front_y, front_y[0])
+    np.testing.assert_allclose(np.diff(front_x) / np.diff(front_y),
+                               np.full(4, -1.0))
+
+
+def test_mirror_substrate_can_cut_flat_from_parent_vertex_plane():
+    surf = _reflecting_surface(
+        OffAxisConicSag(c=1 / 100., k=-1., dy=10),
+        outer_radius=5,
+    )
+    result = _trace_result([surf])
+
+    x, _ = mirror_substrate_outline(
+        surf, result, backing={'mode': 'flat_parent', 'thickness': 2, 'side': 1},
+        points=5,
+    )
+
+    np.testing.assert_allclose(x[6:11], np.full(5, 2.0))
+
+
+def test_mirror_substrate_can_cut_flat_near_aperture_for_uniform_thickness():
+    surf = _reflecting_surface(
+        OffAxisConicSag(c=1 / 100., k=-1., dy=10),
+        outer_radius=5,
+    )
+    result = _trace_result([surf])
+
+    x, y = mirror_substrate_outline(
+        surf, result, backing={'mode': 'flat_aperture', 'thickness': 2, 'side': 1},
+        points=5,
+    )
+
+    rear_x = np.asarray(x[6:11])
+    rear_y = np.asarray(y[6:11])
+    slope = np.diff(rear_x) / np.diff(rear_y)
+    assert not np.allclose(rear_x, rear_x[0])
+    np.testing.assert_allclose(slope, np.full(4, slope[0]))
+
+    front_lower_edge = surf.sag(np.asarray([0.]), np.asarray([-5.]))[0]
+    rear_lower_edge = rear_x[rear_y == -5][0]
+    np.testing.assert_allclose(rear_lower_edge - front_lower_edge, 2.0)
