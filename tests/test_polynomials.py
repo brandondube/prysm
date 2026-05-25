@@ -685,3 +685,23 @@ def test_qcon_zzprime_q2d():
     ddy *= mask
     assert np.allclose(dx, ddx, atol=1)
     assert np.allclose(dy, ddy, atol=1)
+
+
+def test_q2d_nm_c_to_a_b_allows_only_cosine_terms():
+    cms, ams, bms = polynomials.qpoly.Q2d_nm_c_to_a_b(
+        [(0, 0), (1, 1)],
+        [1, 2],
+    )
+    assert cms == [1]
+    assert ams == [[0, 2]]
+    assert bms == [[]]
+
+
+def test_q2d_nm_c_to_a_b_allows_only_sine_terms():
+    cms, ams, bms = polynomials.qpoly.Q2d_nm_c_to_a_b(
+        [(0, 0), (1, -1)],
+        [1, 2],
+    )
+    assert cms == [1]
+    assert ams == [[]]
+    assert bms == [[0, 2]]

@@ -1265,8 +1265,8 @@ def Q2d_nm_c_to_a_b(nms, coefs):
             if bc[k][i] is None:
                 bc[k][i] = 0
 
-    max_m_a = max(list(ac.keys()))
-    max_m_b = max(list(bc.keys()))
+    max_m_a = max(ac.keys()) if ac else 0
+    max_m_b = max(bc.keys()) if bc else 0
     max_m = max(max_m_a, max_m_b)
     ac_ret = []
     bc_ret = []
