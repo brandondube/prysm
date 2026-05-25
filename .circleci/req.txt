@@ -1,9 +1,0 @@
-matplotlib>=3.0
-scikit-image
-imageio
-pandas
-h5py
-pytest>=9.0.2
-pytest-cov==7.0.0
-coverage==7.13.4
-coveralls==4.0.2

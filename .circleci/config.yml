@@ -1,45 +1,75 @@
 version: 2.1
 
 orbs:
-  # The python orb contains a set of prepackaged CircleCI configuration you can use repeatedly in your configuration files
-  # Orb commands and jobs help you with common scripting around a language/tool
-  # so you dont have to copy and paste it everywhere.
-  # See the orb documentation here: https://circleci.com/developer/orbs/orb/circleci/python
-  python: circleci/python@2.1.1
+  python: circleci/python@4.0.0
 
-workflows:
-  build-and-test:  # This is the name of the workflow, feel free to change it to better match your workflow.
-    # Inside the workflow, you define the jobs you want to run.
-    # For more details on extending your workflow, see the configuration docs: https://circleci.com/docs/2.0/configuration-reference/#workflows
-    jobs:
-      - build-and-test
+commands:
+  install-miniforge:
+    steps:
+      - restore_cache:
+          keys:
+            - v1-miniforge-{{ arch }}-{{ checksum ".circleci/environment.yml" }}-{{ checksum "pyproject.toml" }}
+            - v1-miniforge-{{ arch }}-
+      - run:
+          name: Install Miniforge
+          command: |
+            if [ ! -x "$HOME/miniforge3/bin/conda" ]; then
+              curl -fsSL -o /tmp/miniforge.sh \
+                https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+              bash /tmp/miniforge.sh -b -p "$HOME/miniforge3"
+            fi
 
+            "$HOME/miniforge3/bin/conda" config --system --set channel_priority strict
+            "$HOME/miniforge3/bin/conda" config --system --remove channels defaults || true
+      - run:
+          name: Create Miniforge environment
+          command: |
+            if "$HOME/miniforge3/bin/conda" env list | grep -qE '^prysm-ci[[:space:]]'; then
+              "$HOME/miniforge3/bin/mamba" env update \
+                --name prysm-ci \
+                --file .circleci/environment.yml \
+                --prune
+            else
+              "$HOME/miniforge3/bin/mamba" env create \
+                --file .circleci/environment.yml
+            fi
+
+            "$HOME/miniforge3/bin/conda" clean --all --yes
+      - save_cache:
+          key: v1-miniforge-{{ arch }}-{{ checksum ".circleci/environment.yml" }}-{{ checksum "pyproject.toml" }}
+          paths:
+            - ~/miniforge3
 
 jobs:
-  build-and-test:  # This is the name of the job, feel free to change it to better match what you're trying to do!
-    # These next lines defines a Docker executors: https://circleci.com/docs/2.0/executor-types/
-    # You can specify an image from Dockerhub or use one of the convenience images from CircleCI's Developer Hub
-    # A list of available CircleCI Docker convenience images are available here: https://circleci.com/developer/images/image/cimg/python
-    # The executor is the environment in which the steps below will be executed - below will use a python 3.9 container
-    # Change the version below to your required version of python
+  build-and-test:
     resource_class: small
-    docker:
-      - image: cimg/python:3.14
-    # Checkout the code as the first step. This is a dedicated CircleCI step.
-    # The python orb's install-packages step will install the dependencies from a Pipfile via Pipenv by default.
-    # Here we're making sure we use just use the system-wide pip. By default it uses the project root's requirements.txt.
-    # Then run your tests!
-    # CircleCI will report the results back to your VCS provider.
+    executor:
+      name: python/default
+      tag: "3.14.5"
     steps:
       - checkout
-      - python/install-packages:
-          pkg-manager: pip
-          app-dir: ~/project/.circleci/
-          pip-dependency-file: req.txt
-          args: -e ../.  # editable install so coverage paths resolve to the repo tree
+      - install-miniforge
+      - run:
+          name: Install prysm
+          command: |
+            "$HOME/miniforge3/bin/conda" run --name prysm-ci \
+              python -m pip install --no-build-isolation --no-deps --editable .
       - run:
           name: Run tests
-          command: pytest --cov
+          command: |
+            mkdir -p test-results/pytest
+            "$HOME/miniforge3/bin/conda" run --name prysm-ci \
+              python -m pytest --cov --junitxml=test-results/pytest/results.xml
+      - store_test_results:
+          path: test-results
+      - store_artifacts:
+          path: test-results
       - run:
           name: Upload coverage to Coveralls
-          command: coveralls
+          command: |
+            "$HOME/miniforge3/bin/conda" run --name prysm-ci coveralls
+
+workflows:
+  build-and-test:
+    jobs:
+      - build-and-test
