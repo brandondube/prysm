@@ -250,6 +250,53 @@ def _matrix_to_plane(prescription, k, wvl, n_ambient):
                         end_index=k, include_end_surface=False)
 
 
+def entrance_pupil_z(prescription, wvl=None, n_ambient=None, stop_index=None):
+    """Lab-frame z of the paraxial entrance pupil.
+
+    The entrance pupil is the image of the aperture stop in object space; its
+    center is where an object-space chief ray crosses the axis.  This is the
+    plane a collimated or finite-conjugate bundle must pass through for a
+    field point to be sampled correctly, so launch() uses it to position
+    off-axis bundles.
+
+    Parameters
+    ----------
+    prescription : sequence of Surface
+        when a LensData is passed, wvl, n_ambient, and stop_index each default
+        to the corresponding system metadata it carries.
+    wvl : float or str, optional
+        wavelength in microns (or a LensData wavelength name).
+    n_ambient : float, optional
+        object-space index.
+    stop_index : int, optional
+        index of the aperture stop within prescription.
+
+    Returns
+    -------
+    float or None
+        lab-frame z of the entrance pupil, measured in the same frame as the
+        surface vertices.  None when the pupil is undefined: no stop_index is
+        available, the index is out of range, or the system is telecentric in
+        object space (entrance pupil at infinity).
+
+    """
+    wvl = lensdata_wavelength(prescription, wvl)
+    n_ambient = lensdata_n_ambient(prescription, n_ambient)
+    stop_index = lensdata_stop_index(prescription, stop_index)
+    if stop_index is None:
+        return None
+    k = int(stop_index)
+    if k < 0 or k >= len(prescription):
+        return None
+    M_to_stop, _ = _matrix_to_plane(prescription, k, wvl, n_ambient)
+    A_b = float(M_to_stop[0, 0])
+    B_b = float(M_to_stop[0, 1])
+    if abs(A_b) < 1e-30:
+        return None  # telecentric: entrance pupil at infinity
+    ep_distance = B_b * float(n_ambient) / A_b
+    return float(prescription[0].P[2]) + ep_distance
+
+
 class FirstOrderProperties:
     """Paraxial first-order properties of a prescription.
 

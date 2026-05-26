@@ -465,6 +465,43 @@ def angular_spectrum(field, wvl, dx, z, Q=2, tf=None):
     return fft.ifft2(forward*transfer_function)
 
 
+def angular_spectrum_backprop(field, wvl, dx, z, Q=2, tf=None):
+    """Backpropagate gradient through angular_spectrum.
+
+    Parameters
+    ----------
+    field : ndarray
+        gradient at the output plane of the angular spectrum propagation
+    wvl : float
+        wavelength of light, microns
+    z : float
+        propagation distance used for the forward propagation, millimeters
+    dx : float
+        cartesian sample spacing, units of millimeters
+    Q : float
+        sampling factor used for the forward propagation
+    tf : ndarray
+        if not None, clobbers all other arguments
+        transfer function used for the forward propagation
+
+    Returns
+    -------
+    ndarray
+        gradient at the input plane
+
+    """
+    if tf is None:
+        tf = angular_spectrum_transfer_function(field.shape, wvl, dx, z)
+        out_shape = _shape_before_pad(field.shape, Q)
+    else:
+        out_shape = field.shape
+
+    out = fft.ifft2(fft.fft2(field) * np.conj(tf))
+    if out_shape != field.shape:
+        return crop_center(out, out_shape)
+    return out
+
+
 def angular_spectrum_transfer_function(samples, wvl, dx, z):
     """Precompute the transfer function of free space.
 
@@ -900,6 +937,39 @@ class Wavefront:
                                z=dz,
                                Q=Q,
                                tf=tf,
+        )
+        return Wavefront(out, self.wavelength, self.dx, self.space)
+
+    def free_space_backprop(self, dz=np.nan, Q=1, tf=None):
+        """Backpropagate gradient through free_space.
+
+        self carries the gradient at the output plane; the returned Wavefront
+        carries the gradient at the input plane.
+
+        Parameters
+        ----------
+        dz : float
+            inter-plane distance used for the forward propagation, millimeters
+        Q : float
+            padding factor used for the forward propagation
+        tf : ndarray
+            if not None, clobbers all other arguments
+            transfer function used for the forward propagation
+
+        Returns
+        -------
+        Wavefront
+            gradient at the input plane
+
+        """
+        if np.isnan(dz) and tf is None:
+            raise ValueError('dz must be provided if tf is None')
+        out = angular_spectrum_backprop(self.data,
+                                        wvl=self.wavelength,
+                                        dx=self.dx,
+                                        z=dz,
+                                        Q=Q,
+                                        tf=tf,
         )
         return Wavefront(out, self.wavelength, self.dx, self.space)
 

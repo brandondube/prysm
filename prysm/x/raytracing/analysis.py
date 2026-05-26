@@ -156,7 +156,13 @@ def wavefront(prescription, P, S, wavelength, *,
     P = np.asarray(P)
     trace = raytrace(prescription, P, S, wavelength, n_ambient=n_ambient)
     if chief_index is None:
-        chief_index = trace.P.shape[1] // 2
+        # the chief is the pupil-center ray.  For a symmetric sampling the
+        # launch bundle's centroid is that center, even after the bundle was
+        # translated by entrance-pupil routing; pick the ray nearest it.  (A
+        # fixed N//2 is only the center for fan/rect-style samplings, not hex.)
+        center = np.mean(P[:, :2], axis=0)
+        d2 = np.sum((P[:, :2] - center) ** 2, axis=1)
+        chief_index = int(np.argmin(d2))
     valid = _valid_mask(trace.status, trace.P[-1])
     if not valid[chief_index]:
         raise ValueError('chief ray is invalid; cannot define reference sphere')
@@ -177,8 +183,11 @@ def wavefront(prescription, P, S, wavelength, *,
                             n_image=n_ambient,
                             chief_index=filtered_chief)
     if pupil_coords is None:
-        x_pupil = P[valid, 0]
-        y_pupil = P[valid, 1]
+        # pupil coordinate is the launch offset from the chief ray, so the
+        # parameterization is correct even when the bundle was routed through
+        # an off-axis entrance pupil (chief launch point != origin)
+        x_pupil = P[valid, 0] - P[chief_index, 0]
+        y_pupil = P[valid, 1] - P[chief_index, 1]
     else:
         x_pupil = np.asarray(pupil_coords[0])[valid]
         y_pupil = np.asarray(pupil_coords[1])[valid]
@@ -419,17 +428,18 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
                         n_ambient=n_ambient)
         Pc = tr_c.P[-1, 0]
         Sc = tr_c.S[-1, 0]
-        # sagittal marginal (one ray at +x_marg)
+        # sagittal marginal (one ray offset +x_marg from the chief in the
+        # pupil; += keeps any chief offset from entrance-pupil routing)
         P_sx = P_c.copy()
-        P_sx[0, 0] = r_marg
+        P_sx[0, 0] = P_sx[0, 0] + r_marg
         tr_sx = raytrace(prescription, P_sx, S_c, wavelength,
                          n_ambient=n_ambient)
         sagittal_z[i] = _line_intersection_z(Pc, Sc,
                                              tr_sx.P[-1, 0],
                                              tr_sx.S[-1, 0])
-        # tangential marginal (one ray at +y_marg)
+        # tangential marginal (one ray offset +y_marg from the chief)
         P_ty = P_c.copy()
-        P_ty[0, 1] = r_marg
+        P_ty[0, 1] = P_ty[0, 1] + r_marg
         tr_ty = raytrace(prescription, P_ty, S_c, wavelength,
                          n_ambient=n_ambient)
         tangential_z[i] = _line_intersection_z(Pc, Sc,

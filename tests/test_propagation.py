@@ -125,6 +125,54 @@ def test_free_space_zero_distance_is_identity():
     assert out.wavelength == wf.wavelength
 
 
+@pytest.mark.parametrize('Q', [1, 1.5, 2])
+def test_angular_spectrum_backprop_is_adjoint(Q):
+    rng = np.random.default_rng(321)
+    x = rng.normal(size=(9, 12)) + 1j * rng.normal(size=(9, 12))
+    y = rng.normal(size=propagation.angular_spectrum(x, wvl=HeNe, dx=0.25, z=1.2, Q=Q).shape)
+    y = y + 1j * rng.normal(size=y.shape)
+
+    lhs = np.vdot(propagation.angular_spectrum(x, wvl=HeNe, dx=0.25, z=1.2, Q=Q), y)
+    rhs = np.vdot(x, propagation.angular_spectrum_backprop(y, wvl=HeNe, dx=0.25, z=1.2, Q=Q))
+
+    np.testing.assert_allclose(lhs, rhs, atol=1e-12)
+
+
+def test_angular_spectrum_backprop_with_tf_is_adjoint():
+    rng = np.random.default_rng(654)
+    x = rng.normal(size=(9, 12)) + 1j * rng.normal(size=(9, 12))
+    y = rng.normal(size=x.shape) + 1j * rng.normal(size=x.shape)
+    tf = propagation.angular_spectrum_transfer_function(x.shape, HeNe, 0.25, z=1.2)
+
+    lhs = np.vdot(propagation.angular_spectrum(x, wvl=HeNe, dx=0.25, z=np.nan, tf=tf), y)
+    rhs = np.vdot(x, propagation.angular_spectrum_backprop(y, wvl=HeNe, dx=0.25, z=np.nan, tf=tf))
+
+    np.testing.assert_allclose(lhs, rhs, atol=1e-12)
+
+
+def test_wavefront_free_space_backprop_metadata_and_data():
+    rng = np.random.default_rng(753)
+    dx = 0.25
+    dz = 1.2
+    Q = 2
+    data = rng.normal(size=(8, 8)) + 1j * rng.normal(size=(8, 8))
+    wf = propagation.Wavefront(dx=dx, cmplx_field=data, wavelength=HeNe, space='pupil')
+    out = wf.free_space(dz=dz, Q=Q)
+    grad_data = rng.normal(size=out.data.shape) + 1j * rng.normal(size=out.data.shape)
+    grad = propagation.Wavefront(dx=out.dx, cmplx_field=grad_data,
+                                 wavelength=HeNe, space=out.space)
+
+    back = grad.free_space_backprop(dz=dz, Q=Q)
+
+    np.testing.assert_allclose(
+        back.data,
+        propagation.angular_spectrum_backprop(grad_data, wvl=HeNe, dx=dx, z=dz, Q=Q),
+    )
+    assert back.data.shape == wf.data.shape
+    assert back.dx == pytest.approx(wf.dx)
+    assert back.space == wf.space
+
+
 def test_talbot_distance_correct():
     wvl = 123.456
     a = 987.654321
