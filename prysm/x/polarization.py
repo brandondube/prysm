@@ -267,6 +267,7 @@ def quarter_wave_plate(theta=0, shape=None):
     -------
     linear_retarder
         a linear retarder with quarter-wave retardance
+
     """
     return linear_retarder(np.pi / 2, theta=theta, shape=shape)
 
@@ -274,8 +275,8 @@ def quarter_wave_plate(theta=0, shape=None):
 def linear_polarizer(theta=0, shape=None):
     """Make a linear polarizer jones matrix. Just a wrapper for linear_diattenuator.
 
-    Returns
-    -------
+    Parameters
+    ----------
     theta : float
         angle in radians the linear retarder is rotated with respect to the x-axis.
         Defaults to 0.
@@ -287,13 +288,13 @@ def linear_polarizer(theta=0, shape=None):
     -------
     linear_diattenuator
         a linear diattenuator with unit diattenuation
-    """
 
+    """
     return linear_diattenuator(0, theta=theta, shape=shape)
 
 
 def vector_vortex_retarder(charge, theta, retardance=np.pi, rotate=0):
-    """generate a phase-only spatially-varying vector vortex retarder (VVR)
+    """Generate a phase-only spatially-varying vector vortex retarder (VVR).
 
     This model follows Eq (7) in D. Mawet. et al. (2009)
     https://opg.optica.org/oe/fulltext.cfm?uri=oe-17-3-1902&id=176231 (open access)
@@ -314,8 +315,8 @@ def vector_vortex_retarder(charge, theta, retardance=np.pi, rotate=0):
     -------
     ndarray
         jones matrix of a vector vortex retarder
-    """
 
+    """
     # construct empty jones matrices
     shape = theta.shape
     vvr_lhs = _empty_jones(shape=shape)
