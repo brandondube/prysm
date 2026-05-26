@@ -43,6 +43,10 @@ Rich XY polynomial capability has been introduced:
 
 * :func:`~prysm.polynomials.xy.xy_seq`
 
+* :func:`~prysm.polynomials.xy.xy_sum`
+
+* :func:`~prysm.polynomials.xy.xy_sum_der_xy`
+
 Partial derivatives of the XY monomials have been added.  Three named callables
 plus their sequence variants are provided rather than one with an :code:`axis=`
 kwarg, so the chain rule reads naturally at call sites:
@@ -183,10 +187,14 @@ have been renamed:
 
 New features:
 
-* new :code:`.real` property, returning a Richdata to support
+* :code:`.real` property, returning a Richdata to support
   :code:`wf.real.plot2d()` and similar usage
 
-* new :code:`.imag` property, same as :code:`.real`
+* :code:`.imag` property, same as :code:`.real`
+
+* :func:`~prysm.propagation.Wavefront.phase_screen`
+
+* :func:`~prysm.propagation.to_fpm_and_back`
 
 * all propagation routines have a :code:`_backprop` twin, which should be used
   to do gradient backpropagation through optical models:
@@ -270,6 +278,11 @@ Bayer
 * :func:`~prysm.bayer.assemble_superresolved` to assemble a trichromatic image
   from super-resolved Bayer color planes
 
+PSF
+---
+
+* :func:`~prysm.psf.airydisk_efield`; new function that returns the complex
+  electric field of an Airy disk.
 
 i/o
 ---
@@ -385,6 +398,9 @@ other geometric manipulations:
 
 * :func:`~prysm.coordinates.promote_3d_transformation_to_homography` converts a
   3x3 transformation (x, y, z) to a homography (x, y, z, w)
+
+* :func:`~prysm.coordinates.promote_affine_transformation_to_homography`
+  takes a general affine transform and converts it to a homography
 
 * :func:`~prysm.coordinates.make_homomorphic_translation_matrix` creates a
   4x4 homographic matrix for translation in 3D
@@ -595,6 +611,14 @@ Governors
 
 These are what trigger the end of iteration with :func:`~prysm.x.optym.optimizers.run_until`.
 
+Two are special or meta, and combine the others:
+
+* :class:`~prysm.x.optym.governors.AnyGovernor`; # stop when any of the other governors are met
+
+* :class:`~prysm.x.optym.governors.AllGovernor`; # stop when all of the other governors are met
+
+Ordinary governors:
+
 * :class:`~prysm.x.optym.governors.MaxIterations`; limit # of iterations
 
 * :class:`~prysm.x.optym.governors.FunctionTolerance`; # stop when :code:`f` reaches a certain value
@@ -665,6 +689,10 @@ an adapter that generalizes all routines within the propagation module to
 propagation of Jones states.  A tutorial is available at
 :doc:`../tutorials/Jones Calculus` and a How-To at
 :doc:`../how-tos/Polarized Propagation`.
+
+* :func:`~prysm.x.polarization.apply_polarization_optic`
+
+* :func:`~prysm.x.polarization.vector_vortex_retarder`
 
 Jones Vectors
 ^^^^^^^^^^^^^^
@@ -863,6 +891,12 @@ Performance Optimizations
   old.  For example, on a 1024x1024 array, in version 0.21 this function took
   31 ms on a desktop.  It now takes 4 ms for the same array size and output
 
+* :meth:`prysm.propagation.Wavefront.intensity` was made ~60% faster.
+
+* Matrix DFT and CTZ transforms for asymmetric axis sizes and rectangular arrays
+  have been optimized by a factor of 2-8x depending on how rectangular and how
+  asymmetric the array size is.
+
 * :func:`~prysm.geometry.rectangle` has been optimized when the rotation angle
   is zero
 
@@ -898,6 +932,18 @@ Bug Fixes
 
 * fixed a bug in :func:`prysm.psf.encircled_energy` where x,y axes were double
   meshgrided
+
+* Non-square arrays now work properly in :func:`~prysm.io.read_codev_gridint`
+  and :func:`~prysm.io.write_codev_gridint`
+
+* :meth:`~prysm.interferogram.Interferogram.strip_latcal` no longer fails to
+  work properly
+
+* :func:`~prysm.bayer.demosaic_malvar` had a scaling error for the blue channel
+  corrected.
+
+* :module:`prysm.polynomials.cheby` functions now are scaled properly when
+  called on N dimensional coordinate arrays
 
 Code Removal and other Breaking Changes
 =======================================
