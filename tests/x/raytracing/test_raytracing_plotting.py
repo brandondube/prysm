@@ -10,13 +10,32 @@ from matplotlib import pyplot as plt
 from prysm.x.raytracing.plotting import (
     lens_groups_from_surfaces,
     mirror_substrate_outline,
+    plot_distortion,
+    plot_field_curvature,
     plot_optics,
     plot_ray_paths,
+    plot_spot_diagram,
     plot_transverse_ray_aberration,
     plot_wave_aberration_fan,
 )
+from prysm.x.raytracing.lensdata import LensData
 from prysm.x.raytracing.spencer_and_murty import RayTraceResult
-from prysm.x.raytracing.surfaces import OffAxisConicSag, PlaneSag, Surface
+from prysm.x.raytracing.surfaces import ConicSag, OffAxisConicSag, PlaneSag, Surface
+
+
+def _singlet_lensdata():
+    """A simple constant-index biconvex singlet with a 3-point field set."""
+    n15 = lambda wvl: 1.5  # noqa: E731 - terse constant index for the test
+    air = lambda wvl: 1.0  # noqa: E731
+    ld = (LensData(epd=10.0, fields=[0.0, 3.0, 5.0],
+                   wavelengths={'d': 0.5876}, reference_wavelength='d')
+          .add(ConicSag(1 / 60.0, 0.0), thickness=4.0, material=n15,
+               semidiameter=8.0)
+          .add(ConicSag(-1 / 60.0, 0.0), thickness=95.0, material=air,
+               semidiameter=8.0)
+          .add(PlaneSag(), typ='eval', material=air, semidiameter=20.0))
+    ld.solve_image_distance()
+    return ld
 
 
 def _refracting_plane(z, outer_radius=1, inner_radius=None, n=1.0):
@@ -465,3 +484,90 @@ def test_mirror_substrate_can_cut_flat_near_aperture_for_uniform_thickness():
     front_lower_edge = surf.sag(np.asarray([0.]), np.asarray([-5.]))[0]
     rear_lower_edge = rear_x[rear_y == -5][0]
     np.testing.assert_allclose(rear_lower_edge - front_lower_edge, 2.0)
+
+
+def test_plot_spot_diagram_accepts_result_and_masks_invalid():
+    P = np.asarray([
+        [[0., -1., 0.], [0., 0., 0.], [0., 1., 0.]],
+        [[2., 3., 5.], [0., 1., 5.], [-2., -1., 5.]],
+    ])
+    result = RayTraceResult(P, np.zeros_like(P), np.zeros(P.shape[:-1]),
+                            np.asarray([0 + 0j, 0 + 0j, 1 + 2j]))
+
+    fig, ax = plot_spot_diagram(result)
+    try:
+        offsets = ax.collections[0].get_offsets()
+        # invalid third ray dropped; first two surviving image points kept
+        np.testing.assert_allclose(offsets, [[2., 3.], [0., 1.]])
+        assert ax.get_aspect() == 1.0
+    finally:
+        plt.close(fig)
+
+
+def test_plot_spot_diagram_subtracts_centroid_origin():
+    P = np.asarray([
+        [[0., 0., 0.], [0., 0., 0.]],
+        [[1., 3., 5.], [3., 5., 5.]],
+    ])
+
+    fig, ax = plot_spot_diagram(P, origin='centroid')
+    try:
+        offsets = ax.collections[0].get_offsets()
+        # centroid (2, 4) removed
+        np.testing.assert_allclose(offsets, [[-1., -1.], [1., 1.]])
+    finally:
+        plt.close(fig)
+
+
+def test_plot_spot_diagram_subtracts_explicit_origin():
+    P = np.asarray([
+        [[0., 0., 0.], [0., 0., 0.]],
+        [[1., 3., 5.], [3., 5., 5.]],
+    ])
+
+    fig, ax = plot_spot_diagram(P, origin=(1., 3.))
+    try:
+        offsets = ax.collections[0].get_offsets()
+        np.testing.assert_allclose(offsets, [[0., 0.], [2., 2.]])
+    finally:
+        plt.close(fig)
+
+
+def test_plot_field_curvature_plots_s_and_t_vs_field():
+    ld = _singlet_lensdata()
+
+    fig, ax = plot_field_curvature(ld, ld.fields, label='d')
+    try:
+        assert [line.get_label() for line in ax.lines] == ['d S', 'd T']
+        for line in ax.lines:
+            np.testing.assert_allclose(line.get_ydata(), [0., 3., 5.])
+        # the focus shift is referenced to the image vertex, so the plotted
+        # x-values differ from the raw lab-frame foci by that vertex z
+        image_z = float(ld[-1].P[2])
+        from prysm.x.raytracing.analysis import field_curvature
+        sag, tan = field_curvature(ld, ld.fields, ld.wavelength('d'))
+        np.testing.assert_allclose(ax.lines[0].get_xdata(),
+                                   np.asarray(sag) - image_z)
+        np.testing.assert_allclose(ax.lines[1].get_xdata(),
+                                   np.asarray(tan) - image_z)
+        # on-axis sagittal and tangential foci coincide
+        np.testing.assert_allclose(ax.lines[0].get_xdata()[0],
+                                   ax.lines[1].get_xdata()[0])
+    finally:
+        plt.close(fig)
+
+
+def test_plot_distortion_plots_percent_vs_field():
+    ld = _singlet_lensdata()
+
+    fig, ax = plot_distortion(ld, ld.fields)
+    try:
+        line = ax.lines[0]
+        np.testing.assert_allclose(line.get_ydata(), [0., 3., 5.])
+        from prysm.x.raytracing.analysis import distortion
+        _, _, percent = distortion(ld, ld.fields, ld.wavelength('d'))
+        np.testing.assert_allclose(line.get_xdata(), percent)
+        assert line.get_xdata()[0] == 0.0  # no distortion on axis
+        assert ax.get_xlabel() == 'distortion [%]'
+    finally:
+        plt.close(fig)

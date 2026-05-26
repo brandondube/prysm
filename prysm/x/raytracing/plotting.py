@@ -17,7 +17,7 @@ from .spencer_and_murty import (
     transform_to_global_coords,
     transform_to_local_coords,
 )
-from .analysis import transverse_ray_aberration
+from .analysis import transverse_ray_aberration, field_curvature, distortion
 from .surfaces import STYPE_REFLECT, STYPE_REFRACT
 from ._meta import lensdata_wavelength
 
@@ -646,6 +646,7 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
     x = x.lower()
     y = y.lower()
     fig, ax = share_fig_ax(fig, ax)
+    ax.set(aspect='equal')
     result = _require_raytrace_result(result)
     phist = result.P
     phist = np.asarray(array_to_true_numpy(phist))
@@ -909,14 +910,16 @@ def plot_wave_aberration_fan(coord, opd, *, wavelength=None, units='waves',
     return fig, ax
 
 
-def plot_spot_diagram(phist, marker='+', c='k', alpha=1, zorder=4, s=None, fig=None, ax=None):
+def plot_spot_diagram(phist, marker='+', c='k', alpha=1, zorder=4, s=None,
+                      origin=None, status=None, label=None, equal_aspect=True,
+                      fig=None, ax=None):
     """Plot a spot diagram from a ray trace.
 
     Parameters
     ----------
-    phist : list or ndarray
-        the first return from spencer_and_murty.raytrace,
-        iterable of arrays of length 3 (X,Y,Z)
+    phist : RayTraceResult, list, or ndarray
+        Trace result or position history from spencer_and_murty.raytrace.  An
+        ndarray is iterated as (jj+1, N, 3); only the final surface is plotted.
     marker : str, optional
         marker style
     c : color
@@ -927,8 +930,19 @@ def plot_spot_diagram(phist, marker='+', c='k', alpha=1, zorder=4, s=None, fig=N
         stack order in the plot, higher z orders are on top of lower z orders
     s : float
         marker size or variable used for marker size
-    axis : str, {'x', 'y'}
-        which ray position to plot, x or y
+    origin : str or iterable, optional
+        center to subtract before plotting.  None (default) plots raw image
+        coordinates; 'centroid' subtracts the centroid of the valid rays in
+        this bundle; a length-2 iterable subtracts an explicit (x, y) — pass a
+        common reference (e.g. the chief-wavelength centroid from
+        opt.spot_centroid) to register several chromatic bundles to one center.
+    status : ndarray, optional
+        per-ray status from raytrace.  Invalid rays are excluded when provided
+        (taken from the RayTraceResult automatically).
+    label : str, optional
+        legend label for this bundle.
+    equal_aspect : bool, optional
+        if True (default) set equal aspect so the spot is not distorted.
     fig : matplotlib.figure.Figure
         A figure object
     ax : matplotlib.axes.Axis
@@ -943,8 +957,185 @@ def plot_spot_diagram(phist, marker='+', c='k', alpha=1, zorder=4, s=None, fig=N
 
     """
     fig, ax = share_fig_ax(fig, ax)
+    if isinstance(phist, RayTraceResult):
+        result = phist
+        phist = result.P
+        if status is None:
+            status = result.status
     phist = np.asarray(array_to_true_numpy(phist))
     x = phist[-1, ..., 0]
     y = phist[-1, ..., 1]
-    ax.scatter(x, y, c=c, s=s, marker=marker, alpha=alpha, zorder=zorder)
+    if status is not None:
+        status = np.asarray(array_to_true_numpy(status))
+        valid = status.imag == 0
+        x = x[valid]
+        y = y[valid]
+    if origin is not None:
+        if isinstance(origin, str):
+            if origin.lower() == 'centroid':
+                origin = (float(np.nanmean(x)), float(np.nanmean(y)))
+            else:
+                raise ValueError("origin string must be 'centroid'")
+        if isinstance(origin, (list, tuple)):
+            origin = np.asarray(origin, dtype=float)
+        else:
+            origin = np.asarray(array_to_true_numpy(origin), dtype=float)
+        x = x - origin[0]
+        y = y - origin[1]
+    ax.scatter(x, y, c=c, s=s, marker=marker, alpha=alpha, zorder=zorder,
+               label=label)
+    if equal_aspect:
+        ax.set_aspect('equal')
+    return fig, ax
+
+
+def _field_axis_values(fields):
+    """Per-field scalar magnitude for a field-curve y-axis.
+
+    Angle fields report degrees; height fields report the radial object
+    height in prescription length units.
+    """
+    values = []
+    for field in fields:
+        if field.kind == 'angle':
+            ax_rad, ay_rad = field.angle_radians()
+            values.append(np.degrees(np.hypot(ax_rad, ay_rad)))
+        else:
+            values.append(np.hypot(field.hx, field.hy))
+    return np.asarray(values, dtype=float)
+
+
+def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
+                         n_ambient=1.0, marginal_fraction=0.7,
+                         reference='image', c='r', lw=1, alpha=1, zorder=4,
+                         label=None, fig=None, ax=None):
+    """Plot sagittal and tangential field curves.
+
+    Composes analysis.field_curvature: for each field the sagittal (solid) and
+    tangential (dashed) longitudinal foci are plotted as a focus shift on the
+    horizontal axis against field magnitude on the vertical axis — the
+    classical astigmatic-field-curvature presentation.  Call once per
+    wavelength with a distinct c to overlay several wavelengths.
+
+    Parameters
+    ----------
+    prescription : sequence of Surface or LensData
+        the optical system.
+    fields : iterable of Field
+        field points to evaluate, all kind='angle'.
+    wavelength : float, optional
+        in microns; defaults from a LensData reference wavelength.
+    epd : float, optional
+        entrance pupil diameter; defaults from a LensData.
+    n_ambient : float, optional
+        ambient index.
+    marginal_fraction : float, optional
+        pupil zone for the marginal ray, as a fraction of EPD/2.  Default 0.7.
+    reference : str or float, optional
+        zero of the focus-shift axis: 'image' (default) references the last
+        surface vertex; a number references that lab-frame z; None plots the
+        raw lab-frame z.
+    c : color, optional
+        curve color; S and T share it and are distinguished by line style.
+    lw : float, optional
+        line width.
+    alpha : float, optional
+        opacity.
+    zorder : int, optional
+        stack order.
+    label : str, optional
+        base legend label; the sagittal/tangential curves append ' S' / ' T'.
+    fig : matplotlib.figure.Figure
+    ax : matplotlib.axes.Axis
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    matplotlib.axes.Axis
+
+    """
+    fig, ax = share_fig_ax(fig, ax)
+    sagittal_z, tangential_z = field_curvature(
+        prescription, fields, wavelength, epd=epd, n_ambient=n_ambient,
+        marginal_fraction=marginal_fraction,
+    )
+    sagittal_z = np.asarray(array_to_true_numpy(sagittal_z), dtype=float)
+    tangential_z = np.asarray(array_to_true_numpy(tangential_z), dtype=float)
+    if reference is None:
+        ref = 0.0
+    elif isinstance(reference, str):
+        if reference.lower() == 'image':
+            ref = float(prescription[-1].P[2])
+        else:
+            raise ValueError("reference string must be 'image'")
+    else:
+        ref = float(reference)
+    field_values = _field_axis_values(list(fields))
+    s_label = 'S' if label is None else f'{label} S'
+    t_label = 'T' if label is None else f'{label} T'
+    ax.plot(sagittal_z - ref, field_values, c=c, ls='-', lw=lw, alpha=alpha,
+            zorder=zorder, label=s_label)
+    ax.plot(tangential_z - ref, field_values, c=c, ls='--', lw=lw, alpha=alpha,
+            zorder=zorder, label=t_label)
+    ax.set_xlabel('focus shift')
+    ax.set_ylabel('field')
+    return fig, ax
+
+
+def plot_distortion(prescription, fields, wavelength=None, *, epd=None,
+                    n_ambient=1.0, distortion_type='f-tan', pupil_z=None,
+                    c='r', lw=1, alpha=1, zorder=4, label=None,
+                    fig=None, ax=None):
+    """Plot percent distortion against field magnitude.
+
+    Composes analysis.distortion.  The horizontal axis is the chief-ray
+    image-plane error as a percentage of the paraxial image height; the
+    vertical axis is field magnitude.
+
+    Parameters
+    ----------
+    prescription : sequence of Surface or LensData
+        the optical system.
+    fields : iterable of Field
+        field points to evaluate, all kind='angle'.
+    wavelength : float, optional
+        in microns; defaults from a LensData reference wavelength.
+    epd : float, optional
+        entrance pupil diameter; defaults from a LensData.
+    n_ambient : float, optional
+        ambient index.
+    distortion_type : str, optional
+        'f-tan' (default) or 'linear-angle'; see analysis.distortion.
+    pupil_z : float, optional
+        z of the entrance pupil used for the chief-ray launch.
+    c : color, optional
+        curve color.
+    lw : float, optional
+        line width.
+    alpha : float, optional
+        opacity.
+    zorder : int, optional
+        stack order.
+    label : str, optional
+        legend label.
+    fig : matplotlib.figure.Figure
+    ax : matplotlib.axes.Axis
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    matplotlib.axes.Axis
+
+    """
+    fig, ax = share_fig_ax(fig, ax)
+    _, _, percent = distortion(
+        prescription, fields, wavelength, epd=epd, n_ambient=n_ambient,
+        distortion_type=distortion_type, pupil_z=pupil_z,
+    )
+    percent = np.asarray(array_to_true_numpy(percent), dtype=float)
+    field_values = _field_axis_values(list(fields))
+    ax.plot(percent, field_values, c=c, lw=lw, alpha=alpha, zorder=zorder,
+            label=label)
+    ax.set_xlabel('distortion [%]')
+    ax.set_ylabel('field')
     return fig, ax
