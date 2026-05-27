@@ -93,6 +93,19 @@ def set_backend_to_pytorch():
     return
 
 
+def set_backend_to_mlx():
+    """Convenience method to automatically configure prysm's backend to MLX."""
+    import mlx.core as mx
+
+    np._srcmodule = mx
+    fft._srcmodule = mx.fft
+    warnings.warn(
+        'set_backend_to_mlx: only np and fft remapped; ndimage, '
+        'interpolate, optimize, signal, and linalg remain on SciPy.',
+    )
+    return
+
+
 def set_fft_backend_to_mkl_fft():
     """Convenience method to automatically configure prysm's backend to MKL_FFT for FFTs."""
     from mkl_fft import _numpy_fft as mklfft
@@ -139,6 +152,9 @@ def array_to_true_numpy(*args):
         if hasattr(arg, 'numpy'):
             out.append(arg.numpy(force=True))
             continue
+
+        # MLX and several other libraries
+        out.append(_np.array(arg))
 
     if len(out) == 1:
         return out[0]

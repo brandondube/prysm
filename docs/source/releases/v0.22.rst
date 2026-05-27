@@ -329,6 +329,8 @@ integer selectors.  The matching complex dtype is inferred automatically.
 
 * :func:`~prysm.mathops.set_backend_to_pytorch`
 
+* :func:`~prysm.mathops.set_backend_to_mlx`
+
 * :func:`~prysm.mathops.set_fft_backend_to_mkl_fft`
 
 * :func:`~prysm.mathops.set_backend_to_defaults`.
