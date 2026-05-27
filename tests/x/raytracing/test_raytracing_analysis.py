@@ -110,6 +110,26 @@ def test_tra_filters_nonfinite_rays_without_status():
     np.testing.assert_array_equal(dy, [0., 1.])
 
 
+def test_tra_pupil_is_chief_relative_under_launch_shift():
+    """Pupil coordinate must re-center on the chief, not the launch axis.
+
+    Routing an off-axis bundle through the entrance pupil rigidly shifts the
+    whole fan laterally at the launch plane, so the chief ray no longer
+    launches on axis.  The reported pupil coordinate is the launch offset
+    from the chief, so the fan stays symmetric about the pupil center
+    regardless of that shift (matches wavefront()).
+    """
+    shift = 5.0
+    launch_y = np.array([-1., 0., 1.]) + shift   # chief (index 1) at +shift
+    P_hist = np.array([
+        [[0., launch_y[0], 0.], [0., launch_y[1], 0.], [0., launch_y[2], 0.]],
+        [[0., 0.3, 10.], [0., 0.0, 10.], [0., -0.3, 10.]],
+    ])
+    pupil_y, dy = transverse_ray_aberration(P_hist, axis='y', chief_index=1)
+    np.testing.assert_allclose(pupil_y, [-1., 0., 1.])
+    np.testing.assert_allclose(dy, [0.3, 0.0, -0.3])
+
+
 # ---------- wavefront -------------------------------------------------------
 
 def test_wavefront_chief_opd_is_zero():
@@ -226,7 +246,20 @@ def test_distortion_paraxial_proxy_scales_linearly():
         presc, [Field(0., 0.05, unit='deg')], 0.55, epd=4.0,
     )
     # at 0.05 deg a paraxial-quality system should have <0.1% distortion
-    assert percent[0] < 0.1
+    assert abs(percent[0]) < 0.1
+
+
+def test_distortion_sign_distinguishes_barrel_and_pincushion():
+    # a positive singlet with the stop in front of the lens gives barrel
+    # (negative) distortion; with the stop behind it gives pincushion
+    # (positive).  The signed percent must tell them apart -- a magnitude
+    # would report both as the same positive number.
+    presc = _spherical_singlet()
+    field = [Field(0., 8., unit='deg')]
+    _, _, barrel = distortion(presc, field, 0.55, epd=4.0, pupil_z=-30.0)
+    _, _, pincushion = distortion(presc, field, 0.55, epd=4.0, pupil_z=30.0)
+    assert barrel[0] < 0.0
+    assert pincushion[0] > 0.0
 
 
 # ---------- field_curvature -------------------------------------------------
@@ -246,6 +279,27 @@ def test_field_curvature_returns_arrays_of_correct_shape():
     sag, tan = field_curvature(presc, fields, 0.55, epd=4.0)
     assert sag.shape == (3,)
     assert tan.shape == (3,)
+
+
+def test_field_curvature_default_is_differential():
+    """The default reports the differential (Coddington) foci.
+
+    The default marginal_fraction must sample near the chief, so the result
+    matches the marginal_fraction -> 0 limit and is distinct from a finite
+    zonal focus (which folds in coma / oblique spherical aberration).
+    """
+    presc = _spherical_singlet()
+    fields = [Field(0., 8., unit='deg')]
+    sag_d, tan_d = field_curvature(presc, fields, 0.55, epd=4.0)
+    sag_lim, tan_lim = field_curvature(presc, fields, 0.55, epd=4.0,
+                                       marginal_fraction=1e-4)
+    sag_zone, tan_zone = field_curvature(presc, fields, 0.55, epd=4.0,
+                                         marginal_fraction=0.7)
+    # default agrees with the differential limit ...
+    np.testing.assert_allclose(sag_d, sag_lim, atol=5e-3)
+    np.testing.assert_allclose(tan_d, tan_lim, atol=5e-3)
+    # ... and is meaningfully distinct from the 0.7-zone focus
+    assert abs(float(tan_d[0] - tan_zone[0])) > 0.1
 
 
 # ---------- axial / lateral color ------------------------------------------

@@ -281,7 +281,11 @@ def test_distortion_operand_zero_for_on_axis():
 def test_distortion_operand_runs_off_axis():
     ld = _refractive_singlet()
     op = Distortion(Field(0., 1., unit='deg'), 0.55, epd=4.0)
-    assert op(ld, _TraceCache(ld)) >= 0.0
+    value = op(ld, _TraceCache(ld))
+    # distortion is now signed (pincushion +, barrel -); off-axis it is a
+    # finite, nonzero value rather than an unconditionally positive magnitude
+    assert np.isfinite(value)
+    assert value != 0.0
 
 
 def test_field_curvature_operand_zero_for_on_axis():

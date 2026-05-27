@@ -410,7 +410,8 @@ class SurfaceRow:
     """
 
     def __init__(self, shape, *, thickness=0.0, material=None, typ='refr',
-                 semidiameter=None, aperture=None, bounding=None, grating=None):
+                 semidiameter=None, aperture=None, bounding=None, grating=None,
+                 edge=None):
         adapter = _adapter_for(shape)
         params = []
         key_offsets = {}
@@ -450,6 +451,7 @@ class SurfaceRow:
             bounding = {'outer_radius': float(semidiameter)}
         self.bounding = bounding
         self.grating = grating
+        self.edge = edge
 
     @property
     def is_reflective(self):
@@ -487,6 +489,7 @@ class SurfaceRow:
         new.aperture = self.aperture
         new.bounding = self.bounding
         new.grating = self.grating
+        new.edge = self.edge
         return new
 
 
@@ -690,12 +693,19 @@ class LensData:
 
     # -- construction --
     def add(self, shape, *, thickness=0.0, material=None, typ='refr',
-            semidiameter=None, aperture=None, bounding=None, grating=None):
-        """Append a surface row.  Returns self for chaining."""
+            semidiameter=None, aperture=None, bounding=None, grating=None,
+            edge=None):
+        """Append a surface row.  Returns self for chaining.
+
+        edge carries mechanical edge geometry (outer diameter, chamfers,
+        seats, ...) for layout drawing; on the front surface of a lens element
+        it is the element's edge spec consumed by plotting.plot_optics.
+
+        """
         self.rows.append(SurfaceRow(
             shape, thickness=thickness, material=material, typ=typ,
             semidiameter=semidiameter, aperture=aperture, bounding=bounding,
-            grating=grating,
+            grating=grating, edge=edge,
         ))
         self._invalidate()
         return self
@@ -765,6 +775,7 @@ class LensData:
             shape=row.build_shape(), typ=row.typ, P=P, R=R,
             n=_as_material_callable(row.material),
             bounding=row.bounding, aperture=row.aperture, grating=row.grating,
+            edge=getattr(row, 'edge', None),
         )
 
     def _to_surfaces_axial(self):

@@ -887,7 +887,7 @@ class Surface:
     def __init__(self, shape=None, interaction=None, pose=None, material=None,
                  aperture=None, grating=None, *, typ=None, P=None, n=None,
                  R=None, bounding=None, tilt=None, decenter=None,
-                 tilt_radians=False):
+                 tilt_radians=False, edge=None):
         """Initialize a posed optical surface.
 
         Parameters
@@ -919,6 +919,10 @@ class Surface:
             Pose adjustments applied after P and R are resolved.
         tilt_radians : bool, optional
             If True, tilt values are interpreted as radians.
+        edge : mapping, optional
+            Mechanical edge geometry (outer diameter, chamfers, seats, ...)
+            carried for layout drawing.  Consumed by plotting.plot_optics; see
+            its lens_edges parameter for the schema.
 
         """
         if shape is None:
@@ -953,6 +957,7 @@ class Surface:
         self.bounding = bounding
         self.aperture = aperture
         self.grating = grating
+        self.edge = edge
         self.sag = shape.sag
         self.sag_and_normal = shape.sag_and_normal
         self._analytic_intersect = bool(getattr(shape, 'analytic_intersect', False))

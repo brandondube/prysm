@@ -345,6 +345,120 @@ def test_plot_optics_group_od_uses_largest_aperture_in_group():
     assert np.nanmin(y) == -2.0
 
 
+def test_plot_optics_bridges_steep_surface_to_od_with_normal_segment():
+    # A group whose outer radius (here the traced footprint, 1.0) exceeds a
+    # steeply curved member surface's sphere radius (R = 0.5) used to evaluate
+    # that surface's profile past its equator, leaving NaN in the edge wall so
+    # the lens outline broke open.  Now the surface is drawn out to its equator
+    # and bridged to the element OD with a constant-z (normal-to-OD) segment:
+    # the element keeps its full diameter, the outline stays finite, and a
+    # warning is emitted.
+    gentle = Surface(shape=ConicSag(1 / 5.0, 0.0), typ='refr',
+                     P=np.asarray([0., 0., 0.]), n=lambda wvl: 1.5)
+    steep = Surface(shape=ConicSag(1 / 0.5, 0.0), typ='refr',
+                    P=np.asarray([0., 0., 1.0]), n=lambda wvl: 1.0)
+    prescription = [gentle, steep]
+
+    with pytest.warns(UserWarning, match='flat edge'):
+        fig, ax = plot_optics(prescription, _trace_result(prescription),
+                              points=41)
+    try:
+        x = np.asarray(ax.lines[0].get_xdata())
+        y = np.asarray(ax.lines[0].get_ydata())
+    finally:
+        plt.close(fig)
+
+    assert np.isfinite(x).all()
+    assert np.isfinite(y).all()
+    # the element keeps its full outer radius -- not shrunk to the steep R=0.5
+    np.testing.assert_allclose(np.max(np.abs(y)), 1.0)
+    # the steep surface is bridged to the OD by a constant-z segment normal to
+    # the (axial) OD edge, sitting just inside its equator (z ~ 1.46, the
+    # largest z in the outline); the bridge runs from ~the equator out to the OD
+    ridge = np.isclose(x, np.max(x))
+    assert ridge.sum() >= 2
+    np.testing.assert_allclose(np.max(np.abs(y[ridge])), 1.0)
+    assert np.min(np.abs(y[ridge])) <= 0.55
+
+
+def test_plot_optics_draws_clear_aperture_land_to_od_silently():
+    # a surface whose own clear aperture (outer_radius) is smaller than the
+    # element OD is drawn out to its aperture, then bridged with a flat land
+    # (normal to the OD).  Unlike a surface that physically cannot reach the OD,
+    # an intentional smaller aperture is silent -- no warning.
+    front = Surface(shape=ConicSag(1 / 50.0, 0.0), typ='refr',
+                    P=np.asarray([0., 0., 0.]), n=lambda wvl: 1.5,
+                    bounding={'outer_radius': 1.0})
+    rear = Surface(shape=ConicSag(-1 / 50.0, 0.0), typ='refr',
+                   P=np.asarray([0., 0., 1.0]), n=lambda wvl: 1.0,
+                   bounding={'outer_radius': 3.0})
+    prescription = [front, rear]
+
+    import warnings as _warnings
+    with _warnings.catch_warnings():
+        _warnings.simplefilter('error')  # an intentional aperture must not warn
+        fig, ax = plot_optics(prescription, _trace_result(prescription),
+                              points=41)
+    try:
+        x = np.asarray(ax.lines[0].get_xdata())
+        y = np.asarray(ax.lines[0].get_ydata())
+    finally:
+        plt.close(fig)
+
+    assert np.isfinite(x).all()
+    assert np.isfinite(y).all()
+    # the element OD is the larger surface's clear aperture
+    np.testing.assert_allclose(np.max(np.abs(y)), 3.0)
+    # the small front surface is bridged: its sag is held flat beyond its
+    # aperture (r = 1) out to the OD, a constant-z land at the rim sag
+    rim_sag = float(front.sag(np.asarray([0.]), np.asarray([1.0]))[0])
+    land = np.isclose(x, rim_sag) & (np.abs(y) > 1.0 + 1e-9)
+    assert land.sum() >= 2
+    np.testing.assert_allclose(np.max(np.abs(y[land])), 3.0)
+
+
+def test_plot_optics_reads_edge_geometry_from_surface_when_unset():
+    front = _refracting_plane(0, n=1.5)
+    rear = _refracting_plane(2, n=1.0)
+    front.edge = {'features': [{'kind': 'square_cut', 'side': 'upper',
+                                'z_start': 0.5, 'z_end': 1.5, 'depth': 0.25}]}
+
+    x, y = _line_from_plot([front, rear])
+
+    np.testing.assert_allclose(x[5:10], [0.5, 0.5, 1.5, 1.5, 2.0])
+    np.testing.assert_allclose(y[5:10], [1.0, 0.75, 0.75, 1.0, 1.0])
+
+
+def test_plot_optics_explicit_lens_edges_override_surface_edge():
+    front = _refracting_plane(0, n=1.5)
+    rear = _refracting_plane(2, n=1.0)
+    front.edge = {'features': [{'kind': 'square_cut', 'side': 'upper',
+                                'z_start': 0.5, 'z_end': 1.5, 'depth': 0.25}]}
+
+    # an explicit (featureless) edge spec wins: the wall is a plain square OD
+    x, y = _line_from_plot([front, rear], lens_edges={0: {}})
+
+    assert np.any((y[:-1] == 1) & (y[1:] == 1) & (x[:-1] == 0) & (x[1:] == 2))
+
+
+def test_lensdata_add_edge_propagates_to_compiled_surface():
+    edge = {'od_radius': 9.0,
+            'features': [{'kind': 'chamfer', 'side': 'both',
+                          'z_start': 0.0, 'z_end': 0.5, 'depth': 0.3}]}
+    ld = (LensData(epd=10.0, wavelengths={'d': 0.5876},
+                   reference_wavelength='d')
+          .add(ConicSag(1 / 60.0, 0.0), thickness=4.0, material=lambda w: 1.5,
+               semidiameter=8.0, edge=edge)
+          .add(ConicSag(-1 / 60.0, 0.0), thickness=95.0, material=lambda w: 1.0,
+               semidiameter=8.0))
+
+    surfaces = ld.to_surfaces()
+    assert surfaces[0].edge is edge
+    assert surfaces[1].edge is None
+    # the edge survives a copy of the LensData
+    assert ld.copy().to_surfaces()[0].edge is edge
+
+
 def test_plot_optics_draws_mirror_optical_surface_by_default():
     prescription = [_reflecting_surface(PlaneSag(), outer_radius=1)]
 

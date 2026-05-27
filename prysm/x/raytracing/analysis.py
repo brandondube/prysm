@@ -68,7 +68,14 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None):
     Returns
     -------
     pupil : ndarray, shape (N,)
-        launch (x or y) coordinate for each ray.
+        pupil (x or y) coordinate for each ray, measured as the launch
+        offset from the chief ray.  Reporting it chief-relative keeps the fan
+        centered on the pupil even when the bundle was shifted laterally at
+        the launch plane to route through an off-axis entrance pupil (the
+        default for a system with an interior stop); on axis, or with the
+        stop at the first surface, the chief launches on axis and this is
+        just the launch coordinate.  Matches the convention used by
+        wavefront().
     delta : ndarray, shape (N,)
         image-plane (x or y) offset from chief for each ray.
 
@@ -82,7 +89,7 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None):
         raise ValueError(f"axis must be 'x' or 'y', got {axis!r}")
     if chief_index is None:
         chief_index = P_hist.shape[1] // 2
-    pupil = P_hist[0, :, ax]
+    pupil = P_hist[0, :, ax] - P_hist[0, chief_index, ax]
     image = P_hist[-1, :, ax]
     chief_image = P_hist[-1, chief_index, ax]
     if not np.isfinite(chief_image):
@@ -305,8 +312,10 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
     paraxial_xy : ndarray, shape (n_fields, 2)
         scaled-up paraxial chief-ray landing per field.
     percent : ndarray, shape (n_fields,)
-        100 * |real - paraxial| / |paraxial|.  Returns 0 for the on-axis
-        field where paraxial landing is the origin.
+        signed percent distortion, 100 * (h_real - h_ref) / h_ref, where
+        h_ref is the ideal (paraxial) image height and h_real is the real
+        chief-ray height projected onto the ideal direction.  Positive is
+        pincushion, negative is barrel; 0 for the on-axis field.
 
     """
     wavelength = lensdata_wavelength(prescription, wavelength)
@@ -355,8 +364,13 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
 
         denom = float(np.hypot(*paraxial_xy[i]))
         if denom > 0.0:
-            num = float(np.hypot(*(real_xy[i] - paraxial_xy[i])))
-            percent[i] = 100.0 * num / denom
+            # signed distortion: project the real chief-ray landing onto the
+            # ideal (paraxial) image-height direction so the sign survives.  A
+            # real height longer than ideal is pincushion (positive); shorter
+            # is barrel (negative).  Taking |real - paraxial| would collapse
+            # both to a positive magnitude and make them indistinguishable.
+            real_height = float(np.dot(real_xy[i], paraxial_xy[i])) / denom
+            percent[i] = 100.0 * (real_height - denom) / denom
 
     return real_xy, paraxial_xy, percent
 
@@ -378,7 +392,7 @@ def _line_intersection_z(P0, S0, P1, S1):
 
 
 def field_curvature(prescription, fields, wavelength=None, *, epd=None,
-                    n_ambient=1.0, marginal_fraction=0.7):
+                    n_ambient=1.0, marginal_fraction=1e-3):
     """Sagittal and tangential focus shifts per field point.
 
     For each field, traces a 3-ray chief+marginal bundle in both x (sagittal)
@@ -400,7 +414,12 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
         ambient index.
     marginal_fraction : float
         radius used for the marginal ray, as a fraction of EPD/2.  Default
-        0.7 (the classical lens-design "0.7-zone" sample).
+        1e-3, i.e. a near-chief ray, which returns the differential
+        (Coddington) sagittal and tangential foci -- the classical
+        astigmatic field curves.  A finite zone (e.g. 0.7) instead reports
+        where that real zonal fan focuses, which folds in coma and oblique
+        spherical aberration and can differ from the differential foci by an
+        order of magnitude at high aperture and field.
 
     Returns
     -------

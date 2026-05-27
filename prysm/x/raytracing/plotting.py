@@ -7,6 +7,8 @@ go through the swappable prysm.mathops backend here.  User-supplied arrays
 use, so each public function calls array_to_true_numpy at entry.
 """
 
+import warnings
+
 from collections.abc import Mapping, Sequence
 
 from prysm.plotting import share_fig_ax
@@ -120,7 +122,7 @@ def _global_plot_coordinates(surf, sag, ploty, x, y):
 
 
 def _surface_profile(surf, phist, j, points, y, radius=None, clear_radius=None,
-                     center=0.0):
+                     center=0.0, max_radius=None):
     if radius is None:
         if surf.bounding is None:
             p = phist[j + 1]
@@ -155,12 +157,23 @@ def _surface_profile(surf, phist, j, points, y, radius=None, clear_radius=None,
         bound = surf.bounding or {}
         mn = bound.get('inner_radius', 0)
         mask = abs(local) < mn
-        if y == 'y':
-            xpt = np.zeros_like(ploty)
-            ypt = ploty
+        # The plotted points span the full element radius, but the sag is only
+        # evaluated out to max_radius (where this surface still exists).  Beyond
+        # that the evaluation coordinate is held at the rim, so the sag is flat
+        # at the edge value and the profile becomes a constant-z (radial)
+        # segment from the surface edge out to the element OD -- the vertical
+        # bridge that closes the outline on a surface too steep to reach the OD.
+        if max_radius is not None:
+            eval_local = np.clip(local, -max_radius, max_radius)
         else:
-            xpt = ploty
-            ypt = np.zeros_like(ploty)
+            eval_local = local
+        eval_coord = center + eval_local
+        if y == 'y':
+            xpt = np.zeros_like(eval_coord)
+            ypt = eval_coord
+        else:
+            xpt = eval_coord
+            ypt = np.zeros_like(eval_coord)
 
     sag = surf.sag(xpt, ypt)
     sag = np.asarray(sag, dtype=float) + surf.P[2]
@@ -172,6 +185,33 @@ def _surface_profile(surf, phist, j, points, y, radius=None, clear_radius=None,
         mask = mask | (abs(ploty - center) > clear_radius)
     sag[mask] = np.nan
     return sag, ploty, edge_sag
+
+
+def _surface_drawable_radius(surf, radius, axis, center=0.0, samples=512):
+    """Largest radius (<= radius) where this surface's sag is still defined.
+
+    A steeply curved surface (small |R|) has no sag beyond its equator — a
+    sphere is undefined past r = |R| — so evaluating its profile out at the
+    element OD yields NaN and the lens outline breaks open.  Probe the surface
+    along the drawn axis and return the largest radius where the sag remains
+    finite; the caller draws the optical surface out to there and bridges the
+    remaining annulus to the OD with a radial segment.  Returns radius
+    unchanged when the surface reaches the OD.
+
+    """
+    probe = np.linspace(0.0, radius, samples)
+    coord = center + probe
+    zero = np.zeros_like(coord)
+    xpt, ypt = (zero, coord) if axis == 'y' else (coord, zero)
+    # the probe deliberately reaches past a steep surface's equator, where the
+    # sag is undefined; that NaN is the signal we are looking for
+    with np.errstate(invalid='ignore'):
+        sag = np.asarray(surf.sag(xpt, ypt), dtype=float)
+    bad = ~np.isfinite(sag)
+    if not bad.any():
+        return radius
+    first = int(np.argmax(bad))
+    return float(probe[first - 1]) if first > 0 else 0.0
 
 
 def _lens_edge_for(lens_edges, surface_index, pair_index):
@@ -632,7 +672,9 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
         sequence is aligned to lens groups.  Each entry may define
         od_radius, clear_radius, clear_radius_front, clear_radius_rear, and
         a features list.  Supported feature kinds are square, square_cut,
-        seat, chamfer, and flat.
+        seat, chamfer, and flat.  When omitted, the edge geometry carried by
+        the prescription itself (Surface.edge, set from a LensData row's edge=)
+        is used; an explicit value here overrides it.
 
     Returns
     -------
@@ -657,6 +699,17 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
     )
     groups_by_start = {group[0]: (group_index, group)
                        for group_index, group in enumerate(lens_groups)}
+
+    # when the caller does not pass edge geometry explicitly, pick up whatever
+    # the surfaces carry themselves (LensData rows / Surface.edge), keyed by the
+    # group's first surface index so _lens_edge_for resolves it per element
+    if lens_edges is None:
+        derived = {}
+        for group in lens_groups:
+            edge = getattr(prescription[group[0]], 'edge', None)
+            if edge is not None:
+                derived[group[0]] = edge
+        lens_edges = derived or None
 
     j = 0
     mirror_index = 0
@@ -738,9 +791,31 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
                     clear_radius = _surface_clear_radius(
                         lens_edge, f'surface_{surface_number}',
                     )
+                surf_obj = prescription[surface_index]
+                sag_radius = _surface_drawable_radius(surf_obj, od_radius, y)
+                if sag_radius < od_radius * (1.0 - 1e-9):
+                    # a surface that physically cannot reach the OD (its sag is
+                    # undefined past the equator) is a layout surprise -- warn
+                    warnings.warn(
+                        f'surface {surface_index} optical sag only spans radius '
+                        f'{sag_radius:.4g}, short of the element outer radius '
+                        f'{od_radius:.4g}; drawing a flat edge from the surface '
+                        f'rim out to the OD',
+                        stacklevel=2,
+                    )
+                draw_radius = sag_radius
+                bound = surf_obj.bounding
+                if bound is not None and 'outer_radius' in bound:
+                    # the surface's own clear aperture also caps its optical
+                    # zone; beyond it the element is drawn as a flat land
+                    # (normal to the OD) out to the element outer radius.  This
+                    # is an intentional aperture, not a surface that cannot
+                    # reach the OD, so it is silent
+                    draw_radius = min(draw_radius, float(bound['outer_radius']))
                 profiles.append(_surface_profile(
-                    prescription[surface_index], phist, surface_index, points,
+                    surf_obj, phist, surface_index, points,
                     y, radius=od_radius, clear_radius=clear_radius,
+                    max_radius=draw_radius,
                 ))
 
             sag1, ploty1, edge_sag1 = profiles[0]
@@ -1006,7 +1081,7 @@ def _field_axis_values(fields):
 
 
 def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
-                         n_ambient=1.0, marginal_fraction=0.7,
+                         n_ambient=1.0, marginal_fraction=1e-3,
                          reference='image', c='r', lw=1, alpha=1, zorder=4,
                          label=None, fig=None, ax=None):
     """Plot sagittal and tangential field curves.
@@ -1030,7 +1105,9 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
     n_ambient : float, optional
         ambient index.
     marginal_fraction : float, optional
-        pupil zone for the marginal ray, as a fraction of EPD/2.  Default 0.7.
+        pupil zone for the marginal ray, as a fraction of EPD/2.  Default
+        1e-3 -- the differential (Coddington) field curves; see
+        analysis.field_curvature.
     reference : str or float, optional
         zero of the focus-shift axis: 'image' (default) references the last
         surface vertex; a number references that lab-frame z; None plots the
