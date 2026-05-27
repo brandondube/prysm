@@ -22,7 +22,7 @@ extensions = [
 # You can specify multiple suffix as a list of string:
 #
 # source_suffix = ['.rst', '.md']
-source_suffix = '.rst'
+source_suffix = {'.rst': 'restructuredtext'}
 
 # The root toctree document.
 root_doc = 'index'
@@ -51,7 +51,12 @@ language = 'en'
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This patterns also effect to html_static_path and html_extra_path
-exclude_patterns = ['_build', '**.ipynb_checkpoints']
+exclude_patterns = [
+    '_build',
+    '**/.ipynb_checkpoints',
+    '**/__pycache__',
+    '**/.DS_Store',
+]
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
@@ -163,4 +168,4 @@ autodoc_default_options = {
 # nbsphinx conf
 nbsphinx_timeout = 600  # 10 minutes
 
-nbsphinx_allow_errors = True
+nbsphinx_allow_errors = False
