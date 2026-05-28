@@ -104,6 +104,49 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None):
 
 # ---------- wavefront -------------------------------------------------------
 
+def _pupil_center_chief_index(P):
+    """Index of the launch ray nearest the pupil center -- the chief ray.
+
+    For a symmetric sampling the launch bundle's centroid is the pupil center,
+    even after the bundle was translated by entrance-pupil routing; pick the
+    ray nearest it.  (A fixed N//2 is only the center for fan/rect-style
+    samplings, not hex.)  Shared by wavefront() and the differential trace's
+    wavefront_with_tangents so the two agree on which ray anchors the sphere.
+    """
+    P = np.asarray(P)
+    center = np.mean(P[:, :2], axis=0)
+    d2 = np.sum((P[:, :2] - center) ** 2, axis=1)
+    return int(np.argmin(d2))
+
+
+def _filtered_chief_index(valid, chief_index):
+    """Position of chief_index within the valid-only subset of rays."""
+    valid_indices = np.nonzero(valid)[0]
+    return int(np.nonzero(valid_indices == chief_index)[0][0])
+
+
+def _apply_field_and_output(opd, x_pupil, y_pupil, field, output, wavelength):
+    """Field-tilt removal + length/waves scaling shared by the wavefront paths.
+
+    Adds the collimated launch-plane tilt back in (an angular field tilts the
+    reference plane) and converts to the requested output.  Returns
+    (opd_out, scale): scale is the factor opd was multiplied by -- 1.0 for
+    length, -1/(wavelength*1e-3) for waves -- so a differential caller can scale
+    its dOPD/dtau maps by the same factor.  The field tilt is tau-independent,
+    so it shifts opd but contributes nothing to the tangent maps.
+    """
+    if field is not None:
+        ax, ay = field.angle_radians()
+        opd = opd + (np.sin(ax) * x_pupil + np.sin(ay) * y_pupil)
+    if output == 'length':
+        scale = 1.0
+    elif output == 'waves':
+        scale = -1.0 / (float(wavelength) * 1e-3)
+    else:
+        raise ValueError(f"output must be 'length' or 'waves', got {output!r}")
+    return opd * scale, scale
+
+
 def wavefront(prescription, P, S, wavelength, *,
               n_ambient=1.0, chief_index=None,
               axis_point=None, axis_dir=None, P_xp=None,
@@ -163,13 +206,7 @@ def wavefront(prescription, P, S, wavelength, *,
     P = np.asarray(P)
     trace = raytrace(prescription, P, S, wavelength, n_ambient=n_ambient)
     if chief_index is None:
-        # the chief is the pupil-center ray.  For a symmetric sampling the
-        # launch bundle's centroid is that center, even after the bundle was
-        # translated by entrance-pupil routing; pick the ray nearest it.  (A
-        # fixed N//2 is only the center for fan/rect-style samplings, not hex.)
-        center = np.mean(P[:, :2], axis=0)
-        d2 = np.sum((P[:, :2] - center) ** 2, axis=1)
-        chief_index = int(np.argmin(d2))
+        chief_index = _pupil_center_chief_index(P)
     valid = _valid_mask(trace.status, trace.P[-1])
     if not valid[chief_index]:
         raise ValueError('chief ray is invalid; cannot define reference sphere')
@@ -182,8 +219,7 @@ def wavefront(prescription, P, S, wavelength, *,
                                          axis_dir=axis_dir)
     else:
         P_xp = np.asarray(P_xp, dtype=P.dtype)
-    valid_indices = np.nonzero(valid)[0]
-    filtered_chief = int(np.nonzero(valid_indices == chief_index)[0][0])
+    filtered_chief = _filtered_chief_index(valid, chief_index)
     opd = opd_from_raytrace(trace.P[:, valid], trace.S[:, valid],
                             trace.OPL[:, valid],
                             P_img=P_chief_final, P_xp=P_xp,
@@ -199,18 +235,8 @@ def wavefront(prescription, P, S, wavelength, *,
         x_pupil = np.asarray(pupil_coords[0])[valid]
         y_pupil = np.asarray(pupil_coords[1])[valid]
 
-    if field is not None:
-        ax, ay = field.angle_radians()
-        tilt = np.sin(ax) * x_pupil + np.sin(ay) * y_pupil
-        opd = opd + tilt
-
-    if output == 'length':
-        pass
-    elif output == 'waves':
-        opd = -opd / (float(wavelength) * 1e-3)
-    else:
-        raise ValueError(f"output must be 'length' or 'waves', got {output!r}")
-
+    opd, _ = _apply_field_and_output(opd, x_pupil, y_pupil, field, output,
+                                     wavelength)
     return opd, x_pupil, y_pupil
 
 

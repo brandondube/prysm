@@ -2,6 +2,7 @@
 
 from prysm.mathops import np
 from prysm.coordinates import cart_to_polar
+from prysm.polynomials import zernike_nm, zernike_nm_der_xy
 from prysm.polynomials.qpoly import compute_z_Q2d, compute_z_zprime_Q2d
 
 def product_rule(u, v, du, dv):
@@ -266,6 +267,140 @@ def conic_sag_der_xy(c, kappa, x, y, phi=None):
     return (c * x) / phi, (c * y) / phi
 
 
+def conic_sag_hessian(c, kappa, x, y, phi=None):
+    """Cartesian second derivatives of an on-axis conic sag.
+
+    Returns (sag_xx, sag_xy, sag_yy), the entries of the sag Hessian, needed
+    by the differential ray trace's normal tangent.  Written directly in
+    (x, y) with no 1/r singularity; reduces to the sphere Hessian at kappa=0.
+
+    Parameters
+    ----------
+    c : float
+        surface curvature
+    kappa : float
+        conic constant
+    x, y : ndarray
+        Cartesian coordinates (non-normalized)
+    phi : ndarray, optional
+        sqrt(1 - (1+kappa) c^2 (x^2 + y^2)); computed if not provided
+
+    Returns
+    -------
+    ndarray, ndarray, ndarray
+        sag_xx, sag_xy, sag_yy
+
+    """
+    if phi is None:
+        phi = phi_conic(c, kappa, x * x + y * y)
+    beta = (1.0 + kappa) * c * c
+    phi3 = phi * phi * phi
+    sag_xx = c * (1.0 - beta * y * y) / phi3
+    sag_xy = c * beta * x * y / phi3
+    sag_yy = c * (1.0 - beta * x * x) / phi3
+    return sag_xx, sag_xy, sag_yy
+
+
+def conic_sag_param_partials(c, kappa, x, y, name, phi=None):
+    """Partials of conic sag and sag-gradient wrt a shape parameter.
+
+    For name in {'c', 'k'}, returns (sag_t, gx_t, gy_t):
+    the partial of the sag and of its two gradient components (dz/dx, dz/dy)
+    with respect to the named parameter, evaluated at fixed (x, y).  These are
+    the explicit shape tangents the differential trace injects at the surface
+    a curvature/conic tolerance touches.
+
+    Parameters
+    ----------
+    c : float
+        surface curvature
+    kappa : float
+        conic constant
+    x, y : ndarray
+        Cartesian coordinates (non-normalized)
+    name : str
+        'c' for curvature, 'k' for conic constant
+    phi : ndarray, optional
+        sqrt(1 - (1+kappa) c^2 (x^2 + y^2)); computed if not provided
+
+    Returns
+    -------
+    ndarray, ndarray, ndarray
+        d sag / d param, d(dz/dx) / d param, d(dz/dy) / d param
+
+    """
+    A = x * x + y * y
+    if phi is None:
+        phi = phi_conic(c, kappa, A)
+    phi3 = phi * phi * phi
+    one_plus_phi = 1.0 + phi
+    if name == 'c':
+        sag_t = A / one_plus_phi + (1.0 + kappa) * c * c * A * A / (
+            phi * one_plus_phi * one_plus_phi)
+        gx_t = x / phi3
+        gy_t = y / phi3
+    elif name == 'k':
+        c3 = c * c * c
+        sag_t = c3 * A * A / (2.0 * phi * one_plus_phi * one_plus_phi)
+        gx_t = c3 * x * A / (2.0 * phi3)
+        gy_t = c3 * y * A / (2.0 * phi3)
+    else:
+        raise ValueError(f"conic shape parameter must be 'c' or 'k', got {name!r}")
+    return sag_t, gx_t, gy_t
+
+
+def zernike_irregularity_partials(n, m, x, y, normalization_radius, norm=True):
+    """Sag and sag-gradient partials of one Zernike surface-irregularity term.
+
+    A surface irregularity modelled as an added Zernike departure
+    delta z = a * Z_n^m(x / R, y / R) has, at amplitude a, the explicit
+    (parameter) tangents the differential trace injects for that amplitude:
+
+        d(sag)/da   = Z_n^m(x / R, y / R)
+        d(dz/dx)/da = (1 / R) dZ_n^m/dx
+        d(dz/dy)/da = (1 / R) dZ_n^m/dy
+
+    The value uses the polar Zernike (smooth via r^|m| trig(m theta)) and the
+    gradient uses the Cartesian-direct zernike_nm_der_xy (smooth at the origin),
+    so the two match how the Zernike surface shape evaluates itself.  The
+    amplitude is in the surface's sag length units; with norm=True a unit
+    amplitude is one unit RMS of that mode over the disk of radius R.
+
+    This is the Code V CYN/CYD irregularity operand: CYN ~ Z_2^2 (cylinder along
+    the axes, (x^2 - y^2)/R^2) and CYD ~ Z_2^-2 (cylinder at 45 degrees,
+    2xy/R^2), but any (n, m) is admitted (power Z_2^0, spherical Z_4^0, ...).
+    Because the nominal amplitude is zero the nominal sag and Hessian are
+    unchanged, so this enters the trace purely through these tangents.
+
+    Parameters
+    ----------
+    n : int
+        Zernike radial order.
+    m : int
+        Zernike azimuthal order.
+    x, y : ndarray
+        Cartesian coordinates (non-normalized, surface length units).
+    normalization_radius : float
+        radius R used to normalize x, y before Zernike evaluation.
+    norm : bool, optional
+        if True (default), orthonormal (unit-RMS) Zernikes; else zero-to-peak.
+
+    Returns
+    -------
+    ndarray, ndarray, ndarray
+        d sag / da, d(dz/dx) / da, d(dz/dy) / da
+
+    """
+    R = float(normalization_radius)
+    xn = x / R
+    yn = y / R
+    rho = np.sqrt(xn * xn + yn * yn)
+    theta = np.arctan2(yn, xn)
+    sag_t = zernike_nm(n, m, rho, theta, norm=norm)
+    dzdx, dzdy = zernike_nm_der_xy(n, m, xn, yn, norm=norm)
+    return sag_t, dzdx / R, dzdy / R
+
+
 def _conic_base_xy(c, kappa, x, y):
     """Sag and Cartesian partial derivatives of an on-axis conic at (x, y).
 
@@ -516,6 +651,9 @@ __all__ = [
     'conic_sag',
     'conic_sag_der',
     'conic_sag_der_xy',
+    'conic_sag_hessian',
+    'conic_sag_param_partials',
+    'zernike_irregularity_partials',
     'even_asphere_sag',
     'even_asphere_sag_der_xy',
     'Q2d_and_der',

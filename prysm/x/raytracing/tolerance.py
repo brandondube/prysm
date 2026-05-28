@@ -50,13 +50,23 @@ from prysm.mathops import np
 from .design import _TraceCache
 
 
-def _resolve_slot(lensdata, category, surface):
-    """Resolve a (category, surface) pair to a single LensData DOF slot."""
+def _resolve_slot(lensdata, category, surface, component=None):
+    """Resolve a (category, surface) pair to a single LensData DOF slot.
+
+    Multi-component categories (tilt, decenter on a coordinate break) resolve
+    to three DOFs; pass component to select one by its offset -- decenter
+    0/1/2 = dx/dy/dz, tilt 0/1/2 = rz/ry/rx (matching CoordBreak's layout).
+
+    """
     slots = lensdata._category_slots(category, surface)
+    if component is not None:
+        slots = [s for s in slots if s[2] == int(component)]
     if len(slots) != 1:
+        extra = '' if component is None else f' component {component}'
         raise ValueError(
-            f'perturbation target {category!r} on surface {surface!r} resolved '
-            f'to {len(slots)} DOFs; tolerancing needs exactly one scalar DOF'
+            f'perturbation target {category!r} on surface {surface!r}{extra} '
+            f'resolved to {len(slots)} DOFs; tolerancing needs exactly one '
+            'scalar DOF (for tilt/decenter pass component=0/1/2)'
         )
     return slots[0]
 
@@ -103,9 +113,14 @@ class Perturbation:
         )
 
     @classmethod
-    def normal(cls, lensdata, category, surface, sigma, name=''):
-        """Normal(nominal, sigma) distribution.  sigma is absolute."""
-        slot = _resolve_slot(lensdata, category, surface)
+    def normal(cls, lensdata, category, surface, sigma, name='', component=None):
+        """Normal(nominal, sigma) distribution.  sigma is absolute.
+
+        component selects one axis of a multi-DOF tilt/decenter slot (see
+        _resolve_slot); leave it None for scalar categories.
+
+        """
+        slot = _resolve_slot(lensdata, category, surface, component)
         nom = float(lensdata.spec.get_value(slot))
         sigma = float(sigma)
 
@@ -115,14 +130,15 @@ class Perturbation:
         return cls(lensdata, slot, sampler, nom, sigma, name)
 
     @classmethod
-    def normal_relative(cls, lensdata, category, surface, sigma_rel, name=''):
+    def normal_relative(cls, lensdata, category, surface, sigma_rel, name='',
+                        component=None):
         """Normal distribution with sigma = sigma_rel * |nominal DOF|.
 
         For a DOF whose nominal is 0 this collapses to a delta function --
         use .normal with an explicit absolute sigma in that case.
 
         """
-        slot = _resolve_slot(lensdata, category, surface)
+        slot = _resolve_slot(lensdata, category, surface, component)
         nom = float(lensdata.spec.get_value(slot))
         sigma = abs(nom) * float(sigma_rel)
 
@@ -132,9 +148,10 @@ class Perturbation:
         return cls(lensdata, slot, sampler, nom, sigma, name)
 
     @classmethod
-    def uniform(cls, lensdata, category, surface, half_width, name=''):
+    def uniform(cls, lensdata, category, surface, half_width, name='',
+                component=None):
         """Uniform over (nominal - half_width, nominal + half_width)."""
-        slot = _resolve_slot(lensdata, category, surface)
+        slot = _resolve_slot(lensdata, category, surface, component)
         nom = float(lensdata.spec.get_value(slot))
         hw = abs(float(half_width))
 
@@ -144,9 +161,10 @@ class Perturbation:
         return cls(lensdata, slot, sampler, nom, hw, name)
 
     @classmethod
-    def triangular(cls, lensdata, category, surface, half_width, name=''):
+    def triangular(cls, lensdata, category, surface, half_width, name='',
+                   component=None):
         """Triangular distribution centered on nominal with half-width hw."""
-        slot = _resolve_slot(lensdata, category, surface)
+        slot = _resolve_slot(lensdata, category, surface, component)
         nom = float(lensdata.spec.get_value(slot))
         hw = abs(float(half_width))
 

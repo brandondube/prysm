@@ -43,6 +43,8 @@ from .sags import (
     conic_sag_and_normal,
     conic_sag_der,
     conic_sag_der_xy,
+    conic_sag_hessian,
+    conic_sag_param_partials,
     der_direction_cosine_conic,
     even_asphere_sag,
     even_asphere_sag_der_xy,
@@ -202,6 +204,73 @@ class Shape:
         Fy = (self.sag(x, y + h) - self.sag(x, y - h)) / (2.0 * h)
         return z, gradient_to_unit_normal(Fx, Fy)
 
+    def _sag_gradient(self, x, y):
+        """Sag gradient (dz/dx, dz/dy) at x, y, via sag_and_normal."""
+        _, n_hat = self.sag_and_normal(x, y)
+        nz = n_hat[..., 2]
+        return -n_hat[..., 0] / nz, -n_hat[..., 1] / nz
+
+    def _fd_step(self, *arrs):
+        """Central-difference step, scaled to the coordinate magnitude."""
+        if self.finite_difference_step is not None:
+            return np.asarray(self.finite_difference_step, dtype=config.precision)
+        eps = np.sqrt(np.finfo(config.precision).eps)
+        mag = 1.0
+        for a in arrs:
+            mag = np.maximum(mag, np.abs(a))
+        return eps * mag
+
+    def sag_hessian(self, x, y):
+        """Sag Hessian (sag_xx, sag_xy, sag_yy) at x, y.
+
+        Base implementation central-differences the sag gradient; shapes with
+        a closed-form Hessian (Plane, Sphere, Conic) override this.
+
+        """
+        x = np.asarray(x)
+        y = np.asarray(y)
+        h = self._fd_step(x, y)
+        fxxp, _ = self._sag_gradient(x + h, y)
+        fxxm, _ = self._sag_gradient(x - h, y)
+        fxyp, fyyp = self._sag_gradient(x, y + h)
+        fxym, fyym = self._sag_gradient(x, y - h)
+        sag_xx = (fxxp - fxxm) / (2.0 * h)
+        sag_yy = (fyyp - fyym) / (2.0 * h)
+        sag_xy = (fxyp - fxym) / (2.0 * h)
+        return sag_xx, sag_xy, sag_yy
+
+    def sag_param_partials(self, x, y, name):
+        """Partials of sag and sag-gradient wrt a shape parameter at fixed x, y.
+
+        Returns (sag_t, gx_t, gy_t).  The base implementation central-
+        differences a scalar parameter stored in self.params -- the local-FD
+        fallback that lets freeform-coefficient tolerances reuse the
+        differential machinery without a re-trace.  Plane/Sphere/Conic give
+        closed forms.
+
+        """
+        x = np.asarray(x)
+        y = np.asarray(y)
+        params = self.params
+        if params is None or name not in params:
+            raise ValueError(
+                f'shape has no parameter {name!r} to differentiate against')
+        nominal = params[name]
+        h = np.sqrt(np.finfo(config.precision).eps) * max(1.0, abs(float(nominal)))
+        try:
+            params[name] = nominal + h
+            sag_p = self.sag(x, y)
+            gxp, gyp = self._sag_gradient(x, y)
+            params[name] = nominal - h
+            sag_m = self.sag(x, y)
+            gxm, gym = self._sag_gradient(x, y)
+        finally:
+            params[name] = nominal
+        sag_t = (sag_p - sag_m) / (2.0 * h)
+        gx_t = (gxp - gxm) / (2.0 * h)
+        gy_t = (gyp - gym) / (2.0 * h)
+        return sag_t, gx_t, gy_t
+
 
 class CallableShape(Shape):
     """Shape wrapper for user-supplied sag and optional normal callables."""
@@ -252,6 +321,11 @@ class Plane(Shape):
     def sag_and_normal(self, x, y):
         """Evaluate plane sag and unit normal."""
         return plane_sag_and_normal(x, y)
+
+    def sag_hessian(self, x, y):
+        """Plane sag Hessian (all zero)."""
+        z = np.zeros_like(np.asarray(x))
+        return z, z, z
 
     def intersect(self, P, S, sag_and_normal=None, tol_sag=None, eps=None,
                   maxiter=None,
@@ -309,6 +383,14 @@ class Sphere(Shape):
     def sag_and_normal(self, x, y):
         """Evaluate spherical sag and unit normal."""
         return conic_sag_and_normal(self.params['c'], 0.0, x, y)
+
+    def sag_hessian(self, x, y):
+        """Spherical sag Hessian (conic Hessian with k=0)."""
+        return conic_sag_hessian(self.params['c'], 0.0, x, y)
+
+    def sag_param_partials(self, x, y, name):
+        """Partials of sphere sag and gradient wrt 'c'."""
+        return conic_sag_param_partials(self.params['c'], 0.0, x, y, name)
 
     def intersect(self, P, S, sag_and_normal=None, tol_sag=None, eps=None,
                   maxiter=None,
@@ -369,6 +451,15 @@ class Conic(Shape):
     def sag_and_normal(self, x, y):
         """Evaluate conic sag and unit normal."""
         return conic_sag_and_normal(self.params['c'], self.params['k'], x, y)
+
+    def sag_hessian(self, x, y):
+        """Conic sag Hessian."""
+        return conic_sag_hessian(self.params['c'], self.params['k'], x, y)
+
+    def sag_param_partials(self, x, y, name):
+        """Partials of conic sag and gradient wrt 'c' or 'k'."""
+        return conic_sag_param_partials(self.params['c'], self.params['k'],
+                                        x, y, name)
 
     def intersect(self, P, S, sag_and_normal=None, tol_sag=None, eps=None,
                   maxiter=None,

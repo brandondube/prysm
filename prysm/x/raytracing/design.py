@@ -14,11 +14,15 @@ loop:
   ray-trace; paraxial operands compute directly from the prescription.  A
   LensData duck-types as the compiled surface sequence the operands consume.
 - **Problem** wraps a LensData + operands.
-  `residuals(x)` returns the per-operand weighted residual vector for
-  `scipy.optimize.least_squares`; `merit(x)` returns the scalar sum
-  of squared residuals for `scipy.optimize.minimize`; `jacobian(x)`
-  reuses `sensitivity.merit_jacobian_free` to compute the gradient of the
-  scalar merit (FD or torch autograd) w.r.t. the free vector.
+  `residuals(x)` returns the per-operand weighted residual vector for the
+  least-squares objective.  Hard equality and inequality operands are
+  evaluated separately as unweighted constraint functions for
+  `optym.damped_least_squares`, so quantities such as focal length can be
+  solved exactly instead of balanced as soft merit terms.  `merit(x)` returns
+  the scalar sum of squared objective residuals for scalar optimizers;
+  `jacobian(x)` reuses `sensitivity.merit_jacobian_free` to compute the
+  gradient of that scalar objective (FD or torch autograd) w.r.t. the free
+  vector.
 
 A trace cache is created fresh on each `residuals` / `merit` call so
 multiple operands sharing the same launch bundle and wavelength evaluate
@@ -343,25 +347,41 @@ def _is_lensdata(model):
 class Problem:
     """A design-optimization problem over a LensData's free vector.
 
-    `Problem(lensdata, operands)`.  The free vector is the LensData's packed
+    `Problem(lensdata, operands, equality_constraints=None,
+    inequality_constraints=None)`.  The free vector is the LensData's packed
     DOFs (mark them with `lensdata.vary(...)`); `x` is scattered back with
     `lensdata.update`, the system recompiled, and the operands evaluated
     against the compiled surfaces.
 
-    Methods: :meth:`x0`, :meth:`residuals`, :meth:`merit`, :meth:`jacobian`.
+    Objective operands are weighted residual terms.  Equality and inequality
+    operands are hard constraints evaluated as `operand - target`, ignoring
+    `weight`; inequalities use the optym convention g(x) >= 0.
+
+    Methods: :meth:`x0`, :meth:`residuals`, :meth:`equalities`,
+    :meth:`inequalities`, :meth:`solve`, :meth:`merit`, :meth:`jacobian`.
 
     """
 
-    def __init__(self, lensdata, operands=None):
+    def __init__(self, lensdata, operands=None, *,
+                 equality_constraints=None, inequality_constraints=None,
+                 constraints=None):
         if not _is_lensdata(lensdata):
             raise TypeError(
                 'Problem requires a LensData (it needs pack/update/to_surfaces '
                 'to own the free vector); got '
                 f'{type(lensdata).__name__}.'
             )
+        if constraints is not None:
+            if equality_constraints is not None:
+                raise ValueError(
+                    'use either constraints or equality_constraints, not both'
+                )
+            equality_constraints = constraints
         self.lensdata = lensdata
         self.prescription = lensdata  # duck-types as a surface sequence
         self.operands = list(operands or [])
+        self.equality_constraints = _as_operand_list(equality_constraints)
+        self.inequality_constraints = _as_operand_list(inequality_constraints)
 
     def x0(self):
         """Initial parameter vector — the LensData's packed free vector."""
@@ -370,23 +390,79 @@ class Problem:
     def _set_x(self, x):
         self.lensdata.update(x)
 
+    def _operand_vector(self, operands, *, weighted):
+        cache = _TraceCache(self.prescription)
+        out = np.empty(len(operands), dtype=config.precision)
+        for i, op in enumerate(operands):
+            v = op(self.prescription, cache)
+            r = v - op.target
+            if weighted:
+                r = op.weight * r
+            out[i] = r
+        return out, cache
+
     def residuals(self, x, return_cache=False):
         """Per-operand weighted residual vector [w_i * (op_i - target_i)].
 
-        Suitable for scipy.optimize.least_squares.  When return_cache=True
-        also returns the _TraceCache used (for introspection — e.g.,
-        counting trace calls in tests).
+        This is the least-squares objective vector.  Hard constraints live in
+        equalities() and inequalities(), so use solve() or
+        damped_least_squares(..., equality_constraints=prob.equalities) for
+        exact constraint solves.  When return_cache=True also returns the
+        _TraceCache used (for introspection — e.g., counting trace calls in
+        tests).
 
         """
         self._set_x(x)
-        cache = _TraceCache(self.prescription)
-        out = np.empty(len(self.operands), dtype=config.precision)
-        for i, op in enumerate(self.operands):
-            v = op(self.prescription, cache)
-            out[i] = op.weight * (v - op.target)
+        out, cache = self._operand_vector(self.operands, weighted=True)
         if return_cache:
             return out, cache
         return out
+
+    def equalities(self, x, return_cache=False):
+        """Unweighted equality constraint vector, op_i - target_i == 0."""
+        self._set_x(x)
+        out, cache = self._operand_vector(
+            self.equality_constraints, weighted=False,
+        )
+        if return_cache:
+            return out, cache
+        return out
+
+    def inequalities(self, x, return_cache=False):
+        """Unweighted inequality constraint vector, op_i - target_i >= 0."""
+        self._set_x(x)
+        out, cache = self._operand_vector(
+            self.inequality_constraints, weighted=False,
+        )
+        if return_cache:
+            return out, cache
+        return out
+
+    def solve(self, x0=None, **kwargs):
+        """Run constrained damped least squares and update LensData to result.
+
+        Keyword arguments are forwarded to damped_least_squares.  Explicit
+        equality_constraints or inequality_constraints keywords are combined
+        with the hard operands stored on this Problem.
+
+        """
+        eq = _combine_constraints(
+            self.equalities,
+            kwargs.pop('equality_constraints', None),
+        )
+        ineq = _combine_constraints(
+            self.inequalities,
+            kwargs.pop('inequality_constraints', None),
+        )
+        result = damped_least_squares(
+            self,
+            x0=x0,
+            equality_constraints=eq,
+            inequality_constraints=ineq,
+            **kwargs,
+        )
+        self._set_x(result.x)
+        return result
 
     def _eval_merit(self, prescription):
         """Sum of squared weighted residuals on the given prescription.
@@ -424,3 +500,19 @@ class Problem:
         return _merit_jacobian_free(
             self.lensdata, lambda: self._eval_merit(self.prescription),
             method=method, step=step)
+
+
+def _as_operand_list(operands):
+    if operands is None:
+        return []
+    if isinstance(operands, _OperandBase):
+        return [operands]
+    return list(operands)
+
+
+def _combine_constraints(primary, extra):
+    if extra is None:
+        return primary
+    if callable(extra):
+        return (primary, extra)
+    return (primary, *tuple(extra))
