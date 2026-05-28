@@ -1,4 +1,4 @@
-"""Phase 5: compensators -- SVD/least-squares projection vs FD re-optimization.
+"""compensators -- SVD/least-squares projection vs FD re-optimization.
 
 The compensated wavefront-differential model projects the nominal wavefront and
 every tolerance map onto the orthogonal complement of the compensator
@@ -11,8 +11,9 @@ real analysis.wavefront RMS for the nominal and the +/- perturbed systems.
 The test system is run with a small off-axis field (so the exit pupil is well
 defined, unlike the on-axis chief-parallel-to-axis degeneracy) and its field
 tilt removed, with the image plane deliberately defocused so focus is a strong
-but small compensator -- the small-degradation regime where the linearized TOR
-compensation and a true nonlinear re-optimization agree.
+but small compensator -- the small-degradation regime where the linearized
+wavefront-error quadratic compensation and a true nonlinear re-optimization
+agree.
 """
 import numpy as np
 import pytest
@@ -146,7 +147,7 @@ def test_compensate_helper_matches_manual_projection():
     np.testing.assert_allclose(D_c, project_out(D, basis), rtol=0, atol=0)
 
 
-def test_empty_compensators_is_phase4():
+def test_empty_compensators_matches_uncompensated_model():
     ld = singlet()
     P, S = bundle(ld)
     tols = [Perturbation.normal(ld, 'curvature', 0, 1e-5, name='c1')]

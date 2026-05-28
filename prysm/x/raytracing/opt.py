@@ -49,16 +49,16 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328,
 
     Two solver backends are available:
 
-    - ``method='numerical'`` (default) traces 2 rays per axis very near the
+    - `method='numerical'` (default) traces 2 rays per axis very near the
       optical axis and finds where they cross for finite-conjugate solves.
       Collimated solves use the matrix backend to avoid cancellation when
       the paraxial ray fan becomes extremely small.
-    - ``method='matrix'`` composes the 2x2 ABCD system matrix and solves for
+    - `method='matrix'` composes the 2x2 ABCD system matrix and solves for
       the image distance analytically.  Faster, no FP cancellation noise,
       but assumes every powered surface carries a paraxial vertex curvature
-      ``c`` in ``surf.params``.
+      `c` in `surf.params`.
 
-    For collimated input (``na == 0``), the matrix and numerical methods
+    For collimated input (`na == 0`), the matrix and numerical methods
     agree to ~1e-9 on standard sequential systems; the matrix method is the
     truth and the numerical method has paraxial-fraction-dependent noise.
 
@@ -72,10 +72,10 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328,
         the object-space numerical aperture to use in the solve, if zero the object
         is at infinity, else a finite conjugate.  paraxial_fraction of the given NA
         is used in the solve, the NA of the real system may be quite safely provided
-        as an argument.  Only used by ``method='numerical'``.
+        as an argument.  Only used by `method='numerical'`.
     epd : float
         entrance pupil diameter, if na=0 and epd=0 an error will be generated.
-        Only used by finite-conjugate ``method='numerical'`` solves.
+        Only used by finite-conjugate `method='numerical'` solves.
     wvl : float
         wavelength of light, microns
     paraxial_fraction : float, optional
@@ -83,7 +83,7 @@ def paraxial_image_solve(prescription, z, na=0, epd=0, wvl=0.6328,
         solve.  Default 1e-4 (1/10,000th); reduce if the system is so steep
         that 1e-4 of the EPD already shows higher-order effects, increase if
         FP cancellation in the line-intersection is the limiting factor.
-        Only used by ``method='numerical'``.
+        Only used by `method='numerical'`.
     method : {'numerical', 'matrix'}, optional
         which solver backend to use.  Default 'numerical' uses the ray-based
         paraxial solve; 'matrix' uses the ABCD system matrix.
@@ -478,15 +478,15 @@ def spot_centroid(P_final, status=None):
     Parameters
     ----------
     P_final : ndarray
-        shape (N, 3) — typically ``raytrace(...).P[-1]``.
+        shape (N, 3) — typically `raytrace(...).P[-1]`.
     status : ndarray, optional
-        per-ray complex status from ``raytrace`` (or any equivalent).  If
-        provided, rays with ``status.imag != 0`` are excluded.
+        per-ray complex status from `raytrace` (or any equivalent).  If
+        provided, rays with `status.imag != 0` are excluded.
 
     Returns
     -------
     ndarray
-        shape (2,) — mean (x, y) of the valid rays.  Returns ``[nan, nan]``
+        shape (2,) — mean (x, y) of the valid rays.  Returns `[nan, nan]`
         if no rays are valid.
 
     """
@@ -507,7 +507,7 @@ def rms_spot_radius(P_final, status=None, centroid=None):
     P_final : ndarray
         shape (N, 3) ray positions.
     status : ndarray, optional
-        per-ray complex status; rays with ``status.imag != 0`` are excluded.
+        per-ray complex status; rays with `status.imag != 0` are excluded.
     centroid : ndarray, optional
         shape (2,) custom center for the RMS.  If None, the spot centroid
         of the valid rays is used.
@@ -515,7 +515,7 @@ def rms_spot_radius(P_final, status=None, centroid=None):
     Returns
     -------
     float
-        RMS spot radius in the (x, y) plane.  Returns ``nan`` if no rays
+        RMS spot radius in the (x, y) plane.  Returns `nan` if no rays
         are valid.
 
     """
@@ -539,9 +539,9 @@ def geometric_psf_histogram(P_final, status=None, bins=64, extent=None):
     P_final : ndarray
         shape (N, 3) ray positions.
     status : ndarray, optional
-        per-ray complex status; rays with ``status.imag != 0`` are excluded.
+        per-ray complex status; rays with `status.imag != 0` are excluded.
     bins : int or [int, int]
-        passed through to ``np.histogram2d``; number of bins per axis.
+        passed through to `np.histogram2d`; number of bins per axis.
     extent : list of (lo, hi) length 2, optional
         per-axis (x, y) histogram range.  If None, a square window is
         auto-fit around the valid-ray bounding box with a 5% margin.
@@ -549,7 +549,7 @@ def geometric_psf_histogram(P_final, status=None, bins=64, extent=None):
     Returns
     -------
     H : ndarray
-        2D histogram of shape ``(nx, ny)``.
+        2D histogram of shape `(nx, ny)`.
     xedges, yedges : ndarray
         bin edges along the two axes.
 

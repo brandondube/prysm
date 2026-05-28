@@ -1,4 +1,4 @@
-"""Tests for the polynomial-sag surface classes (Phase 5)."""
+"""Tests for the polynomial-sag surface classes."""
 import numpy as np
 import pytest
 

@@ -223,7 +223,7 @@ class PrysmLBFGSB:
     ----------
     fg : callable or Problem
         either fg(x) -> (f, g) or a Problem-shaped object; see
-        :func:`as_problem`.
+        as_problem.
     x0 : ndarray
         the parameter vector immediately prior to optimization.  Its dtype
         sets the dtype of every internal array.
@@ -940,10 +940,10 @@ class PrysmLBFGSB:
         which is the standard choice and equivalent to 1/theta_k in the
         compact representation.
 
-        Used both for cross-validating the compact-form direction _Hg
-        (Phase 3 tests) and as the production unconstrained-step path,
-        where it is several times faster than _Hg because it never
-        materializes the (n, 2k) W or (2k, 2k) M matrices.
+        Used both for cross-validating the compact-form direction _Hg and as
+        the production unconstrained-step path, where it is several times
+        faster than _Hg because it never materializes the (n, 2k) W or
+        (2k, 2k) M matrices.
         """
         k = self._k
         q = g.copy()

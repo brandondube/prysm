@@ -1,10 +1,10 @@
-"""Phase 4: the wavefront-differential front end (the TOR quadratic).
+"""the wavefront-differential front end (the wavefront-error quadratic).
 
 Validates wavefront_differential / WavefrontDifferential built from one nominal
 differential trace:
 
 - the assembled quadratic (C, B, Gram) reproduces design.WavefrontRMS' nominal
-  RMS and the FD sensitivity_table slope (carried over from Phase 3);
+  RMS and the FD sensitivity_table slope;
 - rms_at(p, T) tracks the re-traced RMS and beats the pure-linear extrapolation
   at finite T (the point of the quadratic);
 - inverse_sensitivity round-trips against rms_at;

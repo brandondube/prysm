@@ -1,4 +1,4 @@
-"""Phase 6 tests: pickups (dependent DOFs) and the paraxial image-distance
+"""Tests for pickups (dependent DOFs) and the paraxial image-distance
 solve, both resolved on compile so layout/trace/merit always agree."""
 
 import numpy as np

@@ -880,7 +880,7 @@ def test_laguerre_matches_scipy(n, alpha):
     assert np.allclose(prysm_lag, scipy_lag)
 
 
-# Phase 1 derivative additions: dickson / xy / qpoly
+# derivative additions: dickson / xy / qpoly
 
 @pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
 @pytest.mark.parametrize('alpha', [-1.0, 0.0, 1.0])

@@ -218,7 +218,7 @@ class _MomentBased:
     override __init__ to call super().__init__(fg, x0, alpha, beta1,
     beta2, lower_bounds, upper_bounds) and then set their extras.
 
-    Subclass contract for step: see :class:`_Accumulator`.
+    Subclass contract for step: see _Accumulator.
 
     """
     def __init__(self, fg, x0, alpha, beta1=0.9, beta2=0.999,
@@ -310,7 +310,7 @@ class AdaGrad(_Accumulator):
     relationship between "spatial" elements of the gradient vector.  Only the
     temporal relationship between the gradient and its past is stored.
 
-    Constructed with AdaGrad(fg, x0, alpha) — see :class:`_Accumulator`
+    Constructed with AdaGrad(fg, x0, alpha) — see _Accumulator
     for the shared init signature.
 
     References
@@ -405,7 +405,7 @@ class Adam(_MomentBased):
         x_{k+1} &= x_k - α * \hat{m}_k / \sqrt{\hat{v}_k \,} \\
 
     Constructed with Adam(fg, x0, alpha, beta1=0.9, beta2=0.999) —
-    see :class:`_MomentBased` for the shared init signature.
+    see _MomentBased for the shared init signature.
 
     References
     ----------
@@ -531,7 +531,7 @@ class AdaMomentum(_MomentBased):
         x_{k+1} &= x_k - α * \hat{m}_k / \sqrt{\hat{v}_k \,} \\
 
     Constructed with AdaMomentum(fg, x0, alpha, beta1=0.9, beta2=0.999) —
-    see :class:`_MomentBased` for the shared init signature.
+    see _MomentBased for the shared init signature.
 
     References
     ----------
@@ -583,7 +583,7 @@ class Yogi(_MomentBased):
         x_{k+1} &= x_k - α * m_k / \sqrt{v_k \,} \\
 
     Constructed with Yogi(fg, x0, alpha, beta1=0.9, beta2=0.999) —
-    see :class:`_MomentBased` for the shared init signature.
+    see _MomentBased for the shared init signature.
 
     References
     ----------

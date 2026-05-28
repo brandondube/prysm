@@ -155,25 +155,25 @@ def forward_ft_unit(dx, samples, shift=True):
 class MDFT:
     """Matrix DFT parameterized by input coordinates and output frequencies.
 
-    Computes ``out[i, j] = norm * sum_{k, l} ary[k, l] * exp(sign * 2j*pi * (y[k]*fy[i] + x[l]*fx[j]))``
-    by precomputing two 1D basis matrices and applying them as ``Ey @ ary @ Ex.T``.
+    Computes `out[i, j] = norm * sum_{k, l} ary[k, l] * exp(sign * 2j*pi * (y[k]*fy[i] + x[l]*fx[j]))`
+    by precomputing two 1D basis matrices and applying them as `Ey @ ary @ Ex.T`.
 
     Parameters
     ----------
     x, y : ndarray
         1D arrays of input-plane coordinates along the second and first axis
-        of the input array, respectively. Lengths must match ``ary.shape[1]``
-        and ``ary.shape[0]``.
+        of the input array, respectively. Lengths must match `ary.shape[1]`
+        and `ary.shape[0]`.
     fx, fy : ndarray
         1D arrays of output-plane frequencies along the second and first axis
         of the output array, respectively. Output shape will be
-        ``(len(fy), len(fx))``.
+        `(len(fy), len(fx))`.
     sign : int, optional
-        Sign of the kernel exponent. ``-1`` (default) is the forward DFT
-        convention; ``+1`` is the inverse DFT convention.
+        Sign of the kernel exponent. `-1` (default) is the forward DFT
+        convention; `+1` is the inverse DFT convention.
     norm : float, optional
-        Real scalar applied to the result of every ``__call__`` and
-        ``adjoint``. Default ``1.0`` (bare DFT sum). Set this to bake the
+        Real scalar applied to the result of every `__call__` and
+        `adjoint`. Default `1.0` (bare DFT sum). Set this to bake the
         problem-appropriate scaling into the operator.
 
     Notes
@@ -199,7 +199,7 @@ class MDFT:
         self._adjoint_left_first = Ny * Mx * (My + Nx) <= My * Nx * (Mx + Ny)
 
     def __call__(self, ary):
-        """Apply the forward DFT to ``ary``."""
+        """Apply the forward DFT to `ary`."""
         if not self._forward_left_first:
             out = ary @ self.Ex.T
             out = self.Ey @ out
@@ -209,9 +209,9 @@ class MDFT:
     def adjoint(self, grad):
         """Apply the adjoint (conjugate transpose) of the forward DFT.
 
-        For a real ``norm``, this is the gradient backpropagation operator
-        for ``__call__``. It also coincides with the inverse DFT (i.e. an
-        ``MDFT`` of opposite sign that maps the *output* shape back to the
+        For a real `norm`, this is the gradient backpropagation operator
+        for `__call__`. It also coincides with the inverse DFT (i.e. an
+        `MDFT` of opposite sign that maps the *output* shape back to the
         *input* shape) up to scaling.
         """
         if not self._adjoint_left_first:
@@ -228,14 +228,14 @@ class MDFT:
 
 
 class CZT:
-    """Chirp-Z transform with the same external API as :class:`MDFT`.
+    """Chirp-Z transform with the same external API as MDFT.
 
-    Internally uses the Bluestein/Jurling factorization for ``O(N log N)``
-    cost per axis. Requires ``fx`` and ``fy`` to be uniformly spaced; ``x``
-    and ``y`` are also assumed uniformly spaced.
+    Internally uses the Bluestein/Jurling factorization for `O(N log N)`
+    cost per axis. Requires `fx` and `fy` to be uniformly spaced; `x`
+    and `y` are also assumed uniformly spaced.
 
-    Parameters mirror :class:`MDFT`. ``sign=+1`` is implemented by complex
-    conjugation of the input and output (matches the prior ``iczt2`` behavior).
+    Parameters mirror MDFT. `sign=+1` is implemented by complex
+    conjugation of the input and output (matches the prior `iczt2` behavior).
 
     """
 
@@ -283,7 +283,7 @@ class CZT:
         self._Kx, self._Ky = Kx, Ky
 
     def __call__(self, ary):
-        """Apply the CZT to ``ary``."""
+        """Apply the CZT to `ary`."""
         if self.sign == 1:
             ary = np.conj(ary) if np.iscomplexobj(ary) else ary
         gb = ary * self._bcol

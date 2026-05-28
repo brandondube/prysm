@@ -1,5 +1,7 @@
-"""Phase 3 tests: the general coordinate-break pose scan and the five Code V
-break kinds (basic, dar, ret, rev, ben), plus mirror folding."""
+"""Tests for the general coordinate-break pose scan and break kinds.
+
+Covers basic, decenter-and-return, return, reverse, bend, and mirror folding.
+"""
 
 import numpy as np
 import pytest

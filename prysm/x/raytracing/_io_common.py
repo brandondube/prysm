@@ -36,7 +36,7 @@ def fields_from_xy(x_values, y_values, kind='angle', unit='deg'):
 def parse_float(token):
     """Parse a numeric token from a prescription file.
 
-    Accepts ``INF`` or ``INFINITY`` (case-insensitive) for +∞ — both Zemax
+    Accepts `INF` or `INFINITY` (case-insensitive) for +∞ — both Zemax
     and Code V emit these for unbounded curvature radii.
 
     """

@@ -99,7 +99,7 @@ def circular_pol_vector(handedness='left', shape=None):
     elif handedness == 'right':
         pol_vector[..., 1] = -1j/np.sqrt(2)
     else:
-        raise ValueError(f"unknown handedness {handedness}, use 'left' or 'right''")  # NOQA
+        raise ValueError(f"unknown handedness {handedness}, use 'left' or 'right'")  # NOQA
 
     return pol_vector
 

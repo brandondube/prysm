@@ -208,7 +208,7 @@ def test_default_intersect_call_unchanged():
     assert n.shape == P.shape
 
 
-# ---------- Phase 3.1: cheby distribution + hex / spiral grids ----------
+# ---------- cheby distribution + hex / spiral grids ----------
 
 def test_cheby_distribution_includes_endpoints_and_clusters():
     """Chebyshev-Gauss-Lobatto nodes must include both endpoints and cluster

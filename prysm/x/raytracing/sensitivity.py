@@ -1,6 +1,6 @@
 """Jacobian of a scalar merit w.r.t. a LensData's dense free vector.
 
-Two backends via the `method` kwarg of :func:`merit_jacobian_free`:
+Two backends via the `method` kwarg of merit_jacobian_free:
 
 - `'fd'` (default): central finite differences over the free vector.  Works
   regardless of which numerical backend `prysm.mathops` points at.

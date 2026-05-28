@@ -1,4 +1,4 @@
-"""Phase 1 tests for the LensData spine: axial layout parity, thickness slide,
+"""Tests for the LensData spine: axial layout parity, thickness slide,
 mirror fold, the optimizer surface (pack/update/bounds), variable selection,
 metadata, and shape round-trip."""
 
@@ -334,7 +334,7 @@ def test_coordbreak_declares_dofs_and_lays_out():
     assert isinstance(ld.rows[1], CoordBreak)
     ld.vary('tilt', surfaces=1)
     np.testing.assert_allclose(ld.pack(), [0.0, 0.0, 5.0])
-    # the break now lays out (Phase 3): the downstream surface is tilted
+    # the break now lays out: the downstream surface is tilted
     surfs = ld.to_surfaces()
     assert len(surfs) == 2
     assert surfs[1].R is not None

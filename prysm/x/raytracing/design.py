@@ -1,6 +1,6 @@
 """Design layer: Operands and the `Problem` class.
 
-A thin layer over the kernel that turns a :class:`LensData` into a design
+A thin layer over the kernel that turns a LensData into a design
 loop:
 
 - **Variables** are the LensData's free DOFs.  Mark them with
@@ -357,8 +357,8 @@ class Problem:
     operands are hard constraints evaluated as `operand - target`, ignoring
     `weight`; inequalities use the optym convention g(x) >= 0.
 
-    Methods: :meth:`x0`, :meth:`residuals`, :meth:`equalities`,
-    :meth:`inequalities`, :meth:`solve`, :meth:`merit`, :meth:`jacobian`.
+    Methods: x0, residuals, equalities,
+    inequalities, solve, merit, jacobian.
 
     """
 

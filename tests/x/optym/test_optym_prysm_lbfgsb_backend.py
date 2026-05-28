@@ -6,7 +6,7 @@ unbounded quadratic under each alternate backend (skipping when the
 backend isn't installed) and verify both that no host-only API leaks
 in and that the converged answer matches the numpy reference run.
 
-The fp32 path is exercised through Phase-5 tests in
+The fp32 path is exercised through conditioning tests in
 test_optym_prysm_lbfgsb.py; this file additionally pins one round-trip
 under config.precision = 32 to catch regressions in the precision
 plumbing.

@@ -1,4 +1,4 @@
-"""Phase 4 tests: optimizing a LensData directly through design.Problem over
+"""Tests for optimizing a LensData directly through design.Problem over
 its dense free vector (numpy FD path; the autograd path is gated on torch)."""
 
 import numpy as np

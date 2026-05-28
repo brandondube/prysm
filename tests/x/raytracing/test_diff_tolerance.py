@@ -1,7 +1,7 @@
-"""Phase 3: tolerance.Perturbation -> DiffSeed mapping vs FD sensitivity_table.
+"""tolerance.Perturbation -> DiffSeed mapping vs FD sensitivity_table.
 
-Validates seeds_from_perturbations: each Code V tolerance type (curvature DLR,
-conic, thickness DLT fan-out, tilt BTX/BTY, decenter DSX/DSY) is mapped onto a
+Validates seeds_from_perturbations: each lens-design tolerance type (curvature,
+conic, thickness fan-out, tilt, decenter) is mapped onto a
 LensData through tolerance.Perturbation slots, and the wavefront-differential
 prediction of d(RMS WFE)/dtau is checked against central finite differences of
 the same WavefrontRMS merit via tolerance.sensitivity_table.

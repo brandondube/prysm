@@ -1,4 +1,4 @@
-"""Tests for Phase 6 closed-form geometry breadth: Toroid, Biconic, gratings."""
+"""Tests for closed-form geometry breadth: Toroid, Biconic, gratings."""
 import numpy as np
 import pytest
 

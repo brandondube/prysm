@@ -1,7 +1,7 @@
 """Tests for prysm.x.optym._prysm_lbfgsb.
 
-Phase 1: scaffolding (constructor + dtype plumbing + bound defaults).
-Phase 2: unconstrained two-loop step + Wolfe line search.
+scaffolding (constructor + dtype plumbing + bound defaults).
+unconstrained two-loop step + Wolfe line search.
 """
 import numpy as np
 import pytest
@@ -102,7 +102,7 @@ def test_memory_size_respected(x0_f64):
     assert opt.S.shape == (17, x0_f64.size)
 
 
-# -------------------------- Phase 2: algorithmic --------------------------
+# -------------------------- algorithmic --------------------------
 
 
 def _make_quadratic(dim, dtype=np.float64, seed=0):
@@ -300,7 +300,7 @@ def test_run_until_returns_governor_decision():
     assert len(result.records) <= 10
 
 
-# -------------------- Phase 3: compact representation --------------------
+# -------------------- compact representation --------------------
 
 
 def _populate_history(opt, n_steps, fg):
@@ -379,7 +379,7 @@ def test_Hg_handles_empty_history():
     np.testing.assert_array_equal(opt._Bv(g), g)
 
 
-def test_Hg_drives_convergence_after_phase3_switch():
+def test_Hg_drives_convergence_after_compact_step_switch():
     """After wiring step() to use _Hg, the quadratic still converges."""
     fg, x_star = _make_quadratic(dim=5, seed=15)
     opt = PrysmLBFGSB(fg, np.zeros_like(x_star), memory=10)
@@ -411,7 +411,7 @@ def test_compact_form_preserves_dtype(dtype):
     assert M.dtype == dtype
 
 
-# -------------------- Phase 4: generalized Cauchy point --------------------
+# -------------------- generalized Cauchy point --------------------
 
 
 def _brute_cauchy(x, g, l, u, B):
@@ -599,7 +599,7 @@ def test_cauchy_dtype_propagation(dtype):
     assert c.dtype == dtype
 
 
-# -------------------- Phase 5: subspace minimization --------------------
+# -------------------- subspace minimization --------------------
 
 
 def test_max_alpha_inside_box_unbounded():
@@ -788,7 +788,7 @@ def test_step_preserves_dtype_with_bounds(dtype):
     assert opt.S.dtype == dtype
 
 
-# -------------------- Phase 6: fp32 conditioning stress --------------------
+# -------------------- fp32 conditioning stress --------------------
 #
 # The 2k×2k solves in the Cauchy sweep, in _Hg, and in the subspace step
 # can become ill-conditioned as history pairs (s_i, y_i) become nearly
@@ -973,7 +973,7 @@ def test_fp32_extreme_conditioning_does_not_nan():
         assert np.all(np.isfinite(opt.ys))
 
 
-# ----------- Phase 7: Morales-Nocedal 2011 projected subspace step -----------
+# ----------- Morales-Nocedal 2011 projected subspace step -----------
 #
 # The 2011 remark replaces BLNZ-style truncation of the path x_k -> x_hat
 # with the componentwise projection x_bar = P(x_hat, l, u), reverting to

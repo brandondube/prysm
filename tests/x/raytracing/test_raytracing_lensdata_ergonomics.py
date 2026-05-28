@@ -1,4 +1,4 @@
-"""Phase 9 ergonomics: analysis / launch / paraxial / plotting default the
+"""Tests that analysis / launch / paraxial / plotting default the
 system metadata (wavelength, epd, stop index) from a LensData when omitted,
 while a bare Surface sequence keeps the historical explicit-argument behavior.
 """

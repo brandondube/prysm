@@ -1,6 +1,6 @@
-"""Phase 6: surface irregularity (CYN/CYD) tangents + Zernike-coef sensitivity.
+"""surface irregularity (CYN/CYD) tangents + Zernike-coef sensitivity.
 
-Two stretch deliverables of the wavefront-differential roadmap:
+Two stretch deliverables of the wavefront-differential notes:
 
 - seed_irregularity models a Zernike surface departure delta z = a Z_n^m(x/R,y/R)
   as an added sag term with analytic partials (sags.zernike_irregularity_partials).
@@ -234,7 +234,7 @@ def test_extra_seeds_irregularity_is_a_tolerance_column():
                                 extra_steps=[0.1, 0.1])
     assert wd.n_params == 3
     assert wd.names == ['c1', 'CYN', 'CYD']
-    # the irregularity columns get the full TOR treatment (finite self terms)
+    # the irregularity columns get the full quadratic treatment (finite self terms)
     assert wd.A[1] > 0 and wd.A[2] > 0
     rows = wd.rows()
     assert rows[1]['scale'] == 0.1 and rows[2]['scale'] == 0.1

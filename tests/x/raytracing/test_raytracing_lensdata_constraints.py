@@ -1,4 +1,4 @@
-"""Phase 5 tests: the surfaces= selector forms and constrain() box bounds
+"""Tests for the surfaces= selector forms and constrain() box bounds
 (absolute + relative, radius-vs-curvature quantity, and edge cases)."""
 
 import numpy as np

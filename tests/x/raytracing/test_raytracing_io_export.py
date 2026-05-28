@@ -1,4 +1,4 @@
-"""Phase 7 export tests: LensData -> .seq / .zmx round-trips on the
+"""Export tests: LensData -> .seq / .zmx round-trips on the
 rotationally symmetric subset, including the post-mirror sign convention."""
 
 import numpy as np

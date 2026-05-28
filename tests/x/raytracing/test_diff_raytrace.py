@@ -1,8 +1,8 @@
-"""Phase 1: differential kernel tangent state vs central FD of raytrace.
+"""differential kernel tangent state vs central FD of raytrace.
 
 Validates raytrace_with_tangents' propagated (Pdot_last, Sdot_last, Ldot) on a
 multi-surface refracting system against central finite differences of the real
-spencer_and_murty.raytrace, for every Phase-1 perturbation type:
+spencer_and_murty.raytrace, for every supported perturbation type:
 curvature, conic, despace, thickness (downstream fan-out), decenter, tilt, and
 index.  Also exercises the d_* primitives end to end and the all-seeds-at-once
 trailing parameter axis.

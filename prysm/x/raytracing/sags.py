@@ -366,11 +366,13 @@ def zernike_irregularity_partials(n, m, x, y, normalization_radius, norm=True):
     amplitude is in the surface's sag length units; with norm=True a unit
     amplitude is one unit RMS of that mode over the disk of radius R.
 
-    This is the Code V CYN/CYD irregularity operand: CYN ~ Z_2^2 (cylinder along
-    the axes, (x^2 - y^2)/R^2) and CYD ~ Z_2^-2 (cylinder at 45 degrees,
-    2xy/R^2), but any (n, m) is admitted (power Z_2^0, spherical Z_4^0, ...).
-    Because the nominal amplitude is zero the nominal sag and Hessian are
-    unchanged, so this enters the trace purely through these tangents.
+    The low-order cylinder cases correspond to surface-error terms in the
+    perturbed-lens-system framework of Rimmer, Applied Optics 9(3), 533-537
+    (1970): Z_2^2 is cylinder along the axes, (x^2 - y^2)/R^2, and
+    Z_2^-2 is cylinder at 45 degrees, 2xy/R^2.  Any (n, m) is admitted (power
+    Z_2^0, spherical Z_4^0, ...).  Because the nominal amplitude is zero the
+    nominal sag and Hessian are unchanged, so this enters the trace purely
+    through these tangents.
 
     Parameters
     ----------

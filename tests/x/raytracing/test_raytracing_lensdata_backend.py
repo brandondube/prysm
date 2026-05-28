@@ -1,4 +1,4 @@
-"""Phase 2 tests: the backend-pure R_rh rotation builder and tensor-clean
+"""Tests for the backend-pure R_rh rotation builder and tensor-clean
 shape reconstruction (autograd through the shape constructors)."""
 
 import itertools

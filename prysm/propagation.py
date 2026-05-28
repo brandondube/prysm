@@ -52,7 +52,7 @@ def focus(wavefunction, Q):
 
 
 def focus_backprop(wavefunction, Q):
-    """Backpropagate gradient through :func:`focus`.
+    """Backpropagate gradient through focus.
 
     Parameters
     ----------
@@ -95,7 +95,7 @@ def unfocus(wavefunction, Q):
 
 
 def unfocus_backprop(wavefunction, Q):
-    """Backpropagate gradient through :func:`unfocus`.
+    """Backpropagate gradient through unfocus.
 
     Parameters
     ----------
@@ -125,7 +125,7 @@ def coordinates_for_focus(pupil_dx, pupil_samples, focal_dx, focal_samples,
     returns the input pupil coordinates (x, y) and the spatial frequencies
     (fx, fy) that pair with them, where fx = x_focal / (λ · efl).
 
-    For end users, prefer :func:`prepare_executor`, which wraps this and bakes
+    For end users, prefer prepare_executor, which wraps this and bakes
     the optical normalization into the executor. If you do build the executor
     by hand, multiply its result by pupil_dx * focal_dx / (wavelength * efl).
 
@@ -178,7 +178,7 @@ def prepare_executor(pupil_dx, pupil_samples, focal_dx, focal_samples,
                      wavelength, efl, focal_shift=(0, 0), kind='mdft'):
     """Build a reusable MDFT or CZT operator for a pupil ↔ focal propagation.
 
-    Wraps :func:`coordinates_for_focus` and the executor constructor in one
+    Wraps coordinates_for_focus and the executor constructor in one
     call. The optical normalization scalar
     pupil_dx * focal_dx / (wavelength * efl) is baked into the executor's
     norm, so applying the executor produces a unitary-equivalent
@@ -196,7 +196,7 @@ def prepare_executor(pupil_dx, pupil_samples, focal_dx, focal_samples,
     Parameters
     ----------
     pupil_dx, pupil_samples, focal_dx, focal_samples, wavelength, efl, focal_shift
-        See :func:`coordinates_for_focus`.
+        See coordinates_for_focus.
     kind : {'mdft', 'czt'}, optional
         Executor type to build. Default 'mdft'.
 
@@ -230,7 +230,7 @@ def focus_dft(wavefunction, executor):
     wavefunction : ndarray
         the pupil-plane field; shape must match what the executor was built for.
     executor : MDFT or CZT
-        a focus-orientation operator (e.g. from :func:`prepare_executor`).
+        a focus-orientation operator (e.g. from prepare_executor).
         Optical normalization is expected to be baked into executor.norm.
 
     Returns
@@ -243,7 +243,7 @@ def focus_dft(wavefunction, executor):
 
 
 def focus_dft_backprop(wavefunction, executor):
-    """Backpropagate gradient through :func:`focus_dft`.
+    """Backpropagate gradient through focus_dft.
 
     Parameters
     ----------
@@ -291,7 +291,7 @@ def unfocus_dft(wavefunction, executor):
 
 
 def unfocus_dft_backprop(wavefunction, executor):
-    """Backpropagate gradient through :func:`unfocus_dft`.
+    """Backpropagate gradient through unfocus_dft.
 
     Parameters
     ----------
@@ -540,8 +540,8 @@ def angular_spectrum_transfer_function(samples, wvl, dx, z):
 def to_fpm_and_back(wavefunction, fpm, executor, return_more=False):
     """Propagate to a focal plane mask, apply it, and return.
 
-    Composition of :func:`focus_dft`, multiplication by fpm, and
-    :func:`unfocus_dft`. The same MDFT executor is used for both legs (its
+    Composition of focus_dft, multiplication by fpm, and
+    unfocus_dft. The same MDFT executor is used for both legs (its
     adjoint provides the inverse). To invoke Babinet's principle, pass
     fpm=1 - fpm.
 
@@ -579,7 +579,7 @@ def to_fpm_and_back(wavefunction, fpm, executor, return_more=False):
 
 def to_fpm_and_back_backprop(wavefunction, fpm, executor, return_more=False,
                              return_fpm_grad=False, field_at_fpm=None):
-    """Backpropagate gradient through :func:`to_fpm_and_back`.
+    """Backpropagate gradient through to_fpm_and_back.
 
     Parameters
     ----------
@@ -1002,7 +1002,7 @@ class Wavefront:
         return Wavefront(data, self.wavelength, dx, space='psf')
 
     def focus_backprop(self, efl, Q=2):
-        """Backpropagate gradient through :meth:`focus`.
+        """Backpropagate gradient through focus.
 
         self carries the gradient at the PSF plane; the returned Wavefront
         carries the gradient at the pupil plane.
@@ -1058,7 +1058,7 @@ class Wavefront:
         return Wavefront(data, self.wavelength, dx, space='pupil')
 
     def unfocus_backprop(self, efl, Q=2):
-        """Backpropagate gradient through :meth:`unfocus`.
+        """Backpropagate gradient through unfocus.
 
         self carries the gradient at the pupil plane; the returned Wavefront
         carries the gradient at the PSF plane.
@@ -1088,8 +1088,8 @@ class Wavefront:
     def prepare_executor(self, efl, dx, samples, shift=(0, 0), kind='mdft'):
         """Build a reusable MDFT/CZT focus executor for this wavefront.
 
-        Wraps :func:`prepare_executor` (which itself wraps
-        :func:`coordinates_for_focus` and the executor constructor). The
+        Wraps prepare_executor (which itself wraps
+        coordinates_for_focus and the executor constructor). The
         interpretation of (dx, samples) depends on the wavefront's space:
 
         - If self.space == 'pupil': self.dx and self.data.shape are
@@ -1143,7 +1143,7 @@ class Wavefront:
         Parameters
         ----------
         executor : MDFT or CZT
-            focus-orientation operator (e.g. from :meth:`prepare_executor`).
+            focus-orientation operator (e.g. from prepare_executor).
 
         Returns
         -------
@@ -1157,7 +1157,7 @@ class Wavefront:
         return Wavefront(dx=executor.focal_dx, cmplx_field=data, wavelength=self.wavelength, space='psf')
 
     def focus_dft_backprop(self, executor):
-        """Backpropagate gradient through :meth:`focus_dft`.
+        """Backpropagate gradient through focus_dft.
 
         self carries the gradient at the psf plane; the returned Wavefront
         carries the gradient at the pupil plane.
@@ -1200,7 +1200,7 @@ class Wavefront:
         return Wavefront(dx=executor.pupil_dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')
 
     def unfocus_dft_backprop(self, executor):
-        """Backpropagate gradient through :meth:`unfocus_dft`.
+        """Backpropagate gradient through unfocus_dft.
 
         Parameters
         ----------
@@ -1372,7 +1372,7 @@ class Wavefront:
     def babinet_backprop(self, lyot, fpm, executor, field_at_fpm=None,
                          field_at_lyot=None, return_fpm_grad=False,
                          return_lyot_grad=False):
-        """Backpropagate gradient through :meth:`babinet`.
+        """Backpropagate gradient through babinet.
 
         Parameters
         ----------
@@ -1391,7 +1391,7 @@ class Wavefront:
             call. Required when return_lyot_grad is True.
         return_fpm_grad : bool, optional
             if True, also return the gradient with respect to the original
-            fpm argument passed to :meth:`babinet`.
+            fpm argument passed to babinet.
         return_lyot_grad : bool, optional
             if True, also return the gradient with respect to lyot.
 

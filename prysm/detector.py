@@ -137,7 +137,7 @@ class Detector:
         elif self.bits <= 32:
             output = output.astype(np.uint32)
         else:
-            raise ValueError('numpy''s random functionality is inadequate for > 32 unsigned bits')
+            raise ValueError("numpy's random functionality is inadequate for > 32 unsigned bits")
 
         output = output.reshape((frames, *aerial_img.shape))
         if frames == 1:

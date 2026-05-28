@@ -5,13 +5,7 @@ degrees of freedom (curvature, conic, asphere coefficients, thickness, and --
 once coordinate breaks land -- tilt and decenter), and the system metadata
 (entrance pupil diameter, fields, wavelengths, ambient index, stop, units,
 provenance).  The compiled list[Surface] that the kernel traces is a cheap,
-throwaway artifact rebuilt from the rows on demand by :meth:`LensData.to_surfaces`.
-
-This is the Phase 1 core spine: SurfaceRow + a declaration-only CoordBreak, a
-ParamSpec that addresses scalar DOFs by named slot, the fast rotationally
-symmetric (axial) layout, and the optimizer surface (pack / update / bounds).
-Coordinate-break layout, solves, pickups, IO, and the design rewrite arrive in
-later phases.
+throwaway artifact rebuilt from the rows on demand by to_surfaces.
 
 """
 
@@ -107,11 +101,11 @@ _FLIP_Z = np.asarray([[1.0, 0.0, 0.0],
 
 
 def _ben_auto_gamma(alpha_deg, beta_deg):
-    """Code V BEN auto-roll gamma (degrees) that keeps the folded axis level.
+    """Bend auto-roll gamma (degrees) that keeps the folded axis level.
 
     gamma = atan2(-sin(alpha) sin(beta), cos(alpha) + cos(beta)); zero when
-    either alpha or beta is zero.  Verified against the Code V manual worked
-    example (alpha = beta = 45 deg -> gamma = -19.471 deg).
+    either alpha or beta is zero.  This is the roll correction used by
+    lens-design bend coordinate breaks.
 
     """
     a = alpha_deg * _DEG2RAD
@@ -494,11 +488,10 @@ class SurfaceRow:
 
 
 class CoordBreak:
-    """A right-handed coordinate break (declaration only in Phase 1).
+    """A right-handed coordinate break.
 
     Carries a decenter (dx, dy, dz) and a tilt (rz, ry, rx) in degrees -- both
-    DOFs -- plus the Code V break kind and gap thickness.  It emits no Surface;
-    its layout semantics (frame fold/restore) arrive in Phase 3.
+    DOFs -- plus the break kind and gap thickness.
 
     """
 
@@ -538,8 +531,8 @@ class ParamSpec:
 
     A *slot* is the tuple (group, row_index, offset) where group is one
     of 'shape', 'thickness', 'decenter', 'tilt'.  The free subset is gathered
-    into a dense contiguous vector for the optimizer by :meth:`pack`, and
-    scattered back by :meth:`scatter`.  Free flags and bounds live in dicts
+    into a dense contiguous vector for the optimizer by pack, and
+    scattered back by scatter.  Free flags and bounds live in dicts
     keyed by slot, so appending rows never invalidates existing selections.
 
     """
@@ -661,11 +654,11 @@ class ParamSpec:
 class LensData:
     """The canonical, editable representation of a sequential optical system.
 
-    Build one row at a time with :meth:`add` (chainable) or via the IO readers.
-    :meth:`to_surfaces` compiles the rows into a throwaway list[Surface] the
+    Build one row at a time with add (chainable) or via the IO readers.
+    to_surfaces compiles the rows into a throwaway list[Surface] the
     kernel can trace; LensData also duck-types as that surface sequence (it is
-    iterable, sized, and indexable).  The optimizer talks to :meth:`pack`,
-    :meth:`update`, and :meth:`bounds`.
+    iterable, sized, and indexable).  The optimizer talks to pack,
+    update, and bounds.
 
     """
 
@@ -712,7 +705,7 @@ class LensData:
 
     def add_coordbreak(self, *, decenter=(0.0, 0.0, 0.0), tilt=(0.0, 0.0, 0.0),
                        kind='basic', ret_target=None, thickness=0.0):
-        """Append a coordinate break (declaration only in Phase 1)."""
+        """Append a coordinate break."""
         self.rows.append(CoordBreak(
             decenter=decenter, tilt=tilt, kind=kind, ret_target=ret_target,
             thickness=thickness,
@@ -931,7 +924,7 @@ class LensData:
         return self
 
     def freeze(self, category, surfaces='all'):
-        """Inverse of :meth:`vary`."""
+        """Inverse of vary."""
         for slot in self._category_slots(category, surfaces):
             self.spec._free.pop(slot, None)
         return self

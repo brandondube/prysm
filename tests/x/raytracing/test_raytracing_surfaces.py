@@ -146,7 +146,7 @@ def test_surface_conic_derivatives_finite_at_origin():
         assert np.all(np.isfinite(ddy))
 
 
-# ---------- Q2d_and_der prelude (Phase 3.0b) ----------
+# ---------- Q2d_and_der prelude ----------
 
 def _q2d_sag_only(cm0, ams, bms, x, y, normalization_radius, c, k, dx=0, dy=0):
     """Wrapper that returns just the sag from Q2d_and_der, for FD use."""
@@ -171,7 +171,7 @@ def test_Q2d_and_der_polar_derivatives_match_finite_diff(cm0, ams, bms):
     The function returns (z, dz/drho, dz/dtheta) in the surface's polar frame.
     Verify both polar derivatives match central differences in the polar frame.
 
-    Note: ``Q2d_and_der`` calls ``cart_to_polar`` internally, which by default
+    Note: `Q2d_and_der` calls `cart_to_polar` internally, which by default
     auto-meshgrids 1D inputs.  We pass 2D-shape (N, 1) coordinates here to
     bypass that behaviour and keep the per-point semantics the FD assumes.
     """

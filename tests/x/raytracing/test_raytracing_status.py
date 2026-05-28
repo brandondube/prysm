@@ -1,4 +1,4 @@
-"""Tests for the RayTraceResult / status plumbing (Phase 3.2 + 3.3)."""
+"""Tests for the RayTraceResult / status plumbing."""
 import numpy as np
 import pytest
 

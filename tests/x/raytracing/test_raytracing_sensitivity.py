@@ -1,9 +1,9 @@
 """Tests for prysm.x.raytracing.sensitivity — merit Jacobian over a LensData's
-dense free vector (``merit_jacobian_free``).
+dense free vector (`merit_jacobian_free`).
 
 The Problem-level wiring (FD vs numeric merit, restore, autograd gating through
-``Problem.jacobian``) lives in test_raytracing_lensdata_design.py; this module
-pins ``merit_jacobian_free`` directly against analytic paraxial derivatives.
+`Problem.jacobian`) lives in test_raytracing_lensdata_design.py; this module
+pins `merit_jacobian_free` directly against analytic paraxial derivatives.
 """
 import numpy as np
 import pytest

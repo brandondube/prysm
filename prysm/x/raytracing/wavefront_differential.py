@@ -1,10 +1,13 @@
-"""Code V TOR-style wavefront-differential tolerancing front end.
+"""Wavefront-differential tolerancing front end.
 
-Phase 4 of the wavefront-differential roadmap.  One nominal differential trace
-(via _diff_raytrace.wavefront_with_tangents) yields the nominal OPD W0 and the
-per-tolerance wavefront-derivative maps dW_p = dOPD/dtau_p.  From those this
-module builds the Code V TOR quadratic and everything derived from it -- with
-no further ray tracing.
+One nominal differential trace (via _diff_raytrace.wavefront_with_tangents)
+yields the nominal OPD W0 and the per-tolerance wavefront-derivative maps
+dW_p = dOPD/dtau_p.  From those this module builds the Rimmer-style
+wavefront-error quadratic and everything derived from it, with no further ray
+tracing.
+
+Reference: M. P. Rimmer, "Analysis of Perturbed Lens Systems," Applied Optics
+9(3), 533-537 (1970).
 
 The model is the small-degradation linearization of the wavefront,
     W(tau) = W0 + sum_p dW_p tau_p,
@@ -16,7 +19,7 @@ so RMS wavefront error squared is the pupil quadratic form
 This matches design.WavefrontRMS exactly (RMS about zero, chief anchored at 0),
 which is the merit the FD sensitivity_table / slow monte_carlo validate against.
 
-For a single tolerance scaled by T this is the printed Code V form
+For a single tolerance scaled by T this is the standard quadratic form
     RMS(T) = sqrt(A T^2 + B T + C),
 and everything else follows:
 
@@ -63,13 +66,13 @@ def wavefront_differential(lensdata, perturbations, P, S, wavelength, *,
     """Build the wavefront-differential model from one nominal trace.
 
     Maps the perturbations to differential seeds, runs the single nominal
-    differential trace, and returns a WavefrontDifferential holding the TOR
+    differential trace, and returns a WavefrontDifferential holding the
     quadratic (C, B, Gram) for the launched bundle.
 
     extra_seeds appends already-built DiffSeeds as further tolerance columns --
     the home for perturbations that are not LensData DOF slots, in particular a
     Zernike surface irregularity (CYN/CYD via _diff_raytrace.seed_irregularity).
-    They get the full TOR quadratic / sensitivity / Zernike-coefficient
+    They get the full quadratic / sensitivity / Zernike-coefficient
     treatment; only fast_monte_carlo (which needs Perturbation samplers) does
     not cover them.
 
@@ -79,7 +82,7 @@ def wavefront_differential(lensdata, perturbations, P, S, wavelength, *,
     (SVD least squares).  The returned model is then the compensated one: every
     sensitivity, RMS, and Monte Carlo is reported after the compensators have
     been re-optimized per perturbation -- the linear-least-squares analog of
-    Code V re-solving the back focus (etc.) for each tolerance.
+    lens-design software re-solving the back focus (etc.) for each tolerance.
 
     Parameters
     ----------
@@ -115,7 +118,7 @@ def wavefront_differential(lensdata, perturbations, P, S, wavelength, *,
     Returns
     -------
     WavefrontDifferential
-        compensated when compensators is given, else the bare Phase-4 model.
+        compensated when compensators is given, else the uncompensated model.
 
     """
     perturbations = list(perturbations)
@@ -193,7 +196,7 @@ def compensate(opd, tol_maps, comp_maps, *, rcond=1e-9):
     best least-squares compensator motion, i.e. the projection of W0 + (tol
     maps) onto the orthogonal complement of span(comp_maps).  Doing it to W0
     and to each tolerance map turns the compensated tolerancing problem back
-    into a plain TOR quadratic on the projected maps.
+    into a plain wavefront-error quadratic on the projected maps.
 
     Returns (opd_proj, tol_maps_proj, basis) where basis is the orthonormal
     compensator basis used for the projection.
@@ -203,7 +206,7 @@ def compensate(opd, tol_maps, comp_maps, *, rcond=1e-9):
 
 
 class WavefrontDifferential:
-    """The TOR quadratic for one launch bundle and a fixed tolerance set.
+    """The wavefront-error quadratic for one launch bundle and a fixed tolerance set.
 
     Holds the nominal wavefront W0 and the per-tolerance derivative maps dW,
     plus the assembled quadratic coefficients
@@ -312,9 +315,9 @@ class WavefrontDifferential:
         Zernike basis nms with analysis.wavefront_zernike_fit.  The least-squares
         fit is linear in the OPD, so fitting dW_p yields exactly dc/dtau_p; a
         single shared normalization radius keeps the basis identical across all
-        the fits.  Reports per-coefficient sensitivities (the wavefront content
-        Code V tolerances against, e.g. astigmatism or coma growth) alongside
-        the scalar RMS sensitivity.
+        the fits.  Reports per-coefficient sensitivities (for wavefront content
+        such as astigmatism or coma growth) alongside the scalar RMS
+        sensitivity.
 
         Needs the pupil coordinates the model was built with (present when it
         came from wavefront_differential).
@@ -370,8 +373,8 @@ class WavefrontDifferential:
         The least-squares compensator setting that minimizes the perturbed
         wavefront is c(tau) = -M+ (W0 + D tau); the part that tracks each
         tolerance is dc/dtau = -M+ D (D the unprojected tolerance maps), the
-        compensator-pickup table Code V prints next to each tolerance.  Raises
-        if there are no compensators.
+        usual compensator-pickup table next to each tolerance.  Raises if there
+        are no compensators.
         """
         if self.comp_motions is None:
             raise ValueError('this model has no compensators')
@@ -413,8 +416,9 @@ class WavefrontDifferential:
     def rms_change_per_tolerance(self, scales=None):
         """Per-tolerance RMS minus nominal at tau_p = +scale_p (others 0).
 
-        The individual-sensitivity column Code V's TOR prints; sqrt sum of
-        squares of these is one common (conservative) RSS estimate, while
+        This is the individual-sensitivity column of the Rimmer-style
+        quadratic; sqrt sum of squares of these is one common (conservative)
+        RSS estimate, while
         expected_rms() is the statistically exact independent roll-up.
         """
         s = self._scales(scales)
@@ -549,8 +553,8 @@ def cumulative_probability(merits):
 
     Accepts a MonteCarloResult or a raw merit array.  Returns (thresholds,
     probability) with thresholds the sorted merits and probability[i] the
-    fraction of trials with merit <= thresholds[i] -- the curve Code V plots
-    as 'cumulative probability vs degraded performance'.
+    fraction of trials with merit <= thresholds[i], i.e. a cumulative
+    probability vs degraded-performance curve.
     """
     m = getattr(merits, 'merits', merits)
     m = np.sort(np.asarray(m, dtype=config.precision))

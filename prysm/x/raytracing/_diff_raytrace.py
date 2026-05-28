@@ -1,6 +1,6 @@
 """Manual forward-mode differential ray trace (tangent bundle through the kernel).
 
-This is the engine behind Code V TOR-style wavefront-differential tolerancing:
+This is the engine behind first-order wavefront-differential tolerancing:
 trace the nominal system once and propagate, alongside the ray state, a tangent
 (Pdot, Sdot, Ldot) = d(P, S, OPL)/dtau for every perturbation parameter at once.
 The tangents carry a trailing parameter axis, so one nominal trace yields every
@@ -273,7 +273,7 @@ def seed_irregularity(surface, n, m, normalization_radius, *, norm=True,
 
     """
     from .sags import zernike_irregularity_partials  # local: keep the kernel
-    # module's import surface free of the Phase-6 irregularity helper
+    # module's import surface free of the optional irregularity helper
 
     def partials(x, y):
         return zernike_irregularity_partials(n, m, x, y, normalization_radius,
@@ -286,7 +286,7 @@ def seed_irregularity(surface, n, m, normalization_radius, *, norm=True,
 def seed_decenter(surface, axis, name=None):
     """Seed for a decenter (DSX/DSY) tolerance: vertex moves along axis.
 
-    Analytic pose primitive: validated directly in the Phase-1 tests.  The
+    Analytic pose primitive: validated directly against finite differences. The
     Perturbation->seed mapping (seed_from_perturbation) does NOT use this; it
     derives pose tangents from the compiled layout (_pose_tangents_via_layout)
     so coord-break framing and solves are handled uniformly.
@@ -304,7 +304,7 @@ def seed_despace(surfaces, name='despace'):
     sign units along +z.  A despace is a single surface with sign +1; a
     thickness fans out to every downstream surface (sign flips after a fold).
 
-    Analytic pose primitive: validated directly in the Phase-1 tests.  The
+    Analytic pose primitive: validated directly against finite differences. The
     Perturbation->seed mapping derives the fan-out from the compiled layout
     instead (see seed_decenter).
     """
@@ -321,7 +321,7 @@ def seed_tilt(surface, axis, R_nominal=None, name=None):
     R_total = R_nominal @ R_tilt(a), so Rdot = R_nominal @ generator.  Pass
     R_nominal=None for an untilted surface (identity).
 
-    Analytic pose primitive: validated directly in the Phase-1 tests.  The
+    Analytic pose primitive: validated directly against finite differences. The
     Perturbation->seed mapping derives Rdot from the compiled layout instead
     (see seed_decenter).
     """
@@ -422,7 +422,7 @@ def _pose_tangents_via_layout(perturbation, h):
 def seed_from_perturbation(perturbation, *, pose_step=1e-6):
     """Build the DiffSeed matching a tolerance.Perturbation on a LensData.
 
-    Maps the Code V tolerance set onto the differential trace:
+    Maps a lens-design tolerance set onto the differential trace:
 
     - curvature (DLR) / radius -> the surface's shape DOF 'c'
     - conic -> the surface's shape DOF 'k'

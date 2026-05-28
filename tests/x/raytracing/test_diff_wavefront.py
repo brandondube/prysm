@@ -1,4 +1,4 @@
-"""Phase 2: dOPD/dtau maps vs central FD of analysis.wavefront.
+"""dOPD/dtau maps vs central FD of analysis.wavefront.
 
 Validates wavefront_with_tangents' per-tolerance wavefront-derivative maps
 dW_p = dOPD/dtau_p against central finite differences of analysis.wavefront,

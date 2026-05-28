@@ -118,7 +118,7 @@ class _LBFGSBBase:
         ----------
         fg : callable or Problem
             either fg(x) -> (f, g) or a Problem-shaped object; see
-            :func:`as_problem`.
+            as_problem.
         x0 : ndarray
             the parameter vector immediately prior to optimization.
         memory : int
@@ -407,7 +407,7 @@ class F77LBFGSB(_LBFGSBBase):
 class CLBFGSB(_LBFGSBBase):
     """L-BFGS-B optimizer using the SciPy >= 1.15 C driver.
 
-    Behaves identically to :class:`F77LBFGSB` from the user's perspective,
+    Behaves identically to F77LBFGSB from the user's perspective,
     but targets the C port of L-BFGS-B that replaced the Fortran 77 driver
     in SciPy 1.15.  The differences vs. the Fortran driver are internal:
 
@@ -416,7 +416,7 @@ class CLBFGSB(_LBFGSBBase):
     * task is a length-2 integer array; task[0] carries the request
       code (3=FG, 1=NEW_X, 4=CONVERGENCE, 5=STOP).
 
-    See :class:`F77LBFGSB` for parameter documentation; this class accepts
+    See F77LBFGSB for parameter documentation; this class accepts
     the same arguments and exposes the same step/run_to interface.
     """
 

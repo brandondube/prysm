@@ -280,7 +280,7 @@ def clip_to_aperture(rayfan, aperture):
     """Filter a ray fan by an aperture function applied to ray origins.
 
     Pre-trace filter: keep only rays whose starting (x, y) position is
-    inside the aperture.  Use this before ``raytrace`` when you want to
+    inside the aperture.  Use this before `raytrace` when you want to
     drop out-of-pupil rays from a generic generator (hex, rect, etc.)
     rather than letting them propagate and get flagged STATUS_CLIP at the
     first surface.
@@ -288,10 +288,10 @@ def clip_to_aperture(rayfan, aperture):
     Parameters
     ----------
     rayfan : tuple of (P, S)
-        the result of any ``generate_*`` function in this module
+        the result of any `generate_*` function in this module
     aperture : callable
-        a function ``(x, y) -> bool`` returning True for points inside the
-        aperture and False outside.  Same signature as ``Surface.aperture``.
+        a function `(x, y) -> bool` returning True for points inside the
+        aperture and False outside.  Same signature as `Surface.aperture`.
 
     Returns
     -------
@@ -319,7 +319,7 @@ def generate_collimated_hex_ray_grid(nrings, spacing, z=0,
 
     Concentric rings centered on (0, 0, z): ring 0 is one ray at the origin,
     ring k (k = 1..nrings) carries 6k rays at radius k * spacing, equally
-    spaced in azimuth.  The total ray count is ``1 + 3*nrings*(nrings+1)``
+    spaced in azimuth.  The total ray count is `1 + 3*nrings*(nrings+1)`
     (e.g. 7 for one ring, 19 for two, 37 for three, ...).  This is the
     standard "hexapolar" pupil sampling used by lens-design tools.
 
@@ -386,11 +386,11 @@ def generate_collimated_radial_spiral_ray_grid(nrings, maxr, z=0,
     z : float
         z-plane on which the rays start
     samples_per_ring : callable, optional
-        function ``f(k)`` mapping ring index k = 1..nrings to number of
-        azimuthal samples on that ring.  Default ``lambda k: 6*k`` matches
+        function `f(k)` mapping ring index k = 1..nrings to number of
+        azimuthal samples on that ring.  Default `lambda k: 6*k` matches
         the hexapolar density (also a good Q-polynomial sampling default).
     radial_distribution : str, optional
-        passed to ``_sample_axis``; one of {'uniform', 'cheby', 'random'}.
+        passed to `_sample_axis`; one of {'uniform', 'cheby', 'random'}.
         Default 'cheby'.
     include_center : bool, optional
         if True (default), include one extra sample at the origin
@@ -401,7 +401,7 @@ def generate_collimated_radial_spiral_ray_grid(nrings, maxr, z=0,
     -------
     P, S : ndarray, ndarray
         positions (N, 3) and unit direction cosines (N, 3) of the rays.
-        ``N = (1 if include_center else 0) + sum(samples_per_ring(k) for k=1..nrings)``.
+        `N = (1 if include_center else 0) + sum(samples_per_ring(k) for k=1..nrings)`.
 
     """
     if nrings < 1:
