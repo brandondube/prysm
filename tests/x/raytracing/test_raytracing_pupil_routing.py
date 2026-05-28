@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from prysm.x.raytracing import LensData, launch, raytrace, Sampling, Field
-from prysm.x.raytracing.surfaces import ConicSag, PlaneSag
+from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing import materials as pmat
 from prysm.x.raytracing.paraxial import first_order, entrance_pupil_z
 from prysm.x.raytracing import analysis as pa
@@ -44,8 +44,8 @@ def cooke():
                   reference_wavelength='w', stop_index=STOP_INDEX)
     for R, t, n in _COOKE:
         mat = float(n) if n != 1.0 else pmat.air
-        ld.add(ConicSag(1.0 / R, 0.0), thickness=t, material=mat)
-    ld.add(PlaneSag(), typ='eval', material=pmat.air, semidiameter=1e3)
+        ld.add(Conic(1.0 / R, 0.0), thickness=t, material=mat)
+    ld.add(Plane(), typ='eval', material=pmat.air, semidiameter=1e3)
     return ld
 
 
@@ -53,9 +53,9 @@ def biconvex_stop_first():
     """Stop at the first surface -> entrance pupil at the first surface."""
     ld = LensData(epd=20.0, fields=[0.0, 10.0], wavelengths={'w': WVL},
                   reference_wavelength='w', stop_index=0)
-    ld.add(ConicSag(1 / 50.0, 0.0), thickness=6.0, material=1.5)
-    ld.add(ConicSag(-1 / 50.0, 0.0), thickness=46.0, material=pmat.air)
-    ld.add(PlaneSag(), typ='eval', material=pmat.air, semidiameter=1e3)
+    ld.add(Conic(1 / 50.0, 0.0), thickness=6.0, material=1.5)
+    ld.add(Conic(-1 / 50.0, 0.0), thickness=46.0, material=pmat.air)
+    ld.add(Plane(), typ='eval', material=pmat.air, semidiameter=1e3)
     return ld
 
 

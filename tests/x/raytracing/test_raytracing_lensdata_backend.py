@@ -9,9 +9,9 @@ import pytest
 from prysm.coordinates import make_rotation_matrix
 from prysm.x.raytracing.lensdata import R_rh
 from prysm.x.raytracing.surfaces import (
-    ConicSag,
-    EvenAsphereSag,
-    ZernikeSag,
+    Conic,
+    EvenAsphere,
+    Zernike,
 )
 
 
@@ -58,7 +58,7 @@ def test_shape_ctors_do_not_float_coerce_coefs():
             raise AssertionError('coef was float()-coerced by the constructor')
 
     markers = [_NoFloat(1.0), _NoFloat(2.0)]
-    z = ZernikeSag(0.0, 0.0, 10.0, [(2, 0), (4, 0)], markers)
+    z = Zernike(0.0, 0.0, 10.0, [(2, 0), (4, 0)], markers)
     assert z.params['coefs'][0] is markers[0]
     assert z.params['coefs'][1] is markers[1]
 
@@ -78,7 +78,7 @@ def test_conic_sag_differentiable_through_ctor(torch_backend):
     torch = torch_backend
     c = torch.tensor(1 / 50.0, requires_grad=True)
     k = torch.tensor(-0.5, requires_grad=True)
-    shape = ConicSag(c, k)
+    shape = Conic(c, k)
     x = torch.tensor([1.0, 2.0, 3.0])
     y = torch.tensor([0.5, 1.0, 1.5])
     shape.sag(x, y).sum().backward()
@@ -90,7 +90,7 @@ def test_even_asphere_coefs_differentiable_through_ctor(torch_backend):
     torch = torch_backend
     c = torch.tensor(1 / 80.0, requires_grad=True)
     coefs = torch.tensor([1e-4, -2e-6], requires_grad=True)
-    shape = EvenAsphereSag(c, torch.tensor(0.0), coefs)
+    shape = EvenAsphere(c, torch.tensor(0.0), coefs)
     x = torch.tensor([1.0, 2.0])
     y = torch.tensor([0.5, 1.0])
     shape.sag(x, y).sum().backward()

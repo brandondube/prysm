@@ -4,13 +4,13 @@ from dataclasses import dataclass, field
 
 from .surfaces import (
     Surface,
-    BiconicSag,
-    ConicSag,
-    EvenAsphereSag,
-    PlaneSag,
-    ToroidSag,
-    XYSag,
-    ZernikeSag,
+    Biconic,
+    Conic,
+    EvenAsphere,
+    Plane,
+    Toroid,
+    XY,
+    Zernike,
 )
 
 
@@ -37,23 +37,23 @@ def build_shape(spec):
     kind = spec.kind
     p = spec.params
     if kind == 'plane':
-        return PlaneSag()
+        return Plane()
     if kind == 'conic':
-        return ConicSag(p.get('c', 0.0), p.get('k', 0.0))
+        return Conic(p.get('c', 0.0), p.get('k', 0.0))
     if kind == 'even_asphere':
-        return EvenAsphereSag(p.get('c', 0.0), p.get('k', 0.0),
+        return EvenAsphere(p.get('c', 0.0), p.get('k', 0.0),
                               p.get('coefs', ()))
     if kind == 'toroid':
-        return ToroidSag(p['c_x'], p['c_y'], p['k_y'], p.get('coefs_y', ()))
+        return Toroid(p['c_x'], p['c_y'], p['k_y'], p.get('coefs_y', ()))
     if kind == 'biconic':
-        return BiconicSag(p['c_x'], p['c_y'], p.get('k_x', 0.0),
+        return Biconic(p['c_x'], p['c_y'], p.get('k_x', 0.0),
                           p.get('k_y', 0.0))
     if kind == 'zernike':
-        return ZernikeSag(p.get('c', 0.0), p.get('k', 0.0),
+        return Zernike(p.get('c', 0.0), p.get('k', 0.0),
                           p['normalization_radius'], p['nms'], p['coefs'],
                           norm=p.get('norm', True))
     if kind == 'xy':
-        return XYSag(p.get('c', 0.0), p.get('k', 0.0),
+        return XY(p.get('c', 0.0), p.get('k', 0.0),
                      p['normalization_radius'], p['mns'], p['coefs'])
     raise NotImplementedError(f'unknown surface spec kind {kind!r}')
 

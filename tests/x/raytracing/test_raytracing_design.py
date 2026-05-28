@@ -12,7 +12,7 @@ from prysm.mathops import optimize
 
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing import materials
-from prysm.x.raytracing.surfaces import ConicSag, PlaneSag
+from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing.spencer_and_murty import raytrace
 from prysm.x.raytracing.raygen import generate_collimated_ray_fan
 from prysm.x.raytracing.opt import rms_spot_radius
@@ -35,8 +35,8 @@ def _parabola_mirror(kappa=-1.0):
     c = -1 / 80.0
     f = abs(1.0 / (2.0 * c))  # 40
     return (LensData(epd=10.0, wavelengths=[0.55e-3])
-            .add(ConicSag(c, kappa), typ='refl', thickness=f)
-            .add(PlaneSag(), typ='eval'))
+            .add(Conic(c, kappa), typ='refl', thickness=f)
+            .add(Plane(), typ='eval'))
 
 
 def _collimated_fan(n=15, maxr=5.0):
@@ -51,11 +51,11 @@ def _refractive_singlet(c1=1 / 50.0, c2=-1 / 50.0, gap=5.0, n=1.5):
     """Sphere/sphere singlet (index n) with an image plane 100 past the rear
     vertex."""
     return (LensData(epd=4.0, wavelengths=[0.55])
-            .add(ConicSag(c1, 0.0), typ='refr', material=lambda w: n,
+            .add(Conic(c1, 0.0), typ='refr', material=lambda w: n,
                  thickness=gap)
-            .add(ConicSag(c2, 0.0), typ='refr', material=materials.air,
+            .add(Conic(c2, 0.0), typ='refr', material=materials.air,
                  thickness=100.0)
-            .add(PlaneSag(), typ='eval'))
+            .add(Plane(), typ='eval'))
 
 
 # ---------- Trace cache ------------------------------------------------------
@@ -213,18 +213,17 @@ def test_damped_least_squares_runs_raytracing_problem_with_constraint():
     ld = _refractive_singlet(c1=1 / 30.0, c2=-1 / 30.0, gap=4.0)
     ld.vary('curvature', surfaces=0)
     target_efl = 75.0
-    problem = Problem(ld, [EFL(wavelength=0.55, target=target_efl, weight=1.0)])
-    x0 = problem.x0()
-    result = damped_least_squares(
-        problem,
-        x0=x0,
-        equality_constraints=lambda x: x[0] - x0[0],
-        damping=1e-8,
-        maxiter=3,
+    problem = Problem(
+        ld,
+        equality_constraints=[EFL(wavelength=0.55, target=target_efl)],
     )
+    result = problem.solve(damping=1e-8, maxiter=10, constraint_tol=1e-10)
     assert result.success
-    np.testing.assert_allclose(result.x, x0, atol=1e-12)
-    np.testing.assert_allclose(result.x[0] - x0[0], 0.0, atol=1e-12)
+    np.testing.assert_allclose(
+        effective_focal_length(ld, wvl=0.55),
+        target_efl,
+        rtol=1e-8,
+    )
 
 
 # ---------- Operand library --------------------------------------------------

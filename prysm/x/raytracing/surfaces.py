@@ -236,7 +236,7 @@ class CallableShape(Shape):
         return self._sag_and_normal(x, y)
 
 
-class PlaneSag(Shape):
+class Plane(Shape):
     """Plane sag shape for the local surface z = 0."""
 
     analytic_intersect = True
@@ -286,7 +286,7 @@ class PlaneSag(Shape):
         return ray_plane_intersect(P, S, return_valid=return_valid)
 
 
-class SphereSag(Shape):
+class Sphere(Shape):
     """Spherical sag shape.
 
     Parameters
@@ -344,7 +344,7 @@ class SphereSag(Shape):
                                     return_valid=return_valid)
 
 
-class ConicSag(Shape):
+class Conic(Shape):
     """Conic sag shape.
 
     Parameters
@@ -405,7 +405,7 @@ class ConicSag(Shape):
                                    return_valid=return_valid)
 
 
-class OffAxisConicSag(Shape):
+class OffAxisConic(Shape):
     """Off-axis conic sag shape.
 
     Parameters
@@ -473,7 +473,7 @@ class OffAxisConicSag(Shape):
                                    return_valid=return_valid)
 
 
-class EvenAsphereSag(ConicSeedMixin, Shape):
+class EvenAsphere(ConicSeedMixin, Shape):
     """Even asphere sag shape with a conic base.
 
     Parameters
@@ -508,7 +508,7 @@ class EvenAsphereSag(ConicSeedMixin, Shape):
         return z, gradient_to_unit_normal(dx, dy)
 
 
-class Q2DSag(ConicSeedMixin, Shape):
+class Q2D(ConicSeedMixin, Shape):
     """Q2D asphere sag shape with a conic base.
 
     Parameters
@@ -565,7 +565,7 @@ class Q2DSag(ConicSeedMixin, Shape):
         return z, gradient_to_unit_normal(ddx, ddy)
 
 
-class ZernikeSag(ConicSeedMixin, Shape):
+class Zernike(ConicSeedMixin, Shape):
     """Zernike polynomial sag shape with a conic base.
 
     Parameters
@@ -619,7 +619,7 @@ class ZernikeSag(ConicSeedMixin, Shape):
         return z, gradient_to_unit_normal(ddx, ddy)
 
 
-class XYSag(ConicSeedMixin, Shape):
+class XY(ConicSeedMixin, Shape):
     """Power-series x-y polynomial sag shape with a conic base.
 
     Parameters
@@ -671,7 +671,7 @@ class XYSag(ConicSeedMixin, Shape):
         return z, gradient_to_unit_normal(ddx, ddy)
 
 
-class ChebyshevSag(ConicSeedMixin, Shape):
+class Chebyshev(ConicSeedMixin, Shape):
     """Chebyshev polynomial sag shape with a conic base.
 
     Parameters
@@ -721,7 +721,7 @@ class ChebyshevSag(ConicSeedMixin, Shape):
         return z, gradient_to_unit_normal(ddx, ddy)
 
 
-class JacobiSag(ConicSeedMixin, Shape):
+class Jacobi(ConicSeedMixin, Shape):
     """Radial Jacobi polynomial sag shape with a conic base.
 
     Parameters
@@ -774,7 +774,7 @@ class JacobiSag(ConicSeedMixin, Shape):
         return z, gradient_to_unit_normal(ddx, ddy)
 
 
-class ToroidSag(ConicSeedMixin, Shape):
+class Toroid(ConicSeedMixin, Shape):
     """Toroidal sag shape.
 
     Parameters
@@ -821,7 +821,7 @@ class ToroidSag(ConicSeedMixin, Shape):
         return z_x + z_y, gradient_to_unit_normal(ddx, ddy)
 
 
-class BiconicSag(ConicSeedMixin, Shape):
+class Biconic(ConicSeedMixin, Shape):
     """Biconic sag shape.
 
     Parameters
@@ -1053,18 +1053,18 @@ __all__ = [
     'STYPE_EVAL',
     'Shape',
     'CallableShape',
-    'PlaneSag',
-    'SphereSag',
-    'ConicSag',
-    'OffAxisConicSag',
-    'EvenAsphereSag',
-    'Q2DSag',
-    'ZernikeSag',
-    'XYSag',
-    'ChebyshevSag',
-    'JacobiSag',
-    'ToroidSag',
-    'BiconicSag',
+    'Plane',
+    'Sphere',
+    'Conic',
+    'OffAxisConic',
+    'EvenAsphere',
+    'Q2D',
+    'Zernike',
+    'XY',
+    'Chebyshev',
+    'Jacobi',
+    'Toroid',
+    'Biconic',
     'Surface',
     'circular_aperture',
     'product_rule',

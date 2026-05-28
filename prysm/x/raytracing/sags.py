@@ -421,7 +421,7 @@ def _q2d_conic_base_terms(c, k, x, y, r, t, dx=0, dy=0):
 def Q2d_and_der(cm0, ams, bms, x, y, normalization_radius, c, k, dx=0, dy=0):
     """Q-type freeform surface, with base (perhaps shifted) conicoic.
 
-    Returns the sag and the polar derivatives (dz/dr, dz/dt).  Q2DSag.sag_and_normal
+    Returns the sag and the polar derivatives (dz/dr, dz/dt).  Q2D.sag_and_normal
     converts to Cartesian (dz/dx, dz/dy) via the chain rule with
     a small on-axis patch (r=0 has a removable 0/0).
 

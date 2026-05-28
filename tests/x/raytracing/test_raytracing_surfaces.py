@@ -11,7 +11,7 @@ from prysm.x.raytracing.surfaces import (
     CallableShape,
     Shape,
     Surface,
-    Q2DSag,
+    Q2D,
     conic_sag,
     conic_sag_and_normal,
     conic_sag_der_xy,
@@ -496,7 +496,7 @@ def test_raytrace_end_to_end_analytic_vs_newton():
     np.testing.assert_allclose(trace_an.OPL, trace_nw.OPL, atol=1e-7)
 
 
-# ---------- Q2DSag ----------
+# ---------- Q2D ----------
 
 def test_q2d_zero_coefficients_matches_conic():
     """Q2D with all-zero Q coefs is exactly a Conic."""
@@ -517,13 +517,13 @@ def test_q2d_factory_returns_surface_with_q2d_shape():
     s = q2d(c=1 / 100., k=0.0, normalization_radius=10.0,
                     cm0=[0.0], ams=[[0.0]], bms=[[0.0]],
                     typ='refl', P=np.array([0., 0., 0.]))
-    assert isinstance(s.shape, Q2DSag)
+    assert isinstance(s.shape, Q2D)
     # params dict is preserved
     assert s.params['normalization_radius'] == 10.0
 
 
 def test_q2d_derivative_sag_matches_Q2d_and_der_directly():
-    """Q2DSag.shape.sag must return the same z as a direct Q2d_and_der call."""
+    """Q2D.shape.sag must return the same z as a direct Q2d_and_der call."""
     from prysm.x.raytracing.surfaces import Q2d_and_der
     c, k = 1 / 200., -1.0
     norm_r = 15.0
@@ -542,7 +542,7 @@ def test_q2d_derivative_sag_matches_Q2d_and_der_directly():
 
 
 def test_q2d_xy_derivatives_match_finite_diff():
-    """The chain-rule polar-to-Cartesian conversion in Q2DSag must agree
+    """The chain-rule polar-to-Cartesian conversion in Q2D must agree
     with central differences taken on the sag.  Skip points near r=0 (where
     the function approximates the gradient as zero)."""
     c, k = 1 / 200., -1.0
@@ -572,7 +572,7 @@ def test_q2d_xy_derivatives_match_finite_diff():
 
 
 def test_q2d_intersect_finite_at_origin():
-    """An axial ray intersecting a Q2DSag surface must return a finite (Q, normal)."""
+    """An axial ray intersecting a Q2D surface must return a finite (Q, normal)."""
     s = q2d(c=1 / 200., k=-1.0, normalization_radius=20.0,
                     cm0=[1e-3], ams=[[0.0]], bms=[[0.0]],
                     typ='refl', P=np.array([0., 0., 0.]))
@@ -596,7 +596,7 @@ def test_q2d_intersect_seeded_newton_converges_quickly():
 
 
 def test_q2d_with_off_axis_conic_base():
-    """Q2DSag supports a dx/dy-shifted base conic (off-axis paraboloid + Q)."""
+    """Q2D supports a dx/dy-shifted base conic (off-axis paraboloid + Q)."""
     s = q2d(c=1 / 200., k=-1.0, normalization_radius=20.0,
                     cm0=[0.0], ams=[[0.0]], bms=[[0.0]],
                     typ='refl', P=np.array([0., 0., 0.]),

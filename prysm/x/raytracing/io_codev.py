@@ -24,7 +24,7 @@ are stripped.
 
 """
 
-from .surfaces import ConicSag, PlaneSag, SphereSag
+from .surfaces import Conic, Plane, Sphere
 from . import materials as _materials
 from ._indexing import fringe_to_nm, xy_j_to_mn
 from ._io_common import fields_from_xy, read_text_or_path
@@ -323,7 +323,7 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
             continue
         if sd.get('_is_image'):
             sign = -1.0 if (n_refl % 2) else 1.0
-            ld.add(PlaneSag(), typ='eval',
+            ld.add(Plane(), typ='eval',
                    thickness=sign * float(sd.get('thi', 0.0)))
             surface_origins.append(idx)
             continue
@@ -475,11 +475,11 @@ def _ensure_seq_writable_shape(shape_kind, is_eval):
     """Reject rows that would be lossy in the current .seq writer."""
     if is_eval:
         return
-    if shape_kind in (ConicSag, PlaneSag, SphereSag):
+    if shape_kind in (Conic, Plane, Sphere):
         return
     raise NotImplementedError(
         f'write_seq cannot export {shape_kind.__name__} without losing shape '
-        'data; supported writer shapes are ConicSag, SphereSag, and PlaneSag.'
+        'data; supported writer shapes are Conic, Sphere, and Plane.'
     )
 
 

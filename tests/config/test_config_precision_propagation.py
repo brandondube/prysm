@@ -30,7 +30,7 @@ from prysm.x.raytracing.design import (
     Problem,
 )
 from prysm.x.raytracing import LensData, raygen
-from prysm.x.raytracing.surfaces import ConicSag, PlaneSag
+from prysm.x.raytracing.surfaces import Conic, Plane
 
 
 def _parabola():
@@ -46,8 +46,8 @@ def _parabola_ld():
     c = -1 / 80.0
     f = abs(1.0 / (2.0 * c))
     return (LensData(epd=4.0, wavelengths=[0.55e-3])
-            .add(ConicSag(c, -1.0), typ='refl', thickness=f)
-            .add(PlaneSag(), typ='eval'))
+            .add(Conic(c, -1.0), typ='refl', thickness=f)
+            .add(Plane(), typ='eval'))
 
 
 @pytest.fixture(params=[32, 64])

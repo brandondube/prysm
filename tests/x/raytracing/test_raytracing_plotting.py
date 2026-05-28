@@ -20,7 +20,7 @@ from prysm.x.raytracing.plotting import (
 )
 from prysm.x.raytracing.lensdata import LensData
 from prysm.x.raytracing.spencer_and_murty import RayTraceResult
-from prysm.x.raytracing.surfaces import ConicSag, OffAxisConicSag, PlaneSag, Surface
+from prysm.x.raytracing.surfaces import Conic, OffAxisConic, Plane, Surface
 
 
 def _singlet_lensdata():
@@ -29,11 +29,11 @@ def _singlet_lensdata():
     air = lambda wvl: 1.0  # noqa: E731
     ld = (LensData(epd=10.0, fields=[0.0, 3.0, 5.0],
                    wavelengths={'d': 0.5876}, reference_wavelength='d')
-          .add(ConicSag(1 / 60.0, 0.0), thickness=4.0, material=n15,
+          .add(Conic(1 / 60.0, 0.0), thickness=4.0, material=n15,
                semidiameter=8.0)
-          .add(ConicSag(-1 / 60.0, 0.0), thickness=95.0, material=air,
+          .add(Conic(-1 / 60.0, 0.0), thickness=95.0, material=air,
                semidiameter=8.0)
-          .add(PlaneSag(), typ='eval', material=air, semidiameter=20.0))
+          .add(Plane(), typ='eval', material=air, semidiameter=20.0))
     ld.solve_image_distance()
     return ld
 
@@ -47,7 +47,7 @@ def _refracting_plane(z, outer_radius=1, inner_radius=None, n=1.0):
         bounding['inner_radius'] = inner_radius
 
     return Surface(
-        shape=PlaneSag(),
+        shape=Plane(),
         typ='refr',
         P=np.asarray([0., 0., z]),
         n=lambda wvl: n,
@@ -353,9 +353,9 @@ def test_plot_optics_bridges_steep_surface_to_od_with_normal_segment():
     # and bridged to the element OD with a constant-z (normal-to-OD) segment:
     # the element keeps its full diameter, the outline stays finite, and a
     # warning is emitted.
-    gentle = Surface(shape=ConicSag(1 / 5.0, 0.0), typ='refr',
+    gentle = Surface(shape=Conic(1 / 5.0, 0.0), typ='refr',
                      P=np.asarray([0., 0., 0.]), n=lambda wvl: 1.5)
-    steep = Surface(shape=ConicSag(1 / 0.5, 0.0), typ='refr',
+    steep = Surface(shape=Conic(1 / 0.5, 0.0), typ='refr',
                     P=np.asarray([0., 0., 1.0]), n=lambda wvl: 1.0)
     prescription = [gentle, steep]
 
@@ -386,10 +386,10 @@ def test_plot_optics_draws_clear_aperture_land_to_od_silently():
     # element OD is drawn out to its aperture, then bridged with a flat land
     # (normal to the OD).  Unlike a surface that physically cannot reach the OD,
     # an intentional smaller aperture is silent -- no warning.
-    front = Surface(shape=ConicSag(1 / 50.0, 0.0), typ='refr',
+    front = Surface(shape=Conic(1 / 50.0, 0.0), typ='refr',
                     P=np.asarray([0., 0., 0.]), n=lambda wvl: 1.5,
                     bounding={'outer_radius': 1.0})
-    rear = Surface(shape=ConicSag(-1 / 50.0, 0.0), typ='refr',
+    rear = Surface(shape=Conic(-1 / 50.0, 0.0), typ='refr',
                    P=np.asarray([0., 0., 1.0]), n=lambda wvl: 1.0,
                    bounding={'outer_radius': 3.0})
     prescription = [front, rear]
@@ -447,9 +447,9 @@ def test_lensdata_add_edge_propagates_to_compiled_surface():
                           'z_start': 0.0, 'z_end': 0.5, 'depth': 0.3}]}
     ld = (LensData(epd=10.0, wavelengths={'d': 0.5876},
                    reference_wavelength='d')
-          .add(ConicSag(1 / 60.0, 0.0), thickness=4.0, material=lambda w: 1.5,
+          .add(Conic(1 / 60.0, 0.0), thickness=4.0, material=lambda w: 1.5,
                semidiameter=8.0, edge=edge)
-          .add(ConicSag(-1 / 60.0, 0.0), thickness=95.0, material=lambda w: 1.0,
+          .add(Conic(-1 / 60.0, 0.0), thickness=95.0, material=lambda w: 1.0,
                semidiameter=8.0))
 
     surfaces = ld.to_surfaces()
@@ -460,7 +460,7 @@ def test_lensdata_add_edge_propagates_to_compiled_surface():
 
 
 def test_plot_optics_draws_mirror_optical_surface_by_default():
-    prescription = [_reflecting_surface(PlaneSag(), outer_radius=1)]
+    prescription = [_reflecting_surface(Plane(), outer_radius=1)]
 
     x, y = _line_from_plot(prescription)
 
@@ -469,7 +469,7 @@ def test_plot_optics_draws_mirror_optical_surface_by_default():
 
 
 def test_plot_optics_draws_parallel_mirror_substrate():
-    prescription = [_reflecting_surface(PlaneSag(), outer_radius=1)]
+    prescription = [_reflecting_surface(Plane(), outer_radius=1)]
     backing = {0: {'mode': 'parallel', 'thickness': 2, 'side': 1}}
 
     x, y = _line_from_plot(prescription, mirror_backing=backing)
@@ -481,7 +481,7 @@ def test_plot_optics_draws_parallel_mirror_substrate():
 
 
 def test_plot_optics_accepts_global_mirror_backing_config():
-    prescription = [_reflecting_surface(PlaneSag(), outer_radius=1)]
+    prescription = [_reflecting_surface(Plane(), outer_radius=1)]
     backing = {'mode': 'parallel', 'thickness': 2, 'side': 1}
 
     x, _ = _line_from_plot(prescription, mirror_backing=backing)
@@ -491,7 +491,7 @@ def test_plot_optics_accepts_global_mirror_backing_config():
 
 def test_mirror_substrate_outline_applies_surface_decenter():
     surf = Surface(
-        shape=PlaneSag(),
+        shape=Plane(),
         typ='refl',
         P=np.asarray([0., 10., 5.]),
         bounding={'outer_radius': 1},
@@ -510,7 +510,7 @@ def test_mirror_substrate_outline_applies_surface_decenter():
 
 def test_mirror_substrate_outline_can_center_on_ray_footprint():
     surf = Surface(
-        shape=PlaneSag(),
+        shape=Plane(),
         typ='refl',
         P=np.asarray([0., 0., 0.]),
         bounding={'outer_radius': 1},
@@ -541,7 +541,7 @@ def test_mirror_substrate_outline_can_center_on_ray_footprint():
 
 def test_mirror_substrate_outline_applies_surface_tilt_in_xz_projection():
     surf = Surface(
-        shape=PlaneSag(),
+        shape=Plane(),
         typ='refl',
         P=np.asarray([0., 0., 0.]),
         R=(0, -45, 0),
@@ -564,7 +564,7 @@ def test_mirror_substrate_outline_applies_surface_tilt_in_xz_projection():
 
 def test_mirror_substrate_can_cut_flat_from_parent_vertex_plane():
     surf = _reflecting_surface(
-        OffAxisConicSag(c=1 / 100., k=-1., dy=10),
+        OffAxisConic(c=1 / 100., k=-1., dy=10),
         outer_radius=5,
     )
     result = _trace_result([surf])
@@ -579,7 +579,7 @@ def test_mirror_substrate_can_cut_flat_from_parent_vertex_plane():
 
 def test_mirror_substrate_can_cut_flat_near_aperture_for_uniform_thickness():
     surf = _reflecting_surface(
-        OffAxisConicSag(c=1 / 100., k=-1., dy=10),
+        OffAxisConic(c=1 / 100., k=-1., dy=10),
         outer_radius=5,
     )
     result = _trace_result([surf])

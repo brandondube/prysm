@@ -8,7 +8,7 @@ from prysm.x.raytracing import LensData
 from prysm.x.raytracing import materials
 from prysm.x.raytracing.io_codev import read_seq, write_seq
 from prysm.x.raytracing.io_zemax import read_zmx, write_zmx
-from prysm.x.raytracing.surfaces import ConicSag, EvenAsphereSag, PlaneSag
+from prysm.x.raytracing.surfaces import Conic, EvenAsphere, Plane
 
 
 def _air(wvl):
@@ -17,15 +17,15 @@ def _air(wvl):
 
 def make_refractive():
     return (LensData(epd=10.0, wavelengths=[0.55])
-            .add(ConicSag(1 / 50.0, 0.0), thickness=5.0, material=_air)
-            .add(ConicSag(-1 / 50.0, -0.5), thickness=95.0, material=_air)
-            .add(PlaneSag(), typ='eval'))
+            .add(Conic(1 / 50.0, 0.0), thickness=5.0, material=_air)
+            .add(Conic(-1 / 50.0, -0.5), thickness=95.0, material=_air)
+            .add(Plane(), typ='eval'))
 
 
 def make_mirror():
     return (LensData(epd=10.0, wavelengths=[0.55])
-            .add(ConicSag(1 / 200.0, -1.0), typ='refl', thickness=50.0)
-            .add(PlaneSag(), typ='eval'))
+            .add(Conic(1 / 200.0, -1.0), typ='refl', thickness=50.0)
+            .add(Plane(), typ='eval'))
 
 
 def _assert_geometry_round_trips(a, b):
@@ -73,9 +73,9 @@ GO
 
 def test_seq_export_rejects_unsupported_shape_without_loss():
     ld = (LensData()
-          .add(EvenAsphereSag(0.01, 0.0, (1e-4,)), thickness=1.0)
-          .add(PlaneSag(), typ='eval'))
-    with pytest.raises(NotImplementedError, match='EvenAsphereSag'):
+          .add(EvenAsphere(0.01, 0.0, (1e-4,)), thickness=1.0)
+          .add(Plane(), typ='eval'))
+    with pytest.raises(NotImplementedError, match='EvenAsphere'):
         write_seq(ld)
 
 
@@ -104,7 +104,7 @@ def test_zmx_export_carries_stop_index():
 
 def test_zmx_export_rejects_unsupported_shape_without_loss():
     ld = (LensData()
-          .add(EvenAsphereSag(0.01, 0.0, (1e-4,)), thickness=1.0)
-          .add(PlaneSag(), typ='eval'))
-    with pytest.raises(NotImplementedError, match='EvenAsphereSag'):
+          .add(EvenAsphere(0.01, 0.0, (1e-4,)), thickness=1.0)
+          .add(Plane(), typ='eval'))
+    with pytest.raises(NotImplementedError, match='EvenAsphere'):
         write_zmx(ld)

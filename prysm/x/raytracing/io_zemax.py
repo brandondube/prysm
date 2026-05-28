@@ -29,7 +29,7 @@ instead of read_zmx.
 
 from prysm.mathops import np
 
-from .surfaces import ConicSag, PlaneSag, SphereSag
+from .surfaces import Conic, Plane, Sphere
 from . import materials as _materials
 from ._indexing import noll_to_nm, xy_j_to_mn
 from ._io_common import fields_from_xy, read_text_or_path
@@ -397,12 +397,12 @@ def write_zmx(lensdata):
     def ensure_writable_shape(shape_kind, is_eval):
         if is_eval:
             return
-        if shape_kind in (ConicSag, PlaneSag, SphereSag):
+        if shape_kind in (Conic, Plane, Sphere):
             return
         raise NotImplementedError(
             f'write_zmx cannot export {shape_kind.__name__} without losing '
-            'shape data; supported writer shapes are ConicSag, SphereSag, '
-            'and PlaneSag.'
+            'shape data; supported writer shapes are Conic, Sphere, '
+            'and Plane.'
         )
 
     lines = ['VERS 100000 0', 'MODE SEQ']
@@ -531,7 +531,7 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
         if i == image_block_i and spec.kind == 'conic' \
                 and spec.params.get('c', 0.0) == 0.0 \
                 and spec.params.get('k', 0.0) == 0.0:
-            ld.add(PlaneSag(), typ='eval', thickness=thickness)
+            ld.add(Plane(), typ='eval', thickness=thickness)
         else:
             ld.add(build_shape(spec), thickness=thickness,
                    material=spec.n, typ=spec.typ)

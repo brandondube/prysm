@@ -23,19 +23,19 @@ from prysm.mathops import np
 
 from .materials import MIRROR
 from .surfaces import (
-    BiconicSag,
-    ChebyshevSag,
-    ConicSag,
-    EvenAsphereSag,
-    JacobiSag,
-    OffAxisConicSag,
-    PlaneSag,
-    Q2DSag,
-    SphereSag,
+    Biconic,
+    Chebyshev,
+    Conic,
+    EvenAsphere,
+    Jacobi,
+    OffAxisConic,
+    Plane,
+    Q2D,
+    Sphere,
     Surface,
-    ToroidSag,
-    XYSag,
-    ZernikeSag,
+    Toroid,
+    XY,
+    Zernike,
     circular_aperture,
     _map_stype,
 )
@@ -226,99 +226,99 @@ def _adapter(cls, **kwargs):
 
 
 _SHAPE_ADAPTERS = {
-    PlaneSag: _adapter(
-        PlaneSag,
-        build=lambda p: PlaneSag(),
+    Plane: _adapter(
+        Plane,
+        build=lambda p: Plane(),
     ),
-    SphereSag: _adapter(
-        SphereSag,
+    Sphere: _adapter(
+        Sphere,
         scalar_dofs=('c',),
         categories={'curvature': ['c'], 'radius': ['c']},
-        build=lambda p: SphereSag(p['c']),
+        build=lambda p: Sphere(p['c']),
     ),
-    ConicSag: _adapter(
-        ConicSag,
+    Conic: _adapter(
+        Conic,
         scalar_dofs=('c', 'k'),
         categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k']},
-        build=lambda p: ConicSag(p['c'], p['k']),
+        build=lambda p: Conic(p['c'], p['k']),
     ),
-    OffAxisConicSag: _adapter(
-        OffAxisConicSag,
+    OffAxisConic: _adapter(
+        OffAxisConic,
         scalar_dofs=('c', 'k'),
         meta_keys=('dx', 'dy'),
         categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k']},
-        build=lambda p: OffAxisConicSag(p['c'], p['k'], dx=p['dx'], dy=p['dy']),
+        build=lambda p: OffAxisConic(p['c'], p['k'], dx=p['dx'], dy=p['dy']),
     ),
-    EvenAsphereSag: _adapter(
-        EvenAsphereSag,
+    EvenAsphere: _adapter(
+        EvenAsphere,
         scalar_dofs=('c', 'k'),
         vector_dofs=('coefs',),
         categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
                     'coefs': ['coefs']},
-        build=lambda p: EvenAsphereSag(p['c'], p['k'], p['coefs']),
+        build=lambda p: EvenAsphere(p['c'], p['k'], p['coefs']),
     ),
-    Q2DSag: _adapter(
-        Q2DSag,
+    Q2D: _adapter(
+        Q2D,
         scalar_dofs=('c', 'k'),
         meta_keys=('normalization_radius', 'cm0', 'ams', 'bms', 'dx', 'dy'),
         categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k']},
-        build=lambda p: Q2DSag(p['c'], p['k'], p['normalization_radius'],
+        build=lambda p: Q2D(p['c'], p['k'], p['normalization_radius'],
                                p['cm0'], p['ams'], p['bms'],
                                dx=p['dx'], dy=p['dy']),
     ),
-    ZernikeSag: _adapter(
-        ZernikeSag,
+    Zernike: _adapter(
+        Zernike,
         scalar_dofs=('c', 'k'),
         vector_dofs=('coefs',),
         meta_keys=('normalization_radius', 'nms', 'norm'),
         categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
                     'coefs': ['coefs']},
-        build=lambda p: ZernikeSag(p['c'], p['k'], p['normalization_radius'],
+        build=lambda p: Zernike(p['c'], p['k'], p['normalization_radius'],
                                    p['nms'], p['coefs'], norm=p['norm']),
     ),
-    XYSag: _adapter(
-        XYSag,
+    XY: _adapter(
+        XY,
         scalar_dofs=('c', 'k'),
         vector_dofs=('coefs',),
         meta_keys=('normalization_radius', 'mns'),
         categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
                     'coefs': ['coefs']},
-        build=lambda p: XYSag(p['c'], p['k'], p['normalization_radius'],
+        build=lambda p: XY(p['c'], p['k'], p['normalization_radius'],
                               p['mns'], p['coefs']),
     ),
-    ChebyshevSag: _adapter(
-        ChebyshevSag,
+    Chebyshev: _adapter(
+        Chebyshev,
         scalar_dofs=('c', 'k'),
         vector_dofs=('coefs',),
         meta_keys=('x_norm', 'y_norm', 'mns'),
         categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
                     'coefs': ['coefs']},
-        build=lambda p: ChebyshevSag(p['c'], p['k'], p['x_norm'], p['y_norm'],
+        build=lambda p: Chebyshev(p['c'], p['k'], p['x_norm'], p['y_norm'],
                                      p['mns'], p['coefs']),
     ),
-    JacobiSag: _adapter(
-        JacobiSag,
+    Jacobi: _adapter(
+        Jacobi,
         scalar_dofs=('c', 'k'),
         vector_dofs=('coefs',),
         meta_keys=('normalization_radius', 'alpha', 'beta', 'ns'),
         categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
                     'coefs': ['coefs']},
-        build=lambda p: JacobiSag(p['c'], p['k'], p['normalization_radius'],
+        build=lambda p: Jacobi(p['c'], p['k'], p['normalization_radius'],
                                   p['alpha'], p['beta'], p['ns'], p['coefs']),
     ),
-    ToroidSag: _adapter(
-        ToroidSag,
+    Toroid: _adapter(
+        Toroid,
         scalar_dofs=('c_x', 'c_y', 'k_y'),
         vector_dofs=('coefs_y',),
         categories={'curvature': ['c_x', 'c_y'], 'conic': ['k_y'],
                     'coefs': ['coefs_y']},
-        build=lambda p: ToroidSag(p['c_x'], p['c_y'], p['k_y'], p['coefs_y']),
+        build=lambda p: Toroid(p['c_x'], p['c_y'], p['k_y'], p['coefs_y']),
     ),
-    BiconicSag: _adapter(
-        BiconicSag,
+    Biconic: _adapter(
+        Biconic,
         scalar_dofs=('c_x', 'c_y', 'k_x', 'k_y'),
         categories={'curvature': ['c_x', 'c_y'], 'conic': ['k_x', 'k_y']},
-        build=lambda p: BiconicSag(p['c_x'], p['c_y'], p['k_x'], p['k_y']),
+        build=lambda p: Biconic(p['c_x'], p['c_y'], p['k_x'], p['k_y']),
     ),
 }
 

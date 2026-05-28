@@ -10,8 +10,8 @@ from prysm.x.raytracing.io_zemax import read_zmx
 from prysm.x.raytracing.io_codev import read_seq
 from prysm.x.raytracing._surface_spec import SurfaceSpec, build_surface
 from prysm.x.raytracing.surfaces import (
-    ConicSag, EvenAsphereSag, PlaneSag, ToroidSag, BiconicSag,
-    ZernikeSag, XYSag,
+    Conic, EvenAsphere, Plane, Toroid, Biconic,
+    Zernike, XY,
     STYPE_REFLECT, STYPE_REFRACT, STYPE_EVAL,
 )
 from prysm.x.raytracing._indexing import (
@@ -28,7 +28,7 @@ def test_surface_spec_builder_constructs_shape_surface():
         P=[0.0, 0.0, 0.0],
         params={'c': 1 / 50.0, 'k': -1.0},
     ))
-    assert isinstance(surf.shape, ConicSag)
+    assert isinstance(surf.shape, Conic)
     assert surf.shape.params is surf.params
 
 
@@ -216,7 +216,7 @@ def test_zmx_singlet_header_fields(refractiveindex_database):
 
 def test_zmx_singlet_curvatures_match_input(refractiveindex_database):
     pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
-    assert isinstance(pf.surfaces[0].shape, ConicSag)
+    assert isinstance(pf.surfaces[0].shape, Conic)
     assert pf.surfaces[0].params['c'] == 0.02
     assert pf.surfaces[1].params['c'] == -0.02
 
@@ -229,7 +229,7 @@ def test_zmx_singlet_glass_resolves_to_bk7(refractiveindex_database):
 def test_zmx_singlet_image_is_eval_plane(refractiveindex_database):
     pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
     img = pf.surfaces[-1]
-    assert isinstance(img.shape, PlaneSag)
+    assert isinstance(img.shape, Plane)
     assert img.typ == STYPE_EVAL
 
 
@@ -327,7 +327,7 @@ SURF 3
 def test_zmx_evenasph_builds_asphere(refractiveindex_database):
     pf = read_zmx(_ZMX_EVENASPH, _is_text=True, database=refractiveindex_database)
     s1 = pf.surfaces[0]
-    assert isinstance(s1.shape, EvenAsphereSag)
+    assert isinstance(s1.shape, EvenAsphere)
     assert s1.params['coefs'] == (1.0e-6, 0.0, -2.0e-12)
 
 
@@ -358,7 +358,7 @@ SURF 2
 def test_zmx_biconic_assigns_independent_axes():
     pf = read_zmx(_ZMX_BICONIC, _is_text=True)
     s = pf.surfaces[0]
-    assert isinstance(s.shape, BiconicSag)
+    assert isinstance(s.shape, Biconic)
     assert s.params['c_x'] == 0.015
     assert s.params['c_y'] == 0.02
     assert s.params['k_x'] == -0.5
@@ -391,7 +391,7 @@ SURF 2
 def test_zmx_toroid_uses_parm_1_for_rotation_radius():
     pf = read_zmx(_ZMX_TOROID, _is_text=True)
     s = pf.surfaces[0]
-    assert isinstance(s.shape, ToroidSag)
+    assert isinstance(s.shape, Toroid)
     np.testing.assert_allclose(s.params['c_x'], 1.0 / 50.0)
     np.testing.assert_allclose(s.params['c_y'], 0.02)
 
@@ -464,7 +464,7 @@ def test_seq_singlet_glass_resolves(refractiveindex_database):
 def test_seq_image_is_eval_plane(refractiveindex_database):
     pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
     img = pf.surfaces[-1]
-    assert isinstance(img.shape, PlaneSag)
+    assert isinstance(img.shape, Plane)
     assert img.typ == STYPE_EVAL
 
 
@@ -533,7 +533,7 @@ GO
 def test_seq_A_through_C_coefs_become_asphere(refractiveindex_database):
     pf = read_seq(_SEQ_ASPH, _is_text=True, database=refractiveindex_database)
     s1 = pf.surfaces[0]
-    assert isinstance(s1.shape, EvenAsphereSag)
+    assert isinstance(s1.shape, EvenAsphere)
     assert s1.params['coefs'] == (1.0e-6, 0.0, -2.0e-12)
 
 
@@ -663,7 +663,7 @@ SURF 2
 
 def test_zmx_zernsag_builds_surface_zernike():
     pf = read_zmx(_ZMX_ZERNSAG, _is_text=True)
-    assert isinstance(pf.surfaces[0].shape, ZernikeSag)
+    assert isinstance(pf.surfaces[0].shape, Zernike)
     params = pf.surfaces[0].params
     assert params['normalization_radius'] == 5.0
     # PARM 1 → norm radius; 6 XDAT terms set
@@ -689,7 +689,7 @@ def test_zmx_zernsag_no_coefs_falls_back_to_conic():
         'SURF 2\n  TYPE STANDARD\n  DISZ 0.0\n'
     )
     pf = read_zmx(txt, _is_text=True)
-    assert isinstance(pf.surfaces[0].shape, ConicSag)
+    assert isinstance(pf.surfaces[0].shape, Conic)
 
 
 _ZMX_XYPOLY = """\
@@ -719,7 +719,7 @@ SURF 2
 
 def test_zmx_xypoly_builds_surface_xy():
     pf = read_zmx(_ZMX_XYPOLY, _is_text=True)
-    assert isinstance(pf.surfaces[0].shape, XYSag)
+    assert isinstance(pf.surfaces[0].shape, XY)
     params = pf.surfaces[0].params
     assert params['normalization_radius'] == 10.0
     # 4 terms parsed
@@ -754,7 +754,7 @@ GO
 
 def test_seq_biconic_built_when_x_axis_present():
     pf = read_seq(_SEQ_BICONIC, _is_text=True)
-    assert isinstance(pf.surfaces[0].shape, BiconicSag)
+    assert isinstance(pf.surfaces[0].shape, Biconic)
     p = pf.surfaces[0].params
     np.testing.assert_allclose(p['c_y'], 1 / 100.0)
     np.testing.assert_allclose(p['c_x'], 1 / 50.0)
@@ -765,7 +765,7 @@ def test_seq_biconic_built_when_x_axis_present():
 def test_seq_no_x_axis_stays_conic(refractiveindex_database):
     """Without RDX/CUX/CCX, S is just a conic, not a biconic."""
     pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
-    assert isinstance(pf.surfaces[0].shape, ConicSag)
+    assert isinstance(pf.surfaces[0].shape, Conic)
 
 
 # ============================================================================
@@ -788,7 +788,7 @@ GO
 
 def test_seq_zfr_builds_zernike_surface_with_fringe_norm():
     pf = read_seq(_SEQ_ZFR, _is_text=True)
-    assert isinstance(pf.surfaces[0].shape, ZernikeSag)
+    assert isinstance(pf.surfaces[0].shape, Zernike)
     p = pf.surfaces[0].params
     assert p['normalization_radius'] == 5.0
     assert p['norm'] is False  # Fringe is non-orthonormalized
@@ -823,7 +823,7 @@ GO
 
 def test_seq_xyp_builds_surface_xy():
     pf = read_seq(_SEQ_XYP, _is_text=True)
-    assert isinstance(pf.surfaces[0].shape, XYSag)
+    assert isinstance(pf.surfaces[0].shape, XY)
     p = pf.surfaces[0].params
     assert p['normalization_radius'] == 10.0
     # term 4 corresponds to (m=2, n=0)

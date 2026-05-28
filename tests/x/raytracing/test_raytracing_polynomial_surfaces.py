@@ -9,10 +9,10 @@ from tests.x.raytracing.surface_helpers import (
 
 from prysm.x.raytracing.surfaces import (
     Surface,
-    ZernikeSag,
-    XYSag,
-    ChebyshevSag,
-    JacobiSag,
+    Zernike,
+    XY,
+    Chebyshev,
+    Jacobi,
 )
 from prysm.x.raytracing.intersections import ConicSeedMixin
 from prysm.x.raytracing.spencer_and_murty import raytrace
@@ -49,7 +49,7 @@ def _central_difference_xy(sag, x, y, h=1e-6):
 
 def test_polynomial_shapes_use_conic_seeded_newton():
     """All polynomial sag shapes share the conic-seeded Newton intersect."""
-    for cls in (ZernikeSag, XYSag, ChebyshevSag, JacobiSag):
+    for cls in (Zernike, XY, Chebyshev, Jacobi):
         assert issubclass(cls, ConicSeedMixin), cls.__name__
 
 

@@ -11,7 +11,7 @@ from prysm.x.raytracing import materials
 from prysm.x.raytracing.design import EFL, Problem, RmsSpotRadius
 from prysm.x.raytracing.launch import Sampling, launch
 from prysm.x.raytracing.paraxial import effective_focal_length
-from prysm.x.raytracing.surfaces import ConicSag, PlaneSag
+from prysm.x.raytracing.surfaces import Conic, Plane
 
 
 def n_bk7(wvl):
@@ -21,12 +21,12 @@ def n_bk7(wvl):
 def make_singlet(image_gap=95.0, with_image=True):
     ld = (LensData(epd=20.0, fields=[0], wavelengths=FRAUNHOFER_LINES_UM,
                    reference_wavelength='d')
-          .add(ConicSag(1 / 102.0, 0.0), thickness=6.0, material=n_bk7,
+          .add(Conic(1 / 102.0, 0.0), thickness=6.0, material=n_bk7,
                semidiameter=12.0)
-          .add(ConicSag(-1 / 102.0, 0.0), thickness=image_gap,
+          .add(Conic(-1 / 102.0, 0.0), thickness=image_gap,
                material=materials.air, semidiameter=12.0))
     if with_image:
-        ld.add(PlaneSag(), typ='eval', material=materials.air,
+        ld.add(Plane(), typ='eval', material=materials.air,
                semidiameter=12.0)
     return ld
 
@@ -54,10 +54,10 @@ def test_lensdata_efl_optimization_converges():
     ld.vary('curvature', surfaces=1)  # one DOF, one operand -> well posed
     wvl = ld.wavelength('d')
     target = 80.0
-    prob = Problem(ld, [EFL(wvl, target=target)])
-    res = optimize.least_squares(prob.residuals, prob.x0(), jac='3-point',
-                                 xtol=1e-12, ftol=1e-12)
-    ld.update(res.x)
+    prob = Problem(ld, equality_constraints=[EFL(wvl, target=target)])
+    res = prob.solve(damping=1e-8, xtol=1e-12, ftol=1e-12,
+                     constraint_tol=1e-12)
+    assert res.success
     assert effective_focal_length(ld, wvl=wvl) == pytest.approx(target, rel=1e-6)
 
 
@@ -67,12 +67,21 @@ def test_lensdata_thickness_and_curvature_jointly_varied():
     ld = make_singlet(with_image=False)
     ld.vary('curvature', surfaces=1).vary('thickness', surfaces=0)
     wvl = ld.wavelength('d')
-    prob = Problem(ld, [EFL(wvl, target=90.0)])
+    prob = Problem(ld, equality_constraints=[EFL(wvl, target=90.0)])
     x0 = prob.x0()
     assert len(x0) == 2
-    res = optimize.least_squares(prob.residuals, x0, jac='3-point')
-    ld.update(res.x)
+    res = prob.solve(x0, damping=1e-8, maxiter=10)
+    assert res.success
     assert effective_focal_length(ld, wvl=wvl) == pytest.approx(90.0, rel=1e-5)
+
+
+def test_focal_length_constraint_is_not_an_objective_residual():
+    ld = make_singlet(with_image=False)
+    ld.vary('curvature', surfaces=1)
+    wvl = ld.wavelength('d')
+    prob = Problem(ld, equality_constraints=[EFL(wvl, target=90.0)])
+    assert prob.residuals(prob.x0()).size == 0
+    assert prob.equalities(prob.x0()).shape == (1,)
 
 
 def test_fd_free_jacobian_matches_numeric_merit_gradient():

@@ -12,7 +12,7 @@ from tests.x.raytracing.surface_helpers import (
     chebyshev, jacobi, toroid, biconic,
 )
 
-from prysm.x.raytracing.surfaces import ConicSag, Surface
+from prysm.x.raytracing.surfaces import Conic, Surface
 
 
 P0 = np.array([0.0, 0.0, 0.0])
@@ -115,7 +115,7 @@ def test_shape_required_by_init():
 
 
 def test_explicit_shape_constructor_uses_mutable_shape_params():
-    surf = Surface(shape=ConicSag(c=1 / 50.0, k=0.0),
+    surf = Surface(shape=Conic(c=1 / 50.0, k=0.0),
                    interaction='refl', P=P0)
     assert surf.params is surf.shape.params
     z1 = surf.sag(np.array([1.0]), np.array([0.0]))

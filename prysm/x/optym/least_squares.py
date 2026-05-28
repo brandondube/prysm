@@ -195,9 +195,44 @@ def _solve_kkt(H, grad, A, b):
 
 def _normal_matrix(residuals, jacobian, damping):
     H = jacobian.T @ jacobian
-    if damping:
-        H = H + float(damping) * np.eye(jacobian.shape[1], dtype=H.dtype)
+    damping = np.asarray(damping, dtype=float)
+    if damping.ndim == 0:
+        if damping:
+            H = H + float(damping) * np.eye(jacobian.shape[1], dtype=H.dtype)
+    elif np.any(damping):
+        H = H + np.diag(damping.astype(H.dtype, copy=False))
     return H, jacobian.T @ residuals
+
+
+def _as_vector(value, n, name):
+    value = np.asarray(value, dtype=float)
+    if value.ndim == 0:
+        return np.full(n, float(value), dtype=float)
+    value = value.ravel()
+    if value.size != n:
+        raise ValueError(f'{name} must be scalar or length {n}')
+    return value.copy()
+
+
+def _sensitivity_diagonal(J, Aeq, Aineq):
+    diag = np.zeros(J.shape[1], dtype=float)
+    if J.size:
+        diag = diag + np.sum(J * J, axis=0)
+    if Aeq.size:
+        diag = diag + np.sum(Aeq * Aeq, axis=0)
+    if Aineq.size:
+        diag = diag + np.sum(Aineq * Aineq, axis=0)
+    return diag
+
+
+def _damping_diagonal(J, Aeq, Aineq, damping, mode, floor):
+    damping = _as_vector(damping, J.shape[1], 'damping')
+    if mode == 'identity':
+        return damping
+    if mode == 'sensitivity':
+        scale = np.maximum(_sensitivity_diagonal(J, Aeq, Aineq), float(floor))
+        return damping * scale
+    raise ValueError("damping_mode must be 'identity' or 'sensitivity'")
 
 
 def _constraint_matrix(active, Aeq, Aineq, eq, ineq):
@@ -271,6 +306,26 @@ def _active_set_step(state, J, Aeq, Aineq, damping, constraint_tol,
     return dx, lambda_eq, lambda_ineq, np.asarray(active, dtype=int)
 
 
+def _trust_radii_vector(trust_radii, n):
+    if trust_radii is None:
+        return None
+    radii = _as_vector(trust_radii, n, 'trust_radii')
+    if np.any(radii <= 0):
+        raise ValueError('trust_radii entries must be positive')
+    return radii
+
+
+def _apply_trust_radii(dx, trust_radii):
+    if trust_radii is None or dx.size == 0:
+        return dx, 1.0
+    finite = np.isfinite(trust_radii)
+    limited = finite & (np.abs(dx) > trust_radii)
+    if not np.any(limited):
+        return dx, 1.0
+    scale = float(np.min(trust_radii[limited] / np.abs(dx[limited])))
+    return dx * scale, scale
+
+
 def _initial_x(problem, x0):
     if x0 is not None:
         return np.asarray(x0, dtype=float).copy()
@@ -317,7 +372,9 @@ def _line_search(view, state, dx, ftol, constraint_tol, max_line_search):
     return None, None, evaluations
 
 
-def _record_history(state, trial, step_norm, alpha):
+def _record_history(state, trial, step_norm, alpha, metadata=None):
+    if metadata is None:
+        metadata = {}
     state.history.append({
         'x': trial.x.copy(),
         'cost': trial.cost,
@@ -325,6 +382,7 @@ def _record_history(state, trial, step_norm, alpha):
         'step_norm': step_norm,
         'alpha': alpha,
         'active_inequalities': state.active.copy(),
+        **metadata,
     })
 
 
@@ -337,7 +395,8 @@ def _copy_trial_into_state(state, trial):
     state.violation = trial.violation
 
 
-def _linearized_step(view, state, damping, fd_step, constraint_tol,
+def _linearized_step(view, state, damping, damping_mode, damping_floor,
+                     trust_radii, fd_step, constraint_tol,
                      active_tol, max_active_iter):
     J = _finite_difference_jacobian(
         view.residuals, state.x, f0=state.residuals, step=fd_step,
@@ -350,11 +409,21 @@ def _linearized_step(view, state, damping, fd_step, constraint_tol,
     if state.eq.size or state.ineq.size:
         state.ncev += 2 * state.x.size
 
+    damping_diag = _damping_diagonal(
+        J, Aeq, Aineq, damping, damping_mode, damping_floor,
+    )
     dx, state.lambda_eq, state.lambda_ineq, state.active = _active_set_step(
-        state, J, Aeq, Aineq, damping, constraint_tol,
+        state, J, Aeq, Aineq, damping_diag, constraint_tol,
         active_tol, max_active_iter,
     )
-    return dx, grad
+    dx, trust_scale = _apply_trust_radii(dx, trust_radii)
+    metadata = {
+        'damping': np.asarray(damping, dtype=float).copy(),
+        'damping_diagonal': damping_diag.copy(),
+        'damping_mode': damping_mode,
+        'trust_scale': trust_scale,
+    }
+    return dx, grad, metadata
 
 
 class DampedLeastSquares:
@@ -370,8 +439,18 @@ class DampedLeastSquares:
         Functions returning values that must equal zero.
     inequality_constraints : callable or sequence of callables, optional
         Functions returning values that must be greater than or equal to zero.
-    damping : float, optional
-        Scalar added to the diagonal of J.T @ J.
+    damping : float or ndarray, optional
+        Scalar or per-variable values added to the normal matrix.
+    damping_mode : {'identity', 'sensitivity'}, optional
+        'identity' adds damping directly to each diagonal term.
+        'sensitivity' multiplies damping by the current per-variable
+        squared sensitivity from the residual and constraint Jacobians.
+    trust_radii : float or ndarray, optional
+        Maximum absolute per-variable step.  The proposed step is scaled
+        uniformly so all variables satisfy their radii.
+    adaptive_damping : bool, optional
+        If True, line-search failures increase damping and retry the current
+        step; accepted full steps decrease damping.
 
     Notes
     -----
@@ -383,6 +462,11 @@ class DampedLeastSquares:
     """
     def __init__(self, problem, x0=None, *, equality_constraints=None,
                  inequality_constraints=None, damping=1e-6,
+                 damping_mode='identity', damping_floor=1.0,
+                 trust_radii=None, adaptive_damping=False,
+                 damping_increase=10.0, damping_decrease=0.2,
+                 damping_min=0.0, damping_max=float('inf'),
+                 max_damping_attempts=6,
                  maxiter=25, xtol=1e-10, ftol=1e-12,
                  constraint_tol=1e-10, active_tol=1e-10,
                  fd_step=1e-6, max_active_iter=20,
@@ -396,6 +480,27 @@ class DampedLeastSquares:
         self.x0 = self.state.x.copy()
         self.x = self.state.x
         self.damping = damping
+        self.damping_mode = damping_mode
+        self.damping_floor = float(damping_floor)
+        self.trust_radii = _trust_radii_vector(trust_radii, self.x.size)
+        self.adaptive_damping = bool(adaptive_damping)
+        self.damping_increase = float(damping_increase)
+        self.damping_decrease = float(damping_decrease)
+        self.damping_min = _as_vector(damping_min, self.x.size, 'damping_min')
+        self.damping_max = _as_vector(damping_max, self.x.size, 'damping_max')
+        self.max_damping_attempts = int(max_damping_attempts)
+        if damping_mode not in ('identity', 'sensitivity'):
+            raise ValueError("damping_mode must be 'identity' or 'sensitivity'")
+        if self.damping_floor < 0:
+            raise ValueError('damping_floor must be nonnegative')
+        if self.damping_increase <= 1:
+            raise ValueError('damping_increase must be greater than 1')
+        if not 0 < self.damping_decrease < 1:
+            raise ValueError('damping_decrease must be between 0 and 1')
+        if np.any(self.damping_min < 0):
+            raise ValueError('damping_min entries must be nonnegative')
+        if np.any(self.damping_max < self.damping_min):
+            raise ValueError('damping_max must be >= damping_min')
         self.maxiter = int(maxiter)
         self.xtol = xtol
         self.ftol = ftol
@@ -447,6 +552,15 @@ class DampedLeastSquares:
         """Current combined equality and inequality constraint violation."""
         return self.state.violation
 
+    def _rescale_damping(self, factor):
+        damping = _as_vector(self.damping, self.x.size, 'damping')
+        damping = np.clip(damping * float(factor),
+                          self.damping_min, self.damping_max)
+        if np.asarray(self.damping).ndim == 0:
+            self.damping = float(damping[0])
+        else:
+            self.damping = damping
+
     def _metadata(self, step_norm, alpha, accepted, f_next=None):
         if f_next is None:
             f_next = self.state.cost
@@ -457,6 +571,8 @@ class DampedLeastSquares:
             'active_inequalities': self.state.active.copy(),
             'lambda_eq': self.state.lambda_eq.copy(),
             'lambda_ineq': self.state.lambda_ineq.copy(),
+            'damping': np.asarray(self.damping, dtype=float).copy(),
+            'damping_mode': self.damping_mode,
             'f_next': f_next,
             'accepted': accepted,
         }
@@ -508,49 +624,82 @@ class DampedLeastSquares:
         iteration = self.iter + 1
         x = self.state.x
         f = self.state.cost
-        dx, g = _linearized_step(
-            self.view, self.state, self.damping, self.fd_step,
-            self.constraint_tol, self.active_tol, self.max_active_iter,
-        )
 
-        step_norm = _norm(dx)
-        self.last_step_norm = step_norm
-        x_norm = _norm(self.state.x)
-        if step_norm <= self.xtol * (self.xtol + x_norm):
-            self.last_alpha = None
-            self.last_step_metadata = self._metadata(
-                step_norm, None, False,
+        attempt = 0
+        while True:
+            dx, g, step_metadata = _linearized_step(
+                self.view, self.state, self.damping, self.damping_mode,
+                self.damping_floor, self.trust_radii, self.fd_step,
+                self.constraint_tol, self.active_tol, self.max_active_iter,
             )
-            decision = self._observe_governor(iteration, x, f, g)
-            self._finish_from_decision(decision, iteration - 1)
-            return x, f, g
 
-        alpha, trial, evaluations = _line_search(
-            self.view, self.state, dx, self.ftol, self.constraint_tol,
-            self.max_line_search,
-        )
-        self.last_alpha = alpha
-        self.state.nfev += evaluations
-        self.state.ncev += evaluations
-        if trial is None:
-            self.last_step_metadata = self._metadata(
-                step_norm, alpha, False,
+            step_norm = _norm(dx)
+            self.last_step_norm = step_norm
+            x_norm = _norm(self.state.x)
+            if (step_norm <= self.xtol * (self.xtol + x_norm)
+                    and self.state.violation <= self.constraint_tol):
+                self.last_alpha = None
+                self.last_step_metadata = self._metadata(
+                    step_norm, None, False,
+                )
+                self.last_step_metadata.update(step_metadata)
+                self.last_step_metadata['damping_attempts'] = attempt
+                decision = self._observe_governor(iteration, x, f, g)
+                self._finish_from_decision(decision, iteration - 1)
+                return x, f, g
+
+            alpha, trial, evaluations = _line_search(
+                self.view, self.state, dx, self.ftol, self.constraint_tol,
+                self.max_line_search,
             )
-            self.last_step_metadata['line_search_failed'] = True
-            self._finish(False, 'line search failed', iteration)
-            return x, f, g
+            self.last_alpha = alpha
+            self.state.nfev += evaluations
+            self.state.ncev += evaluations
+            if trial is not None:
+                break
+
+            if (not self.adaptive_damping
+                    or attempt >= self.max_damping_attempts):
+                self.last_step_metadata = self._metadata(
+                    step_norm, alpha, False,
+                )
+                self.last_step_metadata.update(step_metadata)
+                self.last_step_metadata['line_search_failed'] = True
+                self.last_step_metadata['damping_attempts'] = attempt
+                self._finish(False, 'line search failed', iteration)
+                return x, f, g
+
+            self._rescale_damping(self.damping_increase)
+            attempt += 1
 
         f_next = trial.cost
-        _record_history(self.state, trial, step_norm, alpha)
+        history_metadata = step_metadata.copy()
+        history_metadata['damping_attempts'] = attempt
+        _record_history(
+            self.state, trial, step_norm, alpha,
+            metadata=history_metadata,
+        )
         _copy_trial_into_state(self.state, trial)
         self.x = self.state.x
         self.iter += 1
         self.last_step_metadata = self._metadata(
             step_norm, alpha, True, f_next=f_next,
         )
+        self.last_step_metadata.update(step_metadata)
+        self.last_step_metadata['damping_attempts'] = attempt
+
+        if self.adaptive_damping:
+            if alpha == 1.0:
+                self._rescale_damping(self.damping_decrease)
+            else:
+                self._rescale_damping(self.damping_increase)
 
         decision = self._observe_governor(self.iter, x, f, g)
-        if decision.stop:
+        if (decision.stop
+                and not (
+                    decision.message == 'step tolerance reached'
+                    and self.state.violation > self.constraint_tol
+                )):
             self._finish_from_decision(decision, self.iter)
 
         return x, f, g
@@ -567,6 +716,11 @@ class DampedLeastSquares:
 
 def damped_least_squares(problem, x0=None, *, equality_constraints=None,
                          inequality_constraints=None, damping=1e-6,
+                         damping_mode='identity', damping_floor=1.0,
+                         trust_radii=None, adaptive_damping=False,
+                         damping_increase=10.0, damping_decrease=0.2,
+                         damping_min=0.0, damping_max=float('inf'),
+                         max_damping_attempts=6,
                          maxiter=25, xtol=1e-10, ftol=1e-12,
                          constraint_tol=1e-10, active_tol=1e-10,
                          fd_step=1e-6, max_active_iter=20,
@@ -578,6 +732,15 @@ def damped_least_squares(problem, x0=None, *, equality_constraints=None,
         equality_constraints=equality_constraints,
         inequality_constraints=inequality_constraints,
         damping=damping,
+        damping_mode=damping_mode,
+        damping_floor=damping_floor,
+        trust_radii=trust_radii,
+        adaptive_damping=adaptive_damping,
+        damping_increase=damping_increase,
+        damping_decrease=damping_decrease,
+        damping_min=damping_min,
+        damping_max=damping_max,
+        max_damping_attempts=max_damping_attempts,
         maxiter=maxiter,
         xtol=xtol,
         ftol=ftol,

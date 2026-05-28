@@ -7,7 +7,7 @@ import pytest
 
 from prysm.x.raytracing import LensData, FRAUNHOFER_LINES_UM, Field, Sampling, launch
 from prysm.x.raytracing import materials
-from prysm.x.raytracing.surfaces import ConicSag, PlaneSag
+from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing.paraxial import effective_focal_length, first_order
 from prysm.x.raytracing.analysis import distortion, field_curvature
 from prysm.x.raytracing._meta import (
@@ -27,11 +27,11 @@ def _dispersive(wvl):
 def _singlet(material=_n_bk7):
     return (LensData(epd=20.0, fields=[0, 1.0], wavelengths=FRAUNHOFER_LINES_UM,
                      reference_wavelength='d', stop_index=0)
-            .add(ConicSag(1 / 102.0, 0.0), thickness=6.0, material=material,
+            .add(Conic(1 / 102.0, 0.0), thickness=6.0, material=material,
                  semidiameter=12.0)
-            .add(ConicSag(-1 / 102.0, 0.0), thickness=95.0,
+            .add(Conic(-1 / 102.0, 0.0), thickness=95.0,
                  material=materials.air, semidiameter=12.0)
-            .add(PlaneSag(), typ='eval', material=materials.air,
+            .add(Plane(), typ='eval', material=materials.air,
                  semidiameter=12.0))
 
 

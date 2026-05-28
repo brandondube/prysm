@@ -4,8 +4,6 @@ solve, both resolved on compile so layout/trace/merit always agree."""
 import numpy as np
 import pytest
 
-from prysm.mathops import optimize
-
 from prysm.x.raytracing import FRAUNHOFER_LINES_UM, LensData
 from prysm.x.raytracing import materials
 from prysm.x.raytracing.design import EFL, Problem
@@ -13,7 +11,7 @@ from prysm.x.raytracing.paraxial import (
     effective_focal_length,
     paraxial_image_distance,
 )
-from prysm.x.raytracing.surfaces import ConicSag, EvenAsphereSag, PlaneSag
+from prysm.x.raytracing.surfaces import Conic, EvenAsphere, Plane
 
 
 def n_bk7(wvl):
@@ -23,12 +21,12 @@ def n_bk7(wvl):
 def make_singlet(c0=1 / 102.0, c1=-1 / 102.0, gap=95.0, with_image=True):
     ld = (LensData(epd=20.0, wavelengths=FRAUNHOFER_LINES_UM,
                    reference_wavelength='d')
-          .add(ConicSag(c0, 0.0), thickness=6.0, material=n_bk7,
+          .add(Conic(c0, 0.0), thickness=6.0, material=n_bk7,
                semidiameter=10.0)
-          .add(ConicSag(c1, 0.0), thickness=gap, material=materials.air,
+          .add(Conic(c1, 0.0), thickness=gap, material=materials.air,
                semidiameter=10.0))
     if with_image:
-        ld.add(PlaneSag(), typ='eval', material=materials.air,
+        ld.add(Plane(), typ='eval', material=materials.air,
                semidiameter=10.0)
     return ld
 
@@ -69,9 +67,9 @@ def test_pickup_with_scale_and_offset():
 def test_pickup_length_mismatch_raises():
     coefs = (1e-4, -2e-6)
     ld = (LensData()
-          .add(EvenAsphereSag(1 / 50.0, 0.0, coefs), thickness=2.0,
+          .add(EvenAsphere(1 / 50.0, 0.0, coefs), thickness=2.0,
                material=n_bk7, semidiameter=8.0)
-          .add(ConicSag(1 / 80.0, 0.0), thickness=2.0, material=materials.air,
+          .add(Conic(1 / 80.0, 0.0), thickness=2.0, material=materials.air,
                semidiameter=8.0))
     with pytest.raises(ValueError):
         # 2 coefs cannot be picked up from 1 curvature
@@ -81,9 +79,9 @@ def test_pickup_length_mismatch_raises():
 def test_coef_symmetry_pickup_elementwise():
     coefs = (1e-4, -2e-6, 3e-9)
     ld = (LensData()
-          .add(EvenAsphereSag(1 / 50.0, 0.0, coefs), thickness=2.0,
+          .add(EvenAsphere(1 / 50.0, 0.0, coefs), thickness=2.0,
                material=n_bk7, semidiameter=8.0)
-          .add(EvenAsphereSag(1 / 50.0, 0.0, (0.0, 0.0, 0.0)), thickness=2.0,
+          .add(EvenAsphere(1 / 50.0, 0.0, (0.0, 0.0, 0.0)), thickness=2.0,
                material=materials.air, semidiameter=8.0))
     ld.pickup('coefs', 1, from_surface=0, scale=-1.0)
     np.testing.assert_allclose(
@@ -139,9 +137,9 @@ def test_solve_and_pickup_compose_in_optimization():
     ld.solve_image_distance()
     ld.vary('curvature', surfaces=0)
     wvl = ld.wavelength('d')
-    prob = Problem(ld, [EFL(wvl, target=120.0)])
-    res = optimize.least_squares(prob.residuals, prob.x0(), jac='3-point')
-    ld.update(res.x)
+    prob = Problem(ld, equality_constraints=[EFL(wvl, target=120.0)])
+    res = prob.solve(damping=1e-8, maxiter=10)
+    assert res.success
     s = ld.surfaces
     lens = [x for x in s if x.typ != -3]
     assert effective_focal_length(lens, wvl=wvl) == pytest.approx(120.0,

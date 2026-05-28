@@ -6,7 +6,7 @@ import pytest
 
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing import materials
-from prysm.x.raytracing.surfaces import ConicSag, EvenAsphereSag, PlaneSag
+from prysm.x.raytracing.surfaces import Conic, EvenAsphere, Plane
 
 
 def _air(wvl):
@@ -17,9 +17,9 @@ def make_triplet():
     ld = LensData(epd=10.0)
     radii = [50.0, -80.0, 40.0, -40.0, 80.0, -50.0]
     for i, r in enumerate(radii):
-        ld.add(ConicSag(1.0 / r, 0.0), thickness=3.0 + i,
+        ld.add(Conic(1.0 / r, 0.0), thickness=3.0 + i,
                material=_air, semidiameter=8.0)
-    ld.add(PlaneSag(), typ='eval', material=_air, semidiameter=8.0)
+    ld.add(Plane(), typ='eval', material=_air, semidiameter=8.0)
     return ld
 
 
@@ -123,7 +123,7 @@ def test_relative_radius_bound_orders_negative_nominal():
 
 
 def test_relative_bound_on_zero_curvature_is_unbounded_with_warning():
-    ld = LensData().add(ConicSag(0.0, 0.0), thickness=1.0, material=_air,
+    ld = LensData().add(Conic(0.0, 0.0), thickness=1.0, material=_air,
                         semidiameter=5.0)
     ld.vary('curvature', surfaces=0)
     with pytest.warns(UserWarning):
@@ -133,7 +133,7 @@ def test_relative_bound_on_zero_curvature_is_unbounded_with_warning():
 
 
 def test_relative_radius_bound_on_flat_surface_is_unbounded_with_warning():
-    ld = LensData().add(ConicSag(0.0, 0.0), thickness=1.0, material=_air,
+    ld = LensData().add(Conic(0.0, 0.0), thickness=1.0, material=_air,
                         semidiameter=5.0)
     ld.vary('radius', surfaces=0)
     with pytest.warns(UserWarning):
@@ -172,7 +172,7 @@ def test_bounds_only_returned_for_free_slots():
 
 def test_coefs_relative_bound_per_coefficient():
     coefs = (1e-4, -2e-6, 3e-9)
-    ld = LensData().add(EvenAsphereSag(1 / 50.0, 0.0, coefs), thickness=2.0,
+    ld = LensData().add(EvenAsphere(1 / 50.0, 0.0, coefs), thickness=2.0,
                         material=_air, semidiameter=8.0)
     ld.vary('coefs', surfaces=0)
     ld.constrain('coefs', relative=0.5, surfaces=0)

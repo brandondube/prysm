@@ -9,7 +9,7 @@ from tests.x.raytracing.surface_helpers import (
 
 from prysm.x.raytracing.surfaces import Surface
 from prysm.x.raytracing import LensData
-from prysm.x.raytracing.surfaces import ConicSag
+from prysm.x.raytracing.surfaces import Conic
 from prysm.x.raytracing.paraxial import (
     system_matrix,
     paraxial_image_distance,
@@ -167,14 +167,14 @@ def test_efl_thin_lens_matches_lensmakers():
 
 
 def test_lensdata_without_wavelengths_uses_default_wavelength():
-    ld = LensData().add(ConicSag(1 / 50.0, 0.0),
+    ld = LensData().add(Conic(1 / 50.0, 0.0),
                         typ='refr', material=lambda wvl: 1.5)
     np.testing.assert_allclose(effective_focal_length(ld), 100.0)
 
 
 def test_lensdata_n_ambient_defaults_into_paraxial_calculations():
     ld = LensData(n_ambient=1.33).add(
-        ConicSag(1 / 50.0, 0.0), typ='refr', material=lambda wvl: 1.5)
+        Conic(1 / 50.0, 0.0), typ='refr', material=lambda wvl: 1.5)
     np.testing.assert_allclose(
         effective_focal_length(ld),
         effective_focal_length(ld, n_ambient=1.33),

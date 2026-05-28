@@ -11,8 +11,8 @@ from prysm.x.raytracing.opt import rms_spot_radius
 from prysm.x.raytracing.paraxial import first_order
 from prysm.x.raytracing.spencer_and_murty import raytrace
 from prysm.x.raytracing.surfaces import (
-    ConicSag,
-    PlaneSag,
+    Conic,
+    Plane,
     Surface,
     circular_aperture,
 )
@@ -63,7 +63,7 @@ def _optiland_cooke_triplet():
     for radius, thickness, material in rows:
         prescription.append(
             Surface(
-                shape=ConicSag(1 / radius, 0),
+                shape=Conic(1 / radius, 0),
                 typ='refr',
                 P=[0, 0, z],
                 n=material,
@@ -72,7 +72,7 @@ def _optiland_cooke_triplet():
         )
         z += thickness
     prescription.append(
-        Surface(shape=PlaneSag(), typ='eval', P=[0, 0, z], n=materials.air)
+        Surface(shape=Plane(), typ='eval', P=[0, 0, z], n=materials.air)
     )
     return prescription
 

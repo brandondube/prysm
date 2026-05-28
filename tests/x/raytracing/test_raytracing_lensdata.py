@@ -16,12 +16,12 @@ from prysm.x.raytracing import (
 from prysm.x.raytracing import materials
 from prysm.x.raytracing.raygen import generate_collimated_ray_fan
 from prysm.x.raytracing.surfaces import (
-    ConicSag,
-    EvenAsphereSag,
-    PlaneSag,
+    Conic,
+    EvenAsphere,
+    Plane,
     Surface,
-    SphereSag,
-    ZernikeSag,
+    Sphere,
+    Zernike,
     circular_aperture,
 )
 
@@ -34,23 +34,23 @@ def make_singlet_lensdata(image_gap=95.0):
     return (
         LensData(epd=20.0, fields=[0], wavelengths=FRAUNHOFER_LINES_UM,
                  reference_wavelength='d')
-        .add(ConicSag(1 / 102.0, 0.0), thickness=6.0, material=n_bk7,
+        .add(Conic(1 / 102.0, 0.0), thickness=6.0, material=n_bk7,
              semidiameter=10.0)
-        .add(ConicSag(-1 / 102.0, 0.0), thickness=image_gap,
+        .add(Conic(-1 / 102.0, 0.0), thickness=image_gap,
              material=materials.air, semidiameter=10.0)
-        .add(PlaneSag(), typ='eval', material=materials.air, semidiameter=10.0)
+        .add(Plane(), typ='eval', material=materials.air, semidiameter=10.0)
     )
 
 
 def make_singlet_hand(image_gap=95.0):
     return [
-        Surface(shape=ConicSag(1 / 102.0, 0.0), typ='refr', P=[0, 0, 0.0],
+        Surface(shape=Conic(1 / 102.0, 0.0), typ='refr', P=[0, 0, 0.0],
                 n=n_bk7, bounding={'outer_radius': 10.0},
                 aperture=circular_aperture(10.0)),
-        Surface(shape=ConicSag(-1 / 102.0, 0.0), typ='refr', P=[0, 0, 6.0],
+        Surface(shape=Conic(-1 / 102.0, 0.0), typ='refr', P=[0, 0, 6.0],
                 n=materials.air, bounding={'outer_radius': 10.0},
                 aperture=circular_aperture(10.0)),
-        Surface(shape=PlaneSag(), typ='eval', P=[0, 0, 6.0 + image_gap],
+        Surface(shape=Plane(), typ='eval', P=[0, 0, 6.0 + image_gap],
                 n=materials.air, bounding={'outer_radius': 10.0}),
     ]
 
@@ -104,7 +104,7 @@ def test_material_callable_identity_is_preserved():
 
 
 def test_float_material_is_wrapped_into_a_callable():
-    ld = LensData().add(ConicSag(1 / 50.0, 0.0), thickness=3.0,
+    ld = LensData().add(Conic(1 / 50.0, 0.0), thickness=3.0,
                         material=1.5, semidiameter=5.0)
     surf = ld.surfaces[0]
     assert surf.n(0.5) == pytest.approx(1.5)
@@ -147,19 +147,19 @@ def test_thickness_slide_matches_manual_relayout():
 
 def test_mirror_fold_steps_downstream_to_negative_z():
     ld = (LensData()
-          .add(ConicSag(1 / 200.0, -1.0), typ='refl', thickness=50.0)
-          .add(PlaneSag(), typ='eval'))
+          .add(Conic(1 / 200.0, -1.0), typ='refl', thickness=50.0)
+          .add(Plane(), typ='eval'))
     surfs = ld.to_surfaces()
     assert [float(np.asarray(s.P)[2]) for s in surfs] == pytest.approx([0.0, -50.0])
 
 
 def test_mirror_fold_trace_matches_hand_built():
     ld = (LensData()
-          .add(ConicSag(1 / 200.0, -1.0), typ='refl', thickness=50.0)
-          .add(PlaneSag(), typ='eval'))
+          .add(Conic(1 / 200.0, -1.0), typ='refl', thickness=50.0)
+          .add(Plane(), typ='eval'))
     hand = [
-        Surface(shape=ConicSag(1 / 200.0, -1.0), typ='refl', P=[0, 0, 0.0]),
-        Surface(shape=PlaneSag(), typ='eval', P=[0, 0, -50.0]),
+        Surface(shape=Conic(1 / 200.0, -1.0), typ='refl', P=[0, 0, 0.0]),
+        Surface(shape=Plane(), typ='eval', P=[0, 0, -50.0]),
     ]
     P0, S0 = generate_collimated_ray_fan(11, maxr=20.0, z=-200.0)
     ra = raytrace(ld, P0, S0, wvl=0.55)
@@ -171,9 +171,9 @@ def test_mirror_fold_trace_matches_hand_built():
 def test_two_mirror_fold_returns_to_increasing_z():
     # two reflections -> net forward direction again
     ld = (LensData()
-          .add(PlaneSag(), typ='refl', thickness=10.0)
-          .add(PlaneSag(), typ='refl', thickness=4.0)
-          .add(PlaneSag(), typ='eval'))
+          .add(Plane(), typ='refl', thickness=10.0)
+          .add(Plane(), typ='refl', thickness=4.0)
+          .add(Plane(), typ='eval'))
     z = [float(np.asarray(s.P)[2]) for s in ld.to_surfaces()]
     assert z == pytest.approx([0.0, -10.0, -6.0])
 
@@ -268,7 +268,7 @@ def test_extras_and_provenance_fields_round_trip():
 
 def test_even_asphere_round_trips_through_lensdata():
     coefs = (1e-4, -2e-6, 3e-9)
-    shape = EvenAsphereSag(1 / 50.0, -0.5, coefs)
+    shape = EvenAsphere(1 / 50.0, -0.5, coefs)
     ld = LensData().add(shape, thickness=2.0, material=n_bk7, semidiameter=8.0)
     rebuilt = ld.surfaces[0].shape
     x = np.linspace(-7, 7, 13)
@@ -281,7 +281,7 @@ def test_even_asphere_round_trips_through_lensdata():
 def test_zernike_round_trips_with_static_metadata():
     nms = [(2, 0), (4, 0)]
     coefs = (0.3, -0.1)
-    shape = ZernikeSag(0.0, 0.0, 10.0, nms, coefs, norm=True)
+    shape = Zernike(0.0, 0.0, 10.0, nms, coefs, norm=True)
     ld = LensData().add(shape, thickness=1.0, typ='eval', semidiameter=10.0)
     rebuilt = ld.surfaces[0].shape
     assert rebuilt.params['nms'] == tuple(nms)
@@ -293,7 +293,7 @@ def test_zernike_round_trips_with_static_metadata():
 
 def test_varying_a_coef_changes_only_that_coef():
     coefs = (1e-4, -2e-6, 3e-9)
-    ld = LensData().add(EvenAsphereSag(1 / 50.0, -0.5, coefs), thickness=2.0,
+    ld = LensData().add(EvenAsphere(1 / 50.0, -0.5, coefs), thickness=2.0,
                         material=n_bk7, semidiameter=8.0)
     ld.vary('coefs', surfaces=0)
     x = ld.pack()
@@ -327,10 +327,10 @@ def test_copy_is_independent():
 
 def test_coordbreak_declares_dofs_and_lays_out():
     ld = (LensData()
-          .add(ConicSag(1 / 100.0, 0.0), thickness=5.0, material=n_bk7,
+          .add(Conic(1 / 100.0, 0.0), thickness=5.0, material=n_bk7,
                semidiameter=5.0)
           .add_coordbreak(tilt=(0.0, 0.0, 5.0), thickness=2.0)
-          .add(PlaneSag(), typ='eval'))
+          .add(Plane(), typ='eval'))
     assert isinstance(ld.rows[1], CoordBreak)
     ld.vary('tilt', surfaces=1)
     np.testing.assert_allclose(ld.pack(), [0.0, 0.0, 5.0])
