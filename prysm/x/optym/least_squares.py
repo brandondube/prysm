@@ -1,4 +1,5 @@
 """Least-squares optimizers and helpers."""
+import math
 
 from prysm.mathops import np
 
@@ -163,12 +164,13 @@ def _finite_difference_jacobian(fun, x, f0=None, step=1e-6):
 
 
 def _constraint_violation(eq, ineq):
-    eq_norm = _norm(eq) if eq.size else 0.0
+    sq = 0.0
+    if eq.size:
+        sq += float(np.sum(eq * eq))
     if ineq.size:
-        ineq_norm = _norm(np.minimum(ineq, 0.0))
-    else:
-        ineq_norm = 0.0
-    return float(np.sqrt(eq_norm * eq_norm + ineq_norm * ineq_norm))
+        neg = np.minimum(ineq, 0.0)
+        sq += float(np.sum(neg * neg))
+    return math.sqrt(sq)
 
 
 def _solve_kkt(H, grad, A, b):
@@ -196,11 +198,14 @@ def _solve_kkt(H, grad, A, b):
 def _normal_matrix(residuals, jacobian, damping):
     H = jacobian.T @ jacobian
     damping = np.asarray(damping, dtype=float)
-    if damping.ndim == 0:
-        if damping:
-            H = H + float(damping) * np.eye(jacobian.shape[1], dtype=H.dtype)
-    elif np.any(damping):
-        H = H + np.diag(damping.astype(H.dtype, copy=False))
+    # Add damping onto the diagonal in place.  H is freshly allocated by the
+    # matmul above so this never aliases a shared buffer, and it avoids
+    # materializing an n x n identity (scalar) or diag matrix (vector) just to
+    # add it straight back on.  A 0-d damping broadcasts across the diagonal,
+    # so the scalar and per-variable cases share one path.
+    if np.any(damping):
+        idx = np.arange(jacobian.shape[1])
+        H[idx, idx] += damping.astype(H.dtype, copy=False)
     return H, jacobian.T @ residuals
 
 
@@ -217,11 +222,11 @@ def _as_vector(value, n, name):
 def _sensitivity_diagonal(J, Aeq, Aineq):
     diag = np.zeros(J.shape[1], dtype=float)
     if J.size:
-        diag = diag + np.sum(J * J, axis=0)
+        diag += np.sum(J * J, axis=0)
     if Aeq.size:
-        diag = diag + np.sum(Aeq * Aeq, axis=0)
+        diag += np.sum(Aeq * Aeq, axis=0)
     if Aineq.size:
-        diag = diag + np.sum(Aineq * Aineq, axis=0)
+        diag += np.sum(Aineq * Aineq, axis=0)
     return diag
 
 
@@ -334,7 +339,7 @@ def _initial_x(problem, x0):
     return np.asarray(problem.x0(), dtype=float)
 
 
-def _initial_state(view, x):
+def _eval_state(view, x):
     return _DLSState(x, view.residuals(x), view.eq(x), view.ineq(x))
 
 
@@ -346,10 +351,6 @@ def _constraint_jacobians(view, state, fd_step):
         view.ineq, state.x, f0=state.ineq, step=fd_step,
     ) if state.ineq.size else np.zeros((0, state.x.size), dtype=float)
     return Aeq, Aineq
-
-
-def _trial_state(view, x):
-    return _DLSState(x, view.residuals(x), view.eq(x), view.ineq(x))
 
 
 def _accept_trial(state, trial, ftol, constraint_tol):
@@ -364,7 +365,7 @@ def _line_search(view, state, dx, ftol, constraint_tol, max_line_search):
     alpha = 1.0
     evaluations = 0
     for _ in range(max_line_search + 1):
-        trial = _trial_state(view, state.x + alpha * dx)
+        trial = _eval_state(view, state.x + alpha * dx)
         evaluations += 1
         if _accept_trial(state, trial, ftol, constraint_tol):
             return alpha, trial, evaluations
@@ -476,7 +477,7 @@ class DampedLeastSquares:
         self.view = _ResidualProblemView(
             problem, equality_constraints, inequality_constraints,
         )
-        self.state = _initial_state(self.view, _initial_x(problem, x0))
+        self.state = _eval_state(self.view, _initial_x(problem, x0))
         self.x0 = self.state.x.copy()
         self.x = self.state.x
         self.damping = damping
@@ -592,13 +593,12 @@ class DampedLeastSquares:
     def _finish_from_decision(self, decision, iteration):
         message = decision.message
         success = decision.success
+        feasible = self.state.violation <= self.constraint_tol
         if 'function tolerance reached' in message:
             message = 'cost tolerance reached'
-            success = self.state.violation <= self.constraint_tol
-        elif message == 'maximum iterations reached':
-            success = self.state.violation <= self.constraint_tol
-        elif message == 'step tolerance reached':
-            success = self.state.violation <= self.constraint_tol
+            success = feasible
+        elif message in ('maximum iterations reached', 'step tolerance reached'):
+            success = feasible
         self._finish(success, message, iteration)
 
     def result(self):

@@ -250,6 +250,7 @@ class PrysmLBFGSB:
         self.m = memory
 
         dtype = x0.dtype
+        self._eps = float(np.finfo(dtype).eps)  # curvature-condition floor
         if lower_bounds is None:
             lower_bounds = np.full(self.n, -np.inf, dtype=dtype)
         if upper_bounds is None:
@@ -286,6 +287,34 @@ class PrysmLBFGSB:
         # number of coords driven to a bound by the last _cauchy sweep;
         # set each call, read by step() for telemetry without a reduction.
         self._cauchy_breaks = 0
+        # Reusable internal work arrays.  These are deliberately lazy:
+        # unbounded problems never allocate the large bounded-path scratch,
+        # and bounded problems grow each buffer only to the largest shape
+        # reached so far.
+        self._scratch = {}
+
+    def _scratch_array(self, name, shape, dtype=None):
+        """Return a reusable scratch array of exactly shape.
+
+        Buffers grow but never shrink: when the cached array is larger than
+        requested a same-rank, same-dtype slice view is returned.  The common
+        case (exact match, or a fresh allocation) returns the buffer itself,
+        avoiding a per-call view object in the inner loop.
+        """
+        if dtype is None:
+            dtype = self.x.dtype
+        shape = tuple(shape)
+
+        arr = self._scratch.get(name)
+        if (arr is None or arr.dtype != dtype or arr.ndim != len(shape)
+                or any(h < n for h, n in zip(arr.shape, shape))):
+            arr = np.empty(shape, dtype=dtype)
+            self._scratch[name] = arr
+            return arr
+
+        if arr.shape == shape:
+            return arr
+        return arr[tuple(slice(0, n) for n in shape)]
 
     # ---------------- compact L-BFGS representation ----------------
     #
@@ -422,15 +451,29 @@ class PrysmLBFGSB:
         l = self.l
         u = self.u
         dtype = x.dtype
-        t = np.full(self.n, np.inf, dtype=dtype)
-        pos_g = g > 0
-        neg_g = g < 0
-        # guard divisor with np.where; masked-off entries are discarded
-        safe_g = np.where(g != 0, g, 1)
-        lower_hit = pos_g & np.isfinite(l)
-        upper_hit = neg_g & np.isfinite(u)
-        t = np.where(lower_hit, (x - l) / safe_g, t)
-        t = np.where(upper_hit, (x - u) / safe_g, t)
+        t = self._scratch_array('_break_t', (self.n,), dtype)
+        work = self._scratch_array('_break_work', (self.n,), dtype)
+        pos_g = self._scratch_array('_break_pos_g', (self.n,), bool)
+        neg_g = self._scratch_array('_break_neg_g', (self.n,), bool)
+        hit = self._scratch_array('_break_hit', (self.n,), bool)
+
+        t.fill(np.inf)
+
+        np.greater(g, 0, out=pos_g)
+        np.less(g, 0, out=neg_g)
+
+        np.isfinite(l, out=hit)
+        np.logical_and(hit, pos_g, out=hit)
+        np.subtract(x, l, out=work)
+        np.divide(work, g, out=work, where=hit)
+        np.copyto(t, work, where=hit)
+
+        np.isfinite(u, out=hit)
+        np.logical_and(hit, neg_g, out=hit)
+        np.subtract(x, u, out=work)
+        np.divide(work, g, out=work, where=hit)
+        np.copyto(t, work, where=hit)
+
         sorted_indices = np.argsort(t)
         return t, sorted_indices
 
@@ -447,20 +490,26 @@ class PrysmLBFGSB:
             return np.inf
         return -df / ddf
 
-    @staticmethod
-    def _next_dt_min_vec(df, ddf):
+    def _next_dt_min_vec(self, df, ddf):
         """Vectorized form of _next_dt_min.  Works element-wise on
         arrays of df and ddf; same branching semantics applied
-        coordinate by coordinate via np.where.
+        coordinate by coordinate.
         """
-        # divisor guard: ddf<=0 entries will be masked out below, but
-        # the np.where eager-evaluates both branches, so feed a safe
-        # value where ddf would be zero/negative.
-        safe_ddf = np.where(ddf > 0, ddf, 1.0)
-        return np.where(
-            df >= 0, 0.0,
-            np.where(ddf <= 0, np.inf, -df / safe_ddf),
-        )
+        out = self._scratch_array('_cauchy_dt_min_at_iter', df.shape, df.dtype)
+        safe_ddf = self._scratch_array('_cauchy_safe_ddf', df.shape, df.dtype)
+        mask = self._scratch_array('_cauchy_dt_min_mask', df.shape, bool)
+
+        safe_ddf[:] = ddf
+        np.less_equal(ddf, 0, out=mask)
+        np.copyto(safe_ddf, 1.0, where=mask)
+
+        np.divide(df, safe_ddf, out=out)
+        out *= -1
+        np.copyto(out, np.inf, where=mask)
+
+        np.greater_equal(df, 0, out=mask)
+        np.copyto(out, 0.0, where=mask)
+        return out
 
     def _cauchy(self, g, W=None, M=None, M_lu=None):
         """Generalized Cauchy point along the projected gradient path.
@@ -505,9 +554,12 @@ class PrysmLBFGSB:
         # initial direction is the projected steepest descent ray;
         # already-active coords get d=0 inside the loop via their
         # t_i=0 breakpoint being processed first.
-        d = -g.copy()
-        free_mask = np.ones(n, dtype=bool)
-        xc = x.copy()
+        d = self._scratch_array('_cauchy_d', (n,), dtype)
+        free_mask = self._scratch_array('_cauchy_free_mask', (n,), bool)
+        xc = self._scratch_array('_cauchy_xc', (n,), dtype)
+        np.negative(g, out=d)
+        free_mask.fill(True)
+        xc[:] = x
 
         # 0-d backend scalar, not a host float: gtg only ever seeds the
         # df/ddf cumsum arrays (device) below, so keeping it on the
@@ -516,11 +568,14 @@ class PrysmLBFGSB:
         gtg = g @ g
 
         # Permute gradient and breakpoint time arrays into visit order once.
-        g_sorted = g[sorted_indices]
-        t_sorted = t[sorted_indices]
+        g_sorted = self._scratch_array('_cauchy_g_sorted', (n,), dtype)
+        t_sorted = self._scratch_array('_cauchy_t_sorted', (n,), dtype)
+        np.take(g, sorted_indices, out=g_sorted)
+        np.take(t, sorted_indices, out=t_sorted)
         # treat 'beyond the last finite breakpoint' as a hard stop; the
         # rest of the loop body is skipped via the t_b == inf early-exit.
-        finite_mask = np.isfinite(t_sorted)
+        finite_mask = self._scratch_array('_cauchy_finite_mask', (n,), bool)
+        np.isfinite(t_sorted, out=finite_mask)
         n_active = int(finite_mask.sum())
 
         # Per-breakpoint scalar inputs always needed when n_active > 0,
@@ -532,7 +587,7 @@ class PrysmLBFGSB:
             # dt_j = t_a[j] - t_a[j-1] (t_a[-1] := 0); cumulative path
             # segment lengths shared by the vectorized state machine and
             # (when k > 0) the C_before cumsum.
-            dt_seq = np.empty(n_active, dtype=dtype)
+            dt_seq = self._scratch_array('_cauchy_dt_seq', (n_active,), dtype)
             dt_seq[0] = t_a[0]
             dt_seq[1:] = t_a[1:] - t_a[:-1]
 
@@ -570,26 +625,41 @@ class PrysmLBFGSB:
                 # MinvWT used here for the wMw diagonal; recomputed inside
                 # _subspace_solve via its own M_lu re-use.
                 MinvWT = linalg.lu_solve(M_lu, W.T)            # (2k, n)
-                wMw_diag = np.einsum('ij,ji->i', W, MinvWT)    # (n,)
+                wMw_diag = self._scratch_array('_cauchy_wMw_diag',
+                                               (n,), dtype)
+                np.einsum('ij,ji->i', W, MinvWT, out=wMw_diag)  # (n,)
 
-                W_a = W[idx_a, :]                              # (n_a, 2k)
+                W_a = self._scratch_array('_cauchy_W_a',
+                                          (n_active, 2 * k), dtype)
+                np.take(W, idx_a, axis=0, out=W_a)              # (n_a, 2k)
 
                 # Build "p before iter j" and "c before iter j" via the
                 # closed-form cumulative sums that fall out of the rank-1
                 # recurrences in BLNZ Algorithm CP.
-                dP_seq = g_a[:, None] * W_a                    # (n_a, 2k)
-                cum_dP = np.cumsum(dP_seq, axis=0)             # (n_a, 2k)
-                P_before = np.concatenate(
-                    [p_init[None, :], p_init[None, :] + cum_dP[:-1, :]],
-                    axis=0,
-                )                                              # (n_a, 2k)
+                dP_seq = self._scratch_array('_cauchy_dP_seq',
+                                             (n_active, 2 * k), dtype)
+                cum_dP = self._scratch_array('_cauchy_cum_dP',
+                                             (n_active, 2 * k), dtype)
+                P_before = self._scratch_array('_cauchy_P_before',
+                                               (n_active, 2 * k), dtype)
+                np.multiply(W_a, g_a[:, None], out=dP_seq)     # (n_a, 2k)
+                np.cumsum(dP_seq, axis=0, out=cum_dP)          # (n_a, 2k)
+                P_before[0] = p_init
+                if n_active > 1:
+                    P_before[1:] = cum_dP[:-1]
+                    P_before[1:] += p_init
 
-                dC_seq = dt_seq[:, None] * P_before            # (n_a, 2k)
-                cum_dC = np.cumsum(dC_seq, axis=0)             # (n_a, 2k)
-                C_before = np.concatenate(
-                    [np.zeros((1, 2 * k), dtype=dtype), cum_dC[:-1, :]],
-                    axis=0,
-                )                                              # (n_a, 2k)
+                dC_seq = self._scratch_array('_cauchy_dC_seq',
+                                             (n_active, 2 * k), dtype)
+                cum_dC = self._scratch_array('_cauchy_cum_dC',
+                                             (n_active, 2 * k), dtype)
+                C_before = self._scratch_array('_cauchy_C_before',
+                                               (n_active, 2 * k), dtype)
+                np.multiply(P_before, dt_seq[:, None], out=dC_seq)
+                np.cumsum(dC_seq, axis=0, out=cum_dC)          # (n_a, 2k)
+                C_before[0].fill(0)
+                if n_active > 1:
+                    C_before[1:] = cum_dC[:-1]
 
                 # One batched lu_solve replaces n_active separate
                 # M-solves.  lu_solve takes the RHS as (m, k); the
@@ -598,9 +668,15 @@ class PrysmLBFGSB:
                 Mp_array = linalg.lu_solve(M_lu, P_before.T).T  # (n_a, 2k)
                 Mc_array = linalg.lu_solve(M_lu, C_before.T).T  # (n_a, 2k)
 
-                wb_Mp_arr = np.einsum('ij,ij->i', W_a, Mp_array)  # (n_a,)
-                wb_Mc_arr = np.einsum('ij,ij->i', W_a, Mc_array)  # (n_a,)
-                wMw_b_arr = wMw_diag[idx_a]                       # (n_a,)
+                wb_Mp_arr = self._scratch_array('_cauchy_wb_Mp',
+                                                (n_active,), dtype)
+                wb_Mc_arr = self._scratch_array('_cauchy_wb_Mc',
+                                                (n_active,), dtype)
+                np.einsum('ij,ij->i', W_a, Mp_array, out=wb_Mp_arr)
+                np.einsum('ij,ij->i', W_a, Mc_array, out=wb_Mc_arr)
+                wMw_b_arr = self._scratch_array('_cauchy_wMw_b',
+                                                (n_active,), dtype)
+                np.take(wMw_diag, idx_a, out=wMw_b_arr)           # (n_a,)
 
         # ---- Vectorized (df, ddf, dt_min) state machine ----
         #
@@ -619,31 +695,49 @@ class PrysmLBFGSB:
             dt_min_final = self._next_dt_min(float(df_init), float(ddf_init))
             t_old_final = 0.0
         else:
+            ddf_step = self._scratch_array('_cauchy_ddf_step',
+                                           (n_active,), dtype)
+            df_alpha = self._scratch_array('_cauchy_df_alpha',
+                                           (n_active,), dtype)
             if k > 0:
-                ddf_step = (-theta * g_a * g_a
-                            - 2.0 * g_a * wb_Mp_arr
-                            - g_a * g_a * wMw_b_arr)
-                df_alpha = (g_a * g_a - theta * g_a * g_a * t_a
-                            - g_a * wb_Mc_arr)
+                np.multiply(g_a, g_a, out=ddf_step)
+                df_alpha[:] = ddf_step
+                ddf_step *= -theta
+                ddf_step -= 2.0 * g_a * wb_Mp_arr
+                ddf_step -= df_alpha * wMw_b_arr
+
+                df_alpha -= theta * df_alpha * t_a
+                df_alpha -= g_a * wb_Mc_arr
             else:
-                ddf_step = -theta * g_a * g_a
-                df_alpha = g_a * g_a - theta * g_a * g_a * t_a
+                np.multiply(g_a, g_a, out=ddf_step)
+                df_alpha[:] = ddf_step
+                ddf_step *= -theta
+                df_alpha -= theta * df_alpha * t_a
             # ddf_at_iter[j] = ddf_init + sum(ddf_step[:j])
-            ddf_at_iter = np.empty(n_active + 1, dtype=dtype)
+            ddf_at_iter = self._scratch_array('_cauchy_ddf_at_iter',
+                                              (n_active + 1,), dtype)
             ddf_at_iter[0] = ddf_init
-            ddf_at_iter[1:] = ddf_init + np.cumsum(ddf_step)
+            np.cumsum(ddf_step, out=ddf_at_iter[1:])
+            ddf_at_iter[1:] += ddf_init
             # df_at_iter[j+1] = df_at_iter[j] + dt_seq[j]*ddf_at_iter[j] + df_alpha[j]
-            df_step = dt_seq * ddf_at_iter[:-1] + df_alpha
-            df_at_iter = np.empty(n_active + 1, dtype=dtype)
+            df_step = self._scratch_array('_cauchy_df_step',
+                                          (n_active,), dtype)
+            np.multiply(dt_seq, ddf_at_iter[:-1], out=df_step)
+            df_step += df_alpha
+            df_at_iter = self._scratch_array('_cauchy_df_at_iter',
+                                             (n_active + 1,), dtype)
             df_at_iter[0] = df_init
-            df_at_iter[1:] = df_init + np.cumsum(df_step)
+            np.cumsum(df_step, out=df_at_iter[1:])
+            df_at_iter[1:] += df_init
 
             dt_min_at_iter = self._next_dt_min_vec(df_at_iter, ddf_at_iter)
 
             # Break check at iter j: dt_min_at_iter[j] < dt_seq[j].
             # First True index along the active prefix is K.  np.argmax
             # returns 0 on an all-False input, so check that separately.
-            break_pred = dt_min_at_iter[:n_active] < dt_seq
+            break_pred = self._scratch_array('_cauchy_break_pred',
+                                             (n_active,), bool)
+            np.less(dt_min_at_iter[:n_active], dt_seq, out=break_pred)
             if bool(break_pred.any()):
                 K = int(np.argmax(break_pred))
             else:
@@ -699,9 +793,13 @@ class PrysmLBFGSB:
         # free coords get xc[i] = x[i] + (t_old + dt_min) * d[i] (d still
         # holds -g for free coords); already-active coords keep the bound
         # value written during the sweep.
-        xc = np.where(free_mask, x + (t_old + dt_min) * d, xc)
+        np.multiply(d, t_old + dt_min, out=d)
+        d += x
+        np.copyto(xc, d, where=free_mask)
         if k > 0:
-            c = c + dt_min * p
+            c_update = self._scratch_array('_cauchy_c_update', (2 * k,), dtype)
+            np.multiply(p, dt_min, out=c_update)
+            c += c_update
 
         return xc, c, free_mask
 
@@ -753,19 +851,23 @@ class PrysmLBFGSB:
         n = self.n
         k = self._k
         dtype = self.x.dtype
-        dx = np.zeros(n, dtype=dtype)
+        dx = self._scratch_array('_subspace_dx', (n,), dtype)
+        dx.fill(0)
 
         if not bool(free_mask.any()):
             return dx
 
-        zc = xc - self.x
+        zc = self._scratch_array('_subspace_zc', (n,), dtype)
+        np.subtract(xc, self.x, out=zc)
         theta = float(self.theta)
 
         if k == 0:
             # B = θI, so B_F^{-1} = (1/θ) I and Δx_F = -(1/θ) r_c.
-            rc_F = g[free_mask] + theta * zc[free_mask]
-            dx_F = -rc_F / theta
-            dx[free_mask] = dx_F
+            rc_full = self._scratch_array('_subspace_rc_full', (n,), dtype)
+            np.multiply(zc, theta, out=rc_full)
+            rc_full += g
+            rc_full /= -theta
+            np.copyto(dx, rc_full, where=free_mask)
             return dx
 
         if W is None:
@@ -777,11 +879,21 @@ class PrysmLBFGSB:
 
         Mc = linalg.lu_solve(M_lu, c)
         # r_c, full-length, then row-slice to F.
-        rc_full = g + theta * zc - W @ Mc
-        rc_F = rc_full[free_mask]
-        W_F = W[free_mask, :]                # (|F|, 2k)
+        rc_full = self._scratch_array('_subspace_rc_full', (n,), dtype)
+        np.multiply(zc, theta, out=rc_full)
+        rc_full += g
+        rc_full -= W @ Mc
 
-        N = -M + (W_F.T @ W_F) / theta       # (2k, 2k)
+        idx_F = np.nonzero(free_mask)[0]
+        n_free = idx_F.size
+        rc_F = self._scratch_array('_subspace_rc_F', (n_free,), dtype)
+        W_F = self._scratch_array('_subspace_W_F', (n_free, 2 * k), dtype)
+        np.take(rc_full, idx_F, out=rc_F)
+        np.take(W, idx_F, axis=0, out=W_F)   # (|F|, 2k)
+
+        N = self._scratch_array('_subspace_N', (2 * k, 2 * k), dtype)
+        N[:] = (W_F.T @ W_F) / theta         # (2k, 2k)
+        N -= M
         WF_rcF = W_F.T @ rc_F
         # One-shot solve here; not worth factoring N up front.  Using
         # np.linalg.solve (vs linalg.solve) sidesteps scipy's noisy
@@ -790,18 +902,29 @@ class PrysmLBFGSB:
         N_inv = np.linalg.solve(N, WF_rcF)
         # Δx_F = -(1/θ) r_c + (1/θ²) W_F N⁻¹ W_Fᵀ r_c
         dx_F = -rc_F / theta + (W_F @ N_inv) / (theta * theta)
-        dx[free_mask] = dx_F
+        dx[idx_F] = dx_F
         return dx
 
     def _max_alpha_inside_box(self, x, p):
         """Largest α ∈ [0, 1] keeping x + α p inside the box."""
         # vars with p > 0 face the upper bound; p < 0 face the lower.
-        safe_p = np.where(p != 0, p, 1)
-        bound_alpha = np.full_like(x, np.inf)
-        pos = p > 0
-        neg = p < 0
-        bound_alpha = np.where(pos, (self.u - x) / safe_p, bound_alpha)
-        bound_alpha = np.where(neg, (self.l - x) / safe_p, bound_alpha)
+        bound_alpha = self._scratch_array('_bound_alpha', x.shape, x.dtype)
+        work = self._scratch_array('_bound_work', x.shape, x.dtype)
+        pos = self._scratch_array('_bound_pos', x.shape, bool)
+        neg = self._scratch_array('_bound_neg', x.shape, bool)
+
+        bound_alpha.fill(np.inf)
+        np.greater(p, 0, out=pos)
+        np.less(p, 0, out=neg)
+
+        np.subtract(self.u, x, out=work)
+        np.divide(work, p, out=work, where=pos)
+        np.copyto(bound_alpha, work, where=pos)
+
+        np.subtract(self.l, x, out=work)
+        np.divide(work, p, out=work, where=neg)
+        np.copyto(bound_alpha, work, where=neg)
+
         alpha_max = float(np.min(bound_alpha))
         if alpha_max > 1.0:
             return 1.0
@@ -860,8 +983,7 @@ class PrysmLBFGSB:
         dot = np.dot
         sy = float(dot(s, y))
         yy = float(dot(y, y))
-        eps = float(np.finfo(self.x.dtype).eps)
-        if sy <= eps * max(yy, 1.0):
+        if sy <= self._eps * max(yy, 1.0):
             return
 
         m = self.m
@@ -925,22 +1047,27 @@ class PrysmLBFGSB:
 
             xc, c_vec, free_mask = self._cauchy(g, W, M, M_lu)
             dx = self._subspace_solve(xc, c_vec, free_mask, g, W, M, M_lu)
-            x_hat = xc + dx
+            x_hat = self._scratch_array('_step_x_hat', (self.n,), self.x.dtype)
+            np.add(xc, dx, out=x_hat)
 
             # Morales-Nocedal 2011: project x_hat into the box and use that
             # as the trial point.  If the resulting direction is descent,
             # take the full unit step as the line-search ceiling.  Otherwise
             # revert to the BLNZ truncation rule that walks from x_k toward
             # x_hat until the first bound is reached.
-            x_bar = np.minimum(np.maximum(x_hat, self.l), self.u)
-            p_proj = x_bar - self.x
+            x_bar = self._scratch_array('_step_x_bar', (self.n,), self.x.dtype)
+            np.maximum(x_hat, self.l, out=x_bar)
+            np.minimum(x_bar, self.u, out=x_bar)
+            p_proj = self._scratch_array('_step_p_proj', (self.n,), self.x.dtype)
+            np.subtract(x_bar, self.x, out=p_proj)
             gp_proj = float(g @ p_proj)
             if gp_proj < 0.0:
                 p = p_proj
                 alpha_max = 1.0
                 subspace_mode = 'projected'
             else:
-                p = x_hat - self.x
+                p = self._scratch_array('_step_p_hat', (self.n,), self.x.dtype)
+                np.subtract(x_hat, self.x, out=p)
                 alpha_max = self._max_alpha_inside_box(self.x, p)
                 subspace_mode = 'truncated'
             # _cauchy set self._cauchy_breaks = K; free_mask has exactly
@@ -971,7 +1098,8 @@ class PrysmLBFGSB:
         if g_new.ndim != 1:
             g_new = g_new.ravel()
 
-        s = alpha * p
+        s = self._scratch_array('_step_s', (self.n,), self.x.dtype)
+        np.multiply(p, alpha, out=s)
         x_new = self.x + s
         if self._has_bounds:
             # Defensive clip: the Wolfe search may walk fractionally past a
@@ -979,9 +1107,11 @@ class PrysmLBFGSB:
             # The clipped point is within an ULP of x_new, so the cached
             # g_new is still the right representative for the curvature update.
             x_new = np.minimum(np.maximum(x_new, self.l), self.u)
-            s = x_new - self.x  # honor the clip in the history update too
+            # honor the clip in the history update too
+            np.subtract(x_new, self.x, out=s)
 
-        y = g_new - g
+        y = self._scratch_array('_step_y', (self.n,), self.x.dtype)
+        np.subtract(g_new, g, out=y)
         self._update_history(s, y)
 
         self.x = x_new
