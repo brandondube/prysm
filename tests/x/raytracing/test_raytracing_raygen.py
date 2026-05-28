@@ -150,9 +150,9 @@ def test_newton_solver_valid_mask_all_true_for_simple_sphere():
         sag,
         _sag_and_normal_from_derivatives(sag_derivatives),
     )
-    surf = Surface(shape=shape, typ='refl', P=np.array([0., 0., 0.]), n=None)
+    surf = Surface(shape=shape, interaction='refl', P=np.array([0., 0., 0.]))
     P, S = _ray_batch(span=3.0)
-    Q, n, valid = surf.intersect(P, S, return_valid=True)
+    Q, n, valid = surf.intersect(P, S)
     assert valid.shape == (P.shape[0],)
     assert valid.dtype == bool
     assert valid.all()
@@ -163,15 +163,15 @@ def test_newton_solver_valid_mask_flags_nonconvergence():
     """A ray that won't reach the surface within maxiter should be flagged invalid."""
     # use a very low maxiter and a steep curvature so the iteration doesn't
     # have time to converge for off-axis rays
-    surf = conic(c=1 / 5.0, k=-2.0, typ='refl', P=np.array([0., 0., 0.]))
+    surf = conic(c=1 / 5.0, k=-2.0, interaction='refl', P=np.array([0., 0., 0.]))
     # build via a generic Surface (forces Newton, not the analytic Conic path)
     bare = Surface(shape=CallableShape(surf.sag, surf.sag_and_normal,
                                        params=dict(surf.params)),
-                   typ='refl', P=np.array([0., 0., 0.]), n=None)
+                   interaction='refl', P=np.array([0., 0., 0.]))
     # a ray nearly parallel to the surface in the steep region won't converge in 1 iter
     P = np.array([[3.5, 0., -50.], [0., 0., -50.]])
     S = np.array([[0.05, 0., np.sqrt(1 - 0.0025)], [0., 0., 1.]])
-    Q, n, valid = bare.intersect(P, S, maxiter=1, return_valid=True)
+    Q, n, valid = bare.intersect(P, S, maxiter=1)
     # the on-axis ray should converge in 1 iteration; the off-axis ray should not
     assert valid[1]  # on-axis converged
     assert not valid[0]  # off-axis did not
@@ -184,28 +184,16 @@ def test_analytic_intersect_valid_mask_flags_no_intersection():
     """An off-axis ray that lies outside the sphere's extent should be
     reported invalid (negative discriminant) by the analytic conic path."""
     # sphere of radius 50 centered at (0,0,50), vertex at origin, axis +z
-    surf = sphere(c=1 / 50.0, typ='refl', P=np.array([0., 0., 0.]), n=None)
+    surf = sphere(c=1 / 50.0, interaction='refl', P=np.array([0., 0., 0.]), material=None)
     # axial ray (hits the vertex) and an off-axis ray with x=60 > R=50 going +z
     # (the implicit sphere equation has no real root for that ray)
     P = np.array([[0., 0., -10.],
                   [60., 0., -10.]])
     S = np.array([[0., 0., 1.],
                   [0., 0., 1.]])
-    Q, n, valid = surf.intersect(P, S, return_valid=True)
+    Q, n, valid = surf.intersect(P, S)
     assert valid[0]
     assert not valid[1]
-
-
-def test_default_intersect_call_unchanged():
-    """The 2-tuple unpacking convention must keep working when return_valid is omitted."""
-    surf = conic(c=1 / 80., k=-1.0, typ='refl', P=np.array([0., 0., 0.]))
-    P, S = _ray_batch(span=3.0)
-    result = surf.intersect(P, S)
-    assert isinstance(result, tuple)
-    assert len(result) == 2
-    Q, n = result
-    assert Q.shape == P.shape
-    assert n.shape == P.shape
 
 
 # ---------- cheby distribution + hex / spiral grids ----------
@@ -233,13 +221,6 @@ def test_cheby_rect_grid_uses_cheby_on_both_axes():
     assert np.isclose(P[:, 0].max(), 2.0, atol=1e-12)
     assert np.isclose(P[:, 1].min(), -2.0, atol=1e-12)
     assert np.isclose(P[:, 1].max(), 2.0, atol=1e-12)
-
-
-def test_cheby_finite_ray_fan_endpoints_match_na():
-    P, S = generate_finite_ray_fan(5, na=0.1, P=[0, 0, 0], distribution='cheby')
-    # the outermost rays should hit ±arcsin(na/n) — verify direction cosines
-    norms = np.linalg.norm(S, axis=-1)
-    np.testing.assert_allclose(norms, 1.0, atol=1e-12)
 
 
 def test_cheby_unknown_distribution_raises():

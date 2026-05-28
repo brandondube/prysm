@@ -44,14 +44,15 @@ def make_singlet_lensdata(image_gap=95.0):
 
 def make_singlet_hand(image_gap=95.0):
     return [
-        Surface(shape=Conic(1 / 102.0, 0.0), typ='refr', P=[0, 0, 0.0],
-                n=n_bk7, bounding={'outer_radius': 10.0},
+        Surface(shape=Conic(1 / 102.0, 0.0), interaction='refr',
+                P=[0, 0, 0.0], material=n_bk7, bounding={'outer_radius': 10.0},
                 aperture=circular_aperture(10.0)),
-        Surface(shape=Conic(-1 / 102.0, 0.0), typ='refr', P=[0, 0, 6.0],
-                n=materials.air, bounding={'outer_radius': 10.0},
+        Surface(shape=Conic(-1 / 102.0, 0.0), interaction='refr',
+                P=[0, 0, 6.0], material=materials.air,
+                bounding={'outer_radius': 10.0},
                 aperture=circular_aperture(10.0)),
-        Surface(shape=Plane(), typ='eval', P=[0, 0, 6.0 + image_gap],
-                n=materials.air, bounding={'outer_radius': 10.0}),
+        Surface(shape=Plane(), interaction='eval', P=[0, 0, 6.0 + image_gap],
+                material=materials.air, bounding={'outer_radius': 10.0}),
     ]
 
 
@@ -158,8 +159,9 @@ def test_mirror_fold_trace_matches_hand_built():
           .add(Conic(1 / 200.0, -1.0), typ='refl', thickness=50.0)
           .add(Plane(), typ='eval'))
     hand = [
-        Surface(shape=Conic(1 / 200.0, -1.0), typ='refl', P=[0, 0, 0.0]),
-        Surface(shape=Plane(), typ='eval', P=[0, 0, -50.0]),
+        Surface(shape=Conic(1 / 200.0, -1.0), interaction='refl',
+                P=[0, 0, 0.0]),
+        Surface(shape=Plane(), interaction='eval', P=[0, 0, -50.0]),
     ]
     P0, S0 = generate_collimated_ray_fan(11, maxr=20.0, z=-200.0)
     ra = raytrace(ld, P0, S0, wvl=0.55)

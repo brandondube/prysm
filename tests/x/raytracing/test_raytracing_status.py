@@ -22,7 +22,7 @@ from prysm.x.raytracing.raygen import generate_collimated_ray_fan
 
 def _simple_prescription():
     return [
-        conic(c=1 / 200., k=-1.0, typ='refl', P=np.array([0., 0., 0.])),
+        conic(c=1 / 200., k=-1.0, interaction='refl', P=np.array([0., 0., 0.])),
         plane('eval', P=np.array([0., 0., -50.])),
     ]
 
@@ -71,7 +71,7 @@ def test_aperture_clipping_marks_outside_rays():
     # circular aperture of radius 5 on a flat eval surface
     aperture = lambda x, y: (x * x + y * y) <= 25.0
     pres = [
-        plane(typ='eval', P=np.array([0., 0., 0.]), aperture=aperture),
+        plane(interaction='eval', P=np.array([0., 0., 0.]), aperture=aperture),
     ]
     # 7 collimated rays from y=-9 to y=+9: outer rays clipped, center inside
     P0, S0 = generate_collimated_ray_fan(7, maxr=9.0, z=-50.0)
@@ -102,8 +102,8 @@ def test_clip_persists_through_subsequent_surfaces():
     """A ray clipped at the first surface stays invalid through downstream surfaces."""
     aperture = lambda x, y: x * x + y * y <= 1.0
     pres = [
-        plane(typ='eval', P=np.array([0., 0., 0.]), aperture=aperture),
-        plane(typ='eval', P=np.array([0., 0., 5.])),  # downstream, no aperture
+        plane(interaction='eval', P=np.array([0., 0., 0.]), aperture=aperture),
+        plane(interaction='eval', P=np.array([0., 0., 5.])),  # downstream, no aperture
     ]
     P0, S0 = generate_collimated_ray_fan(5, maxr=2.0, z=-10.0)
     result = raytrace(pres, P0, S0, wvl=0.55)
@@ -129,7 +129,7 @@ def test_analytic_miss_marked_as_miss():
     STATUS_MISS at that surface index."""
     # small sphere; rays well outside its support
     pres = [
-        sphere(c=1 / 5.0, typ='refl', P=np.array([0., 0., 0.]), n=None),
+        sphere(c=1 / 5.0, interaction='refl', P=np.array([0., 0., 0.]), material=None),
     ]
     P0 = np.array([[0., 0., -10.],   # axial, hits the sphere
                    [50., 0., -10.]])  # 50mm off-axis, sphere R=5 → can't reach
@@ -148,8 +148,8 @@ def test_total_internal_reflection_marked_as_tir():
     # critical angle for n=1.5 → 1.0 is arcsin(1/1.5) ≈ 41.81°.
     # build a refracting plane at z=0; ray comes from -z in glass at 50° to normal.
     pres = [
-        plane(typ='refr', P=np.array([0., 0., 0.]),
-                      n=lambda wvl: 1.0),  # the medium AFTER the surface
+        plane(interaction='refr', P=np.array([0., 0., 0.]),
+                      material=lambda wvl: 1.0),  # the medium AFTER the surface
     ]
     angle = np.radians(50.0)  # > critical
     # ray in n=1.5 medium hitting the surface at 50° to z (normal)
@@ -167,9 +167,9 @@ def test_mixed_batch_status_codes_distinct():
     three distinct status outcomes."""
     aperture = lambda x, y: (x * x + y * y) <= 4.0
     pres = [
-        sphere(c=1 / 100.0, typ='refl', P=np.array([0., 0., 0.]), n=None,
+        sphere(c=1 / 100.0, interaction='refl', P=np.array([0., 0., 0.]), material=None,
                        aperture=aperture),
-        plane(typ='eval', P=np.array([0., 0., -10.])),
+        plane(interaction='eval', P=np.array([0., 0., -10.])),
     ]
     P0 = np.array([
         [0., 0., -50.],     # axial: valid through both surfaces

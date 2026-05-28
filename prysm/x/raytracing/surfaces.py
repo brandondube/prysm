@@ -327,9 +327,7 @@ class Plane(Shape):
         z = np.zeros_like(np.asarray(x))
         return z, z, z
 
-    def intersect(self, P, S, sag_and_normal=None, tol_sag=None, eps=None,
-                  maxiter=None,
-                  return_valid=False):
+    def intersect(self, P, S, sag_and_normal=None, tol_sag=None, maxiter=None):
         """Intersect rays with the plane.
 
         Parameters
@@ -340,24 +338,19 @@ class Plane(Shape):
             Unit direction cosines.
         sag_and_normal : callable, optional
             Ignored; accepted for the common shape-intersection interface.
-        tol_sag, eps : float, optional
+        tol_sag : float, optional
             Ignored convergence tolerances.
         maxiter : int, optional
             Ignored iteration limit.
-        return_valid : bool, optional
-            If True, return a validity mask.
 
         Returns
         -------
-        Q : ndarray
+        Q, n, valid : ndarray, ndarray, ndarray
             Intersection points.
-        n : ndarray
-            Unit surface normals.
-        valid : ndarray, optional
-            Boolean validity mask, only returned when return_valid is True.
+            Unit surface normals, and a Boolean validity mask.
 
         """
-        return ray_plane_intersect(P, S, return_valid=return_valid)
+        return ray_plane_intersect(P, S)
 
 
 class Sphere(Shape):
@@ -392,9 +385,7 @@ class Sphere(Shape):
         """Partials of sphere sag and gradient wrt 'c'."""
         return conic_sag_param_partials(self.params['c'], 0.0, x, y, name)
 
-    def intersect(self, P, S, sag_and_normal=None, tol_sag=None, eps=None,
-                  maxiter=None,
-                  return_valid=False):
+    def intersect(self, P, S, sag_and_normal=None, tol_sag=None, maxiter=None):
         """Intersect rays with the sphere.
 
         Parameters
@@ -405,25 +396,19 @@ class Sphere(Shape):
             Unit direction cosines.
         sag_and_normal : callable, optional
             Ignored; accepted for the common shape-intersection interface.
-        tol_sag, eps : float, optional
+        tol_sag : float, optional
             Ignored convergence tolerances.
         maxiter : int, optional
             Ignored iteration limit.
-        return_valid : bool, optional
-            If True, return a validity mask.
 
         Returns
         -------
-        Q : ndarray
+        Q, n, valid : ndarray, ndarray, ndarray
             Intersection points.
-        n : ndarray
-            Unit surface normals.
-        valid : ndarray, optional
-            Boolean validity mask, only returned when return_valid is True.
+            Unit surface normals, and a Boolean validity mask.
 
         """
-        return ray_sphere_intersect(P, S, self.params['c'],
-                                    return_valid=return_valid)
+        return ray_sphere_intersect(P, S, self.params['c'])
 
 
 class Conic(Shape):
@@ -461,9 +446,7 @@ class Conic(Shape):
         return conic_sag_param_partials(self.params['c'], self.params['k'],
                                         x, y, name)
 
-    def intersect(self, P, S, sag_and_normal=None, tol_sag=None, eps=None,
-                  maxiter=None,
-                  return_valid=False):
+    def intersect(self, P, S, sag_and_normal=None, tol_sag=None, maxiter=None):
         """Intersect rays with the conic.
 
         Parameters
@@ -474,26 +457,20 @@ class Conic(Shape):
             Unit direction cosines.
         sag_and_normal : callable, optional
             Ignored; accepted for the common shape-intersection interface.
-        tol_sag, eps : float, optional
+        tol_sag : float, optional
             Ignored convergence tolerances.
         maxiter : int, optional
             Ignored iteration limit.
-        return_valid : bool, optional
-            If True, return a validity mask.
 
         Returns
         -------
-        Q : ndarray
+        Q, n, valid : ndarray, ndarray, ndarray
             Intersection points.
-        n : ndarray
-            Unit surface normals.
-        valid : ndarray, optional
-            Boolean validity mask, only returned when return_valid is True.
+            Unit surface normals, and a Boolean validity mask.
 
         """
         p = self.params
-        return ray_conic_intersect(P, S, p['c'], p['k'],
-                                   return_valid=return_valid)
+        return ray_conic_intersect(P, S, p['c'], p['k'])
 
 
 class OffAxisConic(Shape):
@@ -528,9 +505,7 @@ class OffAxisConic(Shape):
         p = self.params
         return conic_sag_and_normal(p['c'], p['k'], x + p['dx'], y + p['dy'])
 
-    def intersect(self, P, S, sag_and_normal=None, tol_sag=None, eps=None,
-                  maxiter=None,
-                  return_valid=False):
+    def intersect(self, P, S, sag_and_normal=None, tol_sag=None, maxiter=None):
         """Intersect rays with the off-axis conic.
 
         Parameters
@@ -541,27 +516,21 @@ class OffAxisConic(Shape):
             Unit direction cosines.
         sag_and_normal : callable, optional
             Ignored; accepted for the common shape-intersection interface.
-        tol_sag, eps : float, optional
+        tol_sag : float, optional
             Ignored convergence tolerances.
         maxiter : int, optional
             Ignored iteration limit.
-        return_valid : bool, optional
-            If True, return a validity mask.
 
         Returns
         -------
-        Q : ndarray
+        Q, n, valid : ndarray, ndarray, ndarray
             Intersection points.
-        n : ndarray
-            Unit surface normals.
-        valid : ndarray, optional
-            Boolean validity mask, only returned when return_valid is True.
+            Unit surface normals, and a Boolean validity mask.
 
         """
         p = self.params
         return ray_conic_intersect(P, S, p['c'], p['k'],
-                                   dx=p['dx'], dy=p['dy'],
-                                   return_valid=return_valid)
+                                   dx=p['dx'], dy=p['dy'])
 
 
 class EvenAsphere(ConicSeedMixin, Shape):
@@ -976,32 +945,28 @@ class Surface:
     _analytic_intersect = False
 
     def __init__(self, shape=None, interaction=None, pose=None, material=None,
-                 aperture=None, grating=None, *, typ=None, P=None, n=None,
-                 R=None, bounding=None, tilt=None, decenter=None,
-                 tilt_radians=False, edge=None):
+                 aperture=None, grating=None, *, P=None, R=None,
+                 bounding=None, tilt=None, decenter=None, tilt_radians=False,
+                 edge=None):
         """Initialize a posed optical surface.
 
         Parameters
         ----------
         shape : Shape
             Sag-bearing shape object.
-        interaction : str or int, optional
+        interaction : str or int
             Surface interaction, one of reflect, refract, eval, or an STYPE
-            constant.  If omitted, typ is used.
+            constant.
         pose : tuple or object, optional
             Surface pose as (P, R) or an object with P and R attributes.
         material : callable or float, optional
-            Refractive-index model or value.  If omitted, n is used.
+            Refractive-index model or value.
         aperture : callable, optional
             Aperture predicate evaluated in local surface coordinates.
         grating : tuple, optional
             Diffraction grating data as (period, grating_vector, order).
-        typ : str or int, optional
-            Legacy alias for interaction.
         P : array_like, optional
             Surface vertex position.
-        n : callable or float, optional
-            Legacy alias for material.
         R : array_like, optional
             Surface rotation matrix.
         bounding : object, optional
@@ -1019,9 +984,7 @@ class Surface:
         if shape is None:
             raise TypeError('Surface requires a shape')
         if interaction is None:
-            interaction = typ
-        if interaction is None:
-            raise TypeError('Surface requires an interaction or typ')
+            raise TypeError('Surface requires an interaction')
         if pose is not None:
             try:
                 P, R = pose
@@ -1035,8 +998,6 @@ class Surface:
         P = _ensure_P_vec(P)
         R = _none_or_rotmat(R)
         P, R = _apply_tilt_decenter(P, R, tilt, decenter, tilt_radians)
-        if material is None:
-            material = n
         _validate_n_and_typ(material, typ)
 
         self.shape = shape
@@ -1096,8 +1057,7 @@ class Surface:
         S_diff = np.where(valid[..., np.newaxis], S_diff, S_specular)
         return S_diff, valid
 
-    def intersect(self, P, S, tol_sag=None, eps=None, maxiter=None,
-                  return_valid=False):
+    def intersect(self, P, S, tol_sag=None, maxiter=None):
         """Intersect rays with the surface shape.
 
         Parameters
@@ -1108,34 +1068,25 @@ class Surface:
             Unit direction cosines in the surface local frame.
         tol_sag : float, optional
             Absolute convergence tolerance on the surface residual.
-        eps : float, optional
-            Deprecated alias for tol_sag.
         maxiter : int, optional
             Maximum Newton iterations for non-analytic shapes.
-        return_valid : bool, optional
-            If True, return a validity mask.
 
         Returns
         -------
-        Q : ndarray
+        Q, n, valid : ndarray, ndarray, ndarray
             Intersection points.
-        n : ndarray
-            Unit surface normals.
-        valid : ndarray, optional
-            Boolean validity mask, only returned when return_valid is True.
+            Unit surface normals, and a Boolean validity mask.
 
         """
-        tol_sag = resolve_tol_sag(tol_sag, eps)
+        tol_sag = resolve_tol_sag(tol_sag)
         if hasattr(self.shape, 'intersect'):
             return self.shape.intersect(P, S, self.sag_and_normal,
                                         tol_sag=tol_sag,
-                                        maxiter=maxiter,
-                                        return_valid=return_valid)
+                                        maxiter=maxiter)
         if maxiter is None:
             maxiter = SURFACE_INTERSECTION_DEFAULT_MAXITER
         return newton_intersect(P, S, self.sag_and_normal, tol_sag=tol_sag,
-                                maxiter=maxiter,
-                                return_valid=return_valid)
+                                maxiter=maxiter)
 
 
 __all__ = [

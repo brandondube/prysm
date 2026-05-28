@@ -765,8 +765,8 @@ class LensData:
 
     def _build_surface(self, row, P, R=None):
         return Surface(
-            shape=row.build_shape(), typ=row.typ, P=P, R=R,
-            n=_as_material_callable(row.material),
+            shape=row.build_shape(), interaction=row.typ, P=P, R=R,
+            material=_as_material_callable(row.material),
             bounding=row.bounding, aperture=row.aperture, grating=row.grating,
             edge=getattr(row, 'edge', None),
         )

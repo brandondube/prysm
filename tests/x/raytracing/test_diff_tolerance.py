@@ -88,7 +88,7 @@ def bundle(ld):
     symmetry).
     """
     return launch(ld, Field(2.5, 2.5), WVL, Sampling.rect(n=7),
-                  epd=10.0, pupil_z=-5.0, aim_pupil=False)
+                  epd=10.0, pupil_z=-5.0)
 
 
 # ---------- sensitivity engines --------------------------------------------

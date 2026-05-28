@@ -58,8 +58,8 @@ def test_polynomial_shapes_use_conic_seeded_newton():
 def test_zernike_zero_coefs_matches_conic():
     c, k = 1 / 80.0, -1.0
     s_zern = zernike(c=c, k=k, normalization_radius=10.0,
-                             nms=[], coefs=[], typ='refl', P=[0, 0, 0])
-    s_conic = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
+                             nms=[], coefs=[], interaction='refl', P=[0, 0, 0])
+    s_conic = conic(c=c, k=k, interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_z, dx_z, dy_z = _sag_derivs(s_zern.shape, x, y)
     z_c, dx_c, dy_c = _sag_derivs(s_conic.shape, x, y)
@@ -73,7 +73,7 @@ def test_zernike_sag_matches_library():
     nms = [(2, 0), (3, 1), (4, 0), (3, -1)]
     coefs = [0.05, -0.02, 0.03, 0.01]
     s = zernike(c=0.0, k=0.0, normalization_radius=R_n,
-                        nms=nms, coefs=coefs, typ='refl', P=[0, 0, 0])
+                        nms=nms, coefs=coefs, interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_s = s.shape.sag(x, y)
     z_lib, _, _ = zernike_sum_der_xy(coefs, nms, x / R_n, y / R_n, norm=True)
@@ -84,7 +84,7 @@ def test_zernike_derivatives_central_diff():
     s = zernike(c=1 / 80.0, k=0.0, normalization_radius=10.0,
                         nms=[(2, 0), (4, 0), (3, 1), (3, -1)],
                         coefs=[0.05, 0.02, -0.03, 0.04],
-                        typ='refl', P=[0, 0, 0])
+                        interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     _, dx_an, dy_an = _sag_derivs(s.shape, x, y)
     dx_num, dy_num = _central_difference_xy(s.shape.sag, x, y)
@@ -97,8 +97,8 @@ def test_zernike_derivatives_central_diff():
 def test_xy_zero_coefs_matches_conic():
     c, k = 1 / 50.0, 0.0
     s_xy = xy(c=c, k=k, normalization_radius=1.0,
-                      mns=[], coefs=[], typ='refl', P=[0, 0, 0])
-    s_conic = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
+                      mns=[], coefs=[], interaction='refl', P=[0, 0, 0])
+    s_conic = conic(c=c, k=k, interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_xy, dx_xy, dy_xy = _sag_derivs(s_xy.shape, x, y)
     z_c, dx_c, dy_c = _sag_derivs(s_conic.shape, x, y)
@@ -112,7 +112,7 @@ def test_xy_sag_matches_direct_polynomial():
     mns = [(0, 0), (1, 0), (0, 1), (1, 1), (2, 0), (0, 2), (3, 1)]
     coefs = [0.1, 0.05, -0.04, 0.02, 0.01, -0.015, 0.003]
     s = xy(c=0.0, k=0.0, normalization_radius=R_n,
-                   mns=mns, coefs=coefs, typ='refl', P=[0, 0, 0])
+                   mns=mns, coefs=coefs, interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid(rmax=2.0, n=7)
     z_s = s.shape.sag(x, y)
     xn = x / R_n
@@ -125,7 +125,7 @@ def test_xy_derivatives_central_diff():
     s = xy(c=1 / 80.0, k=0.0, normalization_radius=10.0,
                    mns=[(0, 0), (2, 0), (0, 2), (1, 1), (3, 1), (2, 2)],
                    coefs=[0.0, 0.05, 0.04, 0.02, 0.005, 0.003],
-                   typ='refl', P=[0, 0, 0])
+                   interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     _, dx_an, dy_an = _sag_derivs(s.shape, x, y)
     dx_num, dy_num = _central_difference_xy(s.shape.sag, x, y)
@@ -138,8 +138,8 @@ def test_xy_derivatives_central_diff():
 def test_chebyshev_zero_coefs_matches_conic():
     c, k = 1 / 50.0, 0.0
     s_cb = chebyshev(c=c, k=k, x_norm=10.0, y_norm=10.0,
-                             mns=[], coefs=[], typ='refl', P=[0, 0, 0])
-    s_conic = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
+                             mns=[], coefs=[], interaction='refl', P=[0, 0, 0])
+    s_conic = conic(c=c, k=k, interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_cb, dx_cb, dy_cb = _sag_derivs(s_cb.shape, x, y)
     z_c, dx_c, dy_c = _sag_derivs(s_conic.shape, x, y)
@@ -153,7 +153,7 @@ def test_chebyshev_sag_matches_library():
     mns = [(0, 0), (2, 0), (0, 2), (1, 1), (4, 0), (2, 2), (3, 1)]
     coefs = [0.02, 0.05, 0.04, -0.03, 0.01, 0.005, 0.003]
     s = chebyshev(c=0.0, k=0.0, x_norm=x_norm, y_norm=y_norm,
-                          mns=mns, coefs=coefs, typ='refl', P=[0, 0, 0])
+                          mns=mns, coefs=coefs, interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_s = s.shape.sag(x, y)
     Tx = cheby1_seq(range(max(m for m, _ in mns) + 1), x / x_norm)
@@ -168,7 +168,7 @@ def test_chebyshev_derivatives_central_diff():
     s = chebyshev(c=1 / 80.0, k=0.0, x_norm=10.0, y_norm=10.0,
                           mns=[(0, 0), (2, 0), (0, 2), (1, 1), (4, 0)],
                           coefs=[0.01, 0.05, 0.04, -0.02, 0.01],
-                          typ='refl', P=[0, 0, 0])
+                          interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     _, dx_an, dy_an = _sag_derivs(s.shape, x, y)
     dx_num, dy_num = _central_difference_xy(s.shape.sag, x, y)
@@ -182,8 +182,8 @@ def test_jacobi_zero_coefs_matches_conic():
     c, k = 1 / 50.0, 0.0
     s_j = jacobi(c=c, k=k, normalization_radius=10.0,
                          alpha=0.0, beta=0.0, ns=[], coefs=[],
-                         typ='refl', P=[0, 0, 0])
-    s_conic = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
+                         interaction='refl', P=[0, 0, 0])
+    s_conic = conic(c=c, k=k, interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_j, dx_j, dy_j = _sag_derivs(s_j.shape, x, y)
     z_c, dx_c, dy_c = _sag_derivs(s_conic.shape, x, y)
@@ -199,7 +199,7 @@ def test_jacobi_sag_matches_library():
     coefs = [0.01, 0.02, 0.03, -0.01]
     s = jacobi(c=0.0, k=0.0, normalization_radius=R_n,
                        alpha=alpha, beta=beta, ns=ns, coefs=coefs,
-                       typ='refl', P=[0, 0, 0])
+                       interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_s = s.shape.sag(x, y)
     rsq = x * x + y * y
@@ -215,7 +215,7 @@ def test_jacobi_derivatives_central_diff(alpha, beta):
     s = jacobi(c=1 / 80.0, k=0.0, normalization_radius=10.0,
                        alpha=alpha, beta=beta, ns=[0, 1, 2, 3],
                        coefs=[0.0, 0.05, 0.02, -0.01],
-                       typ='refl', P=[0, 0, 0])
+                       interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     _, dx_an, dy_an = _sag_derivs(s.shape, x, y)
     dx_num, dy_num = _central_difference_xy(s.shape.sag, x, y)
@@ -228,7 +228,7 @@ def test_jacobi_no_origin_singularity():
     s = jacobi(c=1 / 80.0, k=0.0, normalization_radius=10.0,
                        alpha=0.0, beta=0.0, ns=[0, 1, 2, 3, 4, 5],
                        coefs=[0.01, 0.05, -0.03, 0.02, -0.01, 0.005],
-                       typ='refl', P=[0, 0, 0])
+                       interaction='refl', P=[0, 0, 0])
     x = np.array([0.0, 1e-12, 1.0])
     y = np.array([0.0, 1e-12, 0.5])
     z, dx, dy = _sag_derivs(s.shape, x, y)
@@ -246,16 +246,16 @@ def _polynomial_surfaces():
     return [
         zernike(c=c, k=k, normalization_radius=10.0,
                         nms=[(2, 0), (3, 1)], coefs=[0.05, 0.02],
-                        typ='refl', P=[0, 0, 0]),
+                        interaction='refl', P=[0, 0, 0]),
         xy(c=c, k=k, normalization_radius=10.0,
                    mns=[(2, 0), (1, 1)], coefs=[0.05, 0.02],
-                   typ='refl', P=[0, 0, 0]),
+                   interaction='refl', P=[0, 0, 0]),
         chebyshev(c=c, k=k, x_norm=10.0, y_norm=10.0,
                           mns=[(2, 0), (0, 2)], coefs=[0.05, 0.04],
-                          typ='refl', P=[0, 0, 0]),
+                          interaction='refl', P=[0, 0, 0]),
         jacobi(c=c, k=k, normalization_radius=10.0,
                        alpha=0.0, beta=0.0, ns=[1, 2], coefs=[0.05, 0.02],
-                       typ='refl', P=[0, 0, 0]),
+                       interaction='refl', P=[0, 0, 0]),
     ]
 
 
@@ -267,7 +267,7 @@ def test_polynomial_surfaces_intersect_lands_on_surface(_polynomial_surfaces):
                   [3.0, -2.0, -50.0]])
     S = np.array([[0.0, 0.0, 1.0]] * 4)
     for surf in _polynomial_surfaces:
-        Q, _, valid = surf.intersect(P, S, return_valid=True)
+        Q, _, valid = surf.intersect(P, S)
         assert valid.all(), f'{type(surf).__name__} intersect failed'
         z = surf.shape.sag(Q[..., 0], Q[..., 1])
         np.testing.assert_allclose(Q[..., 2], z, atol=1e-9,
@@ -280,22 +280,22 @@ def test_polynomial_surfaces_zero_pert_matches_conic_image_spot():
     c, k = 1 / 80.0, -1.0  # parabolic
     f = -1.0 / (2.0 * c)  # paraxial focus, negative side after reflection
     P, S = generate_collimated_rect_ray_grid(nrays=5, maxx=5, miny=-5, maxy=5)
-    s_image = plane(typ='eval', P=[0, 0, f])
+    s_image = plane(interaction='eval', P=[0, 0, f])
 
-    s_conic = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
+    s_conic = conic(c=c, k=k, interaction='refl', P=[0, 0, 0])
     res_conic = raytrace([s_conic, s_image], P, S, wvl=0.55)
     spot_c = res_conic.P[-1, ..., :2]
 
     polys = [
         zernike(c=c, k=k, normalization_radius=10.0,
-                        nms=[], coefs=[], typ='refl', P=[0, 0, 0]),
+                        nms=[], coefs=[], interaction='refl', P=[0, 0, 0]),
         xy(c=c, k=k, normalization_radius=10.0,
-                   mns=[], coefs=[], typ='refl', P=[0, 0, 0]),
+                   mns=[], coefs=[], interaction='refl', P=[0, 0, 0]),
         chebyshev(c=c, k=k, x_norm=10.0, y_norm=10.0,
-                          mns=[], coefs=[], typ='refl', P=[0, 0, 0]),
+                          mns=[], coefs=[], interaction='refl', P=[0, 0, 0]),
         jacobi(c=c, k=k, normalization_radius=10.0,
                        alpha=0.0, beta=0.0, ns=[], coefs=[],
-                       typ='refl', P=[0, 0, 0]),
+                       interaction='refl', P=[0, 0, 0]),
     ]
     for surf in polys:
         res = raytrace([surf, s_image], P, S, wvl=0.55)

@@ -1,17 +1,13 @@
-"""Metadata fallbacks for the analysis / launch / paraxial / plotting layer.
+"""Metadata helpers for the analysis / launch / paraxial / plotting layer.
 
 A LensData carries the system metadata (epd, wavelengths, n_ambient, stop
 index).  These helpers let the consuming functions default those values from a
-LensData when the caller omits them, while leaving plain Surface-sequence
-prescriptions to the historical explicit-argument behavior.
+LensData when the caller omits them.
 
 Duck-typed on purpose (no LensData import) so the layer modules can use them
 without an import cycle: a LensData exposes a wavelength resolver method, an epd
 attribute, etc.; a list of Surface does not.
 """
-
-# default wavelength for a bare Surface sequence carrying no metadata (HeNe).
-DEFAULT_WVL = 0.6328
 
 
 def lensdata_wavelength(prescription, wvl):
@@ -19,12 +15,14 @@ def lensdata_wavelength(prescription, wvl):
 
     When prescription is a LensData, defers to its wavelength resolver
     (None -> reference wavelength, a name string -> microns, a scalar ->
-    float).  Otherwise returns wvl, or DEFAULT_WVL when wvl is None.
+    float).  Otherwise an explicit wavelength is required.
     """
     resolver = getattr(prescription, 'wavelength', None)
     if callable(resolver):
         return float(resolver(wvl))
-    return DEFAULT_WVL if wvl is None else float(wvl)
+    if wvl is None:
+        raise TypeError('wavelength is required for prescriptions without metadata')
+    return float(wvl)
 
 
 def lensdata_epd(prescription, epd):

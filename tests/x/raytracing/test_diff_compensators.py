@@ -58,7 +58,7 @@ def singlet():
 
 def bundle(ld):
     return launch(ld, FLD, WVL, Sampling.rect(n=9),
-                  epd=EPD, pupil_z=-5.0, aim_pupil=False)
+                  epd=EPD, pupil_z=-5.0)
 
 
 def focus_compensator(ld):

@@ -32,13 +32,13 @@ WVL = 0.55
 def make_system(**over):
     p = dict(BASE, **over)
     n_glass = lambda w: p['ng']
-    s0 = conic(c=p['c0'], k=p['k0'], typ='refr', P=[0, 0, p['z0']], n=n_glass)
+    s0 = conic(c=p['c0'], k=p['k0'], interaction='refr', P=[0, 0, p['z0']], material=n_glass)
     kw1 = {}
     if p['tiltx1'] != 0.0:
         kw1 = dict(tilt=(0.0, 0.0, p['tiltx1']), tilt_radians=True)
-    s1 = conic(c=p['c1'], k=p['k1'], typ='refr',
-               P=[p['x1'], p['y1'], p['z1']], n=lambda w: 1.0, **kw1)
-    img = plane(typ='eval', P=[0, 0, p['zimg']])
+    s1 = conic(c=p['c1'], k=p['k1'], interaction='refr',
+               P=[p['x1'], p['y1'], p['z1']], material=lambda w: 1.0, **kw1)
+    img = plane(interaction='eval', P=[0, 0, p['zimg']])
     return [s0, s1, img]
 
 

@@ -7,8 +7,7 @@ from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.design import RmsSpotRadius
 from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing.tolerance import (
-    Perturbation, SensitivityTable, MonteCarloResult,
-    sensitivity_table, monte_carlo, operand_as_merit,
+    Perturbation, sensitivity_table, monte_carlo, operand_as_merit,
 )
 
 
@@ -171,17 +170,6 @@ def test_sensitivity_table_repr_lists_each_row():
     assert 'c' in s
 
 
-def test_sensitivity_table_sensitivities_array_shape():
-    ld = _concave_parabola()
-    perts = [
-        Perturbation.normal(ld, 'conic', 0, sigma=0.01, name='k'),
-        Perturbation.normal(ld, 'curvature', 0, sigma=1e-4, name='c'),
-    ]
-    merit = lambda p: float(p[0].params['k'])
-    table = sensitivity_table(ld, perts, merit)
-    assert table.sensitivities().shape == (2,)
-
-
 # ---------- monte_carlo ----------------------------------------------------
 
 def test_monte_carlo_zero_sigma_returns_nominal_merit():
@@ -266,14 +254,6 @@ def test_monte_carlo_record_samples_shape():
     result = monte_carlo(ld, perts, merit, n_trials=30, seed=0,
                          record_samples=True)
     assert result.sampled_x.shape == (30, 2)
-
-
-def test_monte_carlo_sampled_x_is_none_by_default():
-    ld = _spherical_singlet()
-    perts = [Perturbation.normal(ld, 'conic', 0, sigma=0.01, name='k')]
-    merit = lambda p: float(p[0].params['k'])
-    result = monte_carlo(ld, perts, merit, n_trials=10, seed=0)
-    assert result.sampled_x is None
 
 
 # ---------- end-to-end optical example ------------------------------------

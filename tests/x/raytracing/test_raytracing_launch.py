@@ -112,8 +112,8 @@ def _simple_collimating_mirror():
     """One concave mirror at z=0 with c<0 and rays at -z; image at z=-40."""
     c = -1 / 80.0
     f = 1.0 / (2.0 * c)  # = -40
-    s = conic(c=c, k=-1.0, typ='refl', P=[0, 0, 0])
-    img = plane(typ='eval', P=[0, 0, f])
+    s = conic(c=c, k=-1.0, interaction='refl', P=[0, 0, 0])
+    img = plane(interaction='eval', P=[0, 0, f])
     return [s, img]
 
 
@@ -198,12 +198,12 @@ def test_launch_collimated_beam_traces_to_focus():
 
 def _refractive_singlet_with_internal_stop(n_glass=1.5):
     """A two-surface lens with an extra plane between them acting as a stop."""
-    s1 = conic(c=1 / 50.0, k=0.0, typ='refr',
-                       P=[0, 0, 0], n=lambda w: n_glass)
-    stop = plane(typ='eval', P=[0, 0, 2.5])
-    s2 = conic(c=-1 / 50.0, k=0.0, typ='refr',
-                       P=[0, 0, 5.0], n=lambda w: 1.0)
-    img = plane(typ='eval', P=[0, 0, 100.0])
+    s1 = conic(c=1 / 50.0, k=0.0, interaction='refr',
+                       P=[0, 0, 0], material=lambda w: n_glass)
+    stop = plane(interaction='eval', P=[0, 0, 2.5])
+    s2 = conic(c=-1 / 50.0, k=0.0, interaction='refr',
+                       P=[0, 0, 5.0], material=lambda w: 1.0)
+    img = plane(interaction='eval', P=[0, 0, 100.0])
     return [s1, stop, s2, img]
 
 

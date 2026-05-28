@@ -64,15 +64,16 @@ def _optiland_cooke_triplet():
         prescription.append(
             Surface(
                 shape=Conic(1 / radius, 0),
-                typ='refr',
+                interaction='refr',
                 P=[0, 0, z],
-                n=material,
+                material=material,
                 aperture=circular_aperture(20),
             )
         )
         z += thickness
     prescription.append(
-        Surface(shape=Plane(), typ='eval', P=[0, 0, z], n=materials.air)
+        Surface(shape=Plane(), interaction='eval', P=[0, 0, z],
+                material=materials.air)
     )
     return prescription
 

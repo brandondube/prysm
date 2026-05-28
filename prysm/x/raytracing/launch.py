@@ -220,7 +220,7 @@ def _finite_PS(pupil_xy, pupil_z, field):
 
 def launch(prescription, field, wavelength, sampling, *,
            epd=None, pupil_extent=None, n_ambient=1.0, pupil_z=None,
-           aim_pupil=True, aim_to=None, aim_target=(0.0, 0.0)):
+           aim_to=None, aim_target=(0.0, 0.0)):
     """Build (P, S) for one field, wavelength, and pupil sampling.
 
     Combines a Field, a Sampling pattern, and a prescription into absolute
@@ -234,9 +234,8 @@ def launch(prescription, field, wavelength, sampling, *,
     at the launch plane so each ray crosses its pupil coordinate at the
     entrance-pupil z, and finite-conjugate bundles aim at the entrance-pupil
     plane.  This makes the pupil coordinate of every ray meaningful for any
-    stop location, not only a stop at the first surface.  Pass aim_pupil=False
-    (or aim_to=...) to suppress it; a bare Surface sequence, which carries no
-    stop, always uses the legacy first-surface launch.
+    stop location, not only a stop at the first surface.  Pass aim_to=... to
+    run explicit ray aiming instead of paraxial entrance-pupil routing.
 
     Parameters
     ----------
@@ -263,11 +262,6 @@ def launch(prescription, field, wavelength, sampling, *,
         the first surface vertex z.  With entrance-pupil routing active the
         landing on the pupil is unaffected by this choice; it only sets where
         along each ray the launch point sits.
-    aim_pupil : bool, optional
-        when True (default) and the stop is known, route the bundle through
-        the paraxial entrance pupil (see above).  False reproduces the legacy
-        behavior: the pupil sampling is placed at pupil_z, centered on the
-        axis, regardless of stop location.
     aim_to : int, optional
         if given, run per-ray stop aiming so each ray lands at aim_target on
         prescription[aim_to].
@@ -302,11 +296,10 @@ def launch(prescription, field, wavelength, sampling, *,
         pupil_z = float(prescription[0].P[2])
     pupil_z = float(pupil_z)
 
-    # paraxial entrance-pupil routing: only when the stop is known (LensData)
-    # and the caller has not asked for explicit ray aiming.  None for a bare
-    # Surface sequence, which keeps the legacy first-surface launch.
+    # paraxial entrance-pupil routing: only when the stop is known and the
+    # caller has not asked for explicit ray aiming.
     ep_z = None
-    if aim_pupil and aim_to is None:
+    if aim_to is None:
         ep_z = entrance_pupil_z(prescription, wavelength, n_ambient)
 
     if field.kind == 'angle':

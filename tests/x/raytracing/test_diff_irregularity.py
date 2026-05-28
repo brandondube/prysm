@@ -48,13 +48,13 @@ def make_system(irr=None):
     """Two-surface refractor.  irr=((n, m), amp) puts that Zernike mode on s0."""
     n_glass = lambda w: NG
     if irr is None:
-        s0 = conic(c=C0, k=K0, typ='refr', P=[0, 0, 0.0], n=n_glass)
+        s0 = conic(c=C0, k=K0, interaction='refr', P=[0, 0, 0.0], material=n_glass)
     else:
         (n, m), amp = irr
         s0 = zernike(c=C0, k=K0, normalization_radius=RN, nms=[(n, m)],
-                     coefs=[amp], typ='refr', P=[0, 0, 0.0], n=n_glass)
-    s1 = conic(c=-1 / 55.0, k=0.2, typ='refr', P=[0, 0, 6.0], n=lambda w: 1.0)
-    img = plane(typ='eval', P=[0, 0, 56.0])
+                     coefs=[amp], interaction='refr', P=[0, 0, 0.0], material=n_glass)
+    s1 = conic(c=-1 / 55.0, k=0.2, interaction='refr', P=[0, 0, 6.0], material=lambda w: 1.0)
+    img = plane(interaction='eval', P=[0, 0, 56.0])
     return [s0, s1, img]
 
 
@@ -166,7 +166,7 @@ def singlet():
 
 def _bundle(ld):
     return launch(ld, Field(2.5, 2.5), 0.5, Sampling.rect(n=7),
-                  epd=10.0, pupil_z=-5.0, aim_pupil=False)
+                  epd=10.0, pupil_z=-5.0)
 
 
 def _perts(ld):

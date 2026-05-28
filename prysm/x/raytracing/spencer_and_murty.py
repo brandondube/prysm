@@ -136,18 +136,13 @@ def _mark_inactive_history(Pjp1, Sjp1, OPL_segment, active):
     return Pjp1, Sjp1
 
 
-def resolve_tol_sag(tol_sag=DEFAULT_TOL_SAG, eps=None):
+def resolve_tol_sag(tol_sag=DEFAULT_TOL_SAG):
     """Resolve the surface-residual convergence tolerance.
-
-    A non-None eps (the legacy step-tolerance keyword) takes precedence over
-    tol_sag; a None tol_sag falls back to DEFAULT_TOL_SAG.
 
     Parameters
     ----------
     tol_sag : float or None
         absolute convergence tolerance on the surface residual Z - sag.
-    eps : float or None, optional
-        deprecated alias for tol_sag; used when not None.
 
     Returns
     -------
@@ -155,8 +150,6 @@ def resolve_tol_sag(tol_sag=DEFAULT_TOL_SAG, eps=None):
         the resolved tolerance.
 
     """
-    if eps is not None:
-        return eps
     if tol_sag is None:
         return DEFAULT_TOL_SAG
     return tol_sag
@@ -164,9 +157,7 @@ def resolve_tol_sag(tol_sag=DEFAULT_TOL_SAG, eps=None):
 
 def newton_raphson_solve_s(P1, S, sag_and_normal, s1=0.0,
                            tol_sag=DEFAULT_TOL_SAG,
-                           eps=None,
-                           maxiter=SURFACE_INTERSECTION_DEFAULT_MAXITER,
-                           return_valid=False):
+                           maxiter=SURFACE_INTERSECTION_DEFAULT_MAXITER):
     """Use Newton-Raphson iteration to solve for intersection between a ray and surface.
 
     Parameters
@@ -186,20 +177,14 @@ def newton_raphson_solve_s(P1, S, sag_and_normal, s1=0.0,
         Absolute convergence tolerance on the surface residual Z - sag.
     maxiter : int
         maximum number of iterations to allow
-    return_valid : bool, optional
-        if True, also return a length-N boolean mask indicating which rays
-        converged within maxiter.  Non-converged rays still appear in
-        Pj/n_hat as NaN, but the mask makes the failure explicit.
-
     Returns
     -------
-    Pj, n_hat : ndarray, ndarray
+    Pj, n_hat, valid : ndarray, ndarray, ndarray
         final position of the ray intersection, and the unit surface normal
-        at that point.  if return_valid is True, also returns a length-N
-        boolean array.
+        at that point, plus a length-N boolean convergence mask.
 
     """
-    tol_sag = resolve_tol_sag(tol_sag, eps)
+    tol_sag = resolve_tol_sag(tol_sag)
     dtype = P1.dtype
     nrays = P1.shape[0]
     # Single-alloc init: s1 may be a scalar (broadcasts to all rays) OR a
@@ -250,19 +235,15 @@ def newton_raphson_solve_s(P1, S, sag_and_normal, s1=0.0,
     if mask.size > 0:
         Pj_out[mask] = np.nan
         n_out[mask] = np.nan
-    if return_valid:
-        valid = np.ones(nrays, dtype=bool)
-        if mask.size > 0:
-            valid[mask] = False
-        return Pj_out, n_out, valid
-    return Pj_out, n_out
+    valid = np.ones(nrays, dtype=bool)
+    if mask.size > 0:
+        valid[mask] = False
+    return Pj_out, n_out, valid
 
 
 def intersect(P0, S, sag_and_normal, s1=0,
               tol_sag=DEFAULT_TOL_SAG,
-              eps=None,
-              maxiter=SURFACE_INTERSECTION_DEFAULT_MAXITER,
-              return_valid=False):
+              maxiter=SURFACE_INTERSECTION_DEFAULT_MAXITER):
     """Find the intersection of a ray and a surface.
 
     Parameters
@@ -280,23 +261,17 @@ def intersect(P0, S, sag_and_normal, s1=0,
         initial guess for the length along the ray from (X1, Y1, 0) to reach the surface
     tol_sag : float
         absolute convergence tolerance on the surface residual Z - sag.
-    eps : float, optional
-        deprecated alias for tol_sag; used when not None.
     maxiter : int
         maximum number of iterations to allow
-    return_valid : bool, optional
-        if True, also return a length-N boolean mask flagging rays that
-        converged within maxiter.
 
     Returns
     -------
-    Pj, n_hat : ndarray, ndarray
+    Pj, n_hat, valid : ndarray, ndarray, ndarray
         final position of the ray intersection, and the unit surface normal
-        at that point.  if return_valid is True, also returns a length-N
-        boolean array.
+        at that point, plus a length-N boolean convergence mask.
 
     """
-    tol_sag = resolve_tol_sag(tol_sag, eps)
+    tol_sag = resolve_tol_sag(tol_sag)
     # batch support -- ellipsis skip any early dimensions, then replace
     # dot with a multiply
     P0, S = np.atleast_2d(P0, S)
@@ -311,8 +286,7 @@ def intersect(P0, S, sag_and_normal, s1=0,
     # P1 is (N,3)
     # then use newton's method to find and go to the intersection
     return newton_raphson_solve_s(P1, S, sag_and_normal, s1,
-                                  tol_sag=tol_sag, maxiter=maxiter,
-                                  return_valid=return_valid)
+                                  tol_sag=tol_sag, maxiter=maxiter)
 
 
 def transform_to_global_coords(XYZ, P, S, R=None):
@@ -546,8 +520,7 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1, tol_sag=DEFAULT_TOL_SAG):
     for j, surf in enumerate(surfaces):
         surf_idx = j + 1  # 1-based index recorded in status.real
         P0, Sj = transform_to_local_coords(Pj, surf.P, Sj, surf.R)
-        Pj, r, valid = surf.intersect(P0, Sj, tol_sag=tol_sag,
-                                      return_valid=True)
+        Pj, r, valid = surf.intersect(P0, Sj, tol_sag=tol_sag)
 
         active = (status.imag == 0)
         if not valid.all():

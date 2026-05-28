@@ -1,6 +1,5 @@
-"""Tests that analysis / launch / paraxial / plotting default the
-system metadata (wavelength, epd, stop index) from a LensData when omitted,
-while a bare Surface sequence keeps the historical explicit-argument behavior.
+"""Tests that analysis / launch / paraxial / plotting default system metadata
+from a LensData when omitted, and require explicit metadata otherwise.
 """
 import numpy as np
 import pytest
@@ -11,7 +10,7 @@ from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing.paraxial import effective_focal_length, first_order
 from prysm.x.raytracing.analysis import distortion, field_curvature
 from prysm.x.raytracing._meta import (
-    DEFAULT_WVL, lensdata_wavelength, lensdata_epd, lensdata_stop_index,
+    lensdata_wavelength, lensdata_epd, lensdata_stop_index,
 )
 
 
@@ -44,9 +43,10 @@ def test_lensdata_wavelength_defaults_and_resolves_names():
     assert lensdata_wavelength(ld, 0.5) == pytest.approx(0.5)
 
 
-def test_lensdata_wavelength_falls_back_for_surface_list():
+def test_surface_list_requires_explicit_wavelength():
     surfs = list(_singlet().surfaces)
-    assert lensdata_wavelength(surfs, None) == DEFAULT_WVL
+    with pytest.raises(TypeError, match='wavelength is required'):
+        lensdata_wavelength(surfs, None)
     assert lensdata_wavelength(surfs, 0.5) == pytest.approx(0.5)
 
 
@@ -96,7 +96,7 @@ def test_launch_defaults_epd_from_lensdata():
     np.testing.assert_allclose(S1, S2)
 
 
-def test_launch_surface_list_still_requires_epd():
+def test_launch_surface_list_requires_epd():
     surfs = list(_singlet().surfaces)
     with pytest.raises(ValueError, match='entrance pupil'):
         launch(surfs, Field(0, 0), 0.55, Sampling.hex(nrings=2))

@@ -62,7 +62,7 @@ def build_surface(spec):
     """Build a posed Surface from a normalized parser spec."""
     return Surface(
         shape=build_shape(spec),
-        typ=spec.typ, P=spec.P, n=spec.n, R=spec.R,
+        interaction=spec.typ, P=spec.P, material=spec.n, R=spec.R,
         bounding=spec.bounding, aperture=spec.aperture,
         tilt=spec.tilt, decenter=spec.decenter,
         tilt_radians=spec.tilt_radians, grating=spec.grating,

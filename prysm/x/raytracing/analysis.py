@@ -29,6 +29,7 @@ from .spencer_and_murty import raytrace
 from .opt import (
     xp_reference_sphere,
     opd_from_raytrace,
+    opd_from_raytrace_eic,
     _intersect_lines,
     _valid_mask,
 )
@@ -150,7 +151,8 @@ def _apply_field_and_output(opd, x_pupil, y_pupil, field, output, wavelength):
 def wavefront(prescription, P, S, wavelength, *,
               n_ambient=1.0, chief_index=None,
               axis_point=None, axis_dir=None, P_xp=None,
-              pupil_coords=None, field=None, output='length'):
+              pupil_coords=None, field=None, output='length',
+              method='sphere'):
     """Trace and compute OPD on the chief-ray-centered reference sphere.
 
     Composes spencer_and_murty.raytrace, opt.xp_reference_sphere, and
@@ -193,6 +195,13 @@ def wavefront(prescription, P, S, wavelength, *,
         equivalent to -(OPD + launch_tilt) / wavelength.  The 'waves'
         conversion assumes the prescription is in millimeters and wavelength
         is in microns (waves = OPD_mm / (wavelength_um * 1e-3)).
+    method : str, optional
+        'sphere' (default) uses the legacy explicit reference-sphere
+        intersection.  'eic' uses the cancellation-free Welford form for
+        finite conjugates and falls back to a planar reference (Mikš limit)
+        when the reference-sphere radius is effectively infinite -- bit
+        identical to 'sphere' for benign systems, more robust for long /
+        afocal conjugates.
 
     Returns
     -------
@@ -220,11 +229,19 @@ def wavefront(prescription, P, S, wavelength, *,
     else:
         P_xp = np.asarray(P_xp, dtype=P.dtype)
     filtered_chief = _filtered_chief_index(valid, chief_index)
-    opd = opd_from_raytrace(trace.P[:, valid], trace.S[:, valid],
-                            trace.OPL[:, valid],
-                            P_img=P_chief_final, P_xp=P_xp,
-                            n_image=n_ambient,
-                            chief_index=filtered_chief)
+    if method == 'eic':
+        opd_fn = opd_from_raytrace_eic
+    elif method == 'sphere':
+        opd_fn = opd_from_raytrace
+    else:
+        raise ValueError(
+            f"wavefront method must be 'sphere' or 'eic', got {method!r}"
+        )
+    opd = opd_fn(trace.P[:, valid], trace.S[:, valid],
+                 trace.OPL[:, valid],
+                 P_img=P_chief_final, P_xp=P_xp,
+                 n_image=n_ambient,
+                 chief_index=filtered_chief)
     if pupil_coords is None:
         # pupil coordinate is the launch offset from the chief ray, so the
         # parameterization is correct even when the bundle was routed through

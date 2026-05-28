@@ -38,10 +38,10 @@ def test_paraxial_image_solve_single_refracting_sphere():
     expected_image_z = n_glass * R / (n_glass - 1.0)  # 150
 
     prescription = [
-        sphere(c=1.0 / R, typ='refr', P=np.array([0., 0., 0.]),
-                       n=lambda wvl: n_glass),
+        sphere(c=1.0 / R, interaction='refr', P=np.array([0., 0., 0.]),
+                       material=lambda wvl: n_glass),
         # eval plane somewhere downstream so the rays haven't converged yet
-        plane(typ='eval', P=np.array([0., 0., 100.])),
+        plane(interaction='eval', P=np.array([0., 0., 100.])),
     ]
     P_img = paraxial_image_solve(prescription, z=0, epd=10.0)
     np.testing.assert_allclose(P_img[2], expected_image_z, rtol=1e-3)
@@ -53,9 +53,9 @@ def test_paraxial_image_solve_paraxial_fraction_kwarg():
     """Sweeping paraxial_fraction across orders of magnitude should give the
     same paraxial image position; the kwarg is therefore live."""
     prescription = [
-        sphere(c=1 / 50.0, typ='refr', P=np.array([0., 0., 0.]),
-                       n=lambda wvl: 1.5),
-        plane(typ='eval', P=np.array([0., 0., 100.])),
+        sphere(c=1 / 50.0, interaction='refr', P=np.array([0., 0., 0.]),
+                       material=lambda wvl: 1.5),
+        plane(interaction='eval', P=np.array([0., 0., 100.])),
     ]
     img_default = paraxial_image_solve(prescription, z=0, epd=10.0)
     img_smaller = paraxial_image_solve(prescription, z=0, epd=10.0,
@@ -74,8 +74,8 @@ def test_aim_single_ray_hits_target_on_simple_mirror():
     """Aim one ray (a 1-row bundle) at a transverse target on a flat eval
     surface, exercising the reflective-geometry path."""
     prescription = [
-        conic(c=1 / 200.0, k=-1.0, typ='refl', P=np.array([0., 0., 0.])),
-        plane(typ='eval', P=np.array([0., 0., -50.])),  # rays head -z after reflection
+        conic(c=1 / 200.0, k=-1.0, interaction='refl', P=np.array([0., 0., 0.])),
+        plane(interaction='eval', P=np.array([0., 0., -50.])),  # rays head -z after reflection
     ]
     # incoming collimated ray at (?, ?, -100) → +z; we adjust the (x, y)
     # launch position so the ray hits target_xy=(2, -1) on the eval plane.
@@ -85,7 +85,7 @@ def test_aim_single_ray_hits_target_on_simple_mirror():
     P_aimed, converged = aim_rays(P, S, prescription, surface_index=1,
                                   target_xy=(2.0, -1.0), wvl=0.55)
     assert bool(converged[0])
-    # launch z is preserved (no legacy z-zeroing)
+    # launch z is preserved by the aiming adjustment
     assert P_aimed[0, 2] == -100.0
     from prysm.x.raytracing.spencer_and_murty import raytrace
     trace = raytrace(prescription, P_aimed, S, wvl=0.55)
@@ -101,8 +101,8 @@ def _tir_unaimable_bundle():
     This drives the all-rays-dead break path in aim_rays.
     """
     prescription = [
-        plane(typ='refr', P=np.array([0., 0., 0.]), n=lambda w: 1.0),
-        plane(typ='eval', P=np.array([0., 0., 10.])),
+        plane(interaction='refr', P=np.array([0., 0., 0.]), material=lambda w: 1.0),
+        plane(interaction='eval', P=np.array([0., 0., 10.])),
     ]
     theta = np.deg2rad(60.0)
     P = np.array([[0., 0., -100.]])
@@ -133,12 +133,12 @@ def test_aim_single_ray_strict_false_does_not_raise():
 def _singlet_with_internal_stop(n_glass=1.5):
     """Two refractive conics with a plane stop between them."""
     return [
-        conic(c=1 / 50.0, k=0.0, typ='refr', P=np.array([0., 0., 0.]),
-              n=lambda w: n_glass),
-        plane(typ='eval', P=np.array([0., 0., 2.5])),
-        conic(c=-1 / 50.0, k=0.0, typ='refr', P=np.array([0., 0., 5.]),
-              n=lambda w: 1.0),
-        plane(typ='eval', P=np.array([0., 0., 100.])),
+        conic(c=1 / 50.0, k=0.0, interaction='refr', P=np.array([0., 0., 0.]),
+              material=lambda w: n_glass),
+        plane(interaction='eval', P=np.array([0., 0., 2.5])),
+        conic(c=-1 / 50.0, k=0.0, interaction='refr', P=np.array([0., 0., 5.]),
+              material=lambda w: 1.0),
+        plane(interaction='eval', P=np.array([0., 0., 100.])),
     ]
 
 
@@ -184,10 +184,10 @@ def test_aim_rays_onto_nonzero_target():
 def test_aim_rays_onto_tilted_surface():
     """Aiming works when the aim surface is tilted out of the xy plane."""
     presc = [
-        conic(c=1 / 50.0, k=0.0, typ='refr', P=np.array([0., 0., 0.]),
-              n=lambda w: 1.5),
-        plane(typ='eval', P=np.array([0., 0., 3.0]), tilt=(0., 8., 0.)),
-        plane(typ='eval', P=np.array([0., 0., 50.])),
+        conic(c=1 / 50.0, k=0.0, interaction='refr', P=np.array([0., 0., 0.]),
+              material=lambda w: 1.5),
+        plane(interaction='eval', P=np.array([0., 0., 3.0]), tilt=(0., 8., 0.)),
+        plane(interaction='eval', P=np.array([0., 0., 50.])),
     ]
     P, S = _collimated_y_fan(5, half=2.0, z0=-10.0, theta_deg=1.5)
     P_aim, converged = aim_rays(P, S, presc, surface_index=1,
@@ -202,8 +202,8 @@ def test_aim_rays_masks_divergent_ray():
     """A ray that TIRs for every launch is flagged not-converged and the
     rest of the bundle still aims (strict=False)."""
     presc = [
-        plane(typ='refr', P=np.array([0., 0., 0.]), n=lambda w: 1.0),
-        plane(typ='eval', P=np.array([0., 0., 10.])),
+        plane(interaction='refr', P=np.array([0., 0., 0.]), material=lambda w: 1.0),
+        plane(interaction='eval', P=np.array([0., 0., 10.])),
     ]
     # ray 0 is steep enough to TIR (glass -> air); rays 1, 2 are gentle
     S = np.array([
@@ -228,8 +228,8 @@ def test_aim_rays_masks_divergent_ray():
 def test_aim_rays_strict_raises_listing_indices():
     """strict=True raises a RuntimeError that names the un-aimable ray."""
     presc = [
-        plane(typ='refr', P=np.array([0., 0., 0.]), n=lambda w: 1.0),
-        plane(typ='eval', P=np.array([0., 0., 10.])),
+        plane(interaction='refr', P=np.array([0., 0., 0.]), material=lambda w: 1.0),
+        plane(interaction='eval', P=np.array([0., 0., 10.])),
     ]
     S = np.array([
         [0., np.sin(np.deg2rad(2.)), np.cos(np.deg2rad(2.))],

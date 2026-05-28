@@ -28,19 +28,19 @@ def _concave_parabola():
     """Parabolic mirror at z=0, image at parabolic focus z=-40."""
     c = -1 / 80.0
     f = 1.0 / (2.0 * c)  # = -40
-    s = conic(c=c, k=-1.0, typ='refl', P=[0, 0, 0])
-    img = plane(typ='eval', P=[0, 0, f])
+    s = conic(c=c, k=-1.0, interaction='refl', P=[0, 0, 0])
+    img = plane(interaction='eval', P=[0, 0, f])
     return [s, img]
 
 
 def _spherical_singlet():
     """Two-surface BK7-like singlet, f ~= 50 mm."""
     n_glass = lambda w: 1.5
-    s1 = conic(c=1 / 50.0, k=0.0, typ='refr',
-                       P=[0, 0, 0], n=n_glass)
-    s2 = conic(c=-1 / 50.0, k=0.0, typ='refr',
-                       P=[0, 0, 5.0], n=lambda w: 1.0)
-    img = plane(typ='eval', P=[0, 0, 100.0])
+    s1 = conic(c=1 / 50.0, k=0.0, interaction='refr',
+                       P=[0, 0, 0], material=n_glass)
+    s2 = conic(c=-1 / 50.0, k=0.0, interaction='refr',
+                       P=[0, 0, 5.0], material=lambda w: 1.0)
+    img = plane(interaction='eval', P=[0, 0, 100.0])
     return [s1, s2, img]
 
 
@@ -316,11 +316,11 @@ def test_axial_color_varying_index_changes_bfd():
     """A toy dispersion (n decreasing with wvl) should monotonically shift
     the paraxial image."""
     n_glass = lambda w: 1.6 - 0.1 * (w - 0.45) / 0.2
-    s1 = conic(c=1 / 50.0, k=0.0, typ='refr',
-                       P=[0, 0, 0], n=n_glass)
-    s2 = conic(c=-1 / 50.0, k=0.0, typ='refr',
-                       P=[0, 0, 5.0], n=lambda w: 1.0)
-    img = plane(typ='eval', P=[0, 0, 100.0])
+    s1 = conic(c=1 / 50.0, k=0.0, interaction='refr',
+                       P=[0, 0, 0], material=n_glass)
+    s2 = conic(c=-1 / 50.0, k=0.0, interaction='refr',
+                       P=[0, 0, 5.0], material=lambda w: 1.0)
+    img = plane(interaction='eval', P=[0, 0, 100.0])
     presc = [s1, s2, img]
     bfd = axial_color(presc, [0.45, 0.55, 0.65])
     # n decreasing → focal length increasing (weaker glass) → bfd grows

@@ -620,7 +620,7 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, n_ambient=1.0,
             Reff, Q, Pj_prev, trace.S[j], Pdot, Sdot, Qdot_j, Rdot_j)
 
         # nominal local intersection + normal
-        Q_loc, n_hat = surf.intersect(P0, S_loc, tol_sag=tol_sag)
+        Q_loc, n_hat, _ = surf.intersect(P0, S_loc, tol_sag=tol_sag)
 
         # shape derivatives at the intersection
         Xj = Q_loc[..., 0]

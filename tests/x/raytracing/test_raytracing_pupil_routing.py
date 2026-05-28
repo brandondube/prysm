@@ -72,7 +72,7 @@ def test_entrance_pupil_z_matches_first_order():
 def test_entrance_pupil_z_none_without_stop():
     # a bare Surface sequence carries no stop_index
     presc = list(cooke().to_surfaces())
-    assert entrance_pupil_z(presc) is None
+    assert entrance_pupil_z(presc, wvl=WVL) is None
 
 
 def test_entrance_pupil_z_at_first_surface_when_stop_is_first():
@@ -92,25 +92,13 @@ def test_routed_chief_passes_through_stop_center_paraxially():
     np.testing.assert_allclose(xy_at_stop, 0.0, atol=1e-5)
 
 
-def test_aim_pupil_false_is_legacy_axis_launch():
-    """Opt-out reproduces the on-axis launch at the first surface."""
-    ld = cooke()
-    f = Field(0.0, 14.0, unit='deg')
-    P, _ = launch(ld, f, WVL, Sampling.chief(), aim_pupil=False)
-    np.testing.assert_allclose(P[0, :2], 0.0, atol=1e-12)
-    np.testing.assert_allclose(P[0, 2], 0.0, atol=1e-12)  # first surface vertex
-    # routed launch is shifted off axis at the launch plane
-    P2, _ = launch(ld, f, WVL, Sampling.chief())
-    assert abs(float(P2[0, 1])) > 1e-3
-
-
 def test_routing_noop_for_stop_at_first_surface():
     """With the stop at surface 1 the EP is the first surface: no shift."""
     ld = biconvex_stop_first()
     f = Field(0.0, 10.0, unit='deg')
-    P_routed, _ = launch(ld, f, WVL, Sampling.chief())
-    P_legacy, _ = launch(ld, f, WVL, Sampling.chief(), aim_pupil=False)
-    np.testing.assert_allclose(P_routed, P_legacy, atol=1e-12)
+    P, _ = launch(ld, f, WVL, Sampling.chief())
+    np.testing.assert_allclose(P[0, :2], 0.0, atol=1e-12)
+    np.testing.assert_allclose(P[0, 2], 0.0, atol=1e-12)
 
 
 # ---------- analysis consequences vs optiland -------------------------------
@@ -139,12 +127,6 @@ def test_rms_spot_matches_optiland():
     tr = raytrace(ld, P, S, WVL)
     r = float(rms_spot_radius(tr.P[-1], status=tr.status))
     assert r == pytest.approx(0.012117, rel=0.03)
-    # and the un-routed launch is grossly inflated (the bug this guards)
-    P0, S0 = launch(ld, Field(0.0, 20.0, unit='deg'), WVL,
-                    Sampling.hex(nrings=6), aim_pupil=False)
-    tr0 = raytrace(ld, P0, S0, WVL)
-    r0 = float(rms_spot_radius(tr0.P[-1], status=tr0.status))
-    assert r0 > 10 * r
 
 
 def test_wavefront_rms_matches_optiland():
@@ -168,7 +150,7 @@ def test_wavefront_default_chief_is_hex_center():
 
     With the correct (center) chief the reference sphere is centered on the
     true image point and the OPD is the system wavefront error; picking the
-    historical N//2 ray (off-center for hex) centers the sphere on the wrong
+    N//2 ray (off-center for hex) centers the sphere on the wrong
     point and inflates the RMS.  The default must match the index-0 chief and
     differ markedly from N//2.
     """
@@ -183,6 +165,6 @@ def test_wavefront_default_chief_is_hex_center():
 
     rms_default = rms(None)
     rms_center = rms(0)          # the actual hex pupil-center ray
-    rms_nhalf = rms(n // 2)      # the historical (wrong-for-hex) default
+    rms_nhalf = rms(n // 2)      # an off-center hex ray
     assert rms_default == pytest.approx(rms_center, rel=1e-9)
     assert rms_nhalf > 1.2 * rms_center

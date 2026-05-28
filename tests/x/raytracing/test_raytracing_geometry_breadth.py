@@ -56,7 +56,7 @@ def test_toroid_sag_along_axes_matches_components():
     c_x, c_y, k_y = 1 / 100.0, 1 / 50.0, -0.5
     coefs_y = (1e-6, -2e-9)
     s = toroid(c_x=c_x, c_y=c_y, k_y=k_y, coefs_y=coefs_y,
-                       typ='refl', P=[0, 0, 0])
+                       interaction='refl', P=[0, 0, 0])
     x = np.linspace(-5, 5, 11)
     z_at_y0 = s.shape.sag(x, np.zeros_like(x))
     z_sphere_x = sphere_sag(c_x, x * x)
@@ -72,7 +72,7 @@ def test_toroid_sag_is_additive_loft():
     c_x, c_y, k_y = 1 / 100.0, 1 / 50.0, -0.5
     coefs_y = (1e-6, -2e-9)
     s = toroid(c_x=c_x, c_y=c_y, k_y=k_y, coefs_y=coefs_y,
-                       typ='refl', P=[0, 0, 0])
+                       interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_actual = s.shape.sag(x, y)
     z_expected = sphere_sag(c_x, x * x) + even_asphere_sag(c_y, k_y, coefs_y, y * y)
@@ -81,7 +81,7 @@ def test_toroid_sag_is_additive_loft():
 
 def test_toroid_derivatives_central_diff():
     s = toroid(c_x=1 / 80.0, c_y=1 / 60.0, k_y=-0.3, coefs_y=(2e-6,),
-                       typ='refl', P=[0, 0, 0])
+                       interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     _, dx_an, dy_an = _sag_derivs(s.shape, x, y)
     dx_num, dy_num = _central_difference_xy(s.shape.sag, x, y)
@@ -92,12 +92,12 @@ def test_toroid_derivatives_central_diff():
 def test_toroid_intersect_lands_on_surface():
     """Newton intersect via the shared base lands rays on the toroid surface."""
     s = toroid(c_x=1 / 100.0, c_y=1 / 80.0, k_y=-0.5, coefs_y=(),
-                       typ='refl', P=[0, 0, 0])
+                       interaction='refl', P=[0, 0, 0])
     P = np.array([[1.0, 0.5, -50.0],
                   [-2.0, 1.5, -50.0],
                   [0.0, 0.0, -50.0]])
     S = np.array([[0.0, 0.0, 1.0]] * 3)
-    Q, _, valid = s.intersect(P, S, return_valid=True)
+    Q, _, valid = s.intersect(P, S)
     assert valid.all()
     z = s.shape.sag(Q[..., 0], Q[..., 1])
     np.testing.assert_allclose(Q[..., 2], z, atol=1e-9)
@@ -108,7 +108,7 @@ def test_toroid_cylindrical_lens_directionality():
     not x-fans: post-reflection S_x is unchanged for x-displaced rays, and
     S_y is bent for y-displaced rays."""
     s = toroid(c_x=0.0, c_y=1 / 100.0, k_y=0.0, coefs_y=(),
-                       typ='refl', P=[0, 0, 0])
+                       interaction='refl', P=[0, 0, 0])
     P_x = np.array([[1.0, 0.0, -50.0],
                     [2.0, 0.0, -50.0]])
     P_y = np.array([[0.0, 1.0, -50.0],
@@ -126,8 +126,8 @@ def test_toroid_cylindrical_lens_directionality():
 
 def test_biconic_degenerates_to_conic():
     c, k = 1 / 80.0, -1.0
-    s_b = biconic(c_x=c, c_y=c, k_x=k, k_y=k, typ='refl', P=[0, 0, 0])
-    s_c = conic(c=c, k=k, typ='refl', P=[0, 0, 0])
+    s_b = biconic(c_x=c, c_y=c, k_x=k, k_y=k, interaction='refl', P=[0, 0, 0])
+    s_c = conic(c=c, k=k, interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     z_b, dx_b, dy_b = _sag_derivs(s_b.shape, x, y)
     z_c, dx_c, dy_c = _sag_derivs(s_c.shape, x, y)
@@ -139,7 +139,7 @@ def test_biconic_degenerates_to_conic():
 def test_biconic_derivatives_central_diff():
     s = biconic(c_x=1 / 80.0, c_y=1 / 60.0,
                         k_x=-0.5, k_y=-1.0,
-                        typ='refl', P=[0, 0, 0])
+                        interaction='refl', P=[0, 0, 0])
     x, y = _xy_grid()
     _, dx_an, dy_an = _sag_derivs(s.shape, x, y)
     dx_num, dy_num = _central_difference_xy(s.shape.sag, x, y)
@@ -149,12 +149,12 @@ def test_biconic_derivatives_central_diff():
 
 def test_biconic_intersect_lands_on_surface():
     s = biconic(c_x=1 / 100.0, c_y=1 / 80.0, k_x=0.0, k_y=-0.5,
-                        typ='refl', P=[0, 0, 0])
+                        interaction='refl', P=[0, 0, 0])
     P = np.array([[1.0, 0.5, -50.0],
                   [-2.0, 1.5, -50.0],
                   [0.0, 0.0, -50.0]])
     S = np.array([[0.0, 0.0, 1.0]] * 3)
-    Q, _, valid = s.intersect(P, S, return_valid=True)
+    Q, _, valid = s.intersect(P, S)
     assert valid.all()
     z = s.shape.sag(Q[..., 0], Q[..., 1])
     np.testing.assert_allclose(Q[..., 2], z, atol=1e-9)
@@ -167,7 +167,7 @@ def test_biconic_principal_curvatures_drive_principal_directions():
     and S_x scales linearly with c_x at fixed x; symmetric for x=0."""
     c_x, c_y = 1 / 200.0, 1 / 100.0
     s = biconic(c_x=c_x, c_y=c_y, k_x=0.0, k_y=0.0,
-                        typ='refl', P=[0, 0, 0])
+                        interaction='refl', P=[0, 0, 0])
     h = 0.5  # paraxial ray height
     P = np.array([[h, 0.0, -50.0], [0.0, h, -50.0]])
     S_z = np.array([[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]])
@@ -187,10 +187,10 @@ def test_biconic_principal_curvatures_drive_principal_directions():
 
 def test_grating_zeroth_order_matches_specular():
     """m=0 grating reproduces non-grating baseline."""
-    g_surf = plane(typ='refl', P=[0, 0, 0])
+    g_surf = plane(interaction='refl', P=[0, 0, 0])
     g_surf.grating = (1e-3, [1.0, 0.0, 0.0], 0)
-    base = plane(typ='refl', P=[0, 0, 0])
-    img = plane(typ='eval', P=[0, 0, -10.0])
+    base = plane(interaction='refl', P=[0, 0, 0])
+    img = plane(interaction='eval', P=[0, 0, -10.0])
     P = np.array([[1.0, 0.0, -5.0], [0.0, 2.0, -5.0]])
     S = np.array([[0.0, 0.0, 1.0]] * 2)
     r0 = raytrace([g_surf, img], P, S, wvl=0.55e-3)
@@ -204,9 +204,9 @@ def test_grating_equation_normal_incidence(order):
     """Reflection grating, normal incidence: |sin theta_diff| = m * lambda / d."""
     d = 2e-3
     wvl = 0.5e-3  # so m*l/d in [0, 1] for orders -2..2
-    g_surf = plane(typ='refl', P=[0, 0, 0])
+    g_surf = plane(interaction='refl', P=[0, 0, 0])
     g_surf.grating = (d, [1.0, 0.0, 0.0], order)
-    img = plane(typ='eval', P=[0, 0, -10.0])
+    img = plane(interaction='eval', P=[0, 0, -10.0])
     P = np.array([[0.0, 0.0, -5.0]])
     S = np.array([[0.0, 0.0, 1.0]])
     r = raytrace([g_surf, img], P, S, wvl=wvl)
@@ -218,9 +218,9 @@ def test_grating_equation_normal_incidence(order):
 
 def test_grating_evanescent_flagged_as_tir():
     """m*lambda/d > 1 ⇒ evanescent diffraction; status.imag = STATUS_TIR (-2)."""
-    g_surf = plane(typ='refl', P=[0, 0, 0])
+    g_surf = plane(interaction='refl', P=[0, 0, 0])
     g_surf.grating = (0.5e-3, [1.0, 0.0, 0.0], 2)  # m*l/d = 2*0.55e-3/0.5e-3 = 2.2
-    img = plane(typ='eval', P=[0, 0, -10.0])
+    img = plane(interaction='eval', P=[0, 0, -10.0])
     P = np.array([[0.0, 0.0, -5.0]])
     S = np.array([[0.0, 0.0, 1.0]])
     r = raytrace([g_surf, img], P, S, wvl=0.55e-3)
@@ -233,9 +233,9 @@ def test_refraction_grating_equation():
     d = 1e-3
     wvl = 0.55e-3
     n_glass = 1.5
-    g_surf = plane(typ='refr', P=[0, 0, 0], n=lambda w: n_glass)
+    g_surf = plane(interaction='refr', P=[0, 0, 0], material=lambda w: n_glass)
     g_surf.grating = (d, [1.0, 0.0, 0.0], 1)
-    img = plane(typ='eval', P=[0, 0, 10.0])
+    img = plane(interaction='eval', P=[0, 0, 10.0])
     P = np.array([[0.0, 0.0, -5.0]])
     S = np.array([[0.0, 0.0, 1.0]])
     r = raytrace([g_surf, img], P, S, wvl=wvl, n_ambient=1.0)
@@ -249,7 +249,7 @@ def test_grating_off_curved_surface():
     """Grating on a curved (conic) surface: the grating vector is projected
     into the per-ray tangent plane, so the effective tangential shift
     decreases as rays move off-axis (cosine of the surface tilt angle)."""
-    s = conic(c=1 / 100.0, k=0.0, typ='refl', P=[0, 0, 0])
+    s = conic(c=1 / 100.0, k=0.0, interaction='refl', P=[0, 0, 0])
     s.grating = (1e-3, [1.0, 0.0, 0.0], 1)
     # axial ray (vertex hit) vs off-axis (y=10, surface normal tilted from z-axis)
     P = np.array([[0.0, 0.0, -50.0],

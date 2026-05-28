@@ -37,7 +37,7 @@ def test_plane_sag_matches_sag_and_normal():
 
 
 def test_sphere_sag_matches_sag_and_normal():
-    _check(sphere(1 / 50.0, 'refl', P0, n=None))
+    _check(sphere(1 / 50.0, 'refl', P0, material=None))
 
 
 def test_conic_sag_matches_sag_and_normal():
@@ -61,7 +61,7 @@ def test_q2d_sag_matches_sag_and_normal():
                        cm0=(0.0, 1e-3),
                        ams=((1e-4,),),
                        bms=((0.0,),),
-                       typ='refl', P=P0))
+                       interaction='refl', P=P0))
 
 
 def test_zernike_sag_matches_sag_and_normal():
@@ -69,7 +69,7 @@ def test_zernike_sag_matches_sag_and_normal():
                            normalization_radius=10.0,
                            nms=[(2, 0), (4, 0), (3, 1)],
                            coefs=[1e-3, 5e-4, 2e-4],
-                           typ='refl', P=P0))
+                           interaction='refl', P=P0))
 
 
 def test_xy_sag_matches_sag_and_normal():
@@ -77,7 +77,7 @@ def test_xy_sag_matches_sag_and_normal():
                       normalization_radius=10.0,
                       mns=[(2, 0), (0, 2), (1, 1)],
                       coefs=[1e-3, 1e-3, 5e-4],
-                      typ='refl', P=P0))
+                      interaction='refl', P=P0))
 
 
 def test_chebyshev_sag_matches_sag_and_normal():
@@ -85,7 +85,7 @@ def test_chebyshev_sag_matches_sag_and_normal():
                              x_norm=10.0, y_norm=10.0,
                              mns=[(2, 0), (0, 2), (1, 1)],
                              coefs=[1e-3, 1e-3, 5e-4],
-                             typ='refl', P=P0))
+                             interaction='refl', P=P0))
 
 
 def test_jacobi_sag_matches_sag_and_normal():
@@ -94,24 +94,24 @@ def test_jacobi_sag_matches_sag_and_normal():
                           alpha=0.0, beta=0.0,
                           ns=[1, 2, 3],
                           coefs=[1e-3, 5e-4, 2e-4],
-                          typ='refl', P=P0))
+                          interaction='refl', P=P0))
 
 
 def test_toroid_sag_matches_sag_and_normal():
     _check(toroid(c_x=1 / 80.0, c_y=1 / 50.0, k_y=-0.5,
                           coefs_y=(1e-4,),
-                          typ='refl', P=P0))
+                          interaction='refl', P=P0))
 
 
 def test_biconic_sag_matches_sag_and_normal():
     _check(biconic(c_x=1 / 80.0, c_y=1 / 50.0,
                            k_x=-0.2, k_y=-0.5,
-                           typ='refl', P=P0))
+                           interaction='refl', P=P0))
 
 
 def test_shape_required_by_init():
     with pytest.raises(TypeError):
-        Surface(typ='refl', P=P0, n=None)
+        Surface(interaction='refl', P=P0)
 
 
 def test_explicit_shape_constructor_uses_mutable_shape_params():

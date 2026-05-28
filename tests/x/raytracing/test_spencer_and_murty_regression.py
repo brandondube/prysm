@@ -45,7 +45,7 @@ def _ray_batch():
 
 def _asphere():
     return even_asphere(1 / 10.0, -1.0, (1e-4, 1e-6), 'refr',
-                                np.array([0.0, 0.0, 0.0]), n=lambda w: 1.5)
+                                np.array([0.0, 0.0, 0.0]), material=lambda w: 1.5)
 
 
 def test_bare_newton_snapshot():
@@ -59,7 +59,7 @@ def test_bare_newton_snapshot():
     P1 = P + (-Z0 / m)[:, None] * S
 
     Pj, r, valid = newton_raphson_solve_s(P1, S, surf.sag_and_normal,
-                                          s1=0.0, return_valid=True)
+                                          s1=0.0)
 
     assert int(valid.sum()) == 289
     assert np.allclose(Pj, _ref('bare_newton_Pj.npy'), rtol=0, atol=1e-10)
@@ -71,7 +71,7 @@ def test_conic_seeded_newton_snapshot():
     P, S = _ray_batch()
     surf = _asphere()
 
-    Pj, r, valid = surf.intersect(P, S, return_valid=True)
+    Pj, r, valid = surf.intersect(P, S)
 
     assert int(valid.sum()) == 289
     assert np.allclose(Pj, _ref('conic_seeded_Pj.npy'), rtol=0, atol=1e-10)
@@ -90,8 +90,7 @@ def test_partial_nonconvergence_snapshot():
     P1 = P + (-Z0 / m)[:, None] * S
 
     Pj, r, valid = newton_raphson_solve_s(P1, S, surf.sag_and_normal,
-                                          s1=0.0, maxiter=2,
-                                          return_valid=True)
+                                          s1=0.0, maxiter=2)
 
     # snapshot: 1 ray converges in 2 iters, 288 hit maxiter
     assert int(valid.sum()) == 1
@@ -110,8 +109,7 @@ def test_oblique_mixed_convergence_snapshot():
     P1 = P + (-P[:, 2] / S[:, 2])[:, None] * S
 
     Pj, r, valid = newton_raphson_solve_s(P1, S, surf.sag_and_normal,
-                                          s1=0.0, maxiter=5,
-                                          return_valid=True)
+                                          s1=0.0, maxiter=5)
     assert valid.tolist() == [True, False]
     assert Pj[0, 0] == 0.0 and Pj[0, 1] == 0.0 and Pj[0, 2] == 0.0
     assert np.isnan(Pj[1]).all()
@@ -128,8 +126,7 @@ def test_all_converge_first_iter_snapshot():
     P1 = P + (-P[:, 2] / S[:, 2])[:, None] * S
 
     Pj, r, valid = newton_raphson_solve_s(P1, S, surf.sag_and_normal,
-                                          s1=0.0, maxiter=10,
-                                          return_valid=True)
+                                          s1=0.0, maxiter=10)
     assert valid.tolist() == [True]
     np.testing.assert_array_equal(Pj, np.array([[0.0, 0.0, 0.0]]))
     np.testing.assert_array_equal(r, np.array([[0.0, 0.0, 1.0]]))

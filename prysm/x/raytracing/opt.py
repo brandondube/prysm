@@ -422,6 +422,121 @@ def opd_from_raytrace(P_hist, S_hist, OPL_hist, P_img, P_xp,
     return OPL_total - OPL_total[chief_index]
 
 
+def eic_distance(P_a, d_a, P_b, d_b):
+    """Equally-inclined-chord distance from a reference point on ray b to ray a.
+
+    Hopkins' classical relation between two pencils (Welford, Aberrations of
+    Optical Systems, eq 8.x): the signed distance along ray a from its
+    equally-inclined-chord point to P_a, given the second ray (P_b, d_b),
+    evaluates as
+
+        e = (d_a + d_b) . (P_a - P_b) / (1 + d_a . d_b).
+
+    The chord that links the two rays makes equal angles with each, so e is
+    the OPL contribution from the difference in start points -- the
+    geometric piece of a Hopkins-style wavefront aberration calculation.
+    Provided here as a primitive for users porting classical formulas; the
+    OPD path in opd_from_raytrace_eic does not need it because prysm has the
+    full OPL_hist along each ray in global coordinates.
+
+    Parameters
+    ----------
+    P_a, d_a, P_b, d_b : ndarray
+        any common shape; the last axis is xyz.
+
+    Returns
+    -------
+    ndarray
+        e, with P_a's leading shape.
+
+    """
+    dP = P_a - P_b
+    num = ((d_a + d_b) * dP).sum(axis=-1)
+    denom = 1.0 + (d_a * d_b).sum(axis=-1)
+    return num / denom
+
+
+def opd_from_raytrace_eic(P_hist, S_hist, OPL_hist, P_img, P_xp,
+                          n_image=1.0, chief_index=None,
+                          infinite_threshold=1.0e8):
+    """OPD on the exit-pupil reference surface, robust to extreme conjugates.
+
+    Same contract as opd_from_raytrace but uses a cancellation-free
+    (Welford-rationalized) intersection of each ray with the reference
+    sphere and falls back automatically to a planar reference through P_xp
+    normal to the chief direction when the reference-sphere radius exceeds
+    infinite_threshold.  The legacy form t = -b - sqrt(b**2 - cc) loses
+    precision when |b| ~ sqrt(...) -- the regime reached for long
+    conjugates -- because the two large terms cancel.  Here the cancelling
+    branch is rationalized to t = cc / (-b + sqrt(...)), whose denominator
+    is a sum of like-signed quantities; the non-cancelling branch is left
+    in its original form, so the result is bit-identical to the legacy
+    path for benign cases and merely more accurate for extreme ones.  The
+    plane fallback handles the strict afocal limit where the reference
+    sphere is not well defined at all.
+
+    Parameters
+    ----------
+    P_hist, S_hist, OPL_hist : ndarray
+        ray history from raytrace, shapes (jj+1, N, 3), (jj+1, N, 3),
+        (jj+1, N).
+    P_img : iterable
+        chief image point -- sphere center.
+    P_xp : iterable
+        exit-pupil center -- sets the sphere radius R = |P_xp - P_img|.
+    n_image : float
+        index in image space.
+    chief_index : int, optional
+        row of the chief ray.  Default N // 2.
+    infinite_threshold : float
+        reference-sphere radius (in prescription length units) above which
+        the planar reference is used; finite-conjugate systems are far
+        below the default and behave identically to the legacy path.
+
+    Returns
+    -------
+    opd : ndarray, shape (N,)
+        OPD relative to the chief, sign matching opd_from_raytrace
+        (longer ray OPL -> positive).
+
+    """
+    P_img = np.asarray(P_img)
+    P_xp = np.asarray(P_xp)
+    R = float(np.sqrt(np.sum((P_xp - P_img) ** 2)))
+    P_last = P_hist[-1]
+    S_last = S_hist[-1]
+    OPL_through = OPL_hist.sum(axis=0)
+    if chief_index is None:
+        chief_index = OPL_through.shape[0] // 2
+
+    if (not np.isfinite(R)) or R > infinite_threshold:
+        # planar reference through P_xp normal to the chief direction --
+        # the Mikš limit of the reference sphere as R -> infinity.
+        d_c = S_last[chief_index]
+        denom = (S_last * d_c).sum(axis=-1)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            s = ((P_xp - P_last) * d_c).sum(axis=-1) / denom
+    else:
+        # cancellation-free sphere intersection equivalent to
+        # spencer_and_murty.intersect_reference_sphere's -b - sqrt root.
+        g = P_last - P_img
+        beta = (S_last * g).sum(axis=-1)
+        gamma = (g * g).sum(axis=-1) - R * R
+        disc = beta * beta - gamma
+        disc = np.where(disc < 0, np.zeros_like(disc), disc)
+        sq = np.sqrt(disc)
+        # cancellation occurs when -beta and -sqrt are opposite-signed
+        # (i.e. beta < 0, the converging-beam case); rationalize that branch.
+        denom = -beta + sq
+        safe = np.where(denom == 0, np.ones_like(denom), denom)
+        s = np.where(beta < 0,
+                     np.where(denom == 0, np.zeros_like(gamma), gamma / safe),
+                     -beta - sq)
+
+    OPL_total = OPL_through + n_image * s
+    return OPL_total - OPL_total[chief_index]
+
+
 def locate_xp(P_chief, S_chief, P_img, P_sk):
     """Locate the exit pupil of a system.
 

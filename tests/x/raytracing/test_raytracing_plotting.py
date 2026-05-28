@@ -48,9 +48,9 @@ def _refracting_plane(z, outer_radius=1, inner_radius=None, n=1.0):
 
     return Surface(
         shape=Plane(),
-        typ='refr',
+        interaction='refr',
         P=np.asarray([0., 0., z]),
-        n=lambda wvl: n,
+        material=lambda wvl: n,
         bounding=bounding,
     )
 
@@ -65,7 +65,7 @@ def _reflecting_surface(shape, z=0, outer_radius=1, inner_radius=None):
 
     return Surface(
         shape=shape,
-        typ='refl',
+        interaction='refl',
         P=np.asarray([0., 0., z]),
         bounding=bounding,
     )
@@ -97,6 +97,7 @@ def _raytrace_result():
 
 
 def _line_from_plot(prescription, **kwargs):
+    kwargs.setdefault('wvl', 0.55)
     fig, ax = plot_optics(prescription, _trace_result(prescription), points=5, **kwargs)
     try:
         line = ax.lines[0]
@@ -353,15 +354,15 @@ def test_plot_optics_bridges_steep_surface_to_od_with_normal_segment():
     # and bridged to the element OD with a constant-z (normal-to-OD) segment:
     # the element keeps its full diameter, the outline stays finite, and a
     # warning is emitted.
-    gentle = Surface(shape=Conic(1 / 5.0, 0.0), typ='refr',
-                     P=np.asarray([0., 0., 0.]), n=lambda wvl: 1.5)
-    steep = Surface(shape=Conic(1 / 0.5, 0.0), typ='refr',
-                    P=np.asarray([0., 0., 1.0]), n=lambda wvl: 1.0)
+    gentle = Surface(shape=Conic(1 / 5.0, 0.0), interaction='refr',
+                     P=np.asarray([0., 0., 0.]), material=lambda wvl: 1.5)
+    steep = Surface(shape=Conic(1 / 0.5, 0.0), interaction='refr',
+                    P=np.asarray([0., 0., 1.0]), material=lambda wvl: 1.0)
     prescription = [gentle, steep]
 
     with pytest.warns(UserWarning, match='flat edge'):
         fig, ax = plot_optics(prescription, _trace_result(prescription),
-                              points=41)
+                              points=41, wvl=0.55)
     try:
         x = np.asarray(ax.lines[0].get_xdata())
         y = np.asarray(ax.lines[0].get_ydata())
@@ -386,11 +387,11 @@ def test_plot_optics_draws_clear_aperture_land_to_od_silently():
     # element OD is drawn out to its aperture, then bridged with a flat land
     # (normal to the OD).  Unlike a surface that physically cannot reach the OD,
     # an intentional smaller aperture is silent -- no warning.
-    front = Surface(shape=Conic(1 / 50.0, 0.0), typ='refr',
-                    P=np.asarray([0., 0., 0.]), n=lambda wvl: 1.5,
+    front = Surface(shape=Conic(1 / 50.0, 0.0), interaction='refr',
+                    P=np.asarray([0., 0., 0.]), material=lambda wvl: 1.5,
                     bounding={'outer_radius': 1.0})
-    rear = Surface(shape=Conic(-1 / 50.0, 0.0), typ='refr',
-                   P=np.asarray([0., 0., 1.0]), n=lambda wvl: 1.0,
+    rear = Surface(shape=Conic(-1 / 50.0, 0.0), interaction='refr',
+                   P=np.asarray([0., 0., 1.0]), material=lambda wvl: 1.0,
                    bounding={'outer_radius': 3.0})
     prescription = [front, rear]
 
@@ -398,7 +399,7 @@ def test_plot_optics_draws_clear_aperture_land_to_od_silently():
     with _warnings.catch_warnings():
         _warnings.simplefilter('error')  # an intentional aperture must not warn
         fig, ax = plot_optics(prescription, _trace_result(prescription),
-                              points=41)
+                              points=41, wvl=0.55)
     try:
         x = np.asarray(ax.lines[0].get_xdata())
         y = np.asarray(ax.lines[0].get_ydata())
@@ -492,7 +493,7 @@ def test_plot_optics_accepts_global_mirror_backing_config():
 def test_mirror_substrate_outline_applies_surface_decenter():
     surf = Surface(
         shape=Plane(),
-        typ='refl',
+        interaction='refl',
         P=np.asarray([0., 10., 5.]),
         bounding={'outer_radius': 1},
     )
@@ -511,7 +512,7 @@ def test_mirror_substrate_outline_applies_surface_decenter():
 def test_mirror_substrate_outline_can_center_on_ray_footprint():
     surf = Surface(
         shape=Plane(),
-        typ='refl',
+        interaction='refl',
         P=np.asarray([0., 0., 0.]),
         bounding={'outer_radius': 1},
     )
@@ -542,7 +543,7 @@ def test_mirror_substrate_outline_can_center_on_ray_footprint():
 def test_mirror_substrate_outline_applies_surface_tilt_in_xz_projection():
     surf = Surface(
         shape=Plane(),
-        typ='refl',
+        interaction='refl',
         P=np.asarray([0., 0., 0.]),
         R=(0, -45, 0),
         bounding={'outer_radius': 1},
