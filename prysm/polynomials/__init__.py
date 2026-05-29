@@ -183,8 +183,8 @@ def sum_of_2d_modes(modes, weights):
     return np.tensordot(modes, weights, axes=(0, 0))
 
 
-def sum_of_2d_modes_backprop(modes, databar):
-    """Gradient backpropagation through sum_of_2d_modes.
+def sum_of_2d_modes_adjoint(modes, databar):
+    """Apply the adjoint of sum_of_2d_modes with respect to weights.
 
     Parameters
     ----------
@@ -192,7 +192,7 @@ def sum_of_2d_modes_backprop(modes, databar):
         seq of ndarray of shape (k, m, n);
         a list of length k with elements of shape (m,n) works
     databar : numpy.ndarray
-        partial gradient backpropated up to the return of sum_of_2d_modes
+        partial gradient propagated to the return of sum_of_2d_modes
 
     Returns
     -------

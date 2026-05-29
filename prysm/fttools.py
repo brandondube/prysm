@@ -279,6 +279,7 @@ class CZT:
         self._bcol = bx
         self._Hcol = Hx
         self._acol = ax
+        self._Nx, self._Ny = Nx, Ny
         self._Mx, self._My = Mx, My
         self._Kx, self._Ky = Kx, Ky
 
@@ -300,8 +301,25 @@ class CZT:
         return out
 
     def adjoint(self, grad):
-        """Adjoint not implemented for CZT (matches prior behavior)."""
-        raise NotImplementedError('gradient backpropagation not yet implemented for CZT')
+        """Apply the adjoint (conjugate transpose) of the forward CZT."""
+        if self.sign == 1:
+            grad = np.conj(grad)
+
+        tmp = np.zeros((self._Ky, self._Kx), dtype=config.precision_complex)
+        tmp[:self._My, :self._Mx] = grad * self._acol.conj() * self._arow.conj()
+
+        K = self._Ky * self._Kx
+        tmp = fft.fft2(tmp) / K
+        tmp *= self._Hcol.conj()
+        tmp *= self._Hrow.conj()
+        out = fft.ifft2(tmp) * K
+        out = out[:self._Ny, :self._Nx] * self._bcol.conj()
+        out *= self._brow.conj()
+
+        if self.sign == 1:
+            out = np.conj(out)
+        out *= self.norm
+        return out
 
     def nbytes(self):
         """Total size in memory of the cached components, bytes."""

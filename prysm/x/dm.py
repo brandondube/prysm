@@ -272,8 +272,8 @@ class DM:
 
         return warped
 
-    def render_backprop(self, protograd, wfe=True):
-        """Gradient backpropagation for render().
+    def render_adjoint(self, protograd, wfe=True):
+        """Apply the adjoint of render().
 
         Parameters
         ----------
@@ -293,7 +293,7 @@ class DM:
             diff = 2 * (render() - y)
 
             and you would call
-            dm.render_backprop(diff)
+            dm.render_adjoint(diff)
         wfe : bool, optional
             if True, the return is scaled as for a wavefront error instead
             of surface figure error
@@ -308,7 +308,6 @@ class DM:
         Not compatible with complex valued protograd
 
         """
-        """Gradient backpropagation for self.render."""
         if protograd.shape[0] > self.Nintermediate[0]:
             # forward padded, we need to crop
             protograd = crop_center(protograd, out_shape=self.Nintermediate)

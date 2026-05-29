@@ -118,3 +118,29 @@ def test_czt_reverses_self_complex(samples):
     fwd = CZT(x, y, fx, fy, sign=-1)(inp) / samples
     back = CZT(x, y, fx, fy, sign=+1)(fwd) / samples
     assert np.allclose(inp, back)
+
+
+@pytest.mark.parametrize('sign', (-1, 1))
+@pytest.mark.parametrize(
+    'input_shape,output_shape',
+    [
+        ((7, 9), (5, 6)),
+        ((5, 6), (7, 9)),
+    ],
+)
+def test_czt_adjoint_is_adjoint(sign, input_shape, output_shape):
+    rng = np.random.default_rng(123)
+    ny, nx = input_shape
+    my, mx = output_shape
+    x = fftrange(nx).astype(float) * 0.2
+    y = fftrange(ny).astype(float) * 0.17
+    fx = (fftrange(mx).astype(float) + 0.25) * 0.13
+    fy = (fftrange(my).astype(float) - 0.5) * 0.11
+    op = CZT(x, y, fx, fy, sign=sign, norm=0.3)
+
+    inp = rng.normal(size=input_shape) + 1j * rng.normal(size=input_shape)
+    grad = rng.normal(size=output_shape) + 1j * rng.normal(size=output_shape)
+
+    lhs = np.vdot(op(inp), grad)
+    rhs = np.vdot(inp, op.adjoint(grad))
+    np.testing.assert_allclose(lhs, rhs, rtol=1e-12, atol=1e-12)

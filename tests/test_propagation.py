@@ -27,32 +27,32 @@ def test_obj_oriented_wavefront_focusing_reverses():
 
 
 @pytest.mark.parametrize('Q', [1, 1.5, 2])
-def test_focus_backprop_is_adjoint(Q):
+def test_focus_adjoint_is_adjoint(Q):
     rng = np.random.default_rng(789)
     x = rng.normal(size=(9, 12)) + 1j * rng.normal(size=(9, 12))
     y = rng.normal(size=propagation.focus(x, Q=Q).shape)
     y = y + 1j * rng.normal(size=y.shape)
 
     lhs = np.vdot(propagation.focus(x, Q=Q), y)
-    rhs = np.vdot(x, propagation.focus_backprop(y, Q=Q))
+    rhs = np.vdot(x, propagation.focus_adjoint(y, Q=Q))
 
     np.testing.assert_allclose(lhs, rhs, atol=1e-12)
 
 
 @pytest.mark.parametrize('Q', [1, 1.5, 2])
-def test_unfocus_backprop_is_adjoint(Q):
+def test_unfocus_adjoint_is_adjoint(Q):
     rng = np.random.default_rng(987)
     x = rng.normal(size=(9, 12)) + 1j * rng.normal(size=(9, 12))
     y = rng.normal(size=propagation.unfocus(x, Q=Q).shape)
     y = y + 1j * rng.normal(size=y.shape)
 
     lhs = np.vdot(propagation.unfocus(x, Q=Q), y)
-    rhs = np.vdot(x, propagation.unfocus_backprop(y, Q=Q))
+    rhs = np.vdot(x, propagation.unfocus_adjoint(y, Q=Q))
 
     np.testing.assert_allclose(lhs, rhs, atol=1e-12)
 
 
-def test_wavefront_focus_backprop_metadata_and_data():
+def test_wavefront_focus_adjoint_metadata_and_data():
     rng = np.random.default_rng(135)
     dx = 0.25
     efl = 10
@@ -64,15 +64,15 @@ def test_wavefront_focus_backprop_metadata_and_data():
     grad = propagation.Wavefront(dx=psf.dx, cmplx_field=grad_data,
                                  wavelength=HeNe, space='psf')
 
-    back = grad.focus_backprop(efl=efl, Q=Q)
+    back = grad.focus_adjoint(efl=efl, Q=Q)
 
-    np.testing.assert_allclose(back.data, propagation.focus_backprop(grad_data, Q=Q))
+    np.testing.assert_allclose(back.data, propagation.focus_adjoint(grad_data, Q=Q))
     assert back.data.shape == wf.data.shape
     assert back.dx == pytest.approx(wf.dx)
     assert back.space == 'pupil'
 
 
-def test_wavefront_unfocus_backprop_metadata_and_data():
+def test_wavefront_unfocus_adjoint_metadata_and_data():
     rng = np.random.default_rng(246)
     dx = 0.1
     efl = 10
@@ -84,9 +84,9 @@ def test_wavefront_unfocus_backprop_metadata_and_data():
     grad = propagation.Wavefront(dx=pupil.dx, cmplx_field=grad_data,
                                  wavelength=HeNe, space='pupil')
 
-    back = grad.unfocus_backprop(efl=efl, Q=Q)
+    back = grad.unfocus_adjoint(efl=efl, Q=Q)
 
-    np.testing.assert_allclose(back.data, propagation.unfocus_backprop(grad_data, Q=Q))
+    np.testing.assert_allclose(back.data, propagation.unfocus_adjoint(grad_data, Q=Q))
     assert back.data.shape == wf.data.shape
     assert back.dx == pytest.approx(wf.dx)
     assert back.space == 'psf'
@@ -114,6 +114,38 @@ def test_focus_fft_mdft_equivalent_Wavefront():
     assert np.allclose(focus_fft.data, focus_mdft.data)
 
 
+def test_focus_dft_adjoint_is_adjoint():
+    rng = np.random.default_rng(159)
+    x = rng.normal(size=(7, 9)) + 1j * rng.normal(size=(7, 9))
+    mdft = propagation.prepare_executor(
+        pupil_dx=0.25, pupil_samples=x.shape,
+        focal_dx=0.1, focal_samples=(8, 11),
+        wavelength=HeNe, efl=10.0,
+    )
+    y = rng.normal(size=(8, 11)) + 1j * rng.normal(size=(8, 11))
+
+    lhs = np.vdot(propagation.focus_dft(x, mdft), y)
+    rhs = np.vdot(x, propagation.focus_dft_adjoint(y, mdft))
+
+    np.testing.assert_allclose(lhs, rhs, atol=1e-12)
+
+
+def test_unfocus_dft_adjoint_is_adjoint():
+    rng = np.random.default_rng(7531)
+    x = rng.normal(size=(8, 11)) + 1j * rng.normal(size=(8, 11))
+    mdft = propagation.prepare_executor(
+        pupil_dx=0.25, pupil_samples=(7, 9),
+        focal_dx=0.1, focal_samples=x.shape,
+        wavelength=HeNe, efl=10.0,
+    )
+    y = rng.normal(size=(7, 9)) + 1j * rng.normal(size=(7, 9))
+
+    lhs = np.vdot(propagation.unfocus_dft(x, mdft), y)
+    rhs = np.vdot(x, propagation.unfocus_dft_adjoint(y, mdft))
+
+    np.testing.assert_allclose(lhs, rhs, atol=1e-12)
+
+
 def test_free_space_zero_distance_is_identity():
     z = np.random.rand(SAMPLES, SAMPLES)
     wf = propagation.Wavefront(dx=1, cmplx_field=z, wavelength=HeNe, space='pupil')
@@ -126,31 +158,31 @@ def test_free_space_zero_distance_is_identity():
 
 
 @pytest.mark.parametrize('Q', [1, 1.5, 2])
-def test_angular_spectrum_backprop_is_adjoint(Q):
+def test_angular_spectrum_adjoint_is_adjoint(Q):
     rng = np.random.default_rng(321)
     x = rng.normal(size=(9, 12)) + 1j * rng.normal(size=(9, 12))
     y = rng.normal(size=propagation.angular_spectrum(x, wvl=HeNe, dx=0.25, z=1.2, Q=Q).shape)
     y = y + 1j * rng.normal(size=y.shape)
 
     lhs = np.vdot(propagation.angular_spectrum(x, wvl=HeNe, dx=0.25, z=1.2, Q=Q), y)
-    rhs = np.vdot(x, propagation.angular_spectrum_backprop(y, wvl=HeNe, dx=0.25, z=1.2, Q=Q))
+    rhs = np.vdot(x, propagation.angular_spectrum_adjoint(y, wvl=HeNe, dx=0.25, z=1.2, Q=Q))
 
     np.testing.assert_allclose(lhs, rhs, atol=1e-12)
 
 
-def test_angular_spectrum_backprop_with_tf_is_adjoint():
+def test_angular_spectrum_adjoint_with_tf_is_adjoint():
     rng = np.random.default_rng(654)
     x = rng.normal(size=(9, 12)) + 1j * rng.normal(size=(9, 12))
     y = rng.normal(size=x.shape) + 1j * rng.normal(size=x.shape)
     tf = propagation.angular_spectrum_transfer_function(x.shape, HeNe, 0.25, z=1.2)
 
     lhs = np.vdot(propagation.angular_spectrum(x, wvl=HeNe, dx=0.25, z=np.nan, tf=tf), y)
-    rhs = np.vdot(x, propagation.angular_spectrum_backprop(y, wvl=HeNe, dx=0.25, z=np.nan, tf=tf))
+    rhs = np.vdot(x, propagation.angular_spectrum_adjoint(y, wvl=HeNe, dx=0.25, z=np.nan, tf=tf))
 
     np.testing.assert_allclose(lhs, rhs, atol=1e-12)
 
 
-def test_wavefront_free_space_backprop_metadata_and_data():
+def test_wavefront_free_space_adjoint_metadata_and_data():
     rng = np.random.default_rng(753)
     dx = 0.25
     dz = 1.2
@@ -162,11 +194,11 @@ def test_wavefront_free_space_backprop_metadata_and_data():
     grad = propagation.Wavefront(dx=out.dx, cmplx_field=grad_data,
                                  wavelength=HeNe, space=out.space)
 
-    back = grad.free_space_backprop(dz=dz, Q=Q)
+    back = grad.free_space_adjoint(dz=dz, Q=Q)
 
     np.testing.assert_allclose(
         back.data,
-        propagation.angular_spectrum_backprop(grad_data, wvl=HeNe, dx=dx, z=dz, Q=Q),
+        propagation.angular_spectrum_adjoint(grad_data, wvl=HeNe, dx=dx, z=dz, Q=Q),
     )
     assert back.data.shape == wf.data.shape
     assert back.dx == pytest.approx(wf.dx)
@@ -205,7 +237,7 @@ def test_wavefront_scalar_arithmetic_operand_order():
     assert np.allclose((wf / 2.0).data, data / 2.0)
 
 
-def test_to_fpm_and_back_backprop_accepts_wavefront_fpm():
+def test_to_fpm_and_back_adjoint_accepts_wavefront_fpm():
     # regression: previously raised AttributeError on fpm.dtype / fpm.conj()
     dx = 1.0
     z = (np.random.rand(SAMPLES, SAMPLES) + 1j * np.random.rand(SAMPLES, SAMPLES))
@@ -215,7 +247,7 @@ def test_to_fpm_and_back_backprop_accepts_wavefront_fpm():
     fpm = propagation.Wavefront(cmplx_field=fpm_data, dx=0.1, wavelength=HeNe, space='psf')
     mdft = wf.prepare_executor(efl=10.0, dx=fpm.dx, samples=fpm.data.shape)
     out = wf.to_fpm_and_back(fpm=fpm, executor=mdft)
-    grad = out.to_fpm_and_back_backprop(fpm=fpm, executor=mdft)
+    grad = out.to_fpm_and_back_adjoint(fpm=fpm, executor=mdft)
     assert grad.data.shape == wf.data.shape
 
 
@@ -223,7 +255,24 @@ def _real_vdot(a, b):
     return np.real(np.vdot(a, b))
 
 
-def test_to_fpm_and_back_backprop_returns_fpm_gradient():
+def test_to_fpm_and_back_adjoint_is_adjoint_for_input_field():
+    rng = np.random.default_rng(2468)
+    x = rng.normal(size=(7, 9)) + 1j * rng.normal(size=(7, 9))
+    fpm = rng.normal(size=(8, 11)) + 1j * rng.normal(size=(8, 11))
+    y = rng.normal(size=x.shape) + 1j * rng.normal(size=x.shape)
+    mdft = propagation.prepare_executor(
+        pupil_dx=0.25, pupil_samples=x.shape,
+        focal_dx=0.1, focal_samples=fpm.shape,
+        wavelength=HeNe, efl=10.0,
+    )
+
+    lhs = np.vdot(propagation.to_fpm_and_back(x, fpm=fpm, executor=mdft), y)
+    rhs = np.vdot(x, propagation.to_fpm_and_back_adjoint(y, fpm=fpm, executor=mdft))
+
+    np.testing.assert_allclose(lhs, rhs, atol=1e-12)
+
+
+def test_to_fpm_and_back_adjoint_returns_fpm_gradient():
     rng = np.random.default_rng(123)
     dx = 1.0
     z = rng.normal(size=(8, 8)) + 1j * rng.normal(size=(8, 8))
@@ -236,7 +285,7 @@ def test_to_fpm_and_back_backprop_returns_fpm_gradient():
     outbar = propagation.Wavefront(cmplx_field=outbar_data, dx=out.dx,
                                    wavelength=HeNe, space=out.space)
 
-    _, fpm_bar = outbar.to_fpm_and_back_backprop(
+    _, fpm_bar = outbar.to_fpm_and_back_adjoint(
         fpm=fpm, executor=mdft, return_fpm_grad=True, field_at_fpm=at_fpm,
     )
 
@@ -252,7 +301,7 @@ def test_to_fpm_and_back_backprop_returns_fpm_gradient():
     assert fpm_bar.data[y, x] == pytest.approx(fd, rel=1e-6, abs=1e-8)
 
 
-def test_babinet_backprop_returns_fpm_and_lyot_gradients():
+def test_babinet_adjoint_returns_fpm_and_lyot_gradients():
     rng = np.random.default_rng(456)
     dx = 1.0
     z = rng.normal(size=(8, 8)) + 1j * rng.normal(size=(8, 8))
@@ -267,7 +316,7 @@ def test_babinet_backprop_returns_fpm_and_lyot_gradients():
     outbar = propagation.Wavefront(cmplx_field=outbar_data, dx=out.dx,
                                    wavelength=HeNe, space=out.space)
 
-    _, fpm_bar, lyot_bar = outbar.babinet_backprop(
+    _, fpm_bar, lyot_bar = outbar.babinet_adjoint(
         lyot=lyot, fpm=fpm, executor=mdft,
         field_at_fpm=at_fpm, field_at_lyot=at_lyot,
         return_fpm_grad=True, return_lyot_grad=True,

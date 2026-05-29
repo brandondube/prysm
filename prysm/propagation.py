@@ -24,6 +24,37 @@ def _shape_before_pad(padded_shape, Q):
     return tuple(int(s // Q) for s in padded_shape)
 
 
+def _adjoint_pad2d(array, Q):
+    """Apply the adjoint of _maybe_pad(array, Q)."""
+    out_shape = _shape_before_pad(array.shape, Q)
+    if out_shape != array.shape:
+        return crop_center(array, out_shape)
+    return array
+
+
+def _field_data(field):
+    """Return ndarray data from a Wavefront-like field."""
+    if isinstance(field, Wavefront):
+        return field.data
+    return field
+
+
+def _field_is_complex(field):
+    """Return whether a Wavefront-like field has complex data."""
+    return np.iscomplexobj(_field_data(field))
+
+
+def _adjoint_multiply(grad, factor, real=False):
+    """Adjoint with respect to x for y = x * factor."""
+    if np.iscomplexobj(factor):
+        out = grad * np.conj(factor)
+    else:
+        out = grad * factor
+    if real:
+        return np.real(out)
+    return out
+
+
 def _phase_prefix(wavelength):
     """Phase prefix or scale factor such that mul w/ OPD in nm produces radians.
     """
@@ -51,8 +82,8 @@ def focus(wavefunction, Q):
     return impulse_response
 
 
-def focus_backprop(wavefunction, Q):
-    """Backpropagate gradient through focus.
+def focus_adjoint(wavefunction, Q):
+    """Apply the adjoint of focus.
 
     Parameters
     ----------
@@ -68,10 +99,7 @@ def focus_backprop(wavefunction, Q):
 
     """
     padded_grad = fft.fftshift(fft.ifft2(fft.ifftshift(wavefunction), norm='ortho'))
-    out_shape = _shape_before_pad(wavefunction.shape, Q)
-    if out_shape != wavefunction.shape:
-        return crop_center(padded_grad, out_shape)
-    return padded_grad
+    return _adjoint_pad2d(padded_grad, Q)
 
 
 def unfocus(wavefunction, Q):
@@ -94,8 +122,8 @@ def unfocus(wavefunction, Q):
     return fft.fftshift(fft.ifft2(fft.ifftshift(padded_wavefront), norm='ortho'))
 
 
-def unfocus_backprop(wavefunction, Q):
-    """Backpropagate gradient through unfocus.
+def unfocus_adjoint(wavefunction, Q):
+    """Apply the adjoint of unfocus.
 
     Parameters
     ----------
@@ -111,10 +139,7 @@ def unfocus_backprop(wavefunction, Q):
 
     """
     padded_grad = fft.fftshift(fft.fft2(fft.ifftshift(wavefunction), norm='ortho'))
-    out_shape = _shape_before_pad(wavefunction.shape, Q)
-    if out_shape != wavefunction.shape:
-        return crop_center(padded_grad, out_shape)
-    return padded_grad
+    return _adjoint_pad2d(padded_grad, Q)
 
 
 def coordinates_for_focus(pupil_dx, pupil_samples, focal_dx, focal_samples,
@@ -186,8 +211,7 @@ def prepare_executor(pupil_dx, pupil_samples, focal_dx, focal_samples,
 
     - Focus:    executor(pupil_data) produces focal data
     - Unfocus:  executor.adjoint(focal_data) produces pupil data
-      (MDFT only — CZT has no adjoint and would need a separate operator
-      built in the focal → pupil orientation).
+      (both MDFT and CZT expose adjoint propagation).
 
     The pupil and focal sample spacings are also stashed on the returned
     operator as executor.pupil_dx and executor.focal_dx for callers
@@ -230,8 +254,7 @@ def focus_dft(wavefunction, executor):
     wavefunction : ndarray
         the pupil-plane field; shape must match what the executor was built for.
     executor : MDFT or CZT
-        a focus-orientation operator (e.g. from prepare_executor).
-        Optical normalization is expected to be baked into executor.norm.
+        (semi-)arbitrary sampling fourier transform executor
 
     Returns
     -------
@@ -242,16 +265,15 @@ def focus_dft(wavefunction, executor):
     return executor(wavefunction)
 
 
-def focus_dft_backprop(wavefunction, executor):
-    """Backpropagate gradient through focus_dft.
+def focus_dft_adjoint(wavefunction, executor):
+    """Apply the adjoint of focus_dft.
 
     Parameters
     ----------
     wavefunction : ndarray
         gradient at the PSF plane
-    executor : MDFT
-        the same operator used for the forward call. CZT backprop is not
-        implemented and will raise.
+    executor : MDFT or CZT
+        (semi-)arbitrary sampling fourier transform executor
 
     Returns
     -------
@@ -259,8 +281,6 @@ def focus_dft_backprop(wavefunction, executor):
         gradient at the pupil plane
 
     """
-    if isinstance(executor, CZT):
-        raise NotImplementedError('gradient backpropagation not yet implemented for CZT')
     return executor.adjoint(wavefunction)
 
 
@@ -272,10 +292,7 @@ def unfocus_dft(wavefunction, executor):
     wavefunction : ndarray
         the focal-plane field
     executor : MDFT or CZT
-        for MDFT, the focus-orientation operator (same as for focus_dft);
-        the inverse is taken via executor.adjoint. For CZT, the operator
-        must be built in the focal → pupil orientation since CZT has no
-        adjoint.
+        (semi-)arbitrary sampling fourier transform executor
 
     Returns
     -------
@@ -283,23 +300,17 @@ def unfocus_dft(wavefunction, executor):
         pupil-plane field
 
     """
-    if isinstance(executor, MDFT):
-        return executor.adjoint(wavefunction)
-    elif isinstance(executor, CZT):
-        return executor(wavefunction)
-    raise TypeError(f"executor must be MDFT or CZT, got {type(executor).__name__}")
+    return executor.adjoint(wavefunction)
 
-
-def unfocus_dft_backprop(wavefunction, executor):
-    """Backpropagate gradient through unfocus_dft.
+def unfocus_dft_adjoint(wavefunction, executor):
+    """Apply the adjoint of unfocus_dft.
 
     Parameters
     ----------
     wavefunction : ndarray
         gradient at the pupil plane
-    executor : MDFT
-        the same operator used for the forward call. CZT backprop is not
-        implemented and will raise.
+    executor : MDFT or CZT
+        (semi-)arbitrary sampling fourier transform executor
 
     Returns
     -------
@@ -307,9 +318,6 @@ def unfocus_dft_backprop(wavefunction, executor):
         gradient at the focal plane
 
     """
-    if isinstance(executor, CZT):
-        raise NotImplementedError('gradient backpropagation not yet implemented for CZT')
-    # adjoint of unfocus (which uses .adjoint) is the forward (which uses __call__)
     return executor(wavefunction)
 
 
@@ -465,8 +473,8 @@ def angular_spectrum(field, wvl, dx, z, Q=2, tf=None):
     return fft.ifft2(forward*transfer_function)
 
 
-def angular_spectrum_backprop(field, wvl, dx, z, Q=2, tf=None):
-    """Backpropagate gradient through angular_spectrum.
+def angular_spectrum_adjoint(field, wvl, dx, z, Q=2, tf=None):
+    """Apply the adjoint of angular_spectrum.
 
     Parameters
     ----------
@@ -497,9 +505,9 @@ def angular_spectrum_backprop(field, wvl, dx, z, Q=2, tf=None):
         out_shape = field.shape
 
     out = fft.ifft2(fft.fft2(field) * np.conj(tf))
-    if out_shape != field.shape:
-        return crop_center(out, out_shape)
-    return out
+    if out_shape == field.shape:
+        return out
+    return crop_center(out, out_shape)
 
 
 def angular_spectrum_transfer_function(samples, wvl, dx, z):
@@ -551,8 +559,8 @@ def to_fpm_and_back(wavefunction, fpm, executor, return_more=False):
         complex pupil-plane field to propagate
     fpm : Wavefront or ndarray
         the focal plane mask
-    executor : MDFT
-        bidirectional transform operator; CZT is not supported here.
+    executor : MDFT or CZT
+        (semi-)arbitrary sampling fourier transform executor
     return_more : bool, optional
         if True, return (new_wavefront, field_at_fpm, field_after_fpm)
         else return new_wavefront
@@ -563,10 +571,7 @@ def to_fpm_and_back(wavefunction, fpm, executor, return_more=False):
         next pupil; optionally also field at fpm and field after fpm
 
     """
-    if isinstance(executor, CZT):
-        raise TypeError('to_fpm_and_back requires an MDFT executor (bidirectional); CZT is not supported')
-    if isinstance(fpm, Wavefront):
-        fpm = fpm.data
+    fpm = _field_data(fpm)
 
     field_at_fpm = focus_dft(wavefunction, executor)
     field_after_fpm = field_at_fpm * fpm
@@ -577,9 +582,9 @@ def to_fpm_and_back(wavefunction, fpm, executor, return_more=False):
     return field_at_next_pupil
 
 
-def to_fpm_and_back_backprop(wavefunction, fpm, executor, return_more=False,
+def to_fpm_and_back_adjoint(wavefunction, fpm, executor, return_more=False,
                              return_fpm_grad=False, field_at_fpm=None):
-    """Backpropagate gradient through to_fpm_and_back.
+    """Apply the adjoint of to_fpm_and_back.
 
     Parameters
     ----------
@@ -605,29 +610,19 @@ def to_fpm_and_back_backprop(wavefunction, fpm, executor, return_more=False,
         and/or the gradient with respect to fpm
 
     """
-    if isinstance(executor, CZT):
-        raise TypeError('to_fpm_and_back_backprop requires an MDFT executor; CZT is not supported')
-    fpm_is_complex = np.iscomplexobj(fpm.data if isinstance(fpm, Wavefront) else fpm)
-    if isinstance(fpm, Wavefront):
-        fpm = fpm.data
-    if isinstance(field_at_fpm, Wavefront):
-        field_at_fpm = field_at_fpm.data
+    fpm_is_complex = _field_is_complex(fpm)
+    fpm = _field_data(fpm)
+    field_at_fpm = _field_data(field_at_fpm)
 
     if return_fpm_grad and field_at_fpm is None:
         raise ValueError('return_fpm_grad=True requires field_at_fpm from the forward propagation')
 
-    # do not take complex conjugate of reals (no-op, but numpy still does it)
-    if np.iscomplexobj(fpm):
-        fpm = fpm.conj()
-
-    Ebbar = unfocus_dft_backprop(wavefunction, executor)
-    intermediate = Ebbar * fpm
-    Eabar = focus_dft_backprop(intermediate, executor)
+    Ebbar = unfocus_dft_adjoint(wavefunction, executor)
+    intermediate = _adjoint_multiply(Ebbar, fpm)
+    Eabar = focus_dft_adjoint(intermediate, executor)
 
     if return_fpm_grad:
-        fpm_bar = Ebbar * np.conj(field_at_fpm)
-        if not fpm_is_complex:
-            fpm_bar = np.real(fpm_bar)
+        fpm_bar = _adjoint_multiply(Ebbar, field_at_fpm, real=not fpm_is_complex)
 
     if return_more:
         if return_fpm_grad:
@@ -776,37 +771,37 @@ class Wavefront:
         """Return a (deep) copy of this instance."""
         return copy.deepcopy(self)
 
-    def from_amp_and_phase_backprop_phase(self, wf_bar):
-        """Gradient backpropagation through from_amp_and_phase -> phase.
+    def from_amp_and_phase_adjoint_phase(self, wf_bar):
+        """Adjoint of from_amp_and_phase with respect to phase.
 
         Parameters
         ----------
         wf_bar : Wavefront
-            the gradient backpropagated up to wf
+            the gradient propagated to wf
 
         Returns
         -------
         ndarray
-            gradient backpropagated to the phase of wf_in
+            gradient with respect to the phase of wf_in
 
         """
         k = 2 * np.pi / self.wavelength / 1e3  # um -> nm
         # imag(gbar*g)
         return k * np.imag(wf_bar.data * np.conj(self.data))
 
-    def intensity_backprop(self, intensity_bar):
-        """Gradient backpropagation through from_amp_and_phase -> phase.
+    def intensity_adjoint(self, intensity_bar):
+        """Adjoint of intensity.
 
         Parameters
         ----------
         intensity_bar : Wavefront
-            the gradient backpropagated up to the intensity step
+            the gradient propagated to the intensity step
 
         Returns
         -------
         ndarray
-            gradient backpropagated to the complex wavefront before
-            intensity was calculated
+            gradient with respect to the complex wavefront before intensity
+            was calculated
 
         """
         Gbar = 2 * intensity_bar * self.data
@@ -940,8 +935,8 @@ class Wavefront:
         )
         return Wavefront(out, self.wavelength, self.dx, self.space)
 
-    def free_space_backprop(self, dz=np.nan, Q=1, tf=None):
-        """Backpropagate gradient through free_space.
+    def free_space_adjoint(self, dz=np.nan, Q=1, tf=None):
+        """Apply the adjoint of free_space.
 
         self carries the gradient at the output plane; the returned Wavefront
         carries the gradient at the input plane.
@@ -964,7 +959,7 @@ class Wavefront:
         """
         if np.isnan(dz) and tf is None:
             raise ValueError('dz must be provided if tf is None')
-        out = angular_spectrum_backprop(self.data,
+        out = angular_spectrum_adjoint(self.data,
                                         wvl=self.wavelength,
                                         dx=self.dx,
                                         z=dz,
@@ -1001,8 +996,8 @@ class Wavefront:
 
         return Wavefront(data, self.wavelength, dx, space='psf')
 
-    def focus_backprop(self, efl, Q=2):
-        """Backpropagate gradient through focus.
+    def focus_adjoint(self, efl, Q=2):
+        """Apply the adjoint of focus.
 
         self carries the gradient at the PSF plane; the returned Wavefront
         carries the gradient at the pupil plane.
@@ -1021,10 +1016,10 @@ class Wavefront:
 
         """
         if self.space != 'psf':
-            raise ValueError('can only backpropagate from a psf to pupil plane')
+            raise ValueError('can only apply adjoint from a psf to pupil plane')
 
         samples = self.data.shape[1]
-        data = focus_backprop(self.data, Q=Q)
+        data = focus_adjoint(self.data, Q=Q)
         dx = psf_sample_to_pupil_sample(self.dx, samples, self.wavelength, efl)
 
         return Wavefront(data, self.wavelength, dx, space='pupil')
@@ -1057,8 +1052,8 @@ class Wavefront:
 
         return Wavefront(data, self.wavelength, dx, space='pupil')
 
-    def unfocus_backprop(self, efl, Q=2):
-        """Backpropagate gradient through unfocus.
+    def unfocus_adjoint(self, efl, Q=2):
+        """Apply the adjoint of unfocus.
 
         self carries the gradient at the pupil plane; the returned Wavefront
         carries the gradient at the PSF plane.
@@ -1077,10 +1072,10 @@ class Wavefront:
 
         """
         if self.space != 'pupil':
-            raise ValueError('can only backpropagate from a pupil to psf plane')
+            raise ValueError('can only apply adjoint from a pupil to psf plane')
 
         samples = self.data.shape[1]
-        data = unfocus_backprop(self.data, Q=Q)
+        data = unfocus_adjoint(self.data, Q=Q)
         dx = pupil_sample_to_psf_sample(self.dx, samples, self.wavelength, efl)
 
         return Wavefront(data, self.wavelength, dx, space='psf')
@@ -1143,7 +1138,7 @@ class Wavefront:
         Parameters
         ----------
         executor : MDFT or CZT
-            focus-orientation operator (e.g. from prepare_executor).
+            (semi-)arbitrary sampling fourier transform executor
 
         Returns
         -------
@@ -1156,16 +1151,16 @@ class Wavefront:
         data = focus_dft(self.data, executor)
         return Wavefront(dx=executor.focal_dx, cmplx_field=data, wavelength=self.wavelength, space='psf')
 
-    def focus_dft_backprop(self, executor):
-        """Backpropagate gradient through focus_dft.
+    def focus_dft_adjoint(self, executor):
+        """Apply the adjoint of focus_dft.
 
         self carries the gradient at the psf plane; the returned Wavefront
         carries the gradient at the pupil plane.
 
         Parameters
         ----------
-        executor : MDFT
-            same operator as the forward call. CZT backprop is not implemented.
+        executor : MDFT or CZT
+            (semi-)arbitrary sampling fourier transform executor
 
         Returns
         -------
@@ -1174,8 +1169,8 @@ class Wavefront:
 
         """
         if self.space != 'psf':
-            raise ValueError('can only backpropagate from a psf to pupil plane')
-        data = focus_dft_backprop(self.data, executor)
+            raise ValueError('can only apply adjoint from a psf to pupil plane')
+        data = focus_dft_adjoint(self.data, executor)
         return Wavefront(dx=executor.pupil_dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')
 
     def unfocus_dft(self, executor):
@@ -1184,9 +1179,7 @@ class Wavefront:
         Parameters
         ----------
         executor : MDFT or CZT
-            for MDFT, the focus-orientation operator (same one used for
-            focus_dft); for CZT, an operator built in the focal → pupil
-            orientation.
+            (semi-)arbitrary sampling fourier transform executor
 
         Returns
         -------
@@ -1199,13 +1192,13 @@ class Wavefront:
         data = unfocus_dft(self.data, executor)
         return Wavefront(dx=executor.pupil_dx, cmplx_field=data, wavelength=self.wavelength, space='pupil')
 
-    def unfocus_dft_backprop(self, executor):
-        """Backpropagate gradient through unfocus_dft.
+    def unfocus_dft_adjoint(self, executor):
+        """Apply the adjoint of unfocus_dft.
 
         Parameters
         ----------
         executor : MDFT
-            same operator as the forward call. CZT backprop is not implemented.
+            same operator as the forward call. CZT adjoint is not implemented.
 
         Returns
         -------
@@ -1214,8 +1207,8 @@ class Wavefront:
 
         """
         if self.space != 'pupil':
-            raise ValueError('can only backpropagate from a pupil to psf plane')
-        data = unfocus_dft_backprop(self.data, executor)
+            raise ValueError('can only apply adjoint from a pupil to psf plane')
+        data = unfocus_dft_adjoint(self.data, executor)
         return Wavefront(dx=executor.focal_dx, cmplx_field=data, wavelength=self.wavelength, space='psf')
 
     def to_fpm_and_back(self, fpm, executor, return_more=False):
@@ -1225,8 +1218,8 @@ class Wavefront:
         ----------
         fpm : Wavefront or ndarray
             the focal plane mask
-        executor : MDFT
-            bidirectional transform operator. CZT is not supported.
+        executor : MDFT or CZT
+            (semi-)arbitrary sampling fourier transform executor
         return_more : bool, optional
             if True, return (new_wavefront, field_at_fpm, field_after_fpm)
             else return new_wavefront
@@ -1248,9 +1241,9 @@ class Wavefront:
         else:
             return Wavefront(pak, self.wavelength, self.dx, self.space)
 
-    def to_fpm_and_back_backprop(self, fpm, executor, return_more=False,
+    def to_fpm_and_back_adjoint(self, fpm, executor, return_more=False,
                                  return_fpm_grad=False, field_at_fpm=None):
-        """Backprop the to_fpm_and_back propagation.
+        """Apply the adjoint of the to_fpm_and_back propagation.
 
         self carries the gradient at the next pupil (output of the forward
         to_fpm_and_back); the returned Wavefront carries the gradient at the
@@ -1278,7 +1271,7 @@ class Wavefront:
             gradients and/or the gradient with respect to fpm
 
         """
-        pak = to_fpm_and_back_backprop(self.data, fpm=fpm, executor=executor,
+        pak = to_fpm_and_back_adjoint(self.data, fpm=fpm, executor=executor,
                                        return_more=return_more,
                                        return_fpm_grad=return_fpm_grad,
                                        field_at_fpm=field_at_fpm)
@@ -1343,10 +1336,8 @@ class Wavefront:
             field after lyot, [field at fpm, field after fpm, field at lyot]
 
         """
-        if isinstance(fpm, Wavefront):
-            fpm = fpm.data
-        if isinstance(lyot, Wavefront):
-            lyot = lyot.data
+        fpm = _field_data(fpm)
+        lyot = _field_data(lyot)
 
         fpm = 1 - fpm
         result = self.to_fpm_and_back(fpm=fpm, executor=executor, return_more=return_more)
@@ -1369,10 +1360,10 @@ class Wavefront:
             return field_after_lyot, field_at_fpm, field_after_fpm, field_at_lyot
         return field_after_lyot
 
-    def babinet_backprop(self, lyot, fpm, executor, field_at_fpm=None,
+    def babinet_adjoint(self, lyot, fpm, executor, field_at_fpm=None,
                          field_at_lyot=None, return_fpm_grad=False,
                          return_lyot_grad=False):
-        """Backpropagate gradient through babinet.
+        """Apply the adjoint of babinet.
 
         Parameters
         ----------
@@ -1398,29 +1389,20 @@ class Wavefront:
         Returns
         -------
         Wavefront or tuple of Wavefront
-            back-propagated gradient; optionally followed by FPM and/or Lyot
+            adjoint-propagated gradient; optionally followed by FPM and/or Lyot
             gradients in the order requested by the keyword names
 
         """
-        # babinet's principle is implemented by
-        # A = DFT(a)       |
-        # C = A*B          |
-        # c = iDFT(C)      | Cbar to Abar absorbed in to_fpm_and_back_backprop
-        # d = c*L          | cbar = dbar * conj(L)
-        # f = a - c        | a contributes +cbar; c contributes -(to_fpm_and_back grad)
-
-        if isinstance(fpm, Wavefront):
-            fpm = fpm.data
-        lyot_is_complex = True
-        if isinstance(lyot, Wavefront):
-            lyot_is_complex = np.iscomplexobj(lyot.data)
-            lyot = lyot.data
-        elif lyot is not None:
-            lyot_is_complex = np.iscomplexobj(lyot)
-        if isinstance(field_at_fpm, Wavefront):
-            field_at_fpm = field_at_fpm.data
-        if isinstance(field_at_lyot, Wavefront):
-            field_at_lyot = field_at_lyot.data
+        # Forward algebra:
+        # B = 1 - fpm
+        # c = to_fpm_and_back(a, B)
+        # e = a - c
+        # d = lyot * e
+        fpm = _field_data(fpm)
+        lyot_is_complex = True if lyot is None else _field_is_complex(lyot)
+        lyot = _field_data(lyot)
+        field_at_fpm = _field_data(field_at_fpm)
+        field_at_lyot = _field_data(field_at_lyot)
 
         if return_lyot_grad and field_at_lyot is None:
             raise ValueError('return_lyot_grad=True requires field_at_lyot from the forward propagation')
@@ -1429,19 +1411,17 @@ class Wavefront:
 
         dbar = self.data
         if lyot is not None:
-            if np.iscomplexobj(lyot):
-                lyot = np.conj(lyot)
-            cbar = dbar * lyot
+            cbar = _adjoint_multiply(dbar, lyot)
         else:
             cbar = dbar
 
         if return_fpm_grad:
-            abar_data, fpm_bar = to_fpm_and_back_backprop(
+            abar_data, fpm_bar = to_fpm_and_back_adjoint(
                 cbar, fpm=fpm, executor=executor,
                 return_fpm_grad=True, field_at_fpm=field_at_fpm,
             )
         else:
-            abar_data = to_fpm_and_back_backprop(cbar, fpm=fpm, executor=executor)
+            abar_data = to_fpm_and_back_adjoint(cbar, fpm=fpm, executor=executor)
 
         abar = Wavefront(cbar - abar_data, self.wavelength, self.dx, self.space)
         if not (return_fpm_grad or return_lyot_grad):
@@ -1452,9 +1432,7 @@ class Wavefront:
             fpm_bar = Wavefront(fpm_bar, self.wavelength, executor.focal_dx, 'psf')
             out.append(fpm_bar)
         if return_lyot_grad:
-            lyot_bar = dbar * np.conj(field_at_lyot)
-            if not lyot_is_complex:
-                lyot_bar = np.real(lyot_bar)
+            lyot_bar = _adjoint_multiply(dbar, field_at_lyot, real=not lyot_is_complex)
             lyot_bar = Wavefront(lyot_bar, self.wavelength, self.dx, self.space)
             out.append(lyot_bar)
         return tuple(out)
