@@ -211,7 +211,6 @@ def prepare_executor(pupil_dx, pupil_samples, focal_dx, focal_samples,
 
     - Focus:    executor(pupil_data) produces focal data
     - Unfocus:  executor.adjoint(focal_data) produces pupil data
-      (both MDFT and CZT expose adjoint propagation).
 
     The pupil and focal sample spacings are also stashed on the returned
     operator as executor.pupil_dx and executor.focal_dx for callers
@@ -592,8 +591,8 @@ def to_fpm_and_back_adjoint(wavefunction, fpm, executor, return_more=False,
         gradient at the next pupil plane (output of the forward call)
     fpm : Wavefront or ndarray
         the focal plane mask used in the forward propagation
-    executor : MDFT
-        the same MDFT used in the forward call. CZT is not supported.
+    executor : MDFT or CZT
+        (semi-)arbitrary sampling fourier transform executor
     return_more : bool, optional
         if True, return (Eabar, Ebbar, intermediate)
         else return Eabar
@@ -1197,8 +1196,8 @@ class Wavefront:
 
         Parameters
         ----------
-        executor : MDFT
-            same operator as the forward call. CZT adjoint is not implemented.
+        executor : MDFT or CZT
+            (semi-)arbitrary sampling fourier transform executor
 
         Returns
         -------
@@ -1370,10 +1369,9 @@ class Wavefront:
         lyot : Wavefront or ndarray
             the Lyot stop; if None, equivalent to ones_like(self.data)
         fpm : Wavefront or ndarray
-            np.conj(1 - fpm)
             one minus the focal plane mask (see Soummer et al 2007)
-        executor : MDFT
-            same operator as the forward call.
+        executor : MDFT or CZT
+            (semi-)arbitrary sampling fourier transform executor
         field_at_fpm : Wavefront or ndarray, optional
             focal-plane field before the FPM from the matching forward call.
             Required when return_fpm_grad is True.
