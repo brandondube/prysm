@@ -90,3 +90,6 @@ nb/*
 
 # refractiveindex database
 _riidb/*
+
+# finished plans
+_doneplans
