@@ -231,11 +231,9 @@ class CZT:
     """Chirp-Z transform with the same external API as MDFT.
 
     Internally uses the Bluestein/Jurling factorization for `O(N log N)`
-    cost per axis. Requires `fx` and `fy` to be uniformly spaced; `x`
-    and `y` are also assumed uniformly spaced.
-
-    Parameters mirror MDFT. `sign=+1` is implemented by complex
-    conjugation of the input and output (matches the prior `iczt2` behavior).
+    cost per axis. Requires `x`, `y`, `fx`, and `fy` to be uniformly spaced.
+    Center offsets in the input coordinates and output frequency grids are
+    handled by linear phase factors.
 
     """
 
@@ -269,8 +267,8 @@ class CZT:
         Ky = next_fast_len(Ny + My - 1)
 
         dtype = config.precision_complex
-        Hx, bx, ax = _prepare_czt_basis(Nx, Mx, Kx, shift_x, alpha_x, dtype)
-        Hy, by, ay = _prepare_czt_basis(Ny, My, Ky, shift_y, alpha_y, dtype)
+        Hx, bx, ax = _prepare_czt_basis(Nx, Mx, Kx, shift_x, alpha_x, dtype, sign)
+        Hy, by, ay = _prepare_czt_basis(Ny, My, Ky, shift_y, alpha_y, dtype, sign)
 
         # column vectors broadcast along axis 0
         self._brow = by[:, np.newaxis]
@@ -279,34 +277,36 @@ class CZT:
         self._bcol = bx
         self._Hcol = Hx
         self._acol = ax
+        prefix = sign * 2j * np.pi
+        self._x_phase = np.exp(prefix * float(x[Nx//2]) * fx)
+        self._y_phase = np.exp(prefix * float(y[Ny//2]) * fy)[:, np.newaxis]
         self._Nx, self._Ny = Nx, Ny
         self._Mx, self._My = Mx, My
         self._Kx, self._Ky = Kx, Ky
+        self._sx, self._sy = Nx - 1, Ny - 1
 
     def __call__(self, ary):
         """Apply the CZT to `ary`."""
-        if self.sign == 1:
-            ary = np.conj(ary) if np.iscomplexobj(ary) else ary
         gb = ary * self._bcol
         gb *= self._brow
         GB = fft.fft2(gb, (self._Ky, self._Kx))
         GB *= self._Hcol
         GB *= self._Hrow
         out = fft.ifft2(GB)
-        out = out[:self._My, :self._Mx] * self._acol
+        out = out[self._sy:self._sy+self._My, self._sx:self._sx+self._Mx] * self._acol
         out *= self._arow
-        if self.sign == 1:
-            out = np.conj(out)
+        out *= self._x_phase
+        out *= self._y_phase
         out *= self.norm
         return out
 
     def adjoint(self, grad):
         """Apply the adjoint (conjugate transpose) of the forward CZT."""
-        if self.sign == 1:
-            grad = np.conj(grad)
-
         tmp = np.zeros((self._Ky, self._Kx), dtype=config.precision_complex)
-        tmp[:self._My, :self._Mx] = grad * self._acol.conj() * self._arow.conj()
+        tmp[self._sy:self._sy+self._My, self._sx:self._sx+self._Mx] = (
+            grad * self._x_phase.conj() * self._y_phase.conj()
+            * self._acol.conj() * self._arow.conj()
+        )
 
         K = self._Ky * self._Kx
         tmp = fft.fft2(tmp) / K
@@ -316,8 +316,6 @@ class CZT:
         out = out[:self._Ny, :self._Nx] * self._bcol.conj()
         out *= self._brow.conj()
 
-        if self.sign == 1:
-            out = np.conj(out)
         out *= self.norm
         return out
 
@@ -330,30 +328,21 @@ class CZT:
         return total
 
 
-def _prepare_czt_basis(N, M, K, shift, alpha, dtype):
-    m = fftrange(M, dtype=config.precision)
-    if shift != 0:
-        m = m + shift
-
-    prefix = -1j * np.pi
-    a = np.exp(prefix * m*m * alpha)
-
+def _prepare_czt_basis(N, M, K, shift, alpha, dtype, sign=-1):
     n = fftrange(N, dtype=config.precision)
-    b = np.exp(prefix * n*n * alpha)
+    m = fftrange(M, dtype=config.precision)
+    q = m + shift
+
+    prefix = sign * 1j * np.pi * alpha
+    a = np.exp(prefix * q*q)
+    b = np.exp(prefix * n*n)
+
+    d_min = m[0] - n[-1]
+    d_max = m[-1] - n[0]
+    d = np.arange(d_min, d_max+1, dtype=config.precision)
 
     h = np.zeros(K, dtype=dtype)
-
-    # populate h piecewise, see Jurling2014 48c, 48d
-    start = -((N - M) // 2) + shift
-    j = np.arange(-start, -start+M, dtype=config.precision)
-    h_left = np.pi * (j * j)
-
-    j = np.arange(-start-N+1, -start, dtype=config.precision)
-    h_right = np.pi * (j * j)
-
-    h[:M] = np.exp(1j * alpha * h_left)
-    h[K-N+1:K] = np.exp(1j * alpha * h_right)
-    h[M:K-N+1] = 0
+    h[:len(d)] = np.exp(-prefix * (d+shift)*(d+shift))
     H = fft.fft(h)
 
     return H, b, a

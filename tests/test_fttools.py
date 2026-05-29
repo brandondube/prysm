@@ -144,3 +144,21 @@ def test_czt_adjoint_is_adjoint(sign, input_shape, output_shape):
     lhs = np.vdot(op(inp), grad)
     rhs = np.vdot(inp, op.adjoint(grad))
     np.testing.assert_allclose(lhs, rhs, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.parametrize('sign', (-1, 1))
+def test_czt_matches_mdft_for_shifted_uniform_grids(sign):
+    rng = np.random.default_rng(123)
+    input_shape = (7, 9)
+    output_shape = (5, 6)
+    ny, nx = input_shape
+    my, mx = output_shape
+    x = fftrange(nx).astype(float) * 0.2 + 0.33
+    y = fftrange(ny).astype(float) * 0.17 - 0.41
+    fx = (fftrange(mx).astype(float) + 0.25) * 0.13
+    fy = (fftrange(my).astype(float) - 0.5) * 0.11
+    inp = rng.normal(size=input_shape) + 1j * rng.normal(size=input_shape)
+
+    mdft = MDFT(x, y, fx, fy, sign=sign)
+    czt = CZT(x, y, fx, fy, sign=sign)
+    np.testing.assert_allclose(czt(inp), mdft(inp), rtol=1e-12, atol=1e-12)
