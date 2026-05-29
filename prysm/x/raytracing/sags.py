@@ -25,9 +25,9 @@ def plane_sag_and_normal(x, y):
 
 
 def phi_conic(c, k, rhosq):
-    """'phi' for a conicc.
+    """'phi' for a conic.
 
-    phi = sqrt(1 - c^2 rho^2)
+    phi = sqrt(1 - (1 + k) c^2 rho^2)
 
     Parameters
     ----------
@@ -68,7 +68,7 @@ def der_direction_cosine_conic(c, k, rho, rhosq=None, phi=None):
         squared radial coordinate (non-normalized)
         rho ** 2 if None
     phi : ndarray, optional
-        (1 - c^2 r^2)^.5
+        (1 - (1 + k) c^2 r^2)^.5
         computed if not provided
         many surface types utilize phi; its computation can be
         de-duplicated by passing the optional argument

@@ -77,6 +77,24 @@ def test_generate_finite_ray_fan_shape_and_unitnorm():
     np.testing.assert_allclose(P, np.tile([0, 0, -50.0], (7, 1)))
 
 
+def test_generate_finite_ray_fan_single_axis_tilt_applied():
+    """A single-axis (yangle-only) tilt must rotate the fan; the guard was
+    once `and` and silently dropped pure single-axis tilts."""
+    _, S0 = generate_finite_ray_fan(7, na=0.1, P=[0, 0, -50.0], yangle=0.0)
+    _, Sy = generate_finite_ray_fan(7, na=0.1, P=[0, 0, -50.0], yangle=10.0)
+    np.testing.assert_allclose(np.linalg.norm(Sy, axis=-1), 1.0, atol=1e-12)
+    # the gut ray (centered NA sample) must tilt off its untilted direction
+    assert not np.allclose(Sy, S0)
+
+
+def test_generate_finite_ray_fan_single_ray_keeps_batch_axis():
+    """nrays==1 with a tilt must stay shape (1, 3), not collapse to (3,)."""
+    P, S = generate_finite_ray_fan(1, na=0.1, P=[0, 0, -50.0], yangle=5.0)
+    assert S.shape == (1, 3)
+    assert P.shape == (1, 3)
+    np.testing.assert_allclose(np.linalg.norm(S, axis=-1), 1.0, atol=1e-12)
+
+
 def test_concat_rayfans_combines_two_fans():
     P1, S1 = generate_collimated_ray_fan(3, maxr=1.0, z=0)
     P2, S2 = generate_collimated_ray_fan(5, maxr=1.0, z=0)

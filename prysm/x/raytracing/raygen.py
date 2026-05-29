@@ -265,10 +265,11 @@ def generate_finite_ray_fan(nrays, na, P=0, min_na=None, azimuth=90,
         k, l = l, k  # NOQA  swap Y and X axes
 
     S = np.stack([k, l, m], axis=1)
-    if yangle != 0 and xangle != 0:
+    if yangle != 0 or xangle != 0:
         R = make_rotation_matrix((0, yangle, -xangle))
-        # newaxis for batch matmul, squeeze needed for size 1 dim after
-        S = np.matmul(R, S[..., np.newaxis]).squeeze()
+        # newaxis for batch matmul, squeeze the trailing column-vector axis
+        # only (a plain squeeze() would collapse the nrays==1 batch axis too)
+        S = np.matmul(R, S[..., np.newaxis]).squeeze(-1)
 
     # need to see a copy of P for each ray, -> add empty dim and broadcast
     P = P[np.newaxis, :]

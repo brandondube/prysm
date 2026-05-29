@@ -9,7 +9,6 @@ from tests.x.raytracing.surface_helpers import (
 
 from prysm.x.raytracing.surfaces import Surface
 from prysm.x.raytracing.opt import (
-    paraxial_image_solve,
     aim_rays,
     locate_ep,
     locate_xp,
@@ -23,49 +22,8 @@ from prysm.x.raytracing.opt import (
 from prysm.x.raytracing.spencer_and_murty import (
     STATUS_CLIP, STATUS_MISS,
 )
+from prysm.x.raytracing.paraxial import paraxial_image_distance
 from prysm.x.raytracing.auto import rc_prescription_from_efl_bfl_sep
-
-
-# ---------- paraxial_image_solve ----------
-
-def test_paraxial_image_solve_single_refracting_sphere():
-    """Single refracting sphere with R=50, n=1.5: image at z = n_after * R / (n_after - n_before).
-
-    With n_after=1.5, n_before=1.0, R=50: image distance = 1.5 * 50 / 0.5 = 150.
-    """
-    R = 50.0
-    n_glass = 1.5
-    expected_image_z = n_glass * R / (n_glass - 1.0)  # 150
-
-    prescription = [
-        sphere(c=1.0 / R, interaction='refr', P=np.array([0., 0., 0.]),
-                       material=lambda wvl: n_glass),
-        # eval plane somewhere downstream so the rays haven't converged yet
-        plane(interaction='eval', P=np.array([0., 0., 100.])),
-    ]
-    P_img = paraxial_image_solve(prescription, z=0, epd=10.0)
-    np.testing.assert_allclose(P_img[2], expected_image_z, rtol=1e-3)
-    # transverse coords should be ~0 (axial image)
-    np.testing.assert_allclose(P_img[:2], [0.0, 0.0], atol=1e-6)
-
-
-def test_paraxial_image_solve_paraxial_fraction_kwarg():
-    """Sweeping paraxial_fraction across orders of magnitude should give the
-    same paraxial image position; the kwarg is therefore live."""
-    prescription = [
-        sphere(c=1 / 50.0, interaction='refr', P=np.array([0., 0., 0.]),
-                       material=lambda wvl: 1.5),
-        plane(interaction='eval', P=np.array([0., 0., 100.])),
-    ]
-    img_default = paraxial_image_solve(prescription, z=0, epd=10.0)
-    img_smaller = paraxial_image_solve(prescription, z=0, epd=10.0,
-                                       paraxial_fraction=1e-5)
-    np.testing.assert_allclose(img_default, img_smaller, atol=1e-3)
-
-
-def test_paraxial_image_solve_requires_na_or_epd():
-    with pytest.raises(ValueError, match='na or epd'):
-        paraxial_image_solve([], z=0)
 
 
 # ---------- aim_rays: single-ray (1-row bundle) ----------
@@ -370,10 +328,11 @@ def test_rc_prescription_paraxial_image_at_bfl():
         conic(c2, k2, 'refl', P_sm),
         plane('eval', P_img),
     ]
-    img = paraxial_image_solve(prescription, z=0, epd=200.0)
-    # paraxial image z should match the design BFL location
-    np.testing.assert_allclose(img[2], P_img[2], rtol=5e-3)
-    np.testing.assert_allclose(img[:2], [0.0, 0.0], atol=1e-3)
+    # image distance measured from the trailing eval plane; it should land
+    # the paraxial image right on the design BFL location.
+    bfd = paraxial_image_distance(prescription, wvl=0.6328)
+    img_z = float(prescription[-1].P[2]) + bfd
+    np.testing.assert_allclose(img_z, P_img[2], rtol=5e-3)
 
 
 # ---------- spot statistics ----------

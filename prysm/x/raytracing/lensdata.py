@@ -181,7 +181,6 @@ class _FrameState:
         self.pending_fold = None
 
     def advance(self, thickness):
-        """Step the origin along the current local +z by thickness."""
         self.o = self.o + _local_to_global(self.Rgl) @ _axial_step(thickness)
 
 
@@ -207,6 +206,24 @@ class _ShapeAdapter:
 
     def __init__(self, cls, scalar_dofs=(), vector_dofs=(), meta_keys=(),
                  categories=None, build=None):
+        """Initialize an adapter.
+
+        Parameters
+        ----------
+        cls : type
+            Shape class handled by this adapter.
+        scalar_dofs : sequence of str, optional
+            Names of scalar shape parameters stored as independent DOFs.
+        vector_dofs : sequence of str, optional
+            Names of vector-valued shape parameters stored as flat DOF blocks.
+        meta_keys : sequence of str, optional
+            Names of static shape parameters copied verbatim.
+        categories : dict, optional
+            Mapping from category names to DOF names.
+        build : callable, optional
+            Function taking a parameter dictionary and returning a Shape.
+
+        """
         self.cls = cls
         self.scalar_dofs = tuple(scalar_dofs)
         self.vector_dofs = tuple(vector_dofs)
@@ -215,35 +232,31 @@ class _ShapeAdapter:
         self.build = build
 
 
-def _adapter(cls, **kwargs):
-    return _ShapeAdapter(cls, **kwargs)
-
-
 _SHAPE_ADAPTERS = {
-    Plane: _adapter(
+    Plane: _ShapeAdapter(
         Plane,
         build=lambda p: Plane(),
     ),
-    Sphere: _adapter(
+    Sphere: _ShapeAdapter(
         Sphere,
         scalar_dofs=('c',),
         categories={'curvature': ['c'], 'radius': ['c']},
         build=lambda p: Sphere(p['c']),
     ),
-    Conic: _adapter(
+    Conic: _ShapeAdapter(
         Conic,
         scalar_dofs=('c', 'k'),
         categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k']},
         build=lambda p: Conic(p['c'], p['k']),
     ),
-    OffAxisConic: _adapter(
+    OffAxisConic: _ShapeAdapter(
         OffAxisConic,
         scalar_dofs=('c', 'k'),
         meta_keys=('dx', 'dy'),
         categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k']},
         build=lambda p: OffAxisConic(p['c'], p['k'], dx=p['dx'], dy=p['dy']),
     ),
-    EvenAsphere: _adapter(
+    EvenAsphere: _ShapeAdapter(
         EvenAsphere,
         scalar_dofs=('c', 'k'),
         vector_dofs=('coefs',),
@@ -251,7 +264,7 @@ _SHAPE_ADAPTERS = {
                     'coefs': ['coefs']},
         build=lambda p: EvenAsphere(p['c'], p['k'], p['coefs']),
     ),
-    Q2D: _adapter(
+    Q2D: _ShapeAdapter(
         Q2D,
         scalar_dofs=('c', 'k'),
         meta_keys=('normalization_radius', 'cm0', 'ams', 'bms', 'dx', 'dy'),
@@ -260,7 +273,7 @@ _SHAPE_ADAPTERS = {
                                p['cm0'], p['ams'], p['bms'],
                                dx=p['dx'], dy=p['dy']),
     ),
-    Zernike: _adapter(
+    Zernike: _ShapeAdapter(
         Zernike,
         scalar_dofs=('c', 'k'),
         vector_dofs=('coefs',),
@@ -270,7 +283,7 @@ _SHAPE_ADAPTERS = {
         build=lambda p: Zernike(p['c'], p['k'], p['normalization_radius'],
                                    p['nms'], p['coefs'], norm=p['norm']),
     ),
-    XY: _adapter(
+    XY: _ShapeAdapter(
         XY,
         scalar_dofs=('c', 'k'),
         vector_dofs=('coefs',),
@@ -280,7 +293,7 @@ _SHAPE_ADAPTERS = {
         build=lambda p: XY(p['c'], p['k'], p['normalization_radius'],
                               p['mns'], p['coefs']),
     ),
-    Chebyshev: _adapter(
+    Chebyshev: _ShapeAdapter(
         Chebyshev,
         scalar_dofs=('c', 'k'),
         vector_dofs=('coefs',),
@@ -290,7 +303,7 @@ _SHAPE_ADAPTERS = {
         build=lambda p: Chebyshev(p['c'], p['k'], p['x_norm'], p['y_norm'],
                                      p['mns'], p['coefs']),
     ),
-    Jacobi: _adapter(
+    Jacobi: _ShapeAdapter(
         Jacobi,
         scalar_dofs=('c', 'k'),
         vector_dofs=('coefs',),
@@ -300,7 +313,7 @@ _SHAPE_ADAPTERS = {
         build=lambda p: Jacobi(p['c'], p['k'], p['normalization_radius'],
                                   p['alpha'], p['beta'], p['ns'], p['coefs']),
     ),
-    Toroid: _adapter(
+    Toroid: _ShapeAdapter(
         Toroid,
         scalar_dofs=('c_x', 'c_y', 'k_y'),
         vector_dofs=('coefs_y',),
@@ -308,7 +321,7 @@ _SHAPE_ADAPTERS = {
                     'coefs': ['coefs_y']},
         build=lambda p: Toroid(p['c_x'], p['c_y'], p['k_y'], p['coefs_y']),
     ),
-    Biconic: _adapter(
+    Biconic: _ShapeAdapter(
         Biconic,
         scalar_dofs=('c_x', 'c_y', 'k_x', 'k_y'),
         categories={'curvature': ['c_x', 'c_y'], 'conic': ['k_x', 'k_y']},
@@ -406,6 +419,31 @@ class SurfaceRow:
     def __init__(self, shape, *, thickness=0.0, material=None, typ='refr',
                  semidiameter=None, aperture=None, bounding=None, grating=None,
                  edge=None):
+        """Initialize a surface row from a shape.
+
+        Parameters
+        ----------
+        shape : Shape
+            Surface shape whose registered adapter defines the row DOFs.
+        thickness : float, optional
+            Gap to the next row.
+        material : callable, float, str, or None, optional
+            Material specification carried until compilation.
+        typ : str, optional
+            Surface interaction type.
+        semidiameter : float, optional
+            Clear semi-diameter used to create default aperture and bounding
+            data.
+        aperture : callable, optional
+            Aperture function to attach to the compiled surface.
+        bounding : dict, optional
+            Bounding metadata to attach to the compiled surface.
+        grating : object, optional
+            Grating model to attach to the compiled surface.
+        edge : dict, optional
+            Mechanical edge metadata for layout drawing.
+
+        """
         adapter = _adapter_for(shape)
         params = []
         key_offsets = {}
@@ -469,6 +507,14 @@ class SurfaceRow:
         yield ('thickness', row_index, 0)
 
     def copy(self):
+        """Return a copy of the row.
+
+        Returns
+        -------
+        SurfaceRow
+            Row with copied numeric arrays and metadata containers.
+
+        """
         new = object.__new__(SurfaceRow)
         new.shape_kind = self.shape_kind
         new.adapter = self.adapter
@@ -497,6 +543,22 @@ class CoordBreak:
 
     def __init__(self, *, decenter=(0.0, 0.0, 0.0), tilt=(0.0, 0.0, 0.0),
                  kind='basic', ret_target=None, thickness=0.0):
+        """Initialize a coordinate break row.
+
+        Parameters
+        ----------
+        decenter : sequence of float, optional
+            Decenter along the current local x, y, and z axes.
+        tilt : sequence of float, optional
+            Right-handed rotations rz, ry, and rx in degrees.
+        kind : str, optional
+            Coordinate break kind.
+        ret_target : int, optional
+            Row index whose saved frame is restored by a return break.
+        thickness : float, optional
+            Gap after the coordinate break.
+
+        """
         self.decenter = np.asarray(decenter, dtype=config.precision)
         self.tilt = np.asarray(tilt, dtype=config.precision)
         self.kind = kind
@@ -512,6 +574,14 @@ class CoordBreak:
         yield ('thickness', row_index, 0)
 
     def copy(self):
+        """Return a copy of the coordinate break.
+
+        Returns
+        -------
+        CoordBreak
+            Coordinate break with copied numeric arrays.
+
+        """
         new = object.__new__(CoordBreak)
         new.decenter = np.array(self.decenter, copy=True)
         new.tilt = np.array(self.tilt, copy=True)
@@ -526,8 +596,7 @@ class CoordBreak:
 # ---------------------------------------------------------------------------
 
 class ParamSpec:
-    """Maps each scalar DOF slot to a (row, group, offset) address and tracks
-    which slots are free and their box bounds.
+    """Maps each scalar DOF slot to a (row, group, offset) address and tracks which slots are free and their box bounds.
 
     A *slot* is the tuple (group, row_index, offset) where group is one
     of 'shape', 'thickness', 'decenter', 'tilt'.  The free subset is gathered
@@ -556,6 +625,24 @@ class ParamSpec:
 
     # -- value access --
     def get_value(self, slot):
+        """Return the scalar value addressed by a slot.
+
+        Parameters
+        ----------
+        slot : tuple
+            Slot tuple of the form (group, row_index, offset).
+
+        Returns
+        -------
+        float
+            Current value of the addressed DOF.
+
+        Raises
+        ------
+        KeyError
+            If the slot group is unknown.
+
+        """
         group, r, off = slot
         row = self._ld.rows[r]
         if group == 'shape':
@@ -569,6 +656,21 @@ class ParamSpec:
         raise KeyError(group)
 
     def set_value(self, slot, value):
+        """Set the scalar value addressed by a slot.
+
+        Parameters
+        ----------
+        slot : tuple
+            Slot tuple of the form (group, row_index, offset).
+        value : float
+            New scalar value.
+
+        Raises
+        ------
+        KeyError
+            If the slot group is unknown.
+
+        """
         group, r, off = slot
         row = self._ld.rows[r]
         if group == 'shape':
@@ -665,6 +767,32 @@ class LensData:
     def __init__(self, *, epd=None, fields=None, wavelengths=None,
                  reference_wavelength=None, n_ambient=1.0, stop_index=None,
                  unit=None, source_path=None, source_format=None, extras=None):
+        """Initialize an empty optical system.
+
+        Parameters
+        ----------
+        epd : float, optional
+            Entrance pupil diameter.
+        fields : sequence, optional
+            Field specifications coercible to Field instances.
+        wavelengths : mapping or sequence, optional
+            Named or indexed wavelengths in microns.
+        reference_wavelength : str or float, optional
+            Default wavelength used when none is supplied.
+        n_ambient : float, optional
+            Ambient refractive index.
+        stop_index : int, optional
+            Index of the stop surface.
+        unit : str, optional
+            Length unit label for the prescription.
+        source_path : str, optional
+            Path of the source prescription, when loaded from disk.
+        source_format : str, optional
+            Format name of the source prescription.
+        extras : dict, optional
+            Additional metadata carried through IO.
+
+        """
         self.rows = []
         self.spec = ParamSpec(self)
         self.epd = epd
@@ -714,6 +842,7 @@ class LensData:
         return self
 
     def _invalidate(self):
+        """Clear cached compiled surfaces."""
         self._surfaces_cache = None
 
     # -- compilation --
@@ -764,6 +893,23 @@ class LensData:
             self.rows[surf_idx].thickness = pid
 
     def _build_surface(self, row, P, R=None):
+        """Build a posed Surface from a LensData row.
+
+        Parameters
+        ----------
+        row : SurfaceRow
+            Row to compile.
+        P : array_like
+            Surface origin in global coordinates.
+        R : ndarray, optional
+            Global-to-local rotation matrix.  None denotes identity.
+
+        Returns
+        -------
+        Surface
+            Compiled surface ready for ray tracing.
+
+        """
         return Surface(
             shape=row.build_shape(), interaction=row.typ, P=P, R=R,
             material=_as_material_callable(row.material),
@@ -772,6 +918,14 @@ class LensData:
         )
 
     def _to_surfaces_axial(self):
+        """Compile rows for a system without coordinate breaks.
+
+        Returns
+        -------
+        list of Surface
+            Compiled surfaces placed along the global z axis.
+
+        """
         surfaces = []
         z = 0.0
         sign = 1.0
@@ -783,6 +937,14 @@ class LensData:
         return surfaces
 
     def _to_surfaces_general(self):
+        """Compile rows for a system containing coordinate breaks.
+
+        Returns
+        -------
+        list of Surface
+            Compiled surfaces with accumulated origins and rotations.
+
+        """
         surfaces = []
         state = _FrameState()
 
@@ -822,6 +984,22 @@ class LensData:
         return surfaces
 
     def _apply_coordbreak(self, cb, state):
+        """Apply a coordinate break to the running layout state.
+
+        Parameters
+        ----------
+        cb : CoordBreak
+            Coordinate break row to consume.
+        state : _FrameState
+            Mutable running frame state.
+
+        Raises
+        ------
+        ValueError
+            If a return target has not been placed or the break kind is
+            unknown.
+
+        """
         kind = cb.kind
         decenter = cb.decenter
         tilt = cb.tilt
@@ -884,12 +1062,41 @@ class LensData:
 
     # -- sequence protocol (duck-type as a surface list) --
     def __len__(self):
+        """Return the number of compiled surfaces.
+
+        Returns
+        -------
+        int
+            Number of surface rows after compilation.
+
+        """
         return len(self.to_surfaces())
 
     def __iter__(self):
+        """Iterate over compiled surfaces.
+
+        Returns
+        -------
+        iterator
+            Iterator over the compiled surface list.
+
+        """
         return iter(self.to_surfaces())
 
     def __getitem__(self, item):
+        """Return one or more compiled surfaces by index.
+
+        Parameters
+        ----------
+        item : int or slice
+            Index or slice into the compiled surface list.
+
+        Returns
+        -------
+        Surface or list of Surface
+            Selected compiled surface or surfaces.
+
+        """
         return self.to_surfaces()[item]
 
     # -- optimizer surface --
@@ -1039,6 +1246,19 @@ class LensData:
         return self
 
     def _select_rows(self, surfaces):
+        """Resolve a row selector to concrete row indices.
+
+        Parameters
+        ----------
+        surfaces : {'all', None, int, slice, sequence of int}
+            Surface-row selector.
+
+        Returns
+        -------
+        list of int
+            Normalized row indices.
+
+        """
         n = len(self.rows)
         if surfaces == 'all' or surfaces is None:
             return list(range(n))
@@ -1049,6 +1269,21 @@ class LensData:
         return [int(s) % n for s in surfaces]
 
     def _category_slots(self, category, surfaces):
+        """Return all slots selected by a category and row selector.
+
+        Parameters
+        ----------
+        category : str
+            DOF category name.
+        surfaces : {'all', None, int, slice, sequence of int}
+            Surface-row selector.
+
+        Returns
+        -------
+        list of tuple
+            Slot tuples matching the requested category.
+
+        """
         slots = []
         for r in self._select_rows(surfaces):
             row = self.rows[r]
@@ -1087,8 +1322,7 @@ class LensData:
 
     # -- copy --
     def copy(self):
-        """Return a deep-ish copy: rows cloned, metadata copied, DOF
-        selection (free flags + bounds) preserved."""
+        """Return a deep-ish copy: rows cloned, metadata copied, DOF selection (free flags + bounds) preserved."""
         new = LensData(
             epd=self.epd, fields=list(self.fields),
             wavelengths=dict(self.wavelengths),
@@ -1107,6 +1341,15 @@ class LensData:
         return new
 
     def __repr__(self):
+        """Return a compact representation of the system.
+
+        Returns
+        -------
+        str
+            Summary including row count, entrance pupil diameter, and free DOF
+            count.
+
+        """
         return (f'LensData(n_rows={len(self.rows)}, epd={self.epd}, '
                 f'n_free={len(self.spec.free_slots())})')
 
@@ -1116,6 +1359,20 @@ class LensData:
 # ---------------------------------------------------------------------------
 
 def _coerce_field(field):
+    """Coerce an input field specification to a Field.
+
+    Parameters
+    ----------
+    field : Field, scalar, or sequence
+        Field specification.  Scalars are interpreted as y field values;
+        sequences provide x and y.
+
+    Returns
+    -------
+    Field
+        Coerced field object.
+
+    """
     if isinstance(field, Field):
         return field
     if np.isscalar(field):
@@ -1124,12 +1381,39 @@ def _coerce_field(field):
 
 
 def _coerce_fields(fields):
+    """Coerce a sequence of field specifications.
+
+    Parameters
+    ----------
+    fields : sequence or None
+        Field specifications to coerce.
+
+    Returns
+    -------
+    list of Field
+        Coerced field list.  None becomes an empty list.
+
+    """
     if fields is None:
         return []
     return [_coerce_field(field) for field in fields]
 
 
 def _coerce_wavelengths(wavelengths):
+    """Coerce wavelength metadata to a dictionary.
+
+    Parameters
+    ----------
+    wavelengths : mapping, sequence, or None
+        Wavelengths in microns.
+
+    Returns
+    -------
+    dict
+        Wavelength dictionary.  Sequence inputs are keyed by stringified
+        integer index.
+
+    """
     if wavelengths is None:
         return {}
     if hasattr(wavelengths, 'items'):

@@ -19,7 +19,6 @@ from prysm.x.raytracing.paraxial import (
     first_order,
     FirstOrderProperties,
 )
-from prysm.x.raytracing.opt import paraxial_image_solve
 from prysm.x.raytracing.auto import rc_prescription_from_efl_bfl_sep
 
 
@@ -108,46 +107,34 @@ def test_image_distance_no_power_raises():
         paraxial_image_distance(rx, wvl=0.55)
 
 
-# ---------- agreement with the numerical solver ----------
+# ---------- paraxial image distance lands on the design conjugate ----------
 
-def test_matrix_vs_numerical_single_sphere():
+def test_paraxial_image_distance_single_sphere():
+    """Single refracting sphere R=50, n=1.5: image at n'R/(n'-n) = 150 from vertex."""
+    R = 50.0
+    n_glass = 1.5
+    expected = n_glass * R / (n_glass - 1.0)  # 150, measured from the vertex
     rx = [
-        sphere(c=1 / 50.0, interaction='refr', P=np.array([0., 0., 0.]),
-                       material=lambda wvl: 1.5),
-        plane(interaction='eval', P=np.array([0., 0., 100.])),
+        sphere(c=1 / R, interaction='refr', P=np.array([0., 0., 0.]),
+                       material=lambda wvl: n_glass),
     ]
-    img_num = paraxial_image_solve(rx, z=0, epd=10.0, method='numerical')
-    img_mat = paraxial_image_solve(rx, z=0, method='matrix')
-    np.testing.assert_allclose(img_mat[2], img_num[2], rtol=1e-3)
+    bfd = paraxial_image_distance(rx, wvl=0.6328)
+    np.testing.assert_allclose(bfd, expected, rtol=1e-9)
 
 
-def test_matrix_vs_numerical_rc_telescope():
-    """ABCD must agree with the 4-ray solve on an RC to ~1e-3 (relative)."""
+def test_paraxial_image_distance_rc_telescope_lands_on_bfl():
+    """ABCD image distance places the RC paraxial image at the design BFL."""
     efl, bfl, sep = 1500.0, 250.0, 400.0
     c1, c2, k1, k2 = rc_prescription_from_efl_bfl_sep(efl, bfl, sep)
     P_pm = np.array([0.0, 0.0, 0.0])
     P_sm = np.array([0.0, 0.0, -sep])
-    P_img = np.array([0.0, 0.0, bfl - sep])
     rx = [
         conic(c1, k1, 'refl', P_pm),
         conic(c2, k2, 'refl', P_sm),
-        plane('eval', P_img),
     ]
-    img_num = paraxial_image_solve(rx, z=0, epd=200.0, method='numerical')
-    img_mat = paraxial_image_solve(rx, z=0, method='matrix')
-    np.testing.assert_allclose(img_mat[2], img_num[2], rtol=5e-3)
-    # the matrix answer is the truth here; should land within 1e-9 of the
-    # design BFL
-    np.testing.assert_allclose(img_mat[2], P_img[2], rtol=1e-9)
-
-
-def test_matrix_method_unknown_raises():
-    rx = [
-        sphere(c=1 / 50.0, interaction='refr', P=np.array([0., 0., 0.]),
-                       material=lambda wvl: 1.5),
-    ]
-    with pytest.raises(ValueError, match="method must be"):
-        paraxial_image_solve(rx, z=0, method='not_a_method')
+    # image distance is measured from the last (SM) vertex; design BFL is too
+    bfd = paraxial_image_distance(rx, wvl=0.6328)
+    np.testing.assert_allclose(P_sm[2] + bfd, bfl - sep, rtol=1e-9)
 
 
 # ---------- effective focal length ----------
