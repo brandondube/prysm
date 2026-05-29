@@ -32,6 +32,17 @@ def _require_raytrace_result(result):
     return result
 
 
+def _to_np(x, dtype=None):
+    """Bring a possibly-cupy/torch array back to true numpy for matplotlib."""
+    return np.asarray(array_to_true_numpy(x), dtype=dtype)
+
+
+def _axis_pair(coord, y):
+    """Return (xpt, ypt) with coord on the drawn meridian and zero off it."""
+    zero = np.zeros_like(coord)
+    return (zero, coord) if y == 'y' else (coord, zero)
+
+
 def plot_ray_paths(result, *, x='z', y='y', lw=1, ls='-', c='r', alpha=1,
                    zorder=4, fig=None, ax=None):
     """Plot ray paths from a RayTraceResult.
@@ -70,8 +81,7 @@ def plot_ray_paths(result, *, x='z', y='y', lw=1, ls='-', c='r', alpha=1,
     result = _require_raytrace_result(result)
     fig, ax = share_fig_ax(fig, ax)
 
-    ph = result.P
-    ph = np.asarray(array_to_true_numpy(ph))
+    ph = _to_np(result.P)
     xs = ph[..., 0]
     ys = ph[..., 1]
     zs = ph[..., 2]
@@ -95,8 +105,7 @@ def _local_axis_coordinates_from_phist(phist, j, y, surf=None):
     if surf is not None:
         dirs = np.zeros_like(p)
         p, _ = transform_to_local_coords(p, surf.P, dirs, surf.R)
-    axis = 1 if y == 'y' else 0
-    return p[..., axis]
+    return p[..., _axis_index(y)]
 
 
 def _axis_extent_from_phist(phist, j, y, surf=None, center=0.0):
@@ -108,11 +117,8 @@ def _axis_extent_from_phist(phist, j, y, surf=None, center=0.0):
 def _global_plot_coordinates(surf, sag, ploty, x, y):
     sag = np.asarray(sag, dtype=float)
     ploty = np.asarray(ploty, dtype=float)
-    zeros = np.zeros_like(ploty)
-    if y == 'y':
-        local = np.stack([zeros, ploty, sag - surf.P[2]], axis=-1)
-    else:
-        local = np.stack([ploty, zeros, sag - surf.P[2]], axis=-1)
+    xpart, ypart = _axis_pair(ploty, y)
+    local = np.stack([xpart, ypart, sag - surf.P[2]], axis=-1)
     dirs = np.zeros_like(local)
     rotation = None if surf.R is None else surf.R.T
     global_points, _ = transform_to_global_coords(
@@ -128,29 +134,17 @@ def _surface_profile(surf, phist, j, points, y, radius=None, clear_radius=None,
             p = phist[j + 1]
             dirs = np.zeros_like(p)
             p, _ = transform_to_local_coords(p, surf.P, dirs, surf.R)
-            xx = p[..., 0]
-            yy = p[..., 1]
+            src = p[..., 1] if y == 'y' else p[..., 0]
             mask = []
-            if y == 'y':
-                ypt = np.linspace(yy.min(), yy.max(), points)
-                ploty = ypt
-                xpt = np.zeros_like(ypt)
-            else:
-                xpt = np.linspace(xx.min(), xx.max(), points)
-                ploty = xpt
-                ypt = np.zeros_like(xpt)
+            ploty = np.linspace(src.min(), src.max(), points)
+            xpt, ypt = _axis_pair(ploty, y)
         else:
             bound = surf.bounding
             local = np.linspace(-bound['outer_radius'], bound['outer_radius'],
                                 points)
             mask = abs(local) < bound.get('inner_radius', 0)
             ploty = center + local
-            if y == 'y':
-                ypt = ploty
-                xpt = np.zeros_like(ploty)
-            else:
-                xpt = ploty
-                ypt = np.zeros_like(ploty)
+            xpt, ypt = _axis_pair(ploty, y)
     else:
         local = np.linspace(-radius, radius, points)
         ploty = center + local
@@ -168,12 +162,7 @@ def _surface_profile(surf, phist, j, points, y, radius=None, clear_radius=None,
         else:
             eval_local = local
         eval_coord = center + eval_local
-        if y == 'y':
-            xpt = np.zeros_like(eval_coord)
-            ypt = eval_coord
-        else:
-            xpt = eval_coord
-            ypt = np.zeros_like(eval_coord)
+        xpt, ypt = _axis_pair(eval_coord, y)
 
     sag = surf.sag(xpt, ypt)
     sag = np.asarray(sag, dtype=float) + surf.P[2]
@@ -201,8 +190,7 @@ def _surface_drawable_radius(surf, radius, axis, center=0.0, samples=512):
     """
     probe = np.linspace(0.0, radius, samples)
     coord = center + probe
-    zero = np.zeros_like(coord)
-    xpt, ypt = (zero, coord) if axis == 'y' else (coord, zero)
+    xpt, ypt = _axis_pair(coord, axis)
     # the probe deliberately reaches past a steep surface's equator, where the
     # sag is undefined; that NaN is the signal we are looking for
     with np.errstate(invalid='ignore'):
@@ -346,16 +334,9 @@ def _mirror_substrate_outline_from_phist(surf, phist, surface_index, backing,
                   'uniform', 'hockey_puck'):
         reference = backing.get('reference', 'aperture')
         ref = _plot_axis_reference_coordinate(surf, ploty, y, reference)
-        zeros = np.asarray([0.0])
         coord = np.asarray([ref])
-        if y == 'y':
-            xpt = zeros
-            ypt = coord
-            use_fy = True
-        else:
-            xpt = coord
-            ypt = zeros
-            use_fy = False
+        xpt, ypt = _axis_pair(coord, y)
+        use_fy = y == 'y'
 
         z, n_hat = surf.sag_and_normal(xpt, ypt)
         Fx = -n_hat[..., 0] / n_hat[..., 2]
@@ -375,7 +356,7 @@ def mirror_surface_outline(surf, result, surface_index=0, *, points=100,
                            center=0.0):
     """Return X/Y arrays for drawing one mirror optical surface."""
     result = _require_raytrace_result(result)
-    phist = np.asarray(array_to_true_numpy(result.P))
+    phist = _to_np(result.P)
     x = x.lower()
     y = y.lower()
     if isinstance(center, str):
@@ -446,7 +427,7 @@ def mirror_substrate_outline(surf, result, surface_index=0, *, backing,
 
     """
     result = _require_raytrace_result(result)
-    phist = np.asarray(array_to_true_numpy(result.P))
+    phist = _to_np(result.P)
     x = x.lower()
     y = y.lower()
     return _mirror_substrate_outline_from_phist(
@@ -516,7 +497,7 @@ def lens_groups_from_surfaces(prescription, *, wvl=0.587,
         if np.isscalar(n_post):
             n_post = float(n_post)
         else:
-            n_post = np.asarray(array_to_true_numpy(n_post))
+            n_post = _to_np(n_post)
             if n_post.size != 1:
                 raise ValueError('material evaluation must produce a scalar index')
             n_post = float(n_post.reshape(-1)[0])
@@ -690,8 +671,7 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
     fig, ax = share_fig_ax(fig, ax)
     ax.set(aspect='equal')
     result = _require_raytrace_result(result)
-    phist = result.P
-    phist = np.asarray(array_to_true_numpy(phist))
+    phist = _to_np(result.P)
 
     lens_groups = lens_groups_from_surfaces(
         prescription, wvl=wvl, ambient_index=ambient_index,
@@ -897,15 +877,15 @@ def plot_transverse_ray_aberration(phist, lw=1, ls='-', c='r', alpha=1,
         if status is None:
             status = result.status
 
-    ph = np.asarray(array_to_true_numpy(phist))
+    ph = _to_np(phist)
     if status is not None:
-        status = np.asarray(array_to_true_numpy(status))
+        status = _to_np(status)
 
     input_rays, output_rays = transverse_ray_aberration(
         ph, axis=axis.lower(), chief_index=chief_index, status=status,
     )
-    input_rays = np.asarray(array_to_true_numpy(input_rays))
-    output_rays = np.asarray(array_to_true_numpy(output_rays))
+    input_rays = _to_np(input_rays)
+    output_rays = _to_np(output_rays)
     ax.plot(input_rays, output_rays, c=c, lw=lw, ls=ls, alpha=alpha,
             zorder=zorder)
     return fig, ax
@@ -957,8 +937,8 @@ def plot_wave_aberration_fan(coord, opd, *, wavelength=None, units='waves',
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    coord = np.asarray(array_to_true_numpy(coord), dtype=float)
-    opd = np.asarray(array_to_true_numpy(opd), dtype=float)
+    coord = _to_np(coord, dtype=float)
+    opd = _to_np(opd, dtype=float)
 
     units = units.lower()
     if units in ('wave', 'waves'):
@@ -1037,11 +1017,11 @@ def plot_spot_diagram(phist, marker='+', c='k', alpha=1, zorder=4, s=None,
         phist = result.P
         if status is None:
             status = result.status
-    phist = np.asarray(array_to_true_numpy(phist))
+    phist = _to_np(phist)
     x = phist[-1, ..., 0]
     y = phist[-1, ..., 1]
     if status is not None:
-        status = np.asarray(array_to_true_numpy(status))
+        status = _to_np(status)
         valid = status.imag == 0
         x = x[valid]
         y = y[valid]
@@ -1054,7 +1034,7 @@ def plot_spot_diagram(phist, marker='+', c='k', alpha=1, zorder=4, s=None,
         if isinstance(origin, (list, tuple)):
             origin = np.asarray(origin, dtype=float)
         else:
-            origin = np.asarray(array_to_true_numpy(origin), dtype=float)
+            origin = _to_np(origin, dtype=float)
         x = x - origin[0]
         y = y - origin[1]
     ax.scatter(x, y, c=c, s=s, marker=marker, alpha=alpha, zorder=zorder,
@@ -1136,8 +1116,8 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
         prescription, fields, wavelength, epd=epd, n_ambient=n_ambient,
         marginal_fraction=marginal_fraction,
     )
-    sagittal_z = np.asarray(array_to_true_numpy(sagittal_z), dtype=float)
-    tangential_z = np.asarray(array_to_true_numpy(tangential_z), dtype=float)
+    sagittal_z = _to_np(sagittal_z, dtype=float)
+    tangential_z = _to_np(tangential_z, dtype=float)
     if reference is None:
         ref = 0.0
     elif isinstance(reference, str):
@@ -1209,7 +1189,7 @@ def plot_distortion(prescription, fields, wavelength=None, *, epd=None,
         prescription, fields, wavelength, epd=epd, n_ambient=n_ambient,
         distortion_type=distortion_type, pupil_z=pupil_z,
     )
-    percent = np.asarray(array_to_true_numpy(percent), dtype=float)
+    percent = _to_np(percent, dtype=float)
     field_values = _field_axis_values(list(fields))
     ax.plot(percent, field_values, c=c, lw=lw, alpha=alpha, zorder=zorder,
             label=label)
