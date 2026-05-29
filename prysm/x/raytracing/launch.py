@@ -92,41 +92,52 @@ class Sampling:
         kind = self.kind
         if kind == 'chief':
             return np.zeros((1, 2), dtype=config.precision)
-        if kind == 'fan':
+        elif kind == 'fan':
             P, _ = raygen.generate_collimated_ray_fan(
                 self.opts['n'], maxr=extent,
                 azimuth=self.opts.get('azimuth', 90),
                 distribution=self.opts.get('distribution', 'uniform'))
-            return P[:, :2]
-        if kind == 'cross':
+            xy = P[:, :2]
+        elif kind == 'cross':
             n = self.opts['n']
             dist = self.opts.get('distribution', 'uniform')
             Px, _ = raygen.generate_collimated_ray_fan(
                 n, maxr=extent, azimuth=0, distribution=dist)
             Py, _ = raygen.generate_collimated_ray_fan(
                 n, maxr=extent, azimuth=90, distribution=dist)
-            return np.concatenate([Px[:, :2], Py[:, :2]], axis=0)
-        if kind == 'rect':
+            xy = np.concatenate([Px[:, :2], Py[:, :2]], axis=0)
+        elif kind == 'rect':
             P, _ = raygen.generate_collimated_rect_ray_grid(
                 self.opts['n'], maxx=extent,
                 distribution=self.opts.get('distribution', 'uniform'))
-            return P[:, :2]
-        if kind == 'hex':
+            xy = P[:, :2]
+        elif kind == 'hex':
             nrings = self.opts['nrings']
             spacing = self.opts.get('spacing')
             if spacing is None:
                 spacing = extent / nrings if nrings > 0 else 0.0
             P, _ = raygen.generate_collimated_hex_ray_grid(nrings, spacing)
-            return P[:, :2]
-        if kind == 'spiral':
+            xy = P[:, :2]
+        elif kind == 'spiral':
             P, _ = raygen.generate_collimated_radial_spiral_ray_grid(
                 self.opts['nrings'], maxr=extent,
                 samples_per_ring=self.opts.get('samples_per_ring'),
                 radial_distribution=self.opts.get(
                     'radial_distribution', 'cheby'),
                 include_center=self.opts.get('include_center', True))
-            return P[:, :2]
-        raise ValueError(f'unknown sampling kind {kind!r}')
+            xy = P[:, :2]
+        else:
+            raise ValueError(f'unknown sampling kind {kind!r}')
+
+        # a central obscuration (the shadow of a Cassegrain secondary, a
+        # spider hub, ...) is a pupil-sampling mask: it removes the real rays
+        # behind it but leaves reference rays (chief, paraxial marginals) to
+        # the analysis layer.  obscuration is the linear inner-radius ratio.
+        obscuration = self.opts.get('obscuration')
+        if obscuration:
+            r = np.hypot(xy[:, 0], xy[:, 1])
+            xy = xy[r >= float(obscuration) * extent]
+        return xy
 
     @classmethod
     def chief(cls):
@@ -134,10 +145,12 @@ class Sampling:
         return cls('chief')
 
     @classmethod
-    def fan(cls, n=11, axis='y', distribution='uniform'):
+    def fan(cls, n=11, axis='y', distribution='uniform', obscuration=None):
         """A 1D fan of n rays along axis ('x' or 'y').
 
         distribution selects the radial spacing of the fan samples.
+        obscuration, if given, is the linear central-obscuration ratio
+        (inner radius / outer extent); samples inside it are dropped.
 
         """
         if axis == 'y':
@@ -146,31 +159,58 @@ class Sampling:
             azi = 0
         else:
             raise ValueError(f"axis must be 'x' or 'y', got {axis!r}")
-        return cls('fan', n=int(n), azimuth=azi, distribution=distribution)
+        return cls('fan', n=int(n), azimuth=azi, distribution=distribution,
+                   obscuration=obscuration)
 
     @classmethod
-    def cross(cls, n=11, distribution='uniform'):
-        """An x and y fan, 2*n rays total (the central ray appears twice)."""
-        return cls('cross', n=int(n), distribution=distribution)
+    def cross(cls, n=11, distribution='uniform', obscuration=None):
+        """An x and y fan, 2*n rays total (the central ray appears twice).
+
+        obscuration, if given, is the linear central-obscuration ratio
+        (inner radius / outer extent); samples inside it are dropped.
+
+        """
+        return cls('cross', n=int(n), distribution=distribution,
+                   obscuration=obscuration)
 
     @classmethod
-    def rect(cls, n=21, distribution='uniform'):
-        """A rectangular n by n grid of rays."""
-        return cls('rect', n=int(n), distribution=distribution)
+    def rect(cls, n=21, distribution='uniform', obscuration=None):
+        """A rectangular n by n grid of rays.
+
+        obscuration, if given, is the linear central-obscuration ratio
+        (inner radius / outer extent); samples inside it are dropped.
+
+        """
+        return cls('rect', n=int(n), distribution=distribution,
+                   obscuration=obscuration)
 
     @classmethod
-    def hex(cls, nrings=5, spacing=None):
-        """A hexapolar grid of nrings concentric rings."""
-        return cls('hex', nrings=int(nrings), spacing=spacing)
+    def hex(cls, nrings=5, spacing=None, obscuration=None):
+        """A hexapolar grid of nrings concentric rings.
+
+        obscuration, if given, is the linear central-obscuration ratio
+        (inner radius / outer extent); samples inside it are dropped, giving
+        the annular pupil of an obstructed (e.g. Cassegrain) system.
+
+        """
+        return cls('hex', nrings=int(nrings), spacing=spacing,
+                   obscuration=obscuration)
 
     @classmethod
     def spiral(cls, nrings=5, samples_per_ring=None,
-               radial_distribution='cheby', include_center=True):
-        """A radial-azimuthal spiral grid (Forbes-style Q-poly fitting grid)."""
+               radial_distribution='cheby', include_center=True,
+               obscuration=None):
+        """A radial-azimuthal spiral grid (Forbes-style Q-poly fitting grid).
+
+        obscuration, if given, is the linear central-obscuration ratio
+        (inner radius / outer extent); samples inside it are dropped.
+
+        """
         return cls('spiral', nrings=int(nrings),
                    samples_per_ring=samples_per_ring,
                    radial_distribution=radial_distribution,
-                   include_center=bool(include_center))
+                   include_center=bool(include_center),
+                   obscuration=obscuration)
 
     def __repr__(self):
         opts = ', '.join(f'{k}={v!r}' for k, v in self.opts.items())

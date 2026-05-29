@@ -110,6 +110,29 @@ def test_tra_filters_nonfinite_rays_without_status():
     np.testing.assert_array_equal(dy, [0., 1.])
 
 
+def test_tra_centroid_reference_works_without_a_chief():
+    # chief (index 1) lands at NaN -- e.g. clipped by a central obscuration;
+    # the centroid reference registers on the surviving rays instead
+    P_hist = np.array([
+        [[0., -1., 0.], [0., 0., 0.], [0., 1., 0.]],
+        [[0., 2., 10.], [0., np.nan, 10.], [0., 4., 10.]],
+    ])
+    status = np.array([0 + 0j, 1 + STATUS_CLIP * 1j, 0 + 0j])
+    pupil_y, dy = transverse_ray_aberration(P_hist, axis='y', chief_index=1,
+                                            status=status, reference='centroid')
+    np.testing.assert_array_equal(pupil_y, [-1., 1.])
+    np.testing.assert_allclose(dy, [-1., 1.])  # mean of {2,4}=3 subtracted
+
+
+def test_tra_chief_reference_raises_when_chief_clipped():
+    P_hist = np.array([
+        [[0., -1., 0.], [0., 0., 0.], [0., 1., 0.]],
+        [[0., 2., 10.], [0., np.nan, 10.], [0., 4., 10.]],
+    ])
+    with pytest.raises(ValueError, match='centroid'):
+        transverse_ray_aberration(P_hist, axis='y', chief_index=1)
+
+
 def test_tra_pupil_is_chief_relative_under_launch_shift():
     """Pupil coordinate must re-center on the chief, not the launch axis.
 

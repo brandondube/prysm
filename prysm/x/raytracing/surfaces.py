@@ -87,6 +87,45 @@ def circular_aperture(radius, x0=0.0, y0=0.0):
     return aperture
 
 
+def annular_aperture(inner_radius, outer_radius, x0=0.0, y0=0.0):
+    """Create an annular surface aperture predicate.
+
+    Passes points in the ring between inner_radius and outer_radius and blocks
+    the central disk; the natural way to model a central obstruction such as the
+    shadow of a Cassegrain secondary, placed on the stop surface.
+
+    Parameters
+    ----------
+    inner_radius : float
+        Radius of the obscured central disk; points inside it are blocked.
+    outer_radius : float
+        Outer radius of the clear annulus.
+    x0, y0 : float, optional
+        Center of the aperture in local surface coordinates.
+
+    Returns
+    -------
+    callable
+        Predicate returning True for points within the clear annulus.
+
+    """
+    inner_radius = float(inner_radius)
+    outer_radius = float(outer_radius)
+    x0 = float(x0)
+    y0 = float(y0)
+    ri_sq = inner_radius * inner_radius
+    ro_sq = outer_radius * outer_radius
+
+    def aperture(x, y):
+        """Evaluate whether local coordinates fall in the clear annulus."""
+        dx = x - x0
+        dy = y - y0
+        rsq = dx * dx + dy * dy
+        return (rsq >= ri_sq) & (rsq <= ro_sq)
+
+    return aperture
+
+
 def _ensure_P_vec(P):
     """Promote a point-like object to a 3-vector using configured precision."""
     return promote_3d_point(P, dtype=config.precision)
@@ -1109,6 +1148,7 @@ __all__ = [
     'Biconic',
     'Surface',
     'circular_aperture',
+    'annular_aperture',
     'product_rule',
     'phi_conic',
     'der_direction_cosine_conic',

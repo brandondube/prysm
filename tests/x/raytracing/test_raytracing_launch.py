@@ -106,6 +106,24 @@ def test_sampling_unknown_kind_raises():
         s.build(extent=1.0)
 
 
+def test_sampling_obscuration_drops_central_samples():
+    extent = 10.0
+    eps = 0.3
+    full = Sampling.hex(nrings=4).build(extent=extent)
+    annular = Sampling.hex(nrings=4, obscuration=eps).build(extent=extent)
+    r_full = np.hypot(full[:, 0], full[:, 1])
+    r_ann = np.hypot(annular[:, 0], annular[:, 1])
+    # only the samples inside the obscuration are removed; the rest are kept
+    assert len(annular) == int((r_full >= eps * extent).sum())
+    assert len(annular) < len(full)
+    assert r_ann.min() >= eps * extent - 1e-9
+
+
+def test_sampling_fan_obscuration_opens_a_gap():
+    xy = Sampling.fan(n=21, axis='y', obscuration=0.25).build(extent=4.0)
+    assert np.all(np.abs(xy[:, 1]) >= 0.25 * 4.0 - 1e-9)
+
+
 # ---------- launch ---------------------------------------------------------
 
 def _simple_collimating_mirror():

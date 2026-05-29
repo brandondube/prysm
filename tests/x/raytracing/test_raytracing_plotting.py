@@ -509,6 +509,34 @@ def test_mirror_substrate_outline_applies_surface_decenter():
     np.testing.assert_allclose(x[6:11], np.full(5, 7.0))
 
 
+def test_mirror_substrate_outline_bores_a_through_hole():
+    # a holed primary (bounding inner_radius) must be drawn as two disjoint
+    # closed loops with the bore open through both faces, not one outline
+    # bridged across a solid back
+    surf = Surface(
+        shape=Conic(1 / 200.0, 0.0),
+        interaction='refl',
+        P=np.asarray([0., 0., 0.]),
+        bounding={'outer_radius': 10.0, 'inner_radius': 3.0},
+    )
+    result = _trace_result([surf])
+    x, y = mirror_substrate_outline(
+        surf, result,
+        backing={'mode': 'flat_parent', 'thickness': 5.0, 'side': 'rear'},
+        points=41,
+    )
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    # exactly one NaN separator between the two annular loops (plus a trailing
+    # one ending the second loop)
+    assert np.isnan(x).sum() == 2
+    # the bore is open: no drawn point (front or back) lands inside |y| < inner
+    finite = np.isfinite(x) & np.isfinite(y)
+    assert np.all(np.abs(y[finite]) >= 3.0 - 1e-9)
+    # both faces are present out at the rim: front (z=sag~0) and flat back z=5
+    assert np.isclose(x[finite].max(), 5.0)
+
+
 def test_mirror_substrate_outline_can_center_on_ray_footprint():
     surf = Surface(
         shape=Plane(),

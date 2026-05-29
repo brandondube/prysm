@@ -7,7 +7,7 @@ from tests.x.raytracing.surface_helpers import (
     chebyshev, jacobi, toroid, biconic,
 )
 
-from prysm.x.raytracing.surfaces import Surface, circular_aperture
+from prysm.x.raytracing.surfaces import Surface, annular_aperture, circular_aperture
 from prysm.x.raytracing.spencer_and_murty import (
     raytrace,
     RayTraceResult,
@@ -96,6 +96,13 @@ def test_circular_aperture_helper_marks_inside_circle():
     x = np.array([0.0, 2.0, 2.1])
     y = np.array([0.0, 0.0, 0.0])
     np.testing.assert_array_equal(aperture(x, y), [True, True, False])
+
+
+def test_annular_aperture_blocks_central_obstruction():
+    aperture = annular_aperture(1.0, 2.0)
+    x = np.array([0.0, 0.5, 1.0, 2.0, 2.1])
+    y = np.zeros_like(x)
+    np.testing.assert_array_equal(aperture(x, y), [False, False, True, True, False])
 
 
 def test_clip_persists_through_subsequent_surfaces():

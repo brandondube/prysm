@@ -50,8 +50,9 @@ def _require_epd(prescription, epd):
 
 # ---------- transverse ray aberration --------------------------------------
 
-def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None):
-    """Per-ray image-plane offset from chief, vs pupil coordinate.
+def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None,
+                              reference='chief'):
+    """Per-ray image-plane offset from a reference, vs pupil coordinate.
 
     Parameters
     ----------
@@ -60,11 +61,20 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None):
     axis : str
         which axis to report: 'x' or 'y'.
     chief_index : int, optional
-        row index of the chief ray; default N//2.
+        row index of the chief ray; default N//2.  Used as the registration
+        ray when reference is chief, and to center the pupil coordinate in
+        both cases.
     status : ndarray, optional
         per-ray status from raytrace.  Invalid rays are excluded when
         provided.  If omitted, rays with non-finite image coordinates are
         excluded.
+    reference : str, optional
+        image-plane registration point that the error is measured from.
+        chief (default) subtracts the chief ray's landing; centroid subtracts
+        the mean landing of the surviving rays.  Centroid matches the option
+        of the same name in Zemax and CODE V and is the natural choice when
+        the chief ray does not survive -- e.g. it falls inside the central
+        obscuration of a Cassegrain.
 
     Returns
     -------
@@ -78,7 +88,7 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None):
         just the launch coordinate.  Matches the convention used by
         wavefront().
     delta : ndarray, shape (N,)
-        image-plane (x or y) offset from chief for each ray.
+        image-plane (x or y) offset from the reference for each ray.
 
     """
     P_hist = np.asarray(P_hist)
@@ -90,17 +100,39 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None):
         raise ValueError(f"axis must be 'x' or 'y', got {axis!r}")
     if chief_index is None:
         chief_index = P_hist.shape[1] // 2
-    pupil = P_hist[0, :, ax] - P_hist[0, chief_index, ax]
+    launch = P_hist[0, :, ax]
     image = P_hist[-1, :, ax]
-    chief_image = P_hist[-1, chief_index, ax]
-    if not np.isfinite(chief_image):
-        raise ValueError('chief ray image coordinate is not finite')
 
     valid = _valid_mask(status, P_hist[-1])
     if valid is not None:
-        pupil = pupil[valid]
-        image = image[valid]
-    return pupil, image - chief_image
+        launch_v = launch[valid]
+        image_v = image[valid]
+    else:
+        launch_v = launch
+        image_v = image
+
+    # the pupil coordinate is referenced the same way as the image error, so
+    # the fan stays centered on the pupil.  Using chief_index (N//2) for the
+    # pupil zero is only correct when that ray is the pupil center; an annular
+    # (obscured) bundle has no center sample there, so the centroid reference
+    # subtracts the launch centroid instead -- otherwise the pupil axis comes
+    # out lopsided even though the system is on axis.
+    if reference == 'chief':
+        ref_pupil = launch[chief_index]
+        ref_image = image[chief_index]
+        if not np.isfinite(ref_image):
+            raise ValueError(
+                'chief ray image coordinate is not finite; pass '
+                "reference='centroid' for an obscured or vignetted bundle"
+            )
+    elif reference == 'centroid':
+        ref_pupil = np.mean(launch_v)
+        ref_image = np.mean(image_v)
+    else:
+        raise ValueError(
+            f"reference must be 'chief' or 'centroid', got {reference!r}"
+        )
+    return launch_v - ref_pupil, image_v - ref_image
 
 
 # ---------- wavefront -------------------------------------------------------

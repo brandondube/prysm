@@ -346,6 +346,30 @@ def _mirror_substrate_outline_from_phist(surf, phist, surface_index, backing,
     else:
         raise ValueError(f'unknown mirror backing mode {mode!r}')
 
+    # a bored substrate (central hole, set by bounding inner_radius or an
+    # explicit backing inner_radius) is open through both faces, so its
+    # meridional section is two disjoint closed loops -- one per side of the
+    # bore -- not a single outline bridged across a solid back
+    inner = 0.0
+    if surf.bounding is not None:
+        inner = float(surf.bounding.get('inner_radius', 0.0))
+    inner = float(backing.get('inner_radius', inner))
+    if inner > 0.0:
+        ploty_arr = np.asarray(ploty, dtype=float)
+        front = np.asarray(sag, dtype=float)
+        rear = np.asarray(rear_sag, dtype=float).copy()
+        rear[np.abs(ploty_arr - center) < inner] = np.nan
+        xx, yy = [], []
+        for sel in (ploty_arr >= center + inner, ploty_arr <= center - inner):
+            good = sel & np.isfinite(front) & np.isfinite(rear)
+            if not good.any():
+                continue
+            fz, rz, py = front[good], rear[good], ploty_arr[good]
+            # front face out, rear face back, closed by the bore and rim walls
+            xx += [*fz, *rz[::-1], fz[0], np.nan]
+            yy += [*py, *py[::-1], py[0], np.nan]
+        return _global_plot_coordinates(surf, xx, yy, x, y)
+
     xx = [*sag, rear_sag[-1], *rear_sag[::-1], sag[0]]
     yy = [*ploty, ploty[-1], *ploty[::-1], ploty[0]]
     return _global_plot_coordinates(surf, xx, yy, x, y)
@@ -832,7 +856,8 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
 
 def plot_transverse_ray_aberration(phist, lw=1, ls='-', c='r', alpha=1,
                                    zorder=4, axis='y', fig=None, ax=None,
-                                   chief_index=None, status=None):
+                                   chief_index=None, status=None,
+                                   reference='chief'):
     """Plot the transverse ray aberration for a single ray fan.
 
     Parameters
@@ -860,6 +885,10 @@ def plot_transverse_ray_aberration(phist, lw=1, ls='-', c='r', alpha=1,
     status : ndarray, optional
         per-ray status from raytrace.  Invalid rays are excluded when
         provided.
+    reference : str, optional
+        image-plane registration point: chief (default) or centroid.  Use
+        centroid when the chief ray does not survive, such as a fan through
+        the central obscuration of a Cassegrain.
 
     Returns
     -------
@@ -883,6 +912,7 @@ def plot_transverse_ray_aberration(phist, lw=1, ls='-', c='r', alpha=1,
 
     input_rays, output_rays = transverse_ray_aberration(
         ph, axis=axis.lower(), chief_index=chief_index, status=status,
+        reference=reference,
     )
     input_rays = _to_np(input_rays)
     output_rays = _to_np(output_rays)
