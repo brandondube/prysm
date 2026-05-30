@@ -6,6 +6,7 @@ dependencies:
   - numpy
   - scipy
   - matplotlib
+  - graphviz
   - tqdm
   - sphinx
   - pydata-sphinx-theme
