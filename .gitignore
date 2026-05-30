@@ -93,3 +93,6 @@ _riidb/*
 
 # finished plans
 _doneplans
+
+# scratch space
+/scratch*
