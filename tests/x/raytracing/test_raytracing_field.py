@@ -1,0 +1,429 @@
+"""Tests for the complex pupil field bridge (field.py), Phase 0.
+
+Covers the shared Fresnel seam, per-surface normal/incidence recovery, the
+unpolarized scalar amplitude, and the geometric (sine-space) apodization that
+is Hopkins' a(X', Y').
+"""
+import numpy as np
+import pytest
+
+from scipy.special import j1
+
+from prysm import thinfilm
+from tests.x.raytracing.surface_helpers import plane, conic
+from prysm.x.raytracing.spencer_and_murty import (
+    raytrace, intersect_reference_sphere,
+)
+from prysm.x.raytracing.launch import Field, Sampling, launch
+from prysm.x.raytracing.surfaces import annular_aperture
+from prysm.x.raytracing import opt, field
+
+
+# ---------- shared fixtures -------------------------------------------------
+
+def _slow_parabola(epd_focal_ratio=50.0):
+    """A slow, on-axis-stigmatic parabola (apodization ~1, Airy PSF)."""
+    c = -1 / 400.0
+    f = 1.0 / (2.0 * c)            # -200
+    presc = [conic(c=c, k=-1.0, interaction='refl', P=[0, 0, 0]),
+             plane(interaction='eval', P=[0, 0, f])]
+    return presc, abs(f)
+
+
+def _fast_singlet():
+    """A fast equiconvex singlet, heavy spherical aberration."""
+    ng = lambda w: 1.5
+    s1 = conic(c=1 / 20.0, k=0.0, interaction='refr', P=[0, 0, 0],
+               material=ng)
+    s2 = conic(c=-1 / 20.0, k=0.0, interaction='refr', P=[0, 0, 4.0],
+               material=lambda w: 1.0)
+    img = plane(interaction='eval', P=[0, 0, 23.0])
+    return [s1, s2, img]
+
+
+# ---------- the fresnel_rp latent-bug fix ----------------------------------
+
+def test_fresnel_rp_equals_rs_at_normal_incidence():
+    """At normal incidence the s/p basis coincide; |r_s| must equal |r_p|."""
+    n0, n1 = 1.0, 1.5
+    rs = thinfilm.fresnel_rs(n0, n1, 0.0, 0.0)
+    rp = thinfilm.fresnel_rp(n0, n1, 0.0, 0.0)
+    assert abs(abs(rs) - abs(rp)) < 1e-12
+    assert abs(abs(rp) - 0.2) < 1e-12
+
+
+def test_fresnel_energy_conservation_p_pol():
+    """R_p + T_p == 1 for a lossless dielectric interface at oblique angle."""
+    n0, n1 = 1.0, 1.5
+    th0 = np.radians(40.0)
+    th1 = np.arcsin(n0 / n1 * np.sin(th0))
+    rp = thinfilm.fresnel_rp(n0, n1, th0, th1)
+    tp = thinfilm.fresnel_tp(n0, n1, th0, th1)
+    oblique = (n1 * np.cos(th1)) / (n0 * np.cos(th0))
+    R = abs(rp) ** 2
+    T = oblique * abs(tp) ** 2
+    assert abs(R + T - 1.0) < 1e-12
+
+
+# ---------- surface normals / incidence cosine -----------------------------
+
+def _flat_refractor(angle_deg=0.0):
+    """Flat refracting interface n=1->1.5 at z=0, eval plane downstream."""
+    s1 = plane(interaction='refr', P=[0, 0, 0], material=lambda w: 1.5)
+    img = plane(interaction='eval', P=[0, 0, 10.0])
+    return [s1, img]
+
+
+def test_surface_normals_incidence_matches_field_angle():
+    """A collimated bundle at angle a onto a flat plane lands at cos(a)."""
+    presc = _flat_refractor()
+    wvl = 0.55e-3
+    angle = 15.0
+    P, S = launch(presc, Field(0.0, angle, kind='angle'), wvl,
+                  Sampling.rect(n=5), epd=4.0, pupil_z=-5.0)
+    tr = raytrace(presc, P, S, wvl)
+    cosI, n0, n1, typ = field.surface_normals_from_trace(presc, tr, wvl)
+    # surface 0 is the refractor; incidence cosine magnitude == cos(15 deg)
+    assert np.allclose(np.abs(cosI[0]), np.cos(np.radians(angle)), atol=1e-9)
+    assert n0[0] == pytest.approx(1.0)
+    assert n1[0] == pytest.approx(1.5)
+
+
+# ---------- unpolarized scalar amplitude -----------------------------------
+
+def test_unpolarized_amplitude_mirror_is_lossless():
+    """A bare mirror does not attenuate the scalar amplitude."""
+    c = -1 / 80.0
+    f = 1.0 / (2.0 * c)
+    presc = [conic(c=c, k=-1.0, interaction='refl', P=[0, 0, 0]),
+             plane(interaction='eval', P=[0, 0, f])]
+    wvl = 0.55e-3
+    P, S = launch(presc, Field(0., 0.), wvl, Sampling.rect(n=7),
+                  epd=10.0, pupil_z=-50.0)
+    tr = raytrace(presc, P, S, wvl)
+    amp = field.unpolarized_amplitude(presc, tr, wvl)
+    assert np.allclose(amp, 1.0, atol=1e-12)
+
+
+def test_unpolarized_amplitude_normal_incidence_fresnel():
+    """On-axis chief through one flat n=1->1.5 face: amp == sqrt(T_normal)."""
+    presc = _flat_refractor()
+    wvl = 0.55e-3
+    P, S = launch(presc, Field(0., 0.), wvl, Sampling.chief(),
+                  epd=4.0, pupil_z=-5.0)
+    tr = raytrace(presc, P, S, wvl)
+    amp = field.unpolarized_amplitude(presc, tr, wvl)
+    R = ((1.0 - 1.5) / (1.0 + 1.5)) ** 2
+    assert amp[0] == pytest.approx(np.sqrt(1.0 - R), abs=1e-9)
+
+
+# ---------- geometric apodization (sine space) -----------------------------
+
+def test_apodization_identity_mapping_is_uniform():
+    """If the sphere footprint equals the entrance grid, apodization is flat."""
+    x = np.linspace(-1, 1, 11)
+    a, b = np.meshgrid(x, x)
+    entrance = np.stack([a, b], axis=-1)
+    amp = field.amplitude_apodization(entrance, entrance.copy())
+    assert np.allclose(amp, amp[5, 5])
+
+
+def test_apodization_uniform_magnification_scales_inverse():
+    """A bundle magnified by m in area dims drops amplitude to 1/m."""
+    x = np.linspace(-1, 1, 11)
+    a, b = np.meshgrid(x, x)
+    entrance = np.stack([a, b], axis=-1)
+    sphere = entrance * 2.0   # 2x in each axis -> area x4
+    amp = field.amplitude_apodization(entrance, sphere)
+    # detJ = 4 -> amp = 1/2, uniform
+    assert np.allclose(amp, 0.5, atol=1e-12)
+
+
+def test_apodization_masks_invalid_rays():
+    x = np.linspace(-1, 1, 11)
+    a, b = np.meshgrid(x, x)
+    entrance = np.stack([a, b], axis=-1)
+    valid = np.ones((11, 11), dtype=bool)
+    valid[0, 0] = False
+    amp = field.amplitude_apodization(entrance, entrance.copy(), valid=valid)
+    assert amp[0, 0] == 0.0
+    assert amp[5, 5] > 0.0
+
+
+def test_apodization_nan_neighbor_does_not_zero_valid_rays():
+    """A NaN (missed/clipped) sphere sample must not zero its valid neighbors.
+
+    np.gradient's central difference spreads a single NaN onto adjacent grid
+    points; without the inpaint that zeroes legitimately-transmitted rays just
+    inside a vignetting boundary.
+    """
+    x = np.linspace(-1, 1, 11)
+    a, b = np.meshgrid(x, x)
+    entrance = np.stack([a, b], axis=-1)
+    sphere = entrance.copy()
+    sphere[3, 7, :] = np.nan          # one interior ray missed
+    amp = field.amplitude_apodization(entrance, sphere)
+    for r, c in [(3, 6), (3, 8), (2, 7), (4, 7)]:   # the hole's neighbors
+        assert np.isfinite(amp[r, c]) and amp[r, c] > 0.0
+
+
+# ---------- raytrace_field entry point -------------------------------------
+
+def test_raytrace_field_carries_trace_and_amplitude():
+    """raytrace_field returns the geometric trace plus matching amplitude."""
+    c = -1 / 80.0
+    f = 1.0 / (2.0 * c)
+    presc = [conic(c=c, k=-1.0, interaction='refl', P=[0, 0, 0]),
+             plane(interaction='eval', P=[0, 0, f])]
+    wvl = 0.55e-3
+    P, S = launch(presc, Field(0., 0.), wvl, Sampling.rect(n=7),
+                  epd=10.0, pupil_z=-50.0)
+    ft = field.raytrace_field(presc, P, S, wvl)
+    tr = raytrace(presc, P, S, wvl)
+    np.testing.assert_allclose(ft.P, tr.P)
+    np.testing.assert_allclose(ft.status.imag, tr.status.imag)
+    # mirror system is lossless
+    assert np.allclose(ft.amplitude, 1.0, atol=1e-12)
+
+
+def test_raytrace_field_tir_gives_zero_amplitude():
+    """Rays beyond the critical angle carry zero transmitted amplitude."""
+    # bundle inside glass (n_ambient=1.5) onto a flat glass->air interface at
+    # 50 deg; critical angle is ~41.8 deg, so all rays totally internally
+    # reflect and transmit no power.
+    presc = [plane(interaction='refr', P=[0, 0, 0], material=lambda w: 1.0),
+             plane(interaction='eval', P=[0, 0, 10.0])]
+    wvl = 0.55e-3
+    P, S = launch(presc, Field(0.0, 50.0, kind='angle'), wvl,
+                  Sampling.rect(n=3), epd=2.0, pupil_z=-5.0, n_ambient=1.5)
+    ft = field.raytrace_field(presc, P, S, wvl, n_ambient=1.5)
+    assert np.all(ft.amplitude == 0.0)
+
+
+# ---------- reference-sphere (sine-space) coordinates ----------------------
+
+def test_reference_sphere_coords_are_sine_space():
+    """Coordinates of sphere points scale with sin(theta), not tan(theta)."""
+    # build rays converging to the origin from radius R on a sphere; the
+    # transverse coordinate of a point at polar angle theta is R*sin(theta).
+    R = 50.0
+    thetas = np.radians(np.array([0.0, 10.0, 20.0, 30.0]))
+    # points on the sphere centered at origin, in the y-z plane
+    Q = np.stack([np.zeros_like(thetas),
+                  R * np.sin(thetas),
+                  -R * np.cos(thetas)], axis=-1)
+    P_xp = np.array([0.0, 0.0, -R])     # exit pupil on axis at sphere bottom
+    X, Y = field.reference_sphere_coords(Q, P_xp)
+    assert np.allclose(X, 0.0, atol=1e-9)
+    assert np.allclose(Y, R * np.sin(thetas), atol=1e-9)
+
+
+# ---------- Phase 2: orchestration + propagation bridge --------------------
+
+def test_pupil_field_low_na_matches_airy():
+    """A slow, aberration-free pupil gives a near-perfect Airy PSF."""
+    presc, f = _slow_parabola()
+    wvl = 0.5
+    pf = field.pupil_field(presc, Field(0., 0.), wvl, epd=4.0, npupil=96,
+                           stop_index=0, pupil_z=-100.0)
+    assert pf.efl == pytest.approx(f, rel=1e-6)
+    wf = field.pupil_field_to_wavefront(pf, npix=128)
+    psf = wf.focus(efl=pf.efl, Q=6)
+    I = np.abs(psf.data) ** 2
+    I /= I.max()
+    cy, cx = np.unravel_index(I.argmax(), I.shape)
+    yy, xx = np.indices(I.shape)
+    r = np.hypot(xx - cx, yy - cy) * psf.dx
+    F = abs(pf.efl) / 4.0
+    x = np.pi * r / (wvl * F)
+    x = np.where(x == 0, 1e-9, x)
+    airy = (2 * j1(x) / x) ** 2
+    core = r < 2 * 1.22 * wvl * F
+    corr = np.corrcoef(I[core].ravel(), airy[core].ravel())[0, 1]
+    assert corr > 0.999
+
+
+def test_pupil_field_to_wavefront_is_pupil_space():
+    presc, f = _slow_parabola()
+    pf = field.pupil_field(presc, Field(0., 0.), 0.5, epd=4.0, npupil=64,
+                           stop_index=0, pupil_z=-100.0)
+    wf = field.pupil_field_to_wavefront(pf, npix=128)
+    assert wf.space == 'pupil'
+    assert wf.data.shape == (128, 128)
+    assert np.iscomplexobj(wf.data)
+    assert wf.dx > 0
+
+
+def test_pupil_field_coating_is_amplitude_only():
+    """Fresnel loss attenuates amplitude but leaves the wavefront unchanged.
+
+    The bare-interface Fresnel factor is part of the scalar amplitude; the OPD
+    must be identical to the phase-only wavefront() result on the same rays.
+    """
+    from prysm.x.raytracing.analysis import wavefront
+    presc = _fast_singlet()
+    wvl = 0.5
+    P, S = launch(presc, Field(0., 0.), wvl, Sampling.rect(n=64),
+                  epd=8.0, pupil_z=-20.0)
+    # phase-only wavefront on the same launch bundle, masked to the inscribed
+    # circular entrance pupil so it covers the same rays pupil_field keeps
+    opd_ref, xr, yr = wavefront(presc, P, S, wvl, P_xp=(0, 0, 0))
+    circ = np.hypot(xr, yr) <= 4.0 * (1.0 + 1e-9)
+    pf = field.pupil_field(presc, Field(0., 0.), wvl, epd=8.0, npupil=64,
+                           P_xp=(0, 0, 0), pupil_z=-20.0)
+    # amplitude carries Fresnel loss: strictly below the lossless geometric
+    # value (< 1 after two glass interfaces), and not all equal
+    assert float(np.max(pf.amplitude)) < 1.0
+    assert float(np.ptp(pf.amplitude)) > 0.0
+    # OPD agrees with the phase-only wavefront (amplitude-only coating), in
+    # length units, over the matched circular pupil
+    assert np.nanmax(np.abs(opd_ref[circ])) == pytest.approx(
+        np.nanmax(np.abs(pf.opd)), rel=1e-6)
+
+
+def test_fast_singlet_is_spherical_aberration_not_airy():
+    """A fast singlet pupil is dominated by spherical aberration."""
+    presc = _fast_singlet()
+    wvl = 0.5
+    pf = field.pupil_field(presc, Field(0., 0.), wvl, epd=8.0, npupil=64,
+                           P_xp=(0, 0, 0), pupil_z=-20.0)
+    ptv_waves = float(np.ptp(pf.opd)) * 1e3 / wvl   # length(mm)->um->waves
+    assert ptv_waves > 1.0   # many waves of aberration
+
+
+def test_pupil_field_on_axis_requires_pupil_anchor():
+    """An on-axis field with neither stop_index nor P_xp raises clearly."""
+    presc, f = _slow_parabola()
+    with pytest.raises(ValueError, match='exit pupil'):
+        field.pupil_field(presc, Field(0., 0.), 0.5, epd=4.0, npupil=16,
+                          pupil_z=-100.0)
+
+
+def test_pupil_field_obscured_chief_needs_centroid_reference():
+    """A central obstruction clips the chief; reference='centroid' recovers it.
+
+    Mirrors analysis.wavefront: reference='chief' raises a clear error (not a
+    bare IndexError out of the chief-index lookup), and reference='centroid'
+    anchors on the surviving ray nearest the pupil center.
+    """
+    presc, f = _slow_parabola()
+    presc[0].aperture = annular_aperture(0.5, 4.0)    # block the pupil center
+    wvl = 0.5
+    with pytest.raises(ValueError, match='centroid'):
+        field.pupil_field(presc, Field(0., 0.), wvl, epd=4.0, npupil=32,
+                          stop_index=0, pupil_z=-100.0)
+    pf = field.pupil_field(presc, Field(0., 0.), wvl, epd=4.0, npupil=32,
+                           stop_index=0, pupil_z=-100.0, reference='centroid')
+    assert pf.opd.shape[0] > 0
+    assert np.all(np.isfinite(np.asarray(pf.opd, dtype=float)))
+
+
+def test_pupil_field_finite_conjugate_apodization_does_not_collapse():
+    """A finite-conjugate (object-height) field must keep a real apodization.
+
+    Regression: the apodization used the launch positions, which coincide at
+    the object point for a finite conjugate, so np.gradient divided by zero
+    spacing and the amplitude collapsed to zero.  Using the pupil-sample grid
+    fixes it -- the amplitude must be finite and nonzero.
+    """
+    ng = lambda w: 1.5
+    presc = [conic(c=1 / 30., k=0, interaction='refr', P=[0, 0, 0],
+                   material=ng),
+             conic(c=-1 / 30., k=0, interaction='refr', P=[0, 0, 3.],
+                   material=lambda w: 1.0),
+             plane(interaction='eval', P=[0, 0, 51.])]
+    fld = Field(0.0, 0.0, kind='height', object_z=-80.0)
+    pf = field.pupil_field(presc, fld, 0.5, epd=6.0, npupil=48,
+                           P_xp=(0, 0, 3.0), pupil_z=0.0)
+    amp = np.asarray(pf.amplitude, dtype=float)
+    assert np.all(np.isfinite(amp))
+    assert float(np.max(amp)) > 0.0
+
+
+# ---------- Phase 3: polarization ray tracing ------------------------------
+
+def test_prt_matrix_matches_fresnel_diattenuation():
+    """A single dielectric interface: |P.s|=sqrt(Ts), |P.p|=sqrt(Tp)."""
+    presc = [plane(interaction='refr', P=[0, 0, 0], material=lambda w: 1.5),
+             plane(interaction='eval', P=[0, 0, 10.0])]
+    wvl = 0.5
+    # 40 deg collimated, tilt about x -> plane of incidence is y-z, s = x
+    P, S = launch(presc, Field(0., 40., kind='angle'), wvl, Sampling.chief(),
+                  epd=1.0, pupil_z=-5.0)
+    pr = field.raytrace_prt(presc, P, S, wvl)
+    Pmat = pr.P_matrix[0]
+    k_in = S[0] / np.linalg.norm(S[0])
+    s_hat = np.array([1.0, 0.0, 0.0])
+    p_in = np.cross(k_in, s_hat)
+    th0 = np.radians(40.0)
+    th1 = np.arcsin(1 / 1.5 * np.sin(th0))
+    ts = thinfilm.fresnel_ts(1, 1.5, th0, th1)
+    tp = thinfilm.fresnel_tp(1, 1.5, th0, th1)
+    ob = (1.5 * np.cos(th1)) / (1.0 * np.cos(th0))
+    assert np.linalg.norm(Pmat @ s_hat) == pytest.approx(np.sqrt(ob) * abs(ts),
+                                                         rel=1e-9)
+    assert np.linalg.norm(Pmat @ p_in) == pytest.approx(np.sqrt(ob) * abs(tp),
+                                                        rel=1e-9)
+
+
+def test_prt_unpolarized_degenerates_to_scalar_mirror():
+    """An ideal-mirror system's unpolarized PRT PSF equals the scalar PSF."""
+    presc, f = _slow_parabola()
+    wvl = 0.5
+    pf_s = field.pupil_field(presc, Field(0., 0.), wvl, epd=4.0, npupil=96,
+                             stop_index=0, pupil_z=-100.0)
+    pf_p = field.pupil_field(presc, Field(0., 0.), wvl, epd=4.0, npupil=96,
+                             stop_index=0, pupil_z=-100.0, polarized=True)
+    ps, _ = field.pupil_field_psf(pf_s, npix=128, Q=4)
+    pp, _ = field.pupil_field_psf(pf_p, npix=128, Q=4,
+                                  input_polarization='unpolarized')
+    ps = ps / ps.max()
+    pp = pp / pp.max()
+    assert float(np.abs(ps - pp).max()) < 1e-4
+
+
+def test_prt_unpolarized_degenerates_to_scalar_dielectric():
+    """A low-AOI refractive system's unpolarized PRT PSF equals the scalar."""
+    ng = lambda w: 1.5
+    presc = [conic(c=1 / 120., k=0, interaction='refr', P=[0, 0, 0],
+                   material=ng),
+             conic(c=-1 / 120., k=0, interaction='refr', P=[0, 0, 3.],
+                   material=lambda w: 1.0),
+             plane(interaction='eval', P=[0, 0, 120.])]
+    wvl = 0.5
+    pf_s = field.pupil_field(presc, Field(0., 0.), wvl, epd=6.0, npupil=96,
+                             stop_index=0, pupil_z=-10.0)
+    pf_p = field.pupil_field(presc, Field(0., 0.), wvl, epd=6.0, npupil=96,
+                             stop_index=0, pupil_z=-10.0, polarized=True)
+    ps, _ = field.pupil_field_psf(pf_s, npix=128, Q=4)
+    pp, _ = field.pupil_field_psf(pf_p, npix=128, Q=4,
+                                  input_polarization='unpolarized')
+    ps = ps / ps.max()
+    pp = pp / pp.max()
+    assert float(np.abs(ps - pp).max()) < 1e-3
+
+
+def test_prt_has_cross_polarization_leakage():
+    """A fast refractive system rotates polarization (Ey leaks for x input)."""
+    presc = _fast_singlet()
+    wvl = 0.5
+    pf = field.pupil_field(presc, Field(0., 0.), wvl, epd=8.0, npupil=64,
+                           P_xp=(0, 0, 0), pupil_z=-20.0, polarized=True)
+    wfx, wfy = field.pupil_field_to_wavefront(
+        pf, npix=128, input_polarization=(1.0, 0.0, 0.0))
+    ex = np.sum(np.abs(wfx.data) ** 2)
+    ey = np.sum(np.abs(wfy.data) ** 2)
+    # cross-polarization is small but nonzero -- the signature of polarization
+    # aberration that a scalar model cannot represent
+    assert 0.0 < ey / ex < 0.1
+
+
+def test_pupil_field_to_wavefront_polarized_needs_input():
+    presc, f = _slow_parabola()
+    pf = field.pupil_field(presc, Field(0., 0.), 0.5, epd=4.0, npupil=32,
+                           stop_index=0, pupil_z=-100.0, polarized=True)
+    with pytest.raises(TypeError, match='input_polarization'):
+        field.pupil_field_to_wavefront(pf, npix=64)
+    comps = field.pupil_field_to_wavefront(pf, npix=64,
+                                           input_polarization=(1, 0, 0))
+    assert isinstance(comps, list) and len(comps) == 2
