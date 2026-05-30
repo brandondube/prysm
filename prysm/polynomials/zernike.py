@@ -15,6 +15,7 @@ from .jacobi import (
     jacobi_seq_with_der,
     jacobi_sum_clenshaw_der,
 )
+from .qpoly import _harmonic_powers
 
 from prysm.mathops import np, kronecker, sign, is_odd
 from prysm.coordinates import cart_to_polar
@@ -424,17 +425,10 @@ def zernike_nm_der_xy(n, m, x, y, norm=True):
         dzdx = 4 * x * Jp
         dzdy = 4 * y * Jp
     else:
-        # build (C_k, S_k) = (Re, Im) of (x + i y)^k by recurrence
-        # C_0 = 1, S_0 = 0; C_k = x C_{k-1} - y S_{k-1}, S_k = x S_{k-1} + y C_{k-1}
-        C_prev = np.ones_like(x)
-        S_prev = np.zeros_like(x)
-        for _ in range(am - 1):
-            C_new = x * C_prev - y * S_prev
-            S_new = x * S_prev + y * C_prev
-            C_prev, S_prev = C_new, S_new
-        # one more step yields (C_am, S_am); H = C_am for m>0, S_am for m<0
-        C_am = x * C_prev - y * S_prev
-        S_am = x * S_prev + y * C_prev
+        # (C_k, S_k) = (Re, Im) of (x + i y)^k; H = C_am for m>0, S_am for m<0
+        harm = _harmonic_powers(am, x, y)
+        C_prev, S_prev = harm[am - 1]
+        C_am, S_am = harm[am]
         # d (x+iy)^m / dx =  m (x+iy)^(m-1)  =>  dC_m/dx =  m C_{m-1}, dS_m/dx = m S_{m-1}
         # d (x+iy)^m / dy = im (x+iy)^(m-1)  =>  dC_m/dy = -m S_{m-1}, dS_m/dy = m C_{m-1}
         if m > 0:
@@ -502,17 +496,7 @@ def zernike_nm_der_xy_seq(nms, x, y, norm=True):
         jacobi_tables[am], jacobi_der_tables[am] = jacobi_seq_with_der(ns, 0, am, arg)
 
     max_am = max(max_nj_by_am)
-    if max_am:
-        C_prev = np.ones_like(x)
-        S_prev = np.zeros_like(x)
-        harmonics = [(C_prev, S_prev)]
-        for _ in range(max_am):
-            C_next = x * C_prev - y * S_prev
-            S_next = x * S_prev + y * C_prev
-            harmonics.append((C_next, S_next))
-            C_prev, S_prev = C_next, S_next
-    else:
-        harmonics = None
+    harmonics = _harmonic_powers(max_am, x, y) if max_am else None
 
     out = np.empty((len(nms), 2, *x.shape), dtype=x.dtype)
     for j, (n, m) in enumerate(nms):

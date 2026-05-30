@@ -509,40 +509,8 @@ def Qbfs_der(n, x):
     env = rho * (1 - rho)
     denv_dx = 2*x - 4*x*rho  # 2x - 4x^3
 
-    if n == 0:
-        # Qbfs_0(x) = x^2 - x^4 → derivative = 2x - 4x^3
-        return denv_dx
-
-    Q_curr = _INV_SQRT19 * (13 - 16 * rho)
-    dQ_curr = -16 * _INV_SQRT19  # scalar; dQ_1/dy
-    if n == 1:
-        # multiply by env-derivative chain: 2x for d/dx of Q(rho)
-        return denv_dx * Q_curr + env * (2 * x) * dQ_curr
-
-    # auxiliary recurrence on y = rho
-    P_prev = 2                            # P_0(y) = 2
-    P_curr = 6 - 8 * rho                  # P_1(y) = 6 - 8y
-    dP_prev = 0                           # dP_0/dy = 0
-    dP_curr = -8                          # dP_1/dy = -8
-
-    Q_prev = 1                            # Q_0 = 1
-    dQ_prev = 0                           # dQ_0/dy = 0
-
-    prefix = 2 - 4 * rho
-    for nn in range(2, n+1):
-        Pn = prefix * P_curr - P_prev
-        dPn = -4 * P_curr + prefix * dP_curr - dP_prev
-        g = g_qbfs(nn - 1)
-        h = h_qbfs(nn - 2)
-        inv_f = 1 / f_qbfs(nn)
-        Qn = (Pn - g * Q_curr - h * Q_prev) * inv_f
-        dQn = (dPn - g * dQ_curr - h * dQ_prev) * inv_f
-        P_prev, P_curr = P_curr, Pn
-        dP_prev, dP_curr = dP_curr, dPn
-        Q_prev, Q_curr = Q_curr, Qn
-        dQ_prev, dQ_curr = dQ_curr, dQn
-
-    return denv_dx * Q_curr + env * (2 * x) * dQ_curr  # NOQA
+    Q_list, dQ_list = _qbfs_aux_recurrence(n, rho)
+    return denv_dx * Q_list[n] + env * (2 * x) * dQ_list[n]
 
 
 def Qbfs_der_seq(ns, x):
@@ -567,55 +535,16 @@ def Qbfs_der_seq(ns, x):
         ns = list(ns)
     if len(ns) == 0:
         return np.empty((0, *x.shape), dtype=x.dtype)
-    min_i = 0
-    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
 
     rho = x * x
     env = rho * (1 - rho)
     denv_dx = 2*x - 4*x*rho
     two_x = 2 * x
 
-    if ns[min_i] == 0:
-        out[min_i] = denv_dx
-        min_i += 1
-
-    if min_i == len(ns):
-        return out
-
-    Q_curr = _INV_SQRT19 * (13 - 16 * rho)
-    dQ_curr = -16 * _INV_SQRT19  # dQ_1/dy is a scalar
-    if ns[min_i] == 1:
-        out[min_i] = denv_dx * Q_curr + env * two_x * dQ_curr
-        min_i += 1
-
-    if min_i == len(ns):
-        return out
-
-    P_prev = 2
-    P_curr = 6 - 8 * rho
-    dP_prev = 0
-    dP_curr = -8
-
-    Q_prev = 1
-    dQ_prev = 0
-
-    prefix = 2 - 4 * rho
-    for nn in range(2, ns[-1]+1):
-        Pn = prefix * P_curr - P_prev
-        dPn = -4 * P_curr + prefix * dP_curr - dP_prev
-        g = g_qbfs(nn - 1)
-        h = h_qbfs(nn - 2)
-        inv_f = 1 / f_qbfs(nn)
-        Qn = (Pn - g * Q_curr - h * Q_prev) * inv_f
-        dQn = (dPn - g * dQ_curr - h * dQ_prev) * inv_f
-        P_prev, P_curr = P_curr, Pn
-        dP_prev, dP_curr = dP_curr, dPn
-        Q_prev, Q_curr = Q_curr, Qn
-        dQ_prev, dQ_curr = dQ_curr, dQn
-        if ns[min_i] == nn:
-            out[min_i] = denv_dx * Qn + env * two_x * dQn
-            min_i += 1
-
+    Q_list, dQ_list = _qbfs_aux_recurrence(ns[-1], rho)
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
+    for i, n in enumerate(ns):
+        out[i] = denv_dx * Q_list[n] + env * two_x * dQ_list[n]
     return out
 
 
