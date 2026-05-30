@@ -40,7 +40,9 @@ from .opt import (
 )
 from .paraxial import paraxial_image_distance
 from .launch import Field, Sampling, launch
-from ._meta import lensdata_wavelength, lensdata_epd
+from ._meta import (
+    lensdata_wavelength, lensdata_epd, object_space_index, image_space_index,
+)
 
 
 def _require_epd(prescription, epd):
@@ -173,7 +175,7 @@ def _apply_field_and_output(opd, x_pupil, y_pupil, field, output, wavelength):
 
 
 def wavefront(prescription, P, S, wavelength, *,
-              n_ambient=1.0, chief_index=None,
+              n_ambient=None, chief_index=None,
               axis_point=None, axis_dir=None, P_xp=None,
               pupil_coords=None, field=None, output='length',
               method='sphere', reference='chief'):
@@ -248,7 +250,8 @@ def wavefront(prescription, P, S, wavelength, *,
             f"reference must be 'chief' or 'centroid', got {reference!r}"
         )
     P = np.asarray(P)
-    trace = raytrace(prescription, P, S, wavelength, n_ambient=n_ambient)
+    n_object = object_space_index(prescription, wavelength, n_ambient)
+    trace = raytrace(prescription, P, S, wavelength, n_ambient=n_object)
     valid = _valid_mask(trace.status, trace.P[-1])
     if chief_index is None:
         # for reference='centroid' restrict to surviving rays so an obscured
@@ -281,10 +284,11 @@ def wavefront(prescription, P, S, wavelength, *,
         raise ValueError(
             f"wavefront method must be 'sphere' or 'eic', got {method!r}"
         )
+    n_image = image_space_index(prescription, wavelength, fallback=n_object)
     opd = opd_fn(trace.P[:, valid], trace.S[:, valid],
                  trace.OPL[:, valid],
                  P_img=P_chief_final, P_xp=P_xp,
-                 n_image=n_ambient,
+                 n_image=n_image,
                  chief_index=filtered_chief)
     if pupil_coords is None:
         # pupil coordinate is the launch offset from the chief ray, so the

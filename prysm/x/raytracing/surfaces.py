@@ -997,8 +997,8 @@ class Surface:
             constant.
         pose : tuple or object, optional
             Surface pose as (P, R) or an object with P and R attributes.
-        material : callable or float, optional
-            Refractive-index model or value.
+        material : callable, optional
+            Refractive-index model n(wavelength) for refractive surfaces.
         aperture : callable, optional
             Aperture predicate evaluated in local surface coordinates.
         grating : tuple, optional

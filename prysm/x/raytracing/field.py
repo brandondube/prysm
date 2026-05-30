@@ -46,7 +46,9 @@ from .opt import (
     opd_from_raytrace_eic, xp_reference_sphere,
 )
 from .analysis import _apply_field_and_output, _filtered_chief_index
-from ._meta import lensdata_epd, lensdata_wavelength
+from ._meta import (
+    lensdata_epd, lensdata_wavelength, object_space_index, image_space_index,
+)
 
 
 def _complex_sqrt(x):
@@ -541,7 +543,7 @@ def _resolve_exit_pupil(prescription, field, wavelength, epd, n_ambient,
 
 def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
                 stop_index=None, P_xp=None, P_img=None, axis_dir=None,
-                n_ambient=1.0, pupil_z=None, coatings=None, method='sphere',
+                n_ambient=None, pupil_z=None, coatings=None, method='sphere',
                 output='length', reference='chief', polarized=False):
     """Realize the complex pupil field on the exit-pupil reference sphere.
 
@@ -602,19 +604,20 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
     if reference not in ('chief', 'centroid'):
         raise ValueError(
             f"reference must be 'chief' or 'centroid', got {reference!r}")
+    n_object = object_space_index(prescription, wavelength, n_ambient)
 
     sampling = Sampling.rect(n=npupil)
     P, S = launch(prescription, field, wavelength, sampling,
-                  epd=epd, n_ambient=n_ambient, pupil_z=pupil_z)
+                  epd=epd, n_ambient=n_object, pupil_z=pupil_z)
     if polarized:
-        pr = raytrace_prt(prescription, P, S, wavelength, n_ambient=n_ambient,
+        pr = raytrace_prt(prescription, P, S, wavelength, n_ambient=n_object,
                           coatings=coatings)
         trace = pr.trace
         coating_amp = None
         P_matrix_all = pr.P_matrix
     else:
         ft = raytrace_field(prescription, P, S, wavelength,
-                            n_ambient=n_ambient, coatings=coatings)
+                            n_ambient=n_object, coatings=coatings)
         trace = ft.trace
         coating_amp = ft.amplitude
         P_matrix_all = None
@@ -654,7 +657,7 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
     valid = valid & circ
 
     P_xp, P_img = _resolve_exit_pupil(
-        prescription, field, wavelength, epd, n_ambient, stop_index,
+        prescription, field, wavelength, epd, n_object, stop_index,
         P_xp, P_img, trace.P[-1, chief_index], trace.S[-1, chief_index],
         axis_dir=axis_dir)
     R = float(np.sqrt(np.sum((np.asarray(P_xp) - P_img) ** 2)))
@@ -662,8 +665,9 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
     # OPD on the reference sphere (valid rays), mirroring analysis.wavefront
     filtered_chief = _filtered_chief_index(valid, chief_index)
     opd_fn = opd_from_raytrace_eic if method == 'eic' else opd_from_raytrace
+    n_image = image_space_index(prescription, wavelength, fallback=n_object)
     opd = opd_fn(trace.P[:, valid], trace.S[:, valid], trace.OPL[:, valid],
-                 P_img=P_img, P_xp=P_xp, n_image=n_ambient,
+                 P_img=P_img, P_xp=P_xp, n_image=n_image,
                  chief_index=filtered_chief)
 
     # sine-space sphere coordinates (all rays, then mask)
@@ -693,7 +697,7 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
     opd, _ = _apply_field_and_output(opd, x_pupil, y_pupil, tilt_field, output,
                                      wavelength)
 
-    n_image = abs(float(n_ambient))
+    n_image = abs(float(n_image))
     P_matrix = None if P_matrix_all is None else P_matrix_all[valid]
     return PupilField(
         X=X_all[valid], Y=Y_all[valid], amplitude=amplitude_all[valid],

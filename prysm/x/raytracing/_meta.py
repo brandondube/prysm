@@ -9,6 +9,8 @@ without an import cycle: a LensData exposes a wavelength resolver method, an epd
 attribute, etc.; a list of Surface does not.
 """
 
+from .spencer_and_murty import STYPE_EVAL
+
 
 def lensdata_wavelength(prescription, wvl):
     """Resolve a wavelength against a prescription's metadata.
@@ -49,3 +51,38 @@ def lensdata_n_ambient(prescription, n_ambient):
     if n_ambient is not None:
         return float(n_ambient)
     return float(getattr(prescription, 'n_ambient', 1.0))
+
+
+def _surface_medium_index(surface, wavelength, fallback):
+    """Evaluate a surface's post-surface medium index, or return fallback."""
+    n = getattr(surface, 'n', None)
+    if callable(n):
+        return float(n(wavelength))
+    return float(fallback)
+
+
+def object_space_index(prescription, wavelength, n_ambient=None):
+    """Resolve the object-space medium index.
+
+    If an explicit n_ambient is supplied, it wins.  Otherwise, when a
+    prescription includes an object surface at index 0, that row's material is
+    the object-space medium.
+    """
+    if n_ambient is not None:
+        return float(n_ambient)
+    if (len(prescription) > 0
+            and getattr(prescription[0], 'typ', None) == STYPE_EVAL):
+        return _surface_medium_index(prescription[0], wavelength, 1.0)
+    return 1.0
+
+
+def image_space_index(prescription, wavelength, fallback=1.0):
+    """Resolve the image-space medium index from the penultimate surface.
+
+    Sequential LensData places the image plane as the final eval surface; the
+    medium immediately before that plane is therefore the post-surface medium of
+    the penultimate surface.
+    """
+    if len(prescription) > 1:
+        return _surface_medium_index(prescription[-2], wavelength, fallback)
+    return float(fallback)

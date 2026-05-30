@@ -39,6 +39,7 @@ from .analysis import (
     _filtered_chief_index,
     _apply_field_and_output,
 )
+from ._meta import object_space_index, image_space_index
 
 
 # ---------- broadcasting helpers --------------------------------------------
@@ -754,7 +755,7 @@ def d_intersect_reference_sphere(P, S, Pdot, Sdot, C, Cdot, R, Rdot):
 
 
 def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
-                            n_ambient=1.0, chief_index=None,
+                            n_ambient=None, chief_index=None,
                             axis_point=None, axis_dir=None, P_xp=None,
                             field=None, output='length'):
     """Trace, compute OPD on the chief reference sphere, and its tangent maps.
@@ -783,8 +784,9 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
     """
     P = np.asarray(P).astype(config.precision)
     S = np.asarray(S).astype(config.precision)
+    n_object = object_space_index(surfaces, wavelength, n_ambient)
     res = raytrace_with_tangents(surfaces, P, S, wavelength, seeds,
-                                 n_ambient=n_ambient)
+                                 n_ambient=n_object)
     trace = res.trace
 
     if chief_index is None:
@@ -818,10 +820,11 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
 
     filtered_chief = _filtered_chief_index(valid, chief_index)
 
+    n_image = image_space_index(surfaces, wavelength, fallback=n_object)
     opd = opd_from_raytrace(trace.P[:, valid], trace.S[:, valid],
                             trace.OPL[:, valid],
                             P_img=P_chief_final, P_xp=P_xp,
-                            n_image=n_ambient, chief_index=filtered_chief)
+                            n_image=n_image, chief_index=filtered_chief)
 
     P_last_f = trace.P[-1, valid]
     S_last_f = trace.S[-1, valid]
@@ -832,7 +835,7 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
     tdot = d_intersect_reference_sphere(P_last_f, S_last_f,
                                         Pdot_last_f, Sdot_last_f,
                                         C, Cdot, R, Rdot)
-    opl_total_dot = Ldot_total_f + n_ambient * tdot
+    opl_total_dot = Ldot_total_f + n_image * tdot
     opd_dot = opl_total_dot - opl_total_dot[filtered_chief][None, :]
 
     x_pupil = P[valid, 0] - P[chief_index, 0]

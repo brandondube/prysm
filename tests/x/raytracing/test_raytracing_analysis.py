@@ -22,6 +22,7 @@ from prysm.x.raytracing.analysis import (
     axial_color,
     lateral_color,
 )
+from prysm.x.raytracing.opt import opd_from_raytrace, xp_reference_sphere
 
 
 # ---------- helpers ---------------------------------------------------------
@@ -166,6 +167,44 @@ def test_wavefront_chief_opd_is_zero():
     np.testing.assert_allclose(opd[chief], 0.0, atol=1e-12)
     np.testing.assert_array_equal(x_pup, P[:, 0])
     np.testing.assert_array_equal(y_pup, P[:, 1])
+
+
+def test_wavefront_uses_penultimate_surface_image_medium():
+    presc = _spherical_singlet()
+    presc[-2].n = lambda w: 1.25
+    wvl = 0.55
+    P, S = launch(presc, Field(0., 0.), wvl,
+                  Sampling.fan(n=9), epd=4.0, pupil_z=-5.0)
+    opd, _, _ = wavefront(presc, P, S, wvl, n_ambient=1.0)
+
+    trace = raytrace(presc, P, S, wvl, n_ambient=1.0)
+    chief = len(P) // 2
+    C, _, P_xp = xp_reference_sphere(trace.P[-1, chief], trace.S[-1, chief])
+    expected = opd_from_raytrace(trace.P, trace.S, trace.OPL, C, P_xp,
+                                 n_image=1.25, chief_index=chief)
+    wrong_air = opd_from_raytrace(trace.P, trace.S, trace.OPL, C, P_xp,
+                                  n_image=1.0, chief_index=chief)
+
+    np.testing.assert_allclose(opd, expected, atol=1e-12)
+    assert np.max(np.abs(expected - wrong_air)) > 1e-8
+
+
+def test_wavefront_uses_surface_zero_object_medium_when_present():
+    object_surface = plane(interaction='eval', P=[0, 0, -10.0],
+                           material=lambda w: 1.2)
+    presc = [object_surface] + _spherical_singlet()
+    wvl = 0.55
+    P, S = launch(presc, Field(0., 0.), wvl,
+                  Sampling.fan(n=9), epd=4.0, pupil_z=-20.0)
+    opd, _, _ = wavefront(presc, P, S, wvl)
+
+    trace = raytrace(presc, P, S, wvl, n_ambient=1.2)
+    chief = len(P) // 2
+    C, _, P_xp = xp_reference_sphere(trace.P[-1, chief], trace.S[-1, chief])
+    expected = opd_from_raytrace(trace.P, trace.S, trace.OPL, C, P_xp,
+                                 n_image=1.0, chief_index=chief)
+
+    np.testing.assert_allclose(opd, expected, atol=1e-12)
 
 
 def test_wavefront_parabola_is_diffraction_limited():
