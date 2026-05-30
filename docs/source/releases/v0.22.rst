@@ -196,30 +196,30 @@ New features:
 
 * :func:`~prysm.propagation.to_fpm_and_back`
 
-* all propagation routines have a :code:`_backprop` twin, which should be used
-  to do gradient backpropagation through optical models:
+* all propagation routines have a :code:`_adjoint` twin, which should be used
+  to apply gradient adjoints through optical models:
 
-* * :func:`~prysm.propagation.focus_backprop`
+* * :func:`~prysm.propagation.focus_adjoint`
 
-* * :func:`~prysm.propagation.unfocus_backprop`
+* * :func:`~prysm.propagation.unfocus_adjoint`
 
-* * :func:`~prysm.propagation.focus_dft_backprop`
+* * :func:`~prysm.propagation.focus_dft_adjoint`
 
-* * :func:`~prysm.propagation.unfocus_dft_backprop`
+* * :func:`~prysm.propagation.unfocus_dft_adjoint`
 
-* * :func:`~prysm.propagation.to_fpm_and_back_backprop`
+* * :func:`~prysm.propagation.to_fpm_and_back_adjoint`
 
-* * :func:`~prysm.propagation.free_space_backprop`
+* * :func:`~prysm.propagation.free_space_adjoint`
 
-The above functions also have :code:`_backprop` routines for their versions
+The above functions also have :code:`_adjoint` routines for their versions
 defined as methods on :class:`~prysm.propagation.Wavefront`.  The following
-wavefront-only functions also support backpropagation:
+wavefront-only functions also support adjoints:
 
-* * :func:`~prysm.propagation.Wavefront.babinet_backprop`
+* * :func:`~prysm.propagation.Wavefront.babinet_adjoint`
 
-* * :func:`~prysm.propagation.Wavefront.from_amp_and_phase_backprop_phase`
+* * :func:`~prysm.propagation.Wavefront.from_amp_and_phase_adjoint_phase`
 
-* * :func:`prysm.polynomials.sum_of_2d_modes_backprop`
+* * :func:`prysm.polynomials.sum_of_2d_modes_adjoint`
 
 * add and subtract :code:`+` and :code:`-` operators are now defined for
   :class:`~prysm.propagation.Wavefront` for convenient recombination /
@@ -825,8 +825,8 @@ x/dm
   natural model resolution is done.  The behavior here is similar to PROPER
 
 * the forward model of the DM is now differentiable.
-  :func:`~prysm.x.dm.DM.render_backprop` performs gradient
-  backpropagation through :func:`~prysm.x.dm.DM.render`
+  :func:`~prysm.x.dm.DM.render_adjoint` applies the adjoint of
+  :func:`~prysm.x.dm.DM.render`
 
 * rotation definitions have been changed, and a related bug that would cause a
   transposition of the DM surface for some rotations fixed.
