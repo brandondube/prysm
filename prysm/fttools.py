@@ -214,13 +214,18 @@ class MDFT:
         `MDFT` of opposite sign that maps the *output* shape back to the
         *input* shape) up to scaling.
         """
+        try:
+            EyH = self._EyH
+            ExC = self._ExC
+        except AttributeError:
+            # conjugated bases are reused across every adjoint call; build once
+            EyH = self._EyH = self.Ey.conj().T
+            ExC = self._ExC = self.Ex.conj()
         if not self._adjoint_left_first:
-            EyH = self.Ey.conj().T
-            ExC = self.Ex.conj()
             out = grad @ ExC
             out = EyH @ out
             return out * self.norm
-        return (self.Ey.conj().T @ grad @ self.Ex.conj()) * self.norm
+        return (EyH @ grad @ ExC) * self.norm
 
     def nbytes(self):
         """Total size in memory of the basis matrices, bytes."""
