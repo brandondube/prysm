@@ -484,15 +484,43 @@ def test_seq_round_trips_through_raytrace(refractiveindex_database):
     assert float(np.max(np.abs(spot))) < pf.epd / 2.0
 
 
+# ---- STO (aperture stop) ---------------------------------------------------
+
+_SEQ_STOP = """\
+LEN
+RDM
+DIM M
+WL 550.0
+EPD 10.0
+SO ; THI 1E10
+S RDY 50.0 ; THI 5.0
+STO
+S RDY -50.0 ; THI 95.0
+SI
+GO
+"""
+
+
+def test_seq_sto_marks_the_surface_it_appears_on():
+    """STO sets the stop on the surface it follows, not one surface later.
+
+    Regression: the ordinal counted the object surface, which the downstream
+    real_counter walk skips, so the stop landed one real surface too late.
+    STO here follows the first real surface, so stop_index must be 0.
+    """
+    ld = read_seq(_SEQ_STOP, _is_text=True)
+    assert ld.stop_index == 0
+
+
 # ---- mirror ----------------------------------------------------------------
 
 _SEQ_PARABOLA = """\
 LEN
 DIM M
-WL 0.55
+WL 550.0
 EPD 10.0
 SO ; THI 1E10
-S CUY -0.0125 ; CCY -1.0 ; THI -40.0 ; GLA REFL
+S CUY -0.0125 ; K -1.0 ; THI -40.0 ; GLA REFL
 SI
 GO
 """
@@ -516,7 +544,7 @@ def test_seq_parabola_focuses_on_axis():
 _SEQ_ASPH = """\
 LEN
 DIM M
-WL 0.55
+WL 550.0
 EPD 10.0
 SO ; THI 1E10
 S RDY 50.0 ; THI 5.0 ; GLA BK7
@@ -557,8 +585,9 @@ GO
 
 def test_seq_header_wavelengths_and_reference(refractiveindex_database):
     pf = read_seq(_SEQ_HEADER, _is_text=True, database=refractiveindex_database)
+    # Code V WL is nanometers; the reader converts to microns.
     np.testing.assert_allclose(list(pf.wavelengths.values()),
-                               [486.13, 587.56, 656.27])
+                               [0.48613, 0.58756, 0.65627])
 
 
 def test_seq_yan_becomes_field_list(refractiveindex_database):
@@ -743,10 +772,10 @@ def test_zmx_xypoly_default_norm_radius_when_zero():
 _SEQ_BICONIC = """\
 LEN
 DIM M
-WL 0.55
+WL 550.0
 EPD 10.0
 SO ; THI 1E10
-S RDY 100.0 ; RDX 50.0 ; CCY -1.0 ; CCX -0.5 ; THI -40.0 ; GLA REFL
+S RDY 100.0 ; RDX 50.0 ; K -1.0 ; KX -0.5 ; THI -40.0 ; GLA REFL
 SI
 GO
 """
@@ -775,10 +804,10 @@ def test_seq_no_x_axis_stays_conic(refractiveindex_database):
 _SEQ_ZFR = """\
 LEN
 DIM M
-WL 0.55
+WL 550.0
 EPD 10.0
 SO ; THI 1E10
-S CUY -0.0125 ; CCY -1.0 ; THI -40.0 ; GLA REFL
+S CUY -0.0125 ; K -1.0 ; THI -40.0 ; GLA REFL
 NRR 5.0
 ZFR 0.0 0.0 0.0 1.0e-4 0.0 0.0
 SI
@@ -810,10 +839,10 @@ def test_seq_zfr_default_norm_radius_is_one():
 _SEQ_XYP = """\
 LEN
 DIM M
-WL 0.55
+WL 550.0
 EPD 10.0
 SO ; THI 1E10
-S CUY -0.0125 ; CCY -1.0 ; THI -40.0 ; GLA REFL
+S CUY -0.0125 ; K -1.0 ; THI -40.0 ; GLA REFL
 NRR 10.0
 XYP 0.0 0.0 0.0 2.0e-5
 SI
@@ -838,11 +867,12 @@ def test_seq_xyp_builds_surface_xy():
 _SEQ_DECNTR = """\
 LEN
 DIM M
-WL 0.55
+WL 550.0
 EPD 4.0
 SO ; THI 1E10
 S RDY 30 ; THI 2.0 ; GLA BK7
-DEC 0.5 0.25
+DAR
+XDE 0.5 ; YDE 0.25
 ADE 1.0
 BDE -2.0
 S RDY -30 ; THI 50.0
@@ -877,3 +907,130 @@ def test_seq_undecentered_surface_has_no_rotation(refractiveindex_database):
     s2 = pf.surfaces[1]
     assert s2.R is None
     np.testing.assert_allclose(s2.P[:2], (0.0, 0.0))
+
+
+# ============================================================================
+# Code V free-format (positional) surface lines -- the form real Code V writes
+# ============================================================================
+
+_SEQ_POSITIONAL = """\
+RDM
+LEN
+TITLE 'positional singlet'
+DIM M
+WL 587.6
+EPD 10.0
+SO    0. 1E10
+S     50.0 5.0 BK7
+S     -50.0 95.0
+SI    0. 0.
+GO
+"""
+
+
+def test_seq_positional_radius_thickness_glass(refractiveindex_database):
+    """S <radius> <thickness> <glass> positional free format parses."""
+    pf = read_seq(_SEQ_POSITIONAL, _is_text=True,
+                  database=refractiveindex_database)
+    np.testing.assert_allclose(pf.surfaces[0].params['c'], 1 / 50.0)
+    np.testing.assert_allclose(pf.surfaces[1].params['c'], -1 / 50.0)
+    np.testing.assert_allclose(float(pf.surfaces[0].n(0.587)), 1.5168,
+                               atol=1e-3)
+    # SO/S/SI consume their positional thickness: vertices stack the gaps.
+    assert pf.surfaces[0].P[2] == 0.0
+    assert pf.surfaces[1].P[2] == 5.0
+    assert pf.surfaces[2].P[2] == 100.0
+
+
+def test_seq_wavelength_converted_nm_to_um(refractiveindex_database):
+    """Code V WL is nanometers; the reader stores microns."""
+    pf = read_seq(_SEQ_POSITIONAL, _is_text=True,
+                  database=refractiveindex_database)
+    np.testing.assert_allclose(list(pf.wavelengths.values()), [0.5876])
+
+
+_SEQ_K_CONIC = """\
+RDM
+LEN
+DIM M
+WL 550.0
+EPD 10.0
+SO    0. 1E10
+S     -80.0 -40.0 REFL
+  CCY 0
+  K   -1.0
+SI    0. 0.
+GO
+"""
+
+
+def test_seq_K_sets_conic_and_CCY_is_a_control_code():
+    """K is the conic constant; CCY 0 is a coupling code and is ignored."""
+    pf = read_seq(_SEQ_K_CONIC, _is_text=True)
+    s = pf.surfaces[0]
+    np.testing.assert_allclose(s.params['c'], -1 / 80.0)
+    np.testing.assert_allclose(s.params['k'], -1.0)
+    assert s.typ == STYPE_REFLECT
+
+
+def test_seq_stop_without_object_surface():
+    """STO resolves even when no SO object surface is written.
+
+    threemir.seq starts straight at S with the stop on the first surface; the
+    old ordinal math assumed a committed object and lost the stop.
+    """
+    txt = (
+        'RDM\nLEN\nDIM M\nWL 550.0\nEPD 10.0\n'
+        'S 0. 10.0\n  STO\n'
+        'S 50 5\nS -50 90\nSI 0 0\nGO\n'
+    )
+    pf = read_seq(txt, _is_text=True)
+    assert pf.stop_index == 0
+
+
+_SEQ_DAR_VS_BASIC = """\
+RDM
+LEN
+DIM M
+WL 550.0
+EPD 10.0
+SO    0. 1E10
+S     -100. -20. REFL
+  YDE 10.0
+  ADE 5.0
+S     -100. -20. REFL
+  DAR
+  YDE 3.0
+  ADE 2.0
+S     0. 30.
+SI    0. 0.
+GO
+"""
+
+
+def test_seq_dar_is_local_basic_persists():
+    """A bare decenter is a persistent (basic) break; DAR returns the axis.
+
+    Surface 0 has a basic YDE/ADE, so surface 1 (DAR) and the surface after it
+    inherit that frame; the DAR on surface 1 applies to surface 1 only.
+    """
+    pf = read_seq(_SEQ_DAR_VS_BASIC, _is_text=True)
+    s0, s1, s2 = pf.surfaces[0], pf.surfaces[1], pf.surfaces[2]
+    # surface 0 (basic) is decentered up 10mm
+    np.testing.assert_allclose(float(s0.P[1]), 10.0)
+    # surface 1 carries the persistent basic decenter plus its own DAR offset
+    assert s1.R is not None
+    # surface 2 has no break of its own but inherits the persistent basic
+    # frame from surface 0 (tilted), so it is rotated -- not identity.
+    assert s2.R is not None
+
+
+def test_seq_glass_catalog_suffix_stripped(refractiveindex_database):
+    """Code V GLA names are GLASS_CATALOG; the bare glass still resolves."""
+    txt = (
+        'RDM\nLEN\nDIM M\nWL 587.6\nEPD 10.0\n'
+        'SO 0. 1E10\nS 50 5 BK7_SCHOTT\nS -50 95\nSI 0 0\nGO\n'
+    )
+    pf = read_seq(txt, _is_text=True, database=refractiveindex_database)
+    np.testing.assert_allclose(float(pf.surfaces[0].n(0.587)), 1.5168,
+                               atol=1e-3)
