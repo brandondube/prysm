@@ -24,10 +24,15 @@ are stripped.
 
 """
 
-from .surfaces import Conic, Plane, Sphere
+from .surfaces import Plane
 from . import materials as _materials
 from ._indexing import fringe_to_nm, xy_j_to_mn
-from ._io_common import fields_from_xy, read_text_or_path
+from ._io_common import (
+    fields_from_xy,
+    read_text_or_path,
+    fold_sign,
+    writable_shape_or_raise,
+)
 from .lensdata import LensData
 from ._surface_spec import SurfaceSpec, build_shape
 
@@ -194,9 +199,13 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
             except ValueError:
                 pass
         elif verb == 'STO':
-            # 1-based ordinal of the stop surface (counted among S
-            # entries between SO and SI)
-            stop_surface_idx = len(surfaces) + (1 if current is not None else 1)
+            # 1-based ordinal of the stop surface, counted among committed
+            # surfaces (the object at index 0 counts as ordinal 1, matching the
+            # downstream real_counter walk).  If a surface is still open
+            # (current is not None) it is the stop and has not been appended
+            # yet, so it lands at len(surfaces)+1; otherwise STO refers to the
+            # most recently committed surface at len(surfaces).
+            stop_surface_idx = len(surfaces) + (1 if current is not None else 0)
         elif verb == 'SO':
             # object surface; flush current, start a fresh surface dict
             # for object.  Anything inline after SO (e.g. ;THI 1E10)
@@ -322,7 +331,7 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
         if sd.get('_is_object'):
             continue
         if sd.get('_is_image'):
-            sign = -1.0 if (n_refl % 2) else 1.0
+            sign = fold_sign(n_refl)
             ld.add(Plane(), typ='eval',
                    thickness=sign * float(sd.get('thi', 0.0)))
             surface_origins.append(idx)
@@ -330,7 +339,7 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
         spec, tilt, decenter = _build_spec(sd, radius_mode, database)
         if spec.typ == 'refl':
             n_refl += 1
-        sign = -1.0 if (n_refl % 2) else 1.0
+        sign = fold_sign(n_refl)
         if tilt is not None or decenter is not None:
             ld.add_coordbreak(
                 decenter=decenter or (0.0, 0.0, 0.0),
@@ -471,18 +480,6 @@ def _glass_name(material, typ):
     return None  # air or an un-nameable callable -> blank (air)
 
 
-def _ensure_seq_writable_shape(shape_kind, is_eval):
-    """Reject rows that would be lossy in the current .seq writer."""
-    if is_eval:
-        return
-    if shape_kind in (Conic, Plane, Sphere):
-        return
-    raise NotImplementedError(
-        f'write_seq cannot export {shape_kind.__name__} without losing shape '
-        'data; supported writer shapes are Conic, Sphere, and Plane.'
-    )
-
-
 def _coordbreak_seq_lines(row):
     """Code V decenter/tilt commands for a LensData CoordBreak."""
     dx, dy, _ = (float(v) for v in row.decenter)
@@ -535,13 +532,13 @@ def write_seq(lensdata):
         from .spencer_and_murty import STYPE_EVAL
         from .surfaces import _map_stype
         is_eval = _map_stype(row.typ) == STYPE_EVAL
-        _ensure_seq_writable_shape(row.shape_kind, is_eval)
+        writable_shape_or_raise(row.shape_kind, is_eval, 'write_seq')
         shape = row.build_shape()
         params = shape.params or {}
         is_refl = _glass_name(row.material, row.typ) == 'REFL'
         if is_refl:
             n_refl += 1
-        sign = -1.0 if (n_refl % 2) else 1.0
+        sign = fold_sign(n_refl)
         thi = sign * float(row.thickness)
         if is_eval:
             lines.append('SI')

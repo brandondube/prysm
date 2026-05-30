@@ -28,7 +28,6 @@ from prysm.conf import config
 from prysm.mathops import np, row_dot
 
 from .spencer_and_murty import (
-    DEFAULT_TOL_SAG,
     STYPE_REFLECT,
     STYPE_REFRACT,
     raytrace,
@@ -142,10 +141,17 @@ def d_refract(n, nprime, S_loc, n_hat, S_locdot, dn_hat, ndot_pre, ndot_post):
     mu_dot = (ndot_pre * nprime - n * ndot_post) / (nprime * nprime)  # (P,)
     one_minus = 1.0 - cosI * cosI
     sinT2 = mu * mu * one_minus
-    cosT = np.sqrt(1.0 - sinT2)
+    with np.errstate(invalid='ignore'):
+        cosT = np.sqrt(1.0 - sinT2)
     dsinT2 = (2.0 * mu * mu_dot[None, :] * one_minus[:, None]
               - 2.0 * mu * mu * cosI[:, None] * dcosI)
-    dcosT = -dsinT2 / (2.0 * cosT[:, None])
+    # near the critical angle cosT -> 0 and dcosT = -dsinT2 / (2 cosT) blows up;
+    # an exact-TIR ray already carries cosT = NaN (and a NaN forward Sprime that
+    # the analysis layer filters out).  Zero the non-finite derivative rather
+    # than let inf/NaN silently poison an otherwise-valid sensitivity column.
+    with np.errstate(divide='ignore', invalid='ignore'):
+        dcosT = -dsinT2 / (2.0 * cosT[:, None])
+    dcosT = np.where(np.isfinite(dcosT), dcosT, 0.0)
     sign = np.sign(cosI)
     factor = sign * cosT - mu * cosI
     dfactor = (sign[:, None] * dcosT - mu * dcosI
@@ -548,7 +554,7 @@ def _eye3():
 
 
 def raytrace_with_tangents(surfaces, P, S, wvl, seeds, n_ambient=1.0,
-                           n_ambient_dot=None, tol_sag=DEFAULT_TOL_SAG):
+                           n_ambient_dot=None, tol_sag=None):
     """Trace (P, S) and propagate the tangent bundle for every seed.
 
     Runs the authoritative nominal trace via spencer_and_murty.raytrace, then

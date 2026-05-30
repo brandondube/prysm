@@ -136,13 +136,21 @@ def _mark_inactive_history(Pjp1, Sjp1, OPL_segment, active):
     return Pjp1, Sjp1
 
 
-def resolve_tol_sag(tol_sag=DEFAULT_TOL_SAG):
+def resolve_tol_sag(tol_sag, dtype):
     """Resolve the surface-residual convergence tolerance.
 
     Parameters
     ----------
     tol_sag : float or None
-        absolute convergence tolerance on the surface residual Z - sag.
+        absolute convergence tolerance on the surface residual Z - sag.  None
+        selects a dtype-aware default: 1e-12 in float64, relaxed toward 100x
+        the machine epsilon of the working dtype so a float32 backend (or
+        config.precision == 32) can actually reach it.  The residual Z - sag
+        can never drop below a few epsilon in the working precision, so a fixed
+        1e-12 is unreachable in float32 and would strand every Newton surface
+        at maxiter.
+    dtype : numpy dtype
+        working precision of the ray buffer; sets the tolerance floor.
 
     Returns
     -------
@@ -151,12 +159,12 @@ def resolve_tol_sag(tol_sag=DEFAULT_TOL_SAG):
 
     """
     if tol_sag is None:
-        return DEFAULT_TOL_SAG
+        return max(DEFAULT_TOL_SAG, float(np.finfo(dtype).eps) * 100.0)
     return tol_sag
 
 
 def newton_raphson_solve_s(P1, S, sag_and_normal, s1=0.0,
-                           tol_sag=DEFAULT_TOL_SAG,
+                           tol_sag=None,
                            maxiter=SURFACE_INTERSECTION_DEFAULT_MAXITER):
     """Use Newton-Raphson iteration to solve for intersection between a ray and surface.
 
@@ -184,8 +192,8 @@ def newton_raphson_solve_s(P1, S, sag_and_normal, s1=0.0,
         at that point, plus a length-N boolean convergence mask.
 
     """
-    tol_sag = resolve_tol_sag(tol_sag)
     dtype = P1.dtype
+    tol_sag = resolve_tol_sag(tol_sag, dtype)
     nrays = P1.shape[0]
     # Single-alloc init: s1 may be a scalar (broadcasts to all rays) OR a
     # (nrays,) array of per-ray seeds (from the conic-seeded Newton path).
@@ -242,7 +250,7 @@ def newton_raphson_solve_s(P1, S, sag_and_normal, s1=0.0,
 
 
 def intersect(P0, S, sag_and_normal, s1=0,
-              tol_sag=DEFAULT_TOL_SAG,
+              tol_sag=None,
               maxiter=SURFACE_INTERSECTION_DEFAULT_MAXITER):
     """Find the intersection of a ray and a surface.
 
@@ -271,7 +279,8 @@ def intersect(P0, S, sag_and_normal, s1=0,
         at that point, plus a length-N boolean convergence mask.
 
     """
-    tol_sag = resolve_tol_sag(tol_sag)
+    # tol_sag is resolved at the leaf (newton_raphson_solve_s) where the
+    # working dtype is known, so it scales with float32/float64 backends.
     # batch support -- ellipsis skip any early dimensions, then replace
     # dot with a multiply
     P0, S = np.atleast_2d(P0, S)
@@ -416,7 +425,7 @@ def reflect(S, n_hat):
     return S - 2.0 * cosI[:, np.newaxis] * n_hat
 
 
-def raytrace(surfaces, P, S, wvl, n_ambient=1, tol_sag=DEFAULT_TOL_SAG):
+def raytrace(surfaces, P, S, wvl, n_ambient=1, tol_sag=None):
     """Perform a raytrace through a sequence of surfaces.
 
     Notes

@@ -22,7 +22,6 @@ from .spencer_and_murty import (
     STYPE_EVAL,
     STYPE_REFLECT,
     STYPE_REFRACT,
-    resolve_tol_sag,
 )
 from .intersections import (
     SURFACE_INTERSECTION_DEFAULT_MAXITER,
@@ -1117,7 +1116,8 @@ class Surface:
             Unit surface normals, and a Boolean validity mask.
 
         """
-        tol_sag = resolve_tol_sag(tol_sag)
+        # tol_sag stays None here so it resolves at newton_raphson_solve_s,
+        # where the working dtype (float32/float64) is known.
         if hasattr(self.shape, 'intersect'):
             return self.shape.intersect(P, S, self.sag_and_normal,
                                         tol_sag=tol_sag,

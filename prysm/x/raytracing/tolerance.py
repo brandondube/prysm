@@ -259,6 +259,17 @@ def sensitivity_table(prescription, perturbations, merit, *, step=None):
     -------
     SensitivityTable
 
+    Notes
+    -----
+    This is the general fallback: it treats merit as a black box and costs two
+    full bundle traces per perturbation (2P traces for P parameters).  When the
+    merit reduces to a head the differential engine supports -- RMS wavefront
+    error, spot size, or distortion -- prefer the adjoint multi_objective_sensi-
+    tivity or the wavefront-differential sensitivity APIs, which recover the
+    entire sensitivity vector from a single traced bundle plus a reverse (or
+    tangent) sweep, an order of magnitude cheaper than this finite difference.
+    Use this routine only for merits those engines do not cover.
+
     """
     perturbations = list(perturbations)
     m_nom = float(merit(prescription))

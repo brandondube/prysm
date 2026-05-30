@@ -627,3 +627,31 @@ def test_q2d_with_off_axis_conic_base():
     Q_q, _, _ = s.intersect(P, S)
     Q_oac, _, _ = s_oac.intersect(P, S)
     np.testing.assert_allclose(Q_q, Q_oac, atol=1e-9)
+
+
+@pytest.mark.parametrize('precision, atol', [(32, 1e-4), (64, 1e-12)])
+def test_newton_surface_converges_under_reduced_precision(precision, atol):
+    """The Newton (freeform) intersect must converge at float32 too.
+
+    Regression: a fixed 1e-12 residual tolerance is unreachable in float32
+    (eps ~ 1.2e-7), so every Newton surface used to exhaust maxiter and return
+    an all-invalid bundle.  resolve_tol_sag now floors the tolerance at ~100x
+    the working-dtype epsilon, so the same trace converges at either precision.
+    """
+    from prysm.conf import config
+    old = config.precision
+    try:
+        config.precision = precision
+        dt = np.dtype(f'float{precision}')
+        s = even_asphere(c=1 / 50.0, k=0.0, coefs=[1e-4, 1e-7],
+                         interaction='refl', P=np.array([0., 0., 0.]))
+        P, S = _ray_batch(span=6.0)
+        Q, _, valid = s.intersect(P.astype(dt), S.astype(dt))
+        assert np.all(np.asarray(valid)), 'Newton failed to converge in fp%d' % precision
+        # residual Z - sag at the returned points is within the dtype floor
+        Xj = np.asarray(Q, dtype=float)[:, 0]
+        Yj = np.asarray(Q, dtype=float)[:, 1]
+        sag = np.asarray(s.shape.sag(Xj, Yj), dtype=float)
+        np.testing.assert_allclose(np.asarray(Q, dtype=float)[:, 2], sag, atol=atol)
+    finally:
+        config.precision = old

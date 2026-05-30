@@ -168,3 +168,27 @@ def test_wavefront_default_chief_is_hex_center():
     rms_nhalf = rms(n // 2)      # an off-center hex ray
     assert rms_default == pytest.approx(rms_center, rel=1e-9)
     assert rms_nhalf > 1.2 * rms_center
+
+
+def test_launch_threads_aim_strict_to_aim_rays(monkeypatch):
+    """launch(aim_to=...) must forward aim_strict to aim_rays.
+
+    Without an opt-out a vignetting study (some rays unaimable) aborts the whole
+    launch; aim_strict=False routes through to aim_rays(strict=False) so those
+    rays return best-effort instead.
+    """
+    import importlib
+    launch_mod = importlib.import_module('prysm.x.raytracing.launch')
+
+    captured = []
+
+    def fake_aim(P, S, prescription, surface_index, target_xy, wvl, **kw):
+        captured.append(kw.get('strict'))
+        return P, np.ones(P.shape[0], dtype=bool)
+
+    monkeypatch.setattr(launch_mod, 'aim_rays', fake_aim)
+    ld = cooke()
+    fld = Field(0.0, 14.0, unit='deg')
+    launch(ld, fld, WVL, Sampling.fan(n=5), aim_to=STOP_INDEX)
+    launch(ld, fld, WVL, Sampling.fan(n=5), aim_to=STOP_INDEX, aim_strict=False)
+    assert captured == [True, False]

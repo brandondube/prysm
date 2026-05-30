@@ -29,10 +29,15 @@ instead of read_zmx.
 
 from prysm.mathops import np
 
-from .surfaces import Conic, Plane, Sphere
+from .surfaces import Plane
 from . import materials as _materials
 from ._indexing import noll_to_nm, xy_j_to_mn
-from ._io_common import fields_from_xy, read_text_or_path
+from ._io_common import (
+    fields_from_xy,
+    read_text_or_path,
+    fold_sign,
+    writable_shape_or_raise,
+)
 from .lensdata import LensData
 from ._surface_spec import SurfaceSpec, build_shape
 
@@ -394,17 +399,6 @@ def write_zmx(lensdata):
     from .spencer_and_murty import STYPE_EVAL, STYPE_REFLECT
     from .surfaces import _map_stype
 
-    def ensure_writable_shape(shape_kind, is_eval):
-        if is_eval:
-            return
-        if shape_kind in (Conic, Plane, Sphere):
-            return
-        raise NotImplementedError(
-            f'write_zmx cannot export {shape_kind.__name__} without losing '
-            'shape data; supported writer shapes are Conic, Sphere, '
-            'and Plane.'
-        )
-
     lines = ['VERS 100000 0', 'MODE SEQ']
     if lensdata.unit:
         lines.append(f'UNIT {lensdata.unit.upper()}')
@@ -425,7 +419,7 @@ def write_zmx(lensdata):
         if isinstance(row, CoordBreak):
             dx, dy, _ = (float(v) for v in row.decenter)
             rz, ry, rx = (float(v) for v in row.tilt)
-            sign = -1.0 if (n_refl % 2) else 1.0
+            sign = fold_sign(n_refl)
             lines += [f'SURF {surf_no}', '  TYPE COORDBRK',
                       f'  DISZ {sign * float(row.thickness):g}',
                       f'  PARM 1 {dx:g}', f'  PARM 2 {dy:g}',
@@ -433,13 +427,13 @@ def write_zmx(lensdata):
                       f'  PARM 5 {rz:g}']
             continue
         is_eval = _map_stype(row.typ) == STYPE_EVAL
-        ensure_writable_shape(row.shape_kind, is_eval)
+        writable_shape_or_raise(row.shape_kind, is_eval, 'write_zmx')
         shape = row.build_shape()
         params = shape.params or {}
         is_refl = _map_stype(row.typ) == STYPE_REFLECT
         if is_refl:
             n_refl += 1
-        sign = -1.0 if (n_refl % 2) else 1.0
+        sign = fold_sign(n_refl)
         disz = sign * float(row.thickness)
         block = [f'SURF {surf_no}', '  TYPE STANDARD',
                  f'  CURV {params.get("c", 0.0):g}']
@@ -518,14 +512,14 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
         if surf_type == 'COORDBRK':
             cb = _CoordinateBreak(blk)
             tilt, decenter = cb.tilt_decenter()
-            sign = -1.0 if (n_refl % 2) else 1.0
+            sign = fold_sign(n_refl)
             ld.add_coordbreak(decenter=decenter, tilt=tilt, kind='basic',
                               thickness=sign * _gap(blk))
             continue
         spec = _make_spec(blk, database)
         if spec.typ == 'refl':
             n_refl += 1
-        sign = -1.0 if (n_refl % 2) else 1.0
+        sign = fold_sign(n_refl)
         thickness = sign * _gap(blk)
         # the image surface, if flat, becomes an eval plane
         if i == image_block_i and spec.kind == 'conic' \

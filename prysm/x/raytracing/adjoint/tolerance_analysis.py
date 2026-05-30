@@ -10,10 +10,13 @@ compensator projection, and multi-objective budget allocation.
 from prysm.conf import config
 from prysm.mathops import np
 
-from prysm.x.raytracing.spencer_and_murty import DEFAULT_TOL_SAG
 from prysm.x.raytracing._diff_raytrace import _assemble_seeds
 
-from .backward_sweep import _forward_with_intermediates, _backward_sweep
+from .backward_sweep import (
+    _forward_with_intermediates,
+    _backward_sweep,
+    _precompute_shape_partials,
+)
 
 
 class AdjointResult:
@@ -54,7 +57,7 @@ class AdjointResult:
 
 def multi_objective_sensitivity(surfaces, P, S, wvl, seeds, heads, *,
                                 n_ambient=1.0, n_ambient_dot=None,
-                                tol_sag=DEFAULT_TOL_SAG):
+                                tol_sag=None):
     """Assemble the M x P adjoint Jacobian: one forward pass, M backward sweeps.
 
     Parameters
@@ -85,6 +88,10 @@ def multi_objective_sensitivity(surfaces, P, S, wvl, seeds, heads, *,
         surfaces, P, S, wvl, n_ambient=n_ambient, tol_sag=tol_sag)
     Qdot_s, Rdot_s, nprimedot_s, shape_params, sag_partial_fns = \
         _assemble_seeds(len(surfaces), seeds, n_params)
+    # the shape-DOF tangents are cotangent-independent; evaluate them once and
+    # share them across all M sweeps rather than per objective.
+    shape_partials = _precompute_shape_partials(
+        surfaces, inter, shape_params, sag_partial_fns)
 
     J = np.zeros((len(heads), n_params), dtype=config.precision)
     nominals = {}
@@ -92,7 +99,8 @@ def multi_objective_sensitivity(surfaces, P, S, wvl, seeds, heads, *,
         cot = head.seed(trace, inter)
         J[m] = _backward_sweep(surfaces, trace, inter, Qdot_s, Rdot_s,
                                nprimedot_s, shape_params, sag_partial_fns,
-                               cot, n_ambient_dot=n_ambient_dot)
+                               cot, n_ambient_dot=n_ambient_dot,
+                               shape_partials=shape_partials)
         if hasattr(head, 'value'):
             nominals[head.name] = head.value(trace, inter)
 

@@ -16,7 +16,6 @@ from prysm.x.raytracing.spencer_and_murty import (
     raytrace,
     STYPE_REFRACT,
     STYPE_REFLECT,
-    DEFAULT_TOL_SAG,
 )
 from prysm.x.raytracing._diff_raytrace import _assemble_seeds, _eye3
 from prysm.x.raytracing.opt import _valid_mask
@@ -82,7 +81,7 @@ def _sanitize_scalar(arr, valid):
 
 
 def _forward_with_intermediates(surfaces, P, S, wvl, n_ambient=1.0,
-                                tol_sag=DEFAULT_TOL_SAG):
+                                tol_sag=None):
     """Nominal trace + saved per-surface intermediates for the adjoint.
 
     Returns (RayTraceResult, TraceIntermediates).
@@ -154,14 +153,51 @@ def _forward_with_intermediates(surfaces, P, S, wvl, n_ambient=1.0,
     return trace, TraceIntermediates(inters, valid)
 
 
+def _precompute_shape_partials(surfaces, intermediates, shape_params,
+                               sag_partial_fns):
+    """Per-surface (param_index, sag_t, gx_t, gy_t) tangents for the shape DOFs.
+
+    sag_param_partials depends only on the surface shape and its nominal
+    intersection points, not on the merit cotangent, so it is identical across
+    every backward sweep.  Evaluating it once here lets multi_objective_sensi-
+    tivity reuse it for all M objectives instead of re-running it per head --
+    for freeform shapes whose base-class partials are themselves finite-
+    difference sag evaluations, that is the dominant cost of the M-sweep
+    Jacobian.  Returns a list parallel to surfaces; each entry is a (possibly
+    empty) list of (param_index, sag_t, gx_t, gy_t) tuples.
+    """
+    surf_inters = intermediates.surfaces
+    per_surface = []
+    for j in range(len(surfaces)):
+        entries = []
+        if shape_params[j] or sag_partial_fns[j]:
+            Xj = surf_inters[j].Q_loc[..., 0]
+            Yj = surf_inters[j].Q_loc[..., 1]
+            for p, pname in shape_params[j]:
+                sag_t, gx_t, gy_t = surfaces[j].shape.sag_param_partials(
+                    Xj, Yj, pname)
+                entries.append((p, sag_t, gx_t, gy_t))
+            for p, fn in sag_partial_fns[j]:
+                sag_t, gx_t, gy_t = fn(Xj, Yj)
+                entries.append((p, sag_t, gx_t, gy_t))
+        per_surface.append(entries)
+    return per_surface
+
+
 def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
                     nprimedot_s, shape_params, sag_partial_fns,
-                    cotangent_seed, n_ambient_dot=None):
+                    cotangent_seed, n_ambient_dot=None, shape_partials=None):
     """One reverse sweep: cotangent seed -> gradient (P,) over all parameters.
 
     cotangent_seed is (P_bar, S_bar, L_bar): the merit's cotangent on the
     image-plane ray position, direction, and per-segment OPL (L_bar shared
     across all segments since merits here depend on the total OPL).
+
+    shape_partials, if given, is the output of _precompute_shape_partials and
+    supplies the cotangent-independent shape-DOF tangents; the sweep then only
+    contracts them with its own dsag_bar/dgx_bar/dgy_bar instead of re-running
+    sag_param_partials.  When None they are evaluated on the fly (single-sweep
+    callers such as adjoint_gradient).
     """
     n_params = Qdot_s[0].shape[1] if Qdot_s else 0
     grad = np.zeros(n_params, dtype=config.precision)
@@ -218,8 +254,13 @@ def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
         grad = grad + Qdot_bar @ Qdot_s[j]
         grad = grad + np.tensordot(Rdot_bar, Rdot_s[j], axes=([0, 1], [0, 1]))
 
-        # shape DOFs (analytic sag_param_partials)
-        if shape_params[j] or sag_partial_fns[j]:
+        # shape DOFs (analytic sag_param_partials).  The tangents are cotangent-
+        # independent, so reuse the precomputed set when one was supplied.
+        if shape_partials is not None:
+            for p, sag_t, gx_t, gy_t in shape_partials[j]:
+                grad[p] = grad[p] + np.sum(dsag_bar * sag_t + dgx_bar * gx_t
+                                           + dgy_bar * gy_t)
+        elif shape_params[j] or sag_partial_fns[j]:
             Xj = si.Q_loc[..., 0]
             Yj = si.Q_loc[..., 1]
             for p, pname in shape_params[j]:
@@ -248,7 +289,7 @@ def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
 
 
 def adjoint_gradient(surfaces, P, S, wvl, seeds, head, *, n_ambient=1.0,
-                     n_ambient_dot=None, tol_sag=DEFAULT_TOL_SAG):
+                     n_ambient_dot=None, tol_sag=None):
     """Gradient of a scalar merit (given by head) w.r.t. every seed parameter.
 
     One forward-with-intermediates pass and one backward sweep.

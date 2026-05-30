@@ -287,6 +287,28 @@ def xp_reference_sphere(P_chief, S_chief, axis_point=None, axis_dir=None):
     return C, float(R), P_xp
 
 
+def _pupil_center_chief_index(P, valid=None):
+    """Index of the launch ray nearest the pupil center -- the chief ray.
+
+    For a symmetric sampling the launch bundle's centroid is the pupil center,
+    even after the bundle was translated by entrance-pupil routing; pick the
+    ray nearest it.  A fixed N // 2 is only the pupil center for fan / rect
+    grids and lands on an arbitrary ring sample for a hex bundle.  Shared by
+    wavefront(), the OPD primitives, the differential trace, and the adjoint
+    merit heads so every reference-sphere anchor agrees on the chief ray.
+
+    When valid is given, only rays passing the mask are eligible, so an
+    obscured (annular) bundle whose geometric center sample is clipped still
+    resolves to the surviving ray nearest the pupil center.
+    """
+    P = np.asarray(P)
+    center = np.mean(P[:, :2], axis=0)
+    d2 = np.sum((P[:, :2] - center) ** 2, axis=1)
+    if valid is not None:
+        d2 = np.where(valid, d2, np.inf)
+    return int(np.argmin(d2))
+
+
 def opd_from_raytrace(P_hist, S_hist, OPL_hist, P_img, P_xp,
                       n_image=1.0, chief_index=None):
     """Compute OPD on the exit-pupil reference sphere from a ray-trace.
@@ -318,8 +340,9 @@ def opd_from_raytrace(P_hist, S_hist, OPL_hist, P_img, P_xp,
     n_image : float
         index of refraction in image space (1=vacuum)
     chief_index : int, optional
-        row index of the chief ray.  If None, defaults to N//2 which matches
-        the convention used by raygen.generate_collimated_ray_fan.
+        row index of the chief ray.  If None, defaults to the ray nearest the
+        pupil center (correct for any sampling, including hex grids where N//2
+        is an off-center ring sample).
 
     Returns
     -------
@@ -341,7 +364,7 @@ def opd_from_raytrace(P_hist, S_hist, OPL_hist, P_img, P_xp,
     OPL_total = OPL_through + n_image * t
 
     if chief_index is None:
-        chief_index = OPL_total.shape[0] // 2
+        chief_index = _pupil_center_chief_index(P_hist[0])
 
     return OPL_total - OPL_total[chief_index]
 
@@ -411,7 +434,7 @@ def opd_from_raytrace_eic(P_hist, S_hist, OPL_hist, P_img, P_xp,
     n_image : float
         index in image space.
     chief_index : int, optional
-        row of the chief ray.  Default N // 2.
+        row of the chief ray.  Default: the ray nearest the pupil center.
     infinite_threshold : float
         reference-sphere radius (in prescription length units) above which
         the planar reference is used; finite-conjugate systems are far
@@ -431,7 +454,7 @@ def opd_from_raytrace_eic(P_hist, S_hist, OPL_hist, P_img, P_xp,
     S_last = S_hist[-1]
     OPL_through = OPL_hist.sum(axis=0)
     if chief_index is None:
-        chief_index = OPL_through.shape[0] // 2
+        chief_index = _pupil_center_chief_index(P_hist[0])
 
     if (not np.isfinite(R)) or R > infinite_threshold:
         # planar reference through P_xp normal to the chief direction --

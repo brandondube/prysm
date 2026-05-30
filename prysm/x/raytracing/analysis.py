@@ -30,6 +30,11 @@ from .opt import (
     xp_reference_sphere,
     opd_from_raytrace,
     opd_from_raytrace_eic,
+    # _pupil_center_chief_index lives in opt (a lower layer) so the OPD
+    # primitives, wavefront(), the differential trace, and the adjoint merit
+    # heads all anchor the reference sphere on the same ray.  Re-exported here
+    # for importers that reach it via analysis.
+    _pupil_center_chief_index,  # noqa: F401
     _intersect_lines,
     _valid_mask,
 )
@@ -61,9 +66,10 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None,
     axis : str
         which axis to report: 'x' or 'y'.
     chief_index : int, optional
-        row index of the chief ray; default N//2.  Used as the registration
-        ray when reference is chief, and to center the pupil coordinate in
-        both cases.
+        row index of the chief ray; default: the ray nearest the pupil center
+        (correct for any sampling, unlike a fixed N//2 which is the center only
+        for fan/rect grids).  Used as the registration ray when reference is
+        chief, and to center the pupil coordinate in both cases.
     status : ndarray, optional
         per-ray status from raytrace.  Invalid rays are excluded when
         provided.  If omitted, rays with non-finite image coordinates are
@@ -99,7 +105,7 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None,
     else:
         raise ValueError(f"axis must be 'x' or 'y', got {axis!r}")
     if chief_index is None:
-        chief_index = P_hist.shape[1] // 2
+        chief_index = _pupil_center_chief_index(P_hist[0])
     launch = P_hist[0, :, ax]
     image = P_hist[-1, :, ax]
 
@@ -137,20 +143,6 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None,
 
 # ---------- wavefront -------------------------------------------------------
 
-def _pupil_center_chief_index(P):
-    """Index of the launch ray nearest the pupil center -- the chief ray.
-
-    For a symmetric sampling the launch bundle's centroid is the pupil center,
-    even after the bundle was translated by entrance-pupil routing; pick the
-    ray nearest it.  (A fixed N//2 is only the center for fan/rect-style
-    samplings, not hex.)  Shared by wavefront() and the differential trace's
-    wavefront_with_tangents so the two agree on which ray anchors the sphere.
-    """
-    P = np.asarray(P)
-    center = np.mean(P[:, :2], axis=0)
-    d2 = np.sum((P[:, :2] - center) ** 2, axis=1)
-    return int(np.argmin(d2))
-
 
 def _filtered_chief_index(valid, chief_index):
     """Position of chief_index within the valid-only subset of rays."""
@@ -184,7 +176,7 @@ def wavefront(prescription, P, S, wavelength, *,
               n_ambient=1.0, chief_index=None,
               axis_point=None, axis_dir=None, P_xp=None,
               pupil_coords=None, field=None, output='length',
-              method='sphere'):
+              method='sphere', reference='chief'):
     """Trace and compute OPD on the chief-ray-centered reference sphere.
 
     Composes spencer_and_murty.raytrace, opt.xp_reference_sphere, and
@@ -234,6 +226,13 @@ def wavefront(prescription, P, S, wavelength, *,
         when the reference-sphere radius is effectively infinite -- bit
         identical to 'sphere' for benign systems, more robust for long /
         afocal conjugates.
+    reference : str, optional
+        'chief' (default) anchors the reference sphere on the chief ray and
+        raises if that ray is obscured.  'centroid' anchors instead on the
+        surviving ray nearest the pupil center, so OPD analysis works for an
+        obscured or vignetted bundle (e.g. a Cassegrain, whose central
+        obstruction removes the geometric chief).  When the chief ray is valid
+        the two are identical.
 
     Returns
     -------
@@ -244,13 +243,26 @@ def wavefront(prescription, P, S, wavelength, *,
         launch (x, y) coordinates — the canonical pupil parameterization.
 
     """
+    if reference not in ('chief', 'centroid'):
+        raise ValueError(
+            f"reference must be 'chief' or 'centroid', got {reference!r}"
+        )
     P = np.asarray(P)
     trace = raytrace(prescription, P, S, wavelength, n_ambient=n_ambient)
-    if chief_index is None:
-        chief_index = _pupil_center_chief_index(P)
     valid = _valid_mask(trace.status, trace.P[-1])
-    if not valid[chief_index]:
-        raise ValueError('chief ray is invalid; cannot define reference sphere')
+    if chief_index is None:
+        # for reference='centroid' restrict to surviving rays so an obscured
+        # bundle resolves to the innermost valid ray instead of the clipped
+        # geometric chief.
+        mask = valid if reference == 'centroid' else None
+        chief_index = _pupil_center_chief_index(P, mask)
+    if not bool(valid[chief_index]):
+        if reference == 'chief':
+            raise ValueError(
+                'chief ray is invalid; cannot define reference sphere.  Pass '
+                "reference='centroid' for an obscured or vignetted bundle."
+            )
+        raise ValueError('no valid rays to anchor the reference sphere')
 
     P_chief_final = trace.P[-1, chief_index]
     S_chief_final = trace.S[-1, chief_index]

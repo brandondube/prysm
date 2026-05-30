@@ -194,7 +194,7 @@ class ConicSeedMixin:
         return p['c'], p['k'], p.get('dx', 0.0), p.get('dy', 0.0)
 
     def intersect(self, P, S, sag_and_normal,
-                  tol_sag=DEFAULT_TOL_SAG, maxiter=None):
+                  tol_sag=None, maxiter=None):
         if maxiter is None:
             maxiter = SURFACE_INTERSECTION_DEFAULT_MAXITER
         P, S = np.atleast_2d(P, S)

@@ -7,7 +7,9 @@ from tests.x.raytracing.surface_helpers import (
     chebyshev, jacobi, toroid, biconic,
 )
 
-from prysm.x.raytracing.surfaces import Surface, circular_aperture
+from prysm.x.raytracing.surfaces import (
+    Surface, circular_aperture, annular_aperture,
+)
 from prysm.x.raytracing.spencer_and_murty import STATUS_CLIP
 from prysm.x.raytracing.spencer_and_murty import raytrace
 from prysm.x.raytracing.launch import Field, Sampling, launch
@@ -364,3 +366,34 @@ def test_lateral_color_constant_index_constant_landing():
     landing = lateral_color(presc, fields, [0.45, 0.55, 0.65], epd=4.0)
     np.testing.assert_allclose(landing[0, 0], landing[0, 1], atol=1e-12)
     np.testing.assert_allclose(landing[0, 1], landing[0, 2], atol=1e-12)
+
+
+# ---------- chief-ray reference (obscured bundles) --------------------------
+
+def test_wavefront_centroid_reference_for_obscured_chief():
+    """wavefront(reference='centroid') works when the chief is obscured.
+
+    A central obstruction on the first surface clips the geometric chief ray.
+    reference='chief' cannot define a reference sphere and raises; the new
+    reference='centroid' anchors on the surviving ray nearest the pupil center.
+    """
+    presc = _spherical_singlet()
+    presc[0].aperture = annular_aperture(1.5, 6.0)  # central obstruction
+    P, S = launch(presc, Field(0., 0.), 0.55e-3, Sampling.hex(nrings=4),
+                  epd=8.0, pupil_z=-5.0)
+    with pytest.raises(ValueError):
+        wavefront(presc, P, S, 0.55e-3, reference='chief')
+    opd, xp, yp = wavefront(presc, P, S, 0.55e-3, reference='centroid')
+    assert np.all(np.isfinite(np.asarray(opd, dtype=float)))
+    assert opd.shape[0] > 0
+
+
+def test_wavefront_centroid_matches_chief_when_chief_valid():
+    """With a valid chief, reference='centroid' equals reference='chief'."""
+    presc = _spherical_singlet()
+    P, S = launch(presc, Field(0., 0.), 0.55e-3, Sampling.hex(nrings=3),
+                  epd=8.0, pupil_z=-5.0)
+    opd_chief, _, _ = wavefront(presc, P, S, 0.55e-3, reference='chief')
+    opd_cent, _, _ = wavefront(presc, P, S, 0.55e-3, reference='centroid')
+    np.testing.assert_allclose(np.asarray(opd_chief, dtype=float),
+                               np.asarray(opd_cent, dtype=float), atol=1e-12)

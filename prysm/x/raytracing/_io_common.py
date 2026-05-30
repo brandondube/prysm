@@ -33,6 +33,38 @@ def fields_from_xy(x_values, y_values, kind='angle', unit='deg'):
     return [Field(hx, hy, kind=kind) for hx, hy in zip(x_values, y_values)]
 
 
+def fold_sign(n_refl):
+    """Gap sign given the number of preceding reflections.
+
+    Zemax and Code V encode post-mirror gaps as negative thicknesses on an
+    unfolded axis; LensData folds the frame at each reflection and keeps
+    thickness positive.  The conversion negates the gap once per preceding
+    reflection, so the sign alternates with the parity of n_refl.  Shared by
+    both readers (decode) and both writers (encode), which are inverses of one
+    another, so the fold convention lives in exactly one place.
+    """
+    return -1.0 if (n_refl % 2) else 1.0
+
+
+def writable_shape_or_raise(shape_kind, is_eval, writer):
+    """Reject surface rows a prescription writer would serialize lossily.
+
+    Only Conic, Sphere, and Plane round-trip losslessly through the
+    rotationally symmetric Zemax / Code V writers; eval (image-plane) rows
+    carry no shape and are always allowed.  writer is the calling function
+    name, interpolated into the error message.
+    """
+    if is_eval:
+        return
+    from .surfaces import Conic, Plane, Sphere
+    if shape_kind in (Conic, Plane, Sphere):
+        return
+    raise NotImplementedError(
+        f'{writer} cannot export {shape_kind.__name__} without losing shape '
+        'data; supported writer shapes are Conic, Sphere, and Plane.'
+    )
+
+
 def parse_float(token):
     """Parse a numeric token from a prescription file.
 

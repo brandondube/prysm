@@ -260,7 +260,7 @@ def _finite_PS(pupil_xy, pupil_z, field):
 
 def launch(prescription, field, wavelength, sampling, *,
            epd=None, pupil_extent=None, n_ambient=1.0, pupil_z=None,
-           aim_to=None, aim_target=(0.0, 0.0)):
+           aim_to=None, aim_target=(0.0, 0.0), aim_strict=True):
     """Build (P, S) for one field, wavelength, and pupil sampling.
 
     Combines a Field, a Sampling pattern, and a prescription into absolute
@@ -307,6 +307,12 @@ def launch(prescription, field, wavelength, sampling, *,
         prescription[aim_to].
     aim_target : (float, float), optional
         target xy at the aimed surface.  Default (0, 0) (chief-ray aim).
+    aim_strict : bool, optional
+        forwarded to aim_rays when aim_to is set.  True (default) raises if any
+        ray cannot be aimed (the ray TIRs or misses while aiming).  Pass False
+        for vignetting or wide-field studies where some rays are expected to be
+        unaimable; those rays return best-effort launch positions and are then
+        flagged by the trace status downstream.
 
     Returns
     -------
@@ -346,11 +352,15 @@ def launch(prescription, field, wavelength, sampling, *,
         P, S = _collimated_PS(pupil_xy, pupil_z, field)
         if ep_z is not None:
             # slide each launch point along its ray so the pupil coordinate is
-            # reached at the entrance-pupil z (chief then crosses the EP center)
-            Sx, Sy, Sz = float(S[0, 0]), float(S[0, 1]), float(S[0, 2])
-            shift = (pupil_z - float(ep_z)) / Sz
-            P[:, 0] = P[:, 0] + shift * Sx
-            P[:, 1] = P[:, 1] + shift * Sy
+            # reached at the entrance-pupil z (chief then crosses the EP
+            # center).  The collimated bundle shares one direction, so a single
+            # slide moves every ray.  Stay backend-pure (no float()) and add
+            # out-of-place so gradients w.r.t. the entrance-pupil location flow.
+            S0 = S[0]
+            shift = (pupil_z - ep_z) / S0[2]
+            offset = np.stack([shift * S0[0], shift * S0[1],
+                               np.zeros_like(shift)])
+            P = P + offset
     else:
         target_z = float(ep_z) if ep_z is not None else pupil_z
         P, S = _finite_PS(pupil_xy, target_z, field)
@@ -358,7 +368,7 @@ def launch(prescription, field, wavelength, sampling, *,
     if aim_to is not None:
         P, _ = aim_rays(
             P, S, prescription, aim_to, aim_target, wavelength,
-            n_ambient=n_ambient,
+            n_ambient=n_ambient, strict=aim_strict,
         )
 
     return P, S
