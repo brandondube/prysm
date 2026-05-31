@@ -1,4 +1,6 @@
 """Tests for numerical propagation routines."""
+import functools
+
 import pytest
 
 import numpy as np
@@ -380,3 +382,168 @@ def test_thinlens_hopkins_agree():
     wf = no_phs_wf * tl
     psf2 = wf.focus(efl=100, Q=2).intensity
     assert np.allclose(psf.data, psf2.data, rtol=1e-5)
+
+
+# --- multi-resolution vortex coronagraph -----------------------------------
+def _grey_circle(radius, npup, dx, ss=16):
+    """Supersampled (anti-aliased) circular aperture of the given radius."""
+    xx, yy = coordinates.make_xy_grid(npup * ss, dx=dx / ss)
+    rr = np.hypot(xx, yy)
+    fine = (rr < radius).astype(np.float32)
+    return fine.reshape(npup, ss, npup, ss).mean(axis=(1, 3))
+
+
+@functools.lru_cache(maxsize=2)
+def _vortex_rig(kind):
+    """Build the reusable pieces of a charge-2 vortex coronagraph.
+
+    Returns the aperture, undersized Lyot stop, multi-resolution executor, and
+    final-focus machinery so several tests (ideal mask, measured mask) can
+    drive the same optical system with different focal plane masks. Cached so
+    the heavy aperture and executor construction is shared.
+    """
+    wvl = HeNe
+    efl = 100.0          # mm
+    pupil_dx = 0.05      # mm
+    npup = 384
+    nd = 320             # aperture samples across; Dap = nd * pupil_dx
+    Dap = nd * pupil_dx
+    x, y = coordinates.make_xy_grid(npup, dx=pupil_dx)
+    r = np.hypot(x, y)
+    fno = efl / Dap
+    lamD = fno * wvl              # microns per lambda/D
+    period = wvl * efl / pupil_dx  # full focal field of view, microns
+
+    pupil = _grey_circle(Dap / 2, npup, pupil_dx).astype(complex)
+    # undersized Lyot stop at 0.8 of the aperture radius
+    lyot = _grey_circle(0.8 * Dap / 2, npup, pupil_dx)
+
+    # coarsest level spans the full field of view at Nyquist (q0 = 2); finer
+    # levels zoom into the vortex phase singularity at the focal origin.
+    nf0 = 2 * nd
+    executor = propagation.prepare_multiresolution(
+        pupil_dx, npup, period / nf0, nf0, wvl, efl,
+        num_levels=6, fine_samples=256, kind=kind,
+    )
+
+    nf = 256
+    fdx = lamD / 4
+    final = propagation.prepare_executor(pupil_dx, npup, fdx, nf, wvl, efl, kind=kind)
+    # normalize by the peak of the non-coronagraphic PSF (no FPM, no Lyot stop)
+    ref_peak = (np.abs(propagation.focus_dft(pupil, final)) ** 2).max()
+
+    fx = np.arange(-(nf // 2), nf // 2) * fdx
+    XF, YF = np.meshgrid(fx, fx)
+    rad_lamD = np.hypot(XF, YF) / lamD
+
+    return {
+        'pupil': pupil, 'lyot': lyot, 'executor': executor, 'final': final,
+        'ref_peak': ref_peak, 'rad_lamD': rad_lamD, 'lamD': lamD,
+        'r': r, 'Dap': Dap, 'pupil_peak': np.abs(pupil).max() ** 2,
+    }
+
+
+def _lyot_field(rig, fpm):
+    return propagation.to_fpm_and_back_multiresolution(
+        rig['pupil'], fpm, rig['executor'])
+
+
+def _dark_hole_max(rig, fpm):
+    lyot_field = _lyot_field(rig, fpm)
+    psf = np.abs(propagation.focus_dft(lyot_field * rig['lyot'], rig['final'])) ** 2
+    norm_intensity = psf / rig['ref_peak']
+    dark_hole = (rig['rad_lamD'] > 3) & (rig['rad_lamD'] < 10)
+    return norm_intensity[dark_hole].max()
+
+
+@pytest.mark.parametrize('kind', ['mdft', 'czt'])
+def test_multiresolution_vortex_darkens_lyot_interior(kind):
+    # a charge-2 vortex diffracts a clear circular aperture entirely outside
+    # the geometric pupil, leaving the interior of the Lyot stop dark
+    rig = _vortex_rig(kind)
+    lyot_field = _lyot_field(rig, propagation.vortex_phase_mask(2))
+    interior = rig['r'] < 0.8 * rig['Dap'] / 2
+    intensity = np.abs(lyot_field) ** 2 / rig['pupil_peak']
+    assert intensity[interior].max() < 1e-4
+
+
+@pytest.mark.parametrize('kind', ['mdft', 'czt'])
+def test_multiresolution_vortex_dark_hole_below_1e12(kind):
+    # after the undersized (0.8 R) Lyot stop, the next focus has a deep dark
+    # hole: normalized intensity (PSF / non-coronagraphic peak) below 1e-12
+    rig = _vortex_rig(kind)
+    assert _dark_hole_max(rig, propagation.vortex_phase_mask(2)) < 1e-12
+
+
+@pytest.mark.parametrize('kind', ['mdft', 'czt'])
+def test_multiresolution_to_fpm_and_back_adjoint_is_adjoint(kind):
+    rng = np.random.default_rng(20240530)
+    npup = 64
+    executor = propagation.prepare_multiresolution(
+        pupil_dx=0.1, pupil_samples=npup, focal_dx=2.0, focal_samples=32,
+        wavelength=HeNe, efl=10.0, num_levels=3, fine_samples=32, kind=kind,
+    )
+    fpm = propagation.vortex_phase_mask(2)
+    x = rng.standard_normal((npup, npup)) + 1j * rng.standard_normal((npup, npup))
+    y = rng.standard_normal((npup, npup)) + 1j * rng.standard_normal((npup, npup))
+
+    lhs = np.vdot(propagation.to_fpm_and_back_multiresolution(x, fpm, executor), y)
+    rhs = np.vdot(x, propagation.to_fpm_and_back_multiresolution_adjoint(y, fpm, executor))
+
+    np.testing.assert_allclose(lhs, rhs, rtol=1e-10)
+
+
+def test_prepare_measured_fpm_interpolates_and_fills():
+    # exact recovery on the measurement's own grid; ideal vortex continuation
+    # for coordinates beyond the measured extent
+    n = 129
+    dx = 0.4
+    x, y = coordinates.make_xy_grid(n, dx=dx)
+    measurement = np.exp(1j * 2 * np.arctan2(y, x))
+    fpm = propagation.prepare_measured_fpm(measurement, dx, charge=2)
+
+    np.testing.assert_allclose(fpm(x, y), measurement, atol=1e-12)
+
+    far = np.full((1, 1), 1e5)
+    ideal = np.exp(1j * 2 * np.arctan2(far, far))
+    np.testing.assert_allclose(fpm(far, far), ideal, atol=1e-12)
+
+
+def test_prepare_measured_fpm_scalar_fill():
+    n = 65
+    dx = 1.0
+    x, y = coordinates.make_xy_grid(n, dx=dx)
+    measurement = np.ones((n, n), dtype=complex)
+    fpm = propagation.prepare_measured_fpm(measurement, dx, fill=0.0)
+    far = np.full((1, 1), 1e3)
+    assert fpm(far, far)[0, 0] == 0.0
+
+
+def _measured_vortex(lamD, charge=2, extent_lamD=40, samples_per_lamD=8, error=None):
+    """A measured-style complex vortex map on its own fine uniform grid."""
+    mdx = lamD / samples_per_lamD
+    n = int(extent_lamD * samples_per_lamD) // 2 * 2 + 1
+    mx, my = coordinates.make_xy_grid(n, dx=mdx)
+    phase = charge * np.arctan2(my, mx)
+    if error is not None:
+        phase = phase + error(np.hypot(mx, my) / lamD)
+    return np.exp(1j * phase), mdx
+
+
+def test_measured_fpm_captures_manufacturing_error():
+    # drive the coronagraph with a *measured* mask: an ideal vortex map yields
+    # deep suppression, and an injected fabrication phase ripple makes the dark
+    # hole measurably brighter
+    rig = _vortex_rig('mdft')
+
+    ideal_map, mdx = _measured_vortex(rig['lamD'])
+    dh_ideal = _dark_hole_max(rig, propagation.prepare_measured_fpm(ideal_map, mdx, charge=2))
+
+    ripple = lambda r_lamD: 0.05 * np.sin(2 * np.pi * r_lamD / 3.0)  # 50 mrad
+    err_map, mdx = _measured_vortex(rig['lamD'], error=ripple)
+    dh_error = _dark_hole_max(rig, propagation.prepare_measured_fpm(err_map, mdx, charge=2))
+
+    # the measured ideal map still suppresses starlight strongly...
+    assert dh_ideal < 1e-5
+    # ...and the manufacturing error degrades the contrast
+    assert dh_error > 3 * dh_ideal

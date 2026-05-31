@@ -131,8 +131,7 @@ class Wavefront:
         #
         # for dimensional reduction to be unitless, wvl, r, f all need the same
         # units, so scale wvl
-        w = wavelength / 1e3  # um -> mm
-        term1 = -1j * 2 * np.pi / w
+        term1 = - _phase_prefix(wavelength)
 
         rsq = x * x + y * y
         term2 = rsq / (2 * f)
@@ -181,9 +180,101 @@ class Wavefront:
             gradient with respect to the phase of wf_in
 
         """
-        k = 2 * np.pi / self.wavelength / 1e3  # um -> nm
+        k = _phase_prefix(self.wavelength)
         # imag(gbar*g)
         return k * np.imag(wf_bar.data * np.conj(self.data))
+
+    def from_amp_and_phase_adjoint_amp(self, wf_bar, phase=None):
+        """Adjoint of from_amp_and_phase with respect to amplitude.
+
+        The forward field is P = amplitude * S, with S the unit-modulus phasor
+        exp(prefix * phase).  dP/d(amplitude) = S, so the amplitude gradient is
+        real(conj(wf_bar) * S).
+
+        Parameters
+        ----------
+        wf_bar : Wavefront
+            the gradient propagated to wf
+        phase : ndarray, optional
+            the phase used in the forward from_amp_and_phase, units of nm.
+            If given, S is reconstructed exactly.  If None, S is recovered from
+            self.data as P / abs(P), which is exact where the amplitude is
+            nonzero and yields zero gradient where the amplitude vanishes.
+
+        Returns
+        -------
+        ndarray
+            gradient with respect to the amplitude of wf_in
+
+        """
+        if phase is not None:
+            S = np.exp(_phase_prefix(self.wavelength) * phase)
+            # real(conj(gbar) * S)
+            return np.real(wf_bar.data * np.conj(S))
+        # phase not given: recover the unit phasor from the stored field as
+        # P / abs(P); real(gbar * conj(P/abs(P))) = real(gbar * conj(P)) / abs(P),
+        # taken as zero where the amplitude vanishes
+        absP = np.abs(self.data)
+        nonzero = absP > 0
+        grad = np.real(wf_bar.data * np.conj(self.data))
+        return np.where(nonzero, grad / np.where(nonzero, absP, 1), 0)
+
+    def phase_screen_adjoint_phase(self, wf_bar):
+        """Adjoint of phase_screen with respect to phase.
+
+        phase_screen is from_amp_and_phase with unit amplitude, so the gradient
+        has the same form as from_amp_and_phase_adjoint_phase.
+
+        Parameters
+        ----------
+        wf_bar : Wavefront
+            the gradient propagated to wf
+
+        Returns
+        -------
+        ndarray
+            gradient with respect to the phase of the screen
+
+        """
+        return self.from_amp_and_phase_adjoint_phase(wf_bar)
+
+    @classmethod
+    def thin_lens_adjoint(cls, f, wavelength, x, y, wf_bar):
+        """Adjoint of thin_lens with respect to the focal length f.
+
+        thin_lens maps the scalar focal length f to a quadratic phase screen.
+        This is the transpose of that map: given the gradient flowing back to
+        the screen, it returns the (scalar) gradient with respect to f, so the
+        focal length can be treated as a differentiable design parameter.
+
+        Parameters
+        ----------
+        f : float
+            focal length of the lens used in the forward thin_lens, millimeters
+        wavelength : float
+            wavelength of light, microns
+        x : ndarray
+            x coordinates that define the space of the lens, mm
+        y : ndarray
+            y coordinates that define the space of the beam, mm
+        wf_bar : Wavefront or ndarray
+            gradient with respect to the lens screen produced by thin_lens
+
+        Returns
+        -------
+        scalar
+            gradient of the loss with respect to the focal length f
+
+        """
+        L_bar = _field_data(wf_bar)
+        L = cls.thin_lens(f, wavelength, x, y).data  # the forward lens screen
+        w = wavelength / 1e3  # um -> mm, matches thin_lens
+        rsq = x * x + y * y
+
+        # dL/df = i (pi rsq / (w f^2)) L, and
+        # f_bar = sum real(conj(L_bar) dL/df) = coeff sum(rsq imag(L_bar conj(L)))
+        coeff = np.pi / (w * f * f)
+        return coeff * np.sum(rsq * np.imag(L_bar * np.conj(L)))
 
     def intensity_adjoint(self, intensity_bar):
         """Adjoint of intensity.

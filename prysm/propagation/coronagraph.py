@@ -2,7 +2,7 @@
 
 Can be expanded to add vortex, too.
 """
-from ..mathops import np
+from ..mathops import np, ndimage
 from ._kernels import _adjoint_multiply
 from .dft import focus_dft, focus_dft_adjoint, unfocus_dft, unfocus_dft_adjoint
 
@@ -90,6 +90,171 @@ def to_fpm_and_back_adjoint(wavefunction, fpm, executor, return_more=False,
         return Eabar, fpm_bar
     else:
         return Eabar
+
+
+def vortex_phase_mask(charge):
+    """Build a focal-plane-mask callable for a charge-charge optical vortex.
+
+    The returned callable evaluates exp(i * charge * theta), the azimuthal phase
+    ramp of a vortex coronagraph, on focal-plane coordinate grids. Pass it to
+    to_fpm_and_back_multiresolution, whose per-level grids resolve the on-axis
+    phase singularity.
+
+    Parameters
+    ----------
+    charge : int
+        topological charge of the vortex; even charges null a clear circular
+        aperture in the downstream Lyot plane
+
+    Returns
+    -------
+    callable
+        fpm(xf, yf) -> ndarray, with xf and yf focal-plane coordinate grids
+
+    """
+    def fpm(xf, yf):
+        return np.exp((1j * charge) * np.arctan2(yf, xf))
+
+    return fpm
+
+
+def prepare_measured_fpm(measurement, dx, center=(0, 0), charge=None,
+                         fill=None, order=1):
+    """Wrap a measured complex focal-plane-mask map as an fpm callable.
+
+    A high-resolution metrology map of a physically realized mask (e.g. a
+    fabricated vortex, with its real surface, etch-depth, and amplitude errors)
+    lives on its own uniform grid. The multi-resolution executor evaluates the
+    focal-plane mask on a different grid at every level, so the map must be
+    resampled on demand. This returns a callable fpm(xf, yf) that bilinearly
+    (or higher-order) interpolates the measured complex transmission at the
+    requested focal coordinates and falls back to an ideal continuation outside
+    the measured extent — letting to_fpm_and_back_multiresolution propagate the
+    as-built mask to assess real manufacturing errors.
+
+    The measurement is assumed centered per the make_xy_grid / fftrange
+    convention: array index n // 2 along each axis maps to focal coordinate
+    center. The coarse levels span a far larger field of view than a real
+    measurement, and the finest levels zoom below its resolution; the partition
+    windows confine each level to the annulus its sampling resolves, so simple
+    interpolation per level is appropriate.
+
+    Parameters
+    ----------
+    measurement : ndarray
+        complex transmission (amplitude times exp(1j * phase)) of the realized
+        mask. For a measured phase map phi in radians, pass np.exp(1j * phi).
+    dx : float
+        sample spacing of the measurement, in the focal-plane coordinate units
+        of the executor (microns for prepare_multiresolution).
+    center : (float, float), optional
+        (x, y) focal coordinate of the measurement's center sample, microns.
+        The mask singularity should sit here. Default (0, 0).
+    charge : int, optional
+        if given, focal points outside the measured extent fall back to an
+        ideal charge-charge vortex phase, the natural continuation of a
+        vortex mask beyond the measured region. Ignored if fill is given.
+    fill : scalar or callable, optional
+        value, or fpm(xf, yf) callable, for points outside the measured extent.
+        Overrides charge. Defaults to an ideal vortex if charge is given, else
+        1 (no effect outside the measured region).
+    order : int, optional
+        spline order for the interpolation, passed to map_coordinates. 1
+        (bilinear, default) is local and overshoot-free; 3 is smoother for
+        clean maps.
+
+    Returns
+    -------
+    callable
+        fpm(xf, yf) -> complex ndarray, suitable for
+        to_fpm_and_back_multiresolution
+
+    """
+    meas = np.asarray(measurement)
+    ny, nx = meas.shape
+    cx, cy = center
+    re = np.real(meas)
+    im = np.imag(meas)
+
+    if fill is None:
+        fill = vortex_phase_mask(charge) if charge is not None else 1.0
+    fill_is_callable = callable(fill)
+
+    def fpm(xf, yf):
+        col = (xf - cx) / dx + nx // 2
+        row = (yf - cy) / dx + ny // 2
+        coords = np.stack([row.reshape(-1), col.reshape(-1)])
+        ri = ndimage.map_coordinates(re, coords, order=order, mode='nearest')
+        ii = ndimage.map_coordinates(im, coords, order=order, mode='nearest')
+        interp = (ri + 1j * ii).reshape(xf.shape)
+        inside = (row >= 0) & (row <= ny - 1) & (col >= 0) & (col <= nx - 1)
+        fillv = fill(xf, yf) if fill_is_callable else fill
+        return np.where(inside, interp, fillv)
+
+    return fpm
+
+
+def to_fpm_and_back_multiresolution(wavefunction, fpm, executor):
+    """Propagate to a focal plane mask and back at multiple resolutions.
+
+    The multi-resolution analogue of to_fpm_and_back. Each level of executor
+    forward-propagates the pupil to its focal grid, applies the mask times the
+    level's partition-of-unity window, and inverse-propagates; the level
+    contributions are summed. This densely samples the singular core of a mask
+    such as a vortex phase ramp without truncating any spatial frequency.
+
+    Parameters
+    ----------
+    wavefunction : ndarray
+        complex pupil-plane field to propagate
+    fpm : callable
+        fpm(xf, yf) -> ndarray, the focal plane mask evaluated on focal-plane
+        coordinate grids (microns). See vortex_phase_mask.
+    executor : MultiResolutionExecutor
+        stack of executors and hand-off windows from prepare_multiresolution
+
+    Returns
+    -------
+    ndarray
+        field at the next pupil (Lyot) plane
+
+    """
+    out = None
+    for ex, win, xf, yf in zip(executor.executors, executor.windows,
+                               executor.xf, executor.yf):
+        field_at_fpm = focus_dft(wavefunction, ex)
+        field_after_fpm = field_at_fpm * fpm(xf, yf) * win
+        contribution = unfocus_dft(field_after_fpm, ex)
+        out = contribution if out is None else out + contribution
+    return out
+
+
+def to_fpm_and_back_multiresolution_adjoint(wavefunction, fpm, executor):
+    """Apply the adjoint of to_fpm_and_back_multiresolution.
+
+    Parameters
+    ----------
+    wavefunction : ndarray
+        gradient at the next pupil (Lyot) plane
+    fpm : callable
+        the focal plane mask callable used in the forward propagation
+    executor : MultiResolutionExecutor
+        stack of executors and hand-off windows from prepare_multiresolution
+
+    Returns
+    -------
+    ndarray
+        gradient at the input pupil plane
+
+    """
+    out = None
+    for ex, win, xf, yf in zip(executor.executors, executor.windows,
+                               executor.xf, executor.yf):
+        Ebbar = unfocus_dft_adjoint(wavefunction, ex)
+        intermediate = _adjoint_multiply(Ebbar, fpm(xf, yf) * win)
+        contribution = focus_dft_adjoint(intermediate, ex)
+        out = contribution if out is None else out + contribution
+    return out
 
 
 def babinet(wavefunction, lyot, fpm, executor, return_more=False):
