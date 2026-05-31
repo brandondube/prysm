@@ -73,13 +73,13 @@ Rich XY polynomial capability has been introduced:
 
 * :func:`~prysm.polynomials.xy.xy_j_to_mn` for monoindex to dual index
 
-* :func:`~prysm.polynomials.xy.xy`
+* :func:`~prysm.polynomials.xy.xy`, x^m * y^n
 
-* :func:`~prysm.polynomials.xy.xy_seq`
+* :func:`~prysm.polynomials.xy.xy_seq`, x^m * y^n sequence
 
-* :func:`~prysm.polynomials.xy.xy_sum`
+* :func:`~prysm.polynomials.xy.xy_sum`, x^m * y^n direct sum (fastest)
 
-* :func:`~prysm.polynomials.xy.xy_sum_der_xy`
+* :func:`~prysm.polynomials.xy.xy_sum_der_xy`, x^m * y^n direct sum + derivative
 
 Partial derivatives of the XY monomials have been added.  Three named callables
 plus their sequence variants are provided rather than one with an :code:`axis=`
@@ -95,44 +95,6 @@ kwarg, so the chain rule reads naturally at call sites:
   :func:`~prysm.polynomials.xy.xy_der_xy_seq`
   (mixed :math:`\partial^2 / \partial x \partial y`)
 
-Derivatives of the Dickson polynomials of the first and second kind are now
-available via the standard differentiated three-term recurrence:
-
-* :func:`~prysm.polynomials.dickson.dickson1_der`,
-  :func:`~prysm.polynomials.dickson.dickson1_der_seq`
-
-* :func:`~prysm.polynomials.dickson.dickson2_der`,
-  :func:`~prysm.polynomials.dickson.dickson2_der_seq`
-
-Derivatives of the Forbes Q polynomials are now exposed as ordinary
-:code:`_der` / :code:`_der_seq` callables, matching the convention used by
-every other family in the package.  For the radial families (Qbfs and Qcon)
-the derivative is taken with respect to :math:`x`:
-
-* :func:`~prysm.polynomials.qpoly.Qbfs_der`,
-  :func:`~prysm.polynomials.qpoly.Qbfs_der_seq`
-
-* :func:`~prysm.polynomials.qpoly.Qcon_der`,
-  :func:`~prysm.polynomials.qpoly.Qcon_der_seq`
-
-The 2D Q polynomials (Q2D, aka Forbes) expose both polar and Cartesian
-derivatives, mirroring the convention used by Zernikes.  Each callable returns
-a pair of arrays:
-
-* :func:`~prysm.polynomials.qpoly.Q2d_der`,
-  :func:`~prysm.polynomials.qpoly.Q2d_der_seq`
-  return :math:`(\partial / \partial r, \partial / \partial t)`
-
-* :func:`~prysm.polynomials.qpoly.Q2d_der_xy`,
-  :func:`~prysm.polynomials.qpoly.Q2d_der_xy_seq`
-  return :math:`(\partial / \partial x, \partial / \partial y)`
-
-The Cartesian variant is computed directly in :math:`(x, y)` via the harmonic
-decomposition :math:`r^{|m|} \cos(m t) = \mathrm{Re}\bigl((x + i y)^{|m|}\bigr)`
-(and :math:`\mathrm{Im}` for negative :math:`m`), so it is smooth at the origin
-with no :math:`1/r` singularity, in direct analogy to
-:func:`~prysm.polynomials.zernike.zernike_nm_der_xy`.
-
 Additionally, Laguerre polynomials have been introduced, which can be used for
 generating Laguerre-Gaussian beams:
 
@@ -144,6 +106,16 @@ generating Laguerre-Gaussian beams:
 
 * :func:`~prysm.polynomials.laguerre.laguerre_der_seq`
 
+Derivatives of the Dickson polynomials of the first and second kind are now
+available via the standard differentiated three-term recurrence:
+
+* :func:`~prysm.polynomials.dickson.dickson1_der`,
+  :func:`~prysm.polynomials.dickson.dickson1_der_seq`
+
+* :func:`~prysm.polynomials.dickson.dickson2_der`,
+  :func:`~prysm.polynomials.dickson.dickson2_der_seq`
+
+
 New functions for cartesian derivatives of Zernikes, as well as using Clenshaw's
 method to compute their sum and x- and y- derivatives in one sweep:
 
@@ -152,6 +124,23 @@ method to compute their sum and x- and y- derivatives in one sweep:
 * :func:`~prysm.polynomials.zernike.zernike_nm_der_xy_seq`
 
 * :func:`~prysm.polynomials.zernike.zernike_sum_der_xy`
+
+Derivatives of Q polynomials, as for Zernikes:
+
+* :func:`~prysm.polynomials.qpoly.Qbfs_der`,
+  :func:`~prysm.polynomials.qpoly.Qbfs_der_seq`
+
+* :func:`~prysm.polynomials.qpoly.Qcon_der`,
+  :func:`~prysm.polynomials.qpoly.Qcon_der_seq`
+
+* :func:`~prysm.polynomials.qpoly.Q2d_der`,
+  :func:`~prysm.polynomials.qpoly.Q2d_der_seq`
+  return :math:`(\partial / \partial r, \partial / \partial t)`
+
+* :func:`~prysm.polynomials.qpoly.Q2d_der_xy`,
+  :func:`~prysm.polynomials.qpoly.Q2d_der_xy_seq`
+  return :math:`(\partial / \partial x, \partial / \partial y)`
+
 
 All of the :code:`_seq` polynomial functions have been revised.
 Previously, they returned generators to allow weighted sums of extremely high
@@ -162,24 +151,6 @@ benefit has been more theoretical than practical, e.g. a 1000-term expansion at
 array.  Now equivalent usage is :code:`basis = xxx_seq()`, which returns the
 dense array of shape :code:`(K,N,M)` directly (K=num modes, (N,M) = spatial
 dimensionality).
-
-The :code:`_seq` callables also skip the internal :code:`ns = list(ns)` copy
-when :code:`ns` already supports :code:`len()`, so passing an ndarray or other
-sized iterable no longer incurs a redundant Python-list materialization.
-
-Some bugs in edge cases with clenshaw's method for sums of Q polynomials were
-fixed.  Internally, the per-family Clenshaw loops in :code:`jacobi`,
-:code:`qpoly`, and the related derivative paths have been unified behind a
-shared kernel in :code:`prysm.polynomials._clenshaw`, and the :code:`len == 1`
-mode-axis padding is now handled centrally so callers no longer need to guard
-the single-mode degenerate case at each Clenshaw call site.
-
-The polynomial sum helpers used by x/raytracing polynomial sag surfaces have
-also been broadened.  Chebyshev, Jacobi, Zernike, and XY expansions now expose
-evaluate-and-differentiate helpers that return surface height and Cartesian
-slopes in one pass where possible.  This is primarily an internal acceleration
-and consistency improvement for freeform raytracing surfaces, but the routines
-are available to users building their own polynomial-surface workflows.
 
 Propagation
 -----------
@@ -341,6 +312,8 @@ Bayer
 * :func:`~prysm.bayer.wb_prescale` now has additional :code:`safe` and
   :code:`saturation` kwargs for colorimetrically correct handling of saturation
 
+  New:
+
 * :func:`~prysm.bayer.demosaic_deinterlace` for deinterlace-style demosaicing,
   which cuts resolution by a factor of two but imparts no blur or color channel
   crosstalk
@@ -351,11 +324,15 @@ Bayer
 PSF
 ---
 
+New:
+
 * :func:`~prysm.psf.airydisk_efield`; new function that returns the complex
   electric field of an Airy disk.
 
 i/o
 ---
+
+New:
 
 * :func:`prysm.io.write_zygo_dat` to write Zygo .dat files
 
@@ -377,14 +354,14 @@ Detectors
 new :func:`~prysm.detector.apply_lut` function, and associated kwarg :code:`lut`
 when initializing a :class:`~prysm.detector.Detector` instance.  This adds the
 capability to simulate detector nonlinearity that is homogeneous over the whole
-array
+array via arbitrary mapping
 
-Interchangeable backend
------------------------
+mathops
+-------
 
 The global :attr:`prysm.conf.config.precision` setting now accepts any real
 floating dtype-like value, not only the previous :code:`32` and :code:`64`
-integer selectors.  The matching complex dtype is inferred automatically.
+integer selectors.
 
 .. code-block:: python
 
@@ -394,6 +371,8 @@ integer selectors.  The matching complex dtype is inferred automatically.
   config.precision = np.float16
   config.precision = "float32"
   config.precision = np.dtype("float64")
+
+Convenience methods to swap the backend to Cupy, pytorch, apple MLX, or MKL-FFT:
 
 * :func:`prysm.mathops.set_backend_to_cupy`
 
@@ -405,14 +384,12 @@ integer selectors.  The matching complex dtype is inferred automatically.
 
 * :func:`~prysm.mathops.set_backend_to_defaults`.
 
-Note that other numpy/scipy-like APIs can also be used, and these are simply
-convenience functions; there is no special support for either library beyond
-these functions.
+There is no special support for either library beyond these functions.
 
-The math operations shim now exposes :attr:`prysm.mathops.linalg` for backend
-linear algebra routines, there is also a new
-:func:`~prysm.mathops.array_to_true_numpy` that converts arrays from other
-libraries into numpy arrays for plotting, serialization, etc.
+The math operations shim now exposes :attr:`prysm.mathops.linalg`.
+
+* :func:`~prysm.mathops.array_to_true_numpy` converts arrays from the above
+  libraries into numpy arrays for plotting, serialization, etc.
 
 * the :func:`~prysm._richdata.RichData.plot2d` method of RichData now has an
   :code:`extend` keyword argument, which controls the extension of the colorbar
@@ -595,17 +572,22 @@ deformable mirrors.
 x/optym
 -------
 
-Optym is a new optimization experimental package.  It provides numerous
-optimizers, as well as mechanisms for enforcing intelligent stopping
-conditions on running optimizers, and a different way of representing
-an optimization problem that allows for optimizers to only compute what they
-need to compute at a given time.  This means the interface is very different
-to :code:`scipy.optimize`.  It is the authors' belief that this interface is
-superior.  Independent of the interface, all optimizers support arithmetic at
-any precision, and can run on CPU or GPU, as well as any of the interchangeable
-backends.  This gives optym a wide open domain of applicability, including
-extremely rapid optimization of very high dimensional problems entirely on GPU,
-such as coronagraph mask design.
+This module is for (gradient-based) optimization with numerous optimizers.  The
+API is different to :code:`scipy.optimize`.  In scipy, you call :code:`minimize`
+in a fire-and-forget way.  The only way you can interact during optimization is
+via a callback function.  In optym, optimizers only know how to :code:`step()`
+and advance one iteration.  At the lowest level of usage, you could just call`
+step in a loop and access the optimizer and its internal state, and thing
+you are optimizing, on every iteration.  You could for example update a plot,
+or decide to stop if something in your model got astray.
+
+The package also has a type called :code:`Governor`, which inspects the optimizer
+and its internal state on each iteration, and decides when to stop.  For example,
+one governor checks that the function has stopped decreasing to within a
+tolerance.  Another checks that the gradient has become ~0.
+
+All of the optimizers are GPU-compatible and 32-bit compatible.  Many are able
+to run at 1000's of iterations per second on relatively inexpensive problems.
 
 The basic building blocks are the user providing a minimal function
 :code:`cost(x) -> (f, g)` where f is the scalar cost function, and g is d/dx of f.
@@ -626,10 +608,13 @@ In addition to API level documentation that describes each of these items in
 detail, there are several new optimization-related tutorials and how-tos:
 
 * :doc:`../tutorials/Optimization Basics` for first onramp
-* :doc:`../how-tos/Differentiable Optical Models` to use the algorithmic differentiation added in this release to optimize optical models
-* :doc:`../how-tos/Advanced Optimization with Problem and Governors` which describes more advanced usage.
+* :doc:`../how-tos/Differentiable Optical Models` to use the algorithmic
+  differentiation added in this release to optimize optical models
+* :doc:`../how-tos/Advanced Optimization with Problem and Governors` which
+  describes more advanced usage.
 
-A strong Wolfe conditions line searcher is available via :func:`~prysm.x.optym.linesearch.ls_strong_wolfe`.
+A strong Wolfe conditions line searcher is available via
+:func:`~prysm.x.optym.linesearch.ls_strong_wolfe`.
 
 Optimizers
 ^^^^^^^^^^^
@@ -673,10 +658,6 @@ The :code:`PrysmLBFGSB` uses some different methods of solving for the
 cauchy point and then performing subspace minimization.  It appears to be
 able to converge more reliably and in many cases in fewer iterations than
 the scipy L-BFGS-B driver.
-
-All optimizers run on a :class:`~prysm.x.optym.problem.Problem`,
-or :code:`def cost(x) -> (f, g)`, which is automatically converted into a
-problem.  Run the optimizer by calling step in a loop, or run_until/run_for.
 
 Governors
 ^^^^^^^^^
@@ -1033,7 +1014,6 @@ Bug Fixes
 * :mod:`prysm.polynomials.cheby` functions now are scaled properly when
   called on N dimensional coordinate arrays
 
-
 * A latent bug in :func:`~prysm.polynomials.xy.xy_seq` was also fixed: the
   internal monomial table was generated from
   :func:`~prysm.polynomials.dickson.dickson1_seq` with :code:`alpha=0`, but the
@@ -1041,6 +1021,10 @@ Bug Fixes
   :math:`x^0 = 1`.  This meant :code:`xy_seq([(0,0)], x, y)` returned an array
   of 4 while :code:`xy(0, 0, x, y)` returned 1.  Both forms now return 1
   consistently.
+
+* Some bugs in edge cases with clenshaw's method for sums of Q polynomials were
+  fixed.  Notably, indexing beyond the end of the array, requiring the user to
+  pass an extra zero coefficient at the end of the vector.
 
 * Chirp Z Transforms for nonsquare or shifted arrays have been fixed.  Previously
   the chirp was not properly aligned to the shifted coordinates, resulting in
@@ -1056,8 +1040,7 @@ hatchling.  The minimum supported Python version is now 3.10.  The top-level
 :code:`prysm.__version__` attribute has also been removed; use
 :code:`importlib.metadata.version('prysm')` instead.
 
-Project linting has moved to Ruff, and the direct numpy/scipy import guard has
-been broadened in tests to keep backend-shim compatible code honest.
+Project linting has moved to Ruff.
 
 Numerous features related to MTF benches have been removed.  The code was
 extremely old, had incomplete test coverage, and is rarely used:
@@ -1097,6 +1080,14 @@ parametrization has been modified from (mag,ang) to (mag x, mag y).  Pass
 width=0 or height=0 for monodirectional smear.  This also corrects a bug, in
 which only the diagonal elements of the transfer function were corectly
 populated with sinc() when rotation != 0 previously.
+
+Encircled Energy related functions have been moved from the psf module to the
+otf module:
+
+* :func:`prysm.psf.encircled_energy` => :func:`prysm.otf.encircled_energy`
+
+* :func:`prysm.psf._analytical_encircled_energy` =>
+  :func:`prysm.otf.analytical_encircled_energy_circular_aperture`
 
 :func:`prysm.io.read_zygo_dat` was reworked to improve code reuse with the new
 write function.  In doing so, some of the nesting in the dictionary
