@@ -47,6 +47,7 @@ from .coronagraph import (
     babinet_adjoint,
 )
 from .wavefront import Wavefront
+from ._kernels import phase_prefix
 
 __all__ = [
     'focus',
@@ -78,4 +79,5 @@ __all__ = [
     'babinet',
     'babinet_adjoint',
     'Wavefront',
+    'phase_prefix',
 ]

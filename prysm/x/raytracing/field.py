@@ -33,7 +33,7 @@ prysm.propagation to build the output wavefront.
 from prysm.conf import config
 from prysm.mathops import np, row_dot, interpolate
 from prysm.coordinates import make_xy_grid
-from prysm.propagation import Wavefront, _phase_prefix
+from prysm.propagation import Wavefront, phase_prefix
 
 from prysm import thinfilm
 
@@ -781,7 +781,7 @@ def pupil_field_to_wavefront(pf, *, npix=256, margin=1.05,
 
     """
     finite, pts, grid_pts, dx, phase_nm = _resample_grid(pf, npix, margin)
-    phase_term = np.exp(_phase_prefix(pf.wavelength) * phase_nm)
+    phase_term = np.exp(phase_prefix(pf.wavelength) * phase_nm)
 
     if not pf.polarized:
         amp = np.asarray(pf.amplitude)[finite]

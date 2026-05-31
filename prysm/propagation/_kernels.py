@@ -37,7 +37,7 @@ def _adjoint_multiply(grad, factor, real=False):
     return out
 
 
-def _phase_prefix(wavelength):
+def phase_prefix(wavelength):
     """Phase prefix or scale factor such that mul w/ OPD in nm produces radians.
     """
     return 1j * 2 * np.pi / wavelength / 1e3

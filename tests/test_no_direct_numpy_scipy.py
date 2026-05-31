@@ -26,6 +26,8 @@ ALLOWED = {
                    'scipy.linalg'},
     # Analytic PSF formulae use SciPy Bessel functions directly.
     'psf.py': {'scipy.special'},
+    # Encircled-energy formulae use SciPy Bessel functions directly.
+    'otf.py': {'scipy.special'},
     # Forbes Q scalar normalization constants use SciPy factorial helpers.
     'polynomials/qpoly.py': {'scipy.special'},
     # Fiber LP mode solving depends on SciPy Bessel ufuncs and zero tables.

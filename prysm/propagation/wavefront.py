@@ -7,7 +7,7 @@ import operator
 from ..mathops import np
 from .._richdata import RichData
 
-from ._kernels import _phase_prefix
+from ._kernels import phase_prefix
 from .fft import (
     focus, focus_adjoint, unfocus, unfocus_adjoint,
     pupil_sample_to_psf_sample, psf_sample_to_pupil_sample,
@@ -71,7 +71,7 @@ class Wavefront:
 
         """
         if phase is not None:
-            P = amplitude * np.exp(_phase_prefix(wavelength) * phase)
+            P = amplitude * np.exp(phase_prefix(wavelength) * phase)
         else:
             P = amplitude
         return cls(P, wavelength, dx)
@@ -90,7 +90,7 @@ class Wavefront:
             sample spacing with units of mm
 
         """
-        E = np.exp(_phase_prefix(wavelength) * phase)
+        E = np.exp(phase_prefix(wavelength) * phase)
         return cls(E, wavelength, dx)
 
     @classmethod
@@ -131,7 +131,8 @@ class Wavefront:
         #
         # for dimensional reduction to be unitless, wvl, r, f all need the same
         # units, so scale wvl
-        term1 = - _phase_prefix(wavelength)
+        w = wavelength / 1e3  # um -> mm, matches thin_lens_adjoint
+        term1 = -1j * 2 * np.pi / w
 
         rsq = x * x + y * y
         term2 = rsq / (2 * f)
@@ -180,7 +181,7 @@ class Wavefront:
             gradient with respect to the phase of wf_in
 
         """
-        k = _phase_prefix(self.wavelength)
+        k = phase_prefix(self.wavelength)
         # imag(gbar*g)
         return k * np.imag(wf_bar.data * np.conj(self.data))
 
@@ -208,7 +209,7 @@ class Wavefront:
 
         """
         if phase is not None:
-            S = np.exp(_phase_prefix(self.wavelength) * phase)
+            S = np.exp(phase_prefix(self.wavelength) * phase)
             # real(conj(gbar) * S)
             return np.real(wf_bar.data * np.conj(S))
         # phase not given: recover the unit phasor from the stored field as
