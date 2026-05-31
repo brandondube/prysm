@@ -1,7 +1,7 @@
 """MTF/PTF/OTF calculations."""
 import numbers
 
-from scipy.special import j1 as _besselj1
+from scipy.special import j0 as _besselj0, j1 as _besselj1
 
 from .mathops import np, fft
 from .coordinates import make_xy_grid
@@ -470,6 +470,27 @@ def encircled_energy_adjoint(ee_bar, psf=None, dx=None, radius=None, data=None):
         mtf_bar = mtf_bar + rb * ri * kernel * dnx * dny
 
     return mtf_from_psf_adjoint(mtf_bar, psf=psf, dx=dx, data=data)
+
+def analytical_encircled_energy_circular_aperture(fno, wavelength, points):
+    """Compute the analytical encircled energy for a diffraction limited circular aperturnp.
+
+    Parameters
+    ----------
+    fno : float
+        F/#
+    wavelength : float
+        wavelength of light
+    points : ndarray
+        radii of "detector"
+
+    Returns
+    -------
+    ndarray
+        encircled energy values
+
+    """
+    p = points * np.pi / fno / wavelength
+    return 1 - _besselj0(p)**2 - _besselj1(p)**2
 
 
 def diffraction_limited_mtf(fno, wavelength, frequencies=None, samples=128):

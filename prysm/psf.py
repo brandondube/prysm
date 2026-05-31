@@ -1,14 +1,11 @@
 """Evaluation routines for point spread functions."""
 import numbers
 
-from scipy.special import j0 as _besselj0, j1 as _besselj1
-
 from prysm.fttools import fftrange
 
 from .mathops import (
     np, jinc,
     ndimage,
-    optimize,
 )
 from .coordinates import uniform_cart_to_polar
 
@@ -284,32 +281,3 @@ def airydisk_ft(r, fno, wavelength):
     elif s > 1:
         return 0
     return (2 / np.pi) * (np.arccos(s) - s * np.sqrt(1 - s ** 2))
-
-
-def _analytical_encircled_energy(fno, wavelength, points):
-    """Compute the analytical encircled energy for a diffraction limited circular aperturnp.
-
-    Parameters
-    ----------
-    fno : float
-        F/#
-    wavelength : float
-        wavelength of light
-    points : ndarray
-        radii of "detector"
-
-    Returns
-    -------
-    ndarray
-        encircled energy values
-
-    """
-    p = points * np.pi / fno / wavelength
-    return 1 - _besselj0(p)**2 - _besselj1(p)**2
-
-
-def _inverse_analytic_encircled_energy(fno, wavelength, energy=FIRST_AIRY_ENCIRCLED):
-    def optfcn(x):
-        return (_analytical_encircled_energy(fno, wavelength, x) - energy) ** 2
-
-    return optimize.golden(optfcn)
