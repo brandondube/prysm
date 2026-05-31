@@ -833,11 +833,8 @@ of wavefront phase as well as complex E-field.
   consants of x/psi
 
 * Forward modeling of Self-Referenced Interferometers (SRIs), which use a
-  pinhole to generate the reference wave using light from the input port using
-  :class:`~prysm.x.sri.PinholeSRI`
-
-* Photonic SRIs, which use a single mode fiber or waveguide to generate the
-  reference wave using light from the input port using :class:`~prysm.x.sri.PSRI`
+  fiber to generate the reference wave using light from the input port using
+  :class:`~prysm.x.sri.SelfReferencedInterferometer`
 
 * PSI routines:
 
@@ -853,20 +850,6 @@ which contains the phase shifts and associated sine and cosine weights
 * * :func:`~prysm.x.psi.psi_accumulate` for accumulating the sums of de groot's
     formalism, an essential intermediate step in full complex E-field
     reconstruction and differential reconstruction
-
-* * :func:`~prysm.x.psi.differential_re_im` for direct reconstruction of the
-    change in the real and complex part of the E-field based on two PSI
-    measurements
-
-* * :func:`~prysm.x.psi.differential_amp_phs` which is analagous to the Re and
-    Im function
-
-Note that when performing differential reconstructions, it may often be useful
-to work with (amp1 - amp0)/amp0, instead of the difference directly.
-Interferometers which have apodization over the pupil will naturally have
-smaller differences in the dimmer regions of the pupil.  If the apodization does
-not change between the two measuements, this division will improve accuracy
-considerably
 
 
 x/dm
