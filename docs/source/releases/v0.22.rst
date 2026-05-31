@@ -7,8 +7,36 @@ Released (eventually)
 This release, the first in several years, marks the beginning of a split
 between the core library which will have better stability between releases,
 and a new :code:`prysm.x`-perimental (shorthand, x or x/) directory for new
-modules which have not had the ~10 years of development that the core library has.
+modules which have not had the ~10 years of development that the core library
+has.
 
+A basic summary of the changelog is:
+
+* Expanded propagation module, particularly for multi-plane problems such as
+  coronagraphs.
+
+* New experimental modules for optimization, polarization, and massive expansion
+  of the raytracing module.
+
+* Vast expansion of the polynomials module, including analytical derivatives and
+  sums+derivatives using Clenshaw's method (from Forbes' Q polynomial papers)
+  for extremely efficient computation of surfaces and their partial derivatives,
+  essential for high-performance raytracing.
+
+* Adjoint / gradient backpropagation routines for a large subset of the API,
+  allowing gradient-based optimization of a wide range of problems in optics
+  such as:
+
+  * * Phase Retrieval
+
+  * * Coronagraph mask optimization
+
+  * * In raytracing: Using backpropagation to obtain partial derivatives of a
+    cost function with respect to tolerances and other parameters, similar to
+    wavefront differential tolerancing (which is also implemented).
+
+* Several new features and bug fixes in several core modules.  See the release
+  notes for each.
 
 The new x/ modules are detailed in the release notes below.
 
@@ -27,11 +55,17 @@ A breaking change has been made by renaming :code:`xxx_sequence` to
 Utilities to orthogonalize and normalize modes over arbitrary apertures with
 special routines for annular apertures:
 
-* :func:`~prysm.coordinates.distort_annular_grid` - deforms an ordinary (r, t) coordinate mesh to represent a new unit domain for using conventional orthogonal polynomial sets.  For example, vanilla zernikes can be generated on the return from this function, and they will be orthogonal over the annulus.
+* :func:`~prysm.coordinates.distort_annular_grid` - deforms an ordinary (r, t)
+  coordinate mesh to represent a new unit domain for using conventional orthogonal
+  polynomial sets.  For example, vanilla zernikes can be generated on the return
+  from this function, and they will be orthogonal over the annulus.
 
-* :func:`~prysm.polynomials.orthogonalize_modes` - using a QR factorization (more stable gramm-schmidt style process) approach to generate numerically orthogonalized modes.
+* :func:`~prysm.polynomials.orthogonalize_modes` - using a QR factorization
+  (more stable gramm-schmidt style process) approach to generate numerically
+  orthogonalized modes.
 
-* :func:`~prysm.polynomials.normalize_modes` - normalize modes so that they are orthonormal or otherwise (e.g., to='std').
+* :func:`~prysm.polynomials.normalize_modes` - normalize modes so that they are
+  orthonormal or otherwise (e.g., to='std').
 
 See :doc:`../explanation/Ins and Outs of Polynomials` for usage examples
 
@@ -51,42 +85,47 @@ Partial derivatives of the XY monomials have been added.  Three named callables
 plus their sequence variants are provided rather than one with an :code:`axis=`
 kwarg, so the chain rule reads naturally at call sites:
 
-* :func:`~prysm.polynomials.xy.xy_der_x`, :func:`~prysm.polynomials.xy.xy_der_x_seq`
+* :func:`~prysm.polynomials.xy.xy_der_x`,
+  :func:`~prysm.polynomials.xy.xy_der_x_seq`
 
-* :func:`~prysm.polynomials.xy.xy_der_y`, :func:`~prysm.polynomials.xy.xy_der_y_seq`
+* :func:`~prysm.polynomials.xy.xy_der_y`,
+  :func:`~prysm.polynomials.xy.xy_der_y_seq`
 
-* :func:`~prysm.polynomials.xy.xy_der_xy`, :func:`~prysm.polynomials.xy.xy_der_xy_seq` (mixed :math:`\partial^2 / \partial x \partial y`)
-
-A latent bug in :func:`~prysm.polynomials.xy.xy_seq` was also fixed: the
-internal monomial table was generated from :func:`~prysm.polynomials.dickson.dickson1_seq`
-with :code:`alpha=0`, but the Dickson convention gives :math:`D_0 = 2` rather
-than the monomial :math:`x^0 = 1`.  This meant :code:`xy_seq([(0,0)], x, y)`
-returned an array of 4 while :code:`xy(0, 0, x, y)` returned 1.  Both forms
-now return 1 consistently.
+* :func:`~prysm.polynomials.xy.xy_der_xy`,
+  :func:`~prysm.polynomials.xy.xy_der_xy_seq`
+  (mixed :math:`\partial^2 / \partial x \partial y`)
 
 Derivatives of the Dickson polynomials of the first and second kind are now
 available via the standard differentiated three-term recurrence:
 
-* :func:`~prysm.polynomials.dickson.dickson1_der`, :func:`~prysm.polynomials.dickson.dickson1_der_seq`
+* :func:`~prysm.polynomials.dickson.dickson1_der`,
+  :func:`~prysm.polynomials.dickson.dickson1_der_seq`
 
-* :func:`~prysm.polynomials.dickson.dickson2_der`, :func:`~prysm.polynomials.dickson.dickson2_der_seq`
+* :func:`~prysm.polynomials.dickson.dickson2_der`,
+  :func:`~prysm.polynomials.dickson.dickson2_der_seq`
 
 Derivatives of the Forbes Q polynomials are now exposed as ordinary
 :code:`_der` / :code:`_der_seq` callables, matching the convention used by
 every other family in the package.  For the radial families (Qbfs and Qcon)
 the derivative is taken with respect to :math:`x`:
 
-* :func:`~prysm.polynomials.qpoly.Qbfs_der`, :func:`~prysm.polynomials.qpoly.Qbfs_der_seq`
+* :func:`~prysm.polynomials.qpoly.Qbfs_der`,
+  :func:`~prysm.polynomials.qpoly.Qbfs_der_seq`
 
-* :func:`~prysm.polynomials.qpoly.Qcon_der`, :func:`~prysm.polynomials.qpoly.Qcon_der_seq`
+* :func:`~prysm.polynomials.qpoly.Qcon_der`,
+  :func:`~prysm.polynomials.qpoly.Qcon_der_seq`
 
 The 2D Q polynomials (Q2D, aka Forbes) expose both polar and Cartesian
 derivatives, mirroring the convention used by Zernikes.  Each callable returns
 a pair of arrays:
 
-* :func:`~prysm.polynomials.qpoly.Q2d_der`, :func:`~prysm.polynomials.qpoly.Q2d_der_seq` return :math:`(\partial / \partial r, \partial / \partial t)`
+* :func:`~prysm.polynomials.qpoly.Q2d_der`,
+  :func:`~prysm.polynomials.qpoly.Q2d_der_seq`
+  return :math:`(\partial / \partial r, \partial / \partial t)`
 
-* :func:`~prysm.polynomials.qpoly.Q2d_der_xy`, :func:`~prysm.polynomials.qpoly.Q2d_der_xy_seq` return :math:`(\partial / \partial x, \partial / \partial y)`
+* :func:`~prysm.polynomials.qpoly.Q2d_der_xy`,
+  :func:`~prysm.polynomials.qpoly.Q2d_der_xy_seq`
+  return :math:`(\partial / \partial x, \partial / \partial y)`
 
 The Cartesian variant is computed directly in :math:`(x, y)` via the harmonic
 decomposition :math:`r^{|m|} \cos(m t) = \mathrm{Re}\bigl((x + i y)^{|m|}\bigr)`
@@ -176,8 +215,9 @@ The new usage looks like:
   efoc = wf.focus_dft(mdft)
   epup = efoc.unfocus_dft(mdft)
 
-This change *significantly* simplifies logic around backpropagation.  Functions
-have been renamed:
+This change *significantly* simplifies logic around backpropagation.
+
+Functions have been renamed:
 
 * :code:`propagation.focus_fixed_sampling` →
   :func:`~prysm.propagation.focus_dft`
@@ -194,36 +234,66 @@ New features:
 
 * :func:`~prysm.propagation.Wavefront.phase_screen`
 
-* :func:`~prysm.propagation.to_fpm_and_back`
+* :func:`~prysm.propagation.to_fpm_and_back`; perform a dft propagation to an
+  FPM, then back to the Lyot stop.
+
+* :func:`~prysm.propagation.babinet`; to_fpm_and_back but use Babinet's
+  principle to only propagate to the region of an opaque occulter and compute
+  its shadow
 
 * all propagation routines have a :code:`_adjoint` twin, which should be used
   to apply gradient adjoints through optical models:
 
-* * :func:`~prysm.propagation.focus_adjoint`
+* :func:`~prysm.propagation.focus_adjoint`
 
-* * :func:`~prysm.propagation.unfocus_adjoint`
+* :func:`~prysm.propagation.unfocus_adjoint`
 
-* * :func:`~prysm.propagation.focus_dft_adjoint`
+* :func:`~prysm.propagation.focus_dft_adjoint`
 
-* * :func:`~prysm.propagation.unfocus_dft_adjoint`
+* :func:`~prysm.propagation.unfocus_dft_adjoint`
 
-* * :func:`~prysm.propagation.to_fpm_and_back_adjoint`
+* :func:`~prysm.propagation.to_fpm_and_back_adjoint`
 
-* * :func:`~prysm.propagation.free_space_adjoint`
+* :func:`~prysm.propagation.babinet_adjoint`
 
-The above functions also have :code:`_adjoint` routines for their versions
-defined as methods on :class:`~prysm.propagation.Wavefront`.  The following
-wavefront-only functions also support adjoints:
+* :func:`~prysm.propagation.free_space_adjoint`
 
-* * :func:`~prysm.propagation.Wavefront.babinet_adjoint`
+* :func:`~prysm.propagation.Wavefront.thin_lens_adjoint`
 
-* * :func:`~prysm.propagation.Wavefront.from_amp_and_phase_adjoint_phase`
+* :func:`~prysm.propagation.Wavefront.from_amp_and_phase_adjoint_phase`
 
-* * :func:`prysm.polynomials.sum_of_2d_modes_adjoint`
+* :func:`~prysm.propagation.Wavefront.from_amp_and_phase_adjoint_amp`
+
+* :func:`~prysm.propagation.Wavefront.phase_screen_adjoint`
+
+* :func:`prysm.polynomials.sum_of_2d_modes_adjoint`
 
 * add and subtract :code:`+` and :code:`-` operators are now defined for
   :class:`~prysm.propagation.Wavefront` for convenient recombination /
   superposition of waves, as in interferometers
+
+:mod:`prysm.propagation` has been split into a few files.  This should cause no
+change for users.
+
+The versions of propagation functions that are not methods of Wavefront
+previously accepted Wavefront or Richdata instances, with optional arguments
+such as dx.  They now operate only on arrays; users should use one API or the
+other, not both at once.
+
+.. code-block:: python
+  :linenos:
+
+  # WAS: free function accepted a Wavefront mask
+  epup = propagation.to_fpm_and_back(wf.data, fpm=fpm_wavefront, executor=mdft)
+
+  # NOW: pass ndarray data, or use the method
+  epup = propagation.to_fpm_and_back(wf.data, fpm=fpm_wavefront.data, executor=mdft)
+  epup = wf.to_fpm_and_back(fpm=fpm_wavefront, executor=mdft)  # method still unwraps
+
+:func:`~prysm.propagation.babinet` and
+:func:`~prysm.propagation.babinet_adjoint` are now also available as free
+functions on ndarrays, mirroring the existing
+:class:`~prysm.propagation.Wavefront` methods of the same names.
 
 
 fttools
@@ -340,9 +410,9 @@ convenience functions; there is no special support for either library beyond
 these functions.
 
 The math operations shim now exposes :attr:`prysm.mathops.linalg` for backend
-linear algebra routines, there is also a new :func:`~prysm.mathops.array_to_true_numpy`
-that converts arrays from other libraries into numpy arrays for plotting,
-serialization, etc.
+linear algebra routines, there is also a new
+:func:`~prysm.mathops.array_to_true_numpy` that converts arrays from other
+libraries into numpy arrays for plotting, serialization, etc.
 
 * the :func:`~prysm._richdata.RichData.plot2d` method of RichData now has an
   :code:`extend` keyword argument, which controls the extension of the colorbar
@@ -611,40 +681,53 @@ problem.  Run the optimizer by calling step in a loop, or run_until/run_for.
 Governors
 ^^^^^^^^^
 
-These are what trigger the end of iteration with :func:`~prysm.x.optym.optimizers.run_until`.
+These are what trigger the end of iteration with
+:func:`~prysm.x.optym.optimizers.run_until`.
 
 Two are special or meta, and combine the others:
 
-* :class:`~prysm.x.optym.governors.AnyGovernor`; # stop when any of the other governors are met
+* :class:`~prysm.x.optym.governors.AnyGovernor`; # stop when any of the other
+  governors are met
 
-* :class:`~prysm.x.optym.governors.AllGovernor`; # stop when all of the other governors are met
+* :class:`~prysm.x.optym.governors.AllGovernor`; # stop when all of the other
+  governors are met
 
 Ordinary governors:
 
 * :class:`~prysm.x.optym.governors.MaxIterations`; limit # of iterations
 
-* :class:`~prysm.x.optym.governors.FunctionTolerance`; # stop when :code:`f` reaches a certain value
+* :class:`~prysm.x.optym.governors.FunctionTolerance`; # stop when :code:`f`
+  reaches a certain value
 
-* :class:`~prysm.x.optym.governors.GradientTolerance`; # stop when :code:`||g||` reaches a certain value
+* :class:`~prysm.x.optym.governors.GradientTolerance`; # stop when :code:`||g||`
+  reaches a certain value
 
-* :class:`~prysm.x.optym.governors.StepTolerance`; # stop when :code:`||x_new - x_old||` reaches a certain value
+* :class:`~prysm.x.optym.governors.StepTolerance`; # stop when
+  :code:`||x_new - x_old||` reaches a certain value
 
-* :class:`~prysm.x.optym.governors.MaxEvaluations`; # stop when # of function evaluations reaches a certain value
+* :class:`~prysm.x.optym.governors.MaxEvaluations`; # stop when # of function
+  evaluations reaches a certain value
 
-* :class:`~prysm.x.optym.governors.ConstraintTolerance`; # stop when the specified number of variables are pinned at a boundary
+* :class:`~prysm.x.optym.governors.ConstraintTolerance`; # stop when the
+  specified number of variables are pinned at a boundary
 
-The convergence may be plotted using :func:`~prysm.x.optym.plotting.plot_convergence`.
+The convergence may be plotted using
+:func:`~prysm.x.optym.plotting.plot_convergence`.
 
 Benchmark and sample problems
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* :class:`~prysm.x.optym.sample_problems.SphereProblem` or :func:`~prysm.x.optym.sample_problems.sphere`
+* :class:`~prysm.x.optym.sample_problems.SphereProblem`
+  or :func:`~prysm.x.optym.sample_problems.sphere`
 
-* :class:`~prysm.x.optym.sample_problems.RosenbrockProblem` or :func:`~prysm.x.optym.sample_problems.rosenbrock`
+* :class:`~prysm.x.optym.sample_problems.RosenbrockProblem`
+  or :func:`~prysm.x.optym.sample_problems.rosenbrock`
 
-* :class:`~prysm.x.optym.sample_problems.RastriginProblem` or :func:`~prysm.x.optym.sample_problems.rastrigin`
+* :class:`~prysm.x.optym.sample_problems.RastriginProblem`
+  or :func:`~prysm.x.optym.sample_problems.rastrigin`
 
-* :class:`~prysm.x.optym.sample_problems.HimmelblauProblem` or :func:`~prysm.x.optym.sample_problems.himmelblau`
+* :class:`~prysm.x.optym.sample_problems.HimmelblauProblem`
+  or :func:`~prysm.x.optym.sample_problems.himmelblau`
 
 Problem forms of these come pre-populated with f, g, fg, h, and hvp methods.
 You can use them with optimizers, or use them as examples of building a Problem.
@@ -666,9 +749,11 @@ Activation functions and discretizers
 
 * :class:`~prysm.x.optym.activation.Sigmoid`
 
-* :class:`~prysm.x.optym.activation.DiscreteEncoder`; a method of using Softmax to softly quantize variables
+* :class:`~prysm.x.optym.activation.DiscreteEncoder`; a method of using Softmax
+  to softly quantize variables
 
-* :class:`~prysm.x.optym.activation.GumbelSoftmax`; softmax with gumbel distribution stochastic noise
+* :class:`~prysm.x.optym.activation.GumbelSoftmax`; softmax with gumbel
+  distribution stochastic noise
 
 
 Cost or loss functions
@@ -910,6 +995,7 @@ Performance Optimizations
   creates a slight performance enhancement for big endian systems, such as apple
   silicon
 
+
 Bug Fixes
 =========
 
@@ -944,8 +1030,22 @@ Bug Fixes
 * :func:`~prysm.bayer.demosaic_malvar` had a scaling error for the blue channel
   corrected.
 
-* :module:`prysm.polynomials.cheby` functions now are scaled properly when
+* :mod:`prysm.polynomials.cheby` functions now are scaled properly when
   called on N dimensional coordinate arrays
+
+
+* A latent bug in :func:`~prysm.polynomials.xy.xy_seq` was also fixed: the
+  internal monomial table was generated from
+  :func:`~prysm.polynomials.dickson.dickson1_seq` with :code:`alpha=0`, but the
+  Dickson convention gives :math:`D_0 = 2` rather than the monomial
+  :math:`x^0 = 1`.  This meant :code:`xy_seq([(0,0)], x, y)` returned an array
+  of 4 while :code:`xy(0, 0, x, y)` returned 1.  Both forms now return 1
+  consistently.
+
+* Chirp Z Transforms for nonsquare or shifted arrays have been fixed.  Previously
+  the chirp was not properly aligned to the shifted coordinates, resulting in
+  incorrect results.
+
 
 Code Removal and other Breaking Changes
 =======================================
@@ -992,7 +1092,7 @@ the functions have been removed to avoid confusion.
 
 The degredations module has been modernized, and two bugs have been fixed in
 doing so.  The magnitude of jitter now matches more common modern formalisms,
-and is twice as large for the same "scale" parameter has previously.  The smear
+and is twice as large for the same "scale" parameter previously.  The smear
 parametrization has been modified from (mag,ang) to (mag x, mag y).  Pass
 width=0 or height=0 for monodirectional smear.  This also corrects a bug, in
 which only the diagonal elements of the transfer function were corectly
