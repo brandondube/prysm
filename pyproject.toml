@@ -7,15 +7,51 @@ name = "prysm"
 version = "0.22"
 description = "physical optics integrated modeling, phase retrieval, segmented systems, polynomials and fitting, sequential raytracing..."
 readme = "README.md"
-license = { file = "LICENSE.md" }
+license = "MIT"
+license-files = ["LICENSE.md"]
 requires-python = ">=3.10"
 authors = [
     { name = "Brandon Dube", email = "brandon@retrorefractions.com" },
+]
+keywords = [
+    "optics",
+    "physical optics",
+    "diffraction",
+    "wavefront",
+    "interferometry",
+    "polynomials",
+    "zernike",
+    "raytracing",
+    "phase retrieval",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
 ]
 dependencies = [
     "numpy",
     "scipy",
 ]
+
+[project.optional-dependencies]
+plotting = ["matplotlib"]
+img = ["imageio"]
+datx = ["h5py"]
+all = ["matplotlib", "imageio", "h5py"]
+
+[project.urls]
+Homepage = "https://github.com/brandondube/prysm"
+Documentation = "https://prysm.readthedocs.io/"
+Repository = "https://github.com/brandondube/prysm"
+Issues = "https://github.com/brandondube/prysm/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["prysm"]
