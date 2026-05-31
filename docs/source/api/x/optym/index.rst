@@ -9,6 +9,12 @@ Optimizers
 .. automodule:: prysm.x.optym.optimizers
     :members:
 
+.. autoclass:: prysm.x.optym._prysm_lbfgsb.PrysmLBFGSB
+
+.. autoclass:: prysm.x.optym._lbfgsb.CLBFGSB
+
+.. autoclass:: prysm.x.optym.least_squares.DampedLeastSquares
+
 =========
 Governors
 =========
@@ -28,6 +34,13 @@ Activation Functions
 ====================
 
 .. automodule:: prysm.x.optym.activation
+    :members:
+
+=========
+Operators
+=========
+
+.. automodule:: prysm.x.optym.operators
     :members:
 
 =====================

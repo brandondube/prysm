@@ -10,9 +10,7 @@ from prysm.propagation import (
     prepare_executor,
 )
 from prysm.coordinates import make_xy_grid, cart_to_polar
-from prysm.geometry import circle
 
-from .pdi import evaluate_test_ref_arm_matching
 from .fibers import smf_mode_field
 
 WF = Wavefront

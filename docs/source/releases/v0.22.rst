@@ -227,15 +227,17 @@ New features:
 
 * :func:`~prysm.propagation.babinet_adjoint`
 
-* :func:`~prysm.propagation.free_space_adjoint`
+* :func:`~prysm.propagation.angular_spectrum_adjoint`
 
-* :func:`~prysm.propagation.Wavefront.thin_lens_adjoint`
+* :meth:`~prysm.propagation.Wavefront.thin_lens_adjoint`
 
-* :func:`~prysm.propagation.Wavefront.from_amp_and_phase_adjoint_phase`
+* :meth:`~prysm.propagation.Wavefront.from_amp_and_phase_adjoint_phase`
 
-* :func:`~prysm.propagation.Wavefront.from_amp_and_phase_adjoint_amp`
+* :meth:`~prysm.propagation.Wavefront.from_amp_and_phase_adjoint_amp`
 
-* :func:`~prysm.propagation.Wavefront.phase_screen_adjoint`
+* :meth:`~prysm.propagation.Wavefront.phase_screen_adjoint`
+
+* :meth:`~prysm.propagation.Wavefront.free_space_adjoint`
 
 * :func:`prysm.polynomials.sum_of_2d_modes_adjoint`
 
@@ -250,22 +252,6 @@ The versions of propagation functions that are not methods of Wavefront
 previously accepted Wavefront or Richdata instances, with optional arguments
 such as dx.  They now operate only on arrays; users should use one API or the
 other, not both at once.
-
-.. code-block:: python
-  :linenos:
-
-  # WAS: free function accepted a Wavefront mask
-  epup = propagation.to_fpm_and_back(wf.data, fpm=fpm_wavefront, executor=mdft)
-
-  # NOW: pass ndarray data, or use the method
-  epup = propagation.to_fpm_and_back(wf.data, fpm=fpm_wavefront.data, executor=mdft)
-  epup = wf.to_fpm_and_back(fpm=fpm_wavefront, executor=mdft)  # method still unwraps
-
-:func:`~prysm.propagation.babinet` and
-:func:`~prysm.propagation.babinet_adjoint` are now also available as free
-functions on ndarrays, mirroring the existing
-:class:`~prysm.propagation.Wavefront` methods of the same names.
-
 
 fttools
 -------
@@ -633,9 +619,11 @@ Optimizers
 
 * :class:`~prysm.x.optym.optimizers.AdaMomentum`
 
-* :class:`~prysm.x.optym.optimizers.LBFGSB`
+* :class:`~prysm.x.optym._prysm_lbfgsb.PrysmLBFGSB`
 
-* :class:`~prysm.x.optym.optimizers.PrysmLBFGSB`
+* :class:`~prysm.x.optym._lbfgsb.CLBFGSB` (import LBFGSB; there is
+  a fortran77 driver and a C driver; LBFGSB aliases whichever your scipy install
+  has at import-time).
 
 * :class:`~prysm.x.optym.least_squares.DampedLeastSquares`
 
