@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from .surfaces import (
+from ..surfaces import (
     Surface,
     Biconic,
     Conic,

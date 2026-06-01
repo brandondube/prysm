@@ -12,7 +12,7 @@ def read_text_or_path(path_or_text, is_text=False):
 
 def fields_from_xy(x_values, y_values, kind='angle', unit='deg'):
     """Build Field records from possibly uneven x/y field lists."""
-    from .launch import Field
+    from ..launch import Field
 
     x_values = list(x_values)
     y_values = list(y_values)
@@ -56,7 +56,7 @@ def writable_shape_or_raise(shape_kind, is_eval, writer):
     """
     if is_eval:
         return
-    from .surfaces import Conic, Plane, Sphere
+    from ..surfaces import Conic, Plane, Sphere
     if shape_kind in (Conic, Plane, Sphere):
         return
     raise NotImplementedError(

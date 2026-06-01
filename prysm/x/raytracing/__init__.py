@@ -4,7 +4,7 @@ This namespace re-exports the kernel, surfaces, paraxial, launch, and the core
 analysis/opt entry points.  The heavier layers live in their submodules and are
 imported from there: prysm.x.raytracing.aberrations (seidel_aberrations),
 .design (Problem + operands), .tolerance (sensitivity_table, monte_carlo),
-.raygen (ray generators), .plotting, and .io_zemax / .io_codev (readers).
+.raygen (ray generators), .plotting, and .io (Zemax / Code V readers).
 """
 
 from .lensdata import CoordBreak, LensData, SurfaceRow

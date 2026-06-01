@@ -29,16 +29,16 @@ instead of read_zmx.
 
 from prysm.mathops import np
 
-from .surfaces import Plane
-from . import materials as _materials
+from ..surfaces import Plane
+from .. import materials as _materials
 from ._indexing import noll_to_nm, xy_j_to_mn
-from ._io_common import (
+from ._common import (
     fields_from_xy,
     read_text_or_path,
     fold_sign,
     writable_shape_or_raise,
 )
-from .lensdata import LensData
+from ..lensdata import LensData
 from ._surface_spec import SurfaceSpec, build_shape
 
 
@@ -88,7 +88,7 @@ def _directive(line):
     return parts[0].upper(), parts[1]
 
 
-from ._io_common import parse_float as _parse_float  # noqa: E402  (kept name for callers)
+from ._common import parse_float as _parse_float  # noqa: E402  (kept name for callers)
 
 
 def _parse_xdat_lines(lines):
@@ -395,9 +395,9 @@ def write_zmx(lensdata):
     pseudo-surfaces.
 
     """
-    from .lensdata import CoordBreak
-    from .spencer_and_murty import STYPE_EVAL, STYPE_REFLECT
-    from .surfaces import _map_stype
+    from ..lensdata import CoordBreak
+    from ..spencer_and_murty import STYPE_EVAL, STYPE_REFLECT
+    from ..surfaces import _map_stype
 
     lines = ['VERS 100000 0', 'MODE SEQ']
     if lensdata.unit:

@@ -1,4 +1,4 @@
-"""Polynomial indexing tables shared by io_zemax and io_codev.
+"""Polynomial indexing tables shared by the zemax and codev readers.
 
 Thin re-exports of the index mappers already provided by
 prysm.polynomials, so the IO modules import from a single private

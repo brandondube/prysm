@@ -6,15 +6,13 @@ import numpy as np
 import pytest
 
 from prysm.x.raytracing import materials
-from prysm.x.raytracing.io_zemax import read_zmx
-from prysm.x.raytracing.io_codev import read_seq
-from prysm.x.raytracing._surface_spec import SurfaceSpec, build_surface
+from prysm.x.raytracing.io import read_zmx, read_seq, SurfaceSpec, build_surface
 from prysm.x.raytracing.surfaces import (
     Conic, EvenAsphere, Plane, Toroid, Biconic,
     Zernike, XY,
     STYPE_REFLECT, STYPE_REFRACT, STYPE_EVAL,
 )
-from prysm.x.raytracing._indexing import (
+from prysm.x.raytracing.io._indexing import (
     noll_to_nm, fringe_to_nm, xy_j_to_mn,
 )
 from prysm.x.raytracing.spencer_and_murty import raytrace

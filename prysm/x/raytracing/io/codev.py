@@ -1,7 +1,7 @@
 """Code V .seq (sequential lens) prescription reader.
 
 Parses a sequential .seq into a LensData (sequential rows + metadata),
-mirroring the contract of io_zemax.read_zmx.
+mirroring the contract of zemax.read_zmx.
 
 Supported subset (raise informative error otherwise):
 - Header: TITLE, DIM, WL, REF, EPD, YAN, XAN, RDM/CUM
@@ -33,16 +33,16 @@ are stripped.
 
 """
 
-from .surfaces import Plane
-from . import materials as _materials
+from ..surfaces import Plane
+from .. import materials as _materials
 from ._indexing import fringe_to_nm, xy_j_to_mn
-from ._io_common import (
+from ._common import (
     fields_from_xy,
     read_text_or_path,
     fold_sign,
     writable_shape_or_raise,
 )
-from .lensdata import LensData
+from ..lensdata import LensData
 from ._surface_spec import SurfaceSpec, build_shape
 
 
@@ -79,7 +79,7 @@ def _split_commands(text):
     return cmds
 
 
-from ._io_common import parse_float as _parse_float  # noqa: E402  (kept name for callers)
+from ._common import parse_float as _parse_float  # noqa: E402  (kept name for callers)
 
 
 # ---------- parser ----------------------------------------------------------
@@ -538,8 +538,8 @@ def _lookup_codev_glass(glass, database):
 
 def _glass_name(material, typ):
     """Best-effort Code V glass token for a LensData material."""
-    from .spencer_and_murty import STYPE_REFLECT
-    from .surfaces import _map_stype
+    from ..spencer_and_murty import STYPE_REFLECT
+    from ..surfaces import _map_stype
     if _map_stype(typ) == STYPE_REFLECT:
         return 'REFL'
     if material is None:
@@ -584,7 +584,7 @@ def write_seq(lensdata):
     at this boundary only.
 
     """
-    from .lensdata import CoordBreak
+    from ..lensdata import CoordBreak
     lines = ['LEN', 'CUM', 'DIM M']
     wvls = list(lensdata.wavelengths.values())
     if wvls:
@@ -606,8 +606,8 @@ def write_seq(lensdata):
                 )
             pending_coordbreak = row
             continue
-        from .spencer_and_murty import STYPE_EVAL
-        from .surfaces import _map_stype
+        from ..spencer_and_murty import STYPE_EVAL
+        from ..surfaces import _map_stype
         is_eval = _map_stype(row.typ) == STYPE_EVAL
         writable_shape_or_raise(row.shape_kind, is_eval, 'write_seq')
         shape = row.build_shape()
