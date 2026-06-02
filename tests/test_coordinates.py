@@ -74,13 +74,16 @@ def test_uniform_cart_to_polar_preserves_constant_field():
     np.testing.assert_allclose(result, 1)
 
 
-@pytest.mark.skip('changed rotation order, need to re-do scipy match')
-def test_make_rotation_matrix_matches_scipy():
+@pytest.mark.parametrize('zyx', [(1, 2, 3), (-10, 25, 40), (90, 0, -45)])
+def test_make_rotation_matrix_matches_scipy(zyx):
     from scipy.spatial.transform import Rotation as R
 
-    angles = (1, 2, 3)
-    sp = R.from_euler('ZYX', angles, degrees=True).as_matrix()
-    pry = coordinates.make_rotation_matrix(angles)
+    # make_rotation_matrix takes (Z, Y, X) angles and forms Rx @ Ry @ Rz, so a
+    # point is rotated about Z first, then Y, then X -- intrinsic X-Y-Z, which
+    # is scipy's 'XYZ' fed the angles in (X, Y, Z) order.
+    z, y, x = zyx
+    sp = R.from_euler('XYZ', [x, y, z], degrees=True).as_matrix()
+    pry = coordinates.make_rotation_matrix(zyx)
     assert np.allclose(sp, pry)
 
 
