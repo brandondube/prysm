@@ -15,6 +15,7 @@ structure and every tolerance has a non-vanishing first-order sensitivity.
 import numpy as np
 import pytest
 
+from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.surfaces import Conic, Plane
@@ -44,38 +45,41 @@ def _air(w):
 def _place_image(ld, gap_row):
     """Set gap_row's thickness to the paraxial image distance (fixed plane)."""
     lens = [s for s in ld.to_surfaces() if s.typ != STYPE_EVAL]
-    bfd = float(paraxial_image_distance(lens, wvl=WVL, n_ambient=1.0))
+    bfd = float(paraxial_image_distance(lens, wvl=WVL))
     ld.rows[gap_row].thickness = bfd
-    ld._invalidate()
+    ld.lens._invalidate()
     return ld
 
 
 def singlet():
     """Axial thick singlet, image plane at the paraxial focus."""
-    ld = (LensData(epd=10.0, wavelengths=[WVL], n_ambient=1.0)
-          .add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
-          .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
-          .add(Plane(), typ='eval'))
+    lens = LensData()
+    (lens.add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
+         .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
+         .add(Plane(), typ='eval'))
+    ld = OpticalSystem(lens, aperture=10.0, wavelengths=[WVL])
     return _place_image(ld, gap_row=1)
 
 
 def singlet_cb():
     """Same singlet with a basic coordinate break (nominal null) before S1."""
-    ld = (LensData(epd=10.0, wavelengths=[WVL], n_ambient=1.0)
-          .add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
-          .add_coordbreak(decenter=(0., 0., 0.), tilt=(0., 0., 0.),
-                          kind='basic', thickness=0.0)
-          .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
-          .add(Plane(), typ='eval'))
+    lens = LensData()
+    (lens.add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
+         .add_coordbreak(decenter=(0., 0., 0.), tilt=(0., 0., 0.),
+                         kind='basic', thickness=0.0)
+         .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
+         .add(Plane(), typ='eval'))
+    ld = OpticalSystem(lens, aperture=10.0, wavelengths=[WVL])
     return _place_image(ld, gap_row=2)
 
 
 def singlet_solved():
     """Axial singlet whose image gap is an image-distance solve (compensator)."""
-    ld = (LensData(epd=10.0, wavelengths=[WVL], n_ambient=1.0)
-          .add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
-          .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
-          .add(Plane(), typ='eval'))
+    lens = LensData()
+    (lens.add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
+         .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
+         .add(Plane(), typ='eval'))
+    ld = OpticalSystem(lens, aperture=10.0, wavelengths=[WVL])
     return ld.solve_image_distance(wavelength=WVL)
 
 
@@ -97,7 +101,7 @@ def wd_rms_sensitivities(ld, P, S, perturbations):
     """WD prediction of d(RMS WFE)/dtau from one differential trace."""
     seeds = seeds_from_perturbations(perturbations)
     opd, _, _, dW = wavefront_with_tangents(
-        ld.to_surfaces(), P, S, WVL, seeds, n_ambient=ld.n_ambient,
+        ld.to_surfaces(), P, S, WVL, seeds,
         output='length')
     rms = float(np.sqrt(np.mean(opd * opd)))
     return np.mean(opd[:, None] * dW, axis=0) / rms, rms
@@ -105,7 +109,7 @@ def wd_rms_sensitivities(ld, P, S, perturbations):
 
 def fd_rms_sensitivities(ld, P, S, perturbations):
     """FD sensitivity_table of the WavefrontRMS merit (the validation gate)."""
-    merit = operand_as_merit(WavefrontRMS(P, S, WVL, n_ambient=ld.n_ambient))
+    merit = operand_as_merit(WavefrontRMS(P, S, WVL))
     table = sensitivity_table(ld, perturbations, merit)
     return table.sensitivities(), table.merit_nominal
 

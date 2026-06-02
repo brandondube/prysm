@@ -44,71 +44,100 @@ def _establish_axis(P1, P2):
 
 
 def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
-             n_ambient=1.0, tol=1e-12, maxiter=20, strict=True):
+             tol=1e-12, maxiter=20, strict=True, vary='position'):
     """Aim a bundle of rays so each lands at target_xy on a surface.
 
     Stop-aiming is a 2-input -> 2-output root find per ray: find the launch
-    (Px, Py) such that the ray lands at target_xy on
+    parameter (the transverse launch position, or the transverse launch
+    direction) such that the ray lands at target_xy on
     prescription[surface_index].  The landing map (paraxial pupil-to-surface
     transfer plus mild aberration) is smooth and nearly linear, so a batched
     damped Newton on the per-ray 2x2 landing Jacobian solves the whole bundle
     in a handful of iterations.  Cost is ~3 batched traces per iteration,
     independent of the number of rays.
 
-    Backend-pure (no scipy): runs natively on numpy, cupy, or torch.  The
-    launch z is never modified; only (Px, Py) are adjusted, so the landing is
-    compared in the aim surface's global frame exactly as a forward trace
-    would report it.
+    Backend-pure (no scipy): runs natively on numpy, cupy, or torch.
 
     Parameters
     ----------
     P : ndarray
-        shape (N, 3), launch positions.  Only (Px, Py) are modified.
+        shape (N, 3), launch positions.  Modified in place when vary is
+        position; carried unchanged when vary is direction.
     S : ndarray
-        shape (N, 3), launch direction cosines.
+        shape (N, 3), launch direction cosines.  Modified in place (the
+        transverse pair, z recomputed from |S| == 1) when vary is direction.
     prescription : sequence of Surface
         the system traced through during aiming.
     surface_index : int
         index of the aim surface; rays are driven to target_xy on it.
-    target_xy : iterable of length 2
-        target landing (x, y) on the aim surface.
+    target_xy : iterable
+        target landing (x, y) on the aim surface; either a length-2 point
+        (shared by every ray) or an (N, 2) array of per-ray targets (so a
+        sampled pupil can be aimed to fill the stop).
     wvl : float
         wavelength for the aim trace, microns.
-    n_ambient : float, optional
-        ambient index of refraction.  Default 1.
     tol : float, optional
         convergence tolerance on the landing-residual Euclidean norm.
     maxiter : int, optional
         Newton iteration cap.
     strict : bool, optional
         if True (default), raise RuntimeError listing any rays that did not
-        converge; if False, return them at their best-effort (Px, Py).
+        converge; if False, return them at their best-effort parameter.
+    vary : str, optional
+        'position' (default) varies the transverse launch position (Px, Py)
+        with the launch z and direction held fixed -- correct for collimated
+        bundles.  'direction' varies the transverse direction cosines (Sx, Sy)
+        (Sz recomputed to keep S a unit vector) with the launch position held
+        fixed -- correct for a finite-conjugate bundle that must all emanate
+        from one object point.
 
     Returns
     -------
-    P : ndarray
-        shape (N, 3), launch positions with (Px, Py) adjusted; z preserved.
+    P, S : ndarray, ndarray
+        shape (N, 3) launch positions and direction cosines, with the varied
+        pair adjusted.
     converged : ndarray
         shape (N,), bool mask of rays that reached tol.
 
     """
+    if vary not in ('position', 'direction'):
+        raise ValueError(
+            f"vary must be 'position' or 'direction', got {vary!r}")
     P = np.asarray(P).astype(config.precision).copy()
-    S = np.asarray(S).astype(config.precision)
-    target = np.asarray(target_xy, dtype=config.precision).reshape(2)
+    S = np.asarray(S).astype(config.precision).copy()
+    target = np.asarray(target_xy, dtype=config.precision)
+    if target.ndim == 1:
+        target = target.reshape(1, 2)
     trace_path = prescription[:surface_index + 1]
 
-    def landing(Pxy):
-        P[:, 0] = Pxy[:, 0]
-        P[:, 1] = Pxy[:, 1]
-        tr = spencer_and_murty.raytrace(trace_path, P, S, wvl,
-                                        n_ambient=n_ambient)
+    if vary == 'direction':
+        sz_sign = np.sign(S[:, 2])
+        sz_sign = np.where(sz_sign == 0, 1.0, sz_sign)
+
+        def apply(var):
+            S[:, 0] = var[:, 0]
+            S[:, 1] = var[:, 1]
+            rem = 1.0 - var[:, 0] * var[:, 0] - var[:, 1] * var[:, 1]
+            S[:, 2] = sz_sign * np.sqrt(np.clip(rem, 0.0, None))
+
+        var0 = S[:, :2].copy()
+    else:
+        def apply(var):
+            P[:, 0] = var[:, 0]
+            P[:, 1] = var[:, 1]
+
+        var0 = P[:, :2].copy()
+
+    def landing(var):
+        apply(var)
+        tr = spencer_and_murty.raytrace(trace_path, P, S, wvl)
         return tr.P[-1, :, :2]
 
     eps = float(np.finfo(config.precision).eps)
     sqrt_eps = eps ** 0.5
 
-    Pxy = P[:, :2].copy()
-    r = landing(Pxy) - target
+    var = var0
+    r = landing(var) - target
     rn = np.sqrt((r * r).sum(axis=1))
     dead = ~np.isfinite(rn)  # NaN landing (TIR / miss): cannot be aimed
 
@@ -122,21 +151,21 @@ def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
             break
         prev_max = cur_max
 
-        # forward-difference 2x2 Jacobian: columns d(x,y)/dPx, d(x,y)/dPy
+        # forward-difference 2x2 Jacobian: columns d(x,y)/dvar0, d(x,y)/dvar1
         h = sqrt_eps * np.maximum(
-            1.0, np.maximum(np.abs(Pxy[:, 0]), np.abs(Pxy[:, 1])))
+            1.0, np.maximum(np.abs(var[:, 0]), np.abs(var[:, 1])))
         L0 = r + target
-        Pxy_dx = Pxy.copy()
-        Pxy_dx[:, 0] = Pxy_dx[:, 0] + h
-        L_dx = landing(Pxy_dx)
-        Pxy_dy = Pxy.copy()
-        Pxy_dy[:, 1] = Pxy_dy[:, 1] + h
-        L_dy = landing(Pxy_dy)
+        var_dx = var.copy()
+        var_dx[:, 0] = var_dx[:, 0] + h
+        L_dx = landing(var_dx)
+        var_dy = var.copy()
+        var_dy[:, 1] = var_dy[:, 1] + h
+        L_dy = landing(var_dy)
 
-        a = (L_dx[:, 0] - L0[:, 0]) / h  # dx/dPx
-        c = (L_dx[:, 1] - L0[:, 1]) / h  # dy/dPx
-        b = (L_dy[:, 0] - L0[:, 0]) / h  # dx/dPy
-        d = (L_dy[:, 1] - L0[:, 1]) / h  # dy/dPy
+        a = (L_dx[:, 0] - L0[:, 0]) / h  # dx/dvar0
+        c = (L_dx[:, 1] - L0[:, 1]) / h  # dy/dvar0
+        b = (L_dy[:, 0] - L0[:, 0]) / h  # dx/dvar1
+        d = (L_dy[:, 1] - L0[:, 1]) / h  # dy/dvar1
 
         det = a * d - b * c
         jac_scale = a * a + b * b + c * c + d * d
@@ -145,19 +174,19 @@ def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
         rx = r[:, 0]
         ry = r[:, 1]
         safe_det = np.where(singular, 1.0, det)
-        dPx = (-rx * d + b * ry) / safe_det  # closed-form 2x2 solve J@d = -r
-        dPy = (rx * c - a * ry) / safe_det
+        d0 = (-rx * d + b * ry) / safe_det  # closed-form 2x2 solve J@d = -r
+        d1 = (rx * c - a * ry) / safe_det
 
         freeze = dead | singular
-        delta = np.stack([np.where(freeze, 0.0, dPx),
-                          np.where(freeze, 0.0, dPy)], axis=1)
+        delta = np.stack([np.where(freeze, 0.0, d0),
+                          np.where(freeze, 0.0, d1)], axis=1)
         dead = dead | singular
 
         # damped step: backtrack if the active-ray max residual rose
         alpha = 1.0
         for _bt in range(40):
-            Pxy_try = Pxy + alpha * delta
-            r_try = landing(Pxy_try) - target
+            var_try = var + alpha * delta
+            r_try = landing(var_try) - target
             rn_try = np.sqrt((r_try * r_try).sum(axis=1))
             bad = ~np.isfinite(rn_try)
             cur = float(np.max(np.where((~dead) & (~bad), rn_try, 0.0)))
@@ -166,16 +195,15 @@ def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
             alpha = alpha * 0.5
 
         # rays that went non-finite this step revert to their last good
-        # position and are flagged dead; everyone else takes the step
+        # parameter and are flagged dead; everyone else takes the step
         bad = ~np.isfinite(rn_try)
         keep_old = bad[:, np.newaxis]
-        Pxy = np.where(keep_old, Pxy, Pxy_try)
+        var = np.where(keep_old, var, var_try)
         r = np.where(keep_old, r, r_try)
         rn = np.where(bad, rn, rn_try)
         dead = dead | bad
 
-    P[:, 0] = Pxy[:, 0]
-    P[:, 1] = Pxy[:, 1]
+    apply(var)
     converged = np.isfinite(rn) & (rn <= tol)
 
     if strict and not bool(np.all(converged)):
@@ -185,9 +213,9 @@ def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
         raise RuntimeError(
             f'aim_rays failed to converge {n_bad} of {converged.shape[0]} '
             f'rays (indices {bad_idx}); worst finite residual {max_res:.3e}. '
-            'Pass strict=False to return best-effort launch positions.'
+            'Pass strict=False to return best-effort launch parameters.'
         )
-    return P, converged
+    return P, S, converged
 
 
 def _closest_approach_on_axis(P_chief, S_chief, axis_point, axis_dir):

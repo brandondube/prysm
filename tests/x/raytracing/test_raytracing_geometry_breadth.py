@@ -238,7 +238,7 @@ def test_refraction_grating_equation():
     img = plane(interaction='eval', P=[0, 0, 10.0])
     P = np.array([[0.0, 0.0, -5.0]])
     S = np.array([[0.0, 0.0, 1.0]])
-    r = raytrace([g_surf, img], P, S, wvl=wvl, n_ambient=1.0)
+    r = raytrace([g_surf, img], P, S, wvl=wvl)
     expected_x = wvl / (n_glass * d)
     expected_z = +np.sqrt(1 - expected_x ** 2)
     np.testing.assert_allclose(r.S[1].squeeze(),

@@ -40,7 +40,7 @@ def test_aim_single_ray_hits_target_on_simple_mirror():
     # the initial (Px, Py) guess is the target.
     P = np.array([[2.0, -1.0, -100.]])
     S = np.array([[0., 0., 1.]])
-    P_aimed, converged = aim_rays(P, S, prescription, surface_index=1,
+    P_aimed, _, converged = aim_rays(P, S, prescription, surface_index=1,
                                   target_xy=(2.0, -1.0), wvl=0.55)
     assert bool(converged[0])
     # launch z is preserved by the aiming adjustment
@@ -56,9 +56,13 @@ def _tir_unaimable_bundle():
 
     The ray totally internally reflects for every launch (Px, Py), so its
     landing is never finite and it can never be aimed onto the eval plane.
-    This drives the all-rays-dead break path in aim_rays.
+    This drives the all-rays-dead break path in aim_rays.  The launch medium
+    (n=1.5) is carried by a leading eval object surface -- the convention for
+    an immersed launch.
     """
     prescription = [
+        plane(interaction='eval', P=np.array([0., 0., -100.]),
+              material=lambda w: 1.5),
         plane(interaction='refr', P=np.array([0., 0., 0.]), material=lambda w: 1.0),
         plane(interaction='eval', P=np.array([0., 0., 10.])),
     ]
@@ -72,16 +76,16 @@ def test_aim_single_ray_strict_raises_on_unaimable_ray():
     """strict=True must raise when the only ray cannot reach the surface."""
     prescription, P, S = _tir_unaimable_bundle()
     with pytest.raises(RuntimeError):
-        aim_rays(P, S, prescription, surface_index=1, target_xy=(0.0, 0.0),
-                 wvl=0.55, strict=True, n_ambient=1.5)
+        aim_rays(P, S, prescription, surface_index=2, target_xy=(0.0, 0.0),
+                 wvl=0.55, strict=True)
 
 
 def test_aim_single_ray_strict_false_does_not_raise():
     """strict=False must return a best-effort P even for an un-aimable ray."""
     prescription, P, S = _tir_unaimable_bundle()
-    P_out, converged = aim_rays(P, S, prescription, surface_index=1,
+    P_out, _, converged = aim_rays(P, S, prescription, surface_index=2,
                                 target_xy=(0.0, 0.0), wvl=0.55,
-                                strict=False, n_ambient=1.5)
+                                strict=False)
     assert P_out.shape == (1, 3)
     assert not bool(converged[0])
 
@@ -116,7 +120,7 @@ def test_aim_rays_collimated_bundle_onto_stop():
     presc = _singlet_with_internal_stop()
     P, S = _collimated_y_fan(7, half=2.0, z0=-10.0, theta_deg=2.0)
     z_before = P[:, 2].copy()
-    P_aim, converged = aim_rays(P, S, presc, surface_index=1,
+    P_aim, _, converged = aim_rays(P, S, presc, surface_index=1,
                                 target_xy=(0.0, 0.0), wvl=0.55)
     assert bool(np.all(converged))
     # launch z untouched
@@ -130,7 +134,7 @@ def test_aim_rays_onto_nonzero_target():
     """Aiming to a nonzero (x, y) on the stop lands there."""
     presc = _singlet_with_internal_stop()
     P, S = _collimated_y_fan(5, half=2.0, z0=-10.0, theta_deg=1.0)
-    P_aim, converged = aim_rays(P, S, presc, surface_index=1,
+    P_aim, _, converged = aim_rays(P, S, presc, surface_index=1,
                                 target_xy=(0.7, -0.3), wvl=0.55)
     assert bool(np.all(converged))
     from prysm.x.raytracing.spencer_and_murty import raytrace
@@ -148,7 +152,7 @@ def test_aim_rays_onto_tilted_surface():
         plane(interaction='eval', P=np.array([0., 0., 50.])),
     ]
     P, S = _collimated_y_fan(5, half=2.0, z0=-10.0, theta_deg=1.5)
-    P_aim, converged = aim_rays(P, S, presc, surface_index=1,
+    P_aim, _, converged = aim_rays(P, S, presc, surface_index=1,
                                 target_xy=(0.0, 0.0), wvl=0.55)
     assert bool(np.all(converged))
     from prysm.x.raytracing.spencer_and_murty import raytrace
@@ -160,6 +164,8 @@ def test_aim_rays_masks_divergent_ray():
     """A ray that TIRs for every launch is flagged not-converged and the
     rest of the bundle still aims (strict=False)."""
     presc = [
+        plane(interaction='eval', P=np.array([0., 0., -5.]),
+              material=lambda w: 1.5),
         plane(interaction='refr', P=np.array([0., 0., 0.]), material=lambda w: 1.0),
         plane(interaction='eval', P=np.array([0., 0., 10.])),
     ]
@@ -171,21 +177,23 @@ def test_aim_rays_masks_divergent_ray():
     ])
     P = np.zeros((3, 3))
     P[:, 2] = -5.0
-    P_aim, converged = aim_rays(P, S, presc, surface_index=1,
+    P_aim, _, converged = aim_rays(P, S, presc, surface_index=2,
                                 target_xy=(0.0, 0.0), wvl=0.55,
-                                n_ambient=1.5, strict=False)
+                                strict=False)
     assert not bool(converged[0])
     assert bool(converged[1]) and bool(converged[2])
     # the masked ray keeps its nominal launch xy
     np.testing.assert_array_equal(P_aim[0, :2], P[0, :2])
     from prysm.x.raytracing.spencer_and_murty import raytrace
-    tr = raytrace(presc, P_aim, S, wvl=0.55, n_ambient=1.5)
+    tr = raytrace(presc, P_aim, S, wvl=0.55)
     np.testing.assert_allclose(tr.P[-1, 1:, :2], 0.0, atol=1e-9)
 
 
 def test_aim_rays_strict_raises_listing_indices():
     """strict=True raises a RuntimeError that names the un-aimable ray."""
     presc = [
+        plane(interaction='eval', P=np.array([0., 0., -5.]),
+              material=lambda w: 1.5),
         plane(interaction='refr', P=np.array([0., 0., 0.]), material=lambda w: 1.0),
         plane(interaction='eval', P=np.array([0., 0., 10.])),
     ]
@@ -196,8 +204,8 @@ def test_aim_rays_strict_raises_listing_indices():
     P = np.zeros((2, 3))
     P[:, 2] = -5.0
     with pytest.raises(RuntimeError, match='1'):
-        aim_rays(P, S, presc, surface_index=1, target_xy=(0.0, 0.0),
-                 wvl=0.55, n_ambient=1.5, strict=True)
+        aim_rays(P, S, presc, surface_index=2, target_xy=(0.0, 0.0),
+                 wvl=0.55, strict=True)
 
 
 @pytest.mark.parametrize('precision, atol', [(32, 1e-3), (64, 1e-9)])
@@ -210,7 +218,7 @@ def test_aim_rays_precision(precision, atol):
         config.precision = precision
         presc = _singlet_with_internal_stop()
         P, S = _collimated_y_fan(5, half=2.0, z0=-10.0, theta_deg=1.0)
-        P_aim, converged = aim_rays(P, S, presc, surface_index=1,
+        P_aim, _, converged = aim_rays(P, S, presc, surface_index=1,
                                     target_xy=(0.0, 0.0), wvl=0.55,
                                     tol=atol, strict=True)
         assert P_aim.dtype == config.precision
@@ -227,7 +235,7 @@ def test_aim_rays_matches_scipy_lbfgsb():
     from scipy.optimize import minimize
     presc = _singlet_with_internal_stop()
     P, S = _collimated_y_fan(5, half=2.0, z0=-10.0, theta_deg=2.0)
-    P_new, _ = aim_rays(P, S, presc, surface_index=1, target_xy=(0.0, 0.0),
+    P_new, _, _ = aim_rays(P, S, presc, surface_index=1, target_xy=(0.0, 0.0),
                         wvl=0.55)
 
     from prysm.x.raytracing.spencer_and_murty import raytrace

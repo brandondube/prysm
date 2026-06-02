@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import FRAUNHOFER_LINES_UM, LensData
 from prysm.x.raytracing import materials
 from prysm.x.raytracing.surfaces import Conic, Plane
@@ -23,24 +24,28 @@ def _n_const(value):
 
 def _singlet(epd=8.0):
     mat = _n_const(1.5168)
-    ld_probe = (LensData(epd=epd, fields=[Field(0, 0.0, kind='angle')],
-                         wavelengths={'d': 0.5875618},
-                         reference_wavelength='d', stop_index=0, unit='mm')
-                .add(Conic(1 / 61.0, 0.0), thickness=6.0, material=mat,
-                     semidiameter=10.0)
-                .add(Conic(-1 / 61.0, 0.0), thickness=50.0,
-                     material=materials.air, semidiameter=10.0))
+    probe_lens = LensData()
+    (probe_lens.add(Conic(1 / 61.0, 0.0), thickness=6.0, material=mat,
+                    semidiameter=10.0)
+               .add(Conic(-1 / 61.0, 0.0), thickness=50.0,
+                    material=materials.air, semidiameter=10.0))
+    ld_probe = OpticalSystem(
+        probe_lens, aperture=epd, fields=[Field(0, 0.0, kind='angle')],
+        wavelengths={'d': 0.5875618}, reference_wavelength='d',
+        stop_index=0, unit='mm')
     wvl = ld_probe.wavelength('d')
     foc = paraxial_image_distance(ld_probe, wvl)
-    ld = (LensData(epd=epd, fields=[Field(0, 0.0, kind='angle')],
-                   wavelengths={'d': 0.5875618},
-                   reference_wavelength='d', stop_index=0, unit='mm')
-          .add(Conic(1 / 61.0, 0.0), thickness=6.0, material=mat,
-               semidiameter=10.0)
-          .add(Conic(-1 / 61.0, 0.0), thickness=foc, material=materials.air,
-               semidiameter=10.0)
-          .add(Plane(), typ='eval', material=materials.air,
-               semidiameter=12.0))
+    lens = LensData()
+    (lens.add(Conic(1 / 61.0, 0.0), thickness=6.0, material=mat,
+              semidiameter=10.0)
+         .add(Conic(-1 / 61.0, 0.0), thickness=foc, material=materials.air,
+              semidiameter=10.0)
+         .add(Plane(), typ='eval', material=materials.air,
+              semidiameter=12.0))
+    ld = OpticalSystem(
+        lens, aperture=epd, fields=[Field(0, 0.0, kind='angle')],
+        wavelengths={'d': 0.5875618}, reference_wavelength='d',
+        stop_index=0, unit='mm')
     return ld
 
 
@@ -68,7 +73,7 @@ def test_eic_plane_fallback_triggers_for_infinite_reference():
     wvl = ld.wavelength('d')
     field = Field(0.0, 0.0, kind='angle')
     P, S = launch(ld, field, wvl, Sampling.fan(n=21, axis='y'), epd=ld.epd)
-    trace = raytrace(ld, P, S, wvl, n_ambient=1.0)
+    trace = raytrace(ld, P, S, wvl)
     chief = P.shape[0] // 2
     P_img = trace.P[-1, chief]
     # push P_xp far behind the image so R is enormous -> plane fallback
@@ -93,7 +98,7 @@ def test_eic_sphere_preserves_aberration_content_at_very_large_R():
     wvl = ld.wavelength('d')
     field = Field(0.0, 0.0, kind='angle')
     P, S = launch(ld, field, wvl, Sampling.fan(n=21, axis='y'), epd=ld.epd)
-    trace = raytrace(ld, P, S, wvl, n_ambient=1.0)
+    trace = raytrace(ld, P, S, wvl)
     chief = P.shape[0] // 2
     P_img = trace.P[-1, chief]
 

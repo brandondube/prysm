@@ -18,6 +18,7 @@ from prysm.x.raytracing.spencer_and_murty import (
     STYPE_REFLECT,
 )
 from prysm.x.raytracing._diff_raytrace import _assemble_seeds, _eye3
+from prysm.x.raytracing._meta import object_space_index
 from prysm.x.raytracing.opt import _valid_mask
 
 from .primitives import (
@@ -80,8 +81,7 @@ def _sanitize_scalar(arr, valid):
     return np.where(valid, arr, np.zeros_like(arr)).astype(config.precision)
 
 
-def _forward_with_intermediates(surfaces, P, S, wvl, n_ambient=1.0,
-                                tol_sag=None):
+def _forward_with_intermediates(surfaces, P, S, wvl, tol_sag=None):
     """Nominal trace + saved per-surface intermediates for the adjoint.
 
     Returns (RayTraceResult, TraceIntermediates).
@@ -94,11 +94,11 @@ def _forward_with_intermediates(surfaces, P, S, wvl, n_ambient=1.0,
     P = P.astype(config.precision)
     S = S.astype(config.precision)
 
-    trace = raytrace(surfaces, P, S, wvl, n_ambient=n_ambient, tol_sag=tol_sag)
+    trace = raytrace(surfaces, P, S, wvl, tol_sag=tol_sag)
     valid = _valid_mask(trace.status, trace.P[-1])
 
     inters = []
-    nj = float(n_ambient)
+    nj = float(object_space_index(surfaces, wvl))
     index_source = -1
     for j, surf in enumerate(surfaces):
         Reff = _eye3() if surf.R is None else np.asarray(surf.R, dtype=config.precision)
@@ -186,7 +186,7 @@ def _precompute_shape_partials(surfaces, intermediates, shape_params,
 
 def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
                     nprimedot_s, shape_params, sag_partial_fns,
-                    cotangent_seed, n_ambient_dot=None, shape_partials=None):
+                    cotangent_seed, shape_partials=None):
     """One reverse sweep: cotangent seed -> gradient (P,) over all parameters.
 
     cotangent_seed is (P_bar, S_bar, L_bar): the merit's cotangent on the
@@ -273,12 +273,12 @@ def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
                 grad[p] = grad[p] + np.sum(dsag_bar * sag_t + dgx_bar * gx_t
                                            + dgy_bar * gy_t)
 
-        # index DOFs
+        # index DOFs.  The medium preceding the first refraction is the launch
+        # medium (object material or air); no seed perturbs it, so its
+        # cotangent npre_bar has nowhere to accumulate when index_source < 0.
         npre_bar = n_bar + ndot_pre_bar
         if si.index_source >= 0:
             grad = grad + npre_bar * nprimedot_s[si.index_source]
-        elif n_ambient_dot is not None:
-            grad = grad + npre_bar * n_ambient_dot
         if si.typ == STYPE_REFRACT:
             grad = grad + ndot_post_bar * nprimedot_s[j]
 
@@ -288,8 +288,7 @@ def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
     return grad
 
 
-def adjoint_gradient(surfaces, P, S, wvl, seeds, head, *, n_ambient=1.0,
-                     n_ambient_dot=None, tol_sag=None):
+def adjoint_gradient(surfaces, P, S, wvl, seeds, head, *, tol_sag=None):
     """Gradient of a scalar merit (given by head) w.r.t. every seed parameter.
 
     One forward-with-intermediates pass and one backward sweep.
@@ -305,8 +304,6 @@ def adjoint_gradient(surfaces, P, S, wvl, seeds, head, *, n_ambient=1.0,
         defines the trailing parameter axis (order preserved in the gradient).
     head : merit head
         object with a seed(trace, intermediates) -> (P_bar, S_bar, L_bar) method.
-    n_ambient : float
-    n_ambient_dot : ndarray (P,), optional
     tol_sag : float
 
     Returns
@@ -317,10 +314,10 @@ def adjoint_gradient(surfaces, P, S, wvl, seeds, head, *, n_ambient=1.0,
     seeds = list(seeds)
     n_params = len(seeds)
     trace, intermediates = _forward_with_intermediates(
-        surfaces, P, S, wvl, n_ambient=n_ambient, tol_sag=tol_sag)
+        surfaces, P, S, wvl, tol_sag=tol_sag)
     Qdot_s, Rdot_s, nprimedot_s, shape_params, sag_partial_fns = \
         _assemble_seeds(len(surfaces), seeds, n_params)
     cotangent_seed = head.seed(trace, intermediates)
     return _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
                            nprimedot_s, shape_params, sag_partial_fns,
-                           cotangent_seed, n_ambient_dot=n_ambient_dot)
+                           cotangent_seed)

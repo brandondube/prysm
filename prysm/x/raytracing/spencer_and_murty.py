@@ -425,7 +425,25 @@ def reflect(S, n_hat):
     return S - 2.0 * cosI[:, np.newaxis] * n_hat
 
 
-def raytrace(surfaces, P, S, wvl, n_ambient=1, tol_sag=None):
+def _launch_medium_index(surfaces, wvl):
+    """Index of the medium the bundle launches in.
+
+    The object medium is carried by the surface sequence itself: when the
+    leading surface is an eval (object) surface, its material n(wvl) is the
+    launch medium; otherwise the launch medium is air (n = 1).  Kept tensor
+    clean (no float coercion) so a tolerance that perturbs the object medium
+    threads through autograd.
+    """
+    if len(surfaces) > 0:
+        first = surfaces[0]
+        if getattr(first, 'typ', None) == STYPE_EVAL:
+            n = getattr(first, 'n', None)
+            if callable(n):
+                return n(wvl)
+    return 1.0
+
+
+def raytrace(surfaces, P, S, wvl, tol_sag=None):
     """Perform a raytrace through a sequence of surfaces.
 
     Notes
@@ -467,8 +485,6 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1, tol_sag=None):
         (k,l,m) starting direction cosines
     wvl : float
         wavelength of light, um
-    n_ambient : float
-        ambient index of refraction (1=vacuum)
 
     Returns
     -------
@@ -525,7 +541,10 @@ def raytrace(surfaces, P, S, wvl, n_ambient=1, tol_sag=None):
     Sj = S
     P_hist[0] = P
     S_hist[0] = S
-    nj = n_ambient
+    # the launch medium is intrinsic to the surfaces: a leading eval (object)
+    # surface carries the object-space material, otherwise the bundle launches
+    # in air.  To launch inside glass, prepend an eval surface with that glass.
+    nj = _launch_medium_index(surfaces, wvl)
     for j, surf in enumerate(surfaces):
         surf_idx = j + 1  # 1-based index recorded in status.real
         P0, Sj = transform_to_local_coords(Pj, surf.P, Sj, surf.R)

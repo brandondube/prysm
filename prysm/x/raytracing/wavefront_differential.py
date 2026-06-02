@@ -53,6 +53,7 @@ from prysm.conf import config
 from prysm.mathops import np
 
 from ._diff_raytrace import seeds_from_perturbations, wavefront_with_tangents
+from ._meta import system_wavelength
 from .analysis import wavefront_zernike_fit
 from .tolerance import MonteCarloResult
 
@@ -60,7 +61,7 @@ from .tolerance import MonteCarloResult
 def wavefront_differential(lensdata, perturbations, P, S, wavelength, *,
                            extra_seeds=None, extra_names=None, extra_steps=None,
                            compensators=None, comp_rcond=1e-9,
-                           n_ambient=None, chief_index=None,
+                           chief_index=None,
                            axis_point=None, axis_dir=None, P_xp=None,
                            field=None, pose_step=1e-6):
     """Build the wavefront-differential model from one nominal trace.
@@ -108,8 +109,6 @@ def wavefront_differential(lensdata, perturbations, P, S, wavelength, *,
         perturbation by projecting them out of the wavefront.
     comp_rcond : float, optional
         relative singular-value cutoff for the compensator pseudo-inverse.
-    n_ambient : float, optional
-        object-space index; defaults to lensdata.n_ambient.
     chief_index, axis_point, axis_dir, P_xp, field
         forwarded to wavefront_with_tangents (reference-sphere controls).
     pose_step : float, optional
@@ -124,16 +123,15 @@ def wavefront_differential(lensdata, perturbations, P, S, wavelength, *,
     perturbations = list(perturbations)
     extra_seeds = list(extra_seeds) if extra_seeds else []
     compensators = list(compensators) if compensators else []
+    wavelength = system_wavelength(lensdata, wavelength)
     n_tol = len(perturbations) + len(extra_seeds)
-    if n_ambient is None:
-        n_ambient = getattr(lensdata, 'n_ambient', 1.0)
     # one trace carries the tolerance maps, extra seeds, and compensator maps
     seeds = (seeds_from_perturbations(perturbations, pose_step=pose_step)
              + extra_seeds
              + seeds_from_perturbations(compensators, pose_step=pose_step))
     opd, x_pupil, y_pupil, dW = wavefront_with_tangents(
         lensdata.to_surfaces(), P, S, wavelength, seeds,
-        n_ambient=n_ambient, chief_index=chief_index,
+        chief_index=chief_index,
         axis_point=axis_point, axis_dir=axis_dir, P_xp=P_xp,
         field=field, output='length')
     if extra_names is None:

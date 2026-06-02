@@ -10,6 +10,7 @@ import pytest
 
 from prysm.mathops import optimize
 
+from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing import materials
 from prysm.x.raytracing.surfaces import Conic, Plane
@@ -34,9 +35,10 @@ def _parabola_mirror(kappa=-1.0):
     """
     c = -1 / 80.0
     f = abs(1.0 / (2.0 * c))  # 40
-    return (LensData(epd=10.0, wavelengths=[0.55e-3])
-            .add(Conic(c, kappa), typ='refl', thickness=f)
-            .add(Plane(), typ='eval'))
+    lens = LensData()
+    (lens.add(Conic(c, kappa), typ='refl', thickness=f)
+         .add(Plane(), typ='eval'))
+    return OpticalSystem(lens, aperture=10.0, wavelengths=[0.55e-3])
 
 
 def _collimated_fan(n=15, maxr=5.0):
@@ -50,12 +52,13 @@ def _collimated_fan(n=15, maxr=5.0):
 def _refractive_singlet(c1=1 / 50.0, c2=-1 / 50.0, gap=5.0, n=1.5):
     """Sphere/sphere singlet (index n) with an image plane 100 past the rear
     vertex."""
-    return (LensData(epd=4.0, wavelengths=[0.55])
-            .add(Conic(c1, 0.0), typ='refr', material=lambda w: n,
-                 thickness=gap)
-            .add(Conic(c2, 0.0), typ='refr', material=materials.air,
-                 thickness=100.0)
-            .add(Plane(), typ='eval'))
+    lens = LensData()
+    (lens.add(Conic(c1, 0.0), typ='refr', material=lambda w: n,
+              thickness=gap)
+         .add(Conic(c2, 0.0), typ='refr', material=materials.air,
+              thickness=100.0)
+         .add(Plane(), typ='eval'))
+    return OpticalSystem(lens, aperture=4.0, wavelengths=[0.55])
 
 
 # ---------- Trace cache ------------------------------------------------------
@@ -114,7 +117,7 @@ def test_recover_parabola_kappa_via_minimize():
     stigmatic for an on-axis collimated beam).
     """
     ld = _parabola_mirror(kappa=0.0)
-    ld.vary('conic', surfaces=0)
+    ld.lens.vary('conic', surfaces=0)
     P, S = _collimated_fan(15, maxr=5.0)
     op = RmsSpotRadius(P, S, wavelength=0.55e-3, target=0.0, weight=1.0)
     prob = Problem(ld, [op])
@@ -129,14 +132,14 @@ def test_recover_parabola_kappa_via_minimize():
 def test_recover_efl_via_curvature_sweep():
     """Vary the front-surface curvature of a singlet to hit a target EFL."""
     ld = _refractive_singlet(c1=1 / 30.0, c2=-1 / 30.0, gap=4.0)
-    ld.vary('curvature', surfaces=0)
+    ld.lens.vary('curvature', surfaces=0)
     target_efl = 75.0
     op = EFL(wavelength=0.55, target=target_efl, weight=1.0)
     prob = Problem(ld, [op])
     res = optimize.minimize(prob.merit, prob.x0(),
                             jac=prob.jacobian, method='BFGS',
                             options={'gtol': 1e-14})
-    ld.update(res.x)
+    ld.lens.update(res.x)
     np.testing.assert_allclose(effective_focal_length(ld, wvl=0.55),
                                target_efl, rtol=1e-6)
 
@@ -144,7 +147,7 @@ def test_recover_efl_via_curvature_sweep():
 def test_residuals_least_squares_path():
     """The residual vector from Problem feeds least_squares cleanly."""
     ld = _parabola_mirror(kappa=0.0)
-    ld.vary('conic', surfaces=0)
+    ld.lens.vary('conic', surfaces=0)
     P, S = _collimated_fan(15, maxr=5.0)
     op = RmsSpotRadius(P, S, wavelength=0.55e-3)
     prob = Problem(ld, [op])
@@ -211,7 +214,7 @@ def test_damped_least_squares_inactive_inequality_lambda_constraint():
 
 def test_damped_least_squares_runs_raytracing_problem_with_constraint():
     ld = _refractive_singlet(c1=1 / 30.0, c2=-1 / 30.0, gap=4.0)
-    ld.vary('curvature', surfaces=0)
+    ld.lens.vary('curvature', surfaces=0)
     target_efl = 75.0
     problem = Problem(
         ld,

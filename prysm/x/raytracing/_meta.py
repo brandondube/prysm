@@ -1,56 +1,62 @@
 """Metadata helpers for the analysis / launch / paraxial / plotting layer.
 
-A LensData carries the system metadata (epd, wavelengths, n_ambient, stop
-index).  These helpers let the consuming functions default those values from a
-LensData when the caller omits them.
+An OpticalSystem carries the system metadata (aperture, wavelengths, stop
+index) and duck-types as the compiled surface sequence (it delegates len / iter
+/ getitem / to_surfaces to its lens).  These helpers let the consuming
+functions default those values from an OpticalSystem when the caller omits
+them, while still accepting a bare LensData or list of Surface for low-level
+use.
 
-Duck-typed on purpose (no LensData import) so the layer modules can use them
-without an import cycle: a LensData exposes a wavelength resolver method, an epd
-attribute, etc.; a list of Surface does not.
+Duck-typed on purpose (no OpticalSystem import) so the layer modules can use
+them without an import cycle: an OpticalSystem exposes a wavelength resolver
+method, an aperture, a stop_index, etc.; a list of Surface does not.
+
+Object- and image-space media come from the surface materials: the object index
+is the object surface's material (the leading eval row), the image index the
+penultimate surface's post-surface material.  There is no single ambient
+scalar.
 """
 
 from .spencer_and_murty import STYPE_EVAL
 
 
-def lensdata_wavelength(prescription, wvl):
-    """Resolve a wavelength against a prescription's metadata.
+def system_wavelength(prescription, wvl):
+    """Resolve a wavelength against a system's metadata.
 
-    When prescription is a LensData, defers to its wavelength resolver
+    When prescription is an OpticalSystem, defers to its wavelength resolver
     (None -> reference wavelength, a name string -> microns, a scalar ->
-    float).  Otherwise an explicit wavelength is required.
+    float).  For a bare lens / surface sequence, None resolves to the kernel
+    default of 0.6328 microns.
     """
     resolver = getattr(prescription, 'wavelength', None)
     if callable(resolver):
         return float(resolver(wvl))
     if wvl is None:
-        raise TypeError('wavelength is required for prescriptions without metadata')
+        return 0.6328
     return float(wvl)
 
 
-def lensdata_epd(prescription, epd):
-    """Entrance pupil diameter, defaulting from a LensData when epd is None.
+def system_epd(prescription, epd, wvl=None):
+    """Entrance-pupil diameter, defaulting from a system's aperture spec.
 
-    Returns None when neither an explicit epd nor a LensData epd is available;
-    callers decide whether that is an error.
+    An explicit epd wins.  Otherwise, when prescription is an OpticalSystem
+    carrying an ApertureSpec, the spec's first-order entrance-pupil diameter at
+    wvl is used to size the pupil-sampling pattern.  Returns None when neither
+    is available; callers decide whether that is an error.
     """
     if epd is not None:
         return float(epd)
-    epd = getattr(prescription, 'epd', None)
-    return None if epd is None else float(epd)
+    aperture = getattr(prescription, 'aperture', None)
+    if aperture is not None:
+        return float(aperture.entrance_pupil_diameter(prescription, wvl))
+    return None
 
 
-def lensdata_stop_index(prescription, stop_index):
-    """Aperture-stop index, defaulting from a LensData when stop_index is None."""
+def system_stop_index(prescription, stop_index):
+    """Aperture-stop index, defaulting from a system when stop_index is None."""
     if stop_index is not None:
         return stop_index
     return getattr(prescription, 'stop_index', None)
-
-
-def lensdata_n_ambient(prescription, n_ambient):
-    """Object-space index, defaulting from a LensData when omitted."""
-    if n_ambient is not None:
-        return float(n_ambient)
-    return float(getattr(prescription, 'n_ambient', 1.0))
 
 
 def _surface_medium_index(surface, wavelength, fallback):
@@ -61,15 +67,13 @@ def _surface_medium_index(surface, wavelength, fallback):
     return float(fallback)
 
 
-def object_space_index(prescription, wavelength, n_ambient=None):
-    """Resolve the object-space medium index.
+def object_space_index(prescription, wavelength):
+    """Resolve the object-space medium index from the object surface.
 
-    If an explicit n_ambient is supplied, it wins.  Otherwise, when a
-    prescription includes an object surface at index 0, that row's material is
-    the object-space medium.
+    When a prescription includes an object surface at index 0 (a leading eval
+    row), that row's material is the object-space medium.  Otherwise the object
+    space is air (n = 1.0).
     """
-    if n_ambient is not None:
-        return float(n_ambient)
     if (len(prescription) > 0
             and getattr(prescription[0], 'typ', None) == STYPE_EVAL):
         return _surface_medium_index(prescription[0], wavelength, 1.0)
@@ -79,7 +83,7 @@ def object_space_index(prescription, wavelength, n_ambient=None):
 def image_space_index(prescription, wavelength, fallback=1.0):
     """Resolve the image-space medium index from the penultimate surface.
 
-    Sequential LensData places the image plane as the final eval surface; the
+    Sequential systems place the image plane as the final eval surface; the
     medium immediately before that plane is therefore the post-surface medium of
     the penultimate surface.
     """

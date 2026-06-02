@@ -1,5 +1,30 @@
 """Shared helpers for the raytracing IO parsers (Zemax, Code V, ...)."""
 
+import re
+import warnings
+
+
+# vignetting-factor tokens of the supported decks.  Code V: VUX/VUY/VLX/VLY.
+# Zemax: VDX/VDY/VCX/VCY/VAN (with a trailing surface index).
+_VIGNETTING_RE = re.compile(
+    r'\b(VUX|VUY|VLX|VLY|VDX|VDY|VCX|VCY|VAN)\b', re.IGNORECASE)
+
+
+def warn_vignetting_ignored(text, format_name):
+    """Warn once if a prescription declares vignetting factors.
+
+    prysm models real vignetting by clipping at the per-surface clear
+    apertures, so the affine vignetting factors (decenter/scale of the
+    normalized pupil) of Code V / Zemax are intentionally ignored; this emits a
+    one-time note so the user knows they were dropped.
+    """
+    if _VIGNETTING_RE.search(text or ''):
+        warnings.warn(
+            f'{format_name} vignetting factors were found and ignored; prysm '
+            'models vignetting by clipping at the per-surface clear apertures '
+            'rather than via affine pupil-scaling factors.',
+            stacklevel=3)
+
 
 def read_text_or_path(path_or_text, is_text=False):
     """Return text and source path metadata for parser entry points."""

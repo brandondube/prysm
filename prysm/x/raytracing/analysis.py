@@ -41,16 +41,17 @@ from .opt import (
 from .paraxial import paraxial_image_distance
 from .launch import Field, Sampling, launch
 from ._meta import (
-    lensdata_wavelength, lensdata_epd, object_space_index, image_space_index,
+    system_wavelength, system_epd, object_space_index, image_space_index,
 )
 
 
-def _require_epd(prescription, epd):
-    """Resolve epd from an explicit value or the LensData; error if neither."""
-    epd = lensdata_epd(prescription, epd)
+def _require_epd(prescription, epd, wvl=None):
+    """Resolve epd from an explicit value or the system; error if neither."""
+    epd = system_epd(prescription, epd, wvl)
     if epd is None:
         raise TypeError(
-            'epd is required; pass epd=... or supply a LensData carrying it.'
+            'epd is required; pass epd=... or supply an OpticalSystem whose '
+            'aperture spec resolves it.'
         )
     return epd
 
@@ -175,7 +176,7 @@ def _apply_field_and_output(opd, x_pupil, y_pupil, field, output, wavelength):
 
 
 def wavefront(prescription, P, S, wavelength, *,
-              n_ambient=None, chief_index=None,
+              chief_index=None,
               axis_point=None, axis_dir=None, P_xp=None,
               pupil_coords=None, field=None, output='length',
               method='sphere', reference='chief'):
@@ -194,8 +195,6 @@ def wavefront(prescription, P, S, wavelength, *,
         launch positions and direction cosines (typically from launch()).
     wavelength : float
         in microns.
-    n_ambient : float
-        ambient index of refraction.
     chief_index : int, optional
         row index of the chief ray.  Default N//2 (matches raygen
         convention).
@@ -250,8 +249,8 @@ def wavefront(prescription, P, S, wavelength, *,
             f"reference must be 'chief' or 'centroid', got {reference!r}"
         )
     P = np.asarray(P)
-    n_object = object_space_index(prescription, wavelength, n_ambient)
-    trace = raytrace(prescription, P, S, wavelength, n_ambient=n_object)
+    n_object = object_space_index(prescription, wavelength)
+    trace = raytrace(prescription, P, S, wavelength)
     valid = _valid_mask(trace.status, trace.P[-1])
     if chief_index is None:
         # for reference='centroid' restrict to surviving rays so an obscured
@@ -362,7 +361,7 @@ def wavefront_zernike_fit(opd, x_pupil, y_pupil, nms, *,
 # ---------- distortion ------------------------------------------------------
 
 def distortion(prescription, fields, wavelength=None, *, epd=None,
-               n_ambient=1.0, paraxial_fraction=1e-4, distortion_type='f-tan',
+               paraxial_fraction=1e-4, distortion_type='f-tan',
                pupil_z=None):
     """Per-field image-plane error of the chief ray vs a paraxial proxy.
 
@@ -383,8 +382,6 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
         entrance pupil diameter (only enters as the chief-ray pupil-z
         location is the EP; the chief is a single ray at pupil center so
         epd does not affect the trace, but launch() needs it nominally).
-    n_ambient : float
-        ambient index.
     paraxial_fraction : float
         scale factor for the paraxial-proxy field angles.  Default 1e-4.
     distortion_type : str, optional
@@ -409,8 +406,8 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
         pincushion, negative is barrel; 0 for the on-axis field.
 
     """
-    wavelength = lensdata_wavelength(prescription, wavelength)
-    epd = _require_epd(prescription, epd)
+    wavelength = system_wavelength(prescription, wavelength)
+    epd = _require_epd(prescription, epd, wavelength)
     fields = list(fields)
     n = len(fields)
     real_xy = np.zeros((n, 2), dtype=config.precision)
@@ -419,9 +416,8 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
     chief = Sampling.chief()
     for i, field in enumerate(fields):
         P_r, S_r = launch(prescription, field, wavelength, chief,
-                          epd=epd, n_ambient=n_ambient, pupil_z=pupil_z)
-        tr_r = raytrace(prescription, P_r, S_r, wavelength,
-                        n_ambient=n_ambient)
+                          epd=epd, pupil_z=pupil_z)
+        tr_r = raytrace(prescription, P_r, S_r, wavelength)
         real_xy[i] = tr_r.P[-1, 0, :2]
 
         ax, ay = field.angle_radians()
@@ -431,9 +427,8 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
             kind='angle', unit='deg',
         )
         P_p, S_p = launch(prescription, small, wavelength, chief,
-                          epd=epd, n_ambient=n_ambient, pupil_z=pupil_z)
-        tr_p = raytrace(prescription, P_p, S_p, wavelength,
-                        n_ambient=n_ambient)
+                          epd=epd, pupil_z=pupil_z)
+        tr_p = raytrace(prescription, P_p, S_p, wavelength)
         if distortion_type == 'linear-angle':
             paraxial_xy[i] = tr_p.P[-1, 0, :2] / paraxial_fraction
         elif distortion_type == 'f-tan':
@@ -483,7 +478,7 @@ def _line_intersection_z(P0, S0, P1, S1):
 
 
 def field_curvature(prescription, fields, wavelength=None, *, epd=None,
-                    n_ambient=1.0, marginal_fraction=1e-3):
+                    marginal_fraction=1e-3):
     """Sagittal and tangential focus shifts per field point.
 
     For each field, traces a 3-ray chief+marginal bundle in both x (sagittal)
@@ -501,8 +496,6 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
         in microns.
     epd : float
         entrance pupil diameter.
-    n_ambient : float
-        ambient index.
     marginal_fraction : float
         radius used for the marginal ray, as a fraction of EPD/2.  Default
         1e-3, i.e. a near-chief ray, which returns the differential
@@ -522,8 +515,8 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
         the chief.
 
     """
-    wavelength = lensdata_wavelength(prescription, wavelength)
-    epd = _require_epd(prescription, epd)
+    wavelength = system_wavelength(prescription, wavelength)
+    epd = _require_epd(prescription, epd, wavelength)
     fields = list(fields)
     n = len(fields)
     sagittal_z = np.zeros(n, dtype=config.precision)
@@ -533,25 +526,22 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
     for i, field in enumerate(fields):
         # chief
         P_c, S_c = launch(prescription, field, wavelength, chief,
-                          epd=epd, n_ambient=n_ambient)
-        tr_c = raytrace(prescription, P_c, S_c, wavelength,
-                        n_ambient=n_ambient)
+                          epd=epd)
+        tr_c = raytrace(prescription, P_c, S_c, wavelength)
         Pc = tr_c.P[-1, 0]
         Sc = tr_c.S[-1, 0]
         # sagittal marginal (one ray offset +x_marg from the chief in the
         # pupil; += keeps any chief offset from entrance-pupil routing)
         P_sx = P_c.copy()
         P_sx[0, 0] = P_sx[0, 0] + r_marg
-        tr_sx = raytrace(prescription, P_sx, S_c, wavelength,
-                         n_ambient=n_ambient)
+        tr_sx = raytrace(prescription, P_sx, S_c, wavelength)
         sagittal_z[i] = _line_intersection_z(Pc, Sc,
                                              tr_sx.P[-1, 0],
                                              tr_sx.S[-1, 0])
         # tangential marginal (one ray offset +y_marg from the chief)
         P_ty = P_c.copy()
         P_ty[0, 1] = P_ty[0, 1] + r_marg
-        tr_ty = raytrace(prescription, P_ty, S_c, wavelength,
-                         n_ambient=n_ambient)
+        tr_ty = raytrace(prescription, P_ty, S_c, wavelength)
         tangential_z[i] = _line_intersection_z(Pc, Sc,
                                                tr_ty.P[-1, 0],
                                                tr_ty.S[-1, 0])
@@ -560,7 +550,7 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
 
 # ---------- color -----------------------------------------------------------
 
-def axial_color(prescription, wavelengths, *, n_ambient=1.0):
+def axial_color(prescription, wavelengths):
     """Paraxial image distance at each of several wavelengths.
 
     Parameters
@@ -568,8 +558,6 @@ def axial_color(prescription, wavelengths, *, n_ambient=1.0):
     prescription : sequence of Surface
     wavelengths : iterable of float
         wavelengths in microns.
-    n_ambient : float
-        object-space index.
 
     Returns
     -------
@@ -578,12 +566,12 @@ def axial_color(prescription, wavelengths, *, n_ambient=1.0):
 
     """
     return np.array([
-        paraxial_image_distance(prescription, wvl=float(w), n_ambient=n_ambient)
+        paraxial_image_distance(prescription, wvl=float(w))
         for w in wavelengths
     ], dtype=config.precision)
 
 
-def lateral_color(prescription, fields, wavelengths, *, epd=None, n_ambient=1.0):
+def lateral_color(prescription, fields, wavelengths, *, epd=None):
     """Chief-ray image-plane landing at every (field, wavelength) pair.
 
     The lateral chromatic aberration at field i is the difference between
@@ -599,8 +587,6 @@ def lateral_color(prescription, fields, wavelengths, *, epd=None, n_ambient=1.0)
         wavelengths in microns.
     epd : float
         entrance pupil diameter.
-    n_ambient : float
-        ambient index.
 
     Returns
     -------
@@ -617,9 +603,7 @@ def lateral_color(prescription, fields, wavelengths, *, epd=None, n_ambient=1.0)
     chief = Sampling.chief()
     for i, field in enumerate(fields):
         for j, w in enumerate(wavelengths):
-            P, S = launch(prescription, field, float(w), chief,
-                          epd=epd, n_ambient=n_ambient)
-            tr = raytrace(prescription, P, S, float(w),
-                          n_ambient=n_ambient)
+            P, S = launch(prescription, field, float(w), chief, epd=epd)
+            tr = raytrace(prescription, P, S, float(w))
             out[i, j] = tr.P[-1, 0, :2]
     return out

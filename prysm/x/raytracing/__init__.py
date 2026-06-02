@@ -9,6 +9,17 @@ imported from there: prysm.x.raytracing.aberrations (seidel_aberrations),
 
 from .lensdata import CoordBreak, LensData, SurfaceRow
 from .launch import Field, Sampling, launch
+from .system import (
+    ApertureSpec,
+    FieldSet,
+    OpticalSystem,
+    System,
+)
+from .listings import (
+    aperture_table,
+    decenter_table,
+    surface_table,
+)
 from .spencer_and_murty import (
     DEFAULT_TOL_SAG,
     STATUS_CLIP,
@@ -101,6 +112,13 @@ __all__ = [
     'LensData',
     'SurfaceRow',
     'CoordBreak',
+    'OpticalSystem',
+    'System',
+    'ApertureSpec',
+    'FieldSet',
+    'surface_table',
+    'aperture_table',
+    'decenter_table',
     'raytrace',
     'refract',
     'reflect',

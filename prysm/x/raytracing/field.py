@@ -47,7 +47,7 @@ from .opt import (
 )
 from .analysis import _apply_field_and_output, _filtered_chief_index
 from ._meta import (
-    lensdata_epd, lensdata_wavelength, object_space_index, image_space_index,
+    system_epd, system_wavelength, object_space_index, image_space_index,
 )
 
 
@@ -98,8 +98,7 @@ class FieldTraceResult:
         return self.trace.status
 
 
-def surface_normals_from_trace(prescription, trace, wavelength, *,
-                               n_ambient=1.0):
+def surface_normals_from_trace(prescription, trace, wavelength):
     """Recompute per-surface normals, incidence cosines, and indices.
 
     The kernel computes the surface normal and the incidence angle internally
@@ -116,8 +115,6 @@ def surface_normals_from_trace(prescription, trace, wavelength, *,
         result of spencer_and_murty.raytrace through prescription.
     wavelength : float
         wavelength in microns, used to evaluate surface indices.
-    n_ambient : float
-        ambient (object-space) index of refraction.
 
     Returns
     -------
@@ -145,7 +142,7 @@ def surface_normals_from_trace(prescription, trace, wavelength, *,
     n1 = np.empty(jj, dtype=config.precision)
     typ = np.empty(jj, dtype=int)
 
-    nj = float(n_ambient)
+    nj = object_space_index(prescription, wavelength)
     for j, surf in enumerate(surfaces):
         # incident direction on surface j is S_hist[j]; the intersection is
         # P_hist[j+1].  Transform both into the surface's local frame.
@@ -240,7 +237,7 @@ def _power_transmittance(n0, n1, cosI):
     return np.where(tir, 0.0, T)
 
 
-def unpolarized_amplitude(prescription, trace, wavelength, *, n_ambient=1.0,
+def unpolarized_amplitude(prescription, trace, wavelength, *,
                           coatings=None):
     """Per-ray scalar amplitude transmittance through the system.
 
@@ -258,8 +255,6 @@ def unpolarized_amplitude(prescription, trace, wavelength, *, n_ambient=1.0,
         result of raytrace through prescription.
     wavelength : float
         wavelength in microns.
-    n_ambient : float
-        ambient index.
     coatings : sequence, optional
         per-surface coating specs; None (default) gives bare interfaces.
 
@@ -270,7 +265,7 @@ def unpolarized_amplitude(prescription, trace, wavelength, *, n_ambient=1.0,
 
     """
     cosI, n0, n1, typ = surface_normals_from_trace(
-        prescription, trace, wavelength, n_ambient=n_ambient)
+        prescription, trace, wavelength)
     jj, n_rays = cosI.shape
     amp = np.ones(n_rays, dtype=config.precision)
     for j in range(jj):
@@ -285,7 +280,7 @@ def unpolarized_amplitude(prescription, trace, wavelength, *, n_ambient=1.0,
     return amp
 
 
-def raytrace_field(prescription, P, S, wavelength, *, n_ambient=1.0,
+def raytrace_field(prescription, P, S, wavelength, *,
                    coatings=None):
     """Intensity-aware trace: geometry plus a scalar amplitude.
 
@@ -302,8 +297,6 @@ def raytrace_field(prescription, P, S, wavelength, *, n_ambient=1.0,
         launch positions and direction cosines.
     wavelength : float
         wavelength in microns.
-    n_ambient : float
-        ambient index of refraction.
     coatings : sequence, optional
         per-surface coating specs; None (default) gives bare Fresnel interfaces
         and lossless mirrors.
@@ -314,9 +307,9 @@ def raytrace_field(prescription, P, S, wavelength, *, n_ambient=1.0,
         carrying the geometric trace and the per-ray amplitude.
 
     """
-    trace = raytrace(prescription, P, S, wavelength, n_ambient=n_ambient)
+    trace = raytrace(prescription, P, S, wavelength)
     amplitude = unpolarized_amplitude(prescription, trace, wavelength,
-                                      n_ambient=n_ambient, coatings=coatings)
+                                      coatings=coatings)
     return FieldTraceResult(trace, amplitude)
 
 
@@ -492,7 +485,7 @@ class PupilField:
         return self.P_matrix is not None
 
 
-def _resolve_exit_pupil(prescription, field, wavelength, epd, n_ambient,
+def _resolve_exit_pupil(prescription, field, wavelength, epd,
                         stop_index, P_xp, P_img, chief_P, chief_S,
                         axis_dir=None):
     """Resolve the reference-sphere center (P_img) and exit-pupil point (P_xp).
@@ -510,7 +503,7 @@ def _resolve_exit_pupil(prescription, field, wavelength, epd, n_ambient,
         return np.asarray(P_xp), P_img
 
     if stop_index is not None:
-        fo = first_order(prescription, wvl=wavelength, n_ambient=n_ambient,
+        fo = first_order(prescription, wvl=wavelength,
                          epd=epd, stop_index=stop_index)
         if fo.xp_z is None:
             raise ValueError(
@@ -543,7 +536,7 @@ def _resolve_exit_pupil(prescription, field, wavelength, epd, n_ambient,
 
 def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
                 stop_index=None, P_xp=None, P_img=None, axis_dir=None,
-                n_ambient=None, pupil_z=None, coatings=None, method='sphere',
+                pupil_z=None, coatings=None, method='sphere',
                 output='length', reference='chief', polarized=False):
     """Realize the complex pupil field on the exit-pupil reference sphere.
 
@@ -574,8 +567,6 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
         reference-sphere center; defaults to the real chief-ray image point.
     axis_dir : iterable, optional
         optical-axis direction; default +z.
-    n_ambient : float
-        ambient (and image-space) index of refraction.
     pupil_z : float, optional
         launch-plane z; passed to launch().
     coatings : sequence, optional
@@ -597,27 +588,29 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
         image-space index, and pupil/image anchors.
 
     """
-    epd = lensdata_epd(prescription, epd)
-    wavelength = lensdata_wavelength(prescription, wavelength)
+    wavelength = system_wavelength(prescription, wavelength)
+    epd = system_epd(prescription, epd, wavelength)
     if epd is None:
-        raise TypeError('epd is required; pass epd=... or a LensData with it.')
+        raise TypeError(
+            'epd is required; pass epd=... or an OpticalSystem whose aperture '
+            'spec resolves it.')
     if reference not in ('chief', 'centroid'):
         raise ValueError(
             f"reference must be 'chief' or 'centroid', got {reference!r}")
-    n_object = object_space_index(prescription, wavelength, n_ambient)
+    n_object = object_space_index(prescription, wavelength)
 
     sampling = Sampling.rect(n=npupil)
     P, S = launch(prescription, field, wavelength, sampling,
-                  epd=epd, n_ambient=n_object, pupil_z=pupil_z)
+                  epd=epd, pupil_z=pupil_z)
     if polarized:
-        pr = raytrace_prt(prescription, P, S, wavelength, n_ambient=n_object,
+        pr = raytrace_prt(prescription, P, S, wavelength,
                           coatings=coatings)
         trace = pr.trace
         coating_amp = None
         P_matrix_all = pr.P_matrix
     else:
         ft = raytrace_field(prescription, P, S, wavelength,
-                            n_ambient=n_object, coatings=coatings)
+                            coatings=coatings)
         trace = ft.trace
         coating_amp = ft.amplitude
         P_matrix_all = None
@@ -657,7 +650,7 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
     valid = valid & circ
 
     P_xp, P_img = _resolve_exit_pupil(
-        prescription, field, wavelength, epd, n_object, stop_index,
+        prescription, field, wavelength, epd, stop_index,
         P_xp, P_img, trace.P[-1, chief_index], trace.S[-1, chief_index],
         axis_dir=axis_dir)
     R = float(np.sqrt(np.sum((np.asarray(P_xp) - P_img) ** 2)))
@@ -957,7 +950,7 @@ def _interface_jones(n0, n1, cosI, typ, *, coating=None):
     return ones, ones
 
 
-def raytrace_prt(prescription, P, S, wavelength, *, n_ambient=1.0,
+def raytrace_prt(prescription, P, S, wavelength, *,
                  coatings=None):
     """Polarization ray trace: geometry plus a per-ray 3x3 P matrix.
 
@@ -972,8 +965,6 @@ def raytrace_prt(prescription, P, S, wavelength, *, n_ambient=1.0,
         launch positions and direction cosines.
     wavelength : float
         wavelength in microns.
-    n_ambient : float
-        ambient index.
     coatings : sequence, optional
         per-surface coating specs; None gives bare interfaces.
 
@@ -983,7 +974,7 @@ def raytrace_prt(prescription, P, S, wavelength, *, n_ambient=1.0,
         the geometric trace and the per-ray (N, 3, 3) complex P matrix.
 
     """
-    trace = raytrace(prescription, P, S, wavelength, n_ambient=n_ambient)
+    trace = raytrace(prescription, P, S, wavelength)
     surfaces = list(prescription)
     P_hist = trace.P
     S_hist = trace.S
@@ -991,7 +982,7 @@ def raytrace_prt(prescription, P, S, wavelength, *, n_ambient=1.0,
     Pmat = np.broadcast_to(np.eye(3, dtype=config.precision_complex),
                            (n_rays, 3, 3)).copy()
 
-    nj = float(n_ambient)
+    nj = object_space_index(prescription, wavelength)
     for j, surf in enumerate(surfaces):
         coating = None if coatings is None else coatings[j]
         k_in = _unit(S_hist[j])

@@ -37,8 +37,10 @@ from ._common import (
     read_text_or_path,
     fold_sign,
     writable_shape_or_raise,
+    warn_vignetting_ignored as _warn_vignetting_ignored,
 )
 from ..lensdata import LensData
+from ..system import OpticalSystem, ApertureSpec
 from ._surface_spec import SurfaceSpec, build_shape
 
 
@@ -386,35 +388,51 @@ class _CoordinateBreak:
 
 # ---------- top-level reader ------------------------------------------------
 
-def write_zmx(lensdata):
-    """Serialize a LensData to Zemax .zmx text (rotationally symmetric subset).
+def write_zmx(system):
+    """Serialize an OpticalSystem to Zemax .zmx text (rotationally symmetric subset).
 
     Emits OBJECT (surface 0), the surface rows, and the IMAGE plane.  Post-
     reflection gaps use Zemax's negative-thickness (unfolded-axis) convention,
     the inverse of the import fold.  Coordinate breaks export as COORDBRK
     pseudo-surfaces.
 
+    A bare LensData (no system metadata) is also accepted; aperture, stop,
+    unit, and wavelengths are then simply omitted from the output.
+
     """
     from ..lensdata import CoordBreak
+    from ..listings import surface_row_mappings
     from ..spencer_and_murty import STYPE_EVAL, STYPE_REFLECT
     from ..surfaces import _map_stype
 
     lines = ['VERS 100000 0', 'MODE SEQ']
-    if lensdata.unit:
-        lines.append(f'UNIT {lensdata.unit.upper()}')
-    if lensdata.epd is not None:
-        lines.append(f'ENPD {lensdata.epd:g}')
-    if lensdata.stop_index is not None:
-        # +1: our compiled-surface index -> Zemax 1-based SURF idx (OBJECT=0)
-        lines.append(f'STOP {lensdata.stop_index + 1}')
-    for w in lensdata.wavelengths.values():
+    unit = getattr(system, 'unit', None)
+    if unit:
+        lines.append(f'UNIT {unit.upper()}')
+    epd = getattr(system, 'epd', None)
+    if epd is not None:
+        lines.append(f'ENPD {epd:g}')
+    stop_index = getattr(system, 'stop_index', None)
+    if stop_index is not None:
+        stop_surface = None
+        for mapping in surface_row_mappings(system):
+            if mapping['surface_index'] == stop_index:
+                stop_surface = mapping['zemax_surface_number']
+                break
+        if stop_surface is None:
+            raise ValueError(
+                f'stop_index {stop_index!r} does not identify a compiled '
+                'surface'
+            )
+        lines.append(f'STOP {stop_surface}')
+    for w in getattr(system, 'wavelengths', {}).values():
         lines.append(f'WAVL {w:g}')
 
     lines += ['SURF 0', '  TYPE STANDARD', '  CURV 0.0', '  DISZ INFINITY']
 
     surf_no = 0
     n_refl = 0
-    for row in lensdata.rows:
+    for row in system.rows:
         surf_no += 1
         if isinstance(row, CoordBreak):
             dx, dy, _ = (float(v) for v in row.decenter)
@@ -487,8 +505,12 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
         d = blk.get('disz', 0.0)
         return 0.0 if not np.isfinite(d) else float(d)
 
-    ld = LensData(
-        epd=header['epd'], fields=header['fields'],
+    ld = LensData()
+    sys = OpticalSystem(
+        ld,
+        aperture=(ApertureSpec.epd(header['epd'])
+                  if header['epd'] is not None else None),
+        fields=header['fields'],
         wavelengths=header['wavelengths'], unit=header['unit'],
         source_path=path_for_meta, source_format='zemax',
         extras=header['extras'],
@@ -535,8 +557,9 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
     stop_origin = header.get('stop_index_zemax')
     if stop_origin is not None:
         try:
-            ld.stop_index = surface_origin_idx.index(stop_origin)
+            sys.stop_index = surface_origin_idx.index(stop_origin)
         except ValueError:
-            ld.stop_index = None
+            sys.stop_index = None
 
-    return ld
+    _warn_vignetting_ignored(text, 'Zemax')
+    return sys

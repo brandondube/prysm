@@ -154,7 +154,10 @@ def test_total_internal_reflection_marked_as_tir():
     """A ray going from glass (n=1.5) to air past the critical angle should TIR."""
     # critical angle for n=1.5 → 1.0 is arcsin(1/1.5) ≈ 41.81°.
     # build a refracting plane at z=0; ray comes from -z in glass at 50° to normal.
+    # the launch medium (n=1.5) is carried by a leading eval object surface
     pres = [
+        plane(interaction='eval', P=np.array([0., 0., -10.]),
+                      material=lambda wvl: 1.5),  # object immersed in glass
         plane(interaction='refr', P=np.array([0., 0., 0.]),
                       material=lambda wvl: 1.0),  # the medium AFTER the surface
     ]
@@ -162,9 +165,9 @@ def test_total_internal_reflection_marked_as_tir():
     # ray in n=1.5 medium hitting the surface at 50° to z (normal)
     P0 = np.array([[0., -10., -10.]])
     S0 = np.array([[0., np.sin(angle), np.cos(angle)]])
-    result = raytrace(pres, P0, S0, wvl=0.55, n_ambient=1.5)
+    result = raytrace(pres, P0, S0, wvl=0.55)
     assert result.status[0].imag == STATUS_TIR
-    assert result.status[0].real == 1.0
+    assert result.status[0].real == 2.0  # TIR at the refr surface (index 2)
 
 
 # ---------- end-to-end: aperture + valid + clipped mixed batch ----------

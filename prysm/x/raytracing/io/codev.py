@@ -41,8 +41,10 @@ from ._common import (
     read_text_or_path,
     fold_sign,
     writable_shape_or_raise,
+    warn_vignetting_ignored as _warn_vignetting_ignored,
 )
 from ..lensdata import LensData
+from ..system import OpticalSystem, ApertureSpec
 from ._surface_spec import SurfaceSpec, build_shape
 
 
@@ -334,8 +336,12 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
     if ref_idx is not None and 1 <= ref_idx <= len(wavelengths):
         reference_wavelength = float(wavelengths[ref_idx - 1])
 
-    ld = LensData(
-        epd=header['epd'], fields=fields, wavelengths=wavelengths,
+    ld = LensData()
+    sys = OpticalSystem(
+        ld,
+        aperture=(ApertureSpec.epd(header['epd'])
+                  if header['epd'] is not None else None),
+        fields=fields, wavelengths=wavelengths,
         reference_wavelength=reference_wavelength, unit=header['unit'],
         source_path=path_for_meta, source_format='codev',
         extras=header['extras'],
@@ -372,10 +378,11 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
                    thickness=sign * float(sd.get('thi', 0.0)),
                    material=spec.n, typ=spec.typ)
         if sd is stop_surface:
-            ld.stop_index = compiled_idx
+            sys.stop_index = compiled_idx
         compiled_idx += 1
 
-    return ld
+    _warn_vignetting_ignored(text, 'Code V')
+    return sys
 
 
 # keywords whose presence as the first inline token of an SO/S/SI line means
@@ -573,8 +580,8 @@ def _coordbreak_seq_lines(row):
     return lines
 
 
-def write_seq(lensdata):
-    """Serialize a LensData to Code V .seq text (rotationally symmetric subset).
+def write_seq(system):
+    """Serialize an OpticalSystem to Code V .seq text (rotationally symmetric subset).
 
     Writes curvature mode (CUM), so curvatures export directly without radius
     reciprocals.  Post-reflection gaps are written with the Code V negative-
@@ -583,21 +590,26 @@ def write_seq(lensdata):
     export DEC/ADE/BDE/CDE with the Code V left-handed sign convention applied
     at this boundary only.
 
+    A bare LensData (no system metadata) is also accepted; aperture, fields, and
+    wavelengths are then simply omitted from the output.
+
     """
     from ..lensdata import CoordBreak
     lines = ['LEN', 'CUM', 'DIM M']
-    wvls = list(lensdata.wavelengths.values())
+    wvls = list(getattr(system, 'wavelengths', {}).values())
     if wvls:
         lines.append('WL ' + ' '.join(f'{w * 1000.0:g}' for w in wvls))
-    if lensdata.epd is not None:
-        lines.append(f'EPD {lensdata.epd:g}')
-    if lensdata.fields:
-        lines.append('YAN ' + ' '.join(f'{f.hy:g}' for f in lensdata.fields))
+    epd = getattr(system, 'epd', None)
+    if epd is not None:
+        lines.append(f'EPD {epd:g}')
+    fields = getattr(system, 'fields', None) or []
+    if fields:
+        lines.append('YAN ' + ' '.join(f'{f.hy:g}' for f in fields))
     lines.append('SO ; THI 1E10')
 
     n_refl = 0
     pending_coordbreak = None
-    for row in lensdata.rows:
+    for row in system.rows:
         if isinstance(row, CoordBreak):
             if pending_coordbreak is not None:
                 raise NotImplementedError(

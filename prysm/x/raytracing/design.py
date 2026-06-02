@@ -73,12 +73,11 @@ class _TraceCache:
         self._cache = {}
         self._n_traces = 0
 
-    def trace(self, P, S, wavelength, n_ambient=1.0):
-        key = (id(P), id(S), float(wavelength), float(n_ambient))
+    def trace(self, P, S, wavelength):
+        key = (id(P), id(S), float(wavelength))
         cached = self._cache.get(key)
         if cached is None:
-            cached = raytrace(self._prescription, P, S, wavelength,
-                              n_ambient=n_ambient)
+            cached = raytrace(self._prescription, P, S, wavelength)
             self._cache[key] = cached
             self._n_traces += 1
         return cached
@@ -92,32 +91,30 @@ class _TraceCache:
 # ---------- Operands ---------------------------------------------------------
 
 class _OperandBase:
-    """Shared target/weight/n_ambient plumbing for operand classes.
+    """Shared target/weight plumbing for operand classes.
 
-    Subclasses call super().__init__(target, weight, n_ambient) and then
-    set their own task-specific attributes.
+    Subclasses call super().__init__(target, weight) and then set their own
+    task-specific attributes.  Object-space media come from the prescription's
+    object surface material, resolved per merit call.
 
     """
 
-    def __init__(self, target=0.0, weight=1.0, n_ambient=1.0):
+    def __init__(self, target=0.0, weight=1.0):
         self.target = float(target)
         self.weight = float(weight)
-        self.n_ambient = float(n_ambient)
 
 
 class RmsSpotRadius(_OperandBase):
     """Weighted RMS spot radius at the image plane for one launch bundle."""
 
-    def __init__(self, P, S, wavelength, target=0.0, weight=1.0,
-                 n_ambient=1.0):
-        super().__init__(target=target, weight=weight, n_ambient=n_ambient)
+    def __init__(self, P, S, wavelength, target=0.0, weight=1.0):
+        super().__init__(target=target, weight=weight)
         self.P = P
         self.S = S
         self.wavelength = float(wavelength)
 
     def __call__(self, prescription, cache):
-        trace = cache.trace(self.P, self.S, self.wavelength,
-                            n_ambient=self.n_ambient)
+        trace = cache.trace(self.P, self.S, self.wavelength)
         return rms_spot_radius(trace.P[-1], status=trace.status)
 
 
@@ -132,8 +129,8 @@ class RayHeightAt(_OperandBase):
     """
 
     def __init__(self, P, S, wavelength, surface_index, axis,
-                 target=0.0, weight=1.0, ray_index=0, n_ambient=1.0):
-        super().__init__(target=target, weight=weight, n_ambient=n_ambient)
+                 target=0.0, weight=1.0, ray_index=0):
+        super().__init__(target=target, weight=weight)
         self.P = P
         self.S = S
         self.wavelength = float(wavelength)
@@ -142,8 +139,7 @@ class RayHeightAt(_OperandBase):
         self.ray_index = int(ray_index)
 
     def __call__(self, prescription, cache):
-        trace = cache.trace(self.P, self.S, self.wavelength,
-                            n_ambient=self.n_ambient)
+        trace = cache.trace(self.P, self.S, self.wavelength)
         return float(trace.P[self.surface_index, self.ray_index, self.axis])
 
 
@@ -153,18 +149,16 @@ class Boresight(_OperandBase):
 
     """
 
-    def __init__(self, P, S, wavelength, target_xy=(0.0, 0.0), weight=1.0,
-                 n_ambient=1.0):
+    def __init__(self, P, S, wavelength, target_xy=(0.0, 0.0), weight=1.0):
         # boresight residual is the distance to target_xy; target stays 0
-        super().__init__(target=0.0, weight=weight, n_ambient=n_ambient)
+        super().__init__(target=0.0, weight=weight)
         self.P = P
         self.S = S
         self.wavelength = float(wavelength)
         self.target_xy = (float(target_xy[0]), float(target_xy[1]))
 
     def __call__(self, prescription, cache):
-        trace = cache.trace(self.P, self.S, self.wavelength,
-                            n_ambient=self.n_ambient)
+        trace = cache.trace(self.P, self.S, self.wavelength)
         valid = trace.status.imag == 0
         Pf = trace.P[-1]
         if valid.any():
@@ -179,38 +173,35 @@ class Boresight(_OperandBase):
 class EFL(_OperandBase):
     """Effective focal length (paraxial ABCD)."""
 
-    def __init__(self, wavelength, target=0.0, weight=1.0, n_ambient=1.0):
-        super().__init__(target=target, weight=weight, n_ambient=n_ambient)
+    def __init__(self, wavelength, target=0.0, weight=1.0):
+        super().__init__(target=target, weight=weight)
         self.wavelength = float(wavelength)
 
     def __call__(self, prescription, cache):
-        return float(effective_focal_length(prescription, wvl=self.wavelength,
-                                            n_ambient=self.n_ambient))
+        return float(effective_focal_length(prescription, wvl=self.wavelength))
 
 
 class BFL(_OperandBase):
     """Back focal length (last powered surface vertex to rear focal point)."""
 
-    def __init__(self, wavelength, target=0.0, weight=1.0, n_ambient=1.0):
-        super().__init__(target=target, weight=weight, n_ambient=n_ambient)
+    def __init__(self, wavelength, target=0.0, weight=1.0):
+        super().__init__(target=target, weight=weight)
         self.wavelength = float(wavelength)
 
     def __call__(self, prescription, cache):
-        return float(back_focal_length(prescription, wvl=self.wavelength,
-                                       n_ambient=self.n_ambient))
+        return float(back_focal_length(prescription, wvl=self.wavelength))
 
 
 class ParaxialImageDistance(_OperandBase):
     """Signed distance from the last surface vertex to the paraxial image
     plane (collimated on-axis input)."""
 
-    def __init__(self, wavelength, target=0.0, weight=1.0, n_ambient=1.0):
-        super().__init__(target=target, weight=weight, n_ambient=n_ambient)
+    def __init__(self, wavelength, target=0.0, weight=1.0):
+        super().__init__(target=target, weight=weight)
         self.wavelength = float(wavelength)
 
     def __call__(self, prescription, cache):
-        return float(paraxial_image_distance(prescription, wvl=self.wavelength,
-                                             n_ambient=self.n_ambient))
+        return float(paraxial_image_distance(prescription, wvl=self.wavelength))
 
 
 class WavefrontRMS(_OperandBase):
@@ -224,9 +215,9 @@ class WavefrontRMS(_OperandBase):
     """
 
     def __init__(self, P, S, wavelength, target=0.0, weight=1.0,
-                 n_ambient=1.0, chief_index=None,
+                 chief_index=None,
                  axis_point=None, axis_dir=None):
-        super().__init__(target=target, weight=weight, n_ambient=n_ambient)
+        super().__init__(target=target, weight=weight)
         self.P = P
         self.S = S
         self.wavelength = float(wavelength)
@@ -237,7 +228,7 @@ class WavefrontRMS(_OperandBase):
     def __call__(self, prescription, cache):
         opd, _, _ = _analysis.wavefront(
             prescription, self.P, self.S, self.wavelength,
-            n_ambient=self.n_ambient, chief_index=self.chief_index,
+            chief_index=self.chief_index,
             axis_point=self.axis_point, axis_dir=self.axis_dir,
         )
         return float(np.sqrt(np.mean(opd * opd)))
@@ -253,10 +244,10 @@ class ZernikeCoefficient(_OperandBase):
 
     def __init__(self, P, S, wavelength, n, m, *,
                  nms_basis, target=0.0, weight=1.0,
-                 n_ambient=1.0, chief_index=None,
+                 chief_index=None,
                  axis_point=None, axis_dir=None,
                  normalization_radius=None, norm=True):
-        super().__init__(target=target, weight=weight, n_ambient=n_ambient)
+        super().__init__(target=target, weight=weight)
         self.P = P
         self.S = S
         self.wavelength = float(wavelength)
@@ -279,7 +270,7 @@ class ZernikeCoefficient(_OperandBase):
     def __call__(self, prescription, cache):
         opd, x_pup, y_pup = _analysis.wavefront(
             prescription, self.P, self.S, self.wavelength,
-            n_ambient=self.n_ambient, chief_index=self.chief_index,
+            chief_index=self.chief_index,
             axis_point=self.axis_point, axis_dir=self.axis_dir,
         )
         coefs, _ = _analysis.wavefront_zernike_fit(
@@ -294,8 +285,8 @@ class Distortion(_OperandBase):
     """Percent distortion at one off-axis field, vs paraxial proxy."""
 
     def __init__(self, field, wavelength, *, epd, target=0.0, weight=1.0,
-                 n_ambient=1.0, paraxial_fraction=1e-4):
-        super().__init__(target=target, weight=weight, n_ambient=n_ambient)
+                 paraxial_fraction=1e-4):
+        super().__init__(target=target, weight=weight)
         self.field = field
         self.wavelength = float(wavelength)
         self.epd = float(epd)
@@ -304,7 +295,7 @@ class Distortion(_OperandBase):
     def __call__(self, prescription, cache):
         _, _, percent = _analysis.distortion(
             prescription, [self.field], self.wavelength,
-            epd=self.epd, n_ambient=self.n_ambient,
+            epd=self.epd,
             paraxial_fraction=self.paraxial_fraction,
         )
         return float(percent[0])
@@ -320,8 +311,8 @@ class FieldCurvature(_OperandBase):
     """
 
     def __init__(self, field, wavelength, *, epd, target=0.0, weight=1.0,
-                 n_ambient=1.0, marginal_fraction=0.7):
-        super().__init__(target=target, weight=weight, n_ambient=n_ambient)
+                 marginal_fraction=0.7):
+        super().__init__(target=target, weight=weight)
         self.field = field
         self.wavelength = float(wavelength)
         self.epd = float(epd)
@@ -330,7 +321,7 @@ class FieldCurvature(_OperandBase):
     def __call__(self, prescription, cache):
         sag_z, tan_z = _analysis.field_curvature(
             prescription, [self.field], self.wavelength,
-            epd=self.epd, n_ambient=self.n_ambient,
+            epd=self.epd,
             marginal_fraction=self.marginal_fraction,
         )
         return float(abs(sag_z[0] - tan_z[0]))
@@ -365,10 +356,18 @@ class Problem:
     def __init__(self, lensdata, operands=None, *,
                  equality_constraints=None, inequality_constraints=None,
                  constraints=None):
-        if not _is_lensdata(lensdata):
+        # accept either a LensData (the free-vector owner) or an OpticalSystem
+        # wrapping one; the system is used as the prescription so operands see
+        # its aperture / object medium, while pack/update act on the lens.
+        prescription = lensdata
+        if not _is_lensdata(lensdata) and _is_lensdata(getattr(lensdata,
+                                                              'lens', None)):
+            prescription = lensdata
+            lensdata = lensdata.lens
+        elif not _is_lensdata(lensdata):
             raise TypeError(
-                'Problem requires a LensData (it needs pack/update/to_surfaces '
-                'to own the free vector); got '
+                'Problem requires a LensData or OpticalSystem (it needs '
+                'pack/update/to_surfaces to own the free vector); got '
                 f'{type(lensdata).__name__}.'
             )
         if constraints is not None:
@@ -378,7 +377,7 @@ class Problem:
                 )
             equality_constraints = constraints
         self.lensdata = lensdata
-        self.prescription = lensdata  # duck-types as a surface sequence
+        self.prescription = prescription  # duck-types as a surface sequence
         self.operands = list(operands or [])
         self.equality_constraints = _as_operand_list(equality_constraints)
         self.inequality_constraints = _as_operand_list(inequality_constraints)

@@ -56,7 +56,6 @@ class AdjointResult:
 
 
 def multi_objective_sensitivity(surfaces, P, S, wvl, seeds, heads, *,
-                                n_ambient=1.0, n_ambient_dot=None,
                                 tol_sag=None):
     """Assemble the M x P adjoint Jacobian: one forward pass, M backward sweeps.
 
@@ -72,8 +71,6 @@ def multi_objective_sensitivity(surfaces, P, S, wvl, seeds, heads, *,
     heads : sequence of merit heads
         the M objectives (defines the row order); each exposes
         seed(trace, intermediates) and optionally value(trace, intermediates).
-    n_ambient : float
-    n_ambient_dot : ndarray (P,), optional
     tol_sag : float
 
     Returns
@@ -85,7 +82,7 @@ def multi_objective_sensitivity(surfaces, P, S, wvl, seeds, heads, *,
     heads = list(heads)
     n_params = len(seeds)
     trace, inter = _forward_with_intermediates(
-        surfaces, P, S, wvl, n_ambient=n_ambient, tol_sag=tol_sag)
+        surfaces, P, S, wvl, tol_sag=tol_sag)
     Qdot_s, Rdot_s, nprimedot_s, shape_params, sag_partial_fns = \
         _assemble_seeds(len(surfaces), seeds, n_params)
     # the shape-DOF tangents are cotangent-independent; evaluate them once and
@@ -99,8 +96,7 @@ def multi_objective_sensitivity(surfaces, P, S, wvl, seeds, heads, *,
         cot = head.seed(trace, inter)
         J[m] = _backward_sweep(surfaces, trace, inter, Qdot_s, Rdot_s,
                                nprimedot_s, shape_params, sag_partial_fns,
-                               cot, n_ambient_dot=n_ambient_dot,
-                               shape_partials=shape_partials)
+                               cot, shape_partials=shape_partials)
         if hasattr(head, 'value'):
             nominals[head.name] = head.value(trace, inter)
 

@@ -14,6 +14,7 @@ they are hard-coded here to avoid a test dependency on optiland.
 import numpy as np
 import pytest
 
+from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData, launch, raytrace, Sampling, Field
 from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing import materials as pmat
@@ -40,23 +41,25 @@ _COOKE = [
 
 
 def cooke():
-    ld = LensData(epd=EPD, fields=[0.0, 14.0, 20.0], wavelengths={'w': WVL},
-                  reference_wavelength='w', stop_index=STOP_INDEX)
+    lens = LensData()
     for R, t, n in _COOKE:
         mat = float(n) if n != 1.0 else pmat.air
-        ld.add(Conic(1.0 / R, 0.0), thickness=t, material=mat)
-    ld.add(Plane(), typ='eval', material=pmat.air, semidiameter=1e3)
-    return ld
+        lens.add(Conic(1.0 / R, 0.0), thickness=t, material=mat)
+    lens.add(Plane(), typ='eval', material=pmat.air, semidiameter=1e3)
+    return OpticalSystem(lens, aperture=EPD, fields=[0.0, 14.0, 20.0],
+                         wavelengths={'w': WVL}, reference_wavelength='w',
+                         stop_index=STOP_INDEX)
 
 
 def biconvex_stop_first():
     """Stop at the first surface -> entrance pupil at the first surface."""
-    ld = LensData(epd=20.0, fields=[0.0, 10.0], wavelengths={'w': WVL},
-                  reference_wavelength='w', stop_index=0)
-    ld.add(Conic(1 / 50.0, 0.0), thickness=6.0, material=1.5)
-    ld.add(Conic(-1 / 50.0, 0.0), thickness=46.0, material=pmat.air)
-    ld.add(Plane(), typ='eval', material=pmat.air, semidiameter=1e3)
-    return ld
+    lens = LensData()
+    lens.add(Conic(1 / 50.0, 0.0), thickness=6.0, material=1.5)
+    lens.add(Conic(-1 / 50.0, 0.0), thickness=46.0, material=pmat.air)
+    lens.add(Plane(), typ='eval', material=pmat.air, semidiameter=1e3)
+    return OpticalSystem(lens, aperture=20.0, fields=[0.0, 10.0],
+                         wavelengths={'w': WVL}, reference_wavelength='w',
+                         stop_index=0)
 
 
 # ---------- entrance_pupil_z ------------------------------------------------
@@ -78,6 +81,52 @@ def test_entrance_pupil_z_none_without_stop():
 def test_entrance_pupil_z_at_first_surface_when_stop_is_first():
     ld = biconvex_stop_first()
     assert entrance_pupil_z(ld) == pytest.approx(0.0, abs=1e-9)
+
+
+# ---------- ray aiming mode (paraxial vs real) ------------------------------
+
+def _y_at_stop(sys, field):
+    P, S = launch(sys, field, WVL, Sampling.fan(n=11, axis='y'))
+    tr = raytrace(sys, P, S, WVL)
+    return tr.P[STOP_INDEX + 1, :, 1]
+
+
+def test_real_ray_aiming_lands_chief_on_stop_center():
+    """ray_aiming='real' drives the chief exactly onto the stop center at a
+    wide field where paraxial entrance-pupil routing leaves a residual (the
+    real chief ray's pupil aberration)."""
+    fld = Field(0.0, 20.0, unit='deg')
+    chief_par = abs(_y_at_stop(cooke(), fld)[5])         # center sample == chief
+    real_sys = cooke()
+    real_sys.ray_aiming = 'real'
+    chief_real = abs(_y_at_stop(real_sys, fld)[5])
+    assert chief_par > 1e-4          # paraxial routing misses the stop center
+    assert chief_real < 1e-9         # real aiming nails it
+
+
+def test_real_ray_aiming_linearizes_pupil_to_stop_map():
+    """Real aiming maps the normalized pupil linearly onto the stop (the
+    pupil-distortion correction), holding the rim marginal; paraxial routing
+    does not."""
+    fld = Field(0.0, 20.0, unit='deg')
+    rho = np.linspace(-1.0, 1.0, 11)             # fan(n=11) normalized pupil
+    real_sys = cooke()
+    real_sys.ray_aiming = 'real'
+    y_real = _y_at_stop(real_sys, fld)
+    y_par = _y_at_stop(cooke(), fld)
+    # y_stop / rho is constant under real aiming (linear map), not under paraxial
+    nz = rho != 0.0
+    ratio_real = y_real[nz] / rho[nz]
+    ratio_par = y_par[nz] / rho[nz]
+    assert np.std(ratio_real) < 1e-6
+    assert np.std(ratio_par) > 1e-3
+    # the aperture (rim-to-rim span at the stop) is held by the secant scale
+    np.testing.assert_allclose(y_real[-1] - y_real[0], y_par[-1] - y_par[0],
+                               rtol=1e-6)
+
+
+def test_ray_aiming_paraxial_is_the_default():
+    assert cooke().ray_aiming == 'paraxial'
 
 
 # ---------- routing geometry ------------------------------------------------
@@ -175,7 +224,9 @@ def test_launch_threads_aim_strict_to_aim_rays(monkeypatch):
 
     Without an opt-out a vignetting study (some rays unaimable) aborts the whole
     launch; aim_strict=False routes through to aim_rays(strict=False) so those
-    rays return best-effort instead.
+    rays return best-effort instead.  The same explicit aiming branch selects
+    position variation for collimated bundles and direction variation for
+    finite-conjugate bundles.
     """
     import importlib
     launch_mod = importlib.import_module('prysm.x.raytracing.launch')
@@ -183,12 +234,14 @@ def test_launch_threads_aim_strict_to_aim_rays(monkeypatch):
     captured = []
 
     def fake_aim(P, S, prescription, surface_index, target_xy, wvl, **kw):
-        captured.append(kw.get('strict'))
-        return P, np.ones(P.shape[0], dtype=bool)
+        captured.append((kw.get('strict'), kw.get('vary')))
+        return P, S, np.ones(P.shape[0], dtype=bool)
 
     monkeypatch.setattr(launch_mod, 'aim_rays', fake_aim)
     ld = cooke()
-    fld = Field(0.0, 14.0, unit='deg')
-    launch(ld, fld, WVL, Sampling.fan(n=5), aim_to=STOP_INDEX)
-    launch(ld, fld, WVL, Sampling.fan(n=5), aim_to=STOP_INDEX, aim_strict=False)
-    assert captured == [True, False]
+    angle_fld = Field(0.0, 14.0, unit='deg')
+    height_fld = Field(0.0, 1.0, kind='height', object_z=-100.0)
+    launch(ld, angle_fld, WVL, Sampling.fan(n=5), aim_to=STOP_INDEX)
+    launch(ld, height_fld, WVL, Sampling.fan(n=5), aim_to=STOP_INDEX,
+           aim_strict=False)
+    assert captured == [(True, 'position'), (False, 'direction')]

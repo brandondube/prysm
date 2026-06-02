@@ -4,6 +4,7 @@ rotationally symmetric subset, including the post-mirror sign convention."""
 import numpy as np
 import pytest
 
+from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing import materials
 from prysm.x.raytracing.io import read_seq, write_seq, read_zmx, write_zmx
@@ -15,16 +16,18 @@ def _air(wvl):
 
 
 def make_refractive():
-    return (LensData(epd=10.0, wavelengths=[0.55])
-            .add(Conic(1 / 50.0, 0.0), thickness=5.0, material=_air)
-            .add(Conic(-1 / 50.0, -0.5), thickness=95.0, material=_air)
-            .add(Plane(), typ='eval'))
+    lens = LensData()
+    (lens.add(Conic(1 / 50.0, 0.0), thickness=5.0, material=_air)
+         .add(Conic(-1 / 50.0, -0.5), thickness=95.0, material=_air)
+         .add(Plane(), typ='eval'))
+    return OpticalSystem(lens, aperture=10.0, wavelengths=[0.55])
 
 
 def make_mirror():
-    return (LensData(epd=10.0, wavelengths=[0.55])
-            .add(Conic(1 / 200.0, -1.0), typ='refl', thickness=50.0)
-            .add(Plane(), typ='eval'))
+    lens = LensData()
+    (lens.add(Conic(1 / 200.0, -1.0), typ='refl', thickness=50.0)
+         .add(Plane(), typ='eval'))
+    return OpticalSystem(lens, aperture=10.0, wavelengths=[0.55])
 
 
 def _assert_geometry_round_trips(a, b):
@@ -99,6 +102,17 @@ def test_zmx_export_carries_stop_index():
     ld.stop_index = 1
     back = read_zmx(write_zmx(ld), _is_text=True)
     assert back.stop_index == 1
+
+
+def test_zmx_export_maps_stop_index_past_coordbreak():
+    lens = LensData()
+    lens.add_coordbreak(decenter=(1.0, 0.0, 0.0), thickness=0.0)
+    lens.add(Plane(), typ='eval')
+    sys = OpticalSystem(lens, stop_index=0)
+    text = write_zmx(sys)
+    assert 'STOP 2\n' in text
+    back = read_zmx(text, _is_text=True)
+    assert back.stop_index == 0
 
 
 def test_zmx_export_rejects_unsupported_shape_without_loss():

@@ -24,10 +24,10 @@ from prysm.mathops import np
 from .spencer_and_murty import STYPE_REFLECT, STYPE_REFRACT
 from .paraxial import _paraxial_curvature, entrance_pupil_z
 from ._meta import (
-    lensdata_wavelength,
-    lensdata_epd,
-    lensdata_stop_index,
-    lensdata_n_ambient,
+    system_wavelength,
+    system_epd,
+    system_stop_index,
+    object_space_index,
 )
 
 # microns of wavelength per one prescription length unit, used to express the
@@ -205,12 +205,12 @@ def _marginal_chief_launch(prescription, field, wvl, n_ambient, epd,
     through the center of the entrance pupil.
 
     """
-    z_ep = entrance_pupil_z(prescription, wvl, n_ambient, stop_index)
+    z_ep = entrance_pupil_z(prescription, wvl, stop_index=stop_index)
     if z_ep is None:
         raise ValueError(
             'cannot locate the entrance pupil (no aperture stop, or the '
             'system is telecentric in object space); Seidel sums need a '
-            'defined chief ray.  Set stop_index on the LensData.'
+            'defined chief ray.  Set stop_index on the OpticalSystem.'
         )
     surfaces = _surfaces_of(prescription)
     z_s1 = float(surfaces[0].P[2])
@@ -365,36 +365,34 @@ class SeidelResult:
 
 
 def seidel_aberrations(prescription, field=None, wvl=None, *,
-                       n_ambient=None, epd=None, stop_index=None,
+                       epd=None, stop_index=None,
                        wavelengths=None, unit=None):
     """Compute surface-by-surface Seidel and primary chromatic aberrations.
 
     Parameters
     ----------
-    prescription : sequence of Surface or LensData
-        the system.  A LensData supplies epd, stop_index, fields,
-        reference wavelength, n_ambient, and unit when those arguments are
-        omitted.
+    prescription : sequence of Surface or OpticalSystem
+        the system.  An OpticalSystem supplies epd, stop_index, fields,
+        reference wavelength, and unit when those arguments are omitted; the
+        object-space index comes from the object surface material.
     field : Field, optional
         the field point at which the field-dependent terms (coma,
         astigmatism, distortion, lateral color) are evaluated.  Defaults to
-        the largest-magnitude field of a LensData.
+        the largest-magnitude field of the system.
     wvl : float or str, optional
-        wavelength in microns (or a LensData wavelength name).  Defaults to
-        the LensData reference wavelength.
-    n_ambient : float, optional
-        object-space index.
+        wavelength in microns (or a system wavelength name).  Defaults to
+        the reference wavelength.
     epd : float, optional
         entrance pupil diameter.
     stop_index : int, optional
         index of the aperture stop; required to locate the entrance pupil.
     wavelengths : sequence of float, optional
         two or more wavelengths (microns) for the primary chromatic terms.
-        Defaults to the LensData wavelengths.  Chromatic terms are skipped
+        Defaults to the system wavelengths.  Chromatic terms are skipped
         when fewer than two are available.
     unit : str, optional
         prescription length unit, used only for the waves conversion in
-        SeidelResult.wavefront_coefficients.  Defaults to a LensData unit,
+        SeidelResult.wavefront_coefficients.  Defaults to a system unit,
         else 'mm'.
 
     Returns
@@ -402,10 +400,10 @@ def seidel_aberrations(prescription, field=None, wvl=None, *,
     SeidelResult
 
     """
-    wvl = lensdata_wavelength(prescription, wvl)
-    n_ambient = lensdata_n_ambient(prescription, n_ambient)
-    epd = lensdata_epd(prescription, epd)
-    stop_index = lensdata_stop_index(prescription, stop_index)
+    wvl = system_wavelength(prescription, wvl)
+    n_object = object_space_index(prescription, wvl)
+    epd = system_epd(prescription, epd, wvl)
+    stop_index = system_stop_index(prescription, stop_index)
     if epd is None:
         raise ValueError('an entrance pupil diameter is required (epd=...)')
     if field is None:
@@ -425,14 +423,14 @@ def seidel_aberrations(prescription, field=None, wvl=None, *,
         wavelengths = list(wavelengths.values())
 
     (y0_m, u0_m), (y0_c, u0_c) = _marginal_chief_launch(
-        prescription, field, wvl, n_ambient, epd, stop_index)
+        prescription, field, wvl, n_object, epd, stop_index)
 
-    marg = paraxial_trace(prescription, y0_m, u0_m, wvl, n_ambient)
-    chief = paraxial_trace(prescription, y0_c, u0_c, wvl, n_ambient)
+    marg = paraxial_trace(prescription, y0_m, u0_m, wvl, n_object)
+    chief = paraxial_trace(prescription, y0_c, u0_c, wvl, n_object)
 
     # Lagrange (optical) invariant, evaluated object-side; constant through
     # the system, so any surface would give the same value.
-    H = float(n_ambient) * (marg[0].y * u0_c - chief[0].y * u0_m)
+    H = float(n_object) * (marg[0].y * u0_c - chief[0].y * u0_m)
 
     nsurf = len(marg)
     SI = np.zeros(nsurf, dtype=config.precision)
@@ -447,8 +445,8 @@ def seidel_aberrations(prescription, field=None, wvl=None, *,
         wl_sorted = sorted(float(w) for w in wavelengths)
         wl_short, wl_long = wl_sorted[0], wl_sorted[-1]
         surfaces = _surfaces_of(prescription)
-        nb_s, na_s = _signed_indices(surfaces, wl_short, n_ambient)
-        nb_l, na_l = _signed_indices(surfaces, wl_long, n_ambient)
+        nb_s, na_s = _signed_indices(surfaces, wl_short, n_object)
+        nb_l, na_l = _signed_indices(surfaces, wl_long, n_object)
         CI = np.zeros(nsurf, dtype=config.precision)
         CII = np.zeros(nsurf, dtype=config.precision)
     else:

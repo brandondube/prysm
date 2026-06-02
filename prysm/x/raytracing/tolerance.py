@@ -50,6 +50,11 @@ from prysm.mathops import np
 from .design import _TraceCache
 
 
+def _as_lens(lensdata):
+    """Return the LensData spine, unwrapping an OpticalSystem if given one."""
+    return getattr(lensdata, 'lens', lensdata)
+
+
 def _resolve_slot(lensdata, category, surface, component=None):
     """Resolve a (category, surface) pair to a single LensData DOF slot.
 
@@ -57,7 +62,10 @@ def _resolve_slot(lensdata, category, surface, component=None):
     to three DOFs; pass component to select one by its offset -- decenter
     0/1/2 = dx/dy/dz, tilt 0/1/2 = rz/ry/rx (matching CoordBreak's layout).
 
+    Accepts either a LensData or an OpticalSystem wrapping one.
+
     """
+    lensdata = _as_lens(lensdata)
     slots = lensdata._category_slots(category, surface)
     if component is not None:
         slots = [s for s in slots if s[2] == int(component)]
@@ -87,7 +95,7 @@ class Perturbation:
 
     def __init__(self, lensdata, slot, sampler, nominal, step, name=''):
         self.name = str(name)
-        self.lensdata = lensdata
+        self.lensdata = _as_lens(lensdata)
         self.slot = slot
         self.sampler = sampler  # callable(rng) -> sampled float
         self.nominal = float(nominal)
@@ -120,6 +128,7 @@ class Perturbation:
         _resolve_slot); leave it None for scalar categories.
 
         """
+        lensdata = _as_lens(lensdata)
         slot = _resolve_slot(lensdata, category, surface, component)
         nom = float(lensdata.spec.get_value(slot))
         sigma = float(sigma)
@@ -138,6 +147,7 @@ class Perturbation:
         use .normal with an explicit absolute sigma in that case.
 
         """
+        lensdata = _as_lens(lensdata)
         slot = _resolve_slot(lensdata, category, surface, component)
         nom = float(lensdata.spec.get_value(slot))
         sigma = abs(nom) * float(sigma_rel)
@@ -151,6 +161,7 @@ class Perturbation:
     def uniform(cls, lensdata, category, surface, half_width, name='',
                 component=None):
         """Uniform over (nominal - half_width, nominal + half_width)."""
+        lensdata = _as_lens(lensdata)
         slot = _resolve_slot(lensdata, category, surface, component)
         nom = float(lensdata.spec.get_value(slot))
         hw = abs(float(half_width))
@@ -164,6 +175,7 @@ class Perturbation:
     def triangular(cls, lensdata, category, surface, half_width, name='',
                    component=None):
         """Triangular distribution centered on nominal with half-width hw."""
+        lensdata = _as_lens(lensdata)
         slot = _resolve_slot(lensdata, category, surface, component)
         nom = float(lensdata.spec.get_value(slot))
         hw = abs(float(half_width))

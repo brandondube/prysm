@@ -15,6 +15,7 @@ Two stretch deliverables of the wavefront-differential notes:
 import numpy as np
 import pytest
 
+from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.surfaces import Conic, Plane
@@ -153,14 +154,15 @@ def _air(w):
 
 
 def singlet():
-    ld = (LensData(epd=10.0, wavelengths=[0.5], n_ambient=1.0)
-          .add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
-          .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
-          .add(Plane(), typ='eval'))
+    ld_data = LensData()
+    (ld_data.add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
+            .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
+            .add(Plane(), typ='eval'))
+    ld = OpticalSystem(ld_data, aperture=10.0, wavelengths=[0.5])
     lens = [s for s in ld.to_surfaces() if s.typ != STYPE_EVAL]
-    bfd = float(paraxial_image_distance(lens, wvl=0.5, n_ambient=1.0))
+    bfd = float(paraxial_image_distance(lens, wvl=0.5))
     ld.rows[1].thickness = bfd
-    ld._invalidate()
+    ld.lens._invalidate()
     return ld
 
 

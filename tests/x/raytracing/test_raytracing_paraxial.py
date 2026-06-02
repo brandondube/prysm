@@ -9,7 +9,7 @@ from tests.x.raytracing.surface_helpers import (
 
 from prysm.x.raytracing.surfaces import Surface
 from prysm.x.raytracing import LensData
-from prysm.x.raytracing.surfaces import Conic
+from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing.paraxial import (
     system_matrix,
     paraxial_image_distance,
@@ -159,13 +159,30 @@ def test_lensdata_without_wavelengths_uses_default_wavelength():
     np.testing.assert_allclose(effective_focal_length(ld), 100.0)
 
 
-def test_lensdata_n_ambient_defaults_into_paraxial_calculations():
-    ld = LensData(n_ambient=1.33).add(
-        Conic(1 / 50.0, 0.0), typ='refr', material=lambda wvl: 1.5)
-    np.testing.assert_allclose(
-        effective_focal_length(ld),
-        effective_focal_length(ld, n_ambient=1.33),
-    )
+def test_object_index_comes_from_object_surface_material():
+    # the object-space index is the object surface (leading eval) material, not
+    # a single ambient scalar.  An immersed object (n=1.33) scales EFL by 1.33
+    # relative to the same lens in air, since efl = -n_object / C and the object
+    # gap leaves C unchanged.
+    from prysm.x.raytracing._meta import object_space_index
+    c = 1 / 50.0
+
+    def _lens(n_obj):
+        ld = LensData()
+        ld.add(Plane(), typ='eval', material=lambda wvl: n_obj, thickness=10.0)
+        ld.add(Conic(c, 0.0), typ='refr', material=lambda wvl: 1.5)
+        return ld
+
+    ld = _lens(1.33)
+    assert object_space_index(ld, 0.5) == pytest.approx(1.33)
+    # efl = -n_object / C with C = -(n_glass - n_object) * c
+    expected = 1.33 / ((1.5 - 1.33) * c)
+    np.testing.assert_allclose(effective_focal_length(ld, wvl=0.5),
+                               expected, rtol=1e-9)
+    # the air object recovers the bare single-surface focal length
+    expected_air = 1.0 / ((1.5 - 1.0) * c)
+    np.testing.assert_allclose(effective_focal_length(_lens(1.0), wvl=0.5),
+                               expected_air, rtol=1e-9)
 
 
 def test_efl_rc_telescope_matches_design():

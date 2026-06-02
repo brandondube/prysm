@@ -6,7 +6,8 @@ from prysm.mathops import np
 from . import raygen
 from .opt import aim_rays
 from .paraxial import entrance_pupil_z
-from ._meta import lensdata_epd
+from .spencer_and_murty import raytrace
+from ._meta import system_epd, object_space_index, system_stop_index
 
 
 class Field:
@@ -258,8 +259,110 @@ def _finite_PS(pupil_xy, pupil_z, field):
     return P, direction / norm
 
 
+def _perp_basis(w):
+    """Two orthonormal vectors spanning the plane perpendicular to unit w."""
+    helper = np.array([1.0, 0.0, 0.0], dtype=w.dtype)
+    if abs(float(w[0])) > 0.9:
+        helper = np.array([0.0, 1.0, 0.0], dtype=w.dtype)
+    e1 = helper - float(np.dot(helper, w)) * w
+    e1 = e1 / np.sqrt(np.sum(e1 * e1))
+    e2 = np.cross(w, e1)
+    return e1, e2
+
+
+def _object_space_cone_PS(prescription, field, wavelength, sampling, na):
+    """Sine-condition object cone for an object-space NA / F-number aperture.
+
+    The bundle leaves the finite-conjugate object point filling a cone whose
+    marginal ray makes object-space angle U with n_object * sin(U) == na (the
+    sine condition), so a normalized pupil coordinate rho maps to direction
+    sine rho * sin(U) -- the aplanatic parameterization, not the tan-space map
+    of the entrance-pupil-plane finite launch.  The cone is built about the
+    chief direction toward the paraxial entrance-pupil center; positioning it
+    on the stop (paraxial vs real) is the caller's ray-aiming step.
+
+    Returns (P, S, rho) where rho is the normalized pupil coordinate (rim at
+    radius 1) used by the ray-aiming step.
+    """
+    if field.kind != 'height':
+        raise ValueError(
+            'an object-space NA / F-number aperture requires a finite-'
+            "conjugate (kind='height') field")
+    n_obj = object_space_index(prescription, wavelength)
+    sinU = float(na) / float(n_obj)
+    if not (0.0 < sinU < 1.0):
+        raise ValueError(
+            f'object-space NA {na:g} over index {n_obj:g} gives sin(U)='
+            f'{sinU:g}, which is not a physical cone half-angle')
+
+    pupil_xy = sampling.build(1.0)  # normalized: rim at radius 1
+    if pupil_xy.dtype != config.precision:
+        pupil_xy = pupil_xy.astype(config.precision)
+    n_rays = pupil_xy.shape[0]
+
+    obj = np.array([field.hx, field.hy, field.object_z], dtype=config.precision)
+
+    ep_z = entrance_pupil_z(prescription, wavelength)
+    if ep_z is not None:
+        axis_pt = np.array([0.0, 0.0, float(ep_z)], dtype=config.precision)
+        chief = axis_pt - obj
+    else:
+        chief = np.array([0.0, 0.0, 1.0], dtype=config.precision)
+    chief = chief / np.sqrt(np.sum(chief * chief))
+
+    e1, e2 = _perp_basis(chief)
+    # S = sqrt(1 - sinU^2 |rho|^2) chief + sinU (rho_x e1 + rho_y e2)
+    rho = pupil_xy
+    trans = sinU * (rho[:, 0:1] * e1[np.newaxis, :]
+                    + rho[:, 1:2] * e2[np.newaxis, :])
+    axial_sq = 1.0 - sinU * sinU * np.sum(rho * rho, axis=1)
+    axial = np.sqrt(np.clip(axial_sq, 0.0, None))
+    S = axial[:, np.newaxis] * chief[np.newaxis, :] + trans
+    P = np.broadcast_to(obj, (n_rays, 3)).copy()
+    return P, S, rho
+
+
+def _real_aim_to_stop(P, S, rho, prescription, stop_index, wavelength, finite):
+    """Real-ray aiming: map the normalized pupil linearly onto the stop.
+
+    Traces the nominal bundle to the stop, fits the pupil->stop scale per axis
+    (the paraxial marginal landing the aperture implies), then aims every ray
+    so it lands at rho * scale on the stop.  This holds the aperture-defined
+    marginal fixed while correcting pupil aberration / distortion in the
+    interior and driving the chief exactly onto the stop center.  Collimated
+    bundles vary launch position; finite-conjugate bundles vary launch
+    direction (they share one object point).
+    """
+    trace_path = prescription[:stop_index + 1]
+    tr = raytrace(trace_path, P, S, wavelength)
+    L = tr.P[-1, :, :2]
+    valid = np.isfinite(L).all(axis=1)
+
+    def _scale(rk, lk):
+        # pupil->stop slope from the extreme pupil samples (a secant through
+        # the two rim rays): offset-free, so the chief maps to the stop center
+        # and the rim-to-rim aperture span is held while the interior is
+        # linearized.
+        rk = rk[valid]
+        lk = lk[valid]
+        if rk.size < 2:
+            return 0.0
+        imax = int(np.argmax(rk))
+        imin = int(np.argmin(rk))
+        drho = float(rk[imax] - rk[imin])
+        return float(lk[imax] - lk[imin]) / drho if abs(drho) > 1e-12 else 0.0
+
+    sx = _scale(rho[:, 0], L[:, 0])
+    sy = _scale(rho[:, 1], L[:, 1])
+    target = np.stack([rho[:, 0] * sx, rho[:, 1] * sy], axis=1)
+    vary = 'direction' if finite else 'position'
+    P, S, _ = aim_rays(P, S, prescription, stop_index, target, wavelength,
+                       vary=vary, strict=False)
+    return P, S
+
+
 def launch(prescription, field, wavelength, sampling, *,
-           epd=None, pupil_extent=None, n_ambient=1.0, pupil_z=None,
+           epd=None, pupil_extent=None, pupil_z=None,
            aim_to=None, aim_target=(0.0, 0.0), aim_strict=True):
     """Build (P, S) for one field, wavelength, and pupil sampling.
 
@@ -268,14 +371,17 @@ def launch(prescription, field, wavelength, sampling, *,
     fields launch a collimated bundle; kind='height' fields launch a
     finite-conjugate bundle diverging from the object point.
 
-    When the prescription knows its aperture stop (a LensData carries
-    stop_index), off-axis bundles are positioned so the pupil sampling lands
-    on the paraxial entrance pupil: collimated bundles are shifted laterally
-    at the launch plane so each ray crosses its pupil coordinate at the
+    When the prescription knows its aperture stop (an OpticalSystem carries
+    stop_index), off-axis bundles are positioned relative to the stop by the
+    system's ray_aiming mode.  'paraxial' (default) routes the sampling onto
+    the paraxial entrance pupil: collimated bundles are shifted laterally at
+    the launch plane so each ray crosses its pupil coordinate at the
     entrance-pupil z, and finite-conjugate bundles aim at the entrance-pupil
-    plane.  This makes the pupil coordinate of every ray meaningful for any
-    stop location, not only a stop at the first surface.  Pass aim_to=... to
-    run explicit ray aiming instead of paraxial entrance-pupil routing.
+    plane.  'real' iterates real rays so the pupil sampling maps linearly onto
+    the stop (correcting pupil aberration / distortion) with the aperture-
+    defined marginal held.  This makes the pupil coordinate of every ray
+    meaningful for any stop location, not only a stop at the first surface.
+    Pass aim_to=... to run explicit per-ray stop aiming regardless of the mode.
 
     Parameters
     ----------
@@ -295,8 +401,6 @@ def launch(prescription, field, wavelength, sampling, *,
         Defaults from the LensData epd when the prescription is a LensData.
     pupil_extent : float, optional
         pattern outer half-extent, used in place of epd/2 when given.
-    n_ambient : float, optional
-        ambient index of refraction (only used during aim).
     pupil_z : float, optional
         z position the collimated rays start at (the launch plane).  Default:
         the first surface vertex z.  With entrance-pupil routing active the
@@ -320,55 +424,86 @@ def launch(prescription, field, wavelength, sampling, *,
         shape (N, 3) launch positions and direction cosines.
 
     """
+    ray_aiming = str(getattr(prescription, 'ray_aiming', 'paraxial')).lower()
+    real_aiming = (ray_aiming == 'real' and aim_to is None
+                   and sampling.kind != 'chief')
+    stop_index = system_stop_index(prescription, None)
+
+    # object-space NA / F-number apertures define the launch by an object-space
+    # cone (sine condition) rather than an entrance-pupil diameter, unless the
+    # caller forced an explicit pupil size.
+    object_mode = False
     if epd is None and pupil_extent is None:
-        epd = lensdata_epd(prescription, None)  # default from LensData if any
-    if sampling.kind != 'chief' and epd is None and pupil_extent is None:
-        raise ValueError(
-            f'sampling kind {sampling.kind!r} needs an entrance pupil '
-            'size; pass epd=... or pupil_extent=...'
-        )
+        aperture = getattr(prescription, 'aperture', None)
+        bc = aperture.resolve(prescription, wavelength) if aperture is not None else None
+        object_mode = bc is not None and bc[0] in ('NA_OBJECT', 'FNO_OBJECT')
 
-    if pupil_extent is not None:
-        extent = float(pupil_extent)
-    elif epd is not None:
-        extent = float(epd) / 2.0
+    if object_mode:
+        na = bc[1] if bc[0] == 'NA_OBJECT' else 1.0 / (2.0 * bc[1])
+        P, S, rho = _object_space_cone_PS(prescription, field, wavelength,
+                                          sampling, na)
+        finite = True
     else:
-        extent = 0.0
-    pupil_xy = sampling.build(extent)
-    if pupil_xy.dtype != config.precision:
-        pupil_xy = pupil_xy.astype(config.precision)
+        if epd is None and pupil_extent is None:
+            # default from the system aperture spec if any
+            epd = system_epd(prescription, None, wavelength)
+        if sampling.kind != 'chief' and epd is None and pupil_extent is None:
+            raise ValueError(
+                f'sampling kind {sampling.kind!r} needs an entrance pupil '
+                'size; pass epd=... or pupil_extent=...'
+            )
 
-    if pupil_z is None:
-        pupil_z = float(prescription[0].P[2])
-    pupil_z = float(pupil_z)
+        if pupil_extent is not None:
+            extent = float(pupil_extent)
+        elif epd is not None:
+            extent = float(epd) / 2.0
+        else:
+            extent = 0.0
+        pupil_xy = sampling.build(extent)
+        if pupil_xy.dtype != config.precision:
+            pupil_xy = pupil_xy.astype(config.precision)
 
-    # paraxial entrance-pupil routing: only when the stop is known and the
-    # caller has not asked for explicit ray aiming.
-    ep_z = None
-    if aim_to is None:
-        ep_z = entrance_pupil_z(prescription, wavelength, n_ambient)
+        if pupil_z is None:
+            pupil_z = float(prescription[0].P[2])
+        pupil_z = float(pupil_z)
 
-    if field.kind == 'angle':
-        P, S = _collimated_PS(pupil_xy, pupil_z, field)
-        if ep_z is not None:
-            # slide each launch point along its ray so the pupil coordinate is
-            # reached at the entrance-pupil z (chief then crosses the EP
-            # center).  The collimated bundle shares one direction, so a single
-            # slide moves every ray.  Stay backend-pure (no float()) and add
-            # out-of-place so gradients w.r.t. the entrance-pupil location flow.
-            S0 = S[0]
-            shift = (pupil_z - ep_z) / S0[2]
-            offset = np.stack([shift * S0[0], shift * S0[1],
-                               np.zeros_like(shift)])
-            P = P + offset
-    else:
-        target_z = float(ep_z) if ep_z is not None else pupil_z
-        P, S = _finite_PS(pupil_xy, target_z, field)
+        # paraxial entrance-pupil routing seeds the bundle (it also fixes the
+        # aperture-defined marginal height); 'real' ray aiming then refines it
+        # onto the stop downstream.  Skipped only for explicit aim_to aiming.
+        ep_z = None
+        if aim_to is None:
+            ep_z = entrance_pupil_z(prescription, wavelength)
 
+        if field.kind == 'angle':
+            P, S = _collimated_PS(pupil_xy, pupil_z, field)
+            if ep_z is not None:
+                # slide each launch point along its ray so the pupil coordinate
+                # is reached at the entrance-pupil z (chief then crosses the EP
+                # center).  The collimated bundle shares one direction, so a
+                # single slide moves every ray.  Stay backend-pure (no float())
+                # and add out-of-place so gradients w.r.t. the entrance-pupil
+                # location flow.
+                S0 = S[0]
+                shift = (pupil_z - ep_z) / S0[2]
+                offset = np.stack([shift * S0[0], shift * S0[1],
+                                   np.zeros_like(shift)])
+                P = P + offset
+            finite = False
+        else:
+            target_z = float(ep_z) if ep_z is not None else pupil_z
+            P, S = _finite_PS(pupil_xy, target_z, field)
+            finite = True
+        rho = pupil_xy / extent if extent > 0.0 else np.zeros_like(pupil_xy)
+
+    # position the bundle relative to the stop
     if aim_to is not None:
-        P, _ = aim_rays(
+        vary = 'direction' if finite else 'position'
+        P, S, _ = aim_rays(
             P, S, prescription, aim_to, aim_target, wavelength,
-            n_ambient=n_ambient, strict=aim_strict,
+            strict=aim_strict, vary=vary,
         )
+    elif real_aiming and stop_index is not None:
+        P, S = _real_aim_to_stop(P, S, rho, prescription, stop_index,
+                                 wavelength, finite)
 
     return P, S

@@ -21,7 +21,7 @@ from .spencer_and_murty import (
 )
 from .analysis import transverse_ray_aberration, field_curvature, distortion
 from .surfaces import STYPE_REFLECT, STYPE_REFRACT
-from ._meta import lensdata_wavelength
+from ._meta import system_wavelength
 
 import numpy as np  # see module docstring; do not "fix" to mathops np
 
@@ -689,7 +689,7 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
         An axis object
 
     """
-    wvl = lensdata_wavelength(prescription, wvl)
+    wvl = system_wavelength(prescription, wvl)
     x = x.lower()
     y = y.lower()
     fig, ax = share_fig_ax(fig, ax)
@@ -1091,7 +1091,7 @@ def _field_axis_values(fields):
 
 
 def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
-                         n_ambient=1.0, marginal_fraction=1e-3,
+                         marginal_fraction=1e-3,
                          reference='image', c='r', lw=1, alpha=1, zorder=4,
                          label=None, fig=None, ax=None):
     """Plot sagittal and tangential field curves.
@@ -1111,9 +1111,7 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
     wavelength : float, optional
         in microns; defaults from a LensData reference wavelength.
     epd : float, optional
-        entrance pupil diameter; defaults from a LensData.
-    n_ambient : float, optional
-        ambient index.
+        entrance pupil diameter; defaults from a system aperture spec.
     marginal_fraction : float, optional
         pupil zone for the marginal ray, as a fraction of EPD/2.  Default
         1e-3 -- the differential (Coddington) field curves; see
@@ -1143,7 +1141,7 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
     """
     fig, ax = share_fig_ax(fig, ax)
     sagittal_z, tangential_z = field_curvature(
-        prescription, fields, wavelength, epd=epd, n_ambient=n_ambient,
+        prescription, fields, wavelength, epd=epd,
         marginal_fraction=marginal_fraction,
     )
     sagittal_z = _to_np(sagittal_z, dtype=float)
@@ -1170,7 +1168,7 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
 
 
 def plot_distortion(prescription, fields, wavelength=None, *, epd=None,
-                    n_ambient=1.0, distortion_type='f-tan', pupil_z=None,
+                    distortion_type='f-tan', pupil_z=None,
                     c='r', lw=1, alpha=1, zorder=4, label=None,
                     fig=None, ax=None):
     """Plot percent distortion against field magnitude.
@@ -1188,9 +1186,7 @@ def plot_distortion(prescription, fields, wavelength=None, *, epd=None,
     wavelength : float, optional
         in microns; defaults from a LensData reference wavelength.
     epd : float, optional
-        entrance pupil diameter; defaults from a LensData.
-    n_ambient : float, optional
-        ambient index.
+        entrance pupil diameter; defaults from a system aperture spec.
     distortion_type : str, optional
         'f-tan' (default) or 'linear-angle'; see analysis.distortion.
     pupil_z : float, optional
@@ -1216,7 +1212,7 @@ def plot_distortion(prescription, fields, wavelength=None, *, epd=None,
     """
     fig, ax = share_fig_ax(fig, ax)
     _, _, percent = distortion(
-        prescription, fields, wavelength, epd=epd, n_ambient=n_ambient,
+        prescription, fields, wavelength, epd=epd,
         distortion_type=distortion_type, pupil_z=pupil_z,
     )
     percent = _to_np(percent, dtype=float)

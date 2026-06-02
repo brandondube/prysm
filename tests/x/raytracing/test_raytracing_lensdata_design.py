@@ -6,6 +6,7 @@ import pytest
 
 from prysm.mathops import optimize
 
+from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import FRAUNHOFER_LINES_UM, LensData
 from prysm.x.raytracing import materials
 from prysm.x.raytracing.design import EFL, Problem, RmsSpotRadius
@@ -19,28 +20,29 @@ def n_bk7(wvl):
 
 
 def make_singlet(image_gap=95.0, with_image=True):
-    ld = (LensData(epd=20.0, fields=[0], wavelengths=FRAUNHOFER_LINES_UM,
-                   reference_wavelength='d')
-          .add(Conic(1 / 102.0, 0.0), thickness=6.0, material=n_bk7,
-               semidiameter=12.0)
-          .add(Conic(-1 / 102.0, 0.0), thickness=image_gap,
-               material=materials.air, semidiameter=12.0))
+    lens = LensData()
+    (lens.add(Conic(1 / 102.0, 0.0), thickness=6.0, material=n_bk7,
+              semidiameter=12.0)
+         .add(Conic(-1 / 102.0, 0.0), thickness=image_gap,
+              material=materials.air, semidiameter=12.0))
     if with_image:
-        ld.add(Plane(), typ='eval', material=materials.air,
-               semidiameter=12.0)
-    return ld
+        lens.add(Plane(), typ='eval', material=materials.air,
+                 semidiameter=12.0)
+    return OpticalSystem(lens, aperture=20.0, fields=[0],
+                         wavelengths=FRAUNHOFER_LINES_UM,
+                         reference_wavelength='d')
 
 
 def test_problem_x0_is_the_packed_free_vector():
     ld = make_singlet(with_image=False)
-    ld.vary('curvature', surfaces=[0, 1])
+    ld.lens.vary('curvature', surfaces=[0, 1])
     prob = Problem(ld, [EFL(ld.wavelength('d'), target=100.0)])
     np.testing.assert_allclose(prob.x0(), [1 / 102.0, -1 / 102.0])
 
 
 def test_problem_residuals_track_the_free_vector():
     ld = make_singlet(with_image=False)
-    ld.vary('curvature', surfaces=1)
+    ld.lens.vary('curvature', surfaces=1)
     wvl = ld.wavelength('d')
     target = 100.0
     prob = Problem(ld, [EFL(wvl, target=target)])
@@ -51,7 +53,7 @@ def test_problem_residuals_track_the_free_vector():
 
 def test_lensdata_efl_optimization_converges():
     ld = make_singlet(with_image=False)
-    ld.vary('curvature', surfaces=1)  # one DOF, one operand -> well posed
+    ld.lens.vary('curvature', surfaces=1)  # one DOF, one operand -> well posed
     wvl = ld.wavelength('d')
     target = 80.0
     prob = Problem(ld, equality_constraints=[EFL(wvl, target=target)])
@@ -65,7 +67,7 @@ def test_lensdata_thickness_and_curvature_jointly_varied():
     # vary a curvature AND a thickness; merit drives EFL to target.  Confirms
     # the free vector mixes shape and gap DOFs and the optimizer moves both.
     ld = make_singlet(with_image=False)
-    ld.vary('curvature', surfaces=1).vary('thickness', surfaces=0)
+    ld.lens.vary('curvature', surfaces=1).vary('thickness', surfaces=0)
     wvl = ld.wavelength('d')
     prob = Problem(ld, equality_constraints=[EFL(wvl, target=90.0)])
     x0 = prob.x0()
@@ -77,7 +79,7 @@ def test_lensdata_thickness_and_curvature_jointly_varied():
 
 def test_focal_length_constraint_is_not_an_objective_residual():
     ld = make_singlet(with_image=False)
-    ld.vary('curvature', surfaces=1)
+    ld.lens.vary('curvature', surfaces=1)
     wvl = ld.wavelength('d')
     prob = Problem(ld, equality_constraints=[EFL(wvl, target=90.0)])
     assert prob.residuals(prob.x0()).size == 0
@@ -86,7 +88,7 @@ def test_focal_length_constraint_is_not_an_objective_residual():
 
 def test_fd_free_jacobian_matches_numeric_merit_gradient():
     ld = make_singlet(with_image=False)
-    ld.vary('curvature', surfaces=[0, 1])
+    ld.lens.vary('curvature', surfaces=[0, 1])
     wvl = ld.wavelength('d')
     prob = Problem(ld, [EFL(wvl, target=100.0)])
     x = prob.x0()
@@ -99,17 +101,17 @@ def test_fd_free_jacobian_matches_numeric_merit_gradient():
         xp = x.copy(); xp[i] += h
         xm = x.copy(); xm[i] -= h
         ref[i] = (prob.merit(xp) - prob.merit(xm)) / (2 * h)
-    ld.update(x)
+    ld.lens.update(x)
     np.testing.assert_allclose(J, ref, rtol=1e-4)
 
 
 def test_jacobian_restores_free_vector():
     ld = make_singlet(with_image=False)
-    ld.vary('curvature', surfaces=[0, 1])
+    ld.lens.vary('curvature', surfaces=[0, 1])
     prob = Problem(ld, [EFL(ld.wavelength('d'), target=100.0)])
     x0 = prob.x0()
     prob.jacobian(x0)
-    np.testing.assert_allclose(ld.pack(), x0)
+    np.testing.assert_allclose(ld.lens.pack(), x0)
 
 
 def test_rms_spot_operand_decreases_under_optimization():
@@ -117,19 +119,19 @@ def test_rms_spot_operand_decreases_under_optimization():
     wvl = ld.wavelength('d')
     P, S = launch(ld, ld.field(0), wvl, Sampling.hex(nrings=3), epd=ld.epd)
     op = RmsSpotRadius(P, S, wvl)
-    ld.vary('curvature', surfaces=[0, 1])
+    ld.lens.vary('curvature', surfaces=[0, 1])
     prob = Problem(ld, [op])
     spot0 = op(ld, _fresh_cache(prob))
     res = optimize.least_squares(prob.residuals, prob.x0(), jac='3-point',
                                  max_nfev=60)
-    ld.update(res.x)
+    ld.lens.update(res.x)
     spot1 = op(ld, _fresh_cache(prob))
     assert spot1 <= spot0
 
 
 def test_lensdata_autograd_jacobian_requires_torch():
     ld = make_singlet(with_image=False)
-    ld.vary('curvature', surfaces=1)
+    ld.lens.vary('curvature', surfaces=1)
     prob = Problem(ld, [EFL(ld.wavelength('d'), target=100.0)])
     with pytest.raises(RuntimeError, match='backend to be torch'):
         prob.jacobian(prob.x0(), method='autograd')

@@ -175,9 +175,9 @@ def test_wavefront_uses_penultimate_surface_image_medium():
     wvl = 0.55
     P, S = launch(presc, Field(0., 0.), wvl,
                   Sampling.fan(n=9), epd=4.0, pupil_z=-5.0)
-    opd, _, _ = wavefront(presc, P, S, wvl, n_ambient=1.0)
+    opd, _, _ = wavefront(presc, P, S, wvl)
 
-    trace = raytrace(presc, P, S, wvl, n_ambient=1.0)
+    trace = raytrace(presc, P, S, wvl)
     chief = len(P) // 2
     C, _, P_xp = xp_reference_sphere(trace.P[-1, chief], trace.S[-1, chief])
     expected = opd_from_raytrace(trace.P, trace.S, trace.OPL, C, P_xp,
@@ -198,7 +198,7 @@ def test_wavefront_uses_surface_zero_object_medium_when_present():
                   Sampling.fan(n=9), epd=4.0, pupil_z=-20.0)
     opd, _, _ = wavefront(presc, P, S, wvl)
 
-    trace = raytrace(presc, P, S, wvl, n_ambient=1.2)
+    trace = raytrace(presc, P, S, wvl)
     chief = len(P) // 2
     C, _, P_xp = xp_reference_sphere(trace.P[-1, chief], trace.S[-1, chief])
     expected = opd_from_raytrace(trace.P, trace.S, trace.OPL, C, P_xp,

@@ -188,15 +188,17 @@ def test_raytrace_field_carries_trace_and_amplitude():
 
 def test_raytrace_field_tir_gives_zero_amplitude():
     """Rays beyond the critical angle carry zero transmitted amplitude."""
-    # bundle inside glass (n_ambient=1.5) onto a flat glass->air interface at
-    # 50 deg; critical angle is ~41.8 deg, so all rays totally internally
-    # reflect and transmit no power.
-    presc = [plane(interaction='refr', P=[0, 0, 0], material=lambda w: 1.0),
+    # bundle inside glass onto a flat glass->air interface at 50 deg; critical
+    # angle is ~41.8 deg, so all rays totally internally reflect and transmit
+    # no power.  The launch medium (n=1.5) is carried by a leading eval object
+    # surface -- the convention for an immersed launch.
+    presc = [plane(interaction='eval', P=[0, 0, -5.0], material=lambda w: 1.5),
+             plane(interaction='refr', P=[0, 0, 0], material=lambda w: 1.0),
              plane(interaction='eval', P=[0, 0, 10.0])]
     wvl = 0.55e-3
     P, S = launch(presc, Field(0.0, 50.0, kind='angle'), wvl,
-                  Sampling.rect(n=3), epd=2.0, pupil_z=-5.0, n_ambient=1.5)
-    ft = field.raytrace_field(presc, P, S, wvl, n_ambient=1.5)
+                  Sampling.rect(n=3), epd=2.0, pupil_z=-5.0)
+    ft = field.raytrace_field(presc, P, S, wvl)
     assert np.all(ft.amplitude == 0.0)
 
 

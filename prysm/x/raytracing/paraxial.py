@@ -19,10 +19,10 @@ from prysm.mathops import np
 
 from .spencer_and_murty import STYPE_REFLECT, STYPE_REFRACT
 from ._meta import (
-    lensdata_wavelength,
-    lensdata_epd,
-    lensdata_stop_index,
-    lensdata_n_ambient,
+    system_wavelength,
+    system_epd,
+    system_stop_index,
+    object_space_index,
 )
 
 
@@ -64,11 +64,11 @@ def _apply_surface_matrix(M, n, surf, wvl):
     return M, n
 
 
-def _walk_matrix(prescription, wvl, n_ambient, *,
+def _walk_matrix(prescription, wvl, n_start, *,
                  end_index=None, include_end_surface=True):
-    """Walk a prescription and compose its ABCD matrix."""
+    """Walk a prescription and compose its ABCD matrix from a starting index."""
     M = np.eye(2, dtype=config.precision)
-    n = float(n_ambient)
+    n = float(n_start)
     z_prev = float(prescription[0].P[2])
     if end_index is None:
         end_index = len(prescription) - 1
@@ -84,7 +84,7 @@ def _walk_matrix(prescription, wvl, n_ambient, *,
     return M, n
 
 
-def system_matrix(prescription, wvl=None, n_ambient=None):
+def system_matrix(prescription, wvl=None):
     """Compose the 2x2 ABCD system matrix for a sequential prescription.
 
     Walks the prescription in order: between consecutive surfaces a
@@ -98,17 +98,15 @@ def system_matrix(prescription, wvl=None, n_ambient=None):
     prescription : sequence of Surface
         the prescription to analyse.  Surfaces with a c entry in
         surf.params contribute paraxial power; planes and eval surfaces
-        do not.  When a LensData is passed, wvl defaults to its reference
-        wavelength.
+        do not.  When an OpticalSystem is passed, wvl defaults to its
+        reference wavelength.  The object-space index is taken from the object
+        surface material (the leading eval row), else air.
     wvl : float or str, optional
         wavelength in microns (passed to each refractive surface's n
-        callback).  A string names a wavelength of the LensData.  None
-        (default) resolves to the LensData reference wavelength, or 0.6328
+        callback).  A string names a wavelength of the system.  None
+        (default) resolves to the reference wavelength, or 0.6328
         for a bare Surface sequence.  Has no effect on a purely reflective
         prescription.
-    n_ambient : float, optional
-        Index in object space. Defaults from a LensData n_ambient when omitted,
-        else 1.0.
 
     Returns
     -------
@@ -119,12 +117,12 @@ def system_matrix(prescription, wvl=None, n_ambient=None):
         prescription contains an odd number of reflections.
 
     """
-    wvl = lensdata_wavelength(prescription, wvl)
-    n_ambient = lensdata_n_ambient(prescription, n_ambient)
-    return _walk_matrix(prescription, wvl, n_ambient)
+    wvl = system_wavelength(prescription, wvl)
+    n_object = object_space_index(prescription, wvl)
+    return _walk_matrix(prescription, wvl, n_object)
 
 
-def paraxial_image_distance(prescription, wvl=None, n_ambient=None):
+def paraxial_image_distance(prescription, wvl=None):
     """Signed distance from the last surface vertex to the paraxial image plane for a collimated on-axis input.
 
     For a marginal ray launched at (y0, u0 = 0), the image plane is the
@@ -137,8 +135,6 @@ def paraxial_image_distance(prescription, wvl=None, n_ambient=None):
     prescription : sequence of Surface
     wvl : float
         wavelength in microns
-    n_ambient : float
-        object-space index
 
     Returns
     -------
@@ -153,7 +149,7 @@ def paraxial_image_distance(prescription, wvl=None, n_ambient=None):
         stays collimated and there is no finite image distance.
 
     """
-    M, n_final = system_matrix(prescription, wvl=wvl, n_ambient=n_ambient)
+    M, n_final = system_matrix(prescription, wvl=wvl)
     A = M[0, 0]
     C = M[1, 0]
     if abs(C) < 1e-30:
@@ -165,25 +161,27 @@ def paraxial_image_distance(prescription, wvl=None, n_ambient=None):
     return -A * n_final / C
 
 
-def effective_focal_length(prescription, wvl=None, n_ambient=None):
+def effective_focal_length(prescription, wvl=None):
     """System effective focal length (EFL) from the ABCD matrix.
 
-    EFL = -n_ambient / C, where C is the system matrix entry coupling input
-    height to output reduced angle.  Sign follows the usual convention:
-    positive EFL for a converging system seen from object space.
+    EFL = -n_object / C, where C is the system matrix entry coupling input
+    height to output reduced angle and n_object is the object-space index.
+    Sign follows the usual convention: positive EFL for a converging system
+    seen from object space.
 
     """
-    n_ambient = lensdata_n_ambient(prescription, n_ambient)
-    M, _ = system_matrix(prescription, wvl=wvl, n_ambient=n_ambient)
+    wvl = system_wavelength(prescription, wvl)
+    n_object = object_space_index(prescription, wvl)
+    M, _ = _walk_matrix(prescription, wvl, n_object)
     C = M[1, 0]
     if abs(C) < 1e-30:
         raise ValueError(
             'paraxial system has no net power; EFL is infinite.'
         )
-    return -float(n_ambient) / C
+    return -float(n_object) / C
 
 
-def back_focal_length(prescription, wvl=None, n_ambient=None):
+def back_focal_length(prescription, wvl=None):
     """System back focal length (BFL) — distance from the last *powered* surface vertex to the rear focal point.
 
     Equivalent to paraxial_image_distance when the prescription ends at
@@ -200,13 +198,12 @@ def back_focal_length(prescription, wvl=None, n_ambient=None):
         raise ValueError(
             'prescription contains no powered surfaces; BFL is undefined.'
         )
-    bfd_from_end = paraxial_image_distance(prescription, wvl=wvl,
-                                           n_ambient=n_ambient)
+    bfd_from_end = paraxial_image_distance(prescription, wvl=wvl)
     extra = float(prescription[-1].P[2]) - float(last_powered.P[2])
     return bfd_from_end + extra
 
 
-def front_focal_length(prescription, wvl=None, n_ambient=None):
+def front_focal_length(prescription, wvl=None):
     """System front focal length (FFL) — distance from the front focal point to the first *powered* surface vertex.
 
     Sign convention: positive when the front focal point lies upstream of
@@ -225,20 +222,21 @@ def front_focal_length(prescription, wvl=None, n_ambient=None):
         raise ValueError(
             'prescription contains no powered surfaces; FFL is undefined.'
         )
-    n_ambient = lensdata_n_ambient(prescription, n_ambient)
-    M, _ = system_matrix(prescription, wvl=wvl, n_ambient=n_ambient)
+    wvl = system_wavelength(prescription, wvl)
+    n_object = object_space_index(prescription, wvl)
+    M, _ = _walk_matrix(prescription, wvl, n_object)
     C = M[1, 0]
     D = M[1, 1]
     if abs(C) < 1e-30:
         raise ValueError(
             'paraxial system has no net power; FFL is infinite.'
         )
-    ffl_from_first_entry = -float(D) * float(n_ambient) / float(C)
+    ffl_from_first_entry = -float(D) * float(n_object) / float(C)
     extra = float(first_powered.P[2]) - float(prescription[0].P[2])
     return ffl_from_first_entry + extra
 
 
-def _matrix_to_plane(prescription, k, wvl, n_ambient):
+def _matrix_to_plane(prescription, k, wvl, n_start):
     """ABCD from the first entry's vertex (with refraction) to the *plane* of prescription[k] — translation only, no refraction at k.
 
     Returns (M, n_at_plane).  Used for paraxial pupil location, where
@@ -246,11 +244,11 @@ def _matrix_to_plane(prescription, k, wvl, n_ambient):
     refracting surface.
 
     """
-    return _walk_matrix(prescription, wvl, n_ambient,
+    return _walk_matrix(prescription, wvl, n_start,
                         end_index=k, include_end_surface=False)
 
 
-def entrance_pupil_z(prescription, wvl=None, n_ambient=None, stop_index=None):
+def entrance_pupil_z(prescription, wvl=None, stop_index=None):
     """Lab-frame z of the paraxial entrance pupil.
 
     The entrance pupil is the image of the aperture stop in object space; its
@@ -262,12 +260,11 @@ def entrance_pupil_z(prescription, wvl=None, n_ambient=None, stop_index=None):
     Parameters
     ----------
     prescription : sequence of Surface
-        when a LensData is passed, wvl, n_ambient, and stop_index each default
-        to the corresponding system metadata it carries.
+        when an OpticalSystem is passed, wvl and stop_index each default to the
+        corresponding system metadata it carries; the object-space index comes
+        from the object surface material.
     wvl : float or str, optional
-        wavelength in microns (or a LensData wavelength name).
-    n_ambient : float, optional
-        object-space index.
+        wavelength in microns (or a system wavelength name).
     stop_index : int, optional
         index of the aperture stop within prescription.
 
@@ -280,20 +277,20 @@ def entrance_pupil_z(prescription, wvl=None, n_ambient=None, stop_index=None):
         object space (entrance pupil at infinity).
 
     """
-    wvl = lensdata_wavelength(prescription, wvl)
-    n_ambient = lensdata_n_ambient(prescription, n_ambient)
-    stop_index = lensdata_stop_index(prescription, stop_index)
+    wvl = system_wavelength(prescription, wvl)
+    n_object = object_space_index(prescription, wvl)
+    stop_index = system_stop_index(prescription, stop_index)
     if stop_index is None:
         return None
     k = int(stop_index)
     if k < 0 or k >= len(prescription):
         return None
-    M_to_stop, _ = _matrix_to_plane(prescription, k, wvl, n_ambient)
+    M_to_stop, _ = _matrix_to_plane(prescription, k, wvl, n_object)
     A_b = float(M_to_stop[0, 0])
     B_b = float(M_to_stop[0, 1])
     if abs(A_b) < 1e-30:
         return None  # telecentric: entrance pupil at infinity
-    ep_distance = B_b * float(n_ambient) / A_b
+    ep_distance = B_b * float(n_object) / A_b
     return float(prescription[0].P[2]) + ep_distance
 
 
@@ -410,8 +407,7 @@ class FirstOrderProperties:
         return '\n'.join(line for line in lines if line is not None)
 
 
-def first_order(prescription, wvl=None, n_ambient=None, *,
-                epd=None, stop_index=None):
+def first_order(prescription, wvl=None, *, epd=None, stop_index=None):
     """Compute paraxial first-order properties of a prescription.
 
     Combines effective_focal_length, back_focal_length,
@@ -420,25 +416,24 @@ def first_order(prescription, wvl=None, n_ambient=None, *,
     FirstOrderProperties instance whose __repr__ is a multi-line
     summary suitable for printing.
 
-    When a LensData is passed, wvl, epd, and stop_index each default to the
-    corresponding system metadata it carries.
+    When an OpticalSystem is passed, wvl, epd (via its aperture spec), and
+    stop_index each default to the corresponding system metadata it carries;
+    the object-space index comes from the object surface material.
 
     Parameters
     ----------
     prescription : sequence of Surface
     wvl : float or str, optional
-        wavelength in microns (or a LensData wavelength name).  None defaults
-        to the LensData reference wavelength, else 0.6328.
-    n_ambient : float
-        object-space index.
+        wavelength in microns (or a system wavelength name).  None defaults
+        to the reference wavelength, else 0.6328.
     epd : float, optional
         entrance pupil diameter.  When supplied, F-number and image-space
         NA are computed; combined with stop_index, pupil diameters as
-        well.  Defaults from the LensData epd when omitted.
+        well.  Defaults from the system aperture spec when omitted.
     stop_index : int, optional
         index of the aperture stop within prescription.  When
         supplied, paraxial entrance and exit pupil z-positions are
-        computed.  Defaults from the LensData stop_index when omitted.
+        computed.  Defaults from the system stop_index when omitted.
         Convention: the stop is treated as an aperture in a
         plane (no refraction at the stop in the EP path); the stop's own
         refraction, if any, is carried by the post-stop matrix used for
@@ -452,24 +447,24 @@ def first_order(prescription, wvl=None, n_ambient=None, *,
         None.
 
     """
-    wvl = lensdata_wavelength(prescription, wvl)
-    n_ambient = lensdata_n_ambient(prescription, n_ambient)
-    epd = lensdata_epd(prescription, epd)
-    stop_index = lensdata_stop_index(prescription, stop_index)
+    wvl = system_wavelength(prescription, wvl)
+    n_object = object_space_index(prescription, wvl)
+    epd = system_epd(prescription, epd, wvl)
+    stop_index = system_stop_index(prescription, stop_index)
     out = FirstOrderProperties()
     n_surfaces = len(prescription)
     if n_surfaces == 0:
         raise ValueError('prescription is empty')
 
     out.wavelength = float(wvl)
-    out.n_object = float(n_ambient)
+    out.n_object = float(n_object)
     out.n_surfaces = n_surfaces
     out.n_refractive = sum(1 for s in prescription if s.typ == STYPE_REFRACT)
     out.n_reflective = sum(1 for s in prescription if s.typ == STYPE_REFLECT)
     out.n_eval = n_surfaces - out.n_refractive - out.n_reflective
     out.total_track = float(prescription[-1].P[2]) - float(prescription[0].P[2])
 
-    M, n_image_signed = system_matrix(prescription, wvl=wvl, n_ambient=n_ambient)
+    M, n_image_signed = _walk_matrix(prescription, wvl, n_object)
     out.n_image = float(n_image_signed)
     A = float(M[0, 0])
     B = float(M[0, 1])
@@ -478,7 +473,7 @@ def first_order(prescription, wvl=None, n_ambient=None, *,
 
     has_power = abs(C) >= 1e-30
     if has_power:
-        out.efl = -float(n_ambient) / C
+        out.efl = -float(n_object) / C
         out.paraxial_image_distance = -A * out.n_image / C
         out.paraxial_image_z = (float(prescription[-1].P[2])
                                 + out.paraxial_image_distance)
@@ -495,7 +490,7 @@ def first_order(prescription, wvl=None, n_ambient=None, *,
                        + float(prescription[-1].P[2])
                        - float(last_powered.P[2]))
         if first_powered is not None:
-            ffl_from_first = -D * float(n_ambient) / C
+            ffl_from_first = -D * float(n_object) / C
             out.ffl = (ffl_from_first
                        + float(first_powered.P[2])
                        - float(prescription[0].P[2]))
@@ -516,16 +511,15 @@ def first_order(prescription, wvl=None, n_ambient=None, *,
         out.stop_index = k
 
         M_to_stop, n_at_stop = _matrix_to_plane(prescription, k, wvl,
-                                                n_ambient)
-        M_from_stop, _ = system_matrix(prescription[k:], wvl=wvl,
-                                       n_ambient=n_at_stop)
+                                                n_object)
+        M_from_stop, _ = _walk_matrix(prescription[k:], wvl, n_at_stop)
         A_b = float(M_to_stop[0, 0])
         B_b = float(M_to_stop[0, 1])
         B_a = float(M_from_stop[0, 1])
         D_a = float(M_from_stop[1, 1])
 
         if abs(A_b) >= 1e-30:
-            out.ep_distance = B_b * float(n_ambient) / A_b
+            out.ep_distance = B_b * float(n_object) / A_b
             out.ep_z = float(prescription[0].P[2]) + out.ep_distance
         if abs(D_a) >= 1e-30:
             out.xp_distance = -B_a * out.n_image / D_a

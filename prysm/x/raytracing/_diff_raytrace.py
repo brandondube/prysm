@@ -554,8 +554,7 @@ def _eye3():
     return np.eye(3, dtype=config.precision)
 
 
-def raytrace_with_tangents(surfaces, P, S, wvl, seeds, n_ambient=1.0,
-                           n_ambient_dot=None, tol_sag=None):
+def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None):
     """Trace (P, S) and propagate the tangent bundle for every seed.
 
     Runs the authoritative nominal trace via spencer_and_murty.raytrace, then
@@ -572,10 +571,6 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, n_ambient=1.0,
         wavelength, microns.
     seeds : sequence of DiffSeed
         one per perturbation parameter; defines the trailing parameter axis.
-    n_ambient : float, optional
-        object-space index.
-    n_ambient_dot : ndarray (P,), optional
-        tangent of the ambient index (rarely nonzero).
     tol_sag : float, optional
         Newton convergence tolerance, forwarded to the nominal trace.
 
@@ -596,7 +591,7 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, n_ambient=1.0,
     n_rays = P.shape[0]
     jj = len(surfaces)
 
-    trace = raytrace(surfaces, P, S, wvl, n_ambient=n_ambient, tol_sag=tol_sag)
+    trace = raytrace(surfaces, P, S, wvl, tol_sag=tol_sag)
 
     Qdot_s, Rdot_s, nprimedot_s, shape_params, sag_partial_fns = _assemble_seeds(
         jj, seeds, n_params)
@@ -607,11 +602,10 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, n_ambient=1.0,
 
     Pdot = Pdot_hist[0]
     Sdot = Sdot_hist[0]
-    nj = float(n_ambient)
-    if n_ambient_dot is None:
-        nj_dot = np.zeros(n_params, dtype=config.precision)
-    else:
-        nj_dot = np.asarray(n_ambient_dot, dtype=config.precision)
+    # launch medium is intrinsic to the surfaces (leading eval object material,
+    # else air); no seed perturbs the object medium, so its tangent is zero.
+    nj = float(object_space_index(surfaces, wvl))
+    nj_dot = np.zeros(n_params, dtype=config.precision)
 
     Pdot_prev = Pdot
     for j, surf in enumerate(surfaces):
@@ -755,7 +749,7 @@ def d_intersect_reference_sphere(P, S, Pdot, Sdot, C, Cdot, R, Rdot):
 
 
 def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
-                            n_ambient=None, chief_index=None,
+                            chief_index=None,
                             axis_point=None, axis_dir=None, P_xp=None,
                             field=None, output='length'):
     """Trace, compute OPD on the chief reference sphere, and its tangent maps.
@@ -784,9 +778,8 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
     """
     P = np.asarray(P).astype(config.precision)
     S = np.asarray(S).astype(config.precision)
-    n_object = object_space_index(surfaces, wavelength, n_ambient)
-    res = raytrace_with_tangents(surfaces, P, S, wavelength, seeds,
-                                 n_ambient=n_object)
+    n_object = object_space_index(surfaces, wavelength)
+    res = raytrace_with_tangents(surfaces, P, S, wavelength, seeds)
     trace = res.trace
 
     if chief_index is None:

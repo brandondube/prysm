@@ -18,6 +18,7 @@ agree.
 import numpy as np
 import pytest
 
+from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.surfaces import Conic, Plane
@@ -45,14 +46,15 @@ def _air(w):
 
 
 def singlet():
-    ld = (LensData(epd=EPD, wavelengths=[WVL], n_ambient=1.0)
-          .add(Conic(1 / 24.0, 0.0), typ='refr', thickness=5.0, material=_glass)
-          .add(Conic(-1 / 80.0, 0.0), typ='refr', thickness=20.0, material=_air)
-          .add(Plane(), typ='eval'))
+    ld_data = LensData()
+    (ld_data.add(Conic(1 / 24.0, 0.0), typ='refr', thickness=5.0, material=_glass)
+            .add(Conic(-1 / 80.0, 0.0), typ='refr', thickness=20.0, material=_air)
+            .add(Plane(), typ='eval'))
+    ld = OpticalSystem(ld_data, aperture=EPD, wavelengths=[WVL])
     lens = [s for s in ld.to_surfaces() if s.typ != STYPE_EVAL]
-    bfd = float(paraxial_image_distance(lens, wvl=WVL, n_ambient=1.0))
+    bfd = float(paraxial_image_distance(lens, wvl=WVL))
     ld.rows[1].thickness = bfd + DEFOCUS
-    ld._invalidate()
+    ld.lens._invalidate()
     return ld
 
 
@@ -84,7 +86,7 @@ def reoptimize_rms(ld, comps, P, S, n_iter=12):
         for cp, v in zip(comps, cvals):
             cp.set(float(v))
         opd, _, _ = wavefront(ld.to_surfaces(), P, S, WVL,
-                              n_ambient=ld.n_ambient, field=FLD)
+                               field=FLD)
         return opd
 
     try:

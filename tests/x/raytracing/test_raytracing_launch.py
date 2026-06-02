@@ -230,7 +230,7 @@ def test_aim_chief_to_stop_center_lands_at_zero():
     # chief at modest field
     P, S = launch(presc, Field(0., 2., unit='deg'), 0.55,
                   Sampling.chief(), epd=4.0, pupil_z=-10.0)
-    P_aim, _ = aim_rays(P, S, presc, surface_index=1,
+    P_aim, _, _ = aim_rays(P, S, presc, surface_index=1,
                         target_xy=(0.0, 0.0), wvl=0.55, tol=1e-12)
     trace = raytrace(presc, P_aim, S, 0.55)
     # at stop (surface index 1 in the prescription), x and y should be near 0
@@ -243,7 +243,7 @@ def test_aim_preserves_launch_z():
     P, S = launch(presc, Field(0., 1., unit='deg'), 0.55,
                   Sampling.fan(n=3), epd=4.0, pupil_z=-10.0)
     z_before = P[:, 2].copy()
-    P_aim, _ = aim_rays(P, S, presc, surface_index=1,
+    P_aim, _, _ = aim_rays(P, S, presc, surface_index=1,
                         target_xy=(0.0, 0.0), wvl=0.55, tol=1e-9)
     np.testing.assert_array_equal(P_aim[:, 2], z_before)
 
@@ -256,3 +256,15 @@ def test_launch_with_aim_to_stop_chief_lands_at_zero():
                   aim_to=1)
     trace = raytrace(presc, P, S, 0.55)
     np.testing.assert_allclose(trace.P[2, 0, :2], (0., 0.), atol=1e-7)
+
+
+def test_launch_aim_to_finite_bundle_keeps_object_point():
+    """Finite-conjugate explicit aiming varies direction, not object point."""
+    presc = _refractive_singlet_with_internal_stop()
+    fld = Field(0.0, 1.0, kind='height', object_z=-10.0)
+    P, S = launch(presc, fld, 0.55, Sampling.fan(n=3), epd=10.0,
+                  aim_to=1, aim_strict=False)
+    np.testing.assert_allclose(P, np.array([[0.0, 1.0, -10.0]] * 3),
+                               atol=1e-12)
+    trace = raytrace(presc, P, S, 0.55)
+    np.testing.assert_allclose(trace.P[2, :, :2], 0.0, atol=1e-7)

@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from prysm.x.raytracing import (
+    OpticalSystem,
     FRAUNHOFER_LINES_UM,
     CoordBreak,
     Field,
@@ -31,15 +32,13 @@ def n_bk7(wvl):
 
 
 def make_singlet_lensdata(image_gap=95.0):
-    return (
-        LensData(epd=20.0, fields=[0], wavelengths=FRAUNHOFER_LINES_UM,
-                 reference_wavelength='d')
-        .add(Conic(1 / 102.0, 0.0), thickness=6.0, material=n_bk7,
-             semidiameter=10.0)
-        .add(Conic(-1 / 102.0, 0.0), thickness=image_gap,
-             material=materials.air, semidiameter=10.0)
-        .add(Plane(), typ='eval', material=materials.air, semidiameter=10.0)
-    )
+    ld = LensData()
+    (ld.add(Conic(1 / 102.0, 0.0), thickness=6.0, material=n_bk7,
+            semidiameter=10.0)
+       .add(Conic(-1 / 102.0, 0.0), thickness=image_gap,
+            material=materials.air, semidiameter=10.0)
+       .add(Plane(), typ='eval', material=materials.air, semidiameter=10.0))
+    return ld
 
 
 def make_singlet_hand(image_gap=95.0):
@@ -244,18 +243,20 @@ def test_bounds_default_to_infinite():
 # ---------------------------------------------------------------------------
 
 def test_metadata_absorbed_and_resolved():
-    ld = make_singlet_lensdata()
-    assert ld.epd == 20.0
-    assert ld.reference_wavelength == 'd'
-    assert ld.wavelength('d') == pytest.approx(FRAUNHOFER_LINES_UM['d'])
-    assert ld.wavelength() == pytest.approx(FRAUNHOFER_LINES_UM['d'])
-    assert ld.wavelength(0.5) == pytest.approx(0.5)
-    assert isinstance(ld.field(0), Field)
-    assert ld.field(0).hy == pytest.approx(0.0)
+    sys = OpticalSystem(make_singlet_lensdata(), aperture=20.0, fields=[0],
+                        wavelengths=FRAUNHOFER_LINES_UM,
+                        reference_wavelength='d')
+    assert sys.epd == 20.0
+    assert sys.reference_wavelength == 'd'
+    assert sys.wavelength('d') == pytest.approx(FRAUNHOFER_LINES_UM['d'])
+    assert sys.wavelength() == pytest.approx(FRAUNHOFER_LINES_UM['d'])
+    assert sys.wavelength(0.5) == pytest.approx(0.5)
+    assert isinstance(sys.field(0), Field)
+    assert sys.field(0).hy == pytest.approx(0.0)
 
 
 def test_extras_and_provenance_fields_round_trip():
-    ld = LensData(unit='mm', source_path='/tmp/x.seq', source_format='codev',
+    ld = OpticalSystem(LensData(), unit='mm', source_path='/tmp/x.seq', source_format='codev',
                   stop_index=2, extras={'note': 'hi'})
     assert ld.unit == 'mm'
     assert ld.source_path == '/tmp/x.seq'

@@ -1,11 +1,14 @@
-"""LensData: the editable, optimizable, serializable spine of a system.
+"""LensData: the editable, optimizable spine of a system.
 
-LensData owns the sequential rows of an optical system, all of its numeric
-degrees of freedom (curvature, conic, asphere coefficients, thickness, and --
-once coordinate breaks land -- tilt and decenter), and the system metadata
-(entrance pupil diameter, fields, wavelengths, ambient index, stop, units,
-provenance).  The compiled list[Surface] that the kernel traces is a cheap,
+LensData owns the sequential rows of an optical system and all of its numeric
+degrees of freedom (curvature, conic, asphere coefficients, thickness, tilt,
+and decenter).  The compiled list[Surface] that the kernel traces is a cheap,
 throwaway artifact rebuilt from the rows on demand by to_surfaces.
+
+System-level metadata (aperture, fields, wavelengths, units, stop, provenance)
+lives on the OpticalSystem that wraps a LensData; see system.py.  Object- and
+image-space media are carried by the object / last surface materials rather
+than a single ambient scalar.
 
 """
 
@@ -764,49 +767,15 @@ class LensData:
 
     """
 
-    def __init__(self, *, epd=None, fields=None, wavelengths=None,
-                 reference_wavelength=None, n_ambient=1.0, stop_index=None,
-                 unit=None, source_path=None, source_format=None, extras=None):
-        """Initialize an empty optical system.
+    def __init__(self):
+        """Initialize an empty lens (no rows).
 
-        Parameters
-        ----------
-        epd : float, optional
-            Entrance pupil diameter.
-        fields : sequence, optional
-            Field specifications coercible to Field instances.
-        wavelengths : mapping or sequence, optional
-            Named or indexed wavelengths in microns.
-        reference_wavelength : str or float, optional
-            Default wavelength used when none is supplied.
-        n_ambient : float, optional
-            Ambient refractive index.
-        stop_index : int, optional
-            Index of the stop surface.
-        unit : str, optional
-            Length unit label for the prescription.
-        source_path : str, optional
-            Path of the source prescription, when loaded from disk.
-        source_format : str, optional
-            Format name of the source prescription.
-        extras : dict, optional
-            Additional metadata carried through IO.
+        System metadata (aperture, fields, wavelengths, stop, unit) lives on the
+        OpticalSystem that wraps a LensData; see system.py.
 
         """
         self.rows = []
         self.spec = ParamSpec(self)
-        self.epd = epd
-        self.fields = _coerce_fields(fields)
-        self.wavelengths = _coerce_wavelengths(wavelengths)
-        if reference_wavelength is None and self.wavelengths:
-            reference_wavelength = next(iter(self.wavelengths))
-        self.reference_wavelength = reference_wavelength
-        self.n_ambient = float(n_ambient)
-        self.stop_index = stop_index
-        self.unit = unit
-        self.source_path = source_path
-        self.source_format = source_format
-        self.extras = dict(extras) if extras else {}
         self._pickups = []      # (target_slots, source_slots, scale, offset)
         self._image_solve = None  # (surface_row_index, wavelength)
         self._dependent = set()  # slots driven by a pickup/solve (never free)
@@ -887,9 +856,31 @@ class LensData:
                 self.spec.set_value(t, scale * self.spec.get_value(s) + offset)
         if self._image_solve is not None:
             surf_idx, wvl = self._image_solve
-            lens = [s for s in self._compile_surfaces() if s.typ != STYPE_EVAL]
-            pid = paraxial_image_distance(
-                lens, wvl=self.wavelength(wvl), n_ambient=self.n_ambient)
+            surfaces = self._compile_surfaces()
+            surface_rows = [i for i, row in enumerate(self.rows)
+                            if isinstance(row, SurfaceRow)]
+            try:
+                solved_surface = surface_rows.index(surf_idx)
+            except ValueError as e:
+                raise ValueError(
+                    'image-distance solve target must be a surface row'
+                ) from e
+            image_surface = solved_surface + 1
+            if image_surface >= len(surface_rows):
+                raise ValueError(
+                    'image-distance solve target must be the gap before a '
+                    'trailing eval image plane'
+                )
+            image_row_idx = surface_rows[image_surface]
+            image_row = self.rows[image_row_idx]
+            if (image_surface != len(surface_rows) - 1
+                    or _map_stype(image_row.typ) != STYPE_EVAL):
+                raise ValueError(
+                    'image-distance solve target must be the gap before a '
+                    'trailing eval image plane'
+                )
+            lens = surfaces[:image_surface]
+            pid = paraxial_image_distance(lens, wvl=wvl)
             self.rows[surf_idx].thickness = pid
 
     def _build_surface(self, row, P, R=None):
@@ -1221,6 +1212,11 @@ class LensData:
         powered surfaces every time the system is compiled.  The solved
         thickness is frozen.  Backend-pure, so it is differentiable.
 
+        wavelength is a concrete wavelength in microns (or None to use the
+        kernel default); name resolution lives on OpticalSystem, whose
+        solve_image_distance resolves a reference-wavelength name before seeding
+        this lens-level solve.
+
         """
         if surface is None:
             evals = [i for i, r in enumerate(self.rows)
@@ -1299,38 +1295,26 @@ class LensData:
                         slots.append(('shape', r, off))
         return slots
 
-    # -- metadata resolution --
-    def wavelength(self, wavelength=None):
-        """Resolve a wavelength name or scalar to microns."""
-        if wavelength is None:
-            wavelength = self.reference_wavelength
-        if wavelength is None:
-            return 0.6328
-        if isinstance(wavelength, str):
-            return float(self.wavelengths[wavelength])
-        return float(wavelength)
+    # -- listings (tabular inspection of the rows) --
+    def list_surfaces(self, *, stop_index=None, unit=None):
+        """Lens-data-editor surface table (see listings.surface_table)."""
+        from .listings import surface_table
+        return surface_table(self, stop_index=stop_index, unit=unit)
 
-    def field(self, field=None):
-        """Resolve a field index, scalar y angle, tuple, or Field."""
-        if field is None:
-            if not self.fields:
-                return Field(0.0, 0.0)
-            return self.fields[0]
-        if isinstance(field, int):
-            return self.fields[field]
-        return _coerce_field(field)
+    def list_apertures(self):
+        """Per-surface clear-aperture table (see listings.aperture_table)."""
+        from .listings import aperture_table
+        return aperture_table(self)
+
+    def list_decenters(self):
+        """Coordinate-break decenter / tilt table (see listings.decenter_table)."""
+        from .listings import decenter_table
+        return decenter_table(self)
 
     # -- copy --
     def copy(self):
-        """Return a deep-ish copy: rows cloned, metadata copied, DOF selection (free flags + bounds) preserved."""
-        new = LensData(
-            epd=self.epd, fields=list(self.fields),
-            wavelengths=dict(self.wavelengths),
-            reference_wavelength=self.reference_wavelength,
-            n_ambient=self.n_ambient, stop_index=self.stop_index,
-            unit=self.unit, source_path=self.source_path,
-            source_format=self.source_format, extras=dict(self.extras),
-        )
+        """Return a deep-ish copy: rows cloned, DOF selection (free flags + bounds) preserved."""
+        new = LensData()
         new.rows = [row.copy() for row in self.rows]
         new.spec._free = dict(self.spec._free)
         new.spec._bounds = dict(self.spec._bounds)
@@ -1341,88 +1325,16 @@ class LensData:
         return new
 
     def __repr__(self):
-        """Return a compact representation of the system.
+        """Return a compact representation of the lens.
 
         Returns
         -------
         str
-            Summary including row count, entrance pupil diameter, and free DOF
-            count.
+            Summary including row count and free DOF count.
 
         """
-        return (f'LensData(n_rows={len(self.rows)}, epd={self.epd}, '
+        return (f'LensData(n_rows={len(self.rows)}, '
                 f'n_free={len(self.spec.free_slots())})')
-
-
-# ---------------------------------------------------------------------------
-# metadata coercion (shared with the old Prescription helpers)
-# ---------------------------------------------------------------------------
-
-def _coerce_field(field):
-    """Coerce an input field specification to a Field.
-
-    Parameters
-    ----------
-    field : Field, scalar, or sequence
-        Field specification.  Scalars are interpreted as y field values;
-        sequences provide x and y.
-
-    Returns
-    -------
-    Field
-        Coerced field object.
-
-    """
-    if isinstance(field, Field):
-        return field
-    if np.isscalar(field):
-        return Field(0.0, float(field))
-    return Field(float(field[0]), float(field[1]))
-
-
-def _coerce_fields(fields):
-    """Coerce a sequence of field specifications.
-
-    Parameters
-    ----------
-    fields : sequence or None
-        Field specifications to coerce.
-
-    Returns
-    -------
-    list of Field
-        Coerced field list.  None becomes an empty list.
-
-    """
-    if fields is None:
-        return []
-    return [_coerce_field(field) for field in fields]
-
-
-def _coerce_wavelengths(wavelengths):
-    """Coerce wavelength metadata to a dictionary.
-
-    Parameters
-    ----------
-    wavelengths : mapping, sequence, or None
-        Wavelengths in microns.
-
-    Returns
-    -------
-    dict
-        Wavelength dictionary.  Sequence inputs are keyed by stringified
-        integer index.
-
-    """
-    if wavelengths is None:
-        return {}
-    if hasattr(wavelengths, 'items'):
-        return dict(wavelengths)
-    return {str(i): float(w) for i, w in enumerate(wavelengths)}
-
-
-# imported at module end to avoid a circular import at package load time
-from .launch import Field  # noqa: E402
 
 
 __all__ = ['LensData', 'SurfaceRow', 'CoordBreak', 'ParamSpec', 'R_rh']

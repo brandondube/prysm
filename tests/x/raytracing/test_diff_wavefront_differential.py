@@ -16,6 +16,7 @@ differential trace:
 import numpy as np
 import pytest
 
+from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.surfaces import Conic, Plane
@@ -44,27 +45,29 @@ def _air(w):
 
 def _place_image(ld, gap_row):
     lens = [s for s in ld.to_surfaces() if s.typ != STYPE_EVAL]
-    bfd = float(paraxial_image_distance(lens, wvl=WVL, n_ambient=1.0))
+    bfd = float(paraxial_image_distance(lens, wvl=WVL))
     ld.rows[gap_row].thickness = bfd
-    ld._invalidate()
+    ld.lens._invalidate()
     return ld
 
 
 def singlet():
-    ld = (LensData(epd=10.0, wavelengths=[WVL], n_ambient=1.0)
-          .add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
-          .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
-          .add(Plane(), typ='eval'))
+    lens = LensData()
+    (lens.add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
+         .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
+         .add(Plane(), typ='eval'))
+    ld = OpticalSystem(lens, aperture=10.0, wavelengths=[WVL])
     return _place_image(ld, gap_row=1)
 
 
 def singlet_cb():
-    ld = (LensData(epd=10.0, wavelengths=[WVL], n_ambient=1.0)
-          .add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
-          .add_coordbreak(decenter=(0., 0., 0.), tilt=(0., 0., 0.),
-                          kind='basic', thickness=0.0)
-          .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
-          .add(Plane(), typ='eval'))
+    lens = LensData()
+    (lens.add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
+         .add_coordbreak(decenter=(0., 0., 0.), tilt=(0., 0., 0.),
+                         kind='basic', thickness=0.0)
+         .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
+         .add(Plane(), typ='eval'))
+    ld = OpticalSystem(lens, aperture=10.0, wavelengths=[WVL])
     return _place_image(ld, gap_row=2)
 
 
@@ -82,7 +85,7 @@ def basic_perts(ld):
 
 
 def merit_of(ld, P, S):
-    return operand_as_merit(WavefrontRMS(P, S, WVL, n_ambient=ld.n_ambient))
+    return operand_as_merit(WavefrontRMS(P, S, WVL))
 
 
 # ---------- the model reproduces the gate ----------------------------------
@@ -93,6 +96,28 @@ def test_nominal_rms_matches_wavefrontrms():
     wd = wavefront_differential(ld, basic_perts(ld), P, S, WVL)
     m_nom = merit_of(ld, P, S)(ld)
     np.testing.assert_allclose(wd.rms_nominal, m_nom, rtol=1e-10)
+
+
+def test_wavefront_differential_resolves_system_wavelength_name():
+    def dispersive(w):
+        return 1.5 + 0.02 * (w - 0.55)
+
+    lens = LensData()
+    (lens.add(Conic(1 / 40.0, 0.0), typ='refr', thickness=4.0,
+              material=dispersive)
+         .add(Conic(-1 / 40.0, 0.0), typ='refr', thickness=20.0,
+              material=_air)
+         .add(Plane(), typ='eval'))
+    sys = OpticalSystem(lens, aperture=10.0, wavelengths={'d': 0.55},
+                        reference_wavelength='d')
+    sys.solve_image_distance(wavelength='d')
+    P, S = launch(sys, Field(0.0, 0.0), sys.wavelength('d'),
+                  Sampling.rect(n=3), epd=10.0, pupil_z=-5.0)
+    perts = [Perturbation.normal(sys, 'curvature', 0, 1e-5, name='c1')]
+    by_name = wavefront_differential(sys, perts, P, S, 'd')
+    by_value = wavefront_differential(sys, perts, P, S, 0.55)
+    np.testing.assert_allclose(by_name.W0, by_value.W0)
+    np.testing.assert_allclose(by_name.dW, by_value.dW)
 
 
 def test_sensitivity_matches_fd_sensitivity_table():

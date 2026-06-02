@@ -29,7 +29,7 @@ from prysm.x.raytracing.design import (
     RmsSpotRadius,
     Problem,
 )
-from prysm.x.raytracing import LensData, raygen
+from prysm.x.raytracing import LensData, OpticalSystem, raygen
 from prysm.x.raytracing.surfaces import Conic, Plane
 
 
@@ -45,9 +45,10 @@ def _parabola_ld():
     """LensData twin of _parabola — concave mirror, image folded to z=-40."""
     c = -1 / 80.0
     f = abs(1.0 / (2.0 * c))
-    return (LensData(epd=4.0, wavelengths=[0.55e-3])
-            .add(Conic(c, -1.0), typ='refl', thickness=f)
-            .add(Plane(), typ='eval'))
+    lens = LensData()
+    (lens.add(Conic(c, -1.0), typ='refl', thickness=f)
+         .add(Plane(), typ='eval'))
+    return OpticalSystem(lens, aperture=4.0, wavelengths=[0.55e-3])
 
 
 @pytest.fixture(params=[32, 64])
@@ -143,7 +144,7 @@ def test_problem_residuals_dtype_follows_config_precision(precision):
     P, S = launch(ld, Field(0., 0.), 0.55e-3,
                   Sampling.fan(n=5), epd=4.0, pupil_z=-10.0)
     op = RmsSpotRadius(P=P, S=S, wavelength=0.55e-3, target=0.0, weight=1.0)
-    ld.vary('curvature', surfaces=0)
+    ld.lens.vary('curvature', surfaces=0)
     prob = Problem(ld, [op])
     out = prob.residuals(prob.x0())
     assert out.dtype == _expected_dtype(precision)

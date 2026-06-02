@@ -2,6 +2,7 @@
 import matplotlib
 import numpy as np
 import pytest
+from prysm.x.raytracing import OpticalSystem
 
 matplotlib.use('Agg')
 
@@ -27,13 +28,14 @@ def _singlet_lensdata():
     """A simple constant-index biconvex singlet with a 3-point field set."""
     n15 = lambda wvl: 1.5  # noqa: E731 - terse constant index for the test
     air = lambda wvl: 1.0  # noqa: E731
-    ld = (LensData(epd=10.0, fields=[0.0, 3.0, 5.0],
-                   wavelengths={'d': 0.5876}, reference_wavelength='d')
-          .add(Conic(1 / 60.0, 0.0), thickness=4.0, material=n15,
-               semidiameter=8.0)
-          .add(Conic(-1 / 60.0, 0.0), thickness=95.0, material=air,
-               semidiameter=8.0)
-          .add(Plane(), typ='eval', material=air, semidiameter=20.0))
+    lens = LensData()
+    (lens.add(Conic(1 / 60.0, 0.0), thickness=4.0, material=n15,
+              semidiameter=8.0)
+         .add(Conic(-1 / 60.0, 0.0), thickness=95.0, material=air,
+              semidiameter=8.0)
+         .add(Plane(), typ='eval', material=air, semidiameter=20.0))
+    ld = OpticalSystem(lens, aperture=10.0, fields=[0.0, 3.0, 5.0],
+                       wavelengths={'d': 0.5876}, reference_wavelength='d')
     ld.solve_image_distance()
     return ld
 
@@ -446,12 +448,13 @@ def test_lensdata_add_edge_propagates_to_compiled_surface():
     edge = {'od_radius': 9.0,
             'features': [{'kind': 'chamfer', 'side': 'both',
                           'z_start': 0.0, 'z_end': 0.5, 'depth': 0.3}]}
-    ld = (LensData(epd=10.0, wavelengths={'d': 0.5876},
-                   reference_wavelength='d')
-          .add(Conic(1 / 60.0, 0.0), thickness=4.0, material=lambda w: 1.5,
-               semidiameter=8.0, edge=edge)
-          .add(Conic(-1 / 60.0, 0.0), thickness=95.0, material=lambda w: 1.0,
-               semidiameter=8.0))
+    lens = LensData()
+    (lens.add(Conic(1 / 60.0, 0.0), thickness=4.0, material=lambda w: 1.5,
+              semidiameter=8.0, edge=edge)
+         .add(Conic(-1 / 60.0, 0.0), thickness=95.0, material=lambda w: 1.0,
+              semidiameter=8.0))
+    ld = OpticalSystem(lens, aperture=10.0, wavelengths={'d': 0.5876},
+                       reference_wavelength='d')
 
     surfaces = ld.to_surfaces()
     assert surfaces[0].edge is edge

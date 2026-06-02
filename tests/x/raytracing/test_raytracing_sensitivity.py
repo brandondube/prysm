@@ -27,7 +27,7 @@ def test_fd_jacobian_single_sphere_curvature():
     c0 = 1.0 / 50.0
     expected = -n_glass / ((n_glass - 1.0) * c0 * c0)
 
-    ld = LensData(wavelengths=[0.55e-3]).add(
+    ld = LensData().add(
         Conic(c0, 0.0), typ='refr', material=lambda wvl: n_glass,
         thickness=0.0)
     ld.vary('curvature', surfaces=0)
@@ -45,7 +45,7 @@ def test_fd_jacobian_efl_doublet_curvatures():
     f = 1.0 / ((n_glass - 1.0) * (c1 - c2))
     expected_dfdc1 = -f * f * (n_glass - 1.0)
     expected_dfdc2 = +f * f * (n_glass - 1.0)
-    ld = (LensData(wavelengths=[0.55e-3])
+    ld = (LensData()
           .add(Conic(c1, 0.0), typ='refr', material=lambda wvl: n_glass,
                thickness=1e-9)
           .add(Conic(c2, 0.0), typ='refr', material=lambda wvl: 1.0,
@@ -60,7 +60,7 @@ def test_fd_jacobian_efl_doublet_curvatures():
 def test_fd_jacobian_restores_free_vector():
     """After Jacobian evaluation the LensData is back to its nominal free
     vector (no transient perturbation leaks out)."""
-    ld = LensData(wavelengths=[0.55e-3]).add(
+    ld = LensData().add(
         Conic(1 / 50.0, 0.0), typ='refr', material=lambda wvl: 1.5,
         thickness=0.0)
     ld.vary('curvature', surfaces=0)
@@ -71,7 +71,7 @@ def test_fd_jacobian_restores_free_vector():
 
 
 def test_fd_jacobian_unknown_method_raises():
-    ld = LensData(wavelengths=[0.55e-3]).add(
+    ld = LensData().add(
         Conic(1 / 50.0, 0.0), typ='refr', material=lambda wvl: 1.5,
         thickness=0.0)
     ld.vary('curvature', surfaces=0)
@@ -86,7 +86,7 @@ def test_fd_jacobian_unknown_method_raises():
 def test_autograd_method_requires_torch_backend():
     """With the default numpy backend, asking for 'autograd' must error
     helpfully rather than silently producing nonsense."""
-    ld = LensData(wavelengths=[0.55e-3]).add(
+    ld = LensData().add(
         Conic(1 / 50.0, 0.0), typ='refr', material=lambda wvl: 1.5,
         thickness=0.0)
     ld.vary('curvature', surfaces=0)

@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 
+from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.design import RmsSpotRadius
@@ -18,20 +19,22 @@ def _n_glass(w):
 # ---------- helpers --------------------------------------------------------
 
 def _spherical_singlet():
-    return (LensData(epd=10.0, wavelengths=[0.55e-3])
-            .add(Conic(1 / 50.0, 0.0), typ='refr', thickness=5.0,
-                 material=_n_glass)
-            .add(Conic(-1 / 50.0, 0.0), typ='refr', thickness=95.0,
-                 material=lambda w: 1.0)
-            .add(Plane(), typ='eval'))
+    lens = LensData()
+    (lens.add(Conic(1 / 50.0, 0.0), typ='refr', thickness=5.0,
+              material=_n_glass)
+         .add(Conic(-1 / 50.0, 0.0), typ='refr', thickness=95.0,
+              material=lambda w: 1.0)
+         .add(Plane(), typ='eval'))
+    return OpticalSystem(lens, aperture=10.0, wavelengths=[0.55e-3])
 
 
 def _concave_parabola():
     c = -1 / 80.0
     f = abs(1.0 / (2.0 * c))  # 40; the fold places the image at -f
-    return (LensData(epd=10.0, wavelengths=[0.55e-3])
-            .add(Conic(c, -1.0), typ='refl', thickness=f)
-            .add(Plane(), typ='eval'))
+    lens = LensData()
+    (lens.add(Conic(c, -1.0), typ='refl', thickness=f)
+         .add(Plane(), typ='eval'))
+    return OpticalSystem(lens, aperture=10.0, wavelengths=[0.55e-3])
 
 
 # ---------- Perturbation factories ----------------------------------------

@@ -14,7 +14,7 @@ def _air(wvl):
 
 
 def make_triplet():
-    ld = LensData(epd=10.0)
+    ld = LensData()
     radii = [50.0, -80.0, 40.0, -40.0, 80.0, -50.0]
     for i, r in enumerate(radii):
         ld.add(Conic(1.0 / r, 0.0), thickness=3.0 + i,
