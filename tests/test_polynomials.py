@@ -880,6 +880,36 @@ def test_laguerre_matches_scipy(n, alpha):
     assert np.allclose(prysm_lag, scipy_lag)
 
 
+def test_laguerre_seq_matches_loop():
+    ns = [0, 1, 2, 3, 4, 5]
+    seq = polynomials.laguerre_seq(ns, 1.0, XLEFT)
+    loop = [polynomials.laguerre(n, 1.0, XLEFT) for n in ns]
+    for elem, exp in zip(seq, loop):
+        assert np.allclose(elem, exp)
+
+
+@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+@pytest.mark.parametrize('alpha', [0.0, 1.0, 2.0])
+def test_laguerre_der_matches_scipy(n, alpha):
+    # d/dx L_n^alpha = -L_{n-1}^{alpha+1}; compare to scipy's exact derivative
+    prysm_ = polynomials.laguerre_der(n, alpha, XLEFT)
+    scipy_ = sps_laguerre(n, alpha).deriv()(XLEFT)
+    assert np.allclose(prysm_, scipy_)
+
+
+def test_laguerre_der_n_zero():
+    # the constant L_0 differentiates to identically zero
+    assert np.allclose(polynomials.laguerre_der(0, 1.0, XLEFT), 0)
+
+
+def test_laguerre_der_seq_same_as_loop():
+    ns = [0, 1, 2, 3, 5]
+    seq = list(polynomials.laguerre_der_seq(ns, 1.0, XLEFT))
+    for elem, n in zip(seq, ns):
+        exp = polynomials.laguerre_der(n, 1.0, XLEFT)
+        assert np.allclose(exp, elem)
+
+
 # derivative additions: dickson / xy / qpoly
 
 @pytest.mark.parametrize('n', [1, 2, 3, 4, 5])

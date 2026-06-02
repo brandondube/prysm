@@ -157,7 +157,9 @@ def laguerre_der(n, alpha, x):
     # see wiki
     # d^k/dx^k L_n^alpha = (-1)^k L_(n-k)^(alpha+k)
     k = 1
-    return laguerre(n-k, alpha+k, x)
+    if n < k:
+        return np.zeros_like(x)
+    return (-1)**k * laguerre(n-k, alpha+k, x)
 
 
 def laguerre_der_seq(ns, alpha, x):
@@ -181,5 +183,15 @@ def laguerre_der_seq(ns, alpha, x):
 
     """
     k = 1
-    ns = [n-k for n in ns]
-    return laguerre_seq(ns, alpha+k, x)
+    if not hasattr(ns, '__len__'):
+        ns = list(ns)
+    # d^k/dx^k L_n^alpha = (-1)^k L_(n-k)^(alpha+k); orders below k differentiate to 0
+    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
+    lead = 0
+    while lead < len(ns) and ns[lead] < k:
+        out[lead] = 0
+        lead += 1
+    if lead < len(ns):
+        shifted = [n-k for n in ns[lead:]]
+        out[lead:] = (-1)**k * laguerre_seq(shifted, alpha+k, x)
+    return out
