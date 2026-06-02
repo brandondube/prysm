@@ -152,3 +152,48 @@ def test_brewsters_accuracy():
 def test_critical_accuracy():
     ang = thinfilm.critical_angle(1, 1.5, deg=True)
     assert ang == pytest.approx(41.8, abs=0.02)
+
+
+# --- explicit 2x2 transfer-matrix path (characteristic_matrix_* /
+# multilayer_matrix_* / rtot / ttot).  The optimized multilayer_stack_rt only
+# computes the A00/A10 coefficients; these functions build the full matrices and
+# must agree with it.
+
+def _full_matrix_rt(indices, thicknesses, wavelength, pol, substrate_index, aoi=0, ambient=1.0):
+    """r, t computed via the full 2x2 transfer-matrix functions."""
+    char = thinfilm.characteristic_matrix_p if pol == 'p' else thinfilm.characteristic_matrix_s
+    multi = thinfilm.multilayer_matrix_p if pol == 'p' else thinfilm.multilayer_matrix_s
+    mats = [char(wavelength, d, n, thinfilm.snell_aor(ambient, n, aoi, deg=True))
+            for n, d in zip(indices, thicknesses)]
+    theta_sub = thinfilm.snell_aor(ambient, substrate_index, aoi, deg=True)
+    A = multi(ambient, np.radians(aoi), mats, substrate_index, theta_sub)
+    return thinfilm.rtot(A), thinfilm.ttot(A)
+
+
+@pytest.mark.parametrize('pol', ['s', 'p'])
+@pytest.mark.parametrize('aoi', [0, 15, 45])
+@pytest.mark.parametrize('layers', [
+    ([n_MgF2], [.150]),
+    ([n_MgF2, n_ZrO2, n_CeF3], [wvl/4, wvl/2, wvl/4]),
+])
+def test_full_matrix_path_matches_stack_rt(pol, aoi, layers):
+    indices, thicknesses = layers
+    r_full, t_full = _full_matrix_rt(indices, thicknesses, wvl, pol, n_C7980, aoi=aoi)
+    r_ref, t_ref = thinfilm.multilayer_stack_rt(indices, thicknesses, wvl, pol, n_C7980, aoi=aoi)
+    assert np.allclose(r_full, r_ref)
+    assert np.allclose(t_full, t_ref)
+
+
+@pytest.mark.parametrize('pol', ['s', 'p'])
+@pytest.mark.parametrize('m', [1, 3])
+def test_full_matrix_array_substrate_matches_stack_rt(pol, m):
+    # guards the multilayer_matrix_{p,s} batched-term4 branch: an array-like
+    # theta_np1 must take the array branch even at length 1.  Gating on
+    # len(theta_np1) > 1 (rather than "is array-like") regresses m=1 to a
+    # ValueError on inhomogeneous shape -- this pins the working behavior.
+    substrate = n_C7980 + 0.05 * np.arange(m)
+    r_full, t_full = _full_matrix_rt([n_MgF2], [.150], wvl, pol, substrate)
+    r_ref, t_ref = thinfilm.multilayer_stack_rt([n_MgF2], [.150], wvl, pol, substrate)
+    assert r_full.shape == (m,)
+    assert np.allclose(r_full, r_ref)
+    assert np.allclose(t_full, t_ref)

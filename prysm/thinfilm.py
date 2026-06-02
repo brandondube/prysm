@@ -309,7 +309,8 @@ def multilayer_matrix_p(n0, theta0, characteristic_matrices, nnp1, theta_np1):
     else:
         term3 = characteristic_matrices[0]
 
-    if hasattr(theta_np1, '__len__') and len(theta_np1 > 1):
+    # non-scalar case
+    if hasattr(theta_np1, '__len__'):
         term4 = np.asarray([
             [np.cos(theta_np1), np.broadcast_to(0, theta_np1.shape)],
             [nnp1,              np.broadcast_to(0, theta_np1.shape)]
@@ -371,7 +372,8 @@ def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
     else:
         term3 = characteristic_matrices[0]
 
-    if hasattr(theta_np1, '__len__') and len(theta_np1 > 1):
+    # non-scalar case
+    if hasattr(theta_np1, '__len__'):
         term4 = np.asarray([
             [np.broadcast_to(1, theta_np1.shape), np.broadcast_to(0, theta_np1.shape)],
             [nnp1 * np.cos(theta_np1),            np.broadcast_to(0, theta_np1.shape)]
@@ -394,8 +396,6 @@ def multilayer_matrix_s(n0, theta0, characteristic_matrices, nnp1, theta_np1):
         term12 = np.dot(term1, term2)
 
     return reduce(np.matmul, (term12, term3, term4))
-
-    return reduce(np.dot, (term1, term2, term3, term4))
 
 
 def rtot(Amat):
