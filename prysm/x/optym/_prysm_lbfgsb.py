@@ -20,6 +20,16 @@ from prysm.mathops import linalg, np
 from .problem import as_problem
 
 
+class _OptimizerStop:
+    """StopIteration payload consumed by run_until."""
+
+    __slots__ = ('success', 'message')
+
+    def __init__(self, success, message):
+        self.success = bool(success)
+        self.message = message
+
+
 def _wolfe_eval(problem, xk, pk, alpha, dot):
     """Evaluate f, directional derivative, and gradient at xk + alpha*pk."""
     f, g = problem.fg(xk + alpha * pk)
@@ -1079,7 +1089,7 @@ class PrysmLBFGSB:
         # to zero (e.g. every coord is at a bound being pushed into).
         if (alpha_max is not None and alpha_max <= 0.0) or not bool(np.any(p)):
             self.last_step_metadata = {'reason': 'no_descent'}
-            raise StopIteration
+            raise StopIteration(_OptimizerStop(False, 'no descent direction'))
 
         alpha, _, _, g_new = _strong_wolfe_lean(
             self.problem, self.x, p,
@@ -1090,7 +1100,7 @@ class PrysmLBFGSB:
 
         if alpha is None:
             self.last_step_metadata = {'reason': 'linesearch_fail'}
-            raise StopIteration
+            raise StopIteration(_OptimizerStop(False, 'line search failed'))
 
         # The Wolfe search has already evaluated (f, g) at xk + alpha*pk
         # via its internal cache; reuse the gradient instead of paying

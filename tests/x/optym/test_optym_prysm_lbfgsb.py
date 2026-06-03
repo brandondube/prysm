@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from prysm.x.optym import (
+    GradientTolerance,
     MaxIterations,
     PrysmLBFGSB,
     Problem,
@@ -277,6 +278,40 @@ def test_linesearch_failure_raises_stop_iteration():
         for _ in range(20):
             opt.step()
     assert opt.last_step_metadata.get('reason') == 'linesearch_fail'
+
+
+def test_run_until_linesearch_failure_reports_unsuccessful():
+    """Abort payloads must not be interpreted as successful convergence."""
+    fg, x_star = _make_quadratic(dim=4, seed=6)
+
+    def bad_fg(x):
+        f, g = fg(x)
+        return f, -g
+
+    opt = PrysmLBFGSB(bad_fg, np.zeros_like(x_star), memory=5)
+    result = run_until(opt, MaxIterations(20), maxiter=20)
+    assert not result.success
+    assert result.message == 'line search failed'
+
+
+def test_run_until_no_descent_reports_unsuccessful():
+    lb = np.array([0.0, 0.0])
+    ub = np.array([1.0, 1.0])
+
+    def fg(x):
+        return float(x.sum()), np.ones(2)
+
+    opt = PrysmLBFGSB(fg, np.array([0.0, 0.0]),
+                      lower_bounds=lb, upper_bounds=ub, memory=3)
+    result = run_until(opt, MaxIterations(5))
+    assert not result.success
+    assert result.message == 'no descent direction'
+
+
+def test_run_until_gradient_convergence_still_reports_success():
+    opt = PrysmLBFGSB(_quadratic_fg, np.array([1.0, -2.0]), memory=5)
+    result = run_until(opt, GradientTolerance(10.0), maxiter=20)
+    assert result.success
 
 
 @pytest.mark.parametrize('dtype', [np.float32, np.float64])
