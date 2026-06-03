@@ -98,6 +98,47 @@ def test_lensdata_duck_types_as_surface_sequence():
     assert ld[0] is ld.surfaces[0]
 
 
+def test_direct_surface_row_thickness_edit_invalidates_cache():
+    ld = make_singlet_lensdata()
+    before = ld.surfaces
+    ld.rows[0].thickness = 12.0
+    after = ld.surfaces
+    assert after is not before
+    z = [float(np.asarray(s.P)[2]) for s in after]
+    assert z == pytest.approx([0.0, 12.0, 107.0])
+
+
+def test_direct_surface_row_array_and_metadata_edits_invalidate_cache():
+    ld = LensData().add(Conic(1 / 100.0, 0.0), typ='refr', material=1.5,
+                        bounding={'outer_radius': 4.0})
+    before = ld.surfaces
+
+    ld.rows[0].params[0] = 1 / 50.0
+    assert ld.surfaces is not before
+    assert ld.surfaces[0].shape.params['c'] == pytest.approx(1 / 50.0)
+
+    ld.rows[0].material = 1.6
+    assert ld.surfaces[0].n(0.55) == pytest.approx(1.6)
+
+    ld.rows[0].aperture = circular_aperture(2.0)
+    blocked = ld.surfaces[0].aperture(np.array([3.0]), np.array([0.0]))
+    assert bool(blocked[0]) is False
+
+    ld.rows[0].bounding['outer_radius'] = 6.0
+    assert ld.surfaces[0].bounding['outer_radius'] == pytest.approx(6.0)
+
+
+def test_direct_coordbreak_array_edit_invalidates_cache():
+    ld = LensData()
+    ld.add_coordbreak()
+    ld.add(Plane(), typ='eval')
+    before = ld.surfaces
+    ld.rows[0].decenter[0] = 3.0
+    after = ld.surfaces
+    assert after is not before
+    np.testing.assert_allclose(after[0].P, [3.0, 0.0, 0.0])
+
+
 def test_material_callable_identity_is_preserved():
     ld = make_singlet_lensdata()
     assert ld.surfaces[0].n is n_bk7

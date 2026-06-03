@@ -16,7 +16,7 @@ forward-mode tangents:
 from prysm.conf import config
 from prysm.mathops import np
 
-from prysm.x.raytracing.opt import _valid_mask
+from prysm.x.raytracing.opt import _valid_mask, _chief_axis_perp_norm
 from prysm.x.raytracing.spencer_and_murty import intersect_reference_sphere
 from prysm.x.raytracing.analysis import _pupil_center_chief_index
 
@@ -145,12 +145,21 @@ class RmsWfeSeed:
             axis_dir = (np.array([0., 0., 1.], dtype=config.precision)
                         if self.axis_dir is None
                         else np.asarray(self.axis_dir, dtype=config.precision))
+            if _chief_axis_perp_norm(S_last[chief], axis_dir) < 1e-6:
+                raise ValueError(
+                    'cannot locate the exit pupil from a near-axial chief ray; '
+                    'pass P_xp to anchor the reference sphere'
+                )
             P_xp = _closest_point_on_axis(C, S_last[chief], axis_point, axis_dir)
         else:
             axis_point = axis_dir = None
             P_xp = self.P_xp
         delta = P_xp - C
         R = float(np.sqrt(np.sum(delta * delta)))
+        if R <= 1e-12:
+            raise ValueError(
+                'reference-sphere radius is degenerate; pass a nondegenerate P_xp'
+            )
 
         _, t = intersect_reference_sphere(P_last[valid], S_last[valid], C, R)
         OPL_total = trace.OPL[:, valid].sum(axis=0) + self.n_image * t

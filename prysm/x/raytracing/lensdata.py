@@ -405,6 +405,161 @@ def _as_material_callable(material):
     return lambda wvl: value
 
 
+def _invalidate_row_owner(row):
+    owner = getattr(row, '_owner', None)
+    if owner is not None:
+        owner._invalidate()
+
+
+class _InvalidatingArray(np.ndarray):
+    """ndarray view that clears a row owner's surface cache when edited."""
+
+    def __new__(cls, values, row, dtype=None):
+        arr = np.asarray(values, dtype=dtype).view(cls)
+        arr._row = row
+        return arr
+
+    def __array_finalize__(self, obj):
+        self._row = getattr(obj, '_row', None)
+
+    def __setitem__(self, item, value):
+        super().__setitem__(item, value)
+        row = getattr(self, '_row', None)
+        if row is not None:
+            _invalidate_row_owner(row)
+
+
+def _invalidating_array(values, row, dtype=None):
+    arr = np.asarray(values, dtype=dtype)
+    if hasattr(np, 'ndarray') and isinstance(arr, np.ndarray):
+        out = arr.view(_InvalidatingArray)
+        out._row = row
+        return out
+    return arr
+
+
+_MISSING = object()
+
+
+class _InvalidatingDict(dict):
+    """dict that clears a row owner's surface cache on mutation."""
+
+    def __init__(self, *args, row=None, **kwargs):
+        self._row = row
+        super().__init__(*args, **kwargs)
+
+    def _invalidate(self):
+        row = getattr(self, '_row', None)
+        if row is not None:
+            _invalidate_row_owner(row)
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self._invalidate()
+
+    def __delitem__(self, key):
+        super().__delitem__(key)
+        self._invalidate()
+
+    def clear(self):
+        super().clear()
+        self._invalidate()
+
+    def pop(self, key, default=_MISSING):
+        if default is _MISSING:
+            value = super().pop(key)
+        else:
+            if key not in self:
+                return default
+            value = super().pop(key)
+        self._invalidate()
+        return value
+
+    def popitem(self):
+        value = super().popitem()
+        self._invalidate()
+        return value
+
+    def setdefault(self, key, default=None):
+        if key in self:
+            return self[key]
+        value = super().setdefault(key, default)
+        self._invalidate()
+        return value
+
+    def update(self, *args, **kwargs):
+        super().update(*args, **kwargs)
+        self._invalidate()
+
+
+def _invalidating_dict(value, row):
+    if value is None:
+        return None
+    if isinstance(value, _InvalidatingDict):
+        return _InvalidatingDict(dict(value), row=row)
+    if not isinstance(value, dict):
+        return value
+    return _InvalidatingDict(value, row=row)
+
+
+class _RowList(list):
+    """Owned row container that invalidates LensData on structural edits."""
+
+    def __init__(self, owner, rows=()):
+        self._owner = owner
+        super().__init__()
+        self.extend(rows)
+
+    def _own(self, row):
+        if hasattr(row, '_owner'):
+            object.__setattr__(row, '_owner', self._owner)
+        return row
+
+    def _invalidate(self):
+        self._owner._invalidate()
+
+    def append(self, row):
+        super().append(self._own(row))
+        self._invalidate()
+
+    def extend(self, rows):
+        changed = False
+        for row in rows:
+            super().append(self._own(row))
+            changed = True
+        if changed:
+            self._invalidate()
+
+    def insert(self, index, row):
+        super().insert(index, self._own(row))
+        self._invalidate()
+
+    def __setitem__(self, item, value):
+        if isinstance(item, slice):
+            value = [self._own(row) for row in value]
+        else:
+            value = self._own(value)
+        super().__setitem__(item, value)
+        self._invalidate()
+
+    def __delitem__(self, item):
+        super().__delitem__(item)
+        self._invalidate()
+
+    def clear(self):
+        super().clear()
+        self._invalidate()
+
+    def pop(self, index=-1):
+        value = super().pop(index)
+        self._invalidate()
+        return value
+
+    def remove(self, value):
+        super().remove(value)
+        self._invalidate()
+
+
 # ---------------------------------------------------------------------------
 # Rows
 # ---------------------------------------------------------------------------
@@ -418,6 +573,20 @@ class SurfaceRow:
     and aperture/bounding data.
 
     """
+
+    _INVALIDATING_ATTRS = {
+        'params', 'meta', 'thickness', 'material', 'typ', 'semidiameter',
+        'aperture', 'bounding', 'grating', 'edge',
+    }
+
+    def __setattr__(self, name, value):
+        if name == 'params':
+            value = _invalidating_array(value, self, dtype=config.precision)
+        elif name in ('meta', 'bounding'):
+            value = _invalidating_dict(value, self)
+        object.__setattr__(self, name, value)
+        if name in self._INVALIDATING_ATTRS:
+            _invalidate_row_owner(self)
 
     def __init__(self, shape, *, thickness=0.0, material=None, typ='refr',
                  semidiameter=None, aperture=None, bounding=None, grating=None,
@@ -447,6 +616,7 @@ class SurfaceRow:
             Mechanical edge metadata for layout drawing.
 
         """
+        object.__setattr__(self, '_owner', None)
         adapter = _adapter_for(shape)
         params = []
         key_offsets = {}
@@ -519,6 +689,7 @@ class SurfaceRow:
 
         """
         new = object.__new__(SurfaceRow)
+        object.__setattr__(new, '_owner', None)
         new.shape_kind = self.shape_kind
         new.adapter = self.adapter
         new.params = np.array(self.params, copy=True)
@@ -544,6 +715,17 @@ class CoordBreak:
 
     """
 
+    _INVALIDATING_ATTRS = {
+        'decenter', 'tilt', 'kind', 'ret_target', 'thickness',
+    }
+
+    def __setattr__(self, name, value):
+        if name in ('decenter', 'tilt'):
+            value = _invalidating_array(value, self, dtype=config.precision)
+        object.__setattr__(self, name, value)
+        if name in self._INVALIDATING_ATTRS:
+            _invalidate_row_owner(self)
+
     def __init__(self, *, decenter=(0.0, 0.0, 0.0), tilt=(0.0, 0.0, 0.0),
                  kind='basic', ret_target=None, thickness=0.0):
         """Initialize a coordinate break row.
@@ -562,6 +744,7 @@ class CoordBreak:
             Gap after the coordinate break.
 
         """
+        object.__setattr__(self, '_owner', None)
         self.decenter = np.asarray(decenter, dtype=config.precision)
         self.tilt = np.asarray(tilt, dtype=config.precision)
         self.kind = kind
@@ -586,6 +769,7 @@ class CoordBreak:
 
         """
         new = object.__new__(CoordBreak)
+        object.__setattr__(new, '_owner', None)
         new.decenter = np.array(self.decenter, copy=True)
         new.tilt = np.array(self.tilt, copy=True)
         new.kind = self.kind
@@ -774,7 +958,7 @@ class LensData:
         OpticalSystem that wraps a LensData; see system.py.
 
         """
-        self.rows = []
+        self.rows = _RowList(self)
         self.spec = ParamSpec(self)
         self._pickups = []      # (target_slots, source_slots, scale, offset)
         self._image_solve = None  # (surface_row_index, wavelength)
@@ -1315,7 +1499,7 @@ class LensData:
     def copy(self):
         """Return a deep-ish copy: rows cloned, DOF selection (free flags + bounds) preserved."""
         new = LensData()
-        new.rows = [row.copy() for row in self.rows]
+        new.rows = _RowList(new, [row.copy() for row in self.rows])
         new.spec._free = dict(self.spec._free)
         new.spec._bounds = dict(self.spec._bounds)
         new._pickups = [(list(t), list(s), sc, off)
