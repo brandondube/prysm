@@ -1,7 +1,9 @@
 """Code V .seq (sequential lens) prescription reader.
 
-Parses a sequential .seq into a LensData (sequential rows + metadata),
-mirroring the contract of zemax.read_zmx.
+Parses a sequential .seq into an OpticalSystem (sequential rows + metadata),
+mirroring the contract of zemax.read_zmx.  Supported source length units are
+converted to millimeters at import, and the returned OpticalSystem reports
+unit='mm'.
 
 Supported subset (raise informative error otherwise):
 - Header: TITLE, DIM, WL, REF, EPD, YAN, XAN, RDM/CUM
@@ -10,14 +12,16 @@ Supported subset (raise informative error otherwise):
   CUM mode), thickness, then an optional glass name.  An older keyword
   spelling (RDY/CUY/THI/GLA value) is also accepted.
 - Per-surface: RDY (radius Y), CUY (curvature Y), THI (thickness),
-  K (conic Y), GLA (glass), ASP and A/B/C/D (even-asphere coefs)
+  K (conic Y), GLA (glass), CAO/CA/CAI (circular or annular clear aperture),
+  ASP and A/B/C/D (even-asphere coefs)
 - Decenter / tilt: XDE/YDE/ZDE (decenter), ADE/BDE/CDE (tilt, degrees),
   and the DAR (decenter-and-return) block flag
 
 Out of scope:
 - Toroid (TOR command)
-- Solves, pickups, zoom configurations, vignetting (VUY/VLY)
+- Solves, pickups, zoom configurations, affine vignetting factors (VUY/VLY)
 - BEN/REV/RET decenter types, GLB/GLO global references
+- Image-height field records (YIM/XIM)
 
 The C-suffixed codes (CCY, CCX, THC, KC, AC, ADC, BDC, CDC, XDC, ...) are Code V
 optimization coupling/control codes, not geometry; they are ignored.  In
@@ -42,6 +46,10 @@ from ._common import (
     fold_sign,
     writable_shape_or_raise,
     warn_vignetting_ignored as _warn_vignetting_ignored,
+    length_scale_to_mm,
+    scale_length_to_mm,
+    scale_surface_params_to_mm,
+    aperture_kwargs_from_radii,
 )
 from ..lensdata import LensData
 from ..system import OpticalSystem, ApertureSpec
@@ -87,9 +95,9 @@ from ._common import parse_float as _parse_float  # noqa: E402  (kept name for c
 # ---------- parser ----------------------------------------------------------
 
 _KIND_BY_FNUM = {
-    # Code V doesn't have a uniform 'field type' enum like Zemax FTYP;
-    # YAN means Y angle (degrees), YIM means Y image height.  We map
-    # whichever the user supplied.
+    # Code V doesn't have a uniform field-type enum like Zemax FTYP.
+    # YAN/XAN mean angle fields.  YIM/XIM are image-height fields, which the
+    # Field finite-conjugate object-height model cannot represent directly.
 }
 
 
@@ -103,6 +111,8 @@ def _new_surface_dict():
         'k': 0.0,     # conic constant Y (Code V K)
         'kx': None,   # conic constant X (set only for biconic / anamorph)
         'gla': None,
+        'semidiameter': None,
+        'inner_semidiameter': None,
         'asphere_coefs': {},  # int order index -> coefficient value
         'is_asphere': False,
         'zfr_coefs': None,    # Fringe Zernike coefficient list
@@ -120,7 +130,7 @@ def _new_surface_dict():
 
 
 def read_seq(path_or_text, *, _is_text=False, database=None):
-    """Read a Code V .seq file into a LensData.
+    """Read a Code V .seq file into an OpticalSystem.
 
     Parameters
     ----------
@@ -132,7 +142,7 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
 
     Returns
     -------
-    LensData
+    OpticalSystem
 
     """
     text, path_for_meta = read_text_or_path(path_or_text, is_text=_is_text)
@@ -148,6 +158,8 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
         'epd': None,
         'yan': [],
         'xan': [],
+        'yim': [],
+        'xim': [],
         'extras': {},
     }
     radius_mode = True  # default: RDM (radius mode); CUM flips it
@@ -212,6 +224,16 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
                 header['xan'] = [float(t) for t in args]
             except ValueError:
                 pass
+        elif verb == 'YIM':
+            try:
+                header['yim'] = [float(t) for t in args]
+            except ValueError:
+                pass
+        elif verb == 'XIM':
+            try:
+                header['xim'] = [float(t) for t in args]
+            except ValueError:
+                pass
         elif verb == 'STO':
             # STO marks the surface whose block it appears in -- the still-open
             # surface, or the most recently committed one if none is open.  We
@@ -259,6 +281,12 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
             current['kx'] = _parse_float(args[0])
         elif current is not None and verb == 'GLA':
             current['gla'] = args[0] if args else None
+        elif current is not None and verb in ('CAO', 'CA'):
+            if args:
+                current['semidiameter'] = _parse_float(args[0])
+        elif current is not None and verb == 'CAI':
+            if args:
+                current['inner_semidiameter'] = _parse_float(args[0])
         elif current is not None and verb == 'ASP':
             current['is_asphere'] = True
         elif current is not None and verb == 'ZFR':
@@ -327,9 +355,19 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
     if not surfaces:
         raise ValueError('no surfaces found in .seq text')
 
-    # Field objects from YAN / XAN
-    fields = fields_from_xy(header['xan'], header['yan'],
-                            kind='angle', unit='deg')
+    unit_scale = length_scale_to_mm(header['unit'] or 'mm')
+
+    # Field objects from YAN / XAN.  YIM / XIM are image-height fields, not
+    # finite-conjugate object-height fields, so reject them explicitly instead
+    # of launching from the wrong conjugate.
+    if header['xim'] or header['yim']:
+        raise NotImplementedError(
+            'Code V image-height fields (YIM/XIM) are not supported by '
+            'read_seq; use angle fields instead'
+        )
+    else:
+        fields = fields_from_xy(header['xan'], header['yan'],
+                                kind='angle', unit='deg')
     ref_idx = header.get('reference_wvl_index')
     wavelengths = header['wavelengths']
     reference_wavelength = None
@@ -339,10 +377,11 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
     ld = LensData()
     sys = OpticalSystem(
         ld,
-        aperture=(ApertureSpec.epd(header['epd'])
+        aperture=(ApertureSpec.epd(scale_length_to_mm(header['epd'],
+                                                     unit_scale))
                   if header['epd'] is not None else None),
         fields=fields, wavelengths=wavelengths,
-        reference_wavelength=reference_wavelength, unit=header['unit'],
+        reference_wavelength=reference_wavelength, unit='mm',
         source_path=path_for_meta, source_format='codev',
         extras=header['extras'],
     )
@@ -360,23 +399,29 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
     for sd in surfaces:
         if sd.get('_is_object'):
             continue
-        tilt, decenter, kind = _pose_from_dict(sd)
+        tilt, decenter, kind = _pose_from_dict(sd, unit_scale)
         if tilt is not None or decenter is not None:
             ld.add_coordbreak(
                 decenter=decenter or (0.0, 0.0, 0.0),
                 tilt=tilt or (0.0, 0.0, 0.0), kind=kind)
+        aperture_kwargs = aperture_kwargs_from_radii(
+            sd.get('semidiameter'), unit_scale,
+            inner_radius=sd.get('inner_semidiameter'))
         if sd.get('_is_image'):
             sign = fold_sign(n_refl)
             ld.add(Plane(), typ='eval',
-                   thickness=sign * float(sd.get('thi', 0.0)))
+                   thickness=sign * scale_length_to_mm(sd.get('thi', 0.0),
+                                                       unit_scale),
+                   **aperture_kwargs)
         else:
-            spec = _build_spec(sd, radius_mode, database)
+            spec = _build_spec(sd, radius_mode, database, unit_scale)
             if spec.typ == 'refl':
                 n_refl += 1
             sign = fold_sign(n_refl)
             ld.add(build_shape(spec),
-                   thickness=sign * float(sd.get('thi', 0.0)),
-                   material=spec.n, typ=spec.typ)
+                   thickness=sign * scale_length_to_mm(sd.get('thi', 0.0),
+                                                       unit_scale),
+                   material=spec.n, typ=spec.typ, **aperture_kwargs)
         if sd is stop_surface:
             sys.stop_index = compiled_idx
         compiled_idx += 1
@@ -387,7 +432,8 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
 
 # keywords whose presence as the first inline token of an SO/S/SI line means
 # the older keyword spelling is in use rather than the positional free format.
-_SURFACE_KEYWORDS = ('RDY', 'CUY', 'RDX', 'CUX', 'THI', 'GLA', 'K')
+_SURFACE_KEYWORDS = (
+    'RDY', 'CUY', 'RDX', 'CUX', 'THI', 'GLA', 'K', 'CA', 'CAO', 'CAI')
 
 
 def _is_number(token):
@@ -428,10 +474,12 @@ def _consume_surface_line(args, sd, radius_mode):
 
 
 def _consume_inline_keywords(args, sd):
-    """Pull (RDY|CUY|RDX|CUX|THI|GLA|K) <value> token pairs from inline args."""
+    """Pull surface keyword/value pairs from inline args."""
     i = 0
     keys = {'RDY': 'rdy', 'CUY': 'cuy', 'RDX': 'rdx', 'CUX': 'cux',
             'THI': 'thi', 'K': 'k'}
+    apertures = {'CA': 'semidiameter', 'CAO': 'semidiameter',
+                 'CAI': 'inner_semidiameter'}
     while i < len(args):
         tok = args[i].upper()
         if tok in keys and i + 1 < len(args):
@@ -440,11 +488,14 @@ def _consume_inline_keywords(args, sd):
         elif tok == 'GLA' and i + 1 < len(args):
             sd['gla'] = args[i + 1]
             i += 2
+        elif tok in apertures and i + 1 < len(args):
+            sd[apertures[tok]] = _parse_float(args[i + 1])
+            i += 2
         else:
             i += 1  # unknown / control-code inline token; skip silently
 
 
-def _pose_from_dict(sd):
+def _pose_from_dict(sd, length_scale=1.0):
     """Coordinate-break (tilt, decenter, kind) for one parsed surface dict.
 
     Code V uses degrees for ADE/BDE/CDE.  prysm tilt convention is (rz, ry, rx);
@@ -460,14 +511,14 @@ def _pose_from_dict(sd):
                 -float(sd.get('bde', 0.0)),
                 -float(sd.get('ade', 0.0)))
     if any(sd.get(k, 0.0) for k in ('dec_x', 'dec_y', 'dec_z')):
-        decenter = (float(sd.get('dec_x', 0.0)),
-                    float(sd.get('dec_y', 0.0)),
-                    float(sd.get('dec_z', 0.0)))
+        decenter = (scale_length_to_mm(sd.get('dec_x', 0.0), length_scale),
+                    scale_length_to_mm(sd.get('dec_y', 0.0), length_scale),
+                    scale_length_to_mm(sd.get('dec_z', 0.0), length_scale))
     kind = 'dar' if sd.get('dar') else 'basic'
     return tilt, decenter, kind
 
 
-def _build_spec(sd, radius_mode, database=None):
+def _build_spec(sd, radius_mode, database=None, length_scale=1.0):
     """Turn one parsed Code V surface dict into a SurfaceSpec (no pose)."""
     c_y = _resolve_c(sd, 'cuy', 'rdy')
     c_x = _resolve_c(sd, 'cux', 'rdx')
@@ -484,6 +535,7 @@ def _build_spec(sd, radius_mode, database=None):
     n_arg = None if is_mirror else n_callable
 
     def spec(kind, params):
+        params = scale_surface_params_to_mm(kind, params, length_scale)
         return SurfaceSpec(kind, typ, None, n_arg, params)
 
     # Zernike (Fringe) surface

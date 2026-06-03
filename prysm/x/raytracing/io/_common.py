@@ -1,5 +1,6 @@
 """Shared helpers for the raytracing IO parsers (Zemax, Code V, ...)."""
 
+import math
 import re
 import warnings
 
@@ -35,7 +36,8 @@ def read_text_or_path(path_or_text, is_text=False):
     return text, str(path_or_text)
 
 
-def fields_from_xy(x_values, y_values, kind='angle', unit='deg'):
+def fields_from_xy(x_values, y_values, kind='angle', unit='deg',
+                   object_z=None, length_scale=1.0):
     """Build Field records from possibly uneven x/y field lists."""
     from ..launch import Field
 
@@ -55,7 +57,112 @@ def fields_from_xy(x_values, y_values, kind='angle', unit='deg'):
     if kind == 'angle':
         return [Field(hx, hy, kind='angle', unit=unit)
                 for hx, hy in zip(x_values, y_values)]
-    return [Field(hx, hy, kind=kind) for hx, hy in zip(x_values, y_values)]
+    object_z = scale_length_to_mm(object_z, length_scale)
+    return [Field(scale_length_to_mm(hx, length_scale),
+                  scale_length_to_mm(hy, length_scale),
+                  kind=kind, object_z=object_z)
+            for hx, hy in zip(x_values, y_values)]
+
+
+_UNIT_TO_MM = {
+    'mm': 1.0,
+    'millimeter': 1.0,
+    'millimeters': 1.0,
+    'cm': 10.0,
+    'centimeter': 10.0,
+    'centimeters': 10.0,
+    'm': 1000.0,
+    'meter': 1000.0,
+    'meters': 1000.0,
+    'in': 25.4,
+    'inch': 25.4,
+    'inches': 25.4,
+    'ft': 304.8,
+    'foot': 304.8,
+    'feet': 304.8,
+}
+
+
+def length_scale_to_mm(unit):
+    """Return the factor that converts one source length unit to millimeters."""
+    if unit is None:
+        return 1.0
+    key = str(unit).strip().lower()
+    try:
+        return _UNIT_TO_MM[key]
+    except KeyError as e:
+        raise ValueError(
+            f'unsupported prescription length unit {unit!r}; supported units '
+            'are mm, cm, m, in, and ft'
+        ) from e
+
+
+def scale_length_to_mm(value, scale):
+    """Scale a finite length-like value to millimeters."""
+    if value is None:
+        return None
+    value = float(value)
+    if not math.isfinite(value):
+        return value
+    return value * scale
+
+
+def _scale_curvature(value, scale):
+    """Scale inverse-length curvature into inverse millimeters."""
+    return float(value) / scale
+
+
+def _scale_even_asphere_coefs(coefs, scale):
+    """Scale even-asphere coefficients from source units to millimeters."""
+    scaled = []
+    for i, coef in enumerate(coefs, start=1):
+        power = 2 * (i + 1)  # i=1 is rho**4
+        scaled.append(float(coef) / (scale ** (power - 1)))
+    return tuple(scaled)
+
+
+def scale_surface_params_to_mm(kind, params, scale):
+    """Scale normalized SurfaceSpec shape params from source units to mm."""
+    if scale == 1.0:
+        return dict(params)
+    out = dict(params)
+    if kind in ('conic', 'even_asphere', 'zernike', 'xy'):
+        out['c'] = _scale_curvature(out.get('c', 0.0), scale)
+    if kind == 'even_asphere':
+        out['coefs'] = _scale_even_asphere_coefs(out.get('coefs', ()), scale)
+    elif kind == 'toroid':
+        out['c_x'] = _scale_curvature(out['c_x'], scale)
+        out['c_y'] = _scale_curvature(out['c_y'], scale)
+        out['coefs_y'] = _scale_even_asphere_coefs(
+            out.get('coefs_y', ()), scale)
+    elif kind == 'biconic':
+        out['c_x'] = _scale_curvature(out['c_x'], scale)
+        out['c_y'] = _scale_curvature(out['c_y'], scale)
+    elif kind in ('zernike', 'xy'):
+        out['normalization_radius'] = scale_length_to_mm(
+            out['normalization_radius'], scale)
+        out['coefs'] = tuple(float(c) * scale for c in out.get('coefs', ()))
+    return out
+
+
+def aperture_kwargs_from_radii(outer_radius, scale, inner_radius=None):
+    """LensData.add keyword args for a circular or annular clear aperture."""
+    outer = scale_length_to_mm(outer_radius, scale)
+    if outer is None:
+        return {}
+    inner = scale_length_to_mm(inner_radius, scale)
+    if inner is None:
+        return {'semidiameter': outer}
+    if inner < 0 or outer <= 0 or inner >= outer:
+        raise ValueError(
+            'clear-aperture radii must satisfy 0 <= inner < outer'
+        )
+    from ..surfaces import annular_aperture
+    return {
+        'semidiameter': outer,
+        'aperture': annular_aperture(inner, outer),
+        'bounding': {'inner_radius': float(inner), 'outer_radius': float(outer)},
+    }
 
 
 def fold_sign(n_refl):

@@ -11,16 +11,17 @@ non-trivial.
 
 The header is parsed for: WAVL (wavelengths), ENPD (entrance pupil
 diameter), STOP (stop surface index), FNUM, FTYP/XFLN/YFLN (fields),
-UNIT (length units).
+UNIT (length units).  Supported source length units are converted to
+millimeters at import, and the returned OpticalSystem reports unit='mm'.
 
-Returns a LensData carrying the sequential rows (compiled to .surfaces on
-demand) plus all the metadata fields.
+Returns an OpticalSystem carrying the sequential rows (compiled to surfaces
+on demand) plus all supported metadata fields.
 
 Out of scope (raises informative NotImplementedError):
 - Multi-configuration (MNCA / MOFF) data
 - Nonsequential ray-trace blocks (NSC*)
 - USERSURF and other extension surface types
-- Reverse / forward toggles, vignetting, polarization
+- Reverse / forward toggles, affine vignetting factors, polarization
 
 For files outside this subset, supply a manually-built prescription
 instead of read_zmx.
@@ -38,6 +39,10 @@ from ._common import (
     fold_sign,
     writable_shape_or_raise,
     warn_vignetting_ignored as _warn_vignetting_ignored,
+    length_scale_to_mm,
+    scale_length_to_mm,
+    scale_surface_params_to_mm,
+    aperture_kwargs_from_radii,
 )
 from ..lensdata import LensData
 from ..system import OpticalSystem, ApertureSpec
@@ -123,6 +128,8 @@ _UNIT_MAP = {
     'INCHES': 'in',
     'M': 'm',
     'METERS': 'm',
+    'FT': 'ft',
+    'FEET': 'ft',
 }
 
 
@@ -135,6 +142,7 @@ def _parse_header(lines):
         'stop_index_zemax': None,  # 1-based Zemax index, translated later
         'unit': None,
         'fields': [],
+        'field_values': ([], [], 0),
         'extras': {},
     }
     xfln = []
@@ -174,7 +182,9 @@ def _parse_header(lines):
             yfln = [float(y) for y in rest.split() if y]
         elif d == 'FTYP':
             # FTYP <type> ... type 0 = angle, 1 = object height,
-            # 2 = paraxial image height, 3 = real image height
+            # 2 = paraxial image height, 3 = real image height.
+            # The latter two are rejected by read_zmx; Field(kind='height')
+            # represents object height, not image height.
             tokens = rest.split()
             if tokens:
                 out['extras']['FTYP'] = int(tokens[0])
@@ -182,9 +192,11 @@ def _parse_header(lines):
             out['extras'].setdefault(d, []).append(rest)
     # build Field objects from XFLN/YFLN if present
     ftype = out['extras'].get('FTYP', 0)
+    out['field_values'] = (xfln, yfln, ftype)
     if xfln or yfln:
-        kind = 'angle' if ftype == 0 else 'height'
-        out['fields'] = fields_from_xy(xfln, yfln, kind=kind, unit='deg')
+        if ftype == 0:
+            out['fields'] = fields_from_xy(xfln, yfln, kind='angle',
+                                           unit='deg')
     return out
 
 
@@ -249,7 +261,7 @@ def _parse_block(idx, body_lines):
 
 # ---------- block -> Surface ------------------------------------------------
 
-def _make_spec(block, database):
+def _make_spec(block, database, length_scale=1.0):
     """Build a (pose-free) SurfaceSpec from a parsed Zemax SURF block.
 
     Returns a _CoordinateBreak sentinel for COORDBRK pseudo-surfaces.
@@ -265,6 +277,7 @@ def _make_spec(block, database):
     n_arg = None if is_mirror else n_callable
 
     def spec(kind, params):
+        params = scale_surface_params_to_mm(kind, params, length_scale)
         return SurfaceSpec(kind, typ, None, n_arg, params)
 
     if surf_type == 'STANDARD':
@@ -378,9 +391,13 @@ class _CoordinateBreak:
     def __init__(self, block):
         self.block = block
 
-    def tilt_decenter(self):
+    def tilt_decenter(self, length_scale=1.0):
         p = self.block.get('parm', {})
-        decenter = (p.get(1, 0.0), p.get(2, 0.0), 0.0)
+        decenter = (
+            scale_length_to_mm(p.get(1, 0.0), length_scale),
+            scale_length_to_mm(p.get(2, 0.0), length_scale),
+            0.0,
+        )
         # Zemax tilt order: PARM 3=Tx, 4=Ty, 5=Tz; prysm uses (rz, ry, rx)
         tilt = (p.get(5, 0.0), p.get(4, 0.0), p.get(3, 0.0))
         return tilt, decenter
@@ -469,7 +486,7 @@ def write_zmx(system):
 
 
 def read_zmx(path_or_text, *, _is_text=False, database=None):
-    """Read a Zemax .zmx text file into a LensData.
+    """Read a Zemax .zmx text file into an OpticalSystem.
 
     Parameters
     ----------
@@ -484,7 +501,7 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
 
     Returns
     -------
-    LensData
+    OpticalSystem
 
     """
     text, path_for_meta = read_text_or_path(path_or_text, is_text=_is_text)
@@ -500,18 +517,45 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
 
     # parse each block
     parsed = [_parse_block(idx, body) for idx, body in surf_blocks]
+    unit_scale = length_scale_to_mm(header['unit'] or 'mm')
 
     def _gap(blk):
         d = blk.get('disz', 0.0)
-        return 0.0 if not np.isfinite(d) else float(d)
+        return 0.0 if not np.isfinite(d) else scale_length_to_mm(d, unit_scale)
+
+    def _semidiameter(blk):
+        return aperture_kwargs_from_radii(blk.get('diam'), unit_scale)
+
+    fields = header['fields']
+    xfln, yfln, ftype = header.get('field_values', ([], [], 0))
+    if (xfln or yfln) and ftype == 1:
+        raw_object_gap = parsed[0].get('disz', 0.0) if parsed else None
+        if raw_object_gap is None or not np.isfinite(raw_object_gap):
+            raise ValueError(
+                'Zemax object-height fields require a finite object distance on '
+                'SURF 0 DISZ'
+            )
+        fields = fields_from_xy(xfln, yfln, kind='height',
+                                object_z=-raw_object_gap,
+                                length_scale=unit_scale)
+    elif (xfln or yfln) and ftype in (2, 3):
+        raise NotImplementedError(
+            'Zemax image-height fields (FTYP 2/3) are not supported by '
+            'read_zmx; use angle fields or object-height fields instead'
+        )
+    elif (xfln or yfln) and ftype != 0:
+        raise NotImplementedError(
+            f'Zemax FTYP {ftype} fields are not supported by read_zmx'
+        )
 
     ld = LensData()
     sys = OpticalSystem(
         ld,
-        aperture=(ApertureSpec.epd(header['epd'])
+        aperture=(ApertureSpec.epd(scale_length_to_mm(header['epd'],
+                                                     unit_scale))
                   if header['epd'] is not None else None),
-        fields=header['fields'],
-        wavelengths=header['wavelengths'], unit=header['unit'],
+        fields=fields,
+        wavelengths=header['wavelengths'], unit='mm',
         source_path=path_for_meta, source_format='zemax',
         extras=header['extras'],
     )
@@ -533,24 +577,26 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
         surf_type = blk.get('type', 'STANDARD')
         if surf_type == 'COORDBRK':
             cb = _CoordinateBreak(blk)
-            tilt, decenter = cb.tilt_decenter()
+            tilt, decenter = cb.tilt_decenter(unit_scale)
             sign = fold_sign(n_refl)
             ld.add_coordbreak(decenter=decenter, tilt=tilt, kind='basic',
                               thickness=sign * _gap(blk))
             continue
-        spec = _make_spec(blk, database)
+        spec = _make_spec(blk, database, unit_scale)
         if spec.typ == 'refl':
             n_refl += 1
         sign = fold_sign(n_refl)
         thickness = sign * _gap(blk)
+        aperture_kwargs = _semidiameter(blk)
         # the image surface, if flat, becomes an eval plane
         if i == image_block_i and spec.kind == 'conic' \
                 and spec.params.get('c', 0.0) == 0.0 \
                 and spec.params.get('k', 0.0) == 0.0:
-            ld.add(Plane(), typ='eval', thickness=thickness)
+            ld.add(Plane(), typ='eval', thickness=thickness,
+                   **aperture_kwargs)
         else:
             ld.add(build_shape(spec), thickness=thickness,
-                   material=spec.n, typ=spec.typ)
+                   material=spec.n, typ=spec.typ, **aperture_kwargs)
         surface_origin_idx.append(blk.get('idx', i))
 
     # translate Zemax stop index (1-based SURF idx) to the compiled-surface idx
