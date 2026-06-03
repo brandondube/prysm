@@ -4,6 +4,7 @@
 # not using it at the moment for GPU compatibility
 # from numpy.core.umath_tests import inner1d
 
+from prysm.conf import config
 from prysm.mathops import np, row_dot
 
 SURFACE_INTERSECTION_DEFAULT_MAXITER = 100
@@ -37,6 +38,14 @@ STATUS_NEWTON = 1   # numerical: Newton-Raphson didn't converge
 STATUS_CLIP = 2     # numerical: aperture clipped
 STATUS_MISS = -1    # geometric: no analytic intersection
 STATUS_TIR = -2     # geometric: total internal reflection
+
+_STATUS_LABELS = {
+    STATUS_OK: 'OK',
+    STATUS_NEWTON: 'NEWTON',
+    STATUS_CLIP: 'CLIPPED',
+    STATUS_MISS: 'MISS',
+    STATUS_TIR: 'TIR',
+}
 
 
 class RayTraceResult:
@@ -79,6 +88,43 @@ class RayStatus:
     @property
     def encoded(self):
         return self.surface + 1j * self.code
+
+    @property
+    def text(self):
+        """Human-readable status strings."""
+        return decode_status(self.encoded)
+
+
+def _decode_status_scalar(status):
+    """Decode one complex ray status value."""
+    surface = int(status.real)
+    code = int(status.imag)
+    label = _STATUS_LABELS.get(code, f'UNKNOWN({code})')
+    if code == STATUS_OK:
+        return label
+    return f'{label} at surface {surface}'
+
+
+def decode_status(status):
+    """Decode raytrace's compact complex status encoding.
+
+    Parameters
+    ----------
+    status : complex or ndarray
+        Encoded status value or array.  The real part stores the 1-based
+        surface index and the imaginary part stores the STATUS_* code.
+
+    Returns
+    -------
+    str or ndarray
+        A scalar input returns a string.  An array input returns an object
+        array of strings with matching shape.
+    """
+    arr = np.asarray(status)
+    if arr.ndim == 0:
+        return _decode_status_scalar(arr.item())
+    decoded = [_decode_status_scalar(v) for v in arr.ravel()]
+    return np.asarray(decoded, dtype=object).reshape(arr.shape)
 
 
 def _failure_code_for_surface(surf):
@@ -185,6 +231,7 @@ def newton_raphson_solve_s(P1, S, sag_and_normal, s1=0.0,
         Absolute convergence tolerance on the surface residual Z - sag.
     maxiter : int
         maximum number of iterations to allow
+
     Returns
     -------
     Pj, n_hat, valid : ndarray, ndarray, ndarray
@@ -485,6 +532,9 @@ def raytrace(surfaces, P, S, wvl, tol_sag=None):
         (k,l,m) starting direction cosines
     wvl : float
         wavelength of light, um
+    tol_sag : float, optional
+        convergence tolerance in sag for newton-raphson iteration intersecting
+        with surfaces that cannot be analytically intersected
 
     Returns
     -------
@@ -608,7 +658,7 @@ def intersect_reference_sphere(P, S, C, R):
     P : ndarray
         shape (N,3), any float dtype.  Ray origins (typically the last surface).
     S : ndarray
-        shape (N,3), any float dtype.  Ray direction cosines.
+        shape (N,3), any float dtype.  Ray direction cosines leaving P
     C : ndarray
         shape (3,), any float dtype.  Sphere center (image point).
     R : float
@@ -626,6 +676,7 @@ def intersect_reference_sphere(P, S, C, R):
     b = row_dot(S, d)                       # S . (P-C)
     cc = row_dot(d, d) - R * R
     disc = b * b - cc
+    _validate_reference_sphere_intersection(P, C, R, disc)
     # near-zero negative disc from FP noise -> clamp
     disc = np.where(disc < 0, np.zeros_like(disc), disc)
     sqrt_disc = np.sqrt(disc)
@@ -635,3 +686,44 @@ def intersect_reference_sphere(P, S, C, R):
     t = -b - sqrt_disc
     Q = P + t[:, np.newaxis] * S
     return Q, t
+
+
+def _reference_sphere_tolerances(P, C, R):
+    """Absolute radius and discriminant tolerances for reference-sphere tests."""
+    P = np.asarray(P)
+    C = np.asarray(C)
+    dtype = getattr(P, 'dtype', config.precision)
+    rtol = 1e-6 if dtype == np.float32 else 1e-12
+    d = P - C
+    try:
+        extent = float(np.sqrt(np.max(row_dot(d, d))))
+    except TypeError:
+        extent = 1.0
+    scale = max(1.0, extent, abs(float(R)))
+    return rtol * scale, rtol * scale * scale
+
+
+def _validate_reference_sphere_intersection(P, C, R, disc):
+    """Raise for degenerate reference spheres or wholesale missed intersections."""
+    if not np.isfinite(R):
+        raise ValueError(
+            'reference-sphere radius is not finite; pass a finite P_xp or use '
+            'the EIC planar-reference path for an infinite exit pupil'
+        )
+    radius_tol, disc_tol = _reference_sphere_tolerances(P, C, R)
+    if abs(float(R)) <= radius_tol:
+        raise ValueError(
+            'reference-sphere radius is degenerate; pass P_xp or a resolvable '
+            'stop/pupil route instead of auto-locating from an axial chief ray'
+        )
+    bad = disc < -disc_tol
+    if bool(np.any(bad)):
+        try:
+            fraction = float(np.count_nonzero(bad)) / float(np.size(bad))
+        except TypeError:
+            fraction = 1.0
+        if fraction >= 0.25:
+            raise ValueError(
+                'reference sphere does not intersect a substantial fraction '
+                'of rays; check P_xp/reference-sphere geometry'
+            )
