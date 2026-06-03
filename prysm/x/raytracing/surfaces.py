@@ -452,6 +452,9 @@ class Sphere(Shape):
 class Conic(Shape):
     """Conic sag shape.
 
+    Uses the standard raytracing conic convention: k = -1 is a parabola and
+    k = 0 is a sphere.
+
     Parameters
     ----------
     c : float

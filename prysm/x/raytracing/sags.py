@@ -28,6 +28,7 @@ def phi_conic(c, k, rhosq):
     """'phi' for a conic.
 
     phi = sqrt(1 - (1 + k) c^2 rho^2)
+    The conic convention is k = -1 for a parabola and k = 0 for a sphere.
 
     Parameters
     ----------
@@ -46,6 +47,14 @@ def phi_conic(c, k, rhosq):
     """
     csq = c * c
     return np.sqrt(1 - (1 + k) * csq * rhosq)
+
+
+def _der_inv_phi_conic_rhosq(c, k, rhosq, phi=None):
+    """Derivative of 1 / phi with respect to rho squared."""
+    csq = c * c
+    if phi is None:
+        phi = phi_conic(c, k, rhosq)
+    return 0.5 * (1.0 + k) * csq / (phi * phi * phi)
 
 
 def der_direction_cosine_conic(c, k, rho, rhosq=None, phi=None):
@@ -79,15 +88,12 @@ def der_direction_cosine_conic(c, k, rho, rhosq=None, phi=None):
         d/drho of (1/phi)
 
     """
-    csq = c * c
     if rhosq is None:
         rhosq = rho * rho
     if phi is None:
         phi = phi_conic(c, k, rhosq)
 
-    num = -csq * (k-1) * rho
-    den = phi * phi * phi
-    return num / den
+    return 2.0 * rho * _der_inv_phi_conic_rhosq(c, k, rhosq, phi=phi)
 
 def conic_sag_and_normal(c, k, X, Y):
     """Sag and unit normal for a conicoid evaluated at coordinates X, Y."""
@@ -211,7 +217,7 @@ def conic_sag_der(c, kappa, rho, phi=None):
     c : float
         surface curvature
     kappa : float
-        conic constant, 0=sphere, 1=parabola, etc
+        conic constant, where -1 is a parabola and 0 is a sphere
     rho : ndarray
         radial coordinate
         e.g. for a 15 mm half-diameter optic,
@@ -535,10 +541,10 @@ def _q2d_sigma_inv_der(c, k, x, y, r, t, dx=0, dy=0):
     A, dA_dr, dA_dt = _q2d_conic_aggregate_with_derivs(x, y, r, t, dx, dy)
     csq = c * c
     phi = phi_conic(c, k, A)
-    phi_cubed = phi * phi * phi
     u = np.sqrt(1.0 - k * csq * A)
-    common = csq * (((1.0 + k) * u) / (2.0 * phi_cubed)
-                    - k / (2.0 * phi * u))
+    d_inv_phi_dA = _der_inv_phi_conic_rhosq(c, k, A, phi=phi)
+    d_u_dA = -0.5 * k * csq / u
+    common = u * d_inv_phi_dA + d_u_dA / phi
     return common * dA_dr, common * dA_dt
 
 
