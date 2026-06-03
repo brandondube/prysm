@@ -485,6 +485,13 @@ class PupilField:
         return self.P_matrix is not None
 
 
+def _first_order_geometry_failure(exc):
+    """True when first_order failed because scalar ABCD geometry is invalid."""
+    msg = str(exc)
+    return ('centered axial geometry' in msg
+            or 'vertex normal to be axial' in msg)
+
+
 def _resolve_exit_pupil(prescription, field, wavelength, epd,
                         stop_index, P_xp, P_img, chief_P, chief_S,
                         axis_dir=None):
@@ -503,15 +510,20 @@ def _resolve_exit_pupil(prescription, field, wavelength, epd,
         return np.asarray(P_xp), P_img
 
     if stop_index is not None:
-        fo = first_order(prescription, wvl=wavelength,
-                         epd=epd, stop_index=stop_index)
-        if fo.xp_z is None:
-            raise ValueError(
-                'paraxial exit pupil is at infinity (telecentric); pass P_xp '
-                'explicitly for a planar reference'
-            )
-        P_xp = np.array([0.0, 0.0, float(fo.xp_z)], dtype=P_img.dtype)
-        return P_xp, P_img
+        try:
+            fo = first_order(prescription, wvl=wavelength,
+                             epd=epd, stop_index=stop_index)
+        except ValueError as exc:
+            if axis_dir is None or not _first_order_geometry_failure(exc):
+                raise
+        else:
+            if fo.xp_z is None:
+                raise ValueError(
+                    'paraxial exit pupil is at infinity (telecentric); pass P_xp '
+                    'explicitly for a planar reference'
+                )
+            P_xp = np.array([0.0, 0.0, float(fo.xp_z)], dtype=P_img.dtype)
+            return P_xp, P_img
 
     # last resort: chief-ray geometric estimate.  This triangulates the exit
     # pupil from where the chief ray crosses the axis, which is ill-conditioned
@@ -530,7 +542,7 @@ def _resolve_exit_pupil(prescription, field, wavelength, epd,
             'cannot locate the exit pupil from a near-axial chief ray; pass '
             'stop_index=... or P_xp=... to anchor the reference sphere'
         )
-    _, R, P_xp = xp_reference_sphere(chief_P, chief_S)
+    _, R, P_xp = xp_reference_sphere(chief_P, chief_S, axis_dir=w)
     return P_xp, P_img
 
 
