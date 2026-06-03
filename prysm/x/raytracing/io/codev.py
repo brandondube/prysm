@@ -16,12 +16,13 @@ Supported subset (raise informative error otherwise):
   ASP and A/B/C/D (even-asphere coefs)
 - Decenter / tilt: XDE/YDE/ZDE (decenter), ADE/BDE/CDE (tilt, degrees),
   and the DAR (decenter-and-return) block flag
+- FNO image-space F-number aperture, angle fields (YAN/XAN), image-height
+  fields (YIM/XIM), and field-side vignetting factors (VUX/VUY/VLX/VLY)
 
 Out of scope:
 - Toroid (TOR command)
-- Solves, pickups, zoom configurations, affine vignetting factors (VUY/VLY)
+- Solves, pickups, zoom configurations
 - BEN/REV/RET decenter types, GLB/GLO global references
-- Image-height field records (YIM/XIM)
 
 The C-suffixed codes (CCY, CCX, THC, KC, AC, ADC, BDC, CDC, XDC, ...) are Code V
 optimization coupling/control codes, not geometry; they are ignored.  In
@@ -37,6 +38,8 @@ are stripped.
 
 """
 
+import math
+
 from ..surfaces import Plane
 from .. import materials as _materials
 from ._indexing import fringe_to_nm, xy_j_to_mn
@@ -45,14 +48,14 @@ from ._common import (
     read_text_or_path,
     fold_sign,
     writable_shape_or_raise,
-    warn_vignetting_ignored as _warn_vignetting_ignored,
     length_scale_to_mm,
     scale_length_to_mm,
     scale_surface_params_to_mm,
     aperture_kwargs_from_radii,
 )
 from ..lensdata import LensData
-from ..system import OpticalSystem, ApertureSpec
+from ..system import OpticalSystem, ApertureSpec, FieldSet
+from ..paraxial import effective_focal_length
 from ._surface_spec import SurfaceSpec, build_shape
 
 
@@ -96,9 +99,9 @@ from ._common import parse_float as _parse_float  # noqa: E402  (kept name for c
 
 _KIND_BY_FNUM = {
     # Code V doesn't have a uniform field-type enum like Zemax FTYP.
-    # YAN/XAN mean angle fields.  YIM/XIM are image-height fields, which the
-    # Field finite-conjugate object-height model cannot represent directly.
 }
+
+_VIGNETTING_KEYS = ('vux', 'vlx', 'vuy', 'vly')
 
 
 def _new_surface_dict():
@@ -156,10 +159,12 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
         'wavelength_weights': [],
         'reference_wvl_index': None,
         'epd': None,
+        'fno': None,
         'yan': [],
         'xan': [],
         'yim': [],
         'xim': [],
+        'vignetting': {key: [] for key in _VIGNETTING_KEYS},
         'extras': {},
     }
     radius_mode = True  # default: RDM (radius mode); CUM flips it
@@ -179,7 +184,7 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
         if verb == 'LEN':
             pass  # header start marker
         elif verb in ('TITLE', 'TIT'):
-            header['title'] = ' '.join(args)
+            header['title'] = _unquote_title(' '.join(args))
         elif verb in ('RDM',):
             radius_mode = True
         elif verb in ('CUM',):
@@ -214,6 +219,12 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
                     header['epd'] = float(args[0])
                 except ValueError:
                     pass
+        elif verb == 'FNO':
+            if args:
+                try:
+                    header['fno'] = float(args[0])
+                except ValueError:
+                    pass
         elif verb == 'YAN':
             try:
                 header['yan'] = [float(t) for t in args]
@@ -232,6 +243,11 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
         elif verb == 'XIM':
             try:
                 header['xim'] = [float(t) for t in args]
+            except ValueError:
+                pass
+        elif verb in ('VUX', 'VLX', 'VUY', 'VLY'):
+            try:
+                header['vignetting'][verb.lower()] = [float(t) for t in args]
             except ValueError:
                 pass
         elif verb == 'STO':
@@ -357,31 +373,27 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
 
     unit_scale = length_scale_to_mm(header['unit'] or 'mm')
 
-    # Field objects from YAN / XAN.  YIM / XIM are image-height fields, not
-    # finite-conjugate object-height fields, so reject them explicitly instead
-    # of launching from the wrong conjugate.
-    if header['xim'] or header['yim']:
-        raise NotImplementedError(
-            'Code V image-height fields (YIM/XIM) are not supported by '
-            'read_seq; use angle fields instead'
-        )
-    else:
-        fields = fields_from_xy(header['xan'], header['yan'],
-                                kind='angle', unit='deg')
+    fields = _angle_fields_from_header(header)
     ref_idx = header.get('reference_wvl_index')
     wavelengths = header['wavelengths']
     reference_wavelength = None
     if ref_idx is not None and 1 <= ref_idx <= len(wavelengths):
         reference_wavelength = float(wavelengths[ref_idx - 1])
 
+    aperture = None
+    if header['epd'] is not None:
+        aperture = ApertureSpec.epd(scale_length_to_mm(header['epd'],
+                                                      unit_scale))
+    elif header['fno'] is not None:
+        aperture = ApertureSpec.fno(header['fno'])
+
     ld = LensData()
     sys = OpticalSystem(
         ld,
-        aperture=(ApertureSpec.epd(scale_length_to_mm(header['epd'],
-                                                     unit_scale))
-                  if header['epd'] is not None else None),
+        aperture=aperture,
         fields=fields, wavelengths=wavelengths,
         reference_wavelength=reference_wavelength, unit='mm',
+        title=header['title'],
         source_path=path_for_meta, source_format='codev',
         extras=header['extras'],
     )
@@ -426,8 +438,89 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
             sys.stop_index = compiled_idx
         compiled_idx += 1
 
-    _warn_vignetting_ignored(text, 'Code V')
+    if not fields and (header['xim'] or header['yim']):
+        sys.fields = FieldSet(_image_height_fields_from_header(
+            header, sys, unit_scale,
+        ))
+
     return sys
+
+
+def _unquote_title(title):
+    """Strip simple quote wrappers from a Code V title."""
+    title = title.strip()
+    if len(title) >= 2 and title[0] in ('"', "'") and title[-1] == title[0]:
+        return title[1:-1]
+    return title
+
+
+def _field_count(x_values, y_values):
+    """Number of fields implied by two possibly uneven field lists."""
+    return max(len(x_values), len(y_values))
+
+
+def _vignetting_by_field(header, nfields):
+    """Per-field Code V side-vignetting records."""
+    if nfields <= 0:
+        return []
+    out = []
+    for i in range(nfields):
+        item = {}
+        for key in _VIGNETTING_KEYS:
+            values = header['vignetting'].get(key, ())
+            item[key] = values[i] if i < len(values) else 0.0
+        out.append(item)
+    return out
+
+
+def _angle_fields_from_header(header):
+    """Build angle fields from Code V XAN/YAN records."""
+    nfields = _field_count(header['xan'], header['yan'])
+    if nfields == 0:
+        return []
+    return fields_from_xy(
+        header['xan'], header['yan'],
+        kind='angle', unit='deg',
+        vignetting=_vignetting_by_field(header, nfields),
+    )
+
+
+def _image_height_fields_from_header(header, system, unit_scale):
+    """Convert Code V XIM/YIM image heights to equivalent angle fields.
+
+    prysm launches infinite-conjugate fields by object-space angle.  A Code V
+    image-height field is converted through the imported first-order EFL:
+    angle = atan(image_height / |EFL|).  This preserves the sequence's field
+    size for ordinary image-forming systems while leaving the ray launch layer
+    in its native angle-field representation.
+    """
+    nfields = _field_count(header['xim'], header['yim'])
+    if nfields == 0:
+        return []
+
+    wavelength = system.wavelength(None)
+    efl = abs(float(effective_focal_length(system, wvl=wavelength)))
+    if not math.isfinite(efl) or efl <= 0.0:
+        raise ValueError(
+            'Code V image-height fields (XIM/YIM) require a finite, nonzero '
+            'effective focal length'
+        )
+
+    x_angles = []
+    y_angles = []
+    for i in range(nfields):
+        x = header['xim'][i] if i < len(header['xim']) else 0.0
+        y = header['yim'][i] if i < len(header['yim']) else 0.0
+        x = scale_length_to_mm(x, unit_scale)
+        y = scale_length_to_mm(y, unit_scale)
+        x_angles.append(math.degrees(math.atan2(x, efl)))
+        y_angles.append(math.degrees(math.atan2(y, efl)))
+
+    return fields_from_xy(
+        x_angles, y_angles,
+        kind='angle', unit='deg',
+        vignetting=_vignetting_by_field(header, nfields),
+    )
 
 
 # keywords whose presence as the first inline token of an SO/S/SI line means

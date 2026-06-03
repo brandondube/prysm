@@ -37,7 +37,7 @@ def read_text_or_path(path_or_text, is_text=False):
 
 
 def fields_from_xy(x_values, y_values, kind='angle', unit='deg',
-                   object_z=None, length_scale=1.0):
+                   object_z=None, length_scale=1.0, vignetting=None):
     """Build Field records from possibly uneven x/y field lists."""
     from ..launch import Field
 
@@ -54,14 +54,20 @@ def fields_from_xy(x_values, y_values, kind='angle', unit='deg',
         x_values += [0.0] * (n - len(x_values))
     if len(y_values) < n:
         y_values += [0.0] * (n - len(y_values))
+    if vignetting is None:
+        vignetting = [None] * n
+    else:
+        vignetting = list(vignetting)
+        if len(vignetting) < n:
+            vignetting += [None] * (n - len(vignetting))
     if kind == 'angle':
-        return [Field(hx, hy, kind='angle', unit=unit)
-                for hx, hy in zip(x_values, y_values)]
+        return [Field(hx, hy, kind='angle', unit=unit, vignetting=vig)
+                for hx, hy, vig in zip(x_values, y_values, vignetting)]
     object_z = scale_length_to_mm(object_z, length_scale)
     return [Field(scale_length_to_mm(hx, length_scale),
                   scale_length_to_mm(hy, length_scale),
-                  kind=kind, object_z=object_z)
-            for hx, hy in zip(x_values, y_values)]
+                  kind=kind, object_z=object_z, vignetting=vig)
+            for hx, hy, vig in zip(x_values, y_values, vignetting)]
 
 
 _UNIT_TO_MM = {
