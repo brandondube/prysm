@@ -11,6 +11,7 @@ from matplotlib import pyplot as plt
 from prysm.x.raytracing.plotting import (
     lens_groups_from_surfaces,
     mirror_substrate_outline,
+    plot_chromatic_focal_shift,
     plot_distortion,
     plot_field_curvature,
     plot_optics,
@@ -20,6 +21,7 @@ from prysm.x.raytracing.plotting import (
     plot_wave_aberration_fan,
 )
 from prysm.x.raytracing.lensdata import LensData
+from prysm.x.raytracing.launch import Field
 from prysm.x.raytracing.spencer_and_murty import RayTraceResult
 from prysm.x.raytracing.surfaces import Conic, OffAxisConic, Plane, Surface
 
@@ -699,6 +701,39 @@ def test_plot_field_curvature_plots_s_and_t_vs_field():
         # on-axis sagittal and tangential foci coincide
         np.testing.assert_allclose(ax.lines[0].get_xdata()[0],
                                    ax.lines[1].get_xdata()[0])
+    finally:
+        plt.close(fig)
+
+
+def test_plot_field_curvature_uses_xy_labels_for_non_pure_y_fields():
+    ld = _singlet_lensdata()
+    fields = [Field(1.0, 1.0, unit='deg'), Field(2.0, 3.0, unit='deg')]
+
+    fig, ax = plot_field_curvature(ld, fields, label='d')
+    try:
+        assert [line.get_label() for line in ax.lines] == ['d X', 'd Y']
+    finally:
+        plt.close(fig)
+
+
+def test_plot_chromatic_focal_shift_plots_shift_vs_wavelength():
+    ld = _singlet_lensdata()
+
+    fig, ax = plot_chromatic_focal_shift(
+        ld, focus='paraxial', samples=9, label='paraxial',
+    )
+    try:
+        line = ax.lines[0]
+        from prysm.x.raytracing.analysis import chromatic_focal_shift
+        wavelengths, shifts = chromatic_focal_shift(
+            ld, focus='paraxial', samples=9,
+        )
+        np.testing.assert_allclose(line.get_xdata(), wavelengths)
+        np.testing.assert_allclose(line.get_ydata(), shifts)
+        assert len(line.get_xdata()) == 9
+        assert line.get_label() == 'paraxial'
+        assert ax.get_xlabel() == 'wavelength [um]'
+        assert ax.get_ylabel() == 'focus shift'
     finally:
         plt.close(fig)
 

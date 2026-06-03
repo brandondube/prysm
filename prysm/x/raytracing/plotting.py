@@ -19,7 +19,13 @@ from .spencer_and_murty import (
     transform_to_global_coords,
     transform_to_local_coords,
 )
-from .analysis import transverse_ray_aberration, field_curvature, distortion
+from .analysis import (
+    transverse_ray_aberration,
+    chromatic_focal_shift,
+    field_curvature,
+    distortion,
+    _field_curvature_labels,
+)
 from .surfaces import STYPE_REFLECT, STYPE_REFRACT
 from ._meta import system_wavelength
 
@@ -1094,13 +1100,13 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
                          marginal_fraction=1e-3,
                          reference='image', c='r', lw=1, alpha=1, zorder=4,
                          label=None, fig=None, ax=None):
-    """Plot sagittal and tangential field curves.
+    """Plot field-curvature x/y fan curves.
 
-    Composes analysis.field_curvature: for each field the sagittal (solid) and
-    tangential (dashed) longitudinal foci are plotted as a focus shift on the
-    horizontal axis against field magnitude on the vertical axis — the
-    classical astigmatic-field-curvature presentation.  Call once per
-    wavelength with a distinct c to overlay several wavelengths.
+    Composes analysis.field_curvature: for each field the x-fan (solid) and
+    y-fan (dashed) longitudinal foci are plotted as a focus shift on the
+    horizontal axis against field magnitude on the vertical axis.  For pure-y
+    fields on an axisymmetric system the legend uses the classical sagittal
+    and tangential labels; otherwise it uses X and Y fan labels.
 
     Parameters
     ----------
@@ -1121,7 +1127,7 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
         surface vertex; a number references that lab-frame z; None plots the
         raw lab-frame z.
     c : color, optional
-        curve color; S and T share it and are distinguished by line style.
+        curve color; both fans share it and are distinguished by line style.
     lw : float, optional
         line width.
     alpha : float, optional
@@ -1129,7 +1135,8 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
     zorder : int, optional
         stack order.
     label : str, optional
-        base legend label; the sagittal/tangential curves append ' S' / ' T'.
+        base legend label; the curves append S/T for the classical case, else
+        X/Y.
     fig : matplotlib.figure.Figure
     ax : matplotlib.axes.Axis
 
@@ -1140,12 +1147,13 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    sagittal_z, tangential_z = field_curvature(
+    fields = list(fields)
+    x_fan_z, y_fan_z = field_curvature(
         prescription, fields, wavelength, epd=epd,
         marginal_fraction=marginal_fraction,
     )
-    sagittal_z = _to_np(sagittal_z, dtype=float)
-    tangential_z = _to_np(tangential_z, dtype=float)
+    x_fan_z = _to_np(x_fan_z, dtype=float)
+    y_fan_z = _to_np(y_fan_z, dtype=float)
     if reference is None:
         ref = 0.0
     elif isinstance(reference, str):
@@ -1155,15 +1163,85 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
             raise ValueError("reference string must be 'image'")
     else:
         ref = float(reference)
-    field_values = _field_axis_values(list(fields))
-    s_label = 'S' if label is None else f'{label} S'
-    t_label = 'T' if label is None else f'{label} T'
-    ax.plot(sagittal_z - ref, field_values, c=c, ls='-', lw=lw, alpha=alpha,
-            zorder=zorder, label=s_label)
-    ax.plot(tangential_z - ref, field_values, c=c, ls='--', lw=lw, alpha=alpha,
-            zorder=zorder, label=t_label)
+    field_values = _field_axis_values(fields)
+    suffixes, _ = _field_curvature_labels(prescription, fields)
+    x_label = suffixes[0] if label is None else f'{label} {suffixes[0]}'
+    y_label = suffixes[1] if label is None else f'{label} {suffixes[1]}'
+    ax.plot(x_fan_z - ref, field_values, c=c, ls='-', lw=lw, alpha=alpha,
+            zorder=zorder, label=x_label)
+    ax.plot(y_fan_z - ref, field_values, c=c, ls='--', lw=lw, alpha=alpha,
+            zorder=zorder, label=y_label)
     ax.set_xlabel('focus shift')
     ax.set_ylabel('field')
+    return fig, ax
+
+
+def plot_chromatic_focal_shift(prescription, wavelengths=None, *,
+                               reference_wavelength=None,
+                               focus='best', epd=None, field=None,
+                               sampling=None, samples=101,
+                               c='r', marker=None, lw=1, alpha=1,
+                               zorder=4, label=None, fig=None, ax=None):
+    """Plot focus shift against wavelength.
+
+    Composes analysis.chromatic_focal_shift.  The horizontal axis is
+    wavelength in microns, and the vertical axis is longitudinal best-focus
+    shift in prescription length units.  When wavelengths is omitted, the
+    curve spans the full wavelength range carried by an OpticalSystem.
+
+    Parameters
+    ----------
+    prescription : sequence of Surface or LensData
+        the optical system.
+    wavelengths : iterable of float, optional
+        wavelengths in microns.  If omitted, samples spans the full range of
+        prescription.wavelengths.
+    reference_wavelength : float, optional
+        wavelength in microns whose focus is used as zero.  Defaults to the
+        prescription reference wavelength when available.
+    focus : str, optional
+        'best' (default) or 'paraxial'; see analysis.chromatic_focal_shift.
+    epd : float, optional
+        entrance pupil diameter for focus='best'.
+    field : Field, optional
+        field for focus='best'.
+    sampling : Sampling, optional
+        ray bundle used for focus='best'.
+    samples : int, optional
+        number of wavelength samples used when wavelengths is omitted.
+    c : color, optional
+        curve color.
+    marker : str, optional
+        marker style.
+    lw : float, optional
+        line width.
+    alpha : float, optional
+        opacity.
+    zorder : int, optional
+        stack order.
+    label : str, optional
+        legend label.
+    fig : matplotlib.figure.Figure
+    ax : matplotlib.axes.Axis
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    matplotlib.axes.Axis
+
+    """
+    fig, ax = share_fig_ax(fig, ax)
+    wavelengths, shifts = chromatic_focal_shift(
+        prescription, wavelengths, reference_wavelength=reference_wavelength,
+        focus=focus, epd=epd, field=field, sampling=sampling,
+        samples=samples,
+    )
+    shifts = _to_np(shifts, dtype=float)
+    wavelengths = _to_np(wavelengths, dtype=float)
+    ax.plot(wavelengths, shifts, c=c, marker=marker, lw=lw, alpha=alpha,
+            zorder=zorder, label=label)
+    ax.set_xlabel('wavelength [um]')
+    ax.set_ylabel('focus shift')
     return fig, ax
 
 
