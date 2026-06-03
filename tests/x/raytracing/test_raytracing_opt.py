@@ -20,7 +20,7 @@ from prysm.x.raytracing.opt import (
     geometric_psf_histogram,
 )
 from prysm.x.raytracing.spencer_and_murty import (
-    STATUS_CLIP, STATUS_MISS,
+    STATUS_CLIP, STATUS_MISS, intersect_reference_sphere,
 )
 from prysm.x.raytracing.paraxial import paraxial_image_distance
 from prysm.x.raytracing.auto import rc_prescription_from_efl_bfl_sep
@@ -255,6 +255,28 @@ def test_aim_rays_matches_scipy_lbfgsb():
     np.testing.assert_allclose(P_new[:, :2], P_ref[:, :2], atol=1e-7)
 
 
+@pytest.mark.parametrize('target_z, launch_sz', [(1.0, 1.0), (-1.0, -1.0)])
+def test_aim_rays_direction_normalizes_proposals(target_z, launch_sz):
+    """Direction aiming must trace unit vectors even when the Newton variable
+    moves outside the transverse unit disk."""
+    presc = [
+        plane(interaction='eval', P=np.array([0., 0., target_z])),
+    ]
+    P = np.array([[0., 0., 0.]])
+    S = np.array([[0., 0., launch_sz]])
+    target_xy = (2.0, -1.5)
+    _, S_aim, converged = aim_rays(P, S, presc, surface_index=0,
+                                target_xy=target_xy, wvl=0.55,
+                                vary='direction', strict=True)
+    assert bool(converged[0])
+    np.testing.assert_allclose(np.linalg.norm(S_aim, axis=1), 1.0, atol=1e-12)
+    assert np.sign(S_aim[0, 2]) == np.sign(launch_sz)
+
+    from prysm.x.raytracing.spencer_and_murty import raytrace
+    tr = raytrace(presc, P, S_aim, wvl=0.55)
+    np.testing.assert_allclose(tr.P[-1, 0, :2], target_xy, atol=1e-9)
+
+
 # ---------- pupil-on-axis helpers ----------
 
 def test_closest_approach_on_axis_intersecting_lines():
@@ -309,6 +331,23 @@ def test_xp_reference_sphere_radius_matches_geometry():
     np.testing.assert_allclose(P_xp[:2], [0.0, 0.0], atol=1e-12)
     # R = |P_xp - C| > 0 for an off-axis image
     assert R > 0
+
+
+def test_xp_reference_sphere_rejects_axial_chief():
+    P_chief = np.array([0.0, 0.0, 10.0])
+    S_chief = np.array([0.0, 0.0, 1.0])
+    with pytest.raises(ValueError, match='near-axial chief ray'):
+        xp_reference_sphere(P_chief, S_chief)
+
+
+def test_intersect_reference_sphere_rejects_degenerate_radius():
+    P = np.array([[0.0, 1.0, 0.0],
+                  [0.0, -1.0, 0.0]])
+    S = np.array([[0.0, 0.0, 1.0],
+                  [0.0, 0.0, 1.0]])
+    C = np.array([0.0, 0.0, 10.0])
+    with pytest.raises(ValueError, match='degenerate'):
+        intersect_reference_sphere(P, S, C, 0.0)
 
 
 # ---------- _establish_axis ----------

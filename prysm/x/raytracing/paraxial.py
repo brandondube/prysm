@@ -26,19 +26,119 @@ from ._meta import (
 )
 
 
-def _paraxial_curvature(surf):
-    """Vertex curvature of surf for paraxial calculations.
+_AXIAL_GEOMETRY_TOL = 1e-12
 
-    Surfaces carrying a c parameter (sphere, conic, off-axis conic, even
-    asphere, Q-2D freeform) report that.  Planes (params is None) and
-    unrecognised surface types are treated as having no power.
+
+def _as_surface_list(prescription):
+    """Compiled Surface list for a LensData, or the supplied sequence."""
+    if hasattr(prescription, 'to_surfaces'):
+        return prescription.to_surfaces()
+    return list(prescription)
+
+
+def _as_float_scalar(value):
+    """Coerce a backend scalar to a Python float."""
+    return float(np.asarray(value))
+
+
+def local_vertex_curvatures(surf):
+    """Local x and local y vertex curvatures of a surface.
+
+    The returned pair is (c_x, c_y), evaluated in the surface's local
+    coordinate frame at x = y = 0.  Rotational surfaces have c_x == c_y.
+    Toroid and Biconic expose independent local curvatures directly; other
+    shapes use their sag Hessian when available and fall back to a scalar c.
+    """
+    shape = getattr(surf, 'shape', None)
+    if shape is not None:
+        params = getattr(shape, 'params', None) or {}
+        if 'c_x' in params and 'c_y' in params:
+            return float(params['c_x']), float(params['c_y'])
+        hessian = getattr(shape, 'sag_hessian', None)
+        if callable(hessian):
+            try:
+                zero = np.asarray(0.0, dtype=config.precision)
+                c_x, _, c_y = hessian(zero, zero)
+                return _as_float_scalar(c_x), _as_float_scalar(c_y)
+            except Exception:
+                pass
+        if 'c' in params:
+            c = float(params['c'])
+            return c, c
+
+    params = getattr(surf, 'params', None) or {}
+    if 'c_x' in params and 'c_y' in params:
+        return float(params['c_x']), float(params['c_y'])
+    if 'c' in params:
+        c = float(params['c'])
+        return c, c
+    return 0.0, 0.0
+
+
+def local_x_vertex_curvature(surf):
+    """Local x-section vertex curvature of surf."""
+    return local_vertex_curvatures(surf)[0]
+
+
+def local_y_vertex_curvature(surf):
+    """Local y-section vertex curvature of surf."""
+    return local_vertex_curvatures(surf)[1]
+
+
+def _paraxial_curvature(surf):
+    """Local y-section vertex curvature of surf for paraxial calculations.
+
+    The ABCD state vector in this module is (y, u), so the scalar matrix path
+    consumes the local y curvature.  Use local_x_vertex_curvature and
+    local_y_vertex_curvature when a caller needs both principal local sections.
 
     """
-    if hasattr(surf, 'shape'):
-        return float(getattr(surf.shape, 'c', 0.0))
-    if surf.params is not None and 'c' in surf.params:
-        return float(surf.params['c'])
-    return 0.0
+    return local_y_vertex_curvature(surf)
+
+
+def _assert_first_order_geometry(surfaces):
+    """Raise when a surface sequence is outside the axial ABCD contract."""
+    for idx, surf in enumerate(surfaces):
+        P = np.asarray(getattr(surf, 'P', (0.0, 0.0, 0.0)))
+        if P.shape[0] >= 2 and not np.allclose(
+                P[:2], 0.0, atol=_AXIAL_GEOMETRY_TOL, rtol=0.0):
+            raise ValueError(
+                'paraxial first-order calculations require centered axial '
+                f'geometry; surface {idx} has a decentered vertex.'
+            )
+
+        R = getattr(surf, 'R', None)
+        if R is not None and not np.allclose(
+                np.asarray(R), np.eye(3), atol=_AXIAL_GEOMETRY_TOL, rtol=0.0):
+            raise ValueError(
+                'paraxial first-order calculations require centered axial '
+                f'geometry; surface {idx} is tilted or rotated.'
+            )
+
+        shape = getattr(surf, 'shape', None)
+        gradient = getattr(shape, '_sag_gradient', None)
+        if callable(gradient):
+            try:
+                zero = np.asarray(0.0, dtype=config.precision)
+                gx, gy = gradient(zero, zero)
+                if (abs(_as_float_scalar(gx)) > _AXIAL_GEOMETRY_TOL
+                        or abs(_as_float_scalar(gy)) > _AXIAL_GEOMETRY_TOL):
+                    raise ValueError(
+                        'paraxial first-order calculations require the local '
+                        f'vertex normal to be axial; surface {idx} has a '
+                        'nonzero vertex slope.'
+                    )
+            except ValueError:
+                raise
+            except Exception:
+                pass
+
+
+def _first_order_surfaces(prescription):
+    """Surface list validated for centered axial first-order analysis."""
+    surfaces = _as_surface_list(prescription)
+    _assert_first_order_geometry(surfaces)
+    return surfaces
 
 
 def _translation_matrix(t, n):
@@ -67,6 +167,7 @@ def _apply_surface_matrix(M, n, surf, wvl):
 def _walk_matrix(prescription, wvl, n_start, *,
                  end_index=None, include_end_surface=True):
     """Walk a prescription and compose its ABCD matrix from a starting index."""
+    prescription = _first_order_surfaces(prescription)
     M = np.eye(2, dtype=config.precision)
     n = float(n_start)
     z_prev = float(prescription[0].P[2])
@@ -85,7 +186,7 @@ def _walk_matrix(prescription, wvl, n_start, *,
 
 
 def system_matrix(prescription, wvl=None):
-    """Compose the 2x2 ABCD system matrix for a sequential prescription.
+    """Compose the local-y 2x2 ABCD system matrix for a sequential prescription.
 
     Walks the prescription in order: between consecutive surfaces a
     translation matrix is applied with the running index n; at each
@@ -96,11 +197,12 @@ def system_matrix(prescription, wvl=None):
     Parameters
     ----------
     prescription : sequence of Surface
-        the prescription to analyse.  Surfaces with a c entry in
-        surf.params contribute paraxial power; planes and eval surfaces
-        do not.  When an OpticalSystem is passed, wvl defaults to its
-        reference wavelength.  The object-space index is taken from the object
-        surface material (the leading eval row), else air.
+        the prescription to analyse.  The scalar ABCD path assumes centered
+        axial geometry and uses each surface's local y vertex curvature.
+        Planes and eval surfaces do not contribute power.  When an
+        OpticalSystem is passed, wvl defaults to its reference wavelength.
+        The object-space index is taken from the object surface material (the
+        leading eval row), else air.
     wvl : float or str, optional
         wavelength in microns (passed to each refractive surface's n
         callback).  A string names a wavelength of the system.  None
@@ -117,9 +219,10 @@ def system_matrix(prescription, wvl=None):
         prescription contains an odd number of reflections.
 
     """
+    surfaces = _first_order_surfaces(prescription)
     wvl = system_wavelength(prescription, wvl)
-    n_object = object_space_index(prescription, wvl)
-    return _walk_matrix(prescription, wvl, n_object)
+    n_object = object_space_index(surfaces, wvl)
+    return _walk_matrix(surfaces, wvl, n_object)
 
 
 def paraxial_image_distance(prescription, wvl=None):
@@ -170,9 +273,10 @@ def effective_focal_length(prescription, wvl=None):
     seen from object space.
 
     """
+    surfaces = _first_order_surfaces(prescription)
     wvl = system_wavelength(prescription, wvl)
-    n_object = object_space_index(prescription, wvl)
-    M, _ = _walk_matrix(prescription, wvl, n_object)
+    n_object = object_space_index(surfaces, wvl)
+    M, _ = _walk_matrix(surfaces, wvl, n_object)
     C = M[1, 0]
     if abs(C) < 1e-30:
         raise ValueError(
@@ -190,16 +294,18 @@ def back_focal_length(prescription, wvl=None):
     paraxial_image_distance measures from the very last entry.
 
     """
+    surfaces = _first_order_surfaces(prescription)
     last_powered = None
-    for surf in prescription:
-        if _paraxial_curvature(surf) != 0.0 and surf.typ in (STYPE_REFLECT, STYPE_REFRACT):
+    for surf in surfaces:
+        if (_paraxial_curvature(surf) != 0.0
+                and surf.typ in (STYPE_REFLECT, STYPE_REFRACT)):
             last_powered = surf
     if last_powered is None:
         raise ValueError(
             'prescription contains no powered surfaces; BFL is undefined.'
         )
-    bfd_from_end = paraxial_image_distance(prescription, wvl=wvl)
-    extra = float(prescription[-1].P[2]) - float(last_powered.P[2])
+    bfd_from_end = paraxial_image_distance(surfaces, wvl=wvl)
+    extra = float(surfaces[-1].P[2]) - float(last_powered.P[2])
     return bfd_from_end + extra
 
 
@@ -213,9 +319,11 @@ def front_focal_length(prescription, wvl=None):
     present.
 
     """
+    surfaces = _first_order_surfaces(prescription)
     first_powered = None
-    for surf in prescription:
-        if _paraxial_curvature(surf) != 0.0 and surf.typ in (STYPE_REFLECT, STYPE_REFRACT):
+    for surf in surfaces:
+        if (_paraxial_curvature(surf) != 0.0
+                and surf.typ in (STYPE_REFLECT, STYPE_REFRACT)):
             first_powered = surf
             break
     if first_powered is None:
@@ -223,8 +331,8 @@ def front_focal_length(prescription, wvl=None):
             'prescription contains no powered surfaces; FFL is undefined.'
         )
     wvl = system_wavelength(prescription, wvl)
-    n_object = object_space_index(prescription, wvl)
-    M, _ = _walk_matrix(prescription, wvl, n_object)
+    n_object = object_space_index(surfaces, wvl)
+    M, _ = _walk_matrix(surfaces, wvl, n_object)
     C = M[1, 0]
     D = M[1, 1]
     if abs(C) < 1e-30:
@@ -232,7 +340,7 @@ def front_focal_length(prescription, wvl=None):
             'paraxial system has no net power; FFL is infinite.'
         )
     ffl_from_first_entry = -float(D) * float(n_object) / float(C)
-    extra = float(first_powered.P[2]) - float(prescription[0].P[2])
+    extra = float(first_powered.P[2]) - float(surfaces[0].P[2])
     return ffl_from_first_entry + extra
 
 
@@ -277,21 +385,22 @@ def entrance_pupil_z(prescription, wvl=None, stop_index=None):
         object space (entrance pupil at infinity).
 
     """
+    surfaces = _first_order_surfaces(prescription)
     wvl = system_wavelength(prescription, wvl)
-    n_object = object_space_index(prescription, wvl)
+    n_object = object_space_index(surfaces, wvl)
     stop_index = system_stop_index(prescription, stop_index)
     if stop_index is None:
         return None
     k = int(stop_index)
-    if k < 0 or k >= len(prescription):
+    if k < 0 or k >= len(surfaces):
         return None
-    M_to_stop, _ = _matrix_to_plane(prescription, k, wvl, n_object)
+    M_to_stop, _ = _matrix_to_plane(surfaces, k, wvl, n_object)
     A_b = float(M_to_stop[0, 0])
     B_b = float(M_to_stop[0, 1])
     if abs(A_b) < 1e-30:
         return None  # telecentric: entrance pupil at infinity
     ep_distance = B_b * float(n_object) / A_b
-    return float(prescription[0].P[2]) + ep_distance
+    return float(surfaces[0].P[2]) + ep_distance
 
 
 class FirstOrderProperties:
@@ -447,24 +556,25 @@ def first_order(prescription, wvl=None, *, epd=None, stop_index=None):
         None.
 
     """
+    surfaces = _first_order_surfaces(prescription)
     wvl = system_wavelength(prescription, wvl)
-    n_object = object_space_index(prescription, wvl)
+    n_object = object_space_index(surfaces, wvl)
     epd = system_epd(prescription, epd, wvl)
     stop_index = system_stop_index(prescription, stop_index)
     out = FirstOrderProperties()
-    n_surfaces = len(prescription)
+    n_surfaces = len(surfaces)
     if n_surfaces == 0:
         raise ValueError('prescription is empty')
 
     out.wavelength = float(wvl)
     out.n_object = float(n_object)
     out.n_surfaces = n_surfaces
-    out.n_refractive = sum(1 for s in prescription if s.typ == STYPE_REFRACT)
-    out.n_reflective = sum(1 for s in prescription if s.typ == STYPE_REFLECT)
+    out.n_refractive = sum(1 for s in surfaces if s.typ == STYPE_REFRACT)
+    out.n_reflective = sum(1 for s in surfaces if s.typ == STYPE_REFLECT)
     out.n_eval = n_surfaces - out.n_refractive - out.n_reflective
-    out.total_track = float(prescription[-1].P[2]) - float(prescription[0].P[2])
+    out.total_track = float(surfaces[-1].P[2]) - float(surfaces[0].P[2])
 
-    M, n_image_signed = _walk_matrix(prescription, wvl, n_object)
+    M, n_image_signed = _walk_matrix(surfaces, wvl, n_object)
     out.n_image = float(n_image_signed)
     A = float(M[0, 0])
     B = float(M[0, 1])
@@ -475,11 +585,11 @@ def first_order(prescription, wvl=None, *, epd=None, stop_index=None):
     if has_power:
         out.efl = -float(n_object) / C
         out.paraxial_image_distance = -A * out.n_image / C
-        out.paraxial_image_z = (float(prescription[-1].P[2])
+        out.paraxial_image_z = (float(surfaces[-1].P[2])
                                 + out.paraxial_image_distance)
         first_powered = None
         last_powered = None
-        for surf in prescription:
+        for surf in surfaces:
             if (_paraxial_curvature(surf) != 0.0
                     and surf.typ in (STYPE_REFLECT, STYPE_REFRACT)):
                 if first_powered is None:
@@ -487,13 +597,13 @@ def first_order(prescription, wvl=None, *, epd=None, stop_index=None):
                 last_powered = surf
         if last_powered is not None:
             out.bfl = (out.paraxial_image_distance
-                       + float(prescription[-1].P[2])
+                       + float(surfaces[-1].P[2])
                        - float(last_powered.P[2]))
         if first_powered is not None:
             ffl_from_first = -D * float(n_object) / C
             out.ffl = (ffl_from_first
                        + float(first_powered.P[2])
-                       - float(prescription[0].P[2]))
+                       - float(surfaces[0].P[2]))
 
     if epd is not None:
         out.epd = float(epd)
@@ -510,9 +620,9 @@ def first_order(prescription, wvl=None, *, epd=None, stop_index=None):
             )
         out.stop_index = k
 
-        M_to_stop, n_at_stop = _matrix_to_plane(prescription, k, wvl,
+        M_to_stop, n_at_stop = _matrix_to_plane(surfaces, k, wvl,
                                                 n_object)
-        M_from_stop, _ = _walk_matrix(prescription[k:], wvl, n_at_stop)
+        M_from_stop, _ = _walk_matrix(surfaces[k:], wvl, n_at_stop)
         A_b = float(M_to_stop[0, 0])
         B_b = float(M_to_stop[0, 1])
         B_a = float(M_from_stop[0, 1])
@@ -520,10 +630,10 @@ def first_order(prescription, wvl=None, *, epd=None, stop_index=None):
 
         if abs(A_b) >= 1e-30:
             out.ep_distance = B_b * float(n_object) / A_b
-            out.ep_z = float(prescription[0].P[2]) + out.ep_distance
+            out.ep_z = float(surfaces[0].P[2]) + out.ep_distance
         if abs(D_a) >= 1e-30:
             out.xp_distance = -B_a * out.n_image / D_a
-            out.xp_z = float(prescription[-1].P[2]) + out.xp_distance
+            out.xp_z = float(surfaces[-1].P[2]) + out.xp_distance
 
         if epd is not None:
             out.ep_diameter = out.epd

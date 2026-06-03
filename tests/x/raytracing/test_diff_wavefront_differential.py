@@ -114,8 +114,10 @@ def test_wavefront_differential_resolves_system_wavelength_name():
     P, S = launch(sys, Field(0.0, 0.0), sys.wavelength('d'),
                   Sampling.rect(n=3), epd=10.0, pupil_z=-5.0)
     perts = [Perturbation.normal(sys, 'curvature', 0, 1e-5, name='c1')]
-    by_name = wavefront_differential(sys, perts, P, S, 'd')
-    by_value = wavefront_differential(sys, perts, P, S, 0.55)
+    with pytest.raises(ValueError, match='near-axial chief ray'):
+        wavefront_differential(sys, perts, P, S, 'd')
+    by_name = wavefront_differential(sys, perts, P, S, 'd', P_xp=(0, 0, 0))
+    by_value = wavefront_differential(sys, perts, P, S, 0.55, P_xp=(0, 0, 0))
     np.testing.assert_allclose(by_name.W0, by_value.W0)
     np.testing.assert_allclose(by_name.dW, by_value.dW)
 

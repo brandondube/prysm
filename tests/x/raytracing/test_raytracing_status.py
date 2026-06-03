@@ -16,6 +16,7 @@ from prysm.x.raytracing.spencer_and_murty import (
     STATUS_CLIP,
     STATUS_MISS,
     STATUS_TIR,
+    decode_status,
 )
 from prysm.x.raytracing.raygen import generate_collimated_ray_fan
 
@@ -62,6 +63,32 @@ def test_single_ray_1d_input_returns_length1_status():
     result = raytrace(pres, P0, S0, wvl=0.55)
     assert result.status.shape == (1,)
     assert result.status[0].imag == 0
+
+
+def test_decode_status_handles_scalar_and_arrays():
+    assert decode_status(1 + STATUS_MISS * 1j) == 'MISS at surface 1'
+    status = np.array([
+        4 + STATUS_OK * 1j,
+        2 + STATUS_NEWTON * 1j,
+        3 + STATUS_CLIP * 1j,
+        1 + STATUS_MISS * 1j,
+        5 + STATUS_TIR * 1j,
+    ], dtype=np.complex128)
+    labels = decode_status(status)
+    assert labels.shape == status.shape
+    assert labels.tolist() == [
+        'OK',
+        'NEWTON at surface 2',
+        'CLIPPED at surface 3',
+        'MISS at surface 1',
+        'TIR at surface 5',
+    ]
+
+
+def test_decode_status_all_valid_majority_case():
+    status = np.full((2, 3), 7 + STATUS_OK * 1j, dtype=np.complex128)
+    labels = decode_status(status)
+    assert labels.tolist() == [['OK', 'OK', 'OK'], ['OK', 'OK', 'OK']]
 
 
 # ---------- aperture clipping (STATUS_CLIP) ----------

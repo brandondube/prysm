@@ -33,7 +33,7 @@ from .spencer_and_murty import (
     raytrace,
 )
 from ._line_math import normalize_vector
-from .opt import opd_from_raytrace, _valid_mask
+from .opt import opd_from_raytrace, _valid_mask, _chief_axis_perp_norm
 from .analysis import (
     _pupil_center_chief_index,
     _filtered_chief_index,
@@ -800,6 +800,11 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
             axis_point = np.zeros(3, dtype=config.precision)
         if axis_dir is None:
             axis_dir = np.array([0., 0., 1.], dtype=config.precision)
+        if _chief_axis_perp_norm(S_chief_final, axis_dir) < 1e-6:
+            raise ValueError(
+                'cannot locate the exit pupil from a near-axial chief ray; '
+                'pass P_xp to anchor the reference sphere'
+            )
         P_xp, P_xp_dot = d_closest_point_on_axis(
             P_chief_final, S_chief_final, Pdot_chief, Sdot_chief,
             axis_point, axis_dir)
@@ -809,6 +814,10 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
     delta = P_xp - C
     delta_dot = P_xp_dot - Cdot
     R = float(np.sqrt(np.sum(delta * delta)))
+    if R <= 1e-12:
+        raise ValueError(
+            'reference-sphere radius is degenerate; pass a nondegenerate P_xp'
+        )
     Rdot = _dot_vt(delta, delta_dot) / R
 
     filtered_chief = _filtered_chief_index(valid, chief_index)

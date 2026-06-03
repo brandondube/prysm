@@ -33,6 +33,7 @@ from .spencer_and_murty import (
     SURFACE_INTERSECTION_DEFAULT_MAXITER,
     RayStatus,
     RayTraceResult,
+    decode_status,
     raytrace,
     refract,
     reflect,
@@ -68,6 +69,7 @@ from .paraxial import (
 )
 from .analysis import (
     axial_color,
+    chromatic_focal_shift,
     distortion,
     field_curvature,
     lateral_color,
@@ -161,6 +163,7 @@ __all__ = [
     'distortion',
     'field_curvature',
     'axial_color',
+    'chromatic_focal_shift',
     'lateral_color',
     'spot_centroid',
     'rms_spot_radius',
@@ -180,6 +183,7 @@ __all__ = [
     'unpolarized_amplitude',
     'RayTraceResult',
     'RayStatus',
+    'decode_status',
     'STYPE_REFLECT',
     'STYPE_REFRACT',
     'STYPE_EVAL',

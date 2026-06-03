@@ -6,6 +6,7 @@ from . import spencer_and_murty
 from ._line_math import (
     closest_point_on_line_to_line,
     line_intersection_params,
+    normalize_vector,
     unit_vector_between,
 )
 
@@ -113,12 +114,17 @@ def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
     if vary == 'direction':
         sz_sign = np.sign(S[:, 2])
         sz_sign = np.where(sz_sign == 0, 1.0, sz_sign)
+        sz_anchor = sz_sign * np.abs(S[:, 2])
 
         def apply(var):
-            S[:, 0] = var[:, 0]
-            S[:, 1] = var[:, 1]
-            rem = 1.0 - var[:, 0] * var[:, 0] - var[:, 1] * var[:, 1]
-            S[:, 2] = sz_sign * np.sqrt(np.clip(rem, 0.0, None))
+            sx = var[:, 0]
+            sy = var[:, 1]
+            norm = np.sqrt(sx * sx + sy * sy + sz_anchor * sz_anchor)
+            zero_norm = norm == 0
+            norm = np.where(zero_norm, 1.0, norm)
+            S[:, 0] = sx / norm
+            S[:, 1] = sy / norm
+            S[:, 2] = np.where(zero_norm, sz_sign, sz_anchor / norm)
 
         var0 = S[:, :2].copy()
     else:
@@ -231,6 +237,15 @@ def _closest_approach_on_axis(P_chief, S_chief, axis_point, axis_dir):
                                          axis_point, axis_dir)
 
 
+def _chief_axis_perp_norm(S_chief, axis_dir):
+    """Magnitude of the chief-ray direction perpendicular to an axis."""
+    S_chief = np.asarray(S_chief)
+    axis_dir = normalize_vector(np.asarray(axis_dir), axis=-1)
+    s_parallel = np.sum(S_chief * axis_dir) * axis_dir
+    s_perp = S_chief - s_parallel
+    return float(np.sqrt(np.sum(s_perp * s_perp)))
+
+
 def _pupil_on_axis(P_chief, S_chief, axis_p1, axis_p2):
     """Closest-approach point on the line (axis_p1, axis_p2) to the chief ray.
 
@@ -307,6 +322,12 @@ def xp_reference_sphere(P_chief, S_chief, axis_point=None, axis_dir=None):
         axis_point = np.zeros(3, dtype=np.asarray(P_chief).dtype)
     if axis_dir is None:
         axis_dir = np.array([0., 0., 1.], dtype=np.asarray(P_chief).dtype)
+    if _chief_axis_perp_norm(S_chief, axis_dir) < 1e-6:
+        raise ValueError(
+            'cannot locate the exit pupil from a near-axial chief ray; pass '
+            'P_xp or a resolvable stop/pupil route to anchor the reference '
+            'sphere'
+        )
     C = np.asarray(P_chief)
     P_xp = _closest_approach_on_axis(P_chief, S_chief,
                                      np.asarray(axis_point),
@@ -498,6 +519,8 @@ def opd_from_raytrace_eic(P_hist, S_hist, OPL_hist, P_img, P_xp,
         beta = (S_last * g).sum(axis=-1)
         gamma = (g * g).sum(axis=-1) - R * R
         disc = beta * beta - gamma
+        spencer_and_murty._validate_reference_sphere_intersection(
+            P_last, P_img, R, disc)
         disc = np.where(disc < 0, np.zeros_like(disc), disc)
         sq = np.sqrt(disc)
         # cancellation occurs when -beta and -sqrt are opposite-signed

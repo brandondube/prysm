@@ -17,6 +17,7 @@ from prysm.x.raytracing.io._indexing import (
 )
 from prysm.x.raytracing.spencer_and_murty import raytrace
 from prysm.x.raytracing.launch import Field, Sampling, launch
+from prysm.x.raytracing.paraxial import effective_focal_length
 
 
 def test_surface_spec_builder_constructs_shape_surface():
@@ -237,6 +238,118 @@ def test_zmx_singlet_vertex_z_stacks_disz(refractiveindex_database):
     assert pf.surfaces[0].P[2] == 0.0
     assert pf.surfaces[1].P[2] == 5.0
     assert pf.surfaces[2].P[2] == 100.0
+
+
+_ZMX_CLEAR_APERTURE = """\
+VERS 100000 0
+MODE SEQ
+UNIT MM
+WAVL 0.55
+SURF 0
+  TYPE STANDARD
+  DISZ INFINITY
+SURF 1
+  TYPE STANDARD
+  CURV 0.0
+  DISZ 5.0
+  DIAM 1.0
+SURF 2
+  TYPE STANDARD
+  CURV 0.0
+  DISZ 0.0
+"""
+
+
+def test_zmx_diam_becomes_clear_aperture_and_clips():
+    pf = read_zmx(_ZMX_CLEAR_APERTURE, _is_text=True)
+    assert pf.rows[0].semidiameter == 1.0
+    P = np.array([[0.0, 0.0, -1.0],
+                  [0.0, 1.5, -1.0]])
+    S = np.array([[0.0, 0.0, 1.0],
+                  [0.0, 0.0, 1.0]])
+    tr = raytrace(pf.surfaces, P, S, 0.55)
+    assert tr.status.imag[0] == 0
+    assert tr.status.imag[1] != 0
+    assert tr.status.real[1] == 1
+
+
+_ZMX_CM_UNITS = """\
+VERS 100000 0
+MODE SEQ
+UNIT CM
+ENPD 1.0
+WAVL 0.55
+SURF 0
+  TYPE STANDARD
+  DISZ INFINITY
+SURF 1
+  TYPE STANDARD
+  CURV 2.0
+  DISZ 0.5
+  DIAM 0.2
+SURF 2
+  TYPE STANDARD
+  CURV 0.0
+  DISZ 0.0
+"""
+
+
+def test_zmx_non_mm_lengths_scale_to_mm():
+    pf = read_zmx(_ZMX_CM_UNITS, _is_text=True)
+    assert pf.unit == 'mm'
+    assert pf.epd == 10.0
+    np.testing.assert_allclose(pf.surfaces[0].params['c'], 0.2)
+    np.testing.assert_allclose(pf.surfaces[1].P[2], 5.0)
+    np.testing.assert_allclose(pf.rows[0].semidiameter, 2.0)
+
+
+_ZMX_CM_COORD_BREAK = """\
+VERS 100000 0
+MODE SEQ
+UNIT CM
+WAVL 0.55
+SURF 0
+  TYPE STANDARD
+  DISZ INFINITY
+SURF 1
+  TYPE COORDBRK
+  DISZ 0.5
+  PARM 1 1.0
+  PARM 2 2.0
+SURF 2
+  TYPE STANDARD
+  CURV 0.0
+  DISZ 0.0
+"""
+
+
+def test_zmx_non_mm_coordbreak_decenters_scale_to_mm():
+    pf = read_zmx(_ZMX_CM_COORD_BREAK, _is_text=True)
+    np.testing.assert_allclose(pf.rows[0].decenter, [10.0, 20.0, 0.0])
+    np.testing.assert_allclose(pf.rows[0].thickness, 5.0)
+    np.testing.assert_allclose(pf.surfaces[0].P, [10.0, 20.0, 5.0])
+
+
+_ZMX_IMAGE_HEIGHT_FIELD = """\
+VERS 100000 0
+MODE SEQ
+UNIT MM
+FTYP 2 0 0 0
+XFLN 1.0
+YFLN 0.0
+SURF 0
+  TYPE STANDARD
+  DISZ INFINITY
+SURF 1
+  TYPE STANDARD
+  CURV 0.0
+  DISZ 0.0
+"""
+
+
+def test_zmx_image_height_fields_are_explicitly_unsupported():
+    with pytest.raises(NotImplementedError, match='image-height fields'):
+        read_zmx(_ZMX_IMAGE_HEIGHT_FIELD, _is_text=True)
 
 
 def test_zmx_singlet_round_trips_through_raytrace(refractiveindex_database):
@@ -480,6 +593,119 @@ def test_seq_round_trips_through_raytrace(refractiveindex_database):
     tr = raytrace(pf.surfaces, P, S, 0.587)
     spot = tr.P[-1, :, :2]
     assert float(np.max(np.abs(spot))) < pf.epd / 2.0
+
+
+_SEQ_CLEAR_APERTURE = """\
+LEN
+RDM
+DIM M
+WL 550.0
+SO ; THI 1E10
+S RDY 0.0 ; THI 5.0 ; CAO 1.0
+SI
+GO
+"""
+
+
+def test_seq_cao_becomes_clear_aperture_and_clips():
+    pf = read_seq(_SEQ_CLEAR_APERTURE, _is_text=True)
+    assert pf.rows[0].semidiameter == 1.0
+    P = np.array([[0.0, 0.0, -1.0],
+                  [0.0, 1.5, -1.0]])
+    S = np.array([[0.0, 0.0, 1.0],
+                  [0.0, 0.0, 1.0]])
+    tr = raytrace(pf.surfaces, P, S, 0.55)
+    assert tr.status.imag[0] == 0
+    assert tr.status.imag[1] != 0
+    assert tr.status.real[1] == 1
+
+
+_SEQ_CM_UNITS = """\
+LEN
+RDM
+DIM CM
+WL 550.0
+EPD 1.0
+SO ; THI 1E10
+S RDY 5.0 ; THI 0.5 ; CAO 0.2
+SI
+GO
+"""
+
+
+def test_seq_non_mm_lengths_scale_to_mm():
+    pf = read_seq(_SEQ_CM_UNITS, _is_text=True)
+    assert pf.unit == 'mm'
+    assert pf.epd == 10.0
+    np.testing.assert_allclose(pf.surfaces[0].params['c'], 0.02)
+    np.testing.assert_allclose(pf.surfaces[1].P[2], 5.0)
+    np.testing.assert_allclose(pf.rows[0].semidiameter, 2.0)
+
+
+_SEQ_IMAGE_HEIGHT_FIELD = """\
+LEN
+RDM
+DIM M
+WL 550.0
+FNO 7.0
+YIM 1.0
+XIM 0.0
+SO ; THI 1E10
+S RDY 50.0 ; THI 5.0 ; GLA BK7
+S RDY -50.0 ; THI 95.0
+SI
+GO
+"""
+
+
+def test_seq_image_height_fields_become_equivalent_angles(refractiveindex_database):
+    pf = read_seq(_SEQ_IMAGE_HEIGHT_FIELD, _is_text=True,
+                  database=refractiveindex_database)
+    efl = abs(effective_focal_length(pf, wvl=pf.wavelength()))
+    expected_hy = np.degrees(np.arctan2(1.0, efl))
+
+    assert len(pf.fields) == 1
+    np.testing.assert_allclose(pf.fields[0].hx, 0.0)
+    np.testing.assert_allclose(pf.fields[0].hy, expected_hy)
+    assert pf.fields[0].kind == 'angle'
+
+
+def test_seq_fno_becomes_image_space_fnumber(refractiveindex_database):
+    pf = read_seq(_SEQ_IMAGE_HEIGHT_FIELD, _is_text=True,
+                  database=refractiveindex_database)
+    assert pf.aperture.mode == 'FNO_IMAGE'
+    assert pf.aperture.value == 7.0
+    np.testing.assert_allclose(
+        pf.epd,
+        abs(effective_focal_length(pf, wvl=pf.wavelength())) / 7.0,
+    )
+
+
+_SEQ_CODEV_VIGNETTING = """\
+LEN
+RDM
+DIM M
+WL 550.0
+EPD 10.0
+YAN 0.0
+VUY 0.5
+VLY 0.0
+SO ; THI 1E10
+S RDY 0.0 ; THI 5.0
+SI
+GO
+"""
+
+
+def test_seq_vignetting_factors_clip_launched_pupil():
+    pf = read_seq(_SEQ_CODEV_VIGNETTING, _is_text=True)
+    assert pf.fields[0].vignetting == {
+        'vux': 0.0, 'vlx': 0.0, 'vuy': 0.5, 'vly': 0.0,
+    }
+
+    P, _ = launch(pf, pf.field(0), pf.wavelength(), Sampling.fan(n=5, axis='y'))
+    assert float(np.max(P[:, 1])) <= 2.5
+    assert float(np.min(P[:, 1])) == -5.0
 
 
 # ---- STO (aperture stop) ---------------------------------------------------

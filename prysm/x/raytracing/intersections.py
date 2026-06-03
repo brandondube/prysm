@@ -127,6 +127,7 @@ def ray_conic_intersect(P, S, c, kappa, dx=0.0, dy=0.0):
     dx, dy : float
         off-axis shift of the surface relative to the parent conic vertex;
         dx = dy = 0 for an on-axis surface
+
     Returns
     -------
     Q : ndarray

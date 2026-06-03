@@ -21,7 +21,12 @@ from prysm.x.raytracing.surfaces import (
     ray_sphere_intersect,
     ray_conic_intersect,
 )
-from prysm.x.raytracing.sags import _q2d_sigma_inv_der, gradient_to_unit_normal
+from prysm.x.raytracing.sags import (
+    _q2d_sigma_inv_der,
+    der_direction_cosine_conic,
+    gradient_to_unit_normal,
+    phi_conic,
+)
 from prysm.x.raytracing.spencer_and_murty import (
     intersect as newton_intersect,
     raytrace,
@@ -78,6 +83,36 @@ def _xy_grid(span=4.0, n=15):
     xs = np.linspace(-span, span, n)
     X, Y = np.meshgrid(xs, xs, indexing='xy')
     return X, Y
+
+
+@pytest.mark.parametrize('kappa', [-1.0, 0.0, -0.5, 0.7])
+def test_der_direction_cosine_conic_matches_numerical(kappa):
+    c = 1 / 80.0
+    rho = np.linspace(0.0, 8.0, 25)
+    h = 1e-5
+
+    def inv_phi(rr):
+        return 1.0 / phi_conic(c, kappa, rr * rr)
+
+    phi = phi_conic(c, kappa, rho * rho)
+    der_an = der_direction_cosine_conic(c, kappa, rho, phi=phi)
+    der_num = (inv_phi(rho + h) - inv_phi(rho - h)) / (2 * h)
+
+    np.testing.assert_allclose(der_an, der_num, rtol=1e-5, atol=1e-9)
+
+
+def test_conic_kappa_minus_one_is_parabola():
+    c = 1 / 80.0
+    rsq = np.linspace(0.0, 64.0, 17)
+    x = np.linspace(-4.0, 4.0, 17)
+    y = np.zeros_like(x)
+
+    z = conic_sag(c, -1.0, rsq)
+    dx, dy = conic_sag_der_xy(c, -1.0, x, y)
+
+    np.testing.assert_allclose(z, 0.5 * c * rsq, rtol=0, atol=1e-14)
+    np.testing.assert_allclose(dx, c * x, rtol=0, atol=1e-14)
+    np.testing.assert_allclose(dy, np.zeros_like(y), rtol=0, atol=1e-14)
 
 
 @pytest.mark.parametrize('kappa', [0.0, -1.0, -0.5, 0.7])

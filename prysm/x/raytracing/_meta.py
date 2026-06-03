@@ -12,8 +12,9 @@ them without an import cycle: an OpticalSystem exposes a wavelength resolver
 method, an aperture, a stop_index, etc.; a list of Surface does not.
 
 Object- and image-space media come from the surface materials: the object index
-is the object surface's material (the leading eval row), the image index the
-penultimate surface's post-surface material.  There is no single ambient
+is the object surface's material (the leading eval row), and image-space
+queries require an explicit trailing eval image surface so the penultimate
+surface's post-surface material is unambiguous.  There is no single ambient
 scalar.
 """
 
@@ -81,12 +82,22 @@ def object_space_index(prescription, wavelength):
 
 
 def image_space_index(prescription, wavelength, fallback=1.0):
-    """Resolve the image-space medium index from the penultimate surface.
+    """Resolve the image-space medium index from an explicit image surface.
 
     Sequential systems place the image plane as the final eval surface; the
     medium immediately before that plane is therefore the post-surface medium of
-    the penultimate surface.
+    the penultimate surface.  A bare prescription ending at a powered surface
+    has no explicit image plane, so callers that need an image-space medium
+    must append a final eval surface.
     """
+    if len(prescription) == 0:
+        return float(fallback)
+    if getattr(prescription[-1], 'typ', None) != STYPE_EVAL:
+        raise ValueError(
+            'image-space index requires a trailing eval image surface; append '
+            'an explicit image surface instead of relying on a bare final '
+            'powered surface.'
+        )
     if len(prescription) > 1:
         return _surface_medium_index(prescription[-2], wavelength, fallback)
     return float(fallback)

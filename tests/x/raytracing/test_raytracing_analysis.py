@@ -8,8 +8,9 @@ from tests.x.raytracing.surface_helpers import (
 )
 
 from prysm.x.raytracing.surfaces import (
-    Surface, circular_aperture, annular_aperture,
+    Plane, Surface, circular_aperture, annular_aperture,
 )
+from prysm.x.raytracing import LensData, OpticalSystem, ApertureSpec
 from prysm.x.raytracing.spencer_and_murty import STATUS_CLIP
 from prysm.x.raytracing.spencer_and_murty import raytrace
 from prysm.x.raytracing.launch import Field, Sampling, launch
@@ -20,9 +21,10 @@ from prysm.x.raytracing.analysis import (
     distortion,
     field_curvature,
     axial_color,
+    chromatic_focal_shift,
     lateral_color,
 )
-from prysm.x.raytracing.opt import opd_from_raytrace, xp_reference_sphere
+from prysm.x.raytracing.opt import opd_from_raytrace
 
 
 # ---------- helpers ---------------------------------------------------------
@@ -162,11 +164,41 @@ def test_wavefront_chief_opd_is_zero():
     presc = _spherical_singlet()
     P, S = launch(presc, Field(0., 0.), 0.55,
                   Sampling.fan(n=9), epd=4.0, pupil_z=-5.0)
-    opd, x_pup, y_pup = wavefront(presc, P, S, 0.55)
+    opd, x_pup, y_pup = wavefront(presc, P, S, 0.55, P_xp=(0, 0, 0))
     chief = len(opd) // 2
     np.testing.assert_allclose(opd[chief], 0.0, atol=1e-12)
     np.testing.assert_array_equal(x_pup, P[:, 0])
     np.testing.assert_array_equal(y_pup, P[:, 1])
+
+
+def test_wavefront_on_axis_requires_explicit_reference_route():
+    presc = _spherical_singlet()
+    P, S = launch(presc, Field(0., 0.), 0.55,
+                  Sampling.fan(n=9), epd=4.0, pupil_z=-5.0)
+    with pytest.raises(ValueError, match='near-axial chief ray'):
+        wavefront(presc, P, S, 0.55)
+
+
+def test_wavefront_decentered_system_stop_falls_back_to_axis_route():
+    ld = LensData()
+    ld.add_coordbreak(decenter=(1.0, 0.0, 0.0))
+    ld.add(Plane(), typ='eval')
+    sys = OpticalSystem(ld, aperture=ApertureSpec.epd(2.0))
+    sys.stop_index = 0
+    P = np.array([[0.0, 0.0, -1.0],
+                  [0.1, 0.0, -1.0],
+                  [-0.1, 0.0, -1.0]])
+    S = np.array([[0.010, 0.0, 1.0],
+                  [0.012, 0.0, 1.0],
+                  [0.008, 0.0, 1.0]])
+    S = S / np.linalg.norm(S, axis=1, keepdims=True)
+
+    opd, x_pup, y_pup = wavefront(
+        sys, P, S, 0.55, axis_point=(0, 0, 0), axis_dir=(0, 0, 1),
+    )
+    assert np.isfinite(opd).all()
+    np.testing.assert_allclose(x_pup, [0.0, 0.1, -0.1])
+    np.testing.assert_allclose(y_pup, 0.0)
 
 
 def test_wavefront_uses_penultimate_surface_image_medium():
@@ -175,11 +207,12 @@ def test_wavefront_uses_penultimate_surface_image_medium():
     wvl = 0.55
     P, S = launch(presc, Field(0., 0.), wvl,
                   Sampling.fan(n=9), epd=4.0, pupil_z=-5.0)
-    opd, _, _ = wavefront(presc, P, S, wvl)
+    P_xp = np.array([0.0, 0.0, 0.0])
+    opd, _, _ = wavefront(presc, P, S, wvl, P_xp=P_xp)
 
     trace = raytrace(presc, P, S, wvl)
     chief = len(P) // 2
-    C, _, P_xp = xp_reference_sphere(trace.P[-1, chief], trace.S[-1, chief])
+    C = trace.P[-1, chief]
     expected = opd_from_raytrace(trace.P, trace.S, trace.OPL, C, P_xp,
                                  n_image=1.25, chief_index=chief)
     wrong_air = opd_from_raytrace(trace.P, trace.S, trace.OPL, C, P_xp,
@@ -196,11 +229,12 @@ def test_wavefront_uses_surface_zero_object_medium_when_present():
     wvl = 0.55
     P, S = launch(presc, Field(0., 0.), wvl,
                   Sampling.fan(n=9), epd=4.0, pupil_z=-20.0)
-    opd, _, _ = wavefront(presc, P, S, wvl)
+    P_xp = np.array([0.0, 0.0, 0.0])
+    opd, _, _ = wavefront(presc, P, S, wvl, P_xp=P_xp)
 
     trace = raytrace(presc, P, S, wvl)
     chief = len(P) // 2
-    C, _, P_xp = xp_reference_sphere(trace.P[-1, chief], trace.S[-1, chief])
+    C = trace.P[-1, chief]
     expected = opd_from_raytrace(trace.P, trace.S, trace.OPL, C, P_xp,
                                  n_image=1.0, chief_index=chief)
 
@@ -212,7 +246,7 @@ def test_wavefront_parabola_is_diffraction_limited():
     presc = _concave_parabola()
     P, S = launch(presc, Field(0., 0.), 0.55e-3,
                   Sampling.fan(n=11), epd=10.0, pupil_z=-50.0)
-    opd, _, _ = wavefront(presc, P, S, 0.55e-3)
+    opd, _, _ = wavefront(presc, P, S, 0.55e-3, P_xp=(0, 0, 0))
     assert float(np.max(np.abs(opd))) < 1e-9
 
 
@@ -225,7 +259,7 @@ def test_wavefront_filters_vignetted_rays():
     valid = trace.status.imag == 0
     assert valid.sum() < valid.size
 
-    opd, x_pup, y_pup = wavefront(presc, P, S, 0.55)
+    opd, x_pup, y_pup = wavefront(presc, P, S, 0.55, P_xp=(0, 0, 0))
     assert opd.shape == (valid.sum(),)
     assert np.isfinite(opd).all()
     np.testing.assert_array_equal(x_pup, P[valid, 0])
@@ -391,6 +425,43 @@ def test_axial_color_varying_index_changes_bfd():
     assert bfd[0] != bfd[2]
 
 
+def test_chromatic_focal_shift_paraxial_matches_axial_color_difference():
+    presc = _spherical_singlet()
+    wavelengths = [0.45, 0.55, 0.65]
+    wvl, shifts = chromatic_focal_shift(
+        presc, wavelengths, focus='paraxial', reference_wavelength=0.55,
+    )
+    np.testing.assert_allclose(wvl, wavelengths)
+    ref = axial_color(presc, [0.55])[0]
+    np.testing.assert_allclose(shifts, axial_color(presc, wavelengths) - ref)
+
+
+def test_chromatic_focal_shift_reference_wavelength_is_zero():
+    n_glass = lambda w: 1.6 - 0.1 * (w - 0.45) / 0.2
+    s1 = conic(c=1 / 50.0, k=0.0, interaction='refr',
+                       P=[0, 0, 0], material=n_glass)
+    s2 = conic(c=-1 / 50.0, k=0.0, interaction='refr',
+                       P=[0, 0, 5.0], material=lambda w: 1.0)
+    img = plane(interaction='eval', P=[0, 0, 100.0])
+    presc = [s1, s2, img]
+    wvl, shifts = chromatic_focal_shift(
+        presc, [0.45, 0.55, 0.65], focus='paraxial',
+        reference_wavelength=0.55,
+    )
+    np.testing.assert_allclose(wvl, [0.45, 0.55, 0.65])
+    np.testing.assert_allclose(shifts[1], 0.0, atol=1e-12)
+    assert shifts[0] != shifts[2]
+
+
+def test_chromatic_focal_shift_best_focus_constant_index_is_constant():
+    presc = _spherical_singlet()
+    wvl, shifts = chromatic_focal_shift(
+        presc, [0.45, 0.55, 0.65], epd=4.0, reference_wavelength=0.55,
+    )
+    np.testing.assert_allclose(wvl, [0.45, 0.55, 0.65])
+    np.testing.assert_allclose(shifts, 0.0, atol=1e-12)
+
+
 def test_lateral_color_shape():
     presc = _spherical_singlet()
     fields = [Field(0., h, unit='deg') for h in (0., 1.)]
@@ -432,7 +503,9 @@ def test_wavefront_centroid_matches_chief_when_chief_valid():
     presc = _spherical_singlet()
     P, S = launch(presc, Field(0., 0.), 0.55e-3, Sampling.hex(nrings=3),
                   epd=8.0, pupil_z=-5.0)
-    opd_chief, _, _ = wavefront(presc, P, S, 0.55e-3, reference='chief')
-    opd_cent, _, _ = wavefront(presc, P, S, 0.55e-3, reference='centroid')
+    opd_chief, _, _ = wavefront(presc, P, S, 0.55e-3,
+                                P_xp=(0, 0, 0), reference='chief')
+    opd_cent, _, _ = wavefront(presc, P, S, 0.55e-3,
+                               P_xp=(0, 0, 0), reference='centroid')
     np.testing.assert_allclose(np.asarray(opd_chief, dtype=float),
                                np.asarray(opd_cent, dtype=float), atol=1e-12)

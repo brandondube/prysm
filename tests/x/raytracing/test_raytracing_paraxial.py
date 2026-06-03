@@ -18,7 +18,10 @@ from prysm.x.raytracing.paraxial import (
     front_focal_length,
     first_order,
     FirstOrderProperties,
+    local_x_vertex_curvature,
+    local_y_vertex_curvature,
 )
+from prysm.x.raytracing._meta import image_space_index
 from prysm.x.raytracing.auto import rc_prescription_from_efl_bfl_sep
 
 
@@ -197,6 +200,54 @@ def test_efl_rc_telescope_matches_design():
     # signed: the RC design convention may yield negative depending on
     # mirror sign conventions; magnitude is what matches the design value.
     np.testing.assert_allclose(abs(efl), efl_design, rtol=1e-9)
+
+
+def test_local_vertex_curvature_helpers_report_astigmatic_sections():
+    bic = biconic(1 / 80.0, 1 / 50.0, 0.0, 0.0, 'refr',
+                  P=np.array([0., 0., 0.]), material=lambda wvl: 1.5)
+    tor = toroid(1 / 70.0, 1 / 40.0, 0.0, (), 'refr',
+                 P=np.array([0., 0., 0.]), material=lambda wvl: 1.5)
+    assert local_x_vertex_curvature(bic) == pytest.approx(1 / 80.0)
+    assert local_y_vertex_curvature(bic) == pytest.approx(1 / 50.0)
+    assert local_x_vertex_curvature(tor) == pytest.approx(1 / 70.0)
+    assert local_y_vertex_curvature(tor) == pytest.approx(1 / 40.0)
+
+
+def test_paraxial_matrix_uses_local_y_curvature_for_astigmatic_surfaces():
+    n_glass = 1.5
+    for surf, cy in [
+            (biconic(1 / 80.0, 1 / 50.0, 0.0, 0.0, 'refr',
+                     P=np.array([0., 0., 0.]),
+                     material=lambda wvl: n_glass), 1 / 50.0),
+            (toroid(1 / 70.0, 1 / 40.0, 0.0, (), 'refr',
+                    P=np.array([0., 0., 0.]),
+                    material=lambda wvl: n_glass), 1 / 40.0),
+    ]:
+        expected = 1.0 / ((n_glass - 1.0) * cy)
+        np.testing.assert_allclose(effective_focal_length([surf], wvl=0.55),
+                                   expected, rtol=1e-9)
+
+
+def test_paraxial_matrix_rejects_decentered_geometry():
+    ld = LensData()
+    ld.add_coordbreak(decenter=(1.0, 0.0, 0.0))
+    ld.add(Plane(), typ='eval')
+    with pytest.raises(ValueError, match='centered axial'):
+        system_matrix(ld, wvl=0.55)
+
+
+def test_image_space_index_requires_explicit_image_surface():
+    n_glass = 1.5
+    rx = [
+        sphere(c=1 / 50.0, interaction='refr', P=np.array([0., 0., 0.]),
+               material=lambda wvl: n_glass),
+    ]
+    with pytest.raises(ValueError, match='trailing eval image surface'):
+        image_space_index(rx, 0.55)
+    rx_with_image = rx + [
+        plane(interaction='eval', P=np.array([0., 0., 100.])),
+    ]
+    assert image_space_index(rx_with_image, 0.55) == pytest.approx(n_glass)
 
 
 # ---------- back focal length ----------

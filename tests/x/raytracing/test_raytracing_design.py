@@ -236,7 +236,7 @@ def test_wavefront_rms_operand_evaluates():
     ld = _parabola_mirror(-1.0)
     P, S = launch(ld, Field(0., 0.), 0.55e-3,
                   Sampling.fan(n=11), epd=10.0, pupil_z=-50.0)
-    op = WavefrontRMS(P, S, wavelength=0.55e-3)
+    op = WavefrontRMS(P, S, wavelength=0.55e-3, P_xp=(0, 0, 0))
     assert op(ld, _TraceCache(ld)) < 1e-9
 
 
@@ -245,7 +245,7 @@ def test_wavefront_rms_operand_in_problem():
     ld = _parabola_mirror(-1.0)
     P, S = launch(ld, Field(0., 0.), 0.55e-3,
                   Sampling.fan(n=11), epd=10.0, pupil_z=-50.0)
-    op = WavefrontRMS(P, S, wavelength=0.55e-3)
+    op = WavefrontRMS(P, S, wavelength=0.55e-3, P_xp=(0, 0, 0))
     prob = Problem(ld, [op])
     assert prob.merit(prob.x0()) < 1e-18
 
@@ -258,6 +258,7 @@ def test_zernike_coefficient_operand_returns_known_term():
     nms = [(0, 0), (2, 0), (4, 0)]
     op = ZernikeCoefficient(P, S, wavelength=0.55e-3, n=4, m=0,
                             nms_basis=nms,
+                            P_xp=(0, 0, 0),
                             normalization_radius=5.0, norm=False)
     val = op(ld, _TraceCache(ld))
     # parabola is aberration-free for the on-axis collimated beam,

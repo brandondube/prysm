@@ -22,7 +22,12 @@ from prysm.conf import config
 from prysm.mathops import np
 
 from .spencer_and_murty import STYPE_REFLECT, STYPE_REFRACT
-from .paraxial import _paraxial_curvature, entrance_pupil_z
+from .paraxial import (
+    _assert_first_order_geometry,
+    _paraxial_curvature,
+    entrance_pupil_z,
+    local_vertex_curvatures,
+)
 from ._meta import (
     system_wavelength,
     system_epd,
@@ -88,6 +93,7 @@ def paraxial_trace(prescription, y0, theta0, wvl, n_ambient):
 
     """
     surfaces = _surfaces_of(prescription)
+    _assert_first_order_geometry(surfaces)
     recs = []
     n = float(n_ambient)
     y = float(y0)
@@ -115,6 +121,22 @@ def paraxial_trace(prescription, y0, theta0, wvl, n_ambient):
         theta = theta_a
         z_prev = float(surf.P[2])
     return recs
+
+
+def _assert_rotational_third_order_geometry(surfaces):
+    """Raise when Seidel sums are requested for non-rotational geometry."""
+    _assert_first_order_geometry(surfaces)
+    for idx, surf in enumerate(surfaces):
+        if surf.typ not in (STYPE_REFLECT, STYPE_REFRACT):
+            continue
+        c_x, c_y = local_vertex_curvatures(surf)
+        scale = max(1.0, abs(c_x), abs(c_y))
+        if abs(c_x - c_y) > 1e-12 * scale:
+            raise ValueError(
+                'Seidel aberrations require centered rotational surfaces; '
+                f'surface {idx} has different local x and y vertex '
+                'curvatures.'
+            )
 
 
 def _signed_indices(surfaces, wvl, n_ambient):
@@ -421,12 +443,14 @@ def seidel_aberrations(prescription, field=None, wvl=None, *,
     if isinstance(wavelengths, dict):
         # LensData stores wavelengths as {name: microns}
         wavelengths = list(wavelengths.values())
+    surfaces = _surfaces_of(prescription)
+    _assert_rotational_third_order_geometry(surfaces)
 
     (y0_m, u0_m), (y0_c, u0_c) = _marginal_chief_launch(
         prescription, field, wvl, n_object, epd, stop_index)
 
-    marg = paraxial_trace(prescription, y0_m, u0_m, wvl, n_object)
-    chief = paraxial_trace(prescription, y0_c, u0_c, wvl, n_object)
+    marg = paraxial_trace(surfaces, y0_m, u0_m, wvl, n_object)
+    chief = paraxial_trace(surfaces, y0_c, u0_c, wvl, n_object)
 
     # Lagrange (optical) invariant, evaluated object-side; constant through
     # the system, so any surface would give the same value.
@@ -444,7 +468,6 @@ def seidel_aberrations(prescription, field=None, wvl=None, *,
     if have_color:
         wl_sorted = sorted(float(w) for w in wavelengths)
         wl_short, wl_long = wl_sorted[0], wl_sorted[-1]
-        surfaces = _surfaces_of(prescription)
         nb_s, na_s = _signed_indices(surfaces, wl_short, n_object)
         nb_l, na_l = _signed_indices(surfaces, wl_long, n_object)
         CI = np.zeros(nsurf, dtype=config.precision)

@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 
+from prysm.conf import config
 from tests.x.raytracing.surface_helpers import (
     plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
     chebyshev, jacobi, toroid, biconic,
@@ -33,6 +34,7 @@ def _sag_and_normal_from_derivatives(sag_derivatives):
         return z, gradient_to_unit_normal(Fx, Fy)
     return sag_and_normal
 
+
 def test_generate_collimated_ray_fan_uniform():
     P, S = generate_collimated_ray_fan(11, maxr=10.0, z=-50.0, azimuth=90)
     assert P.shape == (11, 3)
@@ -60,12 +62,43 @@ def test_generate_collimated_ray_fan_with_yangle():
     assert not np.allclose(S, [0, 0, 1])
 
 
+def test_generate_collimated_ray_fan_accepts_ignored_aim_at_keyword():
+    P, S = generate_collimated_ray_fan(
+        5, maxr=1.0, z=-2.0, azimuth=0, aim_at=10.0,
+    )
+    assert P.shape == (5, 3)
+    assert S.shape == (5, 3)
+
+
 def test_generate_collimated_rect_ray_grid_shape_and_unitnorm():
     P, S = generate_collimated_rect_ray_grid(5, maxx=1.0, z=0)
     assert P.shape == (25, 3)
     assert S.shape == (25, 3)
     norms = np.linalg.norm(S, axis=-1)
     np.testing.assert_allclose(norms, 1.0, atol=1e-12)
+
+
+def test_generate_collimated_rect_ray_grid_defaults_y_range_from_maxy():
+    P, _ = generate_collimated_rect_ray_grid(3, maxx=1.0, maxy=2.0, z=0)
+    np.testing.assert_allclose(P[:, 0].min(), -1.0, atol=1e-12)
+    np.testing.assert_allclose(P[:, 0].max(), 1.0, atol=1e-12)
+    np.testing.assert_allclose(P[:, 1].min(), -2.0, atol=1e-12)
+    np.testing.assert_allclose(P[:, 1].max(), 2.0, atol=1e-12)
+
+
+@pytest.mark.parametrize('precision, expected', [
+    (32, np.float32),
+    (64, np.float64),
+])
+def test_generate_collimated_rect_ray_grid_dtype(precision, expected):
+    old = config.precision
+    try:
+        config.precision = precision
+        P, S = generate_collimated_rect_ray_grid(3, maxx=1.0, maxy=2.0, z=0)
+        assert P.dtype == expected
+        assert S.dtype == expected
+    finally:
+        config.precision = old
 
 
 def test_generate_finite_ray_fan_shape_and_unitnorm():

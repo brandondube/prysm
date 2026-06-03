@@ -18,10 +18,10 @@ class Field:
 
     """
 
-    __slots__ = ('hx', 'hy', 'kind', 'unit', 'object_z')
+    __slots__ = ('hx', 'hy', 'kind', 'unit', 'object_z', 'vignetting')
 
     def __init__(self, hx=0.0, hy=0.0, kind='angle', unit='deg',
-                 object_z=None):
+                 object_z=None, vignetting=None):
         if kind not in ('angle', 'height'):
             raise ValueError(
                 f"Field kind must be 'angle' or 'height', got {kind!r}"
@@ -41,6 +41,7 @@ class Field:
         self.kind = kind
         self.unit = unit
         self.object_z = None if object_z is None else float(object_z)
+        self.vignetting = _normalize_vignetting(vignetting)
 
     def angle_radians(self):
         """Return (hx, hy) in radians.  Only valid for kind='angle'."""
@@ -59,6 +60,25 @@ class Field:
                     f'unit={self.unit!r})')
         return (f'Field(hx={self.hx}, hy={self.hy}, kind=height, '
                 f'object_z={self.object_z})')
+
+
+def _normalize_vignetting(vignetting):
+    """Normalize per-field Code V vignetting factors."""
+    if vignetting is None:
+        return None
+    keys = ('vux', 'vlx', 'vuy', 'vly')
+    out = {}
+    for key in keys:
+        value = float(vignetting.get(key, 0.0))
+        if value < 0.0 or value > 1.0:
+            raise ValueError(
+                f'vignetting factor {key.upper()}={value:g} must satisfy '
+                '0 <= value <= 1'
+            )
+        out[key] = value
+    if not any(out.values()):
+        return None
+    return out
 
 
 class Sampling:
@@ -296,6 +316,7 @@ def _object_space_cone_PS(prescription, field, wavelength, sampling, na):
             f'{sinU:g}, which is not a physical cone half-angle')
 
     pupil_xy = sampling.build(1.0)  # normalized: rim at radius 1
+    pupil_xy = _apply_vignetting(pupil_xy, 1.0, field)
     if pupil_xy.dtype != config.precision:
         pupil_xy = pupil_xy.astype(config.precision)
     n_rays = pupil_xy.shape[0]
@@ -320,6 +341,27 @@ def _object_space_cone_PS(prescription, field, wavelength, sampling, na):
     S = axial[:, np.newaxis] * chief[np.newaxis, :] + trans
     P = np.broadcast_to(obj, (n_rays, 3)).copy()
     return P, S, rho
+
+
+def _apply_vignetting(pupil_xy, extent, field):
+    """Clip pupil samples by per-field normalized side vignetting."""
+    vignetting = getattr(field, 'vignetting', None)
+    if not vignetting or float(extent) <= 0.0:
+        return pupil_xy
+
+    x = pupil_xy[:, 0]
+    y = pupil_xy[:, 1]
+    extent = float(extent)
+    keep = (
+        (x <= extent * (1.0 - vignetting.get('vux', 0.0))) &
+        (x >= -extent * (1.0 - vignetting.get('vlx', 0.0))) &
+        (y <= extent * (1.0 - vignetting.get('vuy', 0.0))) &
+        (y >= -extent * (1.0 - vignetting.get('vly', 0.0)))
+    )
+    pupil_xy = pupil_xy[keep]
+    if pupil_xy.shape[0] == 0:
+        raise ValueError('vignetting factors clipped every pupil sample')
+    return pupil_xy
 
 
 def _real_aim_to_stop(P, S, rho, prescription, stop_index, wavelength, finite):
@@ -460,6 +502,7 @@ def launch(prescription, field, wavelength, sampling, *,
         else:
             extent = 0.0
         pupil_xy = sampling.build(extent)
+        pupil_xy = _apply_vignetting(pupil_xy, extent, field)
         if pupil_xy.dtype != config.precision:
             pupil_xy = pupil_xy.astype(config.precision)
 

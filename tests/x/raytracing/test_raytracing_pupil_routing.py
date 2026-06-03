@@ -199,16 +199,17 @@ def test_wavefront_default_chief_is_hex_center():
 
     With the correct (center) chief the reference sphere is centered on the
     true image point and the OPD is the system wavefront error; picking the
-    N//2 ray (off-center for hex) centers the sphere on the wrong
-    point and inflates the RMS.  The default must match the index-0 chief and
-    differ markedly from N//2.
+    N//2 ray (off-center for hex) subtracts the wrong reference ray.  The
+    default must match the index-0 chief and differ markedly from N//2.
     """
     ld = cooke()
+    xp_z = first_order(ld).xp_z
     P, S = launch(ld, Field(0.0, 0.0, unit='deg'), WVL, Sampling.hex(nrings=6))
     n = P.shape[0]
 
     def rms(chief_index):
-        opd, _, _ = pa.wavefront(ld, P, S, WVL, chief_index=chief_index)
+        opd, _, _ = pa.wavefront(ld, P, S, WVL, chief_index=chief_index,
+                                 P_xp=(0, 0, xp_z))
         opd = np.asarray(opd)
         return float(np.sqrt(np.mean(opd ** 2)))
 
@@ -216,7 +217,7 @@ def test_wavefront_default_chief_is_hex_center():
     rms_center = rms(0)          # the actual hex pupil-center ray
     rms_nhalf = rms(n // 2)      # an off-center hex ray
     assert rms_default == pytest.approx(rms_center, rel=1e-9)
-    assert rms_nhalf > 1.2 * rms_center
+    assert abs(rms_nhalf - rms_center) > 0.2 * rms_center
 
 
 def test_launch_threads_aim_strict_to_aim_rays(monkeypatch):

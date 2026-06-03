@@ -118,15 +118,9 @@ def generate_collimated_ray_fan(nrays, maxr, z=0, minr=None, azimuth=90,
         a uniform distribution has rays which are equally spaced from minr to maxr,
         random has rays randomly distributed in minr and maxr, while cheby has the
         Cheby-Gauss-Lobatto roots as its locations from minr to maxr
-    aim_at : ndarray or float
-        position [X,Y,Z] aim the rays such that the gut ray of the fan,
-        when propagated in an open medium, hits (aim_at)
-
-        if a float, interpreted as if x=0,y=0, z=aim_at
-
-        This argument mimics ray aiming in commercial optical design software, and
-        is used in conjunction with xangle/yangle to form off-axis ray bundles which
-        properly go through the center of the stop
+    aim_at : object, optional
+        Compatibility keyword retained for callers of older versions.  It was
+        previously documented but ignored, and remains ignored.
 
     Returns
     -------
@@ -168,7 +162,7 @@ def generate_collimated_rect_ray_grid(nrays, maxx, z=0, minx=None, maxy=None, mi
     maxy : float
         maximum y coordinate of the fan, maxx if None
     miny : float, optional
-        minimum y coordinate of the fan, -minx if None
+        minimum y coordinate of the fan, -maxy if None
     yangle : float
         propagation angle of the rays with respect to the Y axis, clockwise
     xangle : float
@@ -191,17 +185,19 @@ def generate_collimated_rect_ray_grid(nrays, maxx, z=0, minx=None, maxy=None, mi
     if maxy is None:
         maxy = maxx
     if miny is None:
-        miny = minx
+        miny = -maxy
 
     S = _make_collimated_S(nrays * nrays, yangle=yangle, xangle=xangle)
 
     # now generate the x and y fans
-    x = _sample_axis(distribution, minx, maxx, nrays)
-    y = _sample_axis(distribution, miny, maxy, nrays)
+    dtype = config.precision
+    x = _sample_axis(distribution, minx, maxx, nrays, dtype=dtype)
+    y = _sample_axis(distribution, miny, maxy, nrays, dtype=dtype)
     xx, yy = np.meshgrid(x, y)
     xx = xx.ravel()
     yy = yy.ravel()
 
+    z = np.array(z, dtype=dtype)
     z = np.broadcast_to(z, xx.shape)
     xyz = np.stack([xx, yy, z], axis=1)
     return xyz, S

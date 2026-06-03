@@ -216,7 +216,8 @@ class WavefrontRMS(_OperandBase):
 
     def __init__(self, P, S, wavelength, target=0.0, weight=1.0,
                  chief_index=None,
-                 axis_point=None, axis_dir=None):
+                 axis_point=None, axis_dir=None, P_xp=None,
+                 epd=None, stop_index=None):
         super().__init__(target=target, weight=weight)
         self.P = P
         self.S = S
@@ -224,12 +225,16 @@ class WavefrontRMS(_OperandBase):
         self.chief_index = chief_index
         self.axis_point = axis_point
         self.axis_dir = axis_dir
+        self.P_xp = P_xp
+        self.epd = epd
+        self.stop_index = stop_index
 
     def __call__(self, prescription, cache):
         opd, _, _ = _analysis.wavefront(
             prescription, self.P, self.S, self.wavelength,
             chief_index=self.chief_index,
             axis_point=self.axis_point, axis_dir=self.axis_dir,
+            P_xp=self.P_xp, epd=self.epd, stop_index=self.stop_index,
         )
         return float(np.sqrt(np.mean(opd * opd)))
 
@@ -246,6 +251,7 @@ class ZernikeCoefficient(_OperandBase):
                  nms_basis, target=0.0, weight=1.0,
                  chief_index=None,
                  axis_point=None, axis_dir=None,
+                 P_xp=None, epd=None, stop_index=None,
                  normalization_radius=None, norm=True):
         super().__init__(target=target, weight=weight)
         self.P = P
@@ -264,6 +270,9 @@ class ZernikeCoefficient(_OperandBase):
         self.chief_index = chief_index
         self.axis_point = axis_point
         self.axis_dir = axis_dir
+        self.P_xp = P_xp
+        self.epd = epd
+        self.stop_index = stop_index
         self.normalization_radius = normalization_radius
         self.norm = bool(norm)
 
@@ -272,6 +281,7 @@ class ZernikeCoefficient(_OperandBase):
             prescription, self.P, self.S, self.wavelength,
             chief_index=self.chief_index,
             axis_point=self.axis_point, axis_dir=self.axis_dir,
+            P_xp=self.P_xp, epd=self.epd, stop_index=self.stop_index,
         )
         coefs, _ = _analysis.wavefront_zernike_fit(
             opd, x_pup, y_pup, self.nms_basis,
@@ -302,11 +312,12 @@ class Distortion(_OperandBase):
 
 
 class FieldCurvature(_OperandBase):
-    """Sagittal-tangential focus separation at one off-axis field.
+    """X/y fan focus separation at one off-axis field.
 
-    Returns abs(sagittal_z - tangential_z) at the requested field; driving
-    this toward zero flattens astigmatic field curvature locally.  For a
-    full Petzval-flat optimization, sum these across multiple fields.
+    Returns abs(x_fan_z - y_fan_z) at the requested field.  For pure-y fields
+    on an axisymmetric system this is the classical sagittal-tangential focus
+    separation; otherwise it is the local x/y fan separation.  For a full
+    Petzval-flat optimization, sum these across multiple fields.
 
     """
 
