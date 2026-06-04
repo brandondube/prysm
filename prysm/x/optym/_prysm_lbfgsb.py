@@ -372,24 +372,54 @@ class PrysmLBFGSB:
         i = self._hist_next
         return np.concatenate([rows[i:], rows[:i]], axis=0)
 
+    def _ordered_rows_work(self, rows, name):
+        """History rows in oldest-newest order, copying only after wrap."""
+        k = self._k
+        if k < self.m or self._hist_next == 0:
+            return rows[:k]
+
+        out = self._scratch_array(name, (k,) + rows.shape[1:], rows.dtype)
+        i = self._hist_next
+        n_tail = self.m - i
+        out[:n_tail] = rows[i:]
+        out[n_tail:] = rows[:i]
+        return out
+
     def _W(self):
         """The (n, 2k) compact matrix W_k = [Y_k, θ_k S_k]."""
-        Y_T = self._ordered_rows(self.Y).T
-        S_T = self._ordered_rows(self.S).T
-        return np.concatenate([Y_T, self.theta * S_T], axis=1)
+        k = self._k
+        W = self._scratch_array('_compact_W', (self.n, 2 * k), self.x.dtype)
+        Y = self._ordered_rows_work(self.Y, '_ordered_Y')
+        S = self._ordered_rows_work(self.S, '_ordered_S')
+        W[:, :k] = Y.T
+        np.multiply(S.T, self.theta, out=W[:, k:])
+        return W
 
     def _M(self):
         """The (2k, 2k) middle matrix from the compact representation."""
-        S = self._ordered_rows(self.S)
-        Y = self._ordered_rows(self.Y)
-        SY = S @ Y.T               # (i,j) = s_i · y_j
-        SS = S @ S.T               # (i,j) = s_i · s_j
-        D = np.diag(self._ordered_rows(self.ys))
-        # strict lower triangular (zero out diagonal and above)
-        L = SY - np.triu(SY)
-        top = np.concatenate([-D, L.T], axis=1)
-        bot = np.concatenate([L, self.theta * SS], axis=1)
-        return np.concatenate([top, bot], axis=0)
+        k = self._k
+        dtype = self.x.dtype
+        S = self._ordered_rows_work(self.S, '_ordered_S')
+        Y = self._ordered_rows_work(self.Y, '_ordered_Y')
+        ys = self._ordered_rows_work(self.ys, '_ordered_ys')
+        SY = self._scratch_array('_compact_SY', (k, k), dtype)
+        SS = self._scratch_array('_compact_SS', (k, k), dtype)
+        M = self._scratch_array('_compact_M', (2 * k, 2 * k), dtype)
+
+        np.matmul(S, Y.T, out=SY)  # (i,j) = s_i . y_j
+        np.matmul(S, S.T, out=SS)  # (i,j) = s_i . s_j
+        M.fill(0)
+        diag_idx = self._scratch_array('_compact_diag_idx', (k,), int)
+        diag_idx[:] = np.arange(k)
+        M[diag_idx, diag_idx] = -ys
+        # strict lower triangular of S Y^T, filled by columns/rows.  k is the
+        # small L-BFGS memory parameter, so this avoids full k-by-k temporaries.
+        for i in range(1, k):
+            row = SY[i, :i]
+            M[k + i, :i] = row
+            M[:i, k + i] = row
+        np.multiply(SS, self.theta, out=M[k:, k:])
+        return M
 
     def _Bv(self, v):
         """Apply B_k v using the compact form."""
@@ -604,8 +634,8 @@ class PrysmLBFGSB:
         if k == 0:
             df_init = -gtg
             ddf_init = theta * gtg
-            p_final = np.zeros(0, dtype=dtype)
-            c_final = np.zeros(0, dtype=dtype)
+            p_final = self._scratch_array('_cauchy_p_final', (0,), dtype)
+            c_final = self._scratch_array('_cauchy_c_final', (0,), dtype)
             # No history → no rank-1 corrections from W·M⁻¹W^T.  The
             # per-breakpoint Δdf, Δddf reduce to just the g² and θ·g²·t
             # terms below.
@@ -629,7 +659,8 @@ class PrysmLBFGSB:
                 # precompute (its dt_seq would degenerate to inf and the
                 # lu_solve would choke on a NaN).
                 p_final = p_init
-                c_final = np.zeros(2 * k, dtype=dtype)
+                c_final = self._scratch_array('_cauchy_c_final', (2 * k,), dtype)
+                c_final.fill(0)
                 wb_Mp_arr = wb_Mc_arr = wMw_b_arr = None
             else:
                 # MinvWT used here for the wMw diagonal; recomputed inside
@@ -709,20 +740,30 @@ class PrysmLBFGSB:
                                            (n_active,), dtype)
             df_alpha = self._scratch_array('_cauchy_df_alpha',
                                            (n_active,), dtype)
+            active_work = self._scratch_array('_cauchy_active_work',
+                                              (n_active,), dtype)
             if k > 0:
                 np.multiply(g_a, g_a, out=ddf_step)
                 df_alpha[:] = ddf_step
                 ddf_step *= -theta
-                ddf_step -= 2.0 * g_a * wb_Mp_arr
-                ddf_step -= df_alpha * wMw_b_arr
+                np.multiply(g_a, wb_Mp_arr, out=active_work)
+                active_work *= 2.0
+                ddf_step -= active_work
+                np.multiply(df_alpha, wMw_b_arr, out=active_work)
+                ddf_step -= active_work
 
-                df_alpha -= theta * df_alpha * t_a
-                df_alpha -= g_a * wb_Mc_arr
+                np.multiply(df_alpha, t_a, out=active_work)
+                active_work *= theta
+                df_alpha -= active_work
+                np.multiply(g_a, wb_Mc_arr, out=active_work)
+                df_alpha -= active_work
             else:
                 np.multiply(g_a, g_a, out=ddf_step)
                 df_alpha[:] = ddf_step
                 ddf_step *= -theta
-                df_alpha -= theta * df_alpha * t_a
+                np.multiply(df_alpha, t_a, out=active_work)
+                active_work *= theta
+                df_alpha -= active_work
             # ddf_at_iter[j] = ddf_init + sum(ddf_step[:j])
             ddf_at_iter = self._scratch_array('_cauchy_ddf_at_iter',
                                               (n_active + 1,), dtype)
@@ -769,7 +810,12 @@ class PrysmLBFGSB:
             visited_t = t_sorted[:K]
             visited_g = g_sorted[:K]
             # z_b = -t_b * g_b, xc[b] = x[b] + z_b
-            xc[visited] = x[visited] - visited_t * visited_g
+            visited_x = self._scratch_array('_cauchy_visited_x', (K,), dtype)
+            visited_step = self._scratch_array('_cauchy_visited_step', (K,), dtype)
+            np.take(x, visited, out=visited_x)
+            np.multiply(visited_t, visited_g, out=visited_step)
+            visited_x -= visited_step
+            xc[visited] = visited_x
             d[visited] = 0
             free_mask[visited] = False
 
@@ -783,8 +829,10 @@ class PrysmLBFGSB:
                 # ran every active breakpoint; last update is dP_seq /
                 # dC_seq at index n_active-1, which P_before / C_before
                 # don't include because they store BEFORE-iter state.
-                p = P_before[n_active - 1] + dP_seq[n_active - 1]
-                c = C_before[n_active - 1] + dC_seq[n_active - 1]
+                p = self._scratch_array('_cauchy_p_final', (2 * k,), dtype)
+                c = self._scratch_array('_cauchy_c_final', (2 * k,), dtype)
+                np.add(P_before[n_active - 1], dP_seq[n_active - 1], out=p)
+                np.add(C_before[n_active - 1], dC_seq[n_active - 1], out=c)
         else:
             p = p_final
             c = c_final
@@ -851,7 +899,8 @@ class PrysmLBFGSB:
     # to be an ascent direction (gᵀd ≥ 0) the algorithm reverts to the
     # original BLNZ truncation rule.  See step() for the switch.
 
-    def _subspace_solve(self, xc, c, free_mask, g, W=None, M=None, M_lu=None):
+    def _subspace_solve(self, xc, c, free_mask, g, W=None, M=None, M_lu=None,
+                        n_free=None):
         """Return the subspace displacement Δx (full length, zero on
         active coords) such that xc + Δx minimizes the quadratic model
         on the free subspace.  W, M, and an LU factorization of M are
@@ -864,7 +913,10 @@ class PrysmLBFGSB:
         dx = self._scratch_array('_subspace_dx', (n,), dtype)
         dx.fill(0)
 
-        if not bool(free_mask.any()):
+        if n_free is None:
+            if not bool(free_mask.any()):
+                return dx
+        elif n_free <= 0:
             return dx
 
         zc = self._scratch_array('_subspace_zc', (n,), dtype)
@@ -892,27 +944,49 @@ class PrysmLBFGSB:
         rc_full = self._scratch_array('_subspace_rc_full', (n,), dtype)
         np.multiply(zc, theta, out=rc_full)
         rc_full += g
-        rc_full -= W @ Mc
+        WMc = self._scratch_array('_subspace_WMc', (n,), dtype)
+        np.matmul(W, Mc, out=WMc)
+        rc_full -= WMc
 
-        idx_F = np.nonzero(free_mask)[0]
-        n_free = idx_F.size
-        rc_F = self._scratch_array('_subspace_rc_F', (n_free,), dtype)
-        W_F = self._scratch_array('_subspace_W_F', (n_free, 2 * k), dtype)
-        np.take(rc_full, idx_F, out=rc_F)
-        np.take(W, idx_F, axis=0, out=W_F)   # (|F|, 2k)
+        if n_free is None:
+            idx_F = np.nonzero(free_mask)[0]
+            n_free = idx_F.size
+        elif n_free == n:
+            idx_F = None
+        else:
+            idx_F = np.nonzero(free_mask)[0]
+
+        if idx_F is None:
+            rc_F = rc_full
+            W_F = W
+        else:
+            rc_F = self._scratch_array('_subspace_rc_F', (n_free,), dtype)
+            W_F = self._scratch_array('_subspace_W_F', (n_free, 2 * k), dtype)
+            np.take(rc_full, idx_F, out=rc_F)
+            np.take(W, idx_F, axis=0, out=W_F)   # (|F|, 2k)
 
         N = self._scratch_array('_subspace_N', (2 * k, 2 * k), dtype)
-        N[:] = (W_F.T @ W_F) / theta         # (2k, 2k)
+        np.matmul(W_F.T, W_F, out=N)         # (2k, 2k)
+        N /= theta
         N -= M
-        WF_rcF = W_F.T @ rc_F
+        WF_rcF = self._scratch_array('_subspace_WF_rcF', (2 * k,), dtype)
+        np.matmul(W_F.T, rc_F, out=WF_rcF)
         # One-shot solve here; not worth factoring N up front.  Using
         # np.linalg.solve (vs linalg.solve) sidesteps scipy's noisy
         # ill-conditioning warnings — N can be poorly scaled near
         # convergence without that being a correctness problem.
         N_inv = np.linalg.solve(N, WF_rcF)
         # Δx_F = -(1/θ) r_c + (1/θ²) W_F N⁻¹ W_Fᵀ r_c
-        dx_F = -rc_F / theta + (W_F @ N_inv) / (theta * theta)
-        dx[idx_F] = dx_F
+        dx_F = self._scratch_array('_subspace_dx_F', (n_free,), dtype)
+        np.multiply(rc_F, -1.0 / theta, out=dx_F)
+        WF_N_inv = self._scratch_array('_subspace_WF_N_inv', (n_free,), dtype)
+        np.matmul(W_F, N_inv, out=WF_N_inv)
+        WF_N_inv /= theta * theta
+        dx_F += WF_N_inv
+        if idx_F is None:
+            dx[:] = dx_F
+        else:
+            dx[idx_F] = dx_F
         return dx
 
     def _max_alpha_inside_box(self, x, p):
@@ -1022,7 +1096,7 @@ class PrysmLBFGSB:
         along the resulting direction.  Falls back to BLNZ-style
         truncation when the projected direction is not descent.
         """
-        x_pre = self.x.copy()
+        x_pre = self.x
         f, g = self.problem.fg(self.x)
         self.nfev += 1
         if g.ndim != 1:
@@ -1056,7 +1130,9 @@ class PrysmLBFGSB:
                 M_lu = None
 
             xc, c_vec, free_mask = self._cauchy(g, W, M, M_lu)
-            dx = self._subspace_solve(xc, c_vec, free_mask, g, W, M, M_lu)
+            n_free = self.n - self._cauchy_breaks
+            dx = self._subspace_solve(xc, c_vec, free_mask, g, W, M, M_lu,
+                                      n_free=n_free)
             x_hat = self._scratch_array('_step_x_hat', (self.n,), self.x.dtype)
             np.add(xc, dx, out=x_hat)
 
@@ -1083,7 +1159,7 @@ class PrysmLBFGSB:
             # _cauchy set self._cauchy_breaks = K; free_mask has exactly
             # n - K free entries, so derive both without re-reducing it.
             cauchy_breaks = self._cauchy_breaks
-            free_mask_count = self.n - cauchy_breaks
+            free_mask_count = n_free
 
         # No room to move, or the Cauchy+subspace direction degenerated
         # to zero (e.g. every coord is at a bound being pushed into).
@@ -1116,7 +1192,8 @@ class PrysmLBFGSB:
             # bound under floating-point roundoff even with maxalpha set.
             # The clipped point is within an ULP of x_new, so the cached
             # g_new is still the right representative for the curvature update.
-            x_new = np.minimum(np.maximum(x_new, self.l), self.u)
+            np.maximum(x_new, self.l, out=x_new)
+            np.minimum(x_new, self.u, out=x_new)
             # honor the clip in the history update too
             np.subtract(x_new, self.x, out=s)
 
@@ -1133,4 +1210,4 @@ class PrysmLBFGSB:
             'subspace_solved': True,
             'subspace_mode': subspace_mode,
         }
-        return x_pre, float(f), g.copy()
+        return x_pre, float(f), g
