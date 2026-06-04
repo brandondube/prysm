@@ -171,17 +171,6 @@ def _apply_grating_status(surf, Sjp1, r, n_post, wvl, active, status, surf_idx):
     return Sjp1_diff, active
 
 
-def _mark_inactive_history(Pjp1, Sjp1, OPL_segment, active):
-    inactive = ~active
-    if inactive.any():
-        Pjp1 = Pjp1.copy()
-        Sjp1 = Sjp1.copy()
-        Pjp1[inactive] = np.nan
-        Sjp1[inactive] = np.nan
-        OPL_segment[inactive] = np.nan
-    return Pjp1, Sjp1
-
-
 def resolve_tol_sag(tol_sag, dtype):
     """Resolve the surface-residual convergence tolerance.
 
@@ -623,8 +612,13 @@ def raytrace(surfaces, P, S, wvl, tol_sag=None):
         if surf.typ == STYPE_REFRACT:
             nj = n_post
 
-        Pjp1, Sjp1 = _mark_inactive_history(Pjp1, Sjp1, OPL_hist[j+1],
-                                            active)
+        inactive = ~active
+        if inactive.any():
+            Pjp1 = Pjp1.copy()
+            Sjp1 = Sjp1.copy()
+            Pjp1[inactive] = np.nan
+            Sjp1[inactive] = np.nan
+            OPL_hist[j+1][inactive] = np.nan
         P_hist[j+1] = Pjp1
         S_hist[j+1] = Sjp1
         Pj, Sj = Pjp1, Sjp1

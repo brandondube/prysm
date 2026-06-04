@@ -60,7 +60,7 @@ def local_vertex_curvatures(surf):
                 zero = np.asarray(0.0, dtype=config.precision)
                 c_x, _, c_y = hessian(zero, zero)
                 return _as_float_scalar(c_x), _as_float_scalar(c_y)
-            except Exception:
+            except NotImplementedError:
                 pass
         if 'c' in params:
             c = float(params['c'])
@@ -130,7 +130,7 @@ def _assert_first_order_geometry(surfaces):
                     )
             except ValueError:
                 raise
-            except Exception:
+            except NotImplementedError:
                 pass
 
 

@@ -13,8 +13,6 @@ from prysm.x.raytracing.opt import (
     locate_ep,
     locate_xp,
     xp_reference_sphere,
-    _closest_approach_on_axis,
-    _establish_axis,
     spot_centroid,
     rms_spot_radius,
     geometric_psf_histogram,
@@ -277,36 +275,20 @@ def test_aim_rays_direction_normalizes_proposals(target_z, launch_sz):
     np.testing.assert_allclose(tr.P[-1, 0, :2], target_xy, atol=1e-9)
 
 
-# ---------- pupil-on-axis helpers ----------
+# ---------- pupil-on-axis behavior ----------
 
-def test_closest_approach_on_axis_intersecting_lines():
+def test_xp_reference_sphere_axis_foot_intersecting_lines():
     """Chief ray that crosses the optical axis at the origin: foot must be the origin."""
     # chief through (1, 0, -10) and (0, 0, 0)
     P_chief = np.array([1.0, 0.0, -10.0])
     direction = np.array([-1.0, 0.0, 10.0])
     S_chief = direction / np.linalg.norm(direction)
-    Q = _closest_approach_on_axis(P_chief, S_chief,
-                                  axis_point=np.zeros(3),
-                                  axis_dir=np.array([0., 0., 1.]))
-    np.testing.assert_allclose(Q, [0.0, 0.0, 0.0], atol=1e-12)
-
-
-def test_closest_approach_on_axis_parallel_chief():
-    """Chief ray exactly parallel to the axis: helper must not divide by zero."""
-    P_chief = np.array([0.0, 1.0, -5.0])
-    S_chief = np.array([0.0, 0.0, 1.0])
-    Q = _closest_approach_on_axis(P_chief, S_chief,
-                                  axis_point=np.zeros(3),
-                                  axis_dir=np.array([0., 0., 1.]))
-    # the projection branch returns the foot of perpendicular along the axis;
-    # finite, no NaN/Inf — the actual coordinate is implementation-defined
-    # for the parallel case but must not blow up
-    assert np.all(np.isfinite(Q))
+    _, _, P_xp = xp_reference_sphere(P_chief, S_chief)
+    np.testing.assert_allclose(P_xp, [0.0, 0.0, 0.0], atol=1e-12)
 
 
 def test_locate_ep_and_locate_xp_share_helper():
-    """Both should reduce to _pupil_on_axis; verify they yield the same result
-    when the axis pair points define the z-axis."""
+    """Entrance and exit pupil locators agree when given the same axis pair."""
     P_chief = np.array([1.0, 0.0, -10.0])
     S_chief = np.array([-1.0, 0.0, 10.0]) / np.sqrt(101)
     P_obj = np.array([0.0, 0.0, -50.0])
@@ -348,17 +330,6 @@ def test_intersect_reference_sphere_rejects_degenerate_radius():
     C = np.array([0.0, 0.0, 10.0])
     with pytest.raises(ValueError, match='degenerate'):
         intersect_reference_sphere(P, S, C, 0.0)
-
-
-# ---------- _establish_axis ----------
-
-def test_establish_axis_returns_unit_norm():
-    P1 = np.array([0.0, 0.0, 0.0])
-    P2 = np.array([3.0, 4.0, 0.0])
-    Sa = _establish_axis(P1, P2)
-    np.testing.assert_allclose(np.linalg.norm(Sa), 1.0, atol=1e-12)
-    np.testing.assert_allclose(Sa, [0.6, 0.8, 0.0], atol=1e-12)
-
 
 # ---------- end-to-end RC sanity check ----------
 

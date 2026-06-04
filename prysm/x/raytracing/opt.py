@@ -5,43 +5,9 @@ from prysm.mathops import np, array_to_true_numpy
 from . import spencer_and_murty
 from ._line_math import (
     closest_point_on_line_to_line,
-    line_intersection_params,
     normalize_vector,
     unit_vector_between,
 )
-
-
-def _intersect_lines(P1, S1, P2, S2):
-    """Find the slerp along the line (P1, S1) that results in intersection with
-    the line (P2, S2).
-
-    P = position, array shape (3,)
-    S = direction cosines, array shape (3,)
-
-    pair of two lines only.
-    """
-    return line_intersection_params(P1, S1, P2, S2)
-
-
-def _establish_axis(P1, P2):
-    """Given two points, establish an axis between them.
-
-    Parameters
-    ----------
-    P1 : ndarray
-        shape (3,), any float dtype
-        first point
-    P2 : ndarray
-        shape (3,), any float dtype
-        second point
-
-    Returns
-    -------
-    ndarray, ndarray
-        P1 (same exact PyObject) and direction cosine from P1 -> P2
-
-    """
-    return unit_vector_between(P1, P2)
 
 
 def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
@@ -254,7 +220,7 @@ def _pupil_on_axis(P_chief, S_chief, axis_p1, axis_p2):
 
     """
     axis_p1 = np.asarray(axis_p1)
-    S_axis = _establish_axis(axis_p1, np.asarray(axis_p2))
+    S_axis = unit_vector_between(axis_p1, np.asarray(axis_p2))
     return _closest_approach_on_axis(P_chief, S_chief, axis_p1, S_axis)
 
 

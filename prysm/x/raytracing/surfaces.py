@@ -125,23 +125,6 @@ def annular_aperture(inner_radius, outer_radius, x0=0.0, y0=0.0):
     return aperture
 
 
-def _ensure_P_vec(P):
-    """Promote a point-like object to a 3-vector using configured precision."""
-    return promote_3d_point(P, dtype=config.precision)
-
-
-def _none_or_rotmat(R):
-    """Return None or a coerced 3D rotation matrix."""
-    return coerce_3d_rotation(R)
-
-
-def _apply_tilt_decenter(P, R, tilt, decenter, tilt_radians):
-    """Apply optional tilt and decenter to a surface pose."""
-    return apply_tilt_decenter(P, R, tilt=tilt, decenter=decenter,
-                               tilt_radians=tilt_radians,
-                               dtype=config.precision)
-
-
 def _map_stype(typ):
     """Map a surface interaction name or integer to an STYPE constant."""
     if isinstance(typ, int):
@@ -157,12 +140,6 @@ def _map_stype(typ):
         f'unknown surface type {typ!r}; expected one of '
         "'refl'/'reflect', 'refr'/'refract', 'eval', or an STYPE_* int."
     )
-
-
-def _validate_n_and_typ(n, typ):
-    """Validate that refractive surfaces have a refractive-index model."""
-    if typ == STYPE_REFRACT and n is None:
-        raise ValueError('refractive surfaces must have a refractive index function, not None')
 
 
 class Shape:
@@ -892,8 +869,7 @@ class Toroid(ConicSeedMixin, Shape):
     def __init__(self, c_x, c_y, k_y, coefs_y):
         """Initialize a toroidal sag shape."""
         coefs_y = tuple(coefs_y) if coefs_y is not None else ()
-        super().__init__(c_x=float(c_x), c_y=float(c_y), k_y=float(k_y),
-                         coefs_y=coefs_y)
+        super().__init__(c_x=c_x, c_y=c_y, k_y=k_y, coefs_y=coefs_y)
 
     def seed_conic(self):
         """Return a conic seed for Newton intersection."""
@@ -936,8 +912,7 @@ class Biconic(ConicSeedMixin, Shape):
 
     def __init__(self, c_x, c_y, k_x, k_y):
         """Initialize a biconic sag shape."""
-        super().__init__(c_x=float(c_x), c_y=float(c_y),
-                         k_x=float(k_x), k_y=float(k_y))
+        super().__init__(c_x=c_x, c_y=c_y, k_x=k_x, k_y=k_y)
 
     def seed_conic(self):
         """Return a conic seed for Newton intersection."""
@@ -1036,10 +1011,15 @@ class Surface:
             raise TypeError('Surface requires a pose or P')
 
         typ = _map_stype(interaction)
-        P = _ensure_P_vec(P)
-        R = _none_or_rotmat(R)
-        P, R = _apply_tilt_decenter(P, R, tilt, decenter, tilt_radians)
-        _validate_n_and_typ(material, typ)
+        P = promote_3d_point(P, dtype=config.precision)
+        R = coerce_3d_rotation(R)
+        P, R = apply_tilt_decenter(P, R, tilt=tilt, decenter=decenter,
+                                   tilt_radians=tilt_radians,
+                                   dtype=config.precision)
+        if typ == STYPE_REFRACT and material is None:
+            raise ValueError(
+                'refractive surfaces must have a refractive index function, '
+                'not None')
 
         self.shape = shape
         self.typ = typ
@@ -1167,7 +1147,4 @@ __all__ = [
     'ray_plane_intersect',
     'ray_sphere_intersect',
     'ray_conic_intersect',
-    '_ensure_P_vec',
-    '_none_or_rotmat',
-    '_apply_tilt_decenter',
 ]
