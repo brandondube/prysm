@@ -1300,3 +1300,227 @@ def plot_distortion(prescription, fields, wavelength=None, *, epd=None,
     ax.set_xlabel('distortion [%]')
     ax.set_ylabel('field')
     return fig, ax
+
+
+# ---------- whole-system grid plotters --------------------------------------
+# These consume the stacked grids from analysis (RayFanGrid, OPDFanGrid,
+# SpotGrid).  Tracing already happened; these only lay out subplots, so the same
+# grid can be drawn many ways or saved instead of drawn.
+
+def _wavelength_label(w):
+    return f'{float(w):.4g} µm'
+
+
+def _field_label(field):
+    """Short subplot label for a field point."""
+    hx = float(getattr(field, 'hx', 0.0))
+    hy = float(getattr(field, 'hy', 0.0))
+    if getattr(field, 'kind', 'angle') == 'angle':
+        return f'({hx:g}, {hy:g})°'
+    return f'({hx:g}, {hy:g})'
+
+
+def _wavelength_colors(wavelengths, colors):
+    """One color per wavelength, shared across every subplot of a grid."""
+    if colors is not None:
+        return list(colors)
+    return [f'C{j % 10}' for j in range(len(wavelengths))]
+
+
+def _plot_fan_grid(grid, value_label, *, axes, colors, sharey, figsize,
+                   legend, fig, axs):
+    """Shared layout for ray-aberration and OPD fan grids.
+
+    Rows are fields; columns are the tangential (Y) and/or sagittal (X) fans;
+    each subplot overlays one curve per wavelength against the shared normalized
+    pupil coordinate.
+    """
+    import matplotlib.pyplot as plt
+
+    fields = grid.fields
+    wavelengths = _to_np(grid.wavelengths, dtype=float)
+    pupil = _to_np(grid.pupil, dtype=float)
+    grid_x = _to_np(grid.x, dtype=float)
+    grid_y = _to_np(grid.y, dtype=float)
+    nf = len(fields)
+    nw = len(wavelengths)
+
+    if axes == 'both':
+        columns = [('y', 'tangential (Y)', grid_y),
+                   ('x', 'sagittal (X)', grid_x)]
+    elif axes == 'y':
+        columns = [('y', 'tangential (Y)', grid_y)]
+    elif axes == 'x':
+        columns = [('x', 'sagittal (X)', grid_x)]
+    else:
+        raise ValueError(f"axes must be 'both', 'x', or 'y', got {axes!r}")
+    ncol = len(columns)
+
+    if fig is None or axs is None:
+        if figsize is None:
+            figsize = (4.0 * ncol, 2.4 * nf)
+        fig, axs = plt.subplots(nf, ncol, sharex=True, sharey=sharey,
+                                figsize=figsize, squeeze=False)
+    wl_colors = _wavelength_colors(wavelengths, colors)
+
+    for i in range(nf):
+        for ci, (axis, title, data) in enumerate(columns):
+            ax = axs[i][ci]
+            for j in range(nw):
+                first = i == 0 and ci == 0
+                ax.plot(pupil, data[i, j], c=wl_colors[j], lw=1,
+                        label=_wavelength_label(wavelengths[j]) if first else None)
+            ax.axhline(0.0, c='k', lw=0.5, alpha=0.4)
+            ax.axvline(0.0, c='k', lw=0.5, alpha=0.4)
+            if i == 0:
+                ax.set_title(title)
+            if i == nf - 1:
+                ax.set_xlabel(f'normalized pupil {axis}')
+            if ci == 0:
+                ax.set_ylabel(f'{_field_label(fields[i])}\n{value_label}')
+    if legend and nw > 1:
+        axs[0][0].legend(fontsize='small', loc='best')
+    fig.tight_layout()
+    return fig, axs
+
+
+def plot_ray_fans(fan_grid, *, axes='both', colors=None, sharey='row',
+                  figsize=None, legend=True, fig=None, axs=None):
+    """Plot a grid of transverse ray-aberration fans.
+
+    Consumes a RayFanGrid from analysis.ray_aberration_fans and draws one row of
+    subplots per field -- the tangential (Y) and sagittal (X) fans -- with one
+    curve per wavelength.  Tracing and plotting stay separate: this only draws.
+
+    Parameters
+    ----------
+    fan_grid : RayFanGrid
+        the traced fans from analysis.ray_aberration_fans.
+    axes : str, optional
+        which fans to draw: 'both' (default), 'x', or 'y'.
+    colors : sequence, optional
+        one matplotlib color per wavelength; defaults to the property cycle.
+    sharey : bool or str, optional
+        forwarded to subplots; 'row' (default) shares the error scale within a
+        field.
+    figsize : tuple, optional
+        figure size; a sensible default is derived from the grid shape.
+    legend : bool, optional
+        draw a wavelength legend on the first subplot when multi-wavelength.
+    fig : matplotlib.figure.Figure, optional
+    axs : ndarray of matplotlib.axes.Axes, optional
+        an existing (n_fields, n_columns) axis grid to draw into.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    ndarray of matplotlib.axes.Axes
+        the (n_fields, n_columns) axis grid.
+
+    """
+    return _plot_fan_grid(fan_grid, 'ray error', axes=axes, colors=colors,
+                          sharey=sharey, figsize=figsize, legend=legend,
+                          fig=fig, axs=axs)
+
+
+def plot_opd_fans(opd_grid, *, axes='both', colors=None, sharey='row',
+                  figsize=None, legend=True, fig=None, axs=None):
+    """Plot a grid of wavefront (OPD) fans.
+
+    Consumes an OPDFanGrid from analysis.opd_fans; otherwise identical in layout
+    to plot_ray_fans.  The vertical axis is OPD (waves by default, matching the
+    grid's output).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    ndarray of matplotlib.axes.Axes
+
+    """
+    return _plot_fan_grid(opd_grid, 'OPD [waves]', axes=axes, colors=colors,
+                          sharey=sharey, figsize=figsize, legend=legend,
+                          fig=fig, axs=axs)
+
+
+def plot_spot_diagrams(spot_grid, *, ncols=None, colors=None, marker='+',
+                       s=None, equal_limits=True, legend=True, figsize=None,
+                       fig=None, axs=None):
+    """Plot a grid of spot diagrams, one subplot per field.
+
+    Consumes a SpotGrid from analysis.spot_diagrams and scatters every
+    wavelength (colored) in each field's subplot, using the centered image
+    coordinates the grid already carries.  Tracing and plotting stay separate.
+
+    Parameters
+    ----------
+    spot_grid : SpotGrid
+        the traced spots from analysis.spot_diagrams.
+    ncols : int, optional
+        number of subplot columns; defaults to all fields in one row.
+    colors : sequence, optional
+        one matplotlib color per wavelength; defaults to the property cycle.
+    marker : str, optional
+        scatter marker.
+    s : float, optional
+        marker size.
+    equal_limits : bool, optional
+        if True (default) give every subplot the same square limits so spot
+        sizes are comparable across fields.
+    legend : bool, optional
+        draw a wavelength legend on the first subplot when multi-wavelength.
+    figsize : tuple, optional
+        figure size; a sensible default is derived from the layout.
+    fig : matplotlib.figure.Figure, optional
+    axs : ndarray of matplotlib.axes.Axes, optional
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    ndarray of matplotlib.axes.Axes
+        the (n_rows, n_cols) axis grid.
+
+    """
+    import matplotlib.pyplot as plt
+
+    fields = spot_grid.fields
+    wavelengths = _to_np(spot_grid.wavelengths, dtype=float)
+    xs = _to_np(spot_grid.x, dtype=float)
+    ys = _to_np(spot_grid.y, dtype=float)
+    nf = len(fields)
+    nw = len(wavelengths)
+
+    if ncols is None:
+        ncols = nf
+    ncols = max(1, min(int(ncols), nf))
+    nrows = -(-nf // ncols)  # ceil
+
+    if fig is None or axs is None:
+        if figsize is None:
+            figsize = (3.0 * ncols, 3.0 * nrows)
+        fig, axs = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
+    wl_colors = _wavelength_colors(wavelengths, colors)
+
+    lim = None
+    if equal_limits:
+        rmax = np.nanmax(np.sqrt(xs * xs + ys * ys))
+        if np.isfinite(rmax) and rmax > 0:
+            lim = 1.1 * float(rmax)
+
+    flat = [axs[r][c] for r in range(nrows) for c in range(ncols)]
+    for idx, field in enumerate(fields):
+        ax = flat[idx]
+        for j in range(nw):
+            ax.scatter(xs[idx, j], ys[idx, j], c=wl_colors[j], marker=marker,
+                       s=s, label=_wavelength_label(wavelengths[j])
+                       if idx == 0 else None)
+        ax.set_aspect('equal')
+        ax.set_title(_field_label(field))
+        if lim is not None:
+            ax.set_xlim(-lim, lim)
+            ax.set_ylim(-lim, lim)
+    for idx in range(nf, nrows * ncols):
+        flat[idx].axis('off')
+    if legend and nw > 1:
+        flat[0].legend(fontsize='small', loc='best')
+    fig.tight_layout()
+    return fig, axs
