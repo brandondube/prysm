@@ -17,6 +17,7 @@ from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.analysis import (
     transverse_ray_aberration,
     wavefront,
+    resolve_exit_pupil,
     wavefront_zernike_fit,
     distortion,
     field_curvature,
@@ -24,7 +25,7 @@ from prysm.x.raytracing.analysis import (
     chromatic_focal_shift,
     lateral_color,
 )
-from prysm.x.raytracing.opt import opd_from_raytrace
+from prysm.x.raytracing.opt import opd_from_raytrace_eic
 
 
 # ---------- helpers ---------------------------------------------------------
@@ -171,15 +172,16 @@ def test_wavefront_chief_opd_is_zero():
     np.testing.assert_array_equal(y_pup, P[:, 1])
 
 
-def test_wavefront_on_axis_requires_explicit_reference_route():
+def test_resolve_exit_pupil_on_axis_geometric_route_raises():
+    # No resolvable stop on a bare surface list -> geometric route on an
+    # on-axis (axial) chief, which cannot locate the exit pupil.  The error
+    # now comes from resolve_exit_pupil, not wavefront (which is pure).
     presc = _spherical_singlet()
-    P, S = launch(presc, Field(0., 0.), 0.55,
-                  Sampling.fan(n=9), epd=4.0, pupil_z=-5.0)
     with pytest.raises(ValueError, match='near-axial chief ray'):
-        wavefront(presc, P, S, 0.55)
+        resolve_exit_pupil(presc, 0.55)
 
 
-def test_wavefront_decentered_system_stop_falls_back_to_axis_route():
+def test_resolve_exit_pupil_decentered_system_stop_falls_back_to_axis_route():
     ld = LensData()
     ld.add_coordbreak(decenter=(1.0, 0.0, 0.0))
     ld.add(Plane(), typ='eval')
@@ -193,9 +195,15 @@ def test_wavefront_decentered_system_stop_falls_back_to_axis_route():
                   [0.008, 0.0, 1.0]])
     S = S / np.linalg.norm(S, axis=1, keepdims=True)
 
-    opd, x_pup, y_pup = wavefront(
-        sys, P, S, 0.55, axis_point=(0, 0, 0), axis_dir=(0, 0, 1),
-    )
+    # the decentered coordinate break makes the scalar-ABCD first_order route
+    # fail; with an explicit axis supplied resolve_exit_pupil falls back to the
+    # geometric route using this bundle's own chief (as wavefront callers pass)
+    # and still returns a finite P_xp that wavefront accepts.
+    tr = raytrace(sys, P, S, 0.55)
+    P_xp = resolve_exit_pupil(sys, 0.55, chief=(tr.P[-1, 0], tr.S[-1, 0]),
+                              axis_point=(0, 0, 0), axis_dir=(0, 0, 1))
+    assert np.all(np.isfinite(np.asarray(P_xp, dtype=float)))
+    opd, x_pup, y_pup = wavefront(sys, P, S, 0.55, P_xp=P_xp)
     assert np.isfinite(opd).all()
     np.testing.assert_allclose(x_pup, [0.0, 0.1, -0.1])
     np.testing.assert_allclose(y_pup, 0.0)
@@ -213,10 +221,10 @@ def test_wavefront_uses_penultimate_surface_image_medium():
     trace = raytrace(presc, P, S, wvl)
     chief = len(P) // 2
     C = trace.P[-1, chief]
-    expected = opd_from_raytrace(trace.P, trace.S, trace.OPL, C, P_xp,
-                                 n_image=1.25, chief_index=chief)
-    wrong_air = opd_from_raytrace(trace.P, trace.S, trace.OPL, C, P_xp,
-                                  n_image=1.0, chief_index=chief)
+    expected = opd_from_raytrace_eic(trace.P, trace.S, trace.OPL, C, P_xp,
+                                     n_image=1.25, chief_index=chief)
+    wrong_air = opd_from_raytrace_eic(trace.P, trace.S, trace.OPL, C, P_xp,
+                                      n_image=1.0, chief_index=chief)
 
     np.testing.assert_allclose(opd, expected, atol=1e-12)
     assert np.max(np.abs(expected - wrong_air)) > 1e-8
@@ -235,8 +243,8 @@ def test_wavefront_uses_surface_zero_object_medium_when_present():
     trace = raytrace(presc, P, S, wvl)
     chief = len(P) // 2
     C = trace.P[-1, chief]
-    expected = opd_from_raytrace(trace.P, trace.S, trace.OPL, C, P_xp,
-                                 n_image=1.0, chief_index=chief)
+    expected = opd_from_raytrace_eic(trace.P, trace.S, trace.OPL, C, P_xp,
+                                     n_image=1.0, chief_index=chief)
 
     np.testing.assert_allclose(opd, expected, atol=1e-12)
 
@@ -492,8 +500,9 @@ def test_wavefront_centroid_reference_for_obscured_chief():
     P, S = launch(presc, Field(0., 0.), 0.55e-3, Sampling.hex(nrings=4),
                   epd=8.0, pupil_z=-5.0)
     with pytest.raises(ValueError):
-        wavefront(presc, P, S, 0.55e-3, reference='chief')
-    opd, xp, yp = wavefront(presc, P, S, 0.55e-3, reference='centroid')
+        wavefront(presc, P, S, 0.55e-3, P_xp=(0, 0, 0), reference='chief')
+    opd, xp, yp = wavefront(presc, P, S, 0.55e-3, P_xp=(0, 0, 0),
+                            reference='centroid')
     assert np.all(np.isfinite(np.asarray(opd, dtype=float)))
     assert opd.shape[0] > 0
 
