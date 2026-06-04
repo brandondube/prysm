@@ -964,6 +964,7 @@ class LensData:
         self._image_solve = None  # (surface_row_index, wavelength)
         self._dependent = set()  # slots driven by a pickup/solve (never free)
         self._surfaces_cache = None
+        self._version = 0  # bumped on every edit; keys system-side derived caches
 
     # -- construction --
     def add(self, shape, *, thickness=0.0, material=None, typ='refr',
@@ -995,8 +996,9 @@ class LensData:
         return self
 
     def _invalidate(self):
-        """Clear cached compiled surfaces."""
+        """Clear cached compiled surfaces and bump the edit version."""
         self._surfaces_cache = None
+        self._version += 1
 
     # -- compilation --
     def to_surfaces(self):

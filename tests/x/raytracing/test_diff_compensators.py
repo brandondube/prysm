@@ -24,11 +24,11 @@ from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing.spencer_and_murty import STYPE_EVAL
 from prysm.x.raytracing.paraxial import paraxial_image_distance
-from prysm.x.raytracing.analysis import wavefront
 from prysm.x.raytracing.tolerance import Perturbation
 from prysm.x.raytracing.wavefront_differential import (
     wavefront_differential, compensate, project_out,
 )
+from tests.x.raytracing.surface_helpers import wf_auto
 
 
 WVL = 0.5
@@ -85,8 +85,8 @@ def reoptimize_rms(ld, comps, P, S, n_iter=12):
     def opd_at(cvals):
         for cp, v in zip(comps, cvals):
             cp.set(float(v))
-        opd, _, _ = wavefront(ld.to_surfaces(), P, S, WVL,
-                               field=FLD)
+        opd, _, _ = wf_auto(ld.to_surfaces(), P, S, WVL,
+                            field=FLD)
         return opd
 
     try:

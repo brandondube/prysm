@@ -9,10 +9,12 @@ from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing import analysis
 from prysm.x.raytracing.opt import (
-    opd_from_raytrace, opd_from_raytrace_eic, xp_reference_sphere,
+    opd_from_raytrace_eic, xp_reference_sphere,
     eic_distance,
 )
-from prysm.x.raytracing.spencer_and_murty import raytrace
+from prysm.x.raytracing.spencer_and_murty import (
+    raytrace, intersect_reference_sphere,
+)
 from prysm.x.raytracing.paraxial import paraxial_image_distance
 
 
@@ -49,20 +51,30 @@ def _singlet(epd=8.0):
     return ld
 
 
-def test_eic_matches_sphere_on_finite_conjugates():
-    """For a normal finite-conjugate system the rationalized form gives a
-    bit-identical OPD to the legacy explicit-sphere intersection (the
-    cancelling branch is the converging-beam case but at modest aperture
-    the loss is well below 1 ULP)."""
+def test_eic_matches_plain_sphere_root_on_finite_conjugates():
+    """For a normal finite-conjugate system the rationalized (eic) OPD is
+    bit-identical to the plain explicit-sphere intersection (t = -b - sqrt),
+    the only OPD path the analysis layer now uses.  The cancelling branch is
+    the converging-beam case but at modest aperture the loss is well below
+    1 ULP, so the two agree to 1e-12."""
     ld = _singlet()
     wvl = ld.wavelength('d')
     field = Field(0.0, 0.0, kind='angle')
     P, S = launch(ld, field, wvl, Sampling.fan(n=41, axis='y'), epd=ld.epd)
-    opd_sphere, _, _ = analysis.wavefront(ld, P, S, wvl, method='sphere',
-                                           output='length')
-    opd_eic, _, _ = analysis.wavefront(ld, P, S, wvl, method='eic',
-                                        output='length')
-    np.testing.assert_allclose(opd_eic, opd_sphere, rtol=0.0, atol=1e-12)
+    P_xp = ld.exit_pupil(wvl)
+    opd_eic, _, _ = analysis.wavefront(ld, P, S, wvl, P_xp=P_xp,
+                                       output='length')
+
+    # plain -b - sqrt root reference (the deleted opd_from_raytrace), built
+    # directly from intersect_reference_sphere on the chief reference sphere.
+    trace = raytrace(ld, P, S, wvl)
+    chief = P.shape[0] // 2
+    P_img = trace.P[-1, chief]
+    R = float(np.sqrt(np.sum((np.asarray(P_xp) - P_img) ** 2)))
+    _, t = intersect_reference_sphere(trace.P[-1], trace.S[-1], P_img, R)
+    opl_total = trace.OPL.sum(axis=0) + t  # n_image == 1 here
+    opd_plain = opl_total - opl_total[chief]
+    np.testing.assert_allclose(opd_eic, opd_plain, rtol=0.0, atol=1e-12)
 
 
 def test_eic_plane_fallback_triggers_for_infinite_reference():

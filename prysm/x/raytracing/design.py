@@ -43,7 +43,7 @@ from prysm.x.optym.least_squares import (  # NOQA - re-export for users
 
 from .spencer_and_murty import raytrace
 from .sensitivity import merit_jacobian_free as _merit_jacobian_free
-from .opt import rms_spot_radius
+from .opt import rms_spot_radius, _pupil_center_chief_index
 from .paraxial import (
     effective_focal_length,
     back_focal_length,
@@ -66,11 +66,12 @@ class _TraceCache:
 
     """
 
-    __slots__ = ('_prescription', '_cache', '_n_traces')
+    __slots__ = ('_prescription', '_cache', '_n_traces', '_xp_cache')
 
     def __init__(self, prescription):
         self._prescription = prescription
         self._cache = {}
+        self._xp_cache = {}
         self._n_traces = 0
 
     def trace(self, P, S, wavelength):
@@ -80,6 +81,34 @@ class _TraceCache:
             cached = raytrace(self._prescription, P, S, wavelength)
             self._cache[key] = cached
             self._n_traces += 1
+        return cached
+
+    def exit_pupil(self, P, S, wavelength, *, P_xp=None, chief_index=None,
+                   stop_index=None, epd=None, axis_point=None, axis_dir=None):
+        """Exit-pupil reference point for an operand bundle, resolved once.
+
+        Honors an explicit P_xp; otherwise resolves via analysis.resolve_exit_pupil
+        and memoizes per (bundle, wavelength, stop) for the merit call.  When no
+        stop is resolvable the geometric route reuses this bundle's own cached
+        chief ray, matching the differential trace (wavefront_with_tangents).
+        """
+        if P_xp is not None:
+            return np.asarray(P_xp)
+        key = (id(P), id(S), float(wavelength), stop_index)
+        cached = self._xp_cache.get(key)
+        if cached is None:
+            resolved_stop = (stop_index if stop_index is not None
+                             else getattr(self._prescription, 'stop_index', None))
+            chief = None
+            if resolved_stop is None:
+                tr = self.trace(P, S, wavelength)
+                ci = (chief_index if chief_index is not None
+                      else _pupil_center_chief_index(P))
+                chief = (tr.P[-1, ci], tr.S[-1, ci])
+            cached = _analysis.resolve_exit_pupil(
+                self._prescription, wavelength, stop_index=stop_index, epd=epd,
+                chief=chief, axis_point=axis_point, axis_dir=axis_dir)
+            self._xp_cache[key] = cached
         return cached
 
     @property
@@ -230,11 +259,13 @@ class WavefrontRMS(_OperandBase):
         self.stop_index = stop_index
 
     def __call__(self, prescription, cache):
+        P_xp = cache.exit_pupil(
+            self.P, self.S, self.wavelength, P_xp=self.P_xp,
+            chief_index=self.chief_index, stop_index=self.stop_index,
+            epd=self.epd, axis_point=self.axis_point, axis_dir=self.axis_dir)
         opd, _, _ = _analysis.wavefront(
             prescription, self.P, self.S, self.wavelength,
-            chief_index=self.chief_index,
-            axis_point=self.axis_point, axis_dir=self.axis_dir,
-            P_xp=self.P_xp, epd=self.epd, stop_index=self.stop_index,
+            chief_index=self.chief_index, P_xp=P_xp,
         )
         return float(np.sqrt(np.mean(opd * opd)))
 
@@ -277,11 +308,13 @@ class ZernikeCoefficient(_OperandBase):
         self.norm = bool(norm)
 
     def __call__(self, prescription, cache):
+        P_xp = cache.exit_pupil(
+            self.P, self.S, self.wavelength, P_xp=self.P_xp,
+            chief_index=self.chief_index, stop_index=self.stop_index,
+            epd=self.epd, axis_point=self.axis_point, axis_dir=self.axis_dir)
         opd, x_pup, y_pup = _analysis.wavefront(
             prescription, self.P, self.S, self.wavelength,
-            chief_index=self.chief_index,
-            axis_point=self.axis_point, axis_dir=self.axis_dir,
-            P_xp=self.P_xp, epd=self.epd, stop_index=self.stop_index,
+            chief_index=self.chief_index, P_xp=P_xp,
         )
         coefs, _ = _analysis.wavefront_zernike_fit(
             opd, x_pup, y_pup, self.nms_basis,

@@ -1,26 +1,7 @@
-"""Compute primitives for geometric ray-trace analysis.
-
-Each function here takes a prescription (or a trace) and returns numbers,
-not plots.  The plotting routines in plotting.py compose with these.
-Operands in design.py also wrap these for use in optimization problems.
-
-Provided primitives:
-
-- transverse_ray_aberration: per-ray image-plane offset vs pupil coordinate
-  (the math behind plot_transverse_ray_aberration, exposed for testing /
-  scripting / merit functions)
-- wavefront: trace and compute OPD on the chief-ray-centered reference
-  sphere (composes exit-pupil resolution + opt.opd_from_raytrace)
-- wavefront_zernike_fit: project an OPD bundle onto a Zernike basis
-- distortion: chief-ray image-plane error vs paraxial proxy, per field
-- field_curvature: x- and y-fan best-focus shifts per field.  These are
-  sagittal and tangential only for pure-y fields on axisymmetric systems.
-- axial_color: paraxial image distance at multiple wavelengths
-- chromatic_focal_shift: best-focus shift across wavelength
-- lateral_color: chief-ray image-plane landing at multiple (field,
-  wavelength) pairs
-
+"""Ray optics analysis.
 """
+
+from collections import namedtuple
 
 from prysm.conf import config
 from prysm.mathops import np
@@ -30,22 +11,66 @@ from prysm.polynomials import zernike_nm_seq, lstsq
 from .spencer_and_murty import raytrace
 from .opt import (
     xp_reference_sphere,
-    opd_from_raytrace,
     opd_from_raytrace_eic,
-    # _pupil_center_chief_index lives in opt (a lower layer) so the OPD
-    # primitives, wavefront(), the differential trace, and the adjoint merit
-    # heads all anchor the reference sphere on the same ray.  Re-exported here
-    # for importers that reach it via analysis.
-    _pupil_center_chief_index,  # noqa: F401
-    _intersect_lines,
+    _pupil_center_chief_index,
     _valid_mask,
 )
+from ._line_math import line_intersection_params
 from .paraxial import paraxial_image_distance, first_order
 from .launch import Field, Sampling, launch
 from ._meta import (
     system_wavelength, system_epd, object_space_index, image_space_index,
 )
 from .surfaces import Conic, EvenAsphere, Plane, Sphere
+
+
+# ---------- result containers ----------------------------------------------
+# Plain namedtuples: the analyses below are pure data producers, so the result
+# is a labelled bundle of arrays, not an object with behaviour.  Every grid
+# array is indexed [field_index, wavelength_index, sample_index]; the fields and
+# wavelengths members map those leading indices back to the physical Field /
+# wavelength so the indexing is never ambiguous.
+
+DistortionResult = namedtuple('DistortionResult', ['real_xy', 'paraxial_xy', 'percent'])
+FieldCurvatureResult = namedtuple('FieldCurvatureResult', ['x_fan_z', 'y_fan_z'])
+RayFanGrid = namedtuple('RayFanGrid', ['fields', 'wavelengths', 'pupil', 'x', 'y'])
+OPDFanGrid = namedtuple('OPDFanGrid', ['fields', 'wavelengths', 'pupil', 'x', 'y'])
+SpotGrid = namedtuple('SpotGrid', ['fields', 'wavelengths', 'x', 'y', 'valid', 'reference'])
+
+
+def _axis_index(axis):
+    if axis == 'x':
+        return 0
+    if axis == 'y':
+        return 1
+    raise ValueError(f"axis must be 'x' or 'y', got {axis!r}")
+
+
+def _reference_value(values, valid, reference, chief_index, *, allow_none=False):
+    """Reference point shared by fan and spot analyses."""
+    values = np.asarray(values)
+    if reference == 'centroid':
+        return np.mean(values[valid], axis=0)
+    if reference == 'chief':
+        if not bool(valid[chief_index]):
+            raise ValueError(
+                'chief ray is invalid; pass reference="centroid" for an '
+                'obscured or vignetted bundle'
+            )
+        return values[chief_index]
+    if reference is None and allow_none:
+        return np.zeros(values.shape[1:], dtype=values.dtype)
+    choices = "'centroid', 'chief', or None" if allow_none else "'centroid' or 'chief'"
+    raise ValueError(f'reference must be {choices}, got {reference!r}')
+
+
+def _center_valid(values, valid, reference, chief_index, *, allow_none=False):
+    """Reference-subtract values and NaN-out invalid rays."""
+    values = np.asarray(values)
+    ref = _reference_value(values, valid, reference, chief_index,
+                           allow_none=allow_none)
+    mask = valid.reshape(valid.shape + (1,) * (values.ndim - 1))
+    return np.where(mask, values - ref, np.nan), ref
 
 
 def _require_epd(prescription, epd, wvl=None):
@@ -57,6 +82,98 @@ def _require_epd(prescription, epd, wvl=None):
             'aperture spec resolves it.'
         )
     return epd
+
+
+def _first_order_geometry_failure(exc):
+    """True when first_order failed because scalar ABCD geometry is invalid."""
+    msg = str(exc)
+    return ('centered axial geometry' in msg
+            or 'vertex normal to be axial' in msg)
+
+
+def resolve_exit_pupil(prescription, wavelength, *, stop_index=None, epd=None,
+                       field=None, chief=None, axis_point=None, axis_dir=None):
+    """Locate the exit-pupil reference point P_xp for a wavefront evaluation.
+
+    The explicit, side-effect-free resolution that wavefront() deliberately no
+    longer does.  Two routes, in order:
+
+    1. Paraxial: when an aperture stop is resolvable (stop_index, else the
+       prescription's stop_index), the paraxial exit pupil is first_order's
+       xp_z on the optical axis, (0, 0, xp_z).  This is field-independent and
+       depends only on (lens, wavelength), so a grid analysis resolves it once
+       per wavelength.  Raises when the paraxial exit pupil is at infinity
+       (afocal) -- pass P_xp explicitly there.
+    2. Geometric: with no resolvable stop (e.g. an off-axis field on a bare
+       surface list), take a chief ray's closest approach to the optical axis
+       (xp_reference_sphere).  The chief is the pre-traced (P, S) pair in chief
+       when given (so a caller reuses a bundle it already traced), else the
+       chief ray for field is traced here.
+
+    Parameters
+    ----------
+    prescription : sequence of Surface or OpticalSystem
+    wavelength : float
+        in microns
+    stop_index : int, optional
+        aperture-stop surface index; defaults to the prescription stop_index.
+    epd : float, optional
+        entrance-pupil diameter for the paraxial solve; defaults from a system.
+    field : Field, optional
+        field whose chief ray seeds the geometric route.  Defaults to on-axis.
+        Ignored when chief is given.
+    chief : tuple of ndarray, optional
+        (P_chief_final, S_chief_final) -- the post-trace chief position and
+        direction for the geometric route, supplied by a caller that already
+        traced the bundle (avoids re-launching and keeps the exit pupil
+        consistent with that bundle's own chief).
+    axis_point, axis_dir : iterable, optional
+        point on, and direction of, the optical axis for the geometric route.
+        Defaults: origin and +z.
+
+    Returns
+    -------
+    P_xp : ndarray, shape (3,)
+        exit-pupil reference point, ready to pass to wavefront(P_xp=...).
+
+    """
+    resolved_stop = (stop_index if stop_index is not None
+                     else getattr(prescription, 'stop_index', None))
+    if resolved_stop is not None:
+        try:
+            fo = first_order(prescription, wvl=wavelength, epd=epd,
+                             stop_index=resolved_stop)
+        except ValueError as exc:
+            # a centered-ABCD geometry failure is only recoverable via the
+            # geometric route when an explicit axis was supplied; otherwise
+            # surface the first_order error.
+            if ((axis_point is None and axis_dir is None)
+                    or not _first_order_geometry_failure(exc)):
+                raise
+        else:
+            if fo.xp_z is None:
+                raise ValueError(
+                    'paraxial exit pupil is at infinity; pass P_xp '
+                    'explicitly for a planar or finite reference'
+                )
+            return np.array([0.0, 0.0, float(fo.xp_z)], dtype=config.precision)
+
+    # geometric route: take the chief ray's axis closest-approach.
+    if chief is not None:
+        P_chief_final, S_chief_final = chief
+    else:
+        if field is None:
+            field = Field(0.0, 0.0)
+        epd_geo = system_epd(prescription, epd, wavelength)
+        if epd_geo is None:
+            epd_geo = 1.0  # chief is a single pupil-center ray; epd only nominal
+        P, S = launch(prescription, field, wavelength, Sampling.chief(),
+                      epd=epd_geo)
+        tr = raytrace(prescription, P, S, wavelength)
+        P_chief_final, S_chief_final = tr.P[-1, 0], tr.S[-1, 0]
+    _, _, P_xp = xp_reference_sphere(P_chief_final, S_chief_final,
+                                     axis_point=axis_point, axis_dir=axis_dir)
+    return np.asarray(P_xp, dtype=config.precision)
 
 
 # ---------- transverse ray aberration --------------------------------------
@@ -104,24 +221,13 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None,
 
     """
     P_hist = np.asarray(P_hist)
-    if axis == 'x':
-        ax = 0
-    elif axis == 'y':
-        ax = 1
-    else:
-        raise ValueError(f"axis must be 'x' or 'y', got {axis!r}")
+    ax = _axis_index(axis)
     if chief_index is None:
         chief_index = _pupil_center_chief_index(P_hist[0])
     launch = P_hist[0, :, ax]
     image = P_hist[-1, :, ax]
 
     valid = _valid_mask(status, P_hist[-1])
-    if valid is not None:
-        launch_v = launch[valid]
-        image_v = image[valid]
-    else:
-        launch_v = launch
-        image_v = image
 
     # the pupil coordinate is referenced the same way as the image error, so
     # the fan stays centered on the pupil.  Using chief_index (N//2) for the
@@ -131,20 +237,12 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None,
     # out lopsided even though the system is on axis.
     if reference == 'chief':
         ref_pupil = launch[chief_index]
-        ref_image = image[chief_index]
-        if not np.isfinite(ref_image):
-            raise ValueError(
-                'chief ray image coordinate is not finite; pass '
-                "reference='centroid' for an obscured or vignetted bundle"
-            )
     elif reference == 'centroid':
-        ref_pupil = np.mean(launch_v)
-        ref_image = np.mean(image_v)
+        ref_pupil = np.mean(launch[valid])
     else:
-        raise ValueError(
-            f"reference must be 'chief' or 'centroid', got {reference!r}"
-        )
-    return launch_v - ref_pupil, image_v - ref_image
+        ref_pupil = _reference_value(launch, valid, reference, chief_index)
+    ref_image = _reference_value(image, valid, reference, chief_index)
+    return launch[valid] - ref_pupil, image[valid] - ref_image
 
 
 # ---------- wavefront -------------------------------------------------------
@@ -154,6 +252,53 @@ def _filtered_chief_index(valid, chief_index):
     """Position of chief_index within the valid-only subset of rays."""
     valid_indices = np.nonzero(valid)[0]
     return int(np.nonzero(valid_indices == chief_index)[0][0])
+
+
+def _resolve_chief_index(P, valid, reference, chief_index):
+    if chief_index is not None:
+        return int(chief_index)
+    mask = valid if reference == 'centroid' else None
+    return _pupil_center_chief_index(P, mask)
+
+
+def _wavefront_from_trace(prescription, P, wavelength, trace, *, P_xp,
+                          chief_index=None, pupil_coords=None, field=None,
+                          output='length', reference='chief'):
+    """Wavefront kernel for callers that already have the raytrace result."""
+    valid = _valid_mask(trace.status, trace.P[-1])
+    chief_index = _resolve_chief_index(P, valid, reference, chief_index)
+    if not bool(valid[chief_index]):
+        if reference == 'chief':
+            raise ValueError(
+                "chief ray is invalid; cannot define reference sphere.  Pass "
+                "reference='centroid' for an obscured or vignetted bundle."
+            )
+        raise ValueError(
+            f'anchor ray (chief_index={chief_index}) is invalid; pass a '
+            'chief_index that survives the trace, or omit it to auto-select '
+            'the surviving ray nearest the pupil center'
+        )
+
+    n_object = object_space_index(prescription, wavelength)
+    n_image = image_space_index(prescription, wavelength, fallback=n_object)
+    P_chief_final = trace.P[-1, chief_index]
+    filtered_chief = _filtered_chief_index(valid, chief_index)
+    opd = opd_from_raytrace_eic(trace.P[:, valid], trace.S[:, valid],
+                                trace.OPL[:, valid],
+                                P_img=P_chief_final,
+                                P_xp=np.asarray(P_xp, dtype=P.dtype),
+                                n_image=n_image,
+                                chief_index=filtered_chief)
+    if pupil_coords is None:
+        x_pupil = P[valid, 0] - P[chief_index, 0]
+        y_pupil = P[valid, 1] - P[chief_index, 1]
+    else:
+        x_pupil = np.asarray(pupil_coords[0])[valid]
+        y_pupil = np.asarray(pupil_coords[1])[valid]
+
+    opd, _ = _apply_field_and_output(opd, x_pupil, y_pupil, field, output,
+                                     wavelength)
+    return opd, x_pupil, y_pupil, valid
 
 
 def _apply_field_and_output(opd, x_pupil, y_pupil, field, output, wavelength):
@@ -178,51 +323,36 @@ def _apply_field_and_output(opd, x_pupil, y_pupil, field, output, wavelength):
     return opd * scale, scale
 
 
-def _first_order_geometry_failure(exc):
-    """True when first_order failed because scalar ABCD geometry is invalid."""
-    msg = str(exc)
-    return ('centered axial geometry' in msg
-            or 'vertex normal to be axial' in msg)
-
-
 def wavefront(prescription, P, S, wavelength, *,
+              P_xp,
               chief_index=None,
-              axis_point=None, axis_dir=None, P_xp=None,
-              epd=None, stop_index=None,
               pupil_coords=None, field=None, output='length',
-              method='sphere', reference='chief'):
+              reference='chief'):
     """Trace and compute OPD on the chief-ray-centered reference sphere.
 
-    Composes spencer_and_murty.raytrace, paraxial or explicit exit-pupil
-    resolution, and opt.opd_from_raytrace.  Prefer P_xp, or stop_index with
-    paraxial exit-pupil resolution, for centered on-axis wavefronts.  The
-    chief-ray/axis geometric estimate is a fallback for off-axis use only.
+    A pure OPD kernel: it traces the bundle and evaluates the optical path
+    difference on the exit-pupil reference sphere via the cancellation-free
+    (Welford-rationalized) intersection in opt.opd_from_raytrace_eic.  It does
+    no first-order / exit-pupil resolution -- pass a resolved P_xp.  Resolve it
+    once with resolve_exit_pupil (or the cached OpticalSystem.exit_pupil) and
+    feed it in; for a lens-design OPD fan that is the paraxial exit-pupil center
+    (0, 0, xp_z).
 
     Parameters
     ----------
     prescription : sequence of Surface
+        compiled optical prescription; lensdata.to_surfaces()
     P, S : ndarray, shape (N, 3)
         launch positions and direction cosines (typically from launch()).
     wavelength : float
         in microns.
+    P_xp : iterable
+        exit-pupil reference point (required).  Centers the reference sphere's
+        radius R = |P_xp - P_img|.  Resolve it with resolve_exit_pupil or
+        OpticalSystem.exit_pupil.
     chief_index : int, optional
         row index of the chief ray.  Defaults to the launch ray nearest the
         pupil center, with invalid rays excluded when reference='centroid'.
-    axis_point, axis_dir : iterable, optional
-        point on, and direction of, the optical axis.  Defaults: origin
-        and +z.
-    P_xp : iterable, optional
-        exit-pupil reference point.  If omitted, it is estimated from the
-        system stop/paraxial exit pupil when stop_index is resolvable, else
-        from the chief ray and optical axis for off-axis fields.  For
-        lens-design OPD fans, pass the paraxial exit-pupil center explicitly,
-        e.g. (0, 0, xp_z).
-    epd : float, optional
-        entrance-pupil diameter for paraxial stop-based P_xp resolution.
-        Defaults from an OpticalSystem aperture when available.
-    stop_index : int, optional
-        aperture-stop surface index for paraxial exit-pupil resolution.
-        Defaults from an OpticalSystem stop_index when available.
     pupil_coords : tuple of array_like, optional
         x and y pupil coordinates to return and to use for angular-field
         tilt correction.  This is useful when P has been propagated to a
@@ -238,13 +368,6 @@ def wavefront(prescription, P, S, wavelength, *,
         equivalent to -(OPD + launch_tilt) / wavelength.  The 'waves'
         conversion assumes the prescription is in millimeters and wavelength
         is in microns (waves = OPD_mm / (wavelength_um * 1e-3)).
-    method : str, optional
-        'sphere' (default) uses the legacy explicit reference-sphere
-        intersection.  'eic' uses the cancellation-free Welford form for
-        finite conjugates and falls back to a planar reference (Mikš limit)
-        when the reference-sphere radius is effectively infinite -- bit
-        identical to 'sphere' for benign systems, more robust for long /
-        afocal conjugates.
     reference : str, optional
         'chief' (default) anchors the reference sphere on the chief ray and
         raises if that ray is obscured.  'centroid' anchors instead on the
@@ -263,80 +386,19 @@ def wavefront(prescription, P, S, wavelength, *,
 
     """
     if reference not in ('chief', 'centroid'):
-        raise ValueError(
-            f"reference must be 'chief' or 'centroid', got {reference!r}"
-        )
-    P = np.asarray(P)
-    n_object = object_space_index(prescription, wavelength)
-    trace = raytrace(prescription, P, S, wavelength)
-    valid = _valid_mask(trace.status, trace.P[-1])
-    if chief_index is None:
-        # for reference='centroid' restrict to surviving rays so an obscured
-        # bundle resolves to the innermost valid ray instead of the clipped
-        # geometric chief.
-        mask = valid if reference == 'centroid' else None
-        chief_index = _pupil_center_chief_index(P, mask)
-    if not bool(valid[chief_index]):
-        if reference == 'chief':
-            raise ValueError(
-                'chief ray is invalid; cannot define reference sphere.  Pass '
-                "reference='centroid' for an obscured or vignetted bundle."
-            )
-        raise ValueError('no valid rays to anchor the reference sphere')
-
-    P_chief_final = trace.P[-1, chief_index]
-    S_chief_final = trace.S[-1, chief_index]
+        raise ValueError(f"reference must be 'chief' or 'centroid', got {reference!r}")
     if P_xp is None:
-        resolved_stop = (stop_index if stop_index is not None
-                         else getattr(prescription, 'stop_index', None))
-        if resolved_stop is not None:
-            try:
-                fo = first_order(prescription, wvl=wavelength, epd=epd,
-                                 stop_index=resolved_stop)
-            except ValueError as exc:
-                if ((axis_point is None and axis_dir is None)
-                        or not _first_order_geometry_failure(exc)):
-                    raise
-            else:
-                if fo.xp_z is None:
-                    raise ValueError(
-                        'paraxial exit pupil is at infinity; pass P_xp '
-                        'explicitly for a planar or finite reference'
-                    )
-                P_xp = np.array([0.0, 0.0, float(fo.xp_z)], dtype=P.dtype)
-        if P_xp is None:
-            _, _, P_xp = xp_reference_sphere(P_chief_final, S_chief_final,
-                                             axis_point=axis_point,
-                                             axis_dir=axis_dir)
-    else:
-        P_xp = np.asarray(P_xp, dtype=P.dtype)
-    filtered_chief = _filtered_chief_index(valid, chief_index)
-    if method == 'eic':
-        opd_fn = opd_from_raytrace_eic
-    elif method == 'sphere':
-        opd_fn = opd_from_raytrace
-    else:
-        raise ValueError(
-            f"wavefront method must be 'sphere' or 'eic', got {method!r}"
+        raise TypeError(
+            'P_xp is required; resolve it with resolve_exit_pupil(...) or '
+            'OpticalSystem.exit_pupil(...) and pass it in.  wavefront does no '
+            'exit-pupil resolution of its own.'
         )
-    n_image = image_space_index(prescription, wavelength, fallback=n_object)
-    opd = opd_fn(trace.P[:, valid], trace.S[:, valid],
-                 trace.OPL[:, valid],
-                 P_img=P_chief_final, P_xp=P_xp,
-                 n_image=n_image,
-                 chief_index=filtered_chief)
-    if pupil_coords is None:
-        # pupil coordinate is the launch offset from the chief ray, so the
-        # parameterization is correct even when the bundle was routed through
-        # an off-axis entrance pupil (chief launch point != origin)
-        x_pupil = P[valid, 0] - P[chief_index, 0]
-        y_pupil = P[valid, 1] - P[chief_index, 1]
-    else:
-        x_pupil = np.asarray(pupil_coords[0])[valid]
-        y_pupil = np.asarray(pupil_coords[1])[valid]
-
-    opd, _ = _apply_field_and_output(opd, x_pupil, y_pupil, field, output,
-                                     wavelength)
+    trace = raytrace(prescription, P, S, wavelength)
+    opd, x_pupil, y_pupil, _ = _wavefront_from_trace(
+        prescription, P, wavelength, trace, P_xp=P_xp,
+        chief_index=chief_index, pupil_coords=pupil_coords, field=field,
+        output=output, reference=reference,
+    )
     return opd, x_pupil, y_pupil
 
 
@@ -431,6 +493,9 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
 
     Returns
     -------
+    DistortionResult
+        A namedtuple (real_xy, paraxial_xy, percent); element i of each array
+        corresponds to fields[i].
     real_xy : ndarray, shape (n_fields, 2)
         actual chief-ray image-plane (x, y) per field.
     paraxial_xy : ndarray, shape (n_fields, 2)
@@ -494,7 +559,7 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
             real_height = float(np.dot(real_xy[i], paraxial_xy[i])) / denom
             percent[i] = 100.0 * (real_height - denom) / denom
 
-    return real_xy, paraxial_xy, percent
+    return DistortionResult(real_xy, paraxial_xy, percent)
 
 
 # ---------- field curvature -------------------------------------------------
@@ -538,7 +603,7 @@ def _line_intersection_z(P0, S0, P1, S1):
     ray's focus along the chief.
 
     """
-    s = _intersect_lines(P0, S0, P1, S1)
+    s = line_intersection_params(P0, S0, P1, S1)
     Q0 = P0 + s[0] * S0
     Q1 = P1 + s[1] * S1
     return 0.5 * (float(Q0[2]) + float(Q1[2]))
@@ -579,6 +644,9 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
 
     Returns
     -------
+    FieldCurvatureResult
+        A namedtuple (x_fan_z, y_fan_z); element i of each array corresponds to
+        fields[i].
     x_fan_z : ndarray, shape (n_fields,)
         z position where the x-fan marginal converges with the chief, in lab
         frame.  This is sagittal for pure-y fields on an axisymmetric system.
@@ -596,28 +664,19 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
     chief = Sampling.chief()
     r_marg = float(marginal_fraction) * float(epd) / 2.0
     for i, field in enumerate(fields):
-        # chief
-        P_c, S_c = launch(prescription, field, wavelength, chief,
-                          epd=epd)
-        tr_c = raytrace(prescription, P_c, S_c, wavelength)
-        Pc = tr_c.P[-1, 0]
-        Sc = tr_c.S[-1, 0]
-        # x-fan marginal: one ray offset +x_marg from the chief in the pupil;
-        # += keeps any chief offset from entrance-pupil routing.
-        P_sx = P_c.copy()
-        P_sx[0, 0] = P_sx[0, 0] + r_marg
-        tr_sx = raytrace(prescription, P_sx, S_c, wavelength)
-        x_fan_z[i] = _line_intersection_z(Pc, Sc,
-                                          tr_sx.P[-1, 0],
-                                          tr_sx.S[-1, 0])
-        # y-fan marginal: one ray offset +y_marg from the chief.
-        P_ty = P_c.copy()
-        P_ty[0, 1] = P_ty[0, 1] + r_marg
-        tr_ty = raytrace(prescription, P_ty, S_c, wavelength)
-        y_fan_z[i] = _line_intersection_z(Pc, Sc,
-                                          tr_ty.P[-1, 0],
-                                          tr_ty.S[-1, 0])
-    return x_fan_z, y_fan_z
+        P0, S0 = launch(prescription, field, wavelength, chief, epd=epd)
+        P = np.repeat(P0, 3, axis=0)
+        S = np.repeat(S0, 3, axis=0)
+        P[1, 0] = P[1, 0] + r_marg
+        P[2, 1] = P[2, 1] + r_marg
+        tr = raytrace(prescription, P, S, wavelength)
+        P_final = tr.P[-1]
+        S_final = tr.S[-1]
+        x_fan_z[i] = _line_intersection_z(P_final[0], S_final[0],
+                                          P_final[1], S_final[1])
+        y_fan_z[i] = _line_intersection_z(P_final[0], S_final[0],
+                                          P_final[2], S_final[2])
+    return FieldCurvatureResult(x_fan_z, y_fan_z)
 
 
 # ---------- color -----------------------------------------------------------
@@ -823,3 +882,319 @@ def lateral_color(prescription, fields, wavelengths, *, epd=None):
             tr = raytrace(prescription, P, S, float(w))
             out[i, j] = tr.P[-1, 0, :2]
     return out
+
+
+# ---------- grid analyses (consistent sampling across field & wavelength) ---
+# Commercial codes build a ray-fan / spot / OPD-fan plot for every field and
+# wavelength from a single command.  These functions are the array-data half of
+# that: they trace every (field, wavelength) with one fixed pupil sampling and
+# return a stacked, labelled grid.  The plotting layer turns a grid into a
+# figure; the same grid can be pickled, fed to a merit, or differenced.
+
+def _resolve_fields(prescription, fields):
+    """Fields to evaluate, defaulting to the system's FieldSet, else on-axis."""
+    if fields is not None:
+        return list(fields)
+    sys_fields = getattr(prescription, 'fields', None)
+    if sys_fields is not None and len(sys_fields) > 0:
+        return list(sys_fields)
+    return [Field(0.0, 0.0)]
+
+
+def _resolve_wavelengths(prescription, wavelengths):
+    """Wavelengths (microns) to evaluate, defaulting to the system's set."""
+    if wavelengths is not None:
+        return [float(w) for w in wavelengths]
+    wv = getattr(prescription, 'wavelengths', None)
+    if wv:
+        values = wv.values() if hasattr(wv, 'values') else wv
+        return [float(w) for w in values]
+    return [system_wavelength(prescription, None)]
+
+
+def _fan_grid_setup(prescription, fields, wavelengths, nrays, distribution):
+    fields = _resolve_fields(prescription, fields)
+    wavelengths = _resolve_wavelengths(prescription, wavelengths)
+    x_fan = Sampling.fan(n=nrays, axis='x', distribution=distribution)
+    y_fan = Sampling.fan(n=nrays, axis='y', distribution=distribution)
+    pupil = np.asarray(x_fan.build(1.0)[:, 0], dtype=config.precision)
+    shape = (len(fields), len(wavelengths), pupil.shape[0])
+    x = np.full(shape, np.nan, dtype=config.precision)
+    y = np.full(shape, np.nan, dtype=config.precision)
+    return fields, wavelengths, x_fan, y_fan, pupil, x, y
+
+
+def _fan_image_error(prescription, field, wavelength, axis, sampling, epd,
+                     reference):
+    """Reference-subtracted image error of one ray fan, full length with NaN.
+
+    Returns one value per fan sample (NaN where the ray failed), the transverse
+    image-plane error in the fan's own axis measured from the chief or centroid.
+    Rays clipped by a real aperture during the trace carry a failure status, so
+    the valid mask NaNs them and the fan stays full length.
+    """
+    ax = _axis_index(axis)
+    P, S = launch(prescription, field, wavelength, sampling, epd=epd)
+    tr = raytrace(prescription, P, S, wavelength)
+    valid = _valid_mask(tr.status, tr.P[-1])
+    image = tr.P[-1, :, ax]
+    ci = _pupil_center_chief_index(P)
+    centered, _ = _center_valid(image, valid, reference, ci)
+    return centered
+
+
+def ray_aberration_fans(prescription, fields=None, wavelengths=None, *,
+                        nrays=21, epd=None, distribution='uniform',
+                        reference='chief'):
+    """Transverse ray-aberration fans for every field and wavelength.
+
+    Traces an x (sagittal) and a y (tangential) ray fan for each field and
+    wavelength using one shared normalized pupil sampling, so the result stacks
+    cleanly and a single pupil axis serves every curve.  This is the data step
+    behind plotting.plot_ray_fans; the grid can be saved, differenced, or used
+    as an optimizer merit without re-tracing.
+
+    Parameters
+    ----------
+    prescription : sequence of Surface or OpticalSystem
+        the optical system.
+    fields : iterable of Field, optional
+        fields to evaluate; defaults to the system FieldSet, else the on-axis
+        field.
+    wavelengths : iterable of float, optional
+        wavelengths in microns; defaults to the system wavelengths, else the
+        reference wavelength.
+    nrays : int, optional
+        number of rays per fan.  Odd values place a sample at pupil center.
+    epd : float, optional
+        entrance pupil diameter; defaults from a system aperture spec.
+    distribution : str, optional
+        radial spacing of the fan samples ('uniform', 'cheby', 'random').
+    reference : str, optional
+        image-plane registration: 'chief' (default) or 'centroid'.
+
+    Returns
+    -------
+    RayFanGrid
+        A namedtuple (fields, wavelengths, pupil, x, y).  fields is the tuple of
+        Field evaluated; wavelengths is an array of microns; pupil is the shared
+        normalized pupil coordinate (-1..1) along the fan.  x and y have shape
+        (n_fields, n_wavelengths, nrays): x is the sagittal (X) fan image error
+        in x, y is the tangential (Y) fan image error in y, both
+        reference-subtracted and in prescription length units.  Index as
+        x[field_index, wavelength_index, pupil_index]; failed rays are NaN.
+
+    """
+    fields, wavelengths, x_fan, y_fan, pupil, x, y = _fan_grid_setup(
+        prescription, fields, wavelengths, nrays, distribution,
+    )
+    for i, field in enumerate(fields):
+        for j, w in enumerate(wavelengths):
+            epd_w = _require_epd(prescription, epd, w)
+            x[i, j] = _fan_image_error(prescription, field, w, 'x', x_fan,
+                                       epd_w, reference)
+            y[i, j] = _fan_image_error(prescription, field, w, 'y', y_fan,
+                                       epd_w, reference)
+    return RayFanGrid(tuple(fields),
+                      np.asarray(wavelengths, dtype=config.precision),
+                      pupil, x, y)
+
+
+def _exit_pupil_for(prescription, wavelength, *, field=None, stop_index=None,
+                    epd=None):
+    """Resolve P_xp, using the system's cached exit_pupil when available.
+
+    An OpticalSystem memoizes the (field-independent paraxial) exit pupil per
+    wavelength; a bare surface list / LensData resolves it directly.
+    """
+    if hasattr(prescription, 'exit_pupil') and hasattr(prescription, 'lens'):
+        return prescription.exit_pupil(wavelength, field=field,
+                                       stop_index=stop_index, epd=epd)
+    return resolve_exit_pupil(prescription, wavelength, stop_index=stop_index,
+                              epd=epd, field=field)
+
+
+def _opd_fan(prescription, field, tilt_field, wavelength, sampling, epd,
+             P_xp, output, n_pupil):
+    """OPD of one ray fan, full length with NaN where rays failed."""
+    P, S = launch(prescription, field, wavelength, sampling, epd=epd)
+    tr = raytrace(prescription, P, S, wavelength)
+    opd, _, _, valid = _wavefront_from_trace(
+        prescription, P, wavelength, tr, P_xp=P_xp, field=tilt_field,
+        output=output,
+    )
+    full = np.full(n_pupil, np.nan, dtype=config.precision)
+    full[valid] = opd
+    return full
+
+
+def opd_fans(prescription, fields=None, wavelengths=None, *, nrays=21,
+             epd=None, distribution='uniform', stop_index=None,
+             output='waves'):
+    """Wavefront (OPD) fans for every field and wavelength.
+
+    The OPD analogue of ray_aberration_fans: for each field and wavelength it
+    traces an x and y fan and evaluates the optical path difference on the
+    chief-ray reference sphere (composing analysis.wavefront), sharing one
+    normalized pupil sampling.  This is the data step behind
+    plotting.plot_opd_fans.
+
+    Parameters
+    ----------
+    prescription : sequence of Surface or OpticalSystem
+        the optical system.
+    fields : iterable of Field, optional
+        fields to evaluate; defaults to the system FieldSet, else on-axis.
+    wavelengths : iterable of float, optional
+        wavelengths in microns; defaults to the system wavelengths.
+    nrays : int, optional
+        number of rays per fan.
+    epd : float, optional
+        entrance pupil diameter; defaults from a system aperture spec.
+    distribution : str, optional
+        radial spacing of the fan samples.
+    stop_index : int, optional
+        aperture-stop index for exit-pupil resolution; defaults from a system.
+    output : str, optional
+        'waves' (default) or 'length'; see analysis.wavefront.
+
+    Returns
+    -------
+    OPDFanGrid
+        A namedtuple (fields, wavelengths, pupil, x, y).  pupil is the shared
+        normalized pupil coordinate (-1..1).  x and y have shape
+        (n_fields, n_wavelengths, nrays): the OPD along the x fan and the y fan,
+        chief-referenced (chief == 0).  Index as
+        x[field_index, wavelength_index, pupil_index]; failed rays are NaN.
+
+    """
+    fields, wavelengths, x_fan, y_fan, pupil, x, y = _fan_grid_setup(
+        prescription, fields, wavelengths, nrays, distribution,
+    )
+    n_pupil = pupil.shape[0]
+    for i, field in enumerate(fields):
+        # angular field tilt is removed inside wavefront; height fields carry
+        # no launch-plane tilt to remove.
+        tilt_field = field if getattr(field, 'kind', 'angle') == 'angle' else None
+        for j, w in enumerate(wavelengths):
+            epd_w = _require_epd(prescription, epd, w)
+            P_xp = _exit_pupil_for(prescription, w, field=field,
+                                   stop_index=stop_index, epd=epd_w)
+            x[i, j] = _opd_fan(prescription, field, tilt_field, w, x_fan,
+                               epd_w, P_xp, output, n_pupil)
+            y[i, j] = _opd_fan(prescription, field, tilt_field, w, y_fan,
+                               epd_w, P_xp, output, n_pupil)
+    return OPDFanGrid(tuple(fields),
+                      np.asarray(wavelengths, dtype=config.precision),
+                      pupil, x, y)
+
+
+def spot_diagrams(prescription, fields=None, wavelengths=None, *,
+                  sampling=None, epd=None, reference='centroid'):
+    """Image-plane spot data for every field and wavelength.
+
+    Traces one fixed 2D pupil sampling for each field and wavelength and returns
+    the image-plane landings, reference-subtracted so each (field, wavelength)
+    bundle is centered.  This is the data step behind plotting.plot_spot_diagrams
+    and feeds spot_rms_radius / spot_geometric_radius.
+
+    Parameters
+    ----------
+    prescription : sequence of Surface or OpticalSystem
+        the optical system.
+    fields : iterable of Field, optional
+        fields to evaluate; defaults to the system FieldSet, else on-axis.
+    wavelengths : iterable of float, optional
+        wavelengths in microns; defaults to the system wavelengths.
+    sampling : Sampling, optional
+        shared pupil sampling pattern.  Defaults to a 6-ring hexapolar grid.
+    epd : float, optional
+        entrance pupil diameter; defaults from a system aperture spec.
+    reference : str or None, optional
+        per-bundle center subtracted from the landings: 'centroid' (default),
+        'chief', or None for raw image coordinates.
+
+    Returns
+    -------
+    SpotGrid
+        A namedtuple (fields, wavelengths, x, y, valid, reference).  x, y, and
+        valid have shape (n_fields, n_wavelengths, n_samples): the centered
+        image coordinates and a per-ray validity mask.  reference has shape
+        (n_fields, n_wavelengths, 2): the absolute (x, y) center that was
+        subtracted, so absolute landings are recoverable.  Index as
+        x[field_index, wavelength_index, sample_index].
+
+    """
+    fields = _resolve_fields(prescription, fields)
+    wavelengths = _resolve_wavelengths(prescription, wavelengths)
+    if sampling is None:
+        sampling = Sampling.hex(nrings=6)
+    nf = len(fields)
+    nw = len(wavelengths)
+    n_samples = sampling.build(1.0).shape[0]
+    x = np.full((nf, nw, n_samples), np.nan, dtype=config.precision)
+    y = np.full((nf, nw, n_samples), np.nan, dtype=config.precision)
+    valid = np.zeros((nf, nw, n_samples), dtype=bool)
+    reference_xy = np.full((nf, nw, 2), np.nan, dtype=config.precision)
+    for i, field in enumerate(fields):
+        for j, w in enumerate(wavelengths):
+            epd_w = _require_epd(prescription, epd, w)
+            P, S = launch(prescription, field, w, sampling, epd=epd_w)
+            tr = raytrace(prescription, P, S, w)
+            # rays clipped by a real aperture during the trace are status-
+            # flagged (not deleted), so the bundle stays full length and those
+            # samples come out NaN via the valid mask.
+            v = _valid_mask(tr.status, tr.P[-1])
+            xi = tr.P[-1, :, 0]
+            yi = tr.P[-1, :, 1]
+            image_xy = np.stack([xi, yi], axis=1)
+            ci = _pupil_center_chief_index(P)
+            centered, ref = _center_valid(image_xy, v, reference, ci,
+                                          allow_none=True)
+            x[i, j] = centered[:, 0]
+            y[i, j] = centered[:, 1]
+            valid[i, j] = v
+            reference_xy[i, j] = ref
+    return SpotGrid(tuple(fields),
+                    np.asarray(wavelengths, dtype=config.precision),
+                    x, y, valid, reference_xy)
+
+
+def _spot_centered(spot_grid):
+    """Centroid-referenced x, y of a SpotGrid, regardless of stored reference."""
+    x = np.asarray(spot_grid.x)
+    y = np.asarray(spot_grid.y)
+    xc = x - np.nanmean(x, axis=2, keepdims=True)
+    yc = y - np.nanmean(y, axis=2, keepdims=True)
+    return xc, yc
+
+
+def spot_rms_radius(spot_grid):
+    """Centroid-referenced RMS spot radius per field and wavelength.
+
+    Re-centers each bundle on its own centroid first, so the result is the true
+    geometric RMS radius independent of the grid's stored reference.
+
+    Returns
+    -------
+    ndarray, shape (n_fields, n_wavelengths)
+        RMS radius in prescription length units; entry [i, j] is fields[i] at
+        wavelengths[j].
+
+    """
+    xc, yc = _spot_centered(spot_grid)
+    return np.sqrt(np.nanmean(xc * xc + yc * yc, axis=2))
+
+
+def spot_geometric_radius(spot_grid):
+    """Maximum (geometric) spot radius from the centroid per field/wavelength.
+
+    Returns
+    -------
+    ndarray, shape (n_fields, n_wavelengths)
+        the farthest valid ray from the centroid, in prescription length units;
+        entry [i, j] is fields[i] at wavelengths[j].
+
+    """
+    xc, yc = _spot_centered(spot_grid)
+    return np.sqrt(np.nanmax(xc * xc + yc * yc, axis=2))

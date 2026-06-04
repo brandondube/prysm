@@ -282,3 +282,49 @@ def test_vignetting_warning_fires_only_when_present():
     with warnings.catch_warnings():
         warnings.simplefilter('error')  # any warning becomes an error
         warn_vignetting_ignored('S 0.02 5.0\nTHI 3.0\n', 'Code V')  # no warn
+
+
+# ---------- exit-pupil resolution + version-stamped cache -------------------
+
+def test_exit_pupil_matches_first_order_and_caches():
+    sys = _singlet()
+    wvl = sys.wavelength('d')
+    P_xp = sys.exit_pupil(wvl)
+    np.testing.assert_allclose(P_xp[2], sys.first_order(wvl).xp_z)
+    np.testing.assert_allclose(np.asarray(P_xp[:2], dtype=float), 0.0)
+    # repeat call is a cache hit -> the very same array object
+    assert sys.exit_pupil(wvl) is P_xp
+
+
+def test_exit_pupil_cache_invalidated_by_lens_edit():
+    sys = _singlet()
+    wvl = sys.wavelength('d')
+    first = sys.exit_pupil(wvl)
+    v0 = sys.lens._version
+    # an edit through the lens bumps the version and so misses the cache
+    sys.lens.rows[0].thickness = float(sys.lens.rows[0].thickness) + 1.0
+    assert sys.lens._version > v0
+    second = sys.exit_pupil(wvl)
+    assert second is not first
+
+
+def test_exit_pupil_cache_keyed_by_stop_index():
+    sys = _singlet()
+    wvl = sys.wavelength('d')
+    xp0 = sys.exit_pupil(wvl)
+    # stop_index is a plain slot write (no hook), so it is part of the cache
+    # key: reassigning it must not return the stale pupil.
+    sys.stop_index = 1
+    xp1 = sys.exit_pupil(wvl)
+    assert xp1 is not xp0
+
+
+def test_resolve_exit_pupil_paraxial_branch_field_independent():
+    from prysm.x.raytracing.analysis import resolve_exit_pupil
+    sys = _singlet()
+    wvl = sys.wavelength('d')
+    on_axis = resolve_exit_pupil(sys, wvl, field=Field(0.0, 0.0))
+    off_axis = resolve_exit_pupil(sys, wvl, field=Field(0.0, 5.0))
+    # the paraxial exit pupil depends only on (lens, wavelength), not field
+    np.testing.assert_allclose(np.asarray(on_axis, dtype=float),
+                               np.asarray(off_axis, dtype=float), atol=1e-12)

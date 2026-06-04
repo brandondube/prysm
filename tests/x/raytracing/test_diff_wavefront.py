@@ -9,7 +9,6 @@ perturbation, and that motion is differentiated in closed form.
 import numpy as np
 import pytest
 
-from prysm.x.raytracing.analysis import wavefront
 from prysm.x.raytracing.launch import Field
 from prysm.x.raytracing._diff_raytrace import (
     wavefront_with_tangents,
@@ -20,7 +19,7 @@ from prysm.x.raytracing._diff_raytrace import (
     seed_tilt,
     seed_index,
 )
-from tests.x.raytracing.surface_helpers import conic, plane
+from tests.x.raytracing.surface_helpers import conic, plane, wf_auto
 
 
 NG = 1.62
@@ -59,8 +58,8 @@ def ray_bundle():
 
 
 def fd_opd(over_plus, over_minus, P, S, h, output='length'):
-    opd_p, _, _ = wavefront(make_system(**over_plus), P, S, WVL, output=output)
-    opd_m, _, _ = wavefront(make_system(**over_minus), P, S, WVL, output=output)
+    opd_p, _, _ = wf_auto(make_system(**over_plus), P, S, WVL, output=output)
+    opd_m, _, _ = wf_auto(make_system(**over_minus), P, S, WVL, output=output)
     return (opd_p - opd_m) / (2 * h)
 
 
@@ -158,7 +157,7 @@ def test_nominal_opd_matches_analysis_wavefront(output, field):
     """
     P, S = ray_bundle()
     sys = make_system()
-    opd_ref, x_ref, y_ref = wavefront(sys, P, S, WVL, field=field,
+    opd_ref, x_ref, y_ref = wf_auto(sys, P, S, WVL, field=field,
                                       output=output)
     opd, x, y, _ = wavefront_with_tangents(sys, P, S, WVL, [seed_curvature(0)],
                                            field=field, output=output)

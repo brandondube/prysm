@@ -108,7 +108,8 @@ def test_W040_matches_real_ray_rho4_coefficient():
     W040_len = res.sums['SI'] / 8.0
 
     P, S = launch(ld, field, wvl, Sampling.fan(n=61, axis='y'), epd=ld.epd)
-    opd, _, yp = analysis.wavefront(ld, P, S, wvl, output='length')
+    opd, _, yp = analysis.wavefront(ld, P, S, wvl, P_xp=ld.exit_pupil(wvl),
+                                    output='length')
     rho = yp / (ld.epd / 2.0)
     A = np.vstack([np.ones_like(rho), rho ** 2, rho ** 4]).T
     coef, *_ = np.linalg.lstsq(A, opd, rcond=None)

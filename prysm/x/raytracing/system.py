@@ -269,7 +269,8 @@ class OpticalSystem:
 
     __slots__ = ('lens', 'aperture', 'fields', 'wavelengths',
                  'reference_wavelength', 'unit', 'title', 'stop_index',
-                 'ray_aiming', 'source_path', 'source_format', 'extras')
+                 'ray_aiming', 'source_path', 'source_format', 'extras',
+                 '_derived')
 
     def __init__(self, lens, *, aperture=None, fields=None, wavelengths=None,
                  reference_wavelength=None, unit=None, title=None,
@@ -332,6 +333,9 @@ class OpticalSystem:
         self.source_path = source_path
         self.source_format = source_format
         self.extras = dict(extras) if extras else {}
+        # version-keyed cache of derived first-order quantities (e.g. the exit
+        # pupil); invalidated implicitly via self.lens._version in the key.
+        self._derived = {}
 
     # -- surface-sequence delegation (duck-type as the compiled surfaces) --
     def to_surfaces(self):
@@ -416,6 +420,45 @@ class OpticalSystem:
         """Paraxial first-order properties (delegates to paraxial.first_order)."""
         from .paraxial import first_order
         return first_order(self, wvl=wvl, epd=epd, stop_index=stop_index)
+
+    def exit_pupil(self, wvl=None, field=None, *, stop_index=None, epd=None,
+                   axis_point=None, axis_dir=None):
+        """Resolved exit-pupil reference point P_xp, cached on the system.
+
+        Wraps analysis.resolve_exit_pupil and memoizes the result keyed by the
+        lens edit version, wavelength, field, and stop index, so a grid
+        analysis resolves the (field-independent, paraxial) exit pupil once per
+        wavelength instead of per field/wavelength/axis.  The cache is lazy and
+        explicit -- it computes on first access and never recomputes silently;
+        an edit through self.lens bumps lens._version (a cache miss), and
+        stop_index is part of the key so reassigning self.stop_index can't
+        return a stale pupil.
+
+        Parameters mirror analysis.resolve_exit_pupil; wvl and field default to
+        the system reference wavelength and on-axis field.
+
+        Returns
+        -------
+        P_xp : ndarray, shape (3,)
+            exit-pupil reference point, ready to pass to wavefront(P_xp=...).
+
+        """
+        from .analysis import resolve_exit_pupil
+        wvl = self.wavelength(wvl)
+        resolved_stop = stop_index if stop_index is not None else self.stop_index
+        # field enters the key only via the geometric route; identify it by a
+        # hashable surrogate (its angle/height tuple) so equal fields share.
+        field_key = None if field is None else (
+            getattr(field, 'hx', None), getattr(field, 'hy', None),
+            getattr(field, 'kind', None))
+        key = (self.lens._version, float(wvl), field_key, resolved_stop)
+        cached = self._derived.get(key)
+        if cached is None:
+            cached = resolve_exit_pupil(
+                self, wvl, stop_index=resolved_stop, epd=epd, field=field,
+                axis_point=axis_point, axis_dir=axis_dir)
+            self._derived[key] = cached
+        return cached
 
     def solve_image_distance(self, surface=None, *, wavelength=None):
         """Seed the lens image-distance solve with a resolved wavelength."""

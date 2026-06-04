@@ -264,7 +264,7 @@ def xp_reference_sphere(P_chief, S_chief, axis_point=None, axis_dir=None):
 
     For tilted/decentered systems, supply axis_point and axis_dir explicitly,
     or compute P_xp via independent means (e.g., from a bundle of chief rays
-    from different fields) and pass it directly to opd_from_raytrace.
+    from different fields) and pass it directly to opd_from_raytrace_eic.
 
     Parameters
     ----------
@@ -324,66 +324,6 @@ def _pupil_center_chief_index(P, valid=None):
     return int(np.argmin(d2))
 
 
-def opd_from_raytrace(P_hist, S_hist, OPL_hist, P_img, P_xp,
-                      n_image=1.0, chief_index=None):
-    """Compute OPD on the exit-pupil reference sphere from a ray-trace.
-
-    For each ray, the OPL is summed through the prescription, then extended
-    along the final direction cosine until it intersects the reference sphere
-    centered on P_img with radius |P_xp - P_img|.  OPD is reported relative
-    to the chief ray (chief OPD = 0).
-
-    The starting plane for OPL accumulation is whatever transverse plane the
-    rays were launched on (e.g. z = const for a collimated fan).  Provided all
-    rays in the bundle share that starting plane, the constant OPL offset
-    cancels in the chief-relative subtraction.
-
-    Parameters
-    ----------
-    P_hist : ndarray
-        position history from raytrace, shape (jj+1, N, 3)
-    S_hist : ndarray
-        direction cosine history from raytrace, shape (jj+1, N, 3)
-    OPL_hist : ndarray
-        per-segment OPL history from raytrace, shape (jj+1, N).  OPL_hist[0]
-        is zero by convention; OPL_hist[j+1] is the OPL of the segment ending
-        at surface j.
-    P_img : iterable
-        image point — center of the reference sphere
-    P_xp : iterable
-        exit pupil center — sets the radius
-    n_image : float
-        index of refraction in image space (1=vacuum)
-    chief_index : int, optional
-        row index of the chief ray.  If None, defaults to the ray nearest the
-        pupil center (correct for any sampling, including hex grids where N//2
-        is an off-center ring sample).
-
-    Returns
-    -------
-    opd : ndarray
-        shape (N,).  Optical path difference at the reference sphere, in the
-        same length units as the prescription.  Sign convention: chief == 0;
-        rays whose OPL exceeds the chief's are positive.
-
-    """
-    P_img = np.asarray(P_img)
-    P_xp = np.asarray(P_xp)
-    R = np.sqrt(np.sum((P_xp - P_img) ** 2))
-
-    P_last = P_hist[-1]
-    S_last = S_hist[-1]
-    Q, t = spencer_and_murty.intersect_reference_sphere(P_last, S_last, P_img, R)
-
-    OPL_through = OPL_hist.sum(axis=0)
-    OPL_total = OPL_through + n_image * t
-
-    if chief_index is None:
-        chief_index = _pupil_center_chief_index(P_hist[0])
-
-    return OPL_total - OPL_total[chief_index]
-
-
 def eic_distance(P_a, d_a, P_b, d_b):
     """Equally-inclined-chord distance from a reference point on ray b to ray a.
 
@@ -423,9 +363,12 @@ def opd_from_raytrace_eic(P_hist, S_hist, OPL_hist, P_img, P_xp,
                           infinite_threshold=1.0e8):
     """OPD on the exit-pupil reference surface, robust to extreme conjugates.
 
-    Same contract as opd_from_raytrace but uses a cancellation-free
-    (Welford-rationalized) intersection of each ray with the reference
-    sphere and falls back automatically to a planar reference through P_xp
+    The OPD primitive for the analysis and field layers: sums OPL through the
+    prescription, extends each ray to the reference sphere centered on P_img
+    with radius |P_xp - P_img|, and reports the result relative to the chief
+    (chief OPD = 0).  Uses a cancellation-free (Welford-rationalized)
+    intersection of each ray with the reference sphere and falls back
+    automatically to a planar reference through P_xp
     normal to the chief direction when the reference-sphere radius exceeds
     infinite_threshold.  The legacy form t = -b - sqrt(b**2 - cc) loses
     precision when |b| ~ sqrt(...) -- the regime reached for long
@@ -458,8 +401,8 @@ def opd_from_raytrace_eic(P_hist, S_hist, OPL_hist, P_img, P_xp,
     Returns
     -------
     opd : ndarray, shape (N,)
-        OPD relative to the chief, sign matching opd_from_raytrace
-        (longer ray OPL -> positive).
+        OPD relative to the chief (longer ray OPL -> positive), in the same
+        length units as the prescription.
 
     """
     P_img = np.asarray(P_img)

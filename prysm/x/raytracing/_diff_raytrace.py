@@ -33,7 +33,7 @@ from .spencer_and_murty import (
     raytrace,
 )
 from ._line_math import normalize_vector
-from .opt import opd_from_raytrace, _valid_mask, _chief_axis_perp_norm
+from .opt import opd_from_raytrace_eic, _valid_mask, _chief_axis_perp_norm
 from .analysis import (
     _pupil_center_chief_index,
     _filtered_chief_index,
@@ -823,10 +823,15 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
     filtered_chief = _filtered_chief_index(valid, chief_index)
 
     n_image = image_space_index(surfaces, wavelength, fallback=n_object)
-    opd = opd_from_raytrace(trace.P[:, valid], trace.S[:, valid],
-                            trace.OPL[:, valid],
-                            P_img=P_chief_final, P_xp=P_xp,
-                            n_image=n_image, chief_index=filtered_chief)
+    # value on the rationalized sphere root (bit-identical to the plain
+    # -b - sqrt root that d_intersect_reference_sphere differentiates below);
+    # force the sphere branch (never the afocal plane fallback) so the value
+    # stays consistent with the analytic tangent.
+    opd = opd_from_raytrace_eic(trace.P[:, valid], trace.S[:, valid],
+                                trace.OPL[:, valid],
+                                P_img=P_chief_final, P_xp=P_xp,
+                                n_image=n_image, chief_index=filtered_chief,
+                                infinite_threshold=np.inf)
 
     P_last_f = trace.P[-1, valid]
     S_last_f = trace.S[-1, valid]

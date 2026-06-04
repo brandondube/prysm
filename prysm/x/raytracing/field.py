@@ -42,7 +42,7 @@ from .spencer_and_murty import STYPE_REFLECT, STYPE_REFRACT, raytrace
 from .launch import Sampling, launch
 from .paraxial import first_order
 from .opt import (
-    _valid_mask, _pupil_center_chief_index, opd_from_raytrace,
+    _valid_mask, _pupil_center_chief_index,
     opd_from_raytrace_eic, xp_reference_sphere,
 )
 from .analysis import _apply_field_and_output, _filtered_chief_index
@@ -548,7 +548,7 @@ def _resolve_exit_pupil(prescription, field, wavelength, epd,
 
 def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
                 stop_index=None, P_xp=None, P_img=None, axis_dir=None,
-                pupil_z=None, coatings=None, method='sphere',
+                pupil_z=None, coatings=None,
                 output='length', reference='chief', polarized=False):
     """Realize the complex pupil field on the exit-pupil reference sphere.
 
@@ -583,8 +583,6 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
         launch-plane z; passed to launch().
     coatings : sequence, optional
         per-surface coating specs; None gives bare interfaces.
-    method : str
-        'sphere' or 'eic', selecting the OPD reference-sphere intersection.
     output : str
         'length' (default) or 'waves' for the returned opd units.
     reference : str
@@ -650,7 +648,13 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
                 "reference sphere.  Pass reference='centroid' for an "
                 'obscured or vignetted bundle.'
             )
-        raise ValueError('no valid rays to anchor the reference sphere')
+        if not bool(np.any(valid)):
+            raise ValueError('no valid rays to anchor the reference sphere')
+        raise ValueError(
+            f'anchor ray (chief_index={chief_index}) is invalid; pass a '
+            'chief_index that survives the trace, or omit it to auto-select '
+            'the surviving ray nearest the pupil center'
+        )
 
     # the rect sampling fills a square; the entrance pupil of diameter epd is
     # the inscribed circle.  Referenced to the chief so it tracks the bundle
@@ -669,11 +673,11 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
 
     # OPD on the reference sphere (valid rays), mirroring analysis.wavefront
     filtered_chief = _filtered_chief_index(valid, chief_index)
-    opd_fn = opd_from_raytrace_eic if method == 'eic' else opd_from_raytrace
     n_image = image_space_index(prescription, wavelength, fallback=n_object)
-    opd = opd_fn(trace.P[:, valid], trace.S[:, valid], trace.OPL[:, valid],
-                 P_img=P_img, P_xp=P_xp, n_image=n_image,
-                 chief_index=filtered_chief)
+    opd = opd_from_raytrace_eic(trace.P[:, valid], trace.S[:, valid],
+                                trace.OPL[:, valid],
+                                P_img=P_img, P_xp=P_xp, n_image=n_image,
+                                chief_index=filtered_chief)
 
     # sine-space sphere coordinates (all rays, then mask)
     Q, _ = sm.intersect_reference_sphere(trace.P[-1], trace.S[-1], P_img, R)
