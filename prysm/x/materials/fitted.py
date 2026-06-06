@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from prysm.mathops import np, optimize
 
-from .core import BaseMaterial, MaterialRangeError, _user_page_info
+from .core import BaseMaterial, MaterialRangeError
 from .tabulated import MaterialData, TabulatedMaterial
 
 
@@ -85,22 +85,39 @@ def _sellmeier1_eval(wvl, coeffs, terms):
     b = coeffs[:terms]
     c = coeffs[terms:]
     w2 = wvl * wvl
-    n2 = np.ones_like(wvl, dtype=float)
+    n2 = 1.0 + wvl * 0
     for bi, ci in zip(b, c):
         n2 = n2 + bi * w2 / (w2 - ci)
     return np.sqrt(n2)
 
 
 def _evaluate_fit_model(model, coeffs, wvl, terms):
-    wvl = np.asarray(wvl, dtype=float)
+    """Evaluate a fitted dispersion model, backend-pure and shape-preserving.
+
+    Written as direct sums (not design-matrix @ coeffs) so a scalar input
+    yields a scalar and the consumption path stays differentiable on non-numpy
+    backends; the design-matrix helpers are reserved for the fit itself.
+    """
     if model == 'constant':
-        return np.full(wvl.shape, coeffs[0], dtype=float)
+        return coeffs[0] + wvl * 0
     if model == 'cauchy':
-        return _cauchy_design(wvl, terms) @ coeffs
+        out = coeffs[0] + wvl * 0
+        for i in range(1, terms):
+            out = out + coeffs[i] * wvl ** (-2 * i)
+        return out
     if model == 'sellmeier1':
         return _sellmeier1_eval(wvl, coeffs, terms)
     if model == 'schott':
-        return np.sqrt(_schott_design(wvl) @ coeffs)
+        w2 = wvl * wvl
+        n2 = (
+            coeffs[0]
+            + coeffs[1] * w2
+            + coeffs[2] / w2
+            + coeffs[3] / w2 ** 2
+            + coeffs[4] / w2 ** 3
+            + coeffs[5] / w2 ** 4
+        )
+        return np.sqrt(n2)
     raise ValueError(model)
 
 
@@ -277,7 +294,6 @@ class FittedMaterial(BaseMaterial):
         terms=None,
         fit_report=None,
         extrapolate=False,
-        page_info=None,
         **kwargs,
     ):
         model = _normalize_model(model)
@@ -340,15 +356,6 @@ class FittedMaterial(BaseMaterial):
         self.coefficient_table = metadata['coefficients']
         self.extrapolate = bool(extrapolate)
         self.fit_report = fit_report
-        self.page_info = _user_page_info(
-            self.name,
-            self.catalog,
-            self.source,
-            self.wavelength_range,
-            self.model,
-        )
-        if page_info:
-            self.page_info.update(page_info)
 
     @classmethod
     def from_samples(
@@ -448,23 +455,13 @@ class FittedMaterial(BaseMaterial):
 
     def n(self, wvl_um, temperature=None):
         """Return real refractive index at wavelength wvl_um in microns."""
-        wvl = np.asarray(wvl_um, dtype=float)
-        self._check_range(wvl)
-        out = _evaluate_fit_model(self.model, self.coefficients, wvl, self.terms)
-        if not np.all(np.isfinite(out)):
-            raise ValueError(f'material {self.name} produced non-finite n')
-        if np.isscalar(wvl_um):
-            return out.item()
-        return out
+        self._check_range(wvl_um)
+        return _evaluate_fit_model(self.model, self.coefficients, wvl_um, self.terms)
 
     def k(self, wvl_um, temperature=None):
         """Return zero extinction for real-index fitted materials."""
-        wvl = np.asarray(wvl_um, dtype=float)
-        self._check_range(wvl)
-        out = np.zeros(wvl.shape, dtype=float)
-        if np.isscalar(wvl_um):
-            return out.item()
-        return out
+        self._check_range(wvl_um)
+        return self._missing_k(wvl_um)
 
 
 def from_samples(name, wavelengths, n, *, k=None, model=None, method='linear',

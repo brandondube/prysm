@@ -30,7 +30,7 @@ def test_agf_sellmeier_scalar_vector_and_range():
     assert material.n(0.5875618) == pytest.approx(1.5168000345)
     n = material.n(np.array([0.4861327, 0.6562725]))
     np.testing.assert_allclose(n, [1.52237629, 1.51432235], rtol=1e-6)
-    with pytest.raises(ValueError, match='outside AGF range'):
+    with pytest.raises(ValueError, match='outside valid range'):
         material.n(0.25)
 
 
@@ -82,3 +82,15 @@ LD 0.4 0.8
     with pytest.raises(AmbiguousMaterialError):
         chain.material_for_name('N-BK7')
     assert chain['ONE:N-BK7'].n(0.55) == pytest.approx(1.5)
+
+
+def test_agf_record_reports_agf_material_class():
+    from prysm.x.materials import MaterialRegistry
+
+    # AGFMaterial is a factory over FormulaMaterial; the record must still carry
+    # material_class='AGFMaterial' so registry filters can find AGF glasses.
+    cat = AGFCatalog.from_text('NM SCH 1\nCD 2.25 0 0 0 0 0\nLD 0.4 0.8\n', namespace='SCH')
+    record = next(iter(cat.records()))
+    assert record.material_class == 'AGFMaterial'
+    registry = MaterialRegistry.from_catalogs(cat)
+    assert [r.name for r in registry.search(material_class='AGFMaterial')] == ['SCH']

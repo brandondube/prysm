@@ -67,8 +67,13 @@ def extended3(wvl_um, c0, c1, c2, c3, c4, c5, c6, c7, c8):
     return np.sqrt(n_squared)
 
 
-def agf_formula(formula, coefficients, wvl_um, name='material'):
-    """Evaluate the AGF formula subset used by current prysm fixtures."""
+def agf_formula(formula, wvl_um, *coefficients, name='material'):
+    """Evaluate the AGF formula subset used by current prysm fixtures.
+
+    Coefficients follow the wavelength positionally so that
+    partial(agf_formula, formula_id) matches the FormulaMaterial calling
+    convention formula(wvl_um, *coefficients).
+    """
     if formula == 1:
         if len(coefficients) < 6:
             raise ValueError(f'AGF Schott formula glass {name} requires six coefficients')
@@ -96,3 +101,69 @@ def _agf_sellmeier(coefficients, wvl_um, name, terms):
         raise ValueError(f'AGF Sellmeier glass {name} requires {needed} coefficients')
     pairs = coefficients[:needed]
     return _sellmeier(wvl_um, pairs[0::2], pairs[1::2])
+
+
+def riinfo_formula(formula_id, wvl_um, *coefficients):
+    """Evaluate refractiveindex.info dispersion formulas 1-9, wavelength in um.
+
+    Mirrors the refractiveindex package's _compute_formula, but evaluated
+    through mathops.np so the consumption path stays backend-pure and
+    differentiable.  Coefficients follow the wavelength positionally so that
+    partial(riinfo_formula, formula_id) matches the FormulaMaterial calling
+    convention formula(wvl_um, *coefficients).
+    """
+    C = coefficients
+    # pad so the fixed-index formulas (4, 7, 8, 9) tolerate short coefficient
+    # lists; Cp[5] (formula 9) is the highest fixed index read.
+    Cp = list(C) + [0.0] * 6
+    wl = wvl_um
+    if formula_id == 1:  # Sellmeier
+        nsq = 1 + Cp[0]
+        for i in range(1, len(C), 2):
+            nsq = nsq + C[i] * wl ** 2 / (wl ** 2 - C[i + 1] ** 2)
+        return np.sqrt(nsq)
+    if formula_id == 2:  # Sellmeier-2
+        nsq = 1 + Cp[0]
+        for i in range(1, len(C), 2):
+            nsq = nsq + C[i] * wl ** 2 / (wl ** 2 - C[i + 1])
+        return np.sqrt(nsq)
+    if formula_id == 3:  # Polynomial
+        nsq = Cp[0]
+        for i in range(1, len(C), 2):
+            nsq = nsq + C[i] * wl ** C[i + 1]
+        return np.sqrt(nsq)
+    if formula_id == 4:  # RefractiveIndex.INFO
+        nsq = Cp[0]
+        for i in range(1, min(8, len(C)), 4):
+            nsq = nsq + C[i] * wl ** C[i + 1] / (wl ** 2 - C[i + 2] ** C[i + 3])
+        if len(C) > 9:
+            for i in range(9, len(C), 2):
+                nsq = nsq + C[i] * wl ** C[i + 1]
+        return np.sqrt(nsq)
+    if formula_id == 5:  # Cauchy
+        n = Cp[0]
+        for i in range(1, len(C), 2):
+            n = n + C[i] * wl ** C[i + 1]
+        return n
+    if formula_id == 6:  # Gases
+        n = 1 + Cp[0]
+        for i in range(1, len(C), 2):
+            n = n + C[i] / (C[i + 1] - wl ** (-2))
+        return n
+    if formula_id == 7:  # Herzberger
+        n = Cp[0]
+        n = n + Cp[1] / (wl ** 2 - 0.028)
+        n = n + Cp[2] / (wl ** 2 - 0.028) ** 2
+        for i in range(3, len(C)):
+            n = n + C[i] * wl ** (2 * (i - 2))
+        return n
+    if formula_id == 8:  # Retro
+        tmp = Cp[0] + Cp[1] * wl ** 2 / (wl ** 2 - Cp[2]) + Cp[3] * wl ** 2
+        return np.sqrt((2 * tmp + 1) / (1 - tmp))
+    if formula_id == 9:  # Exotic
+        return np.sqrt(
+            Cp[0]
+            + Cp[1] / (wl ** 2 - Cp[2])
+            + Cp[3] * (wl - Cp[4]) / ((wl - Cp[4]) ** 2 + Cp[5])
+        )
+    raise ValueError(f'unknown refractiveindex.info dispersion formula {formula_id}')

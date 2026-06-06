@@ -2,7 +2,12 @@ import pytest
 
 from prysm.mathops import np
 from prysm.conf import config
-from prysm.x.materials import MaterialRangeError, TabulatedMaterial, TemperatureGridMaterial
+from prysm.x.materials import (
+    MaterialRangeError,
+    MissingKError,
+    TabulatedMaterial,
+    TemperatureGridMaterial,
+)
 
 
 def test_tabulated_material_interpolates_n_and_k():
@@ -50,7 +55,9 @@ def test_temperature_grid_interpolates_wavelength_and_temperature():
         [1.6, 2.1],
         [1.8, 2.3],
     ]
-    material = TemperatureGridMaterial('grid', wavelengths, temperatures, n)
+    material = TemperatureGridMaterial(
+        'grid', wavelengths, temperatures, n, layout=('temperature', 'wavelength'),
+    )
     assert material.n(0.75, temperature=200) == pytest.approx(1.95)
     np.testing.assert_allclose(
         material.n([0.5, 1.0], temperature=100),
@@ -76,6 +83,7 @@ def test_temperature_grid_extrapolates_wavelength_and_temperature_when_enabled()
         temperatures,
         n,
         extrapolate=True,
+        layout=('temperature', 'wavelength'),
     )
     assert material.n(3.0, temperature=30.0) == pytest.approx(6.0)
 
@@ -96,9 +104,32 @@ def test_temperature_grid_uses_derivative_grids_or_finite_difference():
             [1e-3, 1e-3],
             [1e-3, 1e-3],
         ],
+        layout=('temperature', 'wavelength'),
     )
     assert material.dn_dT(0.75, 200) == pytest.approx(1e-3)
     assert material.dn_dlambda(0.75, temperature=200) == pytest.approx(1.0, rel=1e-6)
+
+
+def test_temperature_grid_2d_query_matches_elementwise():
+    wavelengths = [0.5, 1.0, 1.5]
+    temperatures = [100, 200, 300]
+    n = [
+        [1.50, 1.55, 1.60],
+        [1.52, 1.58, 1.63],
+        [1.54, 1.61, 1.66],
+    ]
+    material = TemperatureGridMaterial(
+        'grid', wavelengths, temperatures, n, layout=('temperature', 'wavelength'),
+    )
+    wq = np.array([[0.6, 0.9], [1.2, 1.4]])
+    tq = np.array([[150.0, 250.0], [120.0, 280.0]])
+    out = material.n(wq, temperature=tq)
+    assert out.shape == (2, 2)
+    for i in range(2):
+        for j in range(2):
+            assert out[i, j] == pytest.approx(
+                float(material.n(float(wq[i, j]), temperature=float(tq[i, j])))
+            )
 
 
 def test_tabulated_material_respects_config_precision_and_query_dtype():
@@ -127,87 +158,42 @@ def test_temperature_grid_material_respects_config_precision():
                 [1.6, 2.1],
                 [1.8, 2.3],
             ],
+            layout=('temperature', 'wavelength'),
         )
 
         assert material.n_grid.dtype == np.dtype(np.float32)
         assert material.n(0.75, temperature=200).dtype == np.dtype(np.float32)
     finally:
         config.precision = old_precision
-import pytest
-
-from prysm.x.materials import (
-    AmbiguousMaterialError,
-    Catalog,
-    CatalogChain,
-    ConstantMaterial,
-    MaterialRegistry,
-    TabulatedMaterial,
-)
 
 
-def test_catalog_chain_namespace_lookup_and_ambiguity():
-    schott = Catalog.from_materials([
-        ConstantMaterial('N-BK7', 1.5, catalog='SCHOTT', metadata={'aliases': ('BK7',)}),
-    ])
-    ohara = Catalog.from_materials([
-        ConstantMaterial('S-BSL7', 1.52, catalog='OHARA', metadata={'aliases': ('BK7',)}),
-    ])
-    chain = CatalogChain([schott, ohara])
-    assert chain['SCHOTT:N-BK7'].n(0.55) == pytest.approx(1.5)
-    with pytest.raises(AmbiguousMaterialError):
-        chain.material_for_name('BK7')
-
-
-def test_registry_metadata_and_computed_search():
-    low = TabulatedMaterial(
-        'low',
-        [0.4, 0.8],
-        [1.45, 1.46],
-        k=[0, 0],
-        catalog='LAB',
-        process='IBS',
+def test_temperature_grid_square_layout_disambiguation():
+    grid = [[1.6, 2.1], [1.8, 2.3]]
+    with pytest.warns(UserWarning, match='square'):
+        TemperatureGridMaterial('g', [0.5, 1.0], [100, 300], grid)
+    default = TemperatureGridMaterial(
+        'g', [0.5, 1.0], [100, 300], grid, layout=('temperature', 'wavelength'),
     )
-    high = TabulatedMaterial(
-        'high',
-        [0.4, 0.8],
-        [2.0, 2.1],
-        k=[0.1, 0.1],
-        catalog='LAB',
-        process='ebeam',
+    transposed = TemperatureGridMaterial(
+        'g', [0.5, 1.0], [100, 300], grid, layout=('wavelength', 'temperature'),
     )
-    registry = MaterialRegistry.from_catalogs(Catalog.from_materials([low, high]))
-    records = registry.search(
-        wavelength_range_contains=(0.45, 0.65),
-        process='IBS',
-        n_at=(0.55, 1.44, 1.47),
-        k_max=(0.55, 1e-6),
+    # the two layouts read the off-diagonal entries from opposite axes.
+    assert default.n(1.0, temperature=100) == pytest.approx(2.1)
+    assert transposed.n(1.0, temperature=100) == pytest.approx(1.8)
+
+
+def test_temperature_grid_missing_k_raise_is_honored():
+    material = TemperatureGridMaterial(
+        'g', [0.5, 1.0], [100, 300], [[1.5, 1.6], [1.7, 1.8]],
+        missing_k='raise', layout=('temperature', 'wavelength'),
     )
-    assert [record.name for record in records] == ['low']
+    with pytest.raises(MissingKError):
+        material.k(0.75, temperature=200)
 
 
-def test_registry_uses_catalog_matching_semantics():
-    material = ConstantMaterial(
-        'N-BK7',
-        1.5,
-        catalog='SCHOTT',
-        process='IBS',
-        metadata={'aliases': ('BK7',)},
-    )
-    registry = MaterialRegistry.from_catalogs(Catalog.from_materials([material]))
-
-    assert [record.name for record in registry.search(query='N BK7')] == ['N-BK7']
-    assert [record.name for record in registry.search(process='ibs')] == ['N-BK7']
-    assert [record.name for record in registry.search(catalog='schott')] == ['N-BK7']
-
-
-def test_registry_computed_criteria_validate_arity():
-    registry = MaterialRegistry.from_catalogs(Catalog.from_materials([
-        ConstantMaterial('glass', 1.5),
-    ]))
-
-    with pytest.raises(ValueError, match='n_at criterion expects'):
-        registry.search(n_at=(0.55,))
-    with pytest.raises(ValueError, match='n_at criterion must be a sequence'):
-        registry.search(n_at=0.55)
-    with pytest.raises(ValueError, match='k_max criterion expects'):
-        registry.search(k_max=(0.55, 1e-6, None, 'extra'))
+def test_temperature_grid_rejects_duplicate_axis_coordinates():
+    with pytest.raises(ValueError, match='strictly increasing'):
+        TemperatureGridMaterial(
+            'g', [0.5, 0.5], [100, 300], [[1.5, 1.6], [1.7, 1.8]],
+            layout=('temperature', 'wavelength'),
+        )

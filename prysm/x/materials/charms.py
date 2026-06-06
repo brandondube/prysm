@@ -51,36 +51,27 @@ class TemperatureSellmeierMaterial(BaseMaterial):
             resonance_coefficients, 'resonance_coefficients'
         )
 
-    def _coefficients_at(self, temperature):
-        S = np.array([
-            _polyval_ascending(coefficients, temperature)
-            for coefficients in self.strength_coefficients
-        ], dtype=self.strength_coefficients.dtype)
-        lambdas = np.array([
-            _polyval_ascending(coefficients, temperature)
-            for coefficients in self.resonance_coefficients
-        ], dtype=self.resonance_coefficients.dtype)
-        return S, lambdas
-
     def n(self, wvl_um, temperature=None):
-        """Evaluate the temperature-dependent Sellmeier equation."""
+        """Evaluate the temperature-dependent Sellmeier equation.
+
+        Vectorized over the broadcast (wavelength, temperature) query: the
+        temperature polynomials and the Sellmeier sum are whole-array ops with
+        no per-point loop or item assignment (Finding #2).
+        """
         if temperature is None:
             raise ValueError(f'temperature is required for {self.name}')
         self._check_wavelength(wvl_um)
         self._check_temperature(temperature)
         wvl_b, temp_b = np.broadcast_arrays(wvl_um, temperature)
-        flat_w = wvl_b.reshape(-1)
-        flat_t = temp_b.reshape(-1)
-        out = np.empty(flat_w.shape, dtype=self.strength_coefficients.dtype)
-        for idx, (w, t) in enumerate(zip(flat_w, flat_t)):
-            S, lambdas = self._coefficients_at(t)
-            w2 = w ** 2
-            n2 = out.dtype.type(1.0)
-            for strength, resonance in zip(S, lambdas):
-                n2 = n2 + strength * w2 / (w2 - resonance ** 2)
-            out[idx] = np.sqrt(n2)
-        out = out.reshape(wvl_b.shape)
-        return out
+        w2 = wvl_b ** 2
+        n2 = 1.0 + wvl_b * 0
+        for strength, resonance in zip(
+            self.strength_coefficients, self.resonance_coefficients
+        ):
+            S = _polyval_ascending(strength, temp_b)
+            lam = _polyval_ascending(resonance, temp_b)
+            n2 = n2 + S * w2 / (w2 - lam ** 2)
+        return np.sqrt(n2)
 
 
 class CHARMSCoefficientMaterial(TemperatureSellmeierMaterial):
@@ -107,8 +98,9 @@ class CHARMSDataset(Catalog):
 
     @classmethod
     def from_materials(cls, materials, *, namespace='CHARMS'):
-        """Build a CHARMS dataset from material instances."""
-        for material in materials:
-            if not material.catalog:
-                material.catalog = namespace
+        """Build a CHARMS dataset from material instances.
+
+        Catalog.from_materials already stamps the namespace onto each record, so
+        no per-material mutation is needed here.
+        """
         return super().from_materials(materials, namespace=namespace)

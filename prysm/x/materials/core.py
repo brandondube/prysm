@@ -4,6 +4,8 @@ Wavelengths are in microns.  Temperatures are in Kelvin.  Complex refractive
 index follows the convention n + 1j*k.
 """
 
+import inspect
+
 from prysm.mathops import np
 from prysm.conf import config
 
@@ -30,19 +32,52 @@ def _range_contains(outer, inner):
     return lo <= ilo and hi >= ihi
 
 
-def _user_page_info(name, catalog, source, wavelength_range, model):
-    """Build best-effort page metadata for user-defined materials."""
-    lo, hi = wavelength_range if wavelength_range is not None else (None, None)
+def _user_page_info(material):
+    """Default page_info shape for a user-defined material.
+
+    page_info is provenance surfaced for the IO writers (which read 'page' and
+    'book').  It is derived on access from the material's own attributes so it
+    cannot drift.  Each data source owns its shape: AGF and RII install their
+    own builder (see materials.agf / materials.rii) so this module carries no
+    per-source enumeration.
+    """
+    wr = material.wavelength_range
+    lo, hi = wr if wr is not None else (None, None)
+    meta = material.metadata
+    catalog = material.catalog
     return {
         'shelf': 'user',
         'book': catalog or 'USER',
-        'page': name,
-        'filepath': source or '',
+        'page': material.name,
+        'filepath': material.source or '',
         'catalog': catalog or 'USER',
         'rangeMin': lo,
         'rangeMax': hi,
-        'model': model,
+        'model': meta.get('model', meta.get('method')),
     }
+
+
+def _accepts_temperature(func):
+    """True if func can be called with a temperature= keyword.
+
+    Used to let a dispersion-formula callable opt into temperature dependence
+    without forcing every formula to carry an unused temperature parameter.
+    """
+    if func is None:
+        return False
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):
+        return False
+    for parameter in signature.parameters.values():
+        if parameter.kind is inspect.Parameter.VAR_KEYWORD:
+            return True
+        if parameter.name == 'temperature' and parameter.kind in (
+            inspect.Parameter.KEYWORD_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+            return True
+    return False
 
 
 def _validate_range(values, valid_range, label, name):
@@ -183,10 +218,16 @@ class BaseMaterial:
         self.process = process
         self.metadata = dict(metadata or {})
         self.missing_k = missing_k
+        self._page_info_builder = _user_page_info
 
     def __call__(self, wvl_um):
         """Alias for n(wvl_um)."""
         return self.n(wvl_um)
+
+    @property
+    def page_info(self):
+        """Read-only provenance view derived from this material's attributes."""
+        return self._page_info_builder(self)
 
     def _check_wavelength(self, wvl):
         if self.metadata.get('extrapolate_wavelength'):
@@ -252,29 +293,64 @@ class BaseMaterial:
         return (n_center - 1) / (n_short - n_long)
 
     def dn_dlambda(self, wvl_um, temperature=None):
-        """Finite-difference derivative of n with respect to wavelength."""
+        """Finite-difference derivative of n with respect to wavelength.
+
+        The evaluation points are clamped into the valid wavelength range, so
+        at a closed band edge the central difference degrades to a one-sided
+        difference instead of evaluating out of range.
+        """
         h = np.maximum(np.abs(wvl_um) * 1e-6, 1e-6)
-        return (
-            self.n(np.add(wvl_um, h), temperature=temperature)
-            - self.n(np.subtract(wvl_um, h), temperature=temperature)
-        ) / (2 * h)
+        hi_point = np.add(wvl_um, h)
+        lo_point = np.subtract(wvl_um, h)
+        if self.wavelength_range is not None and not self.metadata.get('extrapolate_wavelength'):
+            lo, hi = self.wavelength_range
+            if hi is not None:
+                hi_point = np.minimum(hi_point, hi)
+            if lo is not None:
+                lo_point = np.maximum(lo_point, lo)
+        num = self.n(hi_point, temperature=temperature) - self.n(
+            lo_point, temperature=temperature
+        )
+        denom = hi_point - lo_point
+        # a closed band edge or a zero-width range can collapse the interval;
+        # the derivative of a locally-constant sample is 0, not 0/0.
+        return np.where(denom == 0, 0.0, num / np.where(denom == 0, 1.0, denom))
 
     def dn_dT(self, wvl_um, temperature):
-        """Finite-difference derivative of n with respect to temperature."""
-        h = np.maximum(np.abs(temperature) * 1e-6, 1e-3)
-        return (
-            self.n(wvl_um, temperature=np.add(temperature, h))
-            - self.n(wvl_um, temperature=np.subtract(temperature, h))
-        ) / (2 * h)
+        """Finite-difference derivative of n with respect to temperature.
 
-    def record(self, *, loader=None):
-        """Create a metadata record for this material."""
+        The evaluation points are clamped into the valid temperature range so
+        the difference is defined at a closed band edge.
+        """
+        h = np.maximum(np.abs(temperature) * 1e-6, 1e-3)
+        hi_point = np.add(temperature, h)
+        lo_point = np.subtract(temperature, h)
+        if self.temperature_range is not None and not self.metadata.get('extrapolate_temperature'):
+            lo, hi = self.temperature_range
+            if hi is not None:
+                hi_point = np.minimum(hi_point, hi)
+            if lo is not None:
+                lo_point = np.maximum(lo_point, lo)
+        num = self.n(wvl_um, temperature=hi_point) - self.n(
+            wvl_um, temperature=lo_point
+        )
+        denom = hi_point - lo_point
+        # a closed band edge or a single-temperature range can collapse the
+        # interval; the derivative of a locally-constant sample is 0, not 0/0.
+        return np.where(denom == 0, 0.0, num / np.where(denom == 0, 1.0, denom))
+
+    def record(self, *, loader=None, catalog=None):
+        """Create a metadata record for this material.
+
+        A catalog override lets a catalog stamp its namespace onto the record
+        without mutating the caller-owned material.
+        """
         if loader is None:
             loader = lambda: self
         aliases = tuple(self.metadata.get('aliases', ()))
         return MaterialRecord(
             name=self.name,
-            catalog=self.catalog,
+            catalog=self.catalog if catalog is None else catalog,
             variant=self.variant,
             aliases=aliases,
             source=self.source,
@@ -283,7 +359,7 @@ class BaseMaterial:
             wavelength_range=self.wavelength_range,
             temperature_range=self.temperature_range,
             process=self.process,
-            material_class=type(self).__name__,
+            material_class=self.metadata.get('material_class', type(self).__name__),
             metadata=dict(self.metadata),
             loader=loader,
         )
@@ -292,7 +368,7 @@ class BaseMaterial:
 class ConstantMaterial(BaseMaterial):
     """Material with constant n and optional constant k."""
 
-    def __init__(self, *args, name=None, n=None, k=None, page_info=None, **kwargs):
+    def __init__(self, *args, name=None, n=None, k=None, **kwargs):
         name, n = _constant_material_args(args, name, n)
         n = float(n)
         if not np.isfinite(n):
@@ -310,15 +386,6 @@ class ConstantMaterial(BaseMaterial):
         self.fit_report = None
         self.metadata.setdefault('model', 'constant')
         self.metadata.setdefault('extrapolate', True)
-        self.page_info = _user_page_info(
-            self.name,
-            self.catalog,
-            self.source,
-            self.wavelength_range,
-            'constant',
-        )
-        if page_info:
-            self.page_info.update(page_info)
 
     def n(self, wvl_um, temperature=None):
         """Return constant real refractive index."""
@@ -384,11 +451,15 @@ class FormulaMaterial(BaseMaterial):
         self.coefficients = tuple(coefficients)
         self.k_formula = k_formula
         self.k_coefficients = tuple(k_coefficients)
+        self._formula_wants_temperature = _accepts_temperature(formula)
+        self._k_formula_wants_temperature = _accepts_temperature(k_formula)
 
     def n(self, wvl_um, temperature=None):
         """Return formula-derived real refractive index."""
         self._check_wavelength(wvl_um)
         self._check_temperature(temperature)
+        if temperature is not None and self._formula_wants_temperature:
+            return self.formula(wvl_um, *self.coefficients, temperature=temperature)
         return self.formula(wvl_um, *self.coefficients)
 
     def k(self, wvl_um, temperature=None):
@@ -397,4 +468,6 @@ class FormulaMaterial(BaseMaterial):
         self._check_temperature(temperature)
         if self.k_formula is None:
             return self._missing_k(wvl_um)
+        if temperature is not None and self._k_formula_wants_temperature:
+            return self.k_formula(wvl_um, *self.k_coefficients, temperature=temperature)
         return self.k_formula(wvl_um, *self.k_coefficients)

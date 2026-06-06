@@ -76,3 +76,14 @@ def test_registry_computed_criteria_validate_arity():
         registry.search(n_at=0.55)
     with pytest.raises(ValueError, match='k_max criterion expects'):
         registry.search(k_max=(0.55, 1e-6, None, 'extra'))
+
+
+def test_registry_k_max_treats_missing_k_as_transparent():
+    # a missing_k='raise' member must not abort the k_max filter (Finding #3).
+    opaque_unknown = ConstantMaterial('X', 2.0, missing_k='raise', catalog='LAB')
+    clear = ConstantMaterial('Y', 1.5, missing_k='zero', catalog='LAB')
+    registry = MaterialRegistry.from_catalogs(
+        Catalog.from_materials([opaque_unknown, clear])
+    )
+    names = [record.name for record in registry.search(k_max=(0.55, 1e-6))]
+    assert set(names) == {'X', 'Y'}

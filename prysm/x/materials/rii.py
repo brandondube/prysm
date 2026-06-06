@@ -1,225 +1,337 @@
-"""refractiveindex.info catalog backend using prysm's controlled _riidb cache."""
+"""refractiveindex.info catalog backend over the ri.info YAML database.
 
-import sqlite3
+prysm reads the refractiveindex.info database (catalog-nk.yml plus the per-page
+YAML data files) directly and parses each material into a backend-pure
+FormulaMaterial (formula ids 1-9) or a tabulated RefractiveIndexMaterial.  The
+optional refractiveindex package is used only to auto-download the database
+folder when it is absent; an existing folder is read without importing it.
+"""
+
+from functools import partial
 from pathlib import Path
 
 from prysm.mathops import np
 from prysm.conf import config
 
-from .catalog import AmbiguousMaterialError, Catalog
-from .core import MaterialRecord, _normalize_name
+from .catalog import Catalog
+from .core import FormulaMaterial, MaterialRecord, _normalize_name
+from .formulas import riinfo_formula
 from .tabulated import TabulatedMaterial
 
 
-def default_cache_root():
-    """Return the deterministic refractiveindex.info cache root."""
-    return Path(__file__).resolve().parents[3] / '_riidb'
+_PREFERRED_BOOK_BY_PREFIX = {
+    'N-': ('SCHOTT-optical',),
+    'P-': ('SCHOTT-optical',),
+    'S-': ('OHARA-optical',),
+    'J-': ('HIKARI-optical',),
+    'H-': ('CDGM-optical',),
+    'K-': ('SUMITA-optical',),
+}
 
 
-def _row_to_dict(row):
-    if isinstance(row, dict):
-        return dict(row)
-    return {key: row[key] for key in row.keys()}
+def default_db_path():
+    """Return the refractiveindex package's default database folder."""
+    return Path.home() / '.refractiveindex.info-database'
 
 
-def _record_from_page(row, namespace, sqlite_path):
-    data = _row_to_dict(row)
-    metadata = {
-        'pageid': data['pageid'],
-        'shelf': data['shelf'],
-        'book': data['book'],
-        'page': data['page'],
-        'filepath': data['filepath'],
-        'hasrefractive': bool(data['hasrefractive']),
-        'hasextinction': bool(data['hasextinction']),
-        'points': data['points'],
-        'provenance': 'refractiveindex.info sqlite',
-        'sqlite_path': str(sqlite_path),
+def _rii_page_info(material):
+    """page_info shape for a refractiveindex.info-sourced material."""
+    wr = material.wavelength_range
+    lo, hi = wr if wr is not None else (None, None)
+    meta = material.metadata
+    return {
+        'shelf': meta.get('shelf'),
+        'book': meta.get('book'),
+        'page': meta.get('page'),
+        'filepath': material.source or meta.get('filepath') or '',
+        'rangeMin': lo,
+        'rangeMax': hi,
     }
-    aliases = tuple(
-        item for item in (data['page'], data['filepath'])
-        if item and item != data['book']
-    )
-    return MaterialRecord(
-        name=data['book'],
-        catalog=namespace,
-        variant=data['page'],
-        aliases=aliases,
-        source=data['filepath'],
-        license='CC0',
-        wavelength_range=(data['rangeMin'], data['rangeMax']),
-        material_class='RefractiveIndexMaterial',
-        metadata=metadata,
-        material_id=f'{namespace}:{data["shelf"]}:{data["book"]}:{data["page"]}',
-    )
 
 
-class RefractiveIndexMaterial(TabulatedMaterial):
-    """Tabulated material loaded from refractiveindex.info sqlite rows."""
+def _rank_page(record, name):
+    """Sort key preferring the canonical dataset for a glass name.
 
-    def __init__(self, record, wavelengths, n, *, k=None):
-        metadata = dict(record.metadata)
-        metadata['aliases'] = record.aliases
-        self.page_info = {
-            'pageid': metadata['pageid'],
-            'shelf': metadata['shelf'],
-            'book': metadata['book'],
-            'page': metadata['page'],
-            'filepath': metadata['filepath'],
-            'rangeMin': record.wavelength_range[0],
-            'rangeMax': record.wavelength_range[1],
-        }
-        super().__init__(
-            record.name,
-            wavelengths,
-            n,
-            k=k,
-            catalog=record.catalog,
-            variant=record.variant,
-            source=record.source,
-            license=record.license,
-            wavelength_range=record.wavelength_range,
-            metadata=metadata,
-            missing_k='zero' if k is None else 'raise',
-            page_info=self.page_info,
+    Lower is better: an exact page-name match, a manufacturer-spec shelf, and a
+    catalog-page book (e.g. SCHOTT-optical for an N- glass) all reduce the rank.
+    """
+    meta = record.metadata
+    page = meta.get('page') or ''
+    book = meta.get('book') or ''
+    shelf = meta.get('shelf') or ''
+    key = str(name)
+    norm = _normalize_name(key)
+    rank = 100
+    if page.upper() == key.upper():
+        rank -= 50
+    if _normalize_name(page) == norm:
+        rank -= 25
+    if shelf == 'specs':
+        rank -= 10
+    for prefix, books in _PREFERRED_BOOK_BY_PREFIX.items():
+        if key.upper().startswith(prefix) and book in books:
+            rank -= 20
+            break
+    if book.endswith('-optical'):
+        rank -= 5
+    return (rank, shelf, book, page)
+
+
+def _load_catalog(db_path):
+    """Map (shelf, book, page) -> data file path from catalog-nk.yml."""
+    import yaml
+    catalog_file = Path(db_path) / 'catalog-nk.yml'
+    with open(catalog_file, 'rt', encoding='utf-8') as f:
+        catalog = yaml.load(f, Loader=yaml.BaseLoader)
+    index = {}
+    for shelf in catalog:
+        if 'DIVIDER' in shelf:
+            continue
+        shelf_name = shelf['SHELF']
+        for book_entry in shelf.get('content', []):
+            if 'DIVIDER' in book_entry:
+                continue
+            book_name = book_entry['BOOK']
+            for page_entry in book_entry.get('content', []):
+                if 'DIVIDER' in page_entry:
+                    continue
+                page_name = page_entry['PAGE']
+                filepath = Path(db_path) / 'data' / Path(page_entry['data'])
+                index[(shelf_name, book_name, page_name)] = filepath
+    return index
+
+
+def _parse_tabulated(data_str):
+    """Parse a refractiveindex.info tabulated DATA block into arrays."""
+    wavelengths = []
+    col1 = []
+    col2 = []
+    for row in data_str.strip().split('\n'):
+        parts = row.split()
+        if not parts:
+            continue
+        wavelengths.append(float(parts[0]))
+        col1.append(float(parts[1]))
+        if len(parts) > 2:
+            col2.append(float(parts[2]))
+    wl = np.array(wavelengths, dtype=config.precision)
+    c1 = np.array(col1, dtype=config.precision)
+    c2 = np.array(col2, dtype=config.precision) if col2 else None
+    return wl, c1, c2
+
+
+def _ensure_database_downloaded(db_path):
+    """Populate db_path via the refractiveindex package's auto-download.
+
+    Uses only the package's public API: constructing a material runs its
+    _ensure_database (which downloads when the folder is absent) before the
+    catalog key check, so a deliberately missing key raises KeyError after the
+    folder is in place.
+    """
+    try:
+        from refractiveindex import RefractiveIndexMaterial as _Probe
+    except ImportError as exc:
+        raise ImportError(
+            'the refractiveindex.info database is absent and downloading it '
+            'requires the optional refractiveindex package; install it with '
+            "pip install 'prysm[glass]' (or pip install refractiveindex), or "
+            'pass an existing db_path'
+        ) from exc
+    # The probe exists only to trigger the package's auto-download side effect.
+    # The deliberately-bogus key raises once the folder is in place (KeyError in
+    # current versions); tolerate any error and verify the outcome directly, so
+    # a changed exception type cannot defeat an otherwise-successful download.
+    try:
+        _Probe(
+            '__prysm__', '__prysm__', '__prysm__',
+            db_path=str(db_path), auto_download=True,
+        )
+    except Exception:
+        pass
+    if not (Path(db_path) / 'catalog-nk.yml').exists():
+        raise FileNotFoundError(
+            f'auto-download did not populate the refractiveindex.info database '
+            f'at {db_path}'
         )
 
 
+class RefractiveIndexMaterial(TabulatedMaterial):
+    """Tabulated material loaded from a refractiveindex.info data file."""
+
+    def __init__(self, name, wavelengths, n, *, k=None, variant=None,
+                 catalog='RII', source=None, metadata=None):
+        # a single-sample page is a constant index: nearest interpolation with
+        # extrapolation returns that lone value at any wavelength, instead of
+        # failing the >=2-samples requirement for linear interpolation.
+        single = len(wavelengths) < 2
+        super().__init__(
+            name,
+            wavelengths,
+            n,
+            k=k,
+            catalog=catalog,
+            variant=variant,
+            source=source,
+            license='CC0',
+            metadata=dict(metadata or {}),
+            missing_k='zero' if k is None else 'raise',
+            method='nearest' if single else None,
+            extrapolate=bool(single),
+        )
+        self._page_info_builder = _rii_page_info
+
+
+def _load_rii_material(shelf, book, page, filepath, namespace):
+    """Parse one refractiveindex.info YAML file into a prysm material."""
+    import yaml
+    with open(filepath, 'rt', encoding='utf-8') as f:
+        doc = yaml.load(f, Loader=yaml.BaseLoader)
+
+    metadata = {'shelf': shelf, 'book': book, 'page': page, 'filepath': str(filepath)}
+    n_grid = None
+    k_grid = None
+    formula = None
+    for data in doc['DATA']:
+        parts = data['type'].split()
+        category = parts[0]
+        subtype = parts[1] if len(parts) > 1 else None
+        if category == 'tabulated':
+            wl, c1, c2 = _parse_tabulated(data['data'])
+            if subtype == 'n':
+                n_grid = (wl, c1)
+            elif subtype == 'k':
+                k_grid = (wl, c1)
+            elif subtype == 'nk':
+                n_grid = (wl, c1)
+                k_grid = (wl, c2)
+        elif category == 'formula':
+            fid = int(subtype)
+            coeffs = tuple(float(s) for s in data['coefficients'].split())
+            rng = data.get('range', data.get('wavelength_range'))
+            lo, hi = (float(x) for x in rng.split())
+            formula = (fid, coeffs, lo, hi)
+
+    if formula is not None:
+        fid, coeffs, lo, hi = formula
+        k_formula = None
+        if k_grid is not None:
+            # keep n analytic and interpolate the tabulated k, rather than
+            # degrading n to samples on the k grid.
+            wlk, kk = k_grid
+
+            def _k_from_table(wvl):
+                return np.interp(wvl, wlk, kk)
+
+            k_formula = _k_from_table
+        material = FormulaMaterial(
+            book,
+            partial(riinfo_formula, fid),
+            coeffs,
+            k_formula=k_formula,
+            catalog=namespace,
+            variant=page,
+            source=str(filepath),
+            license='CC0',
+            wavelength_range=(lo, hi),
+            metadata=metadata,
+        )
+        material._page_info_builder = _rii_page_info
+        return material
+
+    if n_grid is None:
+        raise ValueError(f'refractiveindex.info material {filepath} has no n data')
+    wl, nn = n_grid
+    kk = None
+    if k_grid is not None:
+        wlk, kk_raw = k_grid
+        if len(wlk) == len(wl) and np.all(wlk == wl):
+            kk = kk_raw
+        else:
+            kk = np.interp(wl, wlk, kk_raw).astype(wl.dtype, copy=False)
+    return RefractiveIndexMaterial(
+        book, wl, nn, k=kk, variant=page, catalog=namespace,
+        source=str(filepath), metadata=metadata,
+    )
+
+
 class RefractiveIndexCatalog(Catalog):
-    """Catalog adapter for refractiveindex.info sqlite data."""
+    """Catalog adapter over the refractiveindex.info YAML database."""
 
-    def __init__(self, records, *, sqlite_path, cache_root=None, namespace='RII'):
-        self.sqlite_path = Path(sqlite_path)
-        self.cache_root = Path(cache_root) if cache_root is not None else self.sqlite_path.parent
+    def __init__(self, records, *, db_path=None, namespace='RII'):
+        self.db_path = None if db_path is None else Path(db_path)
         self.namespace = namespace
-        records = list(records)
-        for record in records:
-            record.loader = lambda record=record: self.material_for_pageid(
-                record.metadata['pageid']
-            )
         super().__init__(records, namespace=namespace)
-
-    @classmethod
-    def from_cache(cls, cache_root=None, *, download=False, namespace='RII'):
-        """Load the catalog from _riidb, optionally preparing the cache first."""
-        cache_root = Path(cache_root) if cache_root is not None else default_cache_root()
-        sqlite_path = cache_root / 'refractive.db'
-        if not sqlite_path.exists() and download:
-            cache_root.mkdir(parents=True, exist_ok=True)
-            _try_external_download(cache_root)
-        if not sqlite_path.exists():
-            raise FileNotFoundError(
-                f'refractiveindex.info sqlite cache not found at {sqlite_path}'
-            )
-        return cls.from_sqlite(sqlite_path, cache_root=cache_root, namespace=namespace)
-
-    @classmethod
-    def from_sqlite(cls, sqlite_path, *, cache_root=None, namespace='RII'):
-        """Load metadata records from an existing refractive.db file."""
-        sqlite_path = Path(sqlite_path)
-        with sqlite3.connect(sqlite_path) as con:
-            con.row_factory = sqlite3.Row
-            rows = con.execute(
-                """
-                SELECT pageid, shelf, book, page, filepath,
-                       hasrefractive, hasextinction, rangeMin, rangeMax, points
-                FROM pages
-                WHERE hasrefractive = 1
-                ORDER BY shelf, book, page
-                """
-            ).fetchall()
-        records = [_record_from_page(row, namespace, sqlite_path) for row in rows]
-        return cls(records, sqlite_path=sqlite_path, cache_root=cache_root, namespace=namespace)
-
-    def material_for_pageid(self, pageid):
-        """Load one material by refractiveindex.info page id."""
-        record = self._record_for_pageid(pageid)
-        with sqlite3.connect(self.sqlite_path) as con:
-            n_rows = con.execute(
-                """
-                SELECT wave, refindex
-                FROM refractiveindex
-                WHERE pageid = ?
-                ORDER BY wave
-                """,
-                (pageid,),
-            ).fetchall()
-            k_rows = con.execute(
-                """
-                SELECT wave, coeff
-                FROM extcoeff
-                WHERE pageid = ?
-                ORDER BY wave
-                """,
-                (pageid,),
-            ).fetchall()
-        if not n_rows:
-            raise KeyError(f'no refractive index samples for pageid {pageid}')
-        wavelengths = np.array([row[0] for row in n_rows], dtype=config.precision)
-        n = np.array([row[1] for row in n_rows], dtype=config.precision)
-        k = None
-        if k_rows:
-            k_wavelengths = np.array([row[0] for row in k_rows], dtype=config.precision)
-            k_values = np.array([row[1] for row in k_rows], dtype=config.precision)
-            if len(k_wavelengths) == len(wavelengths) and np.all(k_wavelengths == wavelengths):
-                k = k_values
-            else:
-                k = np.interp(wavelengths, k_wavelengths, k_values).astype(
-                    wavelengths.dtype,
-                    copy=False,
-                )
-        return RefractiveIndexMaterial(record, wavelengths, n, k=k)
-
-    def _record_for_pageid(self, pageid):
+        # normalized-name -> records index so material_for_name is an O(1) hit
+        # plus a rank over same-name candidates, not a normalize-and-scan over
+        # every page on each lookup.
+        index = {}
         for record in self.records():
-            if record.metadata['pageid'] == pageid:
-                return record
-        raise KeyError(f'no refractiveindex.info pageid {pageid}')
+            for norm in _record_match_names(record):
+                index.setdefault(norm, []).append(record)
+        self._records_by_norm = index
+
+    @classmethod
+    def from_database(cls, db_path=None, *, download=True, namespace='RII'):
+        """Build a catalog from the ri.info database, downloading if absent."""
+        db_path = Path(db_path) if db_path is not None else default_db_path()
+        if not (db_path / 'catalog-nk.yml').exists():
+            if download:
+                _ensure_database_downloaded(db_path)
+            else:
+                raise FileNotFoundError(
+                    f'refractiveindex.info database not found at {db_path}'
+                )
+        index = _load_catalog(db_path)
+        records = [
+            _rii_record(shelf, book, page, filepath, namespace)
+            for (shelf, book, page), filepath in index.items()
+        ]
+        return cls(records, db_path=db_path, namespace=namespace)
 
     def material_for_name(self, name, **qualifiers):
-        """Resolve one material by material name plus shelf/book/page qualifiers."""
+        """Resolve a glass name to its best-ranked refractiveindex.info page."""
         catalog = qualifiers.pop('catalog', qualifiers.pop('namespace', None))
         if catalog is not None and _normalize_name(catalog) != _normalize_name(self.namespace):
             raise KeyError(f'no material named {name!r} in catalog {catalog!r}')
         shelf = qualifiers.pop('shelf', None)
         book = qualifiers.pop('book', None)
         page = qualifiers.pop('page', None)
+        norm = _normalize_name(name)
         matches = []
-        for record in self.records():
-            metadata = record.metadata
-            if not _rii_name_matches(record, name):
+        for record in self._records_by_norm.get(norm, ()):
+            meta = record.metadata
+            if shelf is not None and _normalize_name(meta.get('shelf') or '') != _normalize_name(shelf):
                 continue
-            if shelf is not None and _normalize_name(metadata['shelf']) != _normalize_name(shelf):
+            if book is not None and _normalize_name(meta.get('book') or '') != _normalize_name(book):
                 continue
-            if page is not None and _normalize_name(metadata['page']) != _normalize_name(page):
+            if page is not None and _normalize_name(meta.get('page') or '') != _normalize_name(page):
                 continue
-            if book is not None and not (
-                _normalize_name(metadata['book']) == _normalize_name(book)
-                or _normalize_name(metadata['page']) == _normalize_name(book)
-            ):
-                continue
-            if any(metadata.get(key) != value for key, value in qualifiers.items()):
+            if any(meta.get(key) != value for key, value in qualifiers.items()):
                 continue
             matches.append(record)
         if not matches:
             raise KeyError(f'no refractiveindex.info material named {name!r}')
-        if len(matches) > 1:
-            raise AmbiguousMaterialError(name, matches)
-        return matches[0].load()
+        best = min(matches, key=lambda record: _rank_page(record, name))
+        return best.load()
 
 
-def _rii_name_matches(record, name):
-    norm = _normalize_name(name)
-    if _normalize_name(record.name) == norm:
-        return True
-    return any(_normalize_name(alias) == norm for alias in record.aliases)
+def _record_match_names(record):
+    """Normalized names a record can be looked up by (name, variant, aliases)."""
+    candidates = (record.name, record.variant) + tuple(record.aliases)
+    return {_normalize_name(candidate) for candidate in candidates if candidate}
 
 
-def _try_external_download(cache_root):
-    try:
-        from refractivesqlite import Database
-    except ImportError as exc:
-        raise ImportError(
-            'download=True requires the refractivesqlite package'
-        ) from exc
-    Database(cache_root / 'refractive.db').create_database_from_url()
+def _rii_record(shelf, book, page, filepath, namespace):
+    aliases = tuple(item for item in (page, str(filepath)) if item and item != book)
+    return MaterialRecord(
+        name=book,
+        catalog=namespace,
+        variant=page,
+        aliases=aliases,
+        source=str(filepath),
+        license='CC0',
+        material_class='RefractiveIndexMaterial',
+        metadata={'shelf': shelf, 'book': book, 'page': page, 'filepath': str(filepath)},
+        loader=partial(_load_rii_material, shelf, book, page, filepath, namespace),
+        material_id=f'{namespace}:{shelf}:{book}:{page}',
+    )

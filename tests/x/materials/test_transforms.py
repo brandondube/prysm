@@ -17,6 +17,7 @@ def test_material_correction_receives_temperature():
             [1.5, 1.5],
             [1.5, 1.5],
         ],
+        layout=('temperature', 'wavelength'),
     )
     correction = TemperatureGridMaterial(
         'dn_dT',
@@ -26,6 +27,7 @@ def test_material_correction_receives_temperature():
             [1e-3, 2e-3],
             [3e-3, 4e-3],
         ],
+        layout=('temperature', 'wavelength'),
     )
     shifted = TemperatureShiftedMaterial(parent, correction, reference_temperature=100)
 

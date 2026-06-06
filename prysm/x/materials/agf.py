@@ -1,15 +1,10 @@
 """Standalone Zemax AGF material catalog backend."""
 
+from functools import partial
 from pathlib import Path
 
-from prysm.mathops import np
-from prysm.conf import config
-
 from .catalog import Catalog
-from .core import (
-    MaterialRecord,
-    _normalize_name,
-)
+from .core import FormulaMaterial, _normalize_name
 from .formulas import agf_formula
 
 
@@ -65,117 +60,71 @@ def _aliases_for_agf_name(name):
     return tuple(aliases)
 
 
-class AGFMaterial:
-    """Material parsed from one AGF NM record."""
+def _agf_page_info(material):
+    """page_info shape for an AGF-sourced material."""
+    wr = material.wavelength_range
+    lo, hi = wr if wr is not None else (None, None)
+    catalog = material.catalog
+    return {
+        'shelf': 'agf',
+        'book': f'{catalog}-agf' if catalog else 'agf',
+        'page': material.name,
+        'filepath': material.source or '',
+        'catalog': catalog,
+        'formula': material.metadata.get('formula'),
+        'rangeMin': lo,
+        'rangeMax': hi,
+    }
 
-    __slots__ = (
-        'name', 'catalog', 'formula', 'coefficients', 'wavelength_min',
-        'wavelength_max', 'metadata', 'source_path', 'variant', 'source',
-        'citation', 'license', 'process', 'temperature_range', 'page_info',
-    )
 
-    def __init__(
-        self,
+def AGFMaterial(
+    name,
+    catalog,
+    formula,
+    coefficients,
+    *,
+    wavelength_min=None,
+    wavelength_max=None,
+    metadata=None,
+    source_path=None,
+    variant=None,
+    source=None,
+    citation=None,
+    license=None,
+    process=None,
+    temperature_range=None,
+):
+    """Build a FormulaMaterial from one parsed AGF NM record.
+
+    AGF glass is just a coefficient-and-formula material, so it routes through
+    the shared FormulaMaterial kernel: range validation, metrics, and k/nk all
+    come from BaseMaterial.  Kept as a factory (formerly a slots class) so the
+    public AGFMaterial name still resolves.
+    """
+    catalog = catalog or ''
+    coeffs = tuple(float(c) for c in coefficients)
+    wmin = None if wavelength_min is None else float(wavelength_min)
+    wmax = None if wavelength_max is None else float(wavelength_max)
+    meta = dict(metadata) if metadata is not None else {}
+    meta.setdefault('formula', formula)
+    meta.setdefault('aliases', _aliases_for_agf_name(name))
+    meta.setdefault('material_class', 'AGFMaterial')
+    material = FormulaMaterial(
         name,
-        catalog,
-        formula,
-        coefficients,
-        *,
-        wavelength_min=None,
-        wavelength_max=None,
-        metadata=None,
-        source_path=None,
-        variant=None,
-        source=None,
-        citation=None,
-        license=None,
-        process=None,
-        temperature_range=None,
-    ):
-        self.name = name
-        self.catalog = catalog or ''
-        self.formula = formula
-        self.coefficients = tuple(float(c) for c in coefficients)
-        self.wavelength_min = None if wavelength_min is None else float(wavelength_min)
-        self.wavelength_max = None if wavelength_max is None else float(wavelength_max)
-        self.source_path = source_path
-        self.variant = variant
-        self.source = source or source_path
-        self.citation = citation
-        self.license = license
-        self.process = process
-        self.temperature_range = temperature_range
-        self.metadata = dict(metadata) if metadata is not None else {}
-        self.metadata.setdefault('formula', self.formula)
-        self.metadata.setdefault('aliases', _aliases_for_agf_name(self.name))
-        self.page_info = {
-            'shelf': 'agf',
-            'book': f'{self.catalog}-agf' if self.catalog else 'agf',
-            'page': self.name,
-            'filepath': self.source_path or '',
-            'catalog': self.catalog,
-            'formula': self.formula,
-            'rangeMin': self.wavelength_min,
-            'rangeMax': self.wavelength_max,
-        }
-
-    @property
-    def wavelength_range(self):
-        """Return AGF LD wavelength limits in microns."""
-        return self.wavelength_min, self.wavelength_max
-
-    def __call__(self, wvl_um):
-        """Alias for n(wvl_um)."""
-        return self.n(wvl_um)
-
-    def _validate_wavelengths(self, wvl):
-        lo, hi = self.wavelength_range
-        if lo is None or hi is None:
-            return
-        out_of_range = np.less(wvl, lo) | np.greater(wvl, hi)
-        if np.any(out_of_range):
-            raise ValueError(
-                f'wavelength for {self.name} outside AGF range {lo:g} to {hi:g} um'
-            )
-
-    def n(self, wvl_um, temperature=None):
-        """Return refractive index from the AGF dispersion formula."""
-        self._validate_wavelengths(wvl_um)
-        return agf_formula(self.formula, self.coefficients, wvl_um, self.name)
-
-    def k(self, wvl_um, temperature=None):
-        """Return zero extinction for AGF glass records."""
-        self._validate_wavelengths(wvl_um)
-        if np.isscalar(wvl_um):
-            return wvl_um * 0
-        if hasattr(wvl_um, 'shape'):
-            return np.zeros_like(wvl_um)
-        return np.zeros(np.shape(wvl_um), dtype=config.precision)
-
-    def nk(self, wvl_um, temperature=None):
-        """Return complex refractive index n + 1j*k."""
-        return self.n(wvl_um, temperature=temperature) + 1j * self.k(
-            wvl_um, temperature=temperature
-        )
-
-    def record(self):
-        """Return a lazy material record for catalog indexing."""
-        metadata = dict(self.metadata)
-        return MaterialRecord(
-            name=self.name,
-            catalog=self.catalog,
-            variant=self.variant,
-            aliases=metadata.get('aliases', ()),
-            source=self.source_path,
-            citation=self.citation,
-            license=self.license,
-            wavelength_range=self.wavelength_range,
-            temperature_range=self.temperature_range,
-            process=self.process,
-            material_class=type(self).__name__,
-            metadata=metadata,
-            loader=lambda: self,
-        )
+        partial(agf_formula, formula, name=name),
+        coeffs,
+        catalog=catalog,
+        variant=variant,
+        source=source or source_path,
+        citation=citation,
+        license=license,
+        wavelength_range=(wmin, wmax),
+        temperature_range=temperature_range,
+        process=process,
+        metadata=meta,
+    )
+    material._page_info_builder = _agf_page_info
+    return material
 
 
 class AGFCatalog(Catalog):

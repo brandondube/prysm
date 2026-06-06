@@ -1,6 +1,7 @@
 """Searchable material registry with computed-property filters."""
 
 from .catalog import CatalogChain, _record_matches_filters, _record_matches_query
+from .core import MissingKError
 
 
 _COMPUTED_CRITERIA = {
@@ -104,50 +105,36 @@ class MaterialRegistry:
 
     def _metric(self, record, metric, args):
         key = (record.material_id, metric, args)
-        if key in self._metric_cache:
-            return self._metric_cache[key]
+        try:
+            if key in self._metric_cache:
+                return self._metric_cache[key]
+        except TypeError:
+            # array-valued criterion args are unhashable; skip the cache.
+            key = None
         material = record.load()
         if metric == 'n_at':
             wvl, temperature = args
-            if hasattr(material, 'n_at'):
-                value = material.n_at(wvl, temperature=temperature)
-            else:
-                value = material.n(wvl, temperature=temperature)
+            value = material.n_at(wvl, temperature=temperature)
         elif metric == 'k_at':
             wvl, temperature = args
-            value = material.k(wvl, temperature=temperature)
+            try:
+                value = material.k(wvl, temperature=temperature)
+            except MissingKError:
+                # no extinction data -> treat as transparent for the k_max filter.
+                value = 0.0
         elif metric == 'dispersion':
             wvl1, wvl2, temperature = args
-            if hasattr(material, 'dispersion'):
-                value = material.dispersion(wvl1, wvl2, temperature=temperature)
-            else:
-                value = material.n(wvl1, temperature=temperature) - material.n(
-                    wvl2, temperature=temperature
-                )
+            value = material.dispersion(wvl1, wvl2, temperature=temperature)
         elif metric == 'partial_dispersion':
             w1, w2, w3, w4, temperature = args
-            if hasattr(material, 'partial_dispersion'):
-                value = material.partial_dispersion(w1, w2, w3, w4, temperature=temperature)
-            else:
-                num = material.n(w1, temperature=temperature) - material.n(
-                    w2, temperature=temperature
-                )
-                den = material.n(w3, temperature=temperature) - material.n(
-                    w4, temperature=temperature
-                )
-                value = num / den
+            value = material.partial_dispersion(w1, w2, w3, w4, temperature=temperature)
         elif metric == 'abbe':
             ws, wc, wl, temperature = args
-            if hasattr(material, 'abbe'):
-                value = material.abbe(ws, wc, wl, temperature=temperature)
-            else:
-                ns = material.n(ws, temperature=temperature)
-                nc = material.n(wc, temperature=temperature)
-                nl = material.n(wl, temperature=temperature)
-                value = (nc - 1) / (ns - nl)
+            value = material.abbe(ws, wc, wl, temperature=temperature)
         else:
             raise ValueError(f'unknown metric {metric!r}')
-        self._metric_cache[key] = value
+        if key is not None:
+            self._metric_cache[key] = value
         return value
 
 

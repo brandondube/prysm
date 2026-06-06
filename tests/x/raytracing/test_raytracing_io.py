@@ -1,11 +1,14 @@
 """Tests for the Zemax / Code V IO readers and the materials registry."""
 import os
 import tempfile
+import textwrap
+from collections import OrderedDict
 
 import numpy as np
 import pytest
 
 from prysm.x import materials
+from prysm.x.materials import MaterialRangeError, RefractiveIndexCatalog
 from prysm.x.raytracing.io import read_zmx, read_seq, SurfaceSpec, build_surface
 from prysm.x.raytracing.surfaces import (
     Conic, EvenAsphere, Plane, Toroid, Biconic,
@@ -35,64 +38,60 @@ def test_surface_spec_builder_constructs_shape_surface():
 # materials
 # ============================================================================
 
-class FakeMaterial:
-    def __init__(self, page, samples):
-        self.page = page
-        self.samples = np.asarray(samples, dtype=float)
+# N-BK7 Sellmeier (ri.info formula 2); n(0.587) ~ 1.5169.
+_NBK7_FORMULA = """\
+    DATA:
+      - type: formula 2
+        wavelength_range: 0.3 2.5
+        coefficients: 0 1.03961212 0.00600069867 0.231792344 0.0200179144 1.01046945 103.560653
+"""
 
-    def get_page_info(self):
-        return dict(self.page)
-
-    def get_refractiveindex(self, wvl, unit='nm'):
-        assert unit == 'um'
-        n = np.interp(wvl, self.samples[:, 0], self.samples[:, 1],
-                      left=np.nan, right=np.nan)
-        if np.isscalar(wvl):
-            return float(n)
-        return n
-
-
-class FakeDatabase:
-    def __init__(self, rows):
-        self.rows = []
-        for pageid, shelf, book, page, samples in rows:
-            self.rows.append({
-                'pageid': pageid,
-                'shelf': shelf,
-                'book': book,
-                'page': page,
-                'filepath': '',
-                'hasrefractive': 1,
-                'hasextinction': 0,
-                'rangeMin': samples[0][0],
-                'rangeMax': samples[-1][0],
-                'points': len(samples),
-                'samples': samples,
-            })
-
-    def search_custom(self, sql, params=None):
-        key, norm = params
-        matches = []
-        for row in self.rows:
-            page = row['page'].upper()
-            page_norm = ''.join(ch for ch in page if ch not in '-_ ')
-            if page == key.upper() or page_norm == norm:
-                matches.append(tuple(row[k] for k in (
-                    'pageid', 'shelf', 'book', 'page', 'filepath',
-                    'hasrefractive', 'hasextinction', 'rangeMin',
-                    'rangeMax', 'points',
-                )))
-        return matches
-
-    def get_material(self, pageid):
-        for row in self.rows:
-            if row['pageid'] == pageid:
-                return FakeMaterial(row, row['samples'])
-        raise KeyError(pageid)
+_SBSL7_TAB = """\
+    DATA:
+      - type: tabulated n
+        data: |
+          0.4 1.53
+          0.6 1.52
+          0.8 1.51
+"""
 
 
-def _make_database(rows):
-    return FakeDatabase(rows)
+def _tabulated_n(samples):
+    rows = '\n'.join(f'      {w} {n}' for w, n in samples)
+    return 'DATA:\n  - type: tabulated n\n    data: |\n' + rows + '\n'
+
+
+def _write_rii_catalog(root, entries):
+    """Write a tiny ri.info-shaped db folder and return a catalog over it.
+
+    entries: list of (shelf, book, page, body) tuples.
+    """
+    shelves = OrderedDict()
+    for shelf, book, page, body in entries:
+        shelves.setdefault(shelf, OrderedDict()).setdefault(book, []).append((page, body))
+    lines = []
+    for shelf, books in shelves.items():
+        lines += [f'- SHELF: {shelf}', '  content:']
+        for book, pages in books.items():
+            lines += [f'    - BOOK: {book}', '      content:']
+            for page, body in pages:
+                rel = f'{shelf}/{book}/{page}.yml'
+                lines += [f'        - PAGE: {page}', f'          data: {rel}']
+                path = root / 'data' / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(textwrap.dedent(body))
+    (root / 'catalog-nk.yml').write_text('\n'.join(lines) + '\n')
+    return RefractiveIndexCatalog.from_database(db_path=root, download=False)
+
+
+@pytest.fixture
+def refractiveindex_database(tmp_path):
+    """A refractiveindex.info catalog resolving BK7 / N-BK7 / S-BSL7."""
+    return _write_rii_catalog(tmp_path, [
+        ('specs', 'SCHOTT-optical', 'BK7', _NBK7_FORMULA),
+        ('specs', 'SCHOTT-optical', 'N-BK7', _NBK7_FORMULA),
+        ('specs', 'OHARA-optical', 'S-BSL7', _SBSL7_TAB),
+    ])
 
 
 def test_air_returns_one():
@@ -125,46 +124,31 @@ def test_lookup_requires_database_object():
         materials.lookup('BK7', database='/tmp/refractive.db')
 
 
-@pytest.fixture(autouse=True)
-def refractiveindex_database(monkeypatch):
-    monkeypatch.setattr(materials, 'Database', FakeDatabase)
-    db = _make_database([
-        (1, 'specs', 'SCHOTT-optical', 'BK7',
-         [(0.4, 1.530849), (0.587, 1.5168), (0.8, 1.510776)]),
-        (2, 'specs', 'SCHOTT-optical', 'N-BK7',
-         [(0.4, 1.530849), (0.587, 1.5168), (0.8, 1.510776)]),
-        (3, 'specs', 'OHARA-optical', 'S-BSL7',
-         [(0.4, 1.53), (0.6, 1.52), (0.8, 1.51)]),
+def test_rii_glass_lookup_exact_codev_zemax_name(tmp_path):
+    cat = _write_rii_catalog(tmp_path, [
+        ('specs', 'OHARA-optical', 'S-BSL7', _SBSL7_TAB),
     ])
-    yield db
-
-
-def test_refractiveindex_sqlite_glass_lookup_exact_codev_zemax_name():
-    db = _make_database([
-        (1, 'specs', 'OHARA-optical', 'S-BSL7',
-         [(0.4, 1.53), (0.6, 1.52), (0.8, 1.51)]),
-    ])
-    f = materials.lookup('S-BSL7', database=db)
+    f = materials.lookup('S-BSL7', database=cat)
     np.testing.assert_allclose(float(f(0.5)), 1.525)
 
 
-def test_refractiveindex_sqlite_prefers_catalog_page_for_n_prefix():
-    db = _make_database([
-        (1, 'glass', 'BK7', 'N-BK7', [(0.5, 1.61), (0.6, 1.60)]),
-        (2, 'specs', 'SCHOTT-optical', 'N-BK7', [(0.5, 1.51), (0.6, 1.50)]),
+def test_rii_glass_lookup_prefers_catalog_page_for_n_prefix(tmp_path):
+    cat = _write_rii_catalog(tmp_path, [
+        ('glass', 'BK7', 'N-BK7', _tabulated_n([(0.5, 1.61), (0.6, 1.60)])),
+        ('specs', 'SCHOTT-optical', 'N-BK7', _NBK7_FORMULA),
     ])
-    f = materials.lookup('N-BK7', database=db)
-    np.testing.assert_allclose(float(f(0.55)), 1.505)
+    f = materials.lookup('N-BK7', database=cat)
     assert f.page_info['book'] == 'SCHOTT-optical'
+    assert f.page_info['page'] == 'N-BK7'
 
 
-def test_refractiveindex_sqlite_out_of_range_returns_nan():
-    db = _make_database([
-        (1, 'specs', 'OHARA-optical', 'S-BSL7',
-         [(0.4, 1.53), (0.6, 1.52), (0.8, 1.51)]),
+def test_rii_glass_out_of_range_raises(tmp_path):
+    cat = _write_rii_catalog(tmp_path, [
+        ('specs', 'OHARA-optical', 'S-BSL7', _SBSL7_TAB),
     ])
-    f = materials.lookup('S-BSL7', database=db)
-    assert np.isnan(f(0.3))
+    f = materials.lookup('S-BSL7', database=cat)
+    with pytest.raises(MaterialRangeError):
+        f(0.3)
 
 
 # ============================================================================

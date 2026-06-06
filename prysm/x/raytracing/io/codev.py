@@ -136,9 +136,10 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
     ----------
     path_or_text : str
     _is_text : bool
-    database : refractivesqlite.Database, optional
-        Required when any surface uses a real glass name. Air, blank, and
-        mirror surfaces do not need a database.
+    database : optional
+        A catalog object exposing material_for_name(name), or None to use the
+        refractiveindex.info database. Required when any surface uses a real
+        glass name; air, blank, and mirror surfaces do not need a database.
 
     Returns
     -------

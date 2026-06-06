@@ -86,12 +86,11 @@ class Catalog:
 
     @classmethod
     def from_materials(cls, materials, *, namespace=None):
-        """Build a catalog from material instances."""
+        """Build a catalog from material instances without mutating them."""
         records = []
         for material in materials:
-            if namespace is not None and not material.catalog:
-                material.catalog = namespace
-            records.append(material.record())
+            override = namespace if (namespace is not None and not material.catalog) else None
+            records.append(material.record(catalog=override))
         return cls(records, namespace=namespace)
 
     def records(self):
@@ -137,9 +136,12 @@ class CatalogChain:
         self.catalogs = tuple(catalogs)
 
     def records(self):
-        """Yield records from every catalog in chain order."""
-        for catalog in self.catalogs:
-            yield from catalog.records()
+        """Return records from every catalog in chain order (as a tuple)."""
+        return tuple(
+            record
+            for catalog in self.catalogs
+            for record in catalog.records()
+        )
 
     def search(self, query=None, **metadata_filters):
         """Search across all catalogs."""
