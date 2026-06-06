@@ -414,7 +414,7 @@ class Slices:
         self._p = None
         self._x = x
         self._y = y
-        self.center_y, self.center_x = np.argmin(abs(y)), np.argmin(abs(x))  # fftrange produced x/y, so argmin=center
+        self.center_y, self.center_x = np.argmin(abs(y)), np.argmin(abs(x))
         self.twosided = twosided
 
     def check_polar_calculated(self):

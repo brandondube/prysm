@@ -187,6 +187,8 @@ def decomposite_bayer(img, cfa='rggb'):
         g1 = img[top_right]
         g2 = img[bottom_left]
         r = img[bottom_right]
+    else:
+        raise ErrBadCFA
 
     return r, g1, g2, b
 

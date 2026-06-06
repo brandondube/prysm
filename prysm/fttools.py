@@ -199,7 +199,7 @@ class MDFT:
         self._adjoint_left_first = Ny * Mx * (My + Nx) <= My * Nx * (Mx + Ny)
 
     def __call__(self, ary):
-        """Apply the forward DFT to `ary`."""
+        """Apply the forward DFT to ary."""
         if not self._forward_left_first:
             out = ary @ self.Ex.T
             out = self.Ey @ out

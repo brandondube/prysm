@@ -222,9 +222,9 @@ def autocrop(data, px):
     cy, cx = (int(c) for c in com)
     w = px // 2
     aoi_y_l = cy - w
-    aoi_y_h = aoi_y_l + w
+    aoi_y_h = aoi_y_l + px
     aoi_x_l = cx - w
-    aoi_x_h = aoi_x_l + w
+    aoi_x_h = aoi_x_l + px
     return data[aoi_y_l:aoi_y_h, aoi_x_l:aoi_x_h]
 
 

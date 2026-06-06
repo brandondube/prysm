@@ -82,6 +82,7 @@ def add_psd_model(psd, fig=None, ax=None, invert_x=False,
         zorder = config.zorder
 
     u = psd.slices().x[0]
+    u2 = u
     if invert_x:
         u2 = u.copy()
         u2[0] = u2[1] / 4
@@ -98,6 +99,6 @@ def add_psd_model(psd, fig=None, ax=None, invert_x=False,
 
     line = psd_fcn(u2, **psd_fcn_kwargs)
 
-    ax.plot(u, line, lw=lw, color=color, alpha=alpha, zorder=zorder)
+    ax.plot(u, line, lw=lw, ls=ls, color=color, alpha=alpha, zorder=zorder)
 
     return fig, ax
