@@ -17,7 +17,7 @@ import pytest
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData, launch, raytrace, Sampling, Field
 from prysm.x.raytracing.surfaces import Conic, Plane
-from prysm.x.raytracing import materials as pmat
+from prysm.x import materials as pmat
 from prysm.x.raytracing.paraxial import first_order, entrance_pupil_z
 from prysm.x.raytracing import analysis as pa
 from prysm.x.raytracing.opt import rms_spot_radius

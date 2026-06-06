@@ -41,7 +41,7 @@ are stripped.
 import math
 
 from ..surfaces import Plane
-from .. import materials as _materials
+from ... import materials as _materials
 from ._indexing import fringe_to_nm, xy_j_to_mn
 from ._common import (
     fields_from_xy,

@@ -31,7 +31,7 @@ instead of read_zmx.
 from prysm.mathops import np
 
 from ..surfaces import Plane
-from .. import materials as _materials
+from ... import materials as _materials
 from ._indexing import noll_to_nm, xy_j_to_mn
 from ._common import (
     fields_from_xy,

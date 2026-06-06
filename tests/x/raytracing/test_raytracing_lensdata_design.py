@@ -8,7 +8,7 @@ from prysm.mathops import optimize
 
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import FRAUNHOFER_LINES_UM, LensData
-from prysm.x.raytracing import materials
+from prysm.x import materials
 from prysm.x.raytracing.design import EFL, Problem, RmsSpotRadius
 from prysm.x.raytracing.launch import Sampling, launch
 from prysm.x.raytracing.paraxial import effective_focal_length

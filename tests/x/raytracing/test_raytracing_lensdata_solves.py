@@ -6,7 +6,7 @@ import pytest
 
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import FRAUNHOFER_LINES_UM, LensData
-from prysm.x.raytracing import materials
+from prysm.x import materials
 from prysm.x.raytracing.design import EFL, Problem
 from prysm.x.raytracing.paraxial import (
     effective_focal_length,

@@ -148,6 +148,14 @@ class Shape:
     analytic_intersect = False
     finite_difference_step = None
 
+    # Self-describing DOF layout.  Editable shapes override these and add a
+    # from_params classmethod; LensData reads them off the class, and the
+    # presence of from_params is what "registers" a shape (deepening 02).
+    SCALAR_DOFS = ()
+    VECTOR_DOFS = ()
+    META_KEYS = ()
+    CATEGORIES = {}
+
     def __init__(self, **params):
         """Initialize a shape with parameter storage.
 
@@ -325,6 +333,16 @@ class Plane(Shape):
 
     analytic_intersect = True
 
+    SCALAR_DOFS = ()
+    VECTOR_DOFS = ()
+    META_KEYS = ()
+    CATEGORIES = {}
+
+    @classmethod
+    def from_params(cls, p):
+        """Rebuild a Plane from its parameter dict."""
+        return cls()
+
     def __init__(self):
         """Initialize a plane sag shape."""
         super().__init__()
@@ -379,6 +397,16 @@ class Sphere(Shape):
     """
 
     analytic_intersect = True
+
+    SCALAR_DOFS = ('c',)
+    VECTOR_DOFS = ()
+    META_KEYS = ()
+    CATEGORIES = {'curvature': ['c'], 'radius': ['c']}
+
+    @classmethod
+    def from_params(cls, p):
+        """Rebuild a Sphere from its parameter dict."""
+        return cls(p['c'])
 
     def __init__(self, c):
         """Initialize a spherical sag shape."""
@@ -442,6 +470,16 @@ class Conic(Shape):
     """
 
     analytic_intersect = True
+
+    SCALAR_DOFS = ('c', 'k')
+    VECTOR_DOFS = ()
+    META_KEYS = ()
+    CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k']}
+
+    @classmethod
+    def from_params(cls, p):
+        """Rebuild a Conic from its parameter dict."""
+        return cls(p['c'], p['k'])
 
     def __init__(self, c, k):
         """Initialize a conic sag shape."""
@@ -507,6 +545,16 @@ class OffAxisConic(Shape):
 
     analytic_intersect = True
 
+    SCALAR_DOFS = ('c', 'k')
+    VECTOR_DOFS = ()
+    META_KEYS = ('dx', 'dy')
+    CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k']}
+
+    @classmethod
+    def from_params(cls, p):
+        """Rebuild an OffAxisConic from its parameter dict."""
+        return cls(p['c'], p['k'], dx=p['dx'], dy=p['dy'])
+
     def __init__(self, c, k, dx=0.0, dy=0.0):
         """Initialize an off-axis conic sag shape."""
         super().__init__(c=c, k=k, dx=dx, dy=dy)
@@ -565,6 +613,17 @@ class EvenAsphere(ConicSeedMixin, Shape):
 
     """
 
+    SCALAR_DOFS = ('c', 'k')
+    VECTOR_DOFS = ('coefs',)
+    META_KEYS = ()
+    CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
+                  'coefs': ['coefs']}
+
+    @classmethod
+    def from_params(cls, p):
+        """Rebuild an EvenAsphere from its parameter dict."""
+        return cls(p['c'], p['k'], p['coefs'])
+
     def __init__(self, c, k, coefs):
         """Initialize an even asphere sag shape."""
         coefs = tuple(coefs) if coefs is not None else ()
@@ -605,6 +664,17 @@ class Q2D(ConicSeedMixin, Shape):
         Coordinate offsets applied during Q2D evaluation.
 
     """
+
+    SCALAR_DOFS = ('c', 'k')
+    VECTOR_DOFS = ()
+    META_KEYS = ('normalization_radius', 'cm0', 'ams', 'bms', 'dx', 'dy')
+    CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k']}
+
+    @classmethod
+    def from_params(cls, p):
+        """Rebuild a Q2D from its parameter dict."""
+        return cls(p['c'], p['k'], p['normalization_radius'],
+                   p['cm0'], p['ams'], p['bms'], dx=p['dx'], dy=p['dy'])
 
     def __init__(self, c, k, normalization_radius, cm0, ams, bms,
                  dx=0.0, dy=0.0):
@@ -663,6 +733,18 @@ class Zernike(ConicSeedMixin, Shape):
 
     """
 
+    SCALAR_DOFS = ('c', 'k')
+    VECTOR_DOFS = ('coefs',)
+    META_KEYS = ('normalization_radius', 'nms', 'norm')
+    CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
+                  'coefs': ['coefs']}
+
+    @classmethod
+    def from_params(cls, p):
+        """Rebuild a Zernike from its parameter dict."""
+        return cls(p['c'], p['k'], p['normalization_radius'],
+                   p['nms'], p['coefs'], norm=p['norm'])
+
     def __init__(self, c, k, normalization_radius, nms, coefs, norm=True):
         """Initialize a Zernike sag shape."""
         nms = tuple((int(nn), int(mm)) for nn, mm in nms)
@@ -714,6 +796,18 @@ class XY(ConicSeedMixin, Shape):
         Polynomial coefficients parallel to mns.
 
     """
+
+    SCALAR_DOFS = ('c', 'k')
+    VECTOR_DOFS = ('coefs',)
+    META_KEYS = ('normalization_radius', 'mns')
+    CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
+                  'coefs': ['coefs']}
+
+    @classmethod
+    def from_params(cls, p):
+        """Rebuild an XY polynomial shape from its parameter dict."""
+        return cls(p['c'], p['k'], p['normalization_radius'],
+                   p['mns'], p['coefs'])
 
     def __init__(self, c, k, normalization_radius, mns, coefs):
         """Initialize an x-y polynomial sag shape."""
@@ -767,6 +861,18 @@ class Chebyshev(ConicSeedMixin, Shape):
 
     """
 
+    SCALAR_DOFS = ('c', 'k')
+    VECTOR_DOFS = ('coefs',)
+    META_KEYS = ('x_norm', 'y_norm', 'mns')
+    CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
+                  'coefs': ['coefs']}
+
+    @classmethod
+    def from_params(cls, p):
+        """Rebuild a Chebyshev shape from its parameter dict."""
+        return cls(p['c'], p['k'], p['x_norm'], p['y_norm'],
+                   p['mns'], p['coefs'])
+
     def __init__(self, c, k, x_norm, y_norm, mns, coefs):
         """Initialize a Chebyshev sag shape."""
         mns = tuple((int(mm), int(nn)) for mm, nn in mns)
@@ -819,6 +925,18 @@ class Jacobi(ConicSeedMixin, Shape):
 
     """
 
+    SCALAR_DOFS = ('c', 'k')
+    VECTOR_DOFS = ('coefs',)
+    META_KEYS = ('normalization_radius', 'alpha', 'beta', 'ns')
+    CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
+                  'coefs': ['coefs']}
+
+    @classmethod
+    def from_params(cls, p):
+        """Rebuild a Jacobi shape from its parameter dict."""
+        return cls(p['c'], p['k'], p['normalization_radius'],
+                   p['alpha'], p['beta'], p['ns'], p['coefs'])
+
     def __init__(self, c, k, normalization_radius, alpha, beta, ns, coefs):
         """Initialize a radial Jacobi sag shape."""
         ns = tuple(int(nn) for nn in ns)
@@ -866,6 +984,17 @@ class Toroid(ConicSeedMixin, Shape):
 
     """
 
+    SCALAR_DOFS = ('c_x', 'c_y', 'k_y')
+    VECTOR_DOFS = ('coefs_y',)
+    META_KEYS = ()
+    CATEGORIES = {'curvature': ['c_x', 'c_y'], 'conic': ['k_y'],
+                  'coefs': ['coefs_y']}
+
+    @classmethod
+    def from_params(cls, p):
+        """Rebuild a Toroid from its parameter dict."""
+        return cls(p['c_x'], p['c_y'], p['k_y'], p['coefs_y'])
+
     def __init__(self, c_x, c_y, k_y, coefs_y):
         """Initialize a toroidal sag shape."""
         coefs_y = tuple(coefs_y) if coefs_y is not None else ()
@@ -909,6 +1038,16 @@ class Biconic(ConicSeedMixin, Shape):
         Conic constants in the x and y directions.
 
     """
+
+    SCALAR_DOFS = ('c_x', 'c_y', 'k_x', 'k_y')
+    VECTOR_DOFS = ()
+    META_KEYS = ()
+    CATEGORIES = {'curvature': ['c_x', 'c_y'], 'conic': ['k_x', 'k_y']}
+
+    @classmethod
+    def from_params(cls, p):
+        """Rebuild a Biconic from its parameter dict."""
+        return cls(p['c_x'], p['c_y'], p['k_x'], p['k_y'])
 
     def __init__(self, c_x, c_y, k_x, k_y):
         """Initialize a biconic sag shape."""

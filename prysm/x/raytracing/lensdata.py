@@ -18,7 +18,7 @@ import warnings
 from prysm.conf import config
 from prysm.mathops import np
 
-from .materials import MIRROR
+from ..materials import MIRROR
 from .surfaces import (
     Biconic,
     Chebyshev,
@@ -191,156 +191,51 @@ class _FrameState:
 # Shape adapters: how each Shape decomposes into numeric DOFs + static metadata
 # ---------------------------------------------------------------------------
 
-class _ShapeAdapter:
-    """Maps a Shape class to its numeric DOFs, static metadata, and builder.
+class _ShapeDescriptor:
+    """Reads a Shape's self-declared DOF layout off the class (deepening 02).
 
-    scalar_dofs are single-value DOFs; vector_dofs are flat coefficient
-    blocks of arbitrary (structurally fixed) length.  The assembled parameter
-    array for a row lays the scalars out first, in order, then concatenates the
-    vector blocks.  meta_keys name the static structural parameters that are
-    carried verbatim and are needed to rebuild the shape.  categories maps a
-    human category name ('curvature', 'conic', 'coefs', ...) to the DOF keys it
-    selects, for the bulk vary/freeze/constrain helpers.
+    A shape registers itself by declaring SCALAR_DOFS / VECTOR_DOFS / META_KEYS
+    / CATEGORIES class attributes and a from_params classmethod; this descriptor
+    surfaces those so SurfaceRow needs no private adapter table.  scalar_dofs are
+    single-value DOFs; vector_dofs are flat coefficient blocks of arbitrary
+    (structurally fixed) length.  The assembled parameter array for a row lays
+    the scalars out first, in order, then concatenates the vector blocks.
+    meta_keys name the static structural parameters carried verbatim and needed
+    to rebuild the shape.  categories maps a human category name ('curvature',
+    'conic', 'coefs', ...) to the DOF keys it selects, for the bulk
+    vary/freeze/constrain helpers.
 
     """
 
     __slots__ = ('cls', 'scalar_dofs', 'vector_dofs', 'meta_keys',
                  'categories', 'build')
 
-    def __init__(self, cls, scalar_dofs=(), vector_dofs=(), meta_keys=(),
-                 categories=None, build=None):
-        """Initialize an adapter.
-
-        Parameters
-        ----------
-        cls : type
-            Shape class handled by this adapter.
-        scalar_dofs : sequence of str, optional
-            Names of scalar shape parameters stored as independent DOFs.
-        vector_dofs : sequence of str, optional
-            Names of vector-valued shape parameters stored as flat DOF blocks.
-        meta_keys : sequence of str, optional
-            Names of static shape parameters copied verbatim.
-        categories : dict, optional
-            Mapping from category names to DOF names.
-        build : callable, optional
-            Function taking a parameter dictionary and returning a Shape.
-
-        """
+    def __init__(self, cls):
+        """Read the DOF descriptor off a registered Shape class."""
         self.cls = cls
-        self.scalar_dofs = tuple(scalar_dofs)
-        self.vector_dofs = tuple(vector_dofs)
-        self.meta_keys = tuple(meta_keys)
-        self.categories = dict(categories or {})
-        self.build = build
-
-
-_SHAPE_ADAPTERS = {
-    Plane: _ShapeAdapter(
-        Plane,
-        build=lambda p: Plane(),
-    ),
-    Sphere: _ShapeAdapter(
-        Sphere,
-        scalar_dofs=('c',),
-        categories={'curvature': ['c'], 'radius': ['c']},
-        build=lambda p: Sphere(p['c']),
-    ),
-    Conic: _ShapeAdapter(
-        Conic,
-        scalar_dofs=('c', 'k'),
-        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k']},
-        build=lambda p: Conic(p['c'], p['k']),
-    ),
-    OffAxisConic: _ShapeAdapter(
-        OffAxisConic,
-        scalar_dofs=('c', 'k'),
-        meta_keys=('dx', 'dy'),
-        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k']},
-        build=lambda p: OffAxisConic(p['c'], p['k'], dx=p['dx'], dy=p['dy']),
-    ),
-    EvenAsphere: _ShapeAdapter(
-        EvenAsphere,
-        scalar_dofs=('c', 'k'),
-        vector_dofs=('coefs',),
-        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
-                    'coefs': ['coefs']},
-        build=lambda p: EvenAsphere(p['c'], p['k'], p['coefs']),
-    ),
-    Q2D: _ShapeAdapter(
-        Q2D,
-        scalar_dofs=('c', 'k'),
-        meta_keys=('normalization_radius', 'cm0', 'ams', 'bms', 'dx', 'dy'),
-        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k']},
-        build=lambda p: Q2D(p['c'], p['k'], p['normalization_radius'],
-                               p['cm0'], p['ams'], p['bms'],
-                               dx=p['dx'], dy=p['dy']),
-    ),
-    Zernike: _ShapeAdapter(
-        Zernike,
-        scalar_dofs=('c', 'k'),
-        vector_dofs=('coefs',),
-        meta_keys=('normalization_radius', 'nms', 'norm'),
-        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
-                    'coefs': ['coefs']},
-        build=lambda p: Zernike(p['c'], p['k'], p['normalization_radius'],
-                                   p['nms'], p['coefs'], norm=p['norm']),
-    ),
-    XY: _ShapeAdapter(
-        XY,
-        scalar_dofs=('c', 'k'),
-        vector_dofs=('coefs',),
-        meta_keys=('normalization_radius', 'mns'),
-        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
-                    'coefs': ['coefs']},
-        build=lambda p: XY(p['c'], p['k'], p['normalization_radius'],
-                              p['mns'], p['coefs']),
-    ),
-    Chebyshev: _ShapeAdapter(
-        Chebyshev,
-        scalar_dofs=('c', 'k'),
-        vector_dofs=('coefs',),
-        meta_keys=('x_norm', 'y_norm', 'mns'),
-        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
-                    'coefs': ['coefs']},
-        build=lambda p: Chebyshev(p['c'], p['k'], p['x_norm'], p['y_norm'],
-                                     p['mns'], p['coefs']),
-    ),
-    Jacobi: _ShapeAdapter(
-        Jacobi,
-        scalar_dofs=('c', 'k'),
-        vector_dofs=('coefs',),
-        meta_keys=('normalization_radius', 'alpha', 'beta', 'ns'),
-        categories={'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
-                    'coefs': ['coefs']},
-        build=lambda p: Jacobi(p['c'], p['k'], p['normalization_radius'],
-                                  p['alpha'], p['beta'], p['ns'], p['coefs']),
-    ),
-    Toroid: _ShapeAdapter(
-        Toroid,
-        scalar_dofs=('c_x', 'c_y', 'k_y'),
-        vector_dofs=('coefs_y',),
-        categories={'curvature': ['c_x', 'c_y'], 'conic': ['k_y'],
-                    'coefs': ['coefs_y']},
-        build=lambda p: Toroid(p['c_x'], p['c_y'], p['k_y'], p['coefs_y']),
-    ),
-    Biconic: _ShapeAdapter(
-        Biconic,
-        scalar_dofs=('c_x', 'c_y', 'k_x', 'k_y'),
-        categories={'curvature': ['c_x', 'c_y'], 'conic': ['k_x', 'k_y']},
-        build=lambda p: Biconic(p['c_x'], p['c_y'], p['k_x'], p['k_y']),
-    ),
-}
+        self.scalar_dofs = tuple(cls.SCALAR_DOFS)
+        self.vector_dofs = tuple(cls.VECTOR_DOFS)
+        self.meta_keys = tuple(cls.META_KEYS)
+        self.categories = {k: list(v) for k, v in cls.CATEGORIES.items()}
+        self.build = cls.from_params
 
 
 def _adapter_for(shape):
-    try:
-        return _SHAPE_ADAPTERS[type(shape)]
-    except KeyError:
+    """Return the DOF descriptor for a shape, or raise if it is unregistered.
+
+    A shape is registered when its class declares a from_params classmethod
+    (alongside its SCALAR_DOFS / VECTOR_DOFS / META_KEYS / CATEGORIES); the
+    descriptor data lives on the shape class itself, not in a table here.
+
+    """
+    cls = type(shape)
+    if not hasattr(cls, 'from_params'):
         raise TypeError(
-            f'shape {type(shape).__name__} is not registered with LensData; '
-            f'add a _ShapeAdapter for it in lensdata._SHAPE_ADAPTERS'
-        ) from None
+            f'shape {cls.__name__} is not registered with LensData; declare '
+            f'SCALAR_DOFS / VECTOR_DOFS / META_KEYS / CATEGORIES and a '
+            f'from_params classmethod on the shape class'
+        )
+    return _ShapeDescriptor(cls)
 
 
 def _bounds_for_dof(nominal, lo, hi, relative, is_radius):
@@ -666,8 +561,11 @@ class SurfaceRow:
     def build_shape(self):
         """Rebuild the Shape object from the current parameter array + meta."""
         p = dict(self.meta)
+        scalar = set(self.adapter.scalar_dofs)
         for key, (start, length) in self.key_offsets.items():
-            if length == 1:
+            # A length-1 vector DOF must stay a length-1 block, not collapse to
+            # a scalar; distinguish by role, not by length.
+            if key in scalar:
                 p[key] = self.params[start]
             else:
                 p[key] = self.params[start:start + length]

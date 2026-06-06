@@ -5,7 +5,7 @@ import tempfile
 import numpy as np
 import pytest
 
-from prysm.x.raytracing import materials
+from prysm.x import materials
 from prysm.x.raytracing.io import read_zmx, read_seq, SurfaceSpec, build_surface
 from prysm.x.raytracing.surfaces import (
     Conic, EvenAsphere, Plane, Toroid, Biconic,

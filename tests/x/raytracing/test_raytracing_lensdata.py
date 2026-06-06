@@ -14,7 +14,7 @@ from prysm.x.raytracing import (
     SurfaceRow,
     raytrace,
 )
-from prysm.x.raytracing import materials
+from prysm.x import materials
 from prysm.x.raytracing.raygen import generate_collimated_ray_fan
 from prysm.x.raytracing.surfaces import (
     Conic,

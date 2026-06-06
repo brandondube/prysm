@@ -12,7 +12,7 @@ No plotting and no matplotlib here -- these are text tables for inspection.
 
 from .spencer_and_murty import STYPE_EVAL, STYPE_REFLECT, STYPE_REFRACT
 from .surfaces import _map_stype
-from .materials import MIRROR
+from ..materials import MIRROR
 from .lensdata import CoordBreak, SurfaceRow
 
 
@@ -168,8 +168,13 @@ def surface_table(lensdata, *, stop_index=None, unit=None):
             continue
         shape = row.build_shape()
         params = shape.params or {}
-        c = params.get('c', params.get('c_y', 0.0))
-        k = params.get('k', params.get('k_y', 0.0))
+        # Ask the shape's descriptor for its canonical radius/conic DOF instead
+        # of guessing c vs c_y (deepening 02).
+        cats = type(shape).CATEGORIES
+        radius_keys = cats.get('radius') or cats.get('curvature') or ()
+        conic_keys = cats.get('conic') or ()
+        c = params.get(radius_keys[-1], 0.0) if radius_keys else 0.0
+        k = params.get(conic_keys[-1], 0.0) if conic_keys else 0.0
         records.append({
             'index': i, 'type': _type_str(row.typ),
             'radius': _radius_str(c),

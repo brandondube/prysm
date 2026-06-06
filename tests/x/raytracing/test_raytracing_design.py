@@ -12,7 +12,7 @@ from prysm.mathops import optimize
 
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
-from prysm.x.raytracing import materials
+from prysm.x import materials
 from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing.spencer_and_murty import raytrace
 from prysm.x.raytracing.raygen import generate_collimated_ray_fan

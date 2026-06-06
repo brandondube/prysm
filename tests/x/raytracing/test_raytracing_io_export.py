@@ -6,7 +6,7 @@ import pytest
 
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
-from prysm.x.raytracing import materials
+from prysm.x import materials
 from prysm.x.raytracing.io import read_seq, write_seq, read_zmx, write_zmx
 from prysm.x.raytracing.surfaces import Conic, EvenAsphere, Plane
 

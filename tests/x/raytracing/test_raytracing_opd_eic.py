@@ -4,7 +4,7 @@ import numpy as np
 
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import FRAUNHOFER_LINES_UM, LensData
-from prysm.x.raytracing import materials
+from prysm.x import materials
 from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing import analysis

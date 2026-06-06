@@ -1,6 +1,6 @@
 import numpy as np
 
-from prysm.x.raytracing import materials
+from prysm.x import materials
 from prysm.x.raytracing.analysis import (
     distortion,
     transverse_ray_aberration,

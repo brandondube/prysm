@@ -11,7 +11,7 @@ from prysm.x.raytracing import (
     LensData, OpticalSystem, System, ApertureSpec, FieldSet, Field,
     FRAUNHOFER_LINES_UM,
 )
-from prysm.x.raytracing import materials
+from prysm.x import materials
 from prysm.x.raytracing.system import (
     EPD, FNO_IMAGE, NA_IMAGE, NA_OBJECT, FNO_OBJECT,
 )

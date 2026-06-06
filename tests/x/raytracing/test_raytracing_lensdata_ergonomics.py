@@ -8,7 +8,7 @@ from prysm.x.raytracing import (
     LensData, OpticalSystem, ApertureSpec, FRAUNHOFER_LINES_UM,
     Field, Sampling, launch,
 )
-from prysm.x.raytracing import materials
+from prysm.x import materials
 from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing.paraxial import effective_focal_length, first_order
 from prysm.x.raytracing.analysis import distortion, field_curvature
