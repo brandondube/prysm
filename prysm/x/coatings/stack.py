@@ -93,7 +93,7 @@ class Stack:
     Layers are ordered from the ambient (incidence) side toward the substrate.
     Each layer index, the substrate index, and the ambient index may be a fixed
     value (real or complex) or a callable n(wavelength) dispersion model -- the
-    glass / air callables from prysm.x.raytracing.materials work directly.
+    glass / air callables from prysm.x.materials work directly.
 
     Parameters
     ----------
