@@ -38,11 +38,13 @@ from prysm.propagation import Wavefront, phase_prefix
 from prysm import thinfilm
 
 from . import spencer_and_murty as sm
-from .spencer_and_murty import STYPE_REFLECT, STYPE_REFRACT, raytrace
+from .spencer_and_murty import (
+    STYPE_REFLECT, STYPE_REFRACT, raytrace, valid_mask,
+)
 from .launch import Sampling, launch
 from .paraxial import first_order
 from .opt import (
-    _valid_mask, _pupil_center_chief_index,
+    _pupil_center_chief_index,
     opd_from_raytrace_eic, xp_reference_sphere,
 )
 from .analysis import _apply_field_and_output, _filtered_chief_index
@@ -624,7 +626,7 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
         trace = ft.trace
         coating_amp = ft.amplitude
         P_matrix_all = None
-    valid = _valid_mask(trace.status, trace.P[-1])
+    valid = valid_mask(trace.status, trace.P[-1])
 
     # the uniform entrance-pupil sample grid -- the pupil coordinate of every
     # ray.  Use this, not the launch positions P (which collapse onto the

@@ -43,6 +43,7 @@ from ._common import (
     scale_length_to_mm,
     scale_surface_params_to_mm,
     aperture_kwargs_from_radii,
+    parse_float,
 )
 from ..lensdata import LensData
 from ..system import OpticalSystem, ApertureSpec
@@ -95,9 +96,6 @@ def _directive(line):
     return parts[0].upper(), parts[1]
 
 
-from ._common import parse_float as _parse_float  # noqa: E402  (kept name for callers)
-
-
 def _parse_xdat_lines(lines):
     """Convert raw XDAT lines like ['1 0.5 0 0', '2 -0.1 0 0', ...] into
     a {term_idx: value} dict.
@@ -112,7 +110,7 @@ def _parse_xdat_lines(lines):
             continue
         try:
             idx = int(tokens[0])
-            val = _parse_float(tokens[1])
+            val = parse_float(tokens[1])
             out[idx] = val
         except (ValueError, IndexError):
             pass
@@ -217,11 +215,11 @@ def _parse_block(idx, body_lines):
             if tokens:
                 out['type'] = tokens[0].upper()
         elif d == 'CURV':
-            out['curv'] = _parse_float(tokens[0]) if tokens else 0.0
+            out['curv'] = parse_float(tokens[0]) if tokens else 0.0
         elif d == 'CONI':
-            out['coni'] = _parse_float(tokens[0]) if tokens else 0.0
+            out['coni'] = parse_float(tokens[0]) if tokens else 0.0
         elif d == 'DISZ':
-            out['disz'] = _parse_float(tokens[0]) if tokens else 0.0
+            out['disz'] = parse_float(tokens[0]) if tokens else 0.0
         elif d == 'GLAS':
             out['glas'] = tokens[0] if tokens else ''
         elif d == 'NMAT':
@@ -229,7 +227,7 @@ def _parse_block(idx, body_lines):
             out.setdefault('glas', tokens[0] if tokens else '')
         elif d == 'DIAM':
             try:
-                out['diam'] = _parse_float(tokens[0])
+                out['diam'] = parse_float(tokens[0])
             except (IndexError, ValueError):
                 pass
         elif d == 'PARM':
@@ -238,7 +236,7 @@ def _parse_block(idx, body_lines):
             if len(tokens) >= 2:
                 try:
                     i = int(tokens[0])
-                    v = _parse_float(tokens[1])
+                    v = parse_float(tokens[1])
                     out['parm'][i] = v
                 except ValueError:
                     pass
@@ -333,12 +331,6 @@ def _make_spec(block, database, length_scale=1.0):
             )
         xdat = _parse_xdat_lines(block.get('xdat', []))
         if not xdat:
-            # fallback: some legacy files store Zernike coefs in PARM
-            # 4..N (PARM 1..3 reserved for norm radius / decenter /
-            # extrapolate flags).  Pull any PARM with key >= 4.
-            xdat = {(k - 3): v for k, v in p.items()
-                    if k >= 4 and v != 0.0}
-        if not xdat:
             # no Zernike content -> degenerate to a Conic base
             return spec('conic', dict(c=c, k=k))
         max_j = max(xdat)
@@ -354,10 +346,6 @@ def _make_spec(block, database, length_scale=1.0):
         if norm_r == 0.0:
             norm_r = 1.0
         xdat = _parse_xdat_lines(block.get('xdat', []))
-        if not xdat:
-            # legacy fallback: coefficients in PARM 2..N (skip PARM 1 =
-            # norm radius)
-            xdat = {(k - 1): v for k, v in p.items() if k >= 2 and v != 0.0}
         if not xdat:
             return spec('conic', dict(c=c, k=k))
         max_j = max(xdat)

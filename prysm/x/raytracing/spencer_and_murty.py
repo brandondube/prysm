@@ -68,7 +68,7 @@ class RayTraceResult:
         return (
             f'RayTraceResult(N_rays={self.status.shape[0]}, '
             f'N_surfaces={self.P.shape[0] - 1}, '
-            f'valid={int((self.status.imag == 0).sum())})'
+            f'valid={int(valid_mask(self.status).sum())})'
         )
 
 
@@ -125,6 +125,39 @@ def decode_status(status):
         return _decode_status_scalar(arr.item())
     decoded = [_decode_status_scalar(v) for v in arr.ravel()]
     return np.asarray(decoded, dtype=object).reshape(arr.shape)
+
+
+def _finite_ray_mask(P):
+    """Return a bool mask for rays with finite position coordinates."""
+    P = np.asarray(P)
+    return np.isfinite(P).all(axis=-1)
+
+
+def valid_mask(status, P=None):
+    """Reduce status and optional positions to a bool valid-ray mask.
+
+    Parameters
+    ----------
+    status : ndarray or None
+        Encoded ray status.  If None, validity is derived from P.
+    P : ndarray, optional
+        Ray positions.  When supplied, non-finite ray positions are also
+        rejected.
+
+    Returns
+    -------
+    ndarray or None
+        Boolean valid-ray mask.  If both status and P are None, returns None.
+    """
+    if status is None:
+        if P is None:
+            return None
+        return _finite_ray_mask(P)
+
+    valid = np.asarray(status).imag == STATUS_OK
+    if P is not None:
+        valid = valid & _finite_ray_mask(P)
+    return valid
 
 
 def _failure_code_for_surface(surf):
@@ -589,7 +622,7 @@ def raytrace(surfaces, P, S, wvl, tol_sag=None):
         P0, Sj = transform_to_local_coords(Pj, surf.P, Sj, surf.R)
         Pj, r, valid = surf.intersect(P0, Sj, tol_sag=tol_sag)
 
-        active = (status.imag == 0)
+        active = valid_mask(status)
         if not valid.all():
             active = _record_failure(status, active, ~valid, surf_idx,
                                      _failure_code_for_surface(surf))
@@ -625,7 +658,7 @@ def raytrace(surfaces, P, S, wvl, tol_sag=None):
 
     # rays that survived all surfaces: status.real records the highest
     # surface index reached (= jj for fully successful rays).
-    fully_valid = (status.imag == 0)
+    fully_valid = valid_mask(status)
     status.real[fully_valid] = jj
 
     if squeeze_batch:

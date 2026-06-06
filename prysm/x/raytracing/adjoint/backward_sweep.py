@@ -16,10 +16,10 @@ from prysm.x.raytracing.spencer_and_murty import (
     raytrace,
     STYPE_REFRACT,
     STYPE_REFLECT,
+    valid_mask,
 )
 from prysm.x.raytracing._diff_raytrace import _assemble_seeds, _eye3
 from prysm.x.raytracing._meta import object_space_index
-from prysm.x.raytracing.opt import _valid_mask
 
 from .primitives import (
     adj_opl_segment,
@@ -95,7 +95,7 @@ def _forward_with_intermediates(surfaces, P, S, wvl, tol_sag=None):
     S = S.astype(config.precision)
 
     trace = raytrace(surfaces, P, S, wvl, tol_sag=tol_sag)
-    valid = _valid_mask(trace.status, trace.P[-1])
+    valid = valid_mask(trace.status, trace.P[-1])
 
     inters = []
     nj = float(object_space_index(surfaces, wvl))
@@ -302,8 +302,9 @@ def adjoint_gradient(surfaces, P, S, wvl, seeds, head, *, tol_sag=None):
         wavelength, microns.
     seeds : sequence of DiffSeed
         defines the trailing parameter axis (order preserved in the gradient).
-    head : merit head
-        object with a seed(trace, intermediates) -> (P_bar, S_bar, L_bar) method.
+    head : seedable merit
+        object with a seed(trace, prescription, wavelength)
+        -> (P_bar, S_bar, L_bar) method.
     tol_sag : float
 
     Returns
@@ -317,7 +318,13 @@ def adjoint_gradient(surfaces, P, S, wvl, seeds, head, *, tol_sag=None):
         surfaces, P, S, wvl, tol_sag=tol_sag)
     Qdot_s, Rdot_s, nprimedot_s, shape_params, sag_partial_fns = \
         _assemble_seeds(len(surfaces), seeds, n_params)
-    cotangent_seed = head.seed(trace, intermediates)
-    return _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
+    cotangent_seed = head.seed(trace, surfaces, wvl)
+    grad = _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
                            nprimedot_s, shape_params, sag_partial_fns,
                            cotangent_seed)
+    direct = getattr(head, 'direct_gradient', None)
+    if direct is not None:
+        extra = direct(trace, surfaces, wvl, seeds)
+        if extra is not None:
+            grad = grad + extra
+    return grad

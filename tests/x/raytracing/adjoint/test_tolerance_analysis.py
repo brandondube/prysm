@@ -12,7 +12,7 @@ from prysm.x.raytracing._diff_raytrace import (
 )
 
 from prysm.x.raytracing.adjoint.backward_sweep import adjoint_gradient
-from prysm.x.raytracing.adjoint.merit_heads import RmsSpotSizeSeed, DistortionSeed, RmsWfeSeed
+from prysm.x.raytracing.design import RmsSpotRadius, WavefrontRMS
 from prysm.x.raytracing.adjoint.tolerance_analysis import (
     multi_objective_sensitivity,
     ToleranceSensitivityTable,
@@ -29,15 +29,15 @@ def _seeds():
             seed_decenter(1, 'y'), seed_index(0)]
 
 
-def _heads():
-    return [RmsWfeSeed(), RmsSpotSizeSeed(),
-            DistortionSeed(axis='x'), DistortionSeed(axis='y')]
+def _heads(P, S):
+    # the seedable unified merits; Distortion is value-only (no adjoint seed).
+    return [WavefrontRMS(P, S, WVL), RmsSpotRadius(P, S, WVL)]
 
 
 def test_jacobian_matches_per_head_sweeps():
     P, S = ray_bundle()
     seeds = _seeds()
-    heads = _heads()
+    heads = _heads(P, S)
     res = multi_objective_sensitivity(make_system(), P, S, WVL, seeds, heads)
     assert res.jacobian.shape == (len(heads), len(seeds))
     for m, head in enumerate(heads):
@@ -50,7 +50,7 @@ def test_jacobian_matches_per_head_sweeps():
 def test_ranked_by_orders_by_abs_sensitivity():
     P, S = ray_bundle()
     res = multi_objective_sensitivity(make_system(), P, S, WVL, _seeds(),
-                                      _heads())
+                                      _heads(P, S))
     ranked = res.ranked_by('rms_wfe')
     mags = [abs(v) for _, v in ranked]
     assert mags == sorted(mags, reverse=True)
@@ -118,7 +118,7 @@ def test_multi_objective_budget():
 def test_sensitivity_table():
     P, S = ray_bundle()
     res = multi_objective_sensitivity(make_system(), P, S, WVL, _seeds(),
-                                      _heads())
+                                      _heads(P, S))
     steps = np.full(len(_seeds()), 1e-3)
     tbl = ToleranceSensitivityTable(res, steps)
     np.testing.assert_allclose(tbl.sensitivity(), np.abs(res.jacobian))

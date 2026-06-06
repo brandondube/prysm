@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from prysm.coordinates import make_rotation_matrix
-from prysm.x.raytracing import LensData, raytrace
+from prysm.x.raytracing import LensData, raytrace, valid_mask
 from prysm.x.raytracing.lensdata import R_rh, _ben_auto_gamma
 from prysm.x.raytracing.raygen import generate_collimated_ray_fan
 from prysm.x.raytracing.surfaces import Conic, Plane
@@ -151,7 +151,7 @@ def test_ben_90_degree_fold_places_and_traces_centered():
 
     P0, S0 = generate_collimated_ray_fan(7, maxr=2.0, z=-5.0)
     r = raytrace(ld, P0, S0, wvl=0.55)
-    assert (r.status.imag == 0).all()
+    assert valid_mask(r.status, r.P[-1]).all()
     # frame fold agrees with the kernel reflection: rays land on the folded
     # eval plane and the chief lands at its origin
     np.testing.assert_allclose(np.asarray(r.P[-1])[:, 1], 8.0, atol=1e-9)

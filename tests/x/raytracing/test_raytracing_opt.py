@@ -362,7 +362,7 @@ def test_spot_centroid_no_status():
 
 
 def test_spot_centroid_filters_invalid_rays():
-    """Rays with status.imag != 0 are excluded."""
+    """Rays rejected by valid_mask are excluded."""
     P = np.array([[0., 0., 0.], [10., 10., 0.], [-10., -10., 0.]])
     # the second ray is "clipped"; centroid of the remaining two is (-5, -5)
     status = np.array([0+0j, 1+STATUS_CLIP*1j, 0+0j])

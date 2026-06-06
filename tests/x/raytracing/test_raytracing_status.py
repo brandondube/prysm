@@ -17,6 +17,7 @@ from prysm.x.raytracing.spencer_and_murty import (
     STATUS_MISS,
     STATUS_TIR,
     decode_status,
+    valid_mask,
 )
 from prysm.x.raytracing.raygen import generate_collimated_ray_fan
 
@@ -43,7 +44,7 @@ def test_raytrace_result_has_named_attributes():
                                   result.status.imag.astype(int))
 
 
-# ---------- valid (status.imag == 0) ----------
+# ---------- valid ray status ----------
 
 def test_collimated_through_parabola_all_valid():
     """Collimated rays well within a parabolic mirror's aperture should all
@@ -51,7 +52,7 @@ def test_collimated_through_parabola_all_valid():
     pres = _simple_prescription()
     P0, S0 = generate_collimated_ray_fan(11, maxr=20.0, z=-200.0)
     result = raytrace(pres, P0, S0, wvl=0.55)
-    assert (result.status.imag == 0).all()
+    assert valid_mask(result.status, result.P[-1]).all()
     # status.real records the surface count for valid rays
     np.testing.assert_array_equal(result.status.real, len(pres))
 
@@ -62,7 +63,7 @@ def test_single_ray_1d_input_returns_length1_status():
     S0 = np.array([0.0, 0.0, 1.0])
     result = raytrace(pres, P0, S0, wvl=0.55)
     assert result.status.shape == (1,)
-    assert result.status[0].imag == 0
+    assert valid_mask(result.status, result.P[-1])[0]
 
 
 def test_decode_status_handles_scalar_and_arrays():
@@ -89,6 +90,23 @@ def test_decode_status_all_valid_majority_case():
     status = np.full((2, 3), 7 + STATUS_OK * 1j, dtype=np.complex128)
     labels = decode_status(status)
     assert labels.tolist() == [['OK', 'OK', 'OK'], ['OK', 'OK', 'OK']]
+
+
+def test_valid_mask_handles_status_and_finite_positions():
+    status = np.array([
+        2 + STATUS_OK * 1j,
+        1 + STATUS_CLIP * 1j,
+        2 + STATUS_OK * 1j,
+    ], dtype=np.complex128)
+    P = np.array([
+        [0.0, 0.0, 0.0],
+        [np.nan, np.nan, np.nan],
+        [1.0, np.nan, 0.0],
+    ])
+    np.testing.assert_array_equal(valid_mask(status), [True, False, True])
+    np.testing.assert_array_equal(valid_mask(status, P), [True, False, False])
+    np.testing.assert_array_equal(valid_mask(None, P), [True, False, False])
+    assert valid_mask(None, None) is None
 
 
 # ---------- aperture clipping (STATUS_CLIP) ----------
@@ -170,7 +188,7 @@ def test_analytic_miss_marked_as_miss():
     S0 = np.array([[0., 0., 1.],
                    [0., 0., 1.]])
     result = raytrace(pres, P0, S0, wvl=0.55)
-    assert result.status[0].imag == 0           # axial valid
+    assert valid_mask(result.status, result.P[-1])[0]  # axial valid
     assert result.status[1].imag == STATUS_MISS  # off-axis missed
     assert result.status[1].real == 1.0
 
@@ -215,6 +233,6 @@ def test_mixed_batch_status_codes_distinct():
     ])
     S0 = np.array([[0., 0., 1.]] * 3)
     result = raytrace(pres, P0, S0, wvl=0.55)
-    assert result.status[0].imag == 0
+    assert valid_mask(result.status, result.P[-1])[0]
     assert result.status[1].imag == STATUS_CLIP
     assert result.status[2].imag == STATUS_MISS

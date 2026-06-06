@@ -12,7 +12,7 @@ from prysm.x.raytracing.surfaces import (
 )
 from prysm.x.raytracing import LensData, OpticalSystem, ApertureSpec
 from prysm.x.raytracing.spencer_and_murty import STATUS_CLIP
-from prysm.x.raytracing.spencer_and_murty import raytrace
+from prysm.x.raytracing.spencer_and_murty import raytrace, valid_mask
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.analysis import (
     transverse_ray_aberration,
@@ -264,7 +264,7 @@ def test_wavefront_filters_vignetted_rays():
     P, S = launch(presc, Field(0., 0.), 0.55,
                   Sampling.fan(n=9), epd=4.0, pupil_z=-5.0)
     trace = raytrace(presc, P, S, 0.55)
-    valid = trace.status.imag == 0
+    valid = valid_mask(trace.status, trace.P[-1])
     assert valid.sum() < valid.size
 
     opd, x_pup, y_pup = wavefront(presc, P, S, 0.55, P_xp=(0, 0, 0))

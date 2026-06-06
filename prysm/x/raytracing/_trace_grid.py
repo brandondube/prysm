@@ -20,8 +20,7 @@ a cycle.  field.pupil_field traces its single-cell bundle through the same
 trace_cell entry the grid loop uses, passing an intensity-aware trace_fn.
 """
 
-from .spencer_and_murty import raytrace
-from .opt import _valid_mask
+from .spencer_and_murty import raytrace, valid_mask
 from .launch import Field, launch
 from ._meta import system_wavelength, system_epd
 
@@ -108,7 +107,7 @@ def _launch_trace(prescription, field, wvl, sampling, *, epd, pupil_z, aim_to,
     P, S = launch(prescription, field, wvl, sampling, epd=epd, pupil_z=pupil_z,
                   aim_to=aim_to)
     trace = trace_fn(prescription, P, S, wvl)
-    valid = _valid_mask(trace.status, trace.P[-1])
+    valid = valid_mask(trace.status, trace.P[-1])
     return epd, P, S, trace, valid
 
 

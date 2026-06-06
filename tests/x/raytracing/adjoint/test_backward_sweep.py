@@ -21,7 +21,7 @@ from prysm.x.raytracing._diff_raytrace import (
     seed_tilt,
     seed_index,
 )
-from prysm.x.raytracing.opt import _valid_mask
+from prysm.x.raytracing.spencer_and_murty import valid_mask
 
 from prysm.x.raytracing.adjoint.backward_sweep import (
     _forward_with_intermediates,
@@ -38,7 +38,7 @@ class RawSeed:
         self._S_bar = S_bar
         self._L_bar = L_bar
 
-    def seed(self, trace, intermediates):
+    def seed(self, trace, prescription, wavelength):
         return self._P_bar, self._S_bar, self._L_bar
 
 
@@ -69,7 +69,7 @@ def test_backward_sweep_matches_forward_mode():
 
     res = _forward_jacobian(surfaces, P, S, seeds)
     trace = res.trace
-    valid = _valid_mask(trace.status, trace.P[-1])
+    valid = valid_mask(trace.status, trace.P[-1])
 
     rng = np.random.default_rng(7)
     n = P.shape[0]
@@ -100,7 +100,7 @@ def test_position_only_cotangent():
     surfaces = make_system()
     seeds = _all_seeds()
     res = _forward_jacobian(surfaces, P, S, seeds)
-    valid = _valid_mask(res.trace.status, res.trace.P[-1])
+    valid = valid_mask(res.trace.status, res.trace.P[-1])
 
     n = P.shape[0]
     P_bar = np.zeros((n, 3))

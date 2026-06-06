@@ -19,6 +19,19 @@ from .backward_sweep import (
 )
 
 
+def _head_has_value(head):
+    """True when a head reports a usable trace-based value.
+
+    A design.Merit exposes the has_value flag (its value attribute is always
+    present, so a plain hasattr cannot tell the stub from an override); other
+    duck-typed heads fall back to hasattr.
+    """
+    flag = getattr(head, 'has_value', None)
+    if flag is not None:
+        return bool(flag)
+    return hasattr(head, 'value')
+
+
 class AdjointResult:
     """The M x P adjoint Jacobian plus labels and nominal merit values."""
 
@@ -68,9 +81,10 @@ def multi_objective_sensitivity(surfaces, P, S, wvl, seeds, heads, *,
         wavelength, microns.
     seeds : sequence of DiffSeed
         the P tolerance parameters (defines the Jacobian column order).
-    heads : sequence of merit heads
+    heads : sequence of seedable merits
         the M objectives (defines the row order); each exposes
-        seed(trace, intermediates) and optionally value(trace, intermediates).
+        seed(trace, prescription, wavelength) and optionally
+        value(trace, prescription, wavelength) (see design.Merit).
     tol_sag : float
 
     Returns
@@ -93,12 +107,18 @@ def multi_objective_sensitivity(surfaces, P, S, wvl, seeds, heads, *,
     J = np.zeros((len(heads), n_params), dtype=config.precision)
     nominals = {}
     for m, head in enumerate(heads):
-        cot = head.seed(trace, inter)
-        J[m] = _backward_sweep(surfaces, trace, inter, Qdot_s, Rdot_s,
+        cot = head.seed(trace, surfaces, wvl)
+        grad = _backward_sweep(surfaces, trace, inter, Qdot_s, Rdot_s,
                                nprimedot_s, shape_params, sag_partial_fns,
                                cot, shape_partials=shape_partials)
-        if hasattr(head, 'value'):
-            nominals[head.name] = head.value(trace, inter)
+        direct = getattr(head, 'direct_gradient', None)
+        if direct is not None:
+            extra = direct(trace, surfaces, wvl, seeds)
+            if extra is not None:
+                grad = grad + extra
+        J[m] = grad
+        if _head_has_value(head):
+            nominals[head.name] = head.value(trace, surfaces, wvl)
 
     head_names = [getattr(h, 'name', f'head{m}') for m, h in enumerate(heads)]
     param_names = [getattr(s, 'name', f'param{p}') or f'param{p}'

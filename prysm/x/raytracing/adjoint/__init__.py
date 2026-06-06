@@ -2,9 +2,11 @@
 
 Reverse-mode companion to prysm.x.raytracing._diff_raytrace: one backward sweep
 yields the gradient of a scalar merit with respect to every tolerance parameter
-at once, the transpose of the forward tangent bundle.  Assembling several merit
-heads gives the full M x P sensitivity Jacobian for TOR-style tolerance analysis
-(sensitivity tables, inverse sensitivity, RSS, compensators) at O(M) trace cost.
+at once, the transpose of the forward tangent bundle.  The sweep consumes
+seedable design.Merit classes (RmsSpotRadius, WavefrontRMS); assembling several
+merits gives the full M x P sensitivity Jacobian for TOR-style tolerance
+analysis (sensitivity tables, inverse sensitivity, RSS, compensators) at O(M)
+trace cost.
 """
 
 from .primitives import (
@@ -22,11 +24,6 @@ from .backward_sweep import (
     SurfaceIntermediate,
     TraceIntermediates,
     adjoint_gradient,
-)
-from .merit_heads import (
-    RmsSpotSizeSeed,
-    DistortionSeed,
-    RmsWfeSeed,
 )
 from .tolerance_analysis import (
     AdjointResult,
@@ -53,10 +50,6 @@ __all__ = [
     'SurfaceIntermediate',
     'TraceIntermediates',
     'adjoint_gradient',
-    # merit heads
-    'RmsSpotSizeSeed',
-    'DistortionSeed',
-    'RmsWfeSeed',
     # tolerance analysis
     'AdjointResult',
     'multi_objective_sensitivity',

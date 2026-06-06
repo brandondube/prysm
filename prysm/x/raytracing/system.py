@@ -499,10 +499,6 @@ class OpticalSystem:
                 f'stop_index={self.stop_index})')
 
 
-# Code V / Zemax vocabulary alias.
-System = OpticalSystem
-
-
 # ---------------------------------------------------------------------------
 # metadata coercion (field + wavelength specs)
 # ---------------------------------------------------------------------------
@@ -546,5 +542,5 @@ def _coerce_wavelengths(wavelengths):
 from .launch import Field  # noqa: E402
 
 
-__all__ = ['OpticalSystem', 'System', 'ApertureSpec', 'FieldSet',
+__all__ = ['OpticalSystem', 'ApertureSpec', 'FieldSet',
            'EPD', 'FNO_IMAGE', 'FNO_OBJECT', 'NA_IMAGE', 'NA_OBJECT']

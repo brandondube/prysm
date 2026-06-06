@@ -3,6 +3,7 @@
 from prysm.conf import config
 from prysm.mathops import np, array_to_true_numpy
 from . import spencer_and_murty
+from .spencer_and_murty import valid_mask
 from ._line_math import (
     closest_point_on_line_to_line,
     normalize_vector,
@@ -475,25 +476,6 @@ def locate_xp(P_chief, S_chief, P_img, P_sk):
 
 # ---------- spot statistics ----------
 
-def _finite_ray_mask(P):
-    """Return a bool mask for rays with finite position coordinates."""
-    P = np.asarray(P)
-    return np.isfinite(P).all(axis=-1)
-
-
-def _valid_mask(status, P=None):
-    """Reduce status and optional positions to a bool valid-ray mask."""
-    if status is None:
-        if P is None:
-            return None
-        return _finite_ray_mask(P)
-
-    valid = np.asarray(status).imag == 0
-    if P is not None:
-        valid = valid & _finite_ray_mask(P)
-    return valid
-
-
 def spot_centroid(P_final, status=None):
     """Mean (x, y) position of valid rays at a surface plane.
 
@@ -503,7 +485,7 @@ def spot_centroid(P_final, status=None):
         shape (N, 3) — typically `raytrace(...).P[-1]`.
     status : ndarray, optional
         per-ray complex status from `raytrace` (or any equivalent).  If
-        provided, rays with `status.imag != 0` are excluded.
+        provided, rays rejected by valid_mask are excluded.
 
     Returns
     -------
@@ -513,7 +495,7 @@ def spot_centroid(P_final, status=None):
 
     """
     P_final = np.asarray(P_final)
-    valid = _valid_mask(status, P_final)
+    valid = valid_mask(status, P_final)
     if valid is not None:
         P_final = P_final[valid]
     if P_final.shape[0] == 0:
@@ -529,7 +511,7 @@ def rms_spot_radius(P_final, status=None, centroid=None):
     P_final : ndarray
         shape (N, 3) ray positions.
     status : ndarray, optional
-        per-ray complex status; rays with `status.imag != 0` are excluded.
+        per-ray complex status; rays rejected by valid_mask are excluded.
     centroid : ndarray, optional
         shape (2,) custom center for the RMS.  If None, the spot centroid
         of the valid rays is used.
@@ -542,7 +524,7 @@ def rms_spot_radius(P_final, status=None, centroid=None):
 
     """
     P_final = np.asarray(P_final)
-    valid = _valid_mask(status, P_final)
+    valid = valid_mask(status, P_final)
     if valid is not None:
         P_final = P_final[valid]
     if P_final.shape[0] == 0:
@@ -561,7 +543,7 @@ def geometric_psf_histogram(P_final, status=None, bins=64, extent=None):
     P_final : ndarray
         shape (N, 3) ray positions.
     status : ndarray, optional
-        per-ray complex status; rays with `status.imag != 0` are excluded.
+        per-ray complex status; rays rejected by valid_mask are excluded.
     bins : int or [int, int]
         passed through to `np.histogram2d`; number of bins per axis.
     extent : list of (lo, hi) length 2, optional
@@ -577,7 +559,7 @@ def geometric_psf_histogram(P_final, status=None, bins=64, extent=None):
 
     """
     P_final = np.asarray(P_final)
-    valid = _valid_mask(status, P_final)
+    valid = valid_mask(status, P_final)
     if valid is not None:
         P_final = P_final[valid]
     x = P_final[..., 0]

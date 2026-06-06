@@ -13,7 +13,6 @@ from .system import (
     ApertureSpec,
     FieldSet,
     OpticalSystem,
-    System,
 )
 from .listings import (
     aperture_table,
@@ -35,6 +34,7 @@ from .spencer_and_murty import (
     RayTraceResult,
     decode_status,
     raytrace,
+    valid_mask,
     refract,
     reflect,
 )
@@ -124,7 +124,6 @@ __all__ = [
     'SurfaceRow',
     'CoordBreak',
     'OpticalSystem',
-    'System',
     'ApertureSpec',
     'FieldSet',
     'surface_table',
@@ -202,6 +201,7 @@ __all__ = [
     'RayTraceResult',
     'RayStatus',
     'decode_status',
+    'valid_mask',
     'STYPE_REFLECT',
     'STYPE_REFRACT',
     'STYPE_EVAL',

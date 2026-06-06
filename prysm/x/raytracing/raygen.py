@@ -10,11 +10,6 @@ from prysm.coordinates import (
 )
 
 
-def _sample_axis(distribution, lo, hi, n, dtype=None):
-    """Compatibility wrapper around prysm.coordinates.sample_axis."""
-    return sample_axis(distribution, lo, hi, n, dtype=dtype)
-
-
 def concat_rayfans(*rayfans):
     """Merge N rayfans for a single batch trace.
 
@@ -92,7 +87,7 @@ def split_rayfans(P, chunksizes, S=None):
 
 def generate_collimated_ray_fan(nrays, maxr, z=0, minr=None, azimuth=90,
                                 yangle=0, xangle=0,
-                                distribution='uniform', aim_at=None):
+                                distribution='uniform'):
     """Generate a 1D fan of rays.
 
     Colloquially, an extended field in Y for an object at inf is represented by a ray fan with yangle != 0.
@@ -118,10 +113,6 @@ def generate_collimated_ray_fan(nrays, maxr, z=0, minr=None, azimuth=90,
         a uniform distribution has rays which are equally spaced from minr to maxr,
         random has rays randomly distributed in minr and maxr, while cheby has the
         Cheby-Gauss-Lobatto roots as its locations from minr to maxr
-    aim_at : object, optional
-        Compatibility keyword retained for callers of older versions.  It was
-        previously documented but ignored, and remains ignored.
-
     Returns
     -------
     ndarray, ndarray
@@ -135,7 +126,7 @@ def generate_collimated_ray_fan(nrays, maxr, z=0, minr=None, azimuth=90,
     S = _make_collimated_S(nrays, yangle=yangle, xangle=xangle)
 
     # now generate the radial part of P
-    r = _sample_axis(distribution, minr, maxr, nrays, dtype=dtype)
+    r = sample_axis(distribution, minr, maxr, nrays, dtype=dtype)
 
     t = np.asarray(np.radians(azimuth), dtype=dtype)
     t = np.broadcast_to(t, r.shape)
@@ -191,8 +182,8 @@ def generate_collimated_rect_ray_grid(nrays, maxx, z=0, minx=None, maxy=None, mi
 
     # now generate the x and y fans
     dtype = config.precision
-    x = _sample_axis(distribution, minx, maxx, nrays, dtype=dtype)
-    y = _sample_axis(distribution, miny, maxy, nrays, dtype=dtype)
+    x = sample_axis(distribution, minx, maxx, nrays, dtype=dtype)
+    y = sample_axis(distribution, miny, maxy, nrays, dtype=dtype)
     xx, yy = np.meshgrid(x, y)
     xx = xx.ravel()
     yy = yy.ravel()
@@ -249,7 +240,7 @@ def generate_finite_ray_fan(nrays, na, P=0, min_na=None, azimuth=90,
 
     max_t = np.arcsin(na / n)
     min_t = np.arcsin(min_na / n)
-    t = _sample_axis(distribution, min_t, max_t, nrays)
+    t = sample_axis(distribution, min_t, max_t, nrays)
 
     # use the even function for the y direction cosine,
     # use trig identity to compute the z direction cosine
@@ -387,7 +378,7 @@ def generate_collimated_radial_spiral_ray_grid(nrings, maxr, z=0,
         azimuthal samples on that ring.  Default `lambda k: 6*k` matches
         the hexapolar density (also a good Q-polynomial sampling default).
     radial_distribution : str, optional
-        passed to `_sample_axis`; one of {'uniform', 'cheby', 'random'}.
+        passed to `sample_axis`; one of {'uniform', 'cheby', 'random'}.
         Default 'cheby'.
     include_center : bool, optional
         if True (default), include one extra sample at the origin
@@ -418,7 +409,7 @@ def generate_collimated_radial_spiral_ray_grid(nrings, maxr, z=0,
         nodes = np.cos((nrings - k + 0.5) * np.pi / (2 * nrings))  # in (0, 1)
         radii = (maxr * nodes).astype(config.precision)
     else:
-        radii = _sample_axis(radial_distribution, 0.0, maxr, nrings + 1)[1:]
+        radii = sample_axis(radial_distribution, 0.0, maxr, nrings + 1)[1:]
 
     pts_x = []
     pts_y = []

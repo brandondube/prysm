@@ -12,8 +12,7 @@ from tests.x.raytracing.surface_helpers import conic, plane
 from prysm.x.raytracing import LensData, OpticalSystem, ApertureSpec, Field
 from prysm.x.raytracing.surfaces import Conic, Plane, circular_aperture
 from prysm.x.raytracing.launch import Sampling, launch
-from prysm.x.raytracing.spencer_and_murty import raytrace
-from prysm.x.raytracing.opt import _valid_mask
+from prysm.x.raytracing.spencer_and_murty import raytrace, valid_mask
 from prysm.x.raytracing._trace_grid import (
     TraceRecord,
     trace_cell,
@@ -127,7 +126,7 @@ def test_grid_valid_mask_flags_clipped_rays():
     assert not r.valid.all()
     assert r.valid.any()
     # the mask agrees with a hand-rolled trace
-    expected = _valid_mask(r.trace.status, r.trace.P[-1])
+    expected = valid_mask(r.trace.status, r.trace.P[-1])
     np.testing.assert_array_equal(r.valid, expected)
 
 

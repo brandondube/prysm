@@ -9,8 +9,7 @@ Supported subset (raise informative error otherwise):
 - Header: TITLE, DIM, WL, REF, EPD, YAN, XAN, RDM/CUM
 - Surface boundaries: SO (object), S (new surface), SI (image), GO (end).
   Each carries Code V free-format positional data: radius (or curvature in
-  CUM mode), thickness, then an optional glass name.  An older keyword
-  spelling (RDY/CUY/THI/GLA value) is also accepted.
+  CUM mode), thickness, then an optional glass name.
 - Per-surface: RDY (radius Y), CUY (curvature Y), THI (thickness),
   K (conic Y), GLA (glass), CAO/CA/CAI (circular or annular clear aperture),
   ASP and A/B/C/D (even-asphere coefs)
@@ -52,6 +51,7 @@ from ._common import (
     scale_length_to_mm,
     scale_surface_params_to_mm,
     aperture_kwargs_from_radii,
+    parse_float,
 )
 from ..lensdata import LensData
 from ..system import OpticalSystem, ApertureSpec, FieldSet
@@ -90,9 +90,6 @@ def _split_commands(text):
             tokens[0] = tokens[0].upper()
             cmds.append(tokens)
     return cmds
-
-
-from ._common import parse_float as _parse_float  # noqa: E402  (kept name for callers)
 
 
 # ---------- parser ----------------------------------------------------------
@@ -267,7 +264,7 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
             _consume_surface_line(args, current, radius_mode)
         elif verb == 'S':
             # new surface.  Inline tokens after S are Code V free-format
-            # positional radius / thickness / glass, or an older keyword form.
+            # positional radius / thickness / glass.
             _commit_current()
             current = _new_surface_dict()
             _consume_surface_line(args, current, radius_mode)
@@ -282,44 +279,44 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
         # per-surface directives (apply to the most-recently-opened
         # surface)
         elif current is not None and verb == 'RDY':
-            current['rdy'] = _parse_float(args[0])
+            current['rdy'] = parse_float(args[0])
         elif current is not None and verb == 'CUY':
-            current['cuy'] = _parse_float(args[0])
+            current['cuy'] = parse_float(args[0])
         elif current is not None and verb == 'RDX':
-            current['rdx'] = _parse_float(args[0])
+            current['rdx'] = parse_float(args[0])
         elif current is not None and verb == 'CUX':
-            current['cux'] = _parse_float(args[0])
+            current['cux'] = parse_float(args[0])
         elif current is not None and verb == 'THI':
-            current['thi'] = _parse_float(args[0])
+            current['thi'] = parse_float(args[0])
         elif current is not None and verb == 'K':
-            current['k'] = _parse_float(args[0])
+            current['k'] = parse_float(args[0])
         elif current is not None and verb == 'KX':
-            current['kx'] = _parse_float(args[0])
+            current['kx'] = parse_float(args[0])
         elif current is not None and verb == 'GLA':
             current['gla'] = args[0] if args else None
         elif current is not None and verb in ('CAO', 'CA'):
             if args:
-                current['semidiameter'] = _parse_float(args[0])
+                current['semidiameter'] = parse_float(args[0])
         elif current is not None and verb == 'CAI':
             if args:
-                current['inner_semidiameter'] = _parse_float(args[0])
+                current['inner_semidiameter'] = parse_float(args[0])
         elif current is not None and verb == 'ASP':
             current['is_asphere'] = True
         elif current is not None and verb == 'ZFR':
             try:
-                current['zfr_coefs'] = [_parse_float(t) for t in args]
+                current['zfr_coefs'] = [parse_float(t) for t in args]
             except ValueError:
                 pass
         elif current is not None and verb == 'XYP':
             try:
-                current['xyp_coefs'] = [_parse_float(t) for t in args]
+                current['xyp_coefs'] = [parse_float(t) for t in args]
             except ValueError:
                 pass
         elif current is not None and verb in ('NRR', 'NRD'):
             # NRR: normalization radius for Zernike/XY; NRD: alternate spelling
             if args:
                 try:
-                    current['nrr'] = _parse_float(args[0])
+                    current['nrr'] = parse_float(args[0])
                 except ValueError:
                     pass
         elif current is not None and verb == 'DAR':
@@ -328,28 +325,22 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
             current['dar'] = True
         elif current is not None and verb == 'XDE':
             if args:
-                current['dec_x'] = _parse_float(args[0])
+                current['dec_x'] = parse_float(args[0])
         elif current is not None and verb == 'YDE':
             if args:
-                current['dec_y'] = _parse_float(args[0])
+                current['dec_y'] = parse_float(args[0])
         elif current is not None and verb == 'ZDE':
             if args:
-                current['dec_z'] = _parse_float(args[0])
-        elif current is not None and verb in ('DEC', 'DECNTR'):
-            # legacy positional decenter DEC <x> <y>; real Code V uses XDE/YDE.
-            if len(args) >= 1:
-                current['dec_x'] = _parse_float(args[0])
-            if len(args) >= 2:
-                current['dec_y'] = _parse_float(args[1])
+                current['dec_z'] = parse_float(args[0])
         elif current is not None and verb == 'ADE':
             if args:
-                current['ade'] = _parse_float(args[0])
+                current['ade'] = parse_float(args[0])
         elif current is not None and verb == 'BDE':
             if args:
-                current['bde'] = _parse_float(args[0])
+                current['bde'] = parse_float(args[0])
         elif current is not None and verb == 'CDE':
             if args:
-                current['cde'] = _parse_float(args[0])
+                current['cde'] = parse_float(args[0])
         elif current is not None and verb == 'BEN':
             # Code V "bend" -- coordinate-axis flip after a mirror.  prysm
             # handles reflection direction natively, so we silently ignore.
@@ -358,7 +349,7 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
             # A/B/C/D/... are even-asphere coefs (A = a4, B = a6, ...)
             order = ord(verb) - ord('A') + 1  # 1=A=a4, 2=B=a6, ...
             try:
-                current['asphere_coefs'][order] = _parse_float(args[0])
+                current['asphere_coefs'][order] = parse_float(args[0])
                 current['is_asphere'] = True
             except (IndexError, ValueError):
                 pass
@@ -523,12 +514,6 @@ def _image_height_fields_from_header(header, system, unit_scale):
     )
 
 
-# keywords whose presence as the first inline token of an SO/S/SI line means
-# the older keyword spelling is in use rather than the positional free format.
-_SURFACE_KEYWORDS = (
-    'RDY', 'CUY', 'RDX', 'CUX', 'THI', 'GLA', 'K', 'CA', 'CAO', 'CAI')
-
-
 def _is_number(token):
     """True if token parses as a Code V numeric (including INF / INFINITY)."""
     t = token.strip()
@@ -545,47 +530,24 @@ def _consume_surface_line(args, sd, radius_mode):
     """Parse the inline tokens of an SO / S / SI command.
 
     Code V free format gives radius (or curvature in CUM mode), thickness, and
-    an optional glass name positionally:  S <rad> <thi> [glass].  An older
-    keyword spelling (RDY/CUY/THI/GLA value ...) is also accepted; the two are
-    told apart by whether the first token is a recognized data keyword.
+    an optional glass name positionally:  S <rad> <thi> [glass].
 
     """
-    if args and args[0].upper() in _SURFACE_KEYWORDS:
-        _consume_inline_keywords(args, sd)
-        return
-    # positional: <radius/curvature> [<thickness>] [<glass>]
     pos = 0
     if pos < len(args) and _is_number(args[pos]):
-        val = _parse_float(args[pos])
+        val = parse_float(args[pos])
         sd['rdy' if radius_mode else 'cuy'] = val
         pos += 1
     if pos < len(args) and _is_number(args[pos]):
-        sd['thi'] = _parse_float(args[pos])
+        sd['thi'] = parse_float(args[pos])
         pos += 1
     if pos < len(args):
+        if pos == 0:
+            raise ValueError(
+                f'Code V surface line expects positional numeric data, got '
+                f'{args[pos]!r}'
+            )
         sd['gla'] = args[pos]
-
-
-def _consume_inline_keywords(args, sd):
-    """Pull surface keyword/value pairs from inline args."""
-    i = 0
-    keys = {'RDY': 'rdy', 'CUY': 'cuy', 'RDX': 'rdx', 'CUX': 'cux',
-            'THI': 'thi', 'K': 'k'}
-    apertures = {'CA': 'semidiameter', 'CAO': 'semidiameter',
-                 'CAI': 'inner_semidiameter'}
-    while i < len(args):
-        tok = args[i].upper()
-        if tok in keys and i + 1 < len(args):
-            sd[keys[tok]] = _parse_float(args[i + 1])
-            i += 2
-        elif tok == 'GLA' and i + 1 < len(args):
-            sd['gla'] = args[i + 1]
-            i += 2
-        elif tok in apertures and i + 1 < len(args):
-            sd[apertures[tok]] = _parse_float(args[i + 1])
-            i += 2
-        else:
-            i += 1  # unknown / control-code inline token; skip silently
 
 
 def _pose_from_dict(sd, length_scale=1.0):
@@ -732,8 +694,8 @@ def write_seq(system):
     reciprocals.  Post-reflection gaps are written with the Code V negative-
     thickness (unfolded-axis) convention -- the inverse of the import fold.
     Wavelengths export in nanometers (prysm stores microns).  Coordinate breaks
-    export DEC/ADE/BDE/CDE with the Code V left-handed sign convention applied
-    at this boundary only.
+    export XDE/YDE/ZDE and ADE/BDE/CDE with the Code V left-handed sign
+    convention applied at this boundary only.
 
     A bare LensData (no system metadata) is also accepted; aperture, fields, and
     wavelengths are then simply omitted from the output.

@@ -15,7 +15,7 @@ from prysm.x.raytracing.surfaces import (
 from prysm.x.raytracing.io._indexing import (
     noll_to_nm, fringe_to_nm, xy_j_to_mn,
 )
-from prysm.x.raytracing.spencer_and_murty import raytrace
+from prysm.x.raytracing.spencer_and_murty import raytrace, valid_mask
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.paraxial import effective_focal_length
 
@@ -360,7 +360,7 @@ def test_zmx_singlet_round_trips_through_raytrace(refractiveindex_database):
     tr = raytrace(pf.surfaces, P, S, 0.55)
     spot = tr.P[-1, :, :2]
     assert np.isfinite(spot).all()
-    assert (tr.status.imag == 0).all()
+    assert valid_mask(tr.status, tr.P[-1]).all()
     np.testing.assert_allclose(spot[len(spot) // 2], 0.0, atol=1e-12)
     np.testing.assert_allclose(spot[:, 0], 0.0, atol=1e-12)
     np.testing.assert_allclose(spot[:, 1], -spot[::-1, 1], atol=1e-12)
@@ -546,8 +546,8 @@ DIM M
 WL 587.56
 EPD 10.0
 SO ; THI 1E10
-S RDY 50.0 ; THI 5.0 ; GLA BK7
-S RDY -50.0 ; THI 95.0
+S ; RDY 50.0 ; THI 5.0 ; GLA BK7
+S ; RDY -50.0 ; THI 95.0
 SI
 GO
 """
@@ -601,7 +601,7 @@ RDM
 DIM M
 WL 550.0
 SO ; THI 1E10
-S RDY 0.0 ; THI 5.0 ; CAO 1.0
+S ; RDY 0.0 ; THI 5.0 ; CAO 1.0
 SI
 GO
 """
@@ -627,7 +627,7 @@ DIM CM
 WL 550.0
 EPD 1.0
 SO ; THI 1E10
-S RDY 5.0 ; THI 0.5 ; CAO 0.2
+S ; RDY 5.0 ; THI 0.5 ; CAO 0.2
 SI
 GO
 """
@@ -651,8 +651,8 @@ FNO 7.0
 YIM 1.0
 XIM 0.0
 SO ; THI 1E10
-S RDY 50.0 ; THI 5.0 ; GLA BK7
-S RDY -50.0 ; THI 95.0
+S ; RDY 50.0 ; THI 5.0 ; GLA BK7
+S ; RDY -50.0 ; THI 95.0
 SI
 GO
 """
@@ -691,7 +691,7 @@ YAN 0.0
 VUY 0.5
 VLY 0.0
 SO ; THI 1E10
-S RDY 0.0 ; THI 5.0
+S ; RDY 0.0 ; THI 5.0
 SI
 GO
 """
@@ -717,9 +717,9 @@ DIM M
 WL 550.0
 EPD 10.0
 SO ; THI 1E10
-S RDY 50.0 ; THI 5.0
+S ; RDY 50.0 ; THI 5.0
 STO
-S RDY -50.0 ; THI 95.0
+S ; RDY -50.0 ; THI 95.0
 SI
 GO
 """
@@ -744,7 +744,7 @@ DIM M
 WL 550.0
 EPD 10.0
 SO ; THI 1E10
-S CUY -0.0125 ; K -1.0 ; THI -40.0 ; GLA REFL
+S ; CUY -0.0125 ; K -1.0 ; THI -40.0 ; GLA REFL
 SI
 GO
 """
@@ -771,12 +771,12 @@ DIM M
 WL 550.0
 EPD 10.0
 SO ; THI 1E10
-S RDY 50.0 ; THI 5.0 ; GLA BK7
+S ; RDY 50.0 ; THI 5.0 ; GLA BK7
 ASP
 A 1.0E-6
 B 0.0
 C -2.0E-12
-S RDY -50.0 ; THI 95.0
+S ; RDY -50.0 ; THI 95.0
 SI
 GO
 """
@@ -800,8 +800,8 @@ REF 2
 EPD 5.0
 YAN 0.0 1.0 2.0
 SO ; THI 1E10
-S RDY 30 ; THI 2 ; GLA BK7
-S RDY -30 ; THI 50
+S ; RDY 30 ; THI 2 ; GLA BK7
+S ; RDY -30 ; THI 50
 SI
 GO
 """
@@ -999,7 +999,7 @@ DIM M
 WL 550.0
 EPD 10.0
 SO ; THI 1E10
-S RDY 100.0 ; RDX 50.0 ; K -1.0 ; KX -0.5 ; THI -40.0 ; GLA REFL
+S ; RDY 100.0 ; RDX 50.0 ; K -1.0 ; KX -0.5 ; THI -40.0 ; GLA REFL
 SI
 GO
 """
@@ -1031,7 +1031,7 @@ DIM M
 WL 550.0
 EPD 10.0
 SO ; THI 1E10
-S CUY -0.0125 ; K -1.0 ; THI -40.0 ; GLA REFL
+S ; CUY -0.0125 ; K -1.0 ; THI -40.0 ; GLA REFL
 NRR 5.0
 ZFR 0.0 0.0 0.0 1.0e-4 0.0 0.0
 SI
@@ -1066,7 +1066,7 @@ DIM M
 WL 550.0
 EPD 10.0
 SO ; THI 1E10
-S CUY -0.0125 ; K -1.0 ; THI -40.0 ; GLA REFL
+S ; CUY -0.0125 ; K -1.0 ; THI -40.0 ; GLA REFL
 NRR 10.0
 XYP 0.0 0.0 0.0 2.0e-5
 SI
@@ -1085,36 +1085,36 @@ def test_seq_xyp_builds_surface_xy():
 
 
 # ============================================================================
-# Code V DECNTR / ADE / BDE / CDE
+# Code V XDE / YDE / ADE / BDE / CDE
 # ============================================================================
 
-_SEQ_DECNTR = """\
+_SEQ_DECENTER = """\
 LEN
 DIM M
 WL 550.0
 EPD 4.0
 SO ; THI 1E10
-S RDY 30 ; THI 2.0 ; GLA BK7
+S ; RDY 30 ; THI 2.0 ; GLA BK7
 DAR
 XDE 0.5 ; YDE 0.25
 ADE 1.0
 BDE -2.0
-S RDY -30 ; THI 50.0
+S ; RDY -30 ; THI 50.0
 SI
 GO
 """
 
 
 def test_seq_decentered_surface_has_decenter(refractiveindex_database):
-    pf = read_seq(_SEQ_DECNTR, _is_text=True, database=refractiveindex_database)
+    pf = read_seq(_SEQ_DECENTER, _is_text=True, database=refractiveindex_database)
     s = pf.surfaces[0]
-    # DEC 0.5 0.25 was added to the surface position
+    # XDE/YDE was added to the surface position
     np.testing.assert_allclose(s.P[0], 0.5)
     np.testing.assert_allclose(s.P[1], 0.25)
 
 
 def test_seq_decentered_surface_has_rotation(refractiveindex_database):
-    pf = read_seq(_SEQ_DECNTR, _is_text=True, database=refractiveindex_database)
+    pf = read_seq(_SEQ_DECENTER, _is_text=True, database=refractiveindex_database)
     s = pf.surfaces[0]
     # ADE=1, BDE=-2 -> a non-identity rotation
     assert s.R is not None
@@ -1126,8 +1126,8 @@ def test_seq_decentered_surface_has_rotation(refractiveindex_database):
 
 
 def test_seq_undecentered_surface_has_no_rotation(refractiveindex_database):
-    """The second surface in _SEQ_DECNTR was not decentered."""
-    pf = read_seq(_SEQ_DECNTR, _is_text=True, database=refractiveindex_database)
+    """The second surface in _SEQ_DECENTER was not decentered."""
+    pf = read_seq(_SEQ_DECENTER, _is_text=True, database=refractiveindex_database)
     s2 = pf.surfaces[1]
     assert s2.R is None
     np.testing.assert_allclose(s2.P[:2], (0.0, 0.0))

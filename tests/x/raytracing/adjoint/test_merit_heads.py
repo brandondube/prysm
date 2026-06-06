@@ -1,19 +1,24 @@
-"""Merit-head seeds: adjoint gradient vs forward mode and central differences.
+"""Seedable merits: adjoint gradient vs forward mode and central differences.
 
-Each merit is differentiated three ways and cross-checked:
+The unified merits (design.RmsSpotRadius / design.WavefrontRMS) are seedable:
+the adjoint backward sweep transports their image-plane cotangent to every
+tolerance parameter at once.  Each is differentiated three ways and
+cross-checked:
   - the adjoint backward sweep (one sweep, all parameters)
   - (RMS WFE) prysm's forward-mode wavefront_with_tangents, contracted with the
     merit's OPD cotangent
   - central finite differences of the merit recomputed on perturbed systems
 The FD recomputes the chief ray and (auto) exit pupil per perturbation, so it is
-the faithful total derivative the adjoint must reproduce.
+the faithful total derivative the adjoint must reproduce.  Both merits report
+the RMS (length); the seed carries the sqrt-chain factor 1 / (2 RMS).
 """
 import numpy as np
 import pytest
 
-from prysm.x.raytracing.spencer_and_murty import raytrace, intersect_reference_sphere
+from prysm.x.raytracing.spencer_and_murty import (
+    raytrace, intersect_reference_sphere, valid_mask,
+)
 from prysm.x.raytracing._diff_raytrace import (
-    raytrace_with_tangents,
     wavefront_with_tangents,
     seed_curvature,
     seed_conic,
@@ -21,46 +26,40 @@ from prysm.x.raytracing._diff_raytrace import (
     seed_decenter,
     seed_index,
 )
-from prysm.x.raytracing.opt import _valid_mask
 from prysm.x.raytracing.analysis import _pupil_center_chief_index
+from prysm.x.raytracing.opt import _closest_approach_on_axis, rms_spot_radius
 
 from prysm.x.raytracing.adjoint.backward_sweep import adjoint_gradient
-from prysm.x.raytracing.adjoint.merit_heads import (
-    RmsSpotSizeSeed, DistortionSeed, RmsWfeSeed, _closest_point_on_axis,
+from prysm.x.raytracing.design import (
+    Merit, RmsSpotRadius, WavefrontRMS, Distortion,
 )
-from tests.x.raytracing.adjoint.conftest import make_system, ray_bundle, BASE, NG, WVL
+from tests.x.raytracing.adjoint.conftest import make_system, ray_bundle, BASE, WVL
 
 
-# ---------- nominal merit evaluators (mirror the heads' conventions) --------
+# ---------- nominal merit evaluators (mirror the merits' conventions) -------
 
 def _merit_spot(system, P, S):
     tr = raytrace(system, P, S, WVL)
-    valid = _valid_mask(tr.status, tr.P[-1])
+    valid = valid_mask(tr.status, tr.P[-1])
     xy = tr.P[-1][valid, :2]
     centroid = xy.mean(axis=0)
-    return np.mean(np.sum((xy - centroid) ** 2, axis=1))
-
-
-def _merit_distortion(system, P, S, axis):
-    tr = raytrace(system, P, S, WVL)
-    chief = _pupil_center_chief_index(tr.P[0])
-    return tr.P[-1][chief, {'x': 0, 'y': 1}[axis]]
+    return float(np.sqrt(np.mean(np.sum((xy - centroid) ** 2, axis=1))))
 
 
 def _merit_wfe(system, P, S, n_image=1.0):
     tr = raytrace(system, P, S, WVL)
-    valid = _valid_mask(tr.status, tr.P[-1])
+    valid = valid_mask(tr.status, tr.P[-1])
     chief = _pupil_center_chief_index(tr.P[0])
     C = tr.P[-1][chief]
-    P_xp = _closest_point_on_axis(C, tr.S[-1][chief],
-                                  np.zeros(3), np.array([0., 0., 1.]))
+    P_xp = _closest_approach_on_axis(C, tr.S[-1][chief],
+                                     np.zeros(3), np.array([0., 0., 1.]))
     R = float(np.sqrt(np.sum((P_xp - C) ** 2)))
     _, t = intersect_reference_sphere(tr.P[-1][valid], tr.S[-1][valid], C, R)
     OPL_total = tr.OPL[:, valid].sum(axis=0) + n_image * t
     valid_idx = np.nonzero(valid)[0]
     chief_v = int(np.nonzero(valid_idx == chief)[0][0])
     opd = OPL_total - OPL_total[chief_v]
-    return np.mean(opd ** 2)
+    return float(np.sqrt(np.mean(opd ** 2)))
 
 
 # ---------- FD harness ------------------------------------------------------
@@ -96,32 +95,9 @@ def _seeds():
 def test_spot_size_vs_fd():
     P, S = ray_bundle()
     grad_adj = adjoint_gradient(make_system(), P, S, WVL, _seeds(),
-                                RmsSpotSizeSeed())
+                                RmsSpotRadius(P, S, WVL))
     grad_fd = _fd_grad(_merit_spot, P, S)
     np.testing.assert_allclose(grad_adj, grad_fd, rtol=2e-5, atol=1e-8)
-
-
-# ---------- distortion ------------------------------------------------------
-
-@pytest.mark.parametrize('axis', ['x', 'y'])
-def test_distortion_vs_fd(axis):
-    P, S = ray_bundle()
-    grad_adj = adjoint_gradient(make_system(), P, S, WVL, _seeds(),
-                                DistortionSeed(axis=axis))
-    grad_fd = _fd_grad(lambda sys, p, s: _merit_distortion(sys, p, s, axis), P, S)
-    np.testing.assert_allclose(grad_adj, grad_fd, rtol=2e-5, atol=1e-8)
-
-
-def test_distortion_vs_forward_mode():
-    P, S = ray_bundle()
-    seeds = _seeds()
-    res = raytrace_with_tangents(make_system(), P, S, WVL, seeds)
-    chief = _pupil_center_chief_index(P)
-    for axis, idx in (('x', 0), ('y', 1)):
-        grad_adj = adjoint_gradient(make_system(), P, S, WVL, seeds,
-                                    DistortionSeed(axis=axis))
-        grad_fwd = res.Pdot[-1][chief, idx, :]
-        np.testing.assert_allclose(grad_adj, grad_fwd, rtol=1e-9, atol=1e-11)
 
 
 # ---------- RMS WFE ---------------------------------------------------------
@@ -132,15 +108,70 @@ def test_wfe_vs_forward_mode():
     opd, xp, yp, dW = wavefront_with_tangents(make_system(), P, S, WVL, seeds,
                                               output='length')
     nv = opd.shape[0]
-    opd_bar = (2.0 / nv) * opd
+    rms = float(np.sqrt(np.mean(opd ** 2)))
+    opd_bar = opd / (nv * rms)
     grad_fwd = np.einsum('v,vp->p', opd_bar, dW)
 
-    grad_adj = adjoint_gradient(make_system(), P, S, WVL, seeds, RmsWfeSeed())
+    grad_adj = adjoint_gradient(make_system(), P, S, WVL, seeds,
+                                WavefrontRMS(P, S, WVL))
     np.testing.assert_allclose(grad_adj, grad_fwd, rtol=1e-8, atol=1e-11)
 
 
 def test_wfe_vs_fd():
     P, S = ray_bundle()
-    grad_adj = adjoint_gradient(make_system(), P, S, WVL, _seeds(), RmsWfeSeed())
+    grad_adj = adjoint_gradient(make_system(), P, S, WVL, _seeds(),
+                                WavefrontRMS(P, S, WVL))
     grad_fd = _fd_grad(_merit_wfe, P, S)
     np.testing.assert_allclose(grad_adj, grad_fd, rtol=2e-5, atol=1e-9)
+
+
+# ---------- Merit contract (the shared interface) ---------------------------
+
+def test_seeded_merits_are_merits():
+    P, S = ray_bundle()
+    for merit in (RmsSpotRadius(P, S, WVL), WavefrontRMS(P, S, WVL)):
+        assert isinstance(merit, Merit)
+        assert merit.has_value
+        assert merit.seedable
+
+
+def test_distortion_is_optimizer_only():
+    # The adjoint chief-landing seed was dropped; a bare landing coordinate is
+    # not a usable figure of merit without a target.
+    d = Distortion(field=None, wavelength=WVL, epd=10.0)
+    assert isinstance(d, Merit)
+    assert not d.seedable
+    assert not d.has_value
+
+
+def test_merit_base_stubs_raise():
+    bare = Merit()
+    assert not bare.has_value
+    assert not bare.seedable
+    with pytest.raises(NotImplementedError):
+        bare.value(None, None, None)
+    with pytest.raises(NotImplementedError):
+        bare.seed(None, None, None)
+    with pytest.raises(NotImplementedError):
+        bare(None, None)
+
+
+def test_value_only_merit_flags():
+    class ValueOnly(Merit):
+        name = 'value_only'
+
+        def value(self, trace, prescription, wavelength):
+            return 1.0
+
+    m = ValueOnly()
+    assert m.has_value
+    assert not m.seedable
+
+
+def test_spot_value_matches_rms_spot_radius():
+    P, S = ray_bundle()
+    sys = make_system()
+    tr = raytrace(sys, P, S, WVL)
+    val = RmsSpotRadius(P, S, WVL).value(tr, sys, WVL)
+    assert np.isclose(val, float(rms_spot_radius(tr.P[-1], status=tr.status)))
+    assert np.isclose(val, _merit_spot(sys, P, S))

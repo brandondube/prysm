@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from prysm.x.raytracing import (
-    LensData, OpticalSystem, System, ApertureSpec, FieldSet, Field,
+    LensData, OpticalSystem, ApertureSpec, FieldSet, Field,
     FRAUNHOFER_LINES_UM,
 )
 from prysm.x import materials
@@ -201,8 +201,7 @@ def test_object_index_from_object_surface_material():
 
 # ---------- OpticalSystem behavior -----------------------------------------
 
-def test_system_alias_and_sequence_delegation():
-    assert System is OpticalSystem
+def test_optical_system_sequence_delegation():
     sys = _singlet()
     assert len(sys) == len(sys.lens)
     assert list(sys)[0] is sys.lens[0]

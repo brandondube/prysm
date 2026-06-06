@@ -31,15 +31,16 @@ from .spencer_and_murty import (
     STYPE_REFLECT,
     STYPE_REFRACT,
     raytrace,
+    valid_mask,
 )
 from ._line_math import normalize_vector
-from .opt import opd_from_raytrace_eic, _valid_mask, _chief_axis_perp_norm
+from .opt import opd_from_raytrace_eic, _chief_axis_perp_norm
 from .analysis import (
     _pupil_center_chief_index,
     _filtered_chief_index,
     _apply_field_and_output,
 )
-from ._meta import object_space_index, image_space_index
+from ._meta import object_space_index, image_space_index, system_stop_index
 
 
 # ---------- broadcasting helpers --------------------------------------------
@@ -502,6 +503,120 @@ def _assemble_seeds(n_surfaces, seeds, n_params):
     return Qdot, Rdot, nprimedot, shape_params, sag_partial_fns
 
 
+def _paraxial_matmul_tangent(A, Adot, M, Mdot):
+    """Compose ABCD nominal/tangent matrices with a trailing parameter axis."""
+    Mdot_next = (np.einsum('ijp,jk->ikp', Adot, M)
+                 + np.einsum('ij,jkp->ikp', A, Mdot))
+    return A @ M, Mdot_next
+
+
+def _paraxial_walk_matrix_tangent(surfaces, wvl, n_start, n_start_dot,
+                                  zdot_s, cdot_s, nprimedot_s, *,
+                                  start_index=0, end_index=None,
+                                  include_end_surface=True):
+    """ABCD walk plus derivatives with respect to DiffSeed parameters."""
+    from .paraxial import _paraxial_curvature
+
+    n_params = n_start_dot.shape[0]
+    M = np.eye(2, dtype=config.precision)
+    Mdot = np.zeros((2, 2, n_params), dtype=config.precision)
+    n = float(n_start)
+    ndot = np.asarray(n_start_dot, dtype=config.precision).copy()
+    z_prev = float(surfaces[start_index].P[2])
+    if end_index is None:
+        end_index = len(surfaces) - 1
+
+    for k in range(start_index, len(surfaces)):
+        if k > end_index:
+            break
+        surf = surfaces[k]
+        if k > start_index:
+            t = float(surf.P[2]) - z_prev
+            tdot = zdot_s[k] - zdot_s[k - 1]
+            T = np.array([[1.0, t / n], [0.0, 1.0]], dtype=config.precision)
+            Tdot = np.zeros((2, 2, n_params), dtype=config.precision)
+            Tdot[0, 1] = tdot / n - t * ndot / (n * n)
+            M, Mdot = _paraxial_matmul_tangent(T, Tdot, M, Mdot)
+
+        if include_end_surface or k != end_index:
+            c = _paraxial_curvature(surf)
+            cdot = cdot_s[k]
+            if surf.typ == STYPE_REFRACT:
+                nprime = float(surf.n(wvl))
+                nprime_dot = nprimedot_s[k]
+            elif surf.typ == STYPE_REFLECT:
+                nprime = -n
+                nprime_dot = -ndot
+            else:
+                z_prev = float(surf.P[2])
+                continue
+
+            power = (nprime - n) * c
+            power_dot = (nprime_dot - ndot) * c + (nprime - n) * cdot
+            R = np.array([[1.0, 0.0], [-power, 1.0]], dtype=config.precision)
+            Rdot = np.zeros((2, 2, n_params), dtype=config.precision)
+            Rdot[1, 0] = -power_dot
+            M, Mdot = _paraxial_matmul_tangent(R, Rdot, M, Mdot)
+            n = float(nprime)
+            ndot = np.asarray(nprime_dot, dtype=config.precision).copy()
+
+        z_prev = float(surf.P[2])
+
+    return M, n, Mdot, ndot
+
+
+def paraxial_exit_pupil_z_tangents(prescription, wvl, seeds, *,
+                                   stop_index=None):
+    """Derivative of first_order(...).xp_z with respect to DiffSeed entries."""
+    from .paraxial import _first_order_surfaces
+
+    seeds = list(seeds)
+    n_params = len(seeds)
+    stop_index = system_stop_index(prescription, stop_index)
+    if stop_index is None:
+        return np.zeros(n_params, dtype=config.precision)
+
+    surfaces = _first_order_surfaces(prescription)
+    n_surfaces = len(surfaces)
+    k = int(stop_index)
+    if k < 0 or k >= n_surfaces:
+        raise IndexError(
+            f'stop_index {k} out of range for prescription of length '
+            f'{n_surfaces}'
+        )
+
+    Qdot_s, _, nprimedot_s, shape_params, _ = _assemble_seeds(
+        n_surfaces, seeds, n_params)
+    zdot_s = np.array([Qdot[2] for Qdot in Qdot_s], dtype=config.precision)
+    cdot_s = np.zeros((n_surfaces, n_params), dtype=config.precision)
+    for sidx, entries in enumerate(shape_params):
+        for p, pname in entries:
+            if pname in ('c', 'c_y'):
+                cdot_s[sidx, p] = cdot_s[sidx, p] + 1.0
+
+    n_object = object_space_index(surfaces, wvl)
+    ndot_object = np.zeros(n_params, dtype=config.precision)
+    _, n_at_stop, _, ndot_at_stop = _paraxial_walk_matrix_tangent(
+        surfaces, wvl, n_object, ndot_object, zdot_s, cdot_s, nprimedot_s,
+        end_index=k, include_end_surface=False)
+    M_from_stop, n_image, Mdot_from_stop, ndot_image = \
+        _paraxial_walk_matrix_tangent(
+            surfaces, wvl, n_at_stop, ndot_at_stop, zdot_s, cdot_s,
+            nprimedot_s, start_index=k)
+
+    B = float(M_from_stop[0, 1])
+    D = float(M_from_stop[1, 1])
+    if abs(D) < 1e-30:
+        return np.zeros(n_params, dtype=config.precision)
+    Bdot = Mdot_from_stop[0, 1]
+    Ddot = Mdot_from_stop[1, 1]
+    xp_distance_dot = (
+        -(Bdot * n_image + B * ndot_image) / D
+        + B * n_image * Ddot / (D * D)
+    )
+    return zdot_s[-1] + xp_distance_dot
+
+
 # ---------- the differential trace ------------------------------------------
 
 class DiffTraceResult:
@@ -784,7 +899,7 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
 
     if chief_index is None:
         chief_index = _pupil_center_chief_index(P)
-    valid = _valid_mask(trace.status, trace.P[-1])
+    valid = valid_mask(trace.status, trace.P[-1])
     if not valid[chief_index]:
         raise ValueError('chief ray is invalid; cannot define reference sphere')
 

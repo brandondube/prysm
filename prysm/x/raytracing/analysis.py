@@ -8,12 +8,11 @@ from prysm.mathops import np
 
 from prysm.polynomials import zernike_nm_seq, lstsq
 
-from .spencer_and_murty import raytrace
+from .spencer_and_murty import raytrace, valid_mask
 from .opt import (
     xp_reference_sphere,
     opd_from_raytrace_eic,
     _pupil_center_chief_index,
-    _valid_mask,
 )
 from ._line_math import line_intersection_params
 from .paraxial import paraxial_image_distance, first_order
@@ -227,7 +226,7 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None,
     launch = P_hist[0, :, ax]
     image = P_hist[-1, :, ax]
 
-    valid = _valid_mask(status, P_hist[-1])
+    valid = valid_mask(status, P_hist[-1])
 
     # the pupil coordinate is referenced the same way as the image error, so
     # the fan stays centered on the pupil.  Using chief_index (N//2) for the
@@ -265,7 +264,7 @@ def _wavefront_from_trace(prescription, P, wavelength, trace, *, P_xp,
                           chief_index=None, pupil_coords=None, field=None,
                           output='length', reference='chief'):
     """Wavefront kernel for callers that already have the raytrace result."""
-    valid = _valid_mask(trace.status, trace.P[-1])
+    valid = valid_mask(trace.status, trace.P[-1])
     chief_index = _resolve_chief_index(P, valid, reference, chief_index)
     if not bool(valid[chief_index]):
         if reference == 'chief':
@@ -736,7 +735,7 @@ def _best_focus_shift_from_trace(P_final, S_final, status=None):
     """Axial plane shift that minimizes centroid-referenced RMS spot radius."""
     P_final = np.asarray(P_final)
     S_final = np.asarray(S_final)
-    valid = _valid_mask(status, P_final)
+    valid = valid_mask(status, P_final)
     valid = valid & np.isfinite(S_final).all(axis=1)
     valid = valid & (np.abs(S_final[:, 2]) > 1e-30)
     if not valid.any():
@@ -936,7 +935,7 @@ def _fan_image_error(prescription, field, wavelength, axis, sampling, epd,
     ax = _axis_index(axis)
     P, S = launch(prescription, field, wavelength, sampling, epd=epd)
     tr = raytrace(prescription, P, S, wavelength)
-    valid = _valid_mask(tr.status, tr.P[-1])
+    valid = valid_mask(tr.status, tr.P[-1])
     image = tr.P[-1, :, ax]
     ci = _pupil_center_chief_index(P)
     centered, _ = _center_valid(image, valid, reference, ci)
@@ -1144,7 +1143,7 @@ def spot_diagrams(prescription, fields=None, wavelengths=None, *,
             # rays clipped by a real aperture during the trace are status-
             # flagged (not deleted), so the bundle stays full length and those
             # samples come out NaN via the valid mask.
-            v = _valid_mask(tr.status, tr.P[-1])
+            v = valid_mask(tr.status, tr.P[-1])
             xi = tr.P[-1, :, 0]
             yi = tr.P[-1, :, 1]
             image_xy = np.stack([xi, yi], axis=1)

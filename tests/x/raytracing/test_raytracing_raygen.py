@@ -62,14 +62,6 @@ def test_generate_collimated_ray_fan_with_yangle():
     assert not np.allclose(S, [0, 0, 1])
 
 
-def test_generate_collimated_ray_fan_accepts_ignored_aim_at_keyword():
-    P, S = generate_collimated_ray_fan(
-        5, maxr=1.0, z=-2.0, azimuth=0, aim_at=10.0,
-    )
-    assert P.shape == (5, 3)
-    assert S.shape == (5, 3)
-
-
 def test_generate_collimated_rect_ray_grid_shape_and_unitnorm():
     P, S = generate_collimated_rect_ray_grid(5, maxx=1.0, z=0)
     assert P.shape == (25, 3)

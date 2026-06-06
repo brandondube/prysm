@@ -18,6 +18,7 @@ from .spencer_and_murty import (
     RayTraceResult,
     transform_to_global_coords,
     transform_to_local_coords,
+    valid_mask,
 )
 from .analysis import (
     transverse_ray_aberration,
@@ -1058,7 +1059,7 @@ def plot_spot_diagram(phist, marker='+', c='k', alpha=1, zorder=4, s=None,
     y = phist[-1, ..., 1]
     if status is not None:
         status = _to_np(status)
-        valid = status.imag == 0
+        valid = valid_mask(status, phist[-1])
         x = x[valid]
         y = y[valid]
     if origin is not None:
