@@ -60,7 +60,6 @@ def test_autocrop_returns_requested_centered_window(tpsf):
 
     cropped = psf.autocrop(tpsf, 10)
     cy, cx = (int(c) for c in psf.centroid(tpsf, unit='pixels'))
-    expected = tpsf[cy - 5:cy, cx - 5:cx]
-
-    assert cropped.shape == (5, 5)
+    expected = tpsf[cy - 5:cy + 5, cx - 5:cx + 5]
+    assert cropped.shape == (10, 10)
     np.testing.assert_allclose(cropped, expected)
