@@ -1,21 +1,4 @@
-"""Optical-monitoring simulation of coating deposition.
-
-During physical deposition the layers grow one at a time on the substrate; an
-in-situ monitor watches the reflectance (or transmittance) of the partially
-grown stack at a monitor wavelength and the deposition of each layer is
-terminated when that signal reaches a chosen point -- a turning point (extremum,
-i.e. quarter-wave at the monitor wavelength) or a preset level.  Termination
-error (overshoot, level miss, monitor noise) becomes layer-thickness error and
-propagates into the as-built spectrum, partly self-compensating depending on the
-monitor wavelength.  This module simulates that chain so a monitoring strategy
-can be evaluated and the monitor wavelength chosen to minimize error sensitivity.
-
-The signal of the growing layer is computed from the same transfer-matrix engine
-as the rest of the package: the already-deposited layers below contribute a fixed
-matrix product, and the growing layer's matrix is swept over deposited thickness.
-Deposition order is substrate side first (the last layer in the ambient-first
-Stack is deposited first); the monitor beam enters from the ambient side.
-"""
+"""Optical-monitoring simulation for coating deposition."""
 
 from functools import reduce
 
@@ -31,11 +14,7 @@ from .stack import (
 
 def _signal_curve(below_indices, below_thicknesses, grow_index, d_grid,
                   monitor_wvl, theta, pol, mode, n0, nsub):
-    """Monitor signal of a growing layer over a grid of deposited thickness.
-
-    The layers below (already deposited) are fixed; the growing layer's
-    characteristic matrix is evaluated across d_grid and assembled onto them.
-    """
+    """Monitor signal of a growing layer over deposited thickness."""
     pol = pol.lower()
     if below_indices:
         sub = Stack(below_indices, below_thicknesses, nsub, n0)
@@ -87,8 +66,7 @@ def monitoring_trace(stack, layer, monitor_wvl, *, theta=0.0, pol='s', mode='R',
     n_points : int, optional
         samples along the deposited-thickness axis.
     max_factor : float, optional
-        the grid spans [0, max_factor * target thickness]; raise it above 1 to
-        see beyond the target (e.g. for overshoot / turning points past target).
+        multiple of the target thickness spanned by the grid.
 
     Returns
     -------
@@ -190,16 +168,7 @@ def cutoff_levels(stack, monitor_wvl, *, theta=0.0, pol='s', mode='R',
 def simulate_run(stack, monitor_wvl, *, strategy='level', turning_index=1,
                  signal_errors=None, thickness_errors=None, theta=0.0, pol='s',
                  mode='R', n_points=600, max_factor=1.8, levels=None):
-    """Simulate a monitored deposition run and return the as-built stack.
-
-    Layers are deposited substrate side first.  For each layer the monitor trace
-    is computed from the as-built layers below (so errors propagate and partly
-    self-compensate), and deposition terminates per the strategy:
-
-    - 'turning': stop at the turning_index-th extremum (quarter-wave monitoring);
-      thickness_errors add a per-layer overshoot.
-    - 'level': stop when the signal crosses the nominal cutoff level (from
-      cutoff_levels, or the provided levels); signal_errors offset that level.
+    """Simulate a monitored deposition run.
 
     Parameters
     ----------
@@ -210,18 +179,17 @@ def simulate_run(stack, monitor_wvl, *, strategy='level', turning_index=1,
     strategy : str, optional
         'level' or 'turning'.
     turning_index : int, optional
-        which extremum to stop at (1 = first), for the turning strategy.
+        which extremum to stop at for the turning strategy.
     signal_errors : ndarray, optional
-        per-layer additive monitor-level error (level strategy).
+        per-layer monitor-level error.
     thickness_errors : ndarray, optional
-        per-layer additive thickness error / overshoot (turning strategy).
+        per-layer thickness error.
     theta, pol, mode : optional
         monitor geometry / quantity.
     n_points, max_factor : optional
         monitor-trace sampling (see monitoring_trace).
     levels : ndarray, optional
-        precomputed nominal cutoff levels (level strategy); cutoff_levels is used
-        when omitted.
+        precomputed nominal cutoff levels.
 
     Returns
     -------
@@ -268,11 +236,7 @@ def simulate_run(stack, monitor_wvl, *, strategy='level', turning_index=1,
 def monitoring_error_sensitivity(stack, monitor_wvl, design_wvls, *,
                                  strategy='level', theta=0.0, pol='s',
                                  design_pol='s', mode='R', eps=1e-4, **kwargs):
-    """Jacobian of the as-built design reflectance w.r.t. per-layer termination error.
-
-    Finite-differences simulate_run: column k is d(R at each design wavelength)
-    / d(termination error of layer k), the error being a monitor-level offset
-    (level strategy) or thickness overshoot (turning strategy).
+    """Jacobian of realized reflectance w.r.t. termination error.
 
     Parameters
     ----------
@@ -321,10 +285,7 @@ def monitoring_error_sensitivity(stack, monitor_wvl, design_wvls, *,
 
 def choose_monitor_wavelength(stack, candidates, design_wvls, *,
                              strategy='level', **kwargs):
-    """Pick the monitor wavelength that minimizes total error sensitivity.
-
-    Scores each candidate by the Frobenius norm of its error-sensitivity
-    Jacobian (monitoring_error_sensitivity) and returns the lowest.
+    """Pick the monitor wavelength with lowest error sensitivity.
 
     Parameters
     ----------

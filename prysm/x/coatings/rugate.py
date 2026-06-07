@@ -1,24 +1,4 @@
-"""Rugate / inhomogeneous-index synthesis.
-
-A rugate filter is a coating with a continuous refractive-index profile n(z)
-rather than discrete homogeneous layers; a sinusoidal n(z) produces a narrow
-reflectance notch (rejection band) and -- being smooth -- avoids the higher-order
-harmonics of a discrete quarter-wave stack.  The package's transfer-matrix engine
-already handles a stack of many thin homogeneous sublayers and its O(N) gradient
-scales to hundreds of them, so a continuous profile is designed here and then
-discretized into such a stack, optionally refined index-by-index against the
-exact spectrum (refine(..., variables='index')).
-
-Two synthesis routes are provided: a direct parametric sinusoidal rugate, and the
-Fourier / Q-function inverse method (Bovard / Sossi), which maps a target
-reflectance amplitude versus wavenumber to a log-index profile in optical-
-thickness space.  Apodization (a smooth amplitude taper, e.g. a quintic window)
-suppresses the sidebands a hard-truncated profile would ring with.
-
-Conventions: thicknesses and wavelengths are microns; wavenumber is k = 2 pi /
-lambda; the design notch of a sinusoid of physical period Lambda sits at the
-first-order wavelength lambda0 = 2 n_avg Lambda.
-"""
+"""Rugate and inhomogeneous-index coating synthesis."""
 
 from prysm.conf import config
 from prysm.mathops import np
@@ -26,14 +6,8 @@ from prysm.mathops import np
 from .stack import Stack
 
 
-# ---------------------------------------------------------------- windows
-
 def quintic_taper(edge_fraction=0.5):
-    """A smooth amplitude window that ramps 0 -> 1 -> 0 with a quintic smoothstep.
-
-    The quintic S(t) = 10 t^3 - 15 t^4 + 6 t^5 has zero first and second
-    derivatives at both ends, so the modulation switches on and off without the
-    kinks that seed reflectance sidebands.
+    """Smooth amplitude window using a quintic smoothstep.
 
     Parameters
     ----------
@@ -63,14 +37,9 @@ def quintic_taper(edge_fraction=0.5):
     return window
 
 
-# ---------------------------------------------------------------- discretize
-
 def discretize_profile(n_of_z, total_thickness, n_sublayers, substrate_index,
                        ambient_index=1.0):
     """Sample a continuous index profile into a Stack of thin homogeneous layers.
-
-    The profile is sampled at the midpoint of each of n_sublayers equal slabs of
-    thickness total_thickness / n_sublayers.
 
     Parameters
     ----------
@@ -98,8 +67,6 @@ def discretize_profile(n_of_z, total_thickness, n_sublayers, substrate_index,
     return Stack(indices, thicknesses, substrate_index, ambient_index)
 
 
-# ---------------------------------------------------------------- parametric
-
 def rugate_period(n_avg, design_wvl):
     """Physical period for a first-order rugate notch at design_wvl."""
     return design_wvl / (2.0 * n_avg)
@@ -115,16 +82,12 @@ def sinusoidal_rugate(n_avg, n_amp, design_wvl, n_periods, *,
                       ambient_index=1.0, apodization=None, clamp=None):
     """Build a sinusoidal rugate stack with a notch at design_wvl.
 
-    The index profile is n(z) = n_avg + n_amp * w(z / total) * sin(2 pi z /
-    Lambda), with Lambda the first-order period for design_wvl and w an optional
-    amplitude window (apodization).
-
     Parameters
     ----------
     n_avg : float
         mean index.
     n_amp : float
-        modulation amplitude (peak-to-peak is 2 n_amp).
+        modulation amplitude.
     design_wvl : float
         notch wavelength, microns.
     n_periods : int
@@ -132,7 +95,7 @@ def sinusoidal_rugate(n_avg, n_amp, design_wvl, n_periods, *,
     sublayers_per_period : int, optional
         discretization density.
     substrate_index : float, optional
-        substrate index; defaults to n_avg (index-matched, isolating the notch).
+        substrate index; defaults to n_avg.
     ambient_index : float, optional
         incidence-medium index.
     apodization : callable, optional
@@ -165,11 +128,7 @@ def sinusoidal_rugate(n_avg, n_amp, design_wvl, n_periods, *,
 
 
 def apodize(n_of_z, n_avg, total_thickness, window):
-    """Wrap a profile so its modulation about n_avg is tapered by a window.
-
-    Returns a new callable n'(z) = n_avg + window(z / total) * (n_of_z(z) -
-    n_avg), i.e. the index excursion is scaled by the window while the mean is
-    preserved.
+    """Wrap a profile so its modulation about n_avg is tapered.
 
     Parameters
     ----------
@@ -193,22 +152,10 @@ def apodize(n_of_z, n_avg, total_thickness, window):
     return tapered
 
 
-# ---------------------------------------------------------------- inverse
-
 def rugate_from_target(wavenumbers, target_amplitude, n_avg,
                        total_optical_thickness, n_sublayers, *,
                        substrate_index=None, ambient_index=1.0, clamp=None):
-    """Fourier (Q-function) synthesis of an index profile from a target spectrum.
-
-    The first-order inverse of thin-film reflection: in the optical-thickness
-    coordinate x the log-index derivative Q(x) = (1/2) d ln n / dx is the Fourier
-    transform of the target reflectance amplitude r(k) (k the wavenumber, the
-    factor 2 from the round trip),
-
-        Q(x) = (1 / pi) Re integral r(k) exp(2 i k x) dk,
-
-    so ln n(x) = ln n_avg + 2 integral_0^x Q(x') dx'.  The profile is then mapped
-    from optical to physical thickness (dz = dx / n) and discretized.
+    """Fourier synthesis of an index profile from a target spectrum.
 
     Parameters
     ----------

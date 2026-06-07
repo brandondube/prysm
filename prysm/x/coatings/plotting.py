@@ -1,15 +1,4 @@
-"""Plotting for coating designs.
-
-Like prysm.x.raytracing.plotting, this module uses import numpy as np directly:
-matplotlib only accepts true numpy arrays, so the public functions bring any
-backend tensors back to host numpy at entry rather than going through the
-swappable prysm.mathops backend.
-
-The views are the working set of coating design: the spectrum (R/T/A versus
-wavelength), the standing-wave field intensity through the stack, the index
-profile, the admittance diagram (the H/E locus, the partial-product view a
-coefficient-only TMM cannot draw), and the in-situ monitoring trace.
-"""
+"""Plotting for coating designs."""
 
 from prysm.plotting import share_fig_ax
 from prysm.mathops import array_to_true_numpy
@@ -17,7 +6,7 @@ from prysm.mathops import array_to_true_numpy
 from .stack import RTA, field_at_depth, internal_fields
 from .monitoring import monitoring_trace
 
-import numpy as np  # see module docstring; do not "fix" to mathops np
+import numpy as np  # matplotlib expects host numpy arrays
 
 
 def _to_np(x):
@@ -147,13 +136,7 @@ def plot_field_intensity(stack, wvl, theta=0.0, pol='s', n_points=1000,
 
 def plot_admittance(stack, wvl, theta=0.0, pol='s', n_points=2000,
                     fig=None, ax=None):
-    """Plot the admittance diagram: the H/E locus through the stack.
-
-    As the structure is traversed from the substrate to the front, the optical
-    admittance Y = H / E traces a curve (a circular arc per homogeneous layer) in
-    the complex plane; the locus ending at the ambient admittance gives the
-    reflectance.  The internal fields the partial-product engine exposes make
-    this classic design view directly available.
+    """Plot the admittance diagram, the H/E locus through the stack.
 
     Parameters
     ----------

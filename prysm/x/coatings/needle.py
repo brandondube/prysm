@@ -1,23 +1,4 @@
-"""Needle optimization: automatic layer-count growth.
-
-The needle method inserts an infinitesimally thin layer ("needle") of a candidate
-material at the depth where it most improves the merit, then refines.  Repeating
-grows a one- or two-layer start into a multilayer design that meets a broadband
-target -- the flagship coating-synthesis method (Tikhonravov; OptiLayer).
-
-The needle function P(z) is the derivative of the merit with respect to the
-inserted thickness of a needle of given material at depth z.  Splitting the
-assembled transfer matrix at z, M = M_left . M_right, an infinitesimal layer
-contributes dM/d(thickness) = M_left . G . M_right with the thin-layer generator
-
-    G = (2 pi n_n cos(theta_n) / lambda) [[0, -i/eta_n], [-i eta_n, 0]]
-
-(the beta -> 0 limit of d(characteristic matrix)/d(thickness)).  Contracting this
-with the assembled-matrix cotangent of the merit (diff.assembly_cotangent) gives
-P(z) directly, reusing the partial products computed once per illumination
-sample.  Evaluating P(z) for each candidate material over the small fixed pool is
-this package's discrete material-selection mechanism -- no continuous relaxation.
-"""
+"""Needle optimization for coating synthesis."""
 
 from prysm.conf import config
 from prysm.mathops import np
@@ -52,7 +33,7 @@ def _needle_P_for_sample(fwd, c_M, needle_material, z, Z):
     G = np.broadcast_to(beta_dd_n + 0j, calc_shape)[..., None, None] \
         * _dchar_dbeta(np.zeros(calc_shape), eta_n_b)
 
-    # per-z host layer and the partial host-layer matrices above / below z
+    # per-z host layer and partial matrices above / below z
     j = np.clip(np.searchsorted(Z, z, side='right') - 1, 0, N - 1)
     top_t = z - Z[j]
     bot_t = Z[j + 1] - z
@@ -67,7 +48,7 @@ def _needle_P_for_sample(fwd, c_M, needle_material, z, Z):
     M_top = _char_matrix(dbdd_j * top_b, etas_j)
     M_bot = _char_matrix(dbdd_j * bot_b, etas_j)
 
-    # the end-cap identities are bare 2x2; broadcast every product to (*calc, 2, 2)
+    # broadcast end-cap identities to the calc shape before stacking.
     tshape = calc_shape + (2, 2)
     Lstack = np.stack([np.broadcast_to(Lk + 0j, tshape) for Lk in fwd.L], 0)
     Rstack = np.stack([np.broadcast_to(Rk + 0j, tshape) for Rk in fwd.R], 0)
@@ -82,14 +63,13 @@ def _needle_P_for_sample(fwd, c_M, needle_material, z, Z):
 
 
 def needle_function(stack, targets, needle_material, z):
-    """Merit derivative w.r.t. inserting needle_material at each depth z.
+    """Merit derivative for inserting a needle material at depth z.
 
     Parameters
     ----------
     stack : Stack
     targets : MeritFunction, term, or sequence of terms
-        the design objective; must be reflectance / transmittance terms (the
-        classical needle is an assembled-matrix sensitivity).
+        reflectance / transmittance objective.
     needle_material : float, complex, or callable
         the candidate needle index (or dispersion callable).
     z : float or ndarray
@@ -98,8 +78,7 @@ def needle_function(stack, targets, needle_material, z):
     Returns
     -------
     ndarray
-        P(z), same shape as z.  P(z) < 0 means inserting a needle there lowers
-        the merit; the most negative depth is the best insertion site.
+        P(z), same shape as z; negative values lower the merit.
 
     """
     merit = as_merit(targets)
@@ -113,11 +92,7 @@ def needle_function(stack, targets, needle_material, z):
 
 
 def insert_needle(stack, z, material, thickness=1e-3, return_index=False):
-    """Insert a needle of material at depth z, splitting the host layer.
-
-    The host layer containing z is split into [host(top) | needle | host(bottom)]
-    so the surrounding optical thickness is preserved; the needle is seeded with
-    a small thickness for the optimizer to grow or prune.
+    """Insert a layer at depth z, splitting the host layer.
 
     Parameters
     ----------
@@ -129,8 +104,7 @@ def insert_needle(stack, z, material, thickness=1e-3, return_index=False):
     thickness : float, optional
         seed thickness of the inserted needle, microns.
     return_index : bool, optional
-        if True, also return the layer index of the inserted needle in the new
-        stack; synthesize uses this to protect the needle from pruning.
+        if True, also return the layer index of the inserted needle.
 
     Returns
     -------
@@ -206,7 +180,7 @@ def cleanup(stack, prune_tol=2e-3, keep_indices=None):
 
 
 class NeedleResult:
-    """Outcome of a needle synthesis run.
+    """Outcome of needle synthesis.
 
     Attributes
     ----------
@@ -242,13 +216,7 @@ class NeedleResult:
 def synthesize(stack0, targets, materials, *, z_samples=240, max_layers=40,
                max_iters=30, tol=1e-9, prune_tol=2e-3, seed_thickness=1e-3,
                refine_kwargs=None):
-    """Grow a multilayer design by repeated needle insertion + refinement.
-
-    The loop refines the current stack, evaluates P(z) for every candidate
-    material over a depth grid, inserts a needle of the best material at the most
-    negative P(z), refines again, then prunes thin layers and merges neighbours.
-    It stops when no insertion improves the merit (min P(z) >= -tol), the layer
-    budget is hit, or the iteration cap is reached.
+    """Grow a multilayer design by repeated needle insertion and refinement.
 
     Parameters
     ----------
@@ -257,8 +225,7 @@ def synthesize(stack0, targets, materials, *, z_samples=240, max_layers=40,
     targets : MeritFunction, term, or sequence of terms
         reflectance / transmittance objective.
     materials : sequence
-        the fixed material pool (indices or dispersion callables) the fabricator
-        can deposit; the needle selects among them per candidate.
+        material pool, as indices or dispersion callables.
     z_samples : int, optional
         depth-grid resolution for the P(z) sweep.
     max_layers : int, optional

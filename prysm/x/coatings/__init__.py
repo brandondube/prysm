@@ -1,18 +1,4 @@
-"""Thin-film coating design and synthesis.
-
-Built on the committed 2x2 transfer-matrix primitives in prysm.thinfilm, this
-package moves from coating analysis (R/T/A of a given stack) toward synthesis:
-field-aware merit functions, analytic-gradient refinement, needle optimization,
-and rugate synthesis.
-
-Phase 1 is the foundation: a Stack representation plus the field /
-partial-product engine that exposes the internal electric and magnetic field at
-every boundary -- the intermediate state the coefficient-only
-multilayer_stack_rt collapses away, and which every later method consumes.
-
-Phase 2 adds the differentiable transfer-matrix engine (analytic O(N) thickness
-gradients) and analytic-gradient refinement; Phase 3 adds needle synthesis.
-"""
+"""Thin-film coating analysis and synthesis."""
 
 from .stack import (
     Stack,
@@ -68,7 +54,7 @@ from .rugate import (
 )
 
 __all__ = [
-    # stack / field engine (Phase 1)
+    # stack / field engine
     'Stack',
     'stack_characteristic_matrices',
     'forward_products',
@@ -77,7 +63,7 @@ __all__ = [
     'field_at_depth',
     'RTA',
     'stack_rt',
-    # differentiable engine + refinement (Phase 2)
+    # differentiable engine + refinement
     'forward_eval',
     'thickness_gradient',
     'index_gradient',
@@ -92,13 +78,13 @@ __all__ = [
     'CoatingProblem',
     'refine',
     'CoatingResult',
-    # needle synthesis (Phase 3)
+    # needle synthesis
     'needle_function',
     'insert_needle',
     'cleanup',
     'synthesize',
     'NeedleResult',
-    # monitoring-strategy simulation (Phase 5)
+    # monitoring
     'monitoring_trace',
     'turning_points',
     'level_cut',
@@ -106,7 +92,7 @@ __all__ = [
     'simulate_run',
     'monitoring_error_sensitivity',
     'choose_monitor_wavelength',
-    # rugate / inhomogeneous-index synthesis (Phase 6)
+    # rugate / inhomogeneous-index synthesis
     'quintic_taper',
     'discretize_profile',
     'rugate_period',

@@ -1,12 +1,4 @@
-"""Analytic-gradient refinement: tune layer thicknesses to hit a target.
-
-refine builds a CoatingProblem and drives it to a local optimum with either the
-bounded limited-memory quasi-Newton optimizer (PrysmLBFGSB -- the workhorse, the
-gradient is one backward sweep no matter how many spectral samples) or
-constrained damped least squares (Levenberg-Marquardt, fast local target
-fitting).  This is the user-visible Phase 2 deliverable and the inner loop the
-needle synthesis (Phase 3) calls after every insertion.
-"""
+"""Analytic-gradient refinement of coating stacks."""
 
 from prysm.conf import config
 from prysm.mathops import np
@@ -25,7 +17,7 @@ from .problem import CoatingProblem
 
 
 class CoatingResult:
-    """Outcome of a refinement: the optimized stack and run diagnostics.
+    """Outcome of a coating refinement.
 
     Attributes
     ----------
@@ -93,7 +85,7 @@ def refine(stack, targets, *, method='lbfgsb', variable_layers=None,
            variables='thickness', bounds=None,
            min_thickness=0.0, max_thickness=None, maxiter=200,
            ftol=1e-12, gtol=1e-10, memory=10, **kwargs):
-    """Refine a stack's layer thicknesses against a target.
+    """Refine a stack against a target.
 
     Parameters
     ----------
@@ -102,15 +94,13 @@ def refine(stack, targets, *, method='lbfgsb', variable_layers=None,
     targets : MeritFunction, merit term, or sequence of terms
         the objective (normalized with merit.as_merit).
     method : {'lbfgsb', 'lm'}, optional
-        'lbfgsb' is bounded quasi-Newton with the analytic gradient (default);
-        'lm' is damped least squares on the residual vector.
+        bounded quasi-Newton ('lbfgsb') or damped least squares ('lm').
     variable_layers : sequence of int, optional
         which layers' design variable is free; default all.
     variables : {'thickness', 'index'}, optional
-        optimize layer thickness (default) or layer index (rugate / graded index).
+        optimize layer thickness or layer index.
     bounds : (float, float), optional
-        explicit (lower, upper) box bounds on the design variable; overrides
-        min_thickness / max_thickness.  Use this for index bounds.
+        explicit (lower, upper) box bounds on the design variable.
     min_thickness, max_thickness : float, optional
         box bounds on the thicknesses; default [0, inf).
     maxiter : int, optional

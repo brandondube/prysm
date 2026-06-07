@@ -1,14 +1,4 @@
-"""Optimization problem over a coating stack's layer thicknesses.
-
-CoatingProblem adapts a Stack plus a MeritFunction to the optym.Problem protocol:
-the design vector x is the (variable) layer thicknesses, _fg(x) returns the merit
-and its analytic gradient via the diff.py adjoint, and residuals(x) exposes the
-weighted residual vector for the least-squares (Levenberg-Marquardt) path.
-
-Layer thicknesses are physical and must stay non-negative; this is enforced with
-box bounds at the optimizer rather than a reparameterization, so the analytic
-gradient flows straight through.
-"""
+"""Optimization problem for coating layer variables."""
 
 from prysm.conf import config
 from prysm.mathops import np
@@ -21,20 +11,18 @@ from .diff import thickness_gradient, index_gradient
 
 
 class CoatingProblem(Problem):
-    """A thickness-design problem: minimize a MeritFunction over a Stack.
+    """Minimize a MeritFunction over a Stack.
 
     Parameters
     ----------
     stack : Stack
-        the starting stack; its indices, substrate, and ambient are held fixed
-        and its thicknesses seed the design vector.
+        the starting stack.
     merit : MeritFunction, term, or sequence of terms
         the objective; normalized with merit.as_merit.
     variable_layers : sequence of int, optional
-        indices of the layers whose design variable is free.  Default: all.
+        layers whose design variable is free.  Default: all.
     variables : {'thickness', 'index'}, optional
-        which per-layer quantity is optimized.  'index' is for graded-index /
-        rugate films and requires numeric (non-dispersive) layer indices.
+        per-layer quantity to optimize.
 
     """
 

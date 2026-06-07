@@ -1,36 +1,7 @@
-"""Differentiable transfer-matrix engine: analytic gradients of coating merits.
+"""Analytic adjoints for coating transfer matrices.
 
-Manual, backend-pure reverse-mode (adjoint) differentiation over the 2x2
-characteristic-matrix product built in stack.py.  One forward pass and one
-backward sweep give the gradient of any scalar merit with respect to every layer
-thickness at once, in O(N) work regardless of the number of layers -- the
-coating analogue of prysm.x.raytracing.adjoint.
-
-Conventions
------------
-The design variables (layer thicknesses) are real; the matrices, fields, and
-amplitude coefficients are complex; the merit is real.  Every complex node z
-carries a cotangent c_z defined so that
-
-    dF = sum_nodes Re( conj(c_z) dz ),
-
-which composes by the rules
-  - holomorphic z = f(w):           c_w += conj(df/dw) c_z
-  - linear const matrices M = A X B: c_X  = A^H c_M B^H
-  - modulus q = |z|^2 (c_q real):    c_z += 2 c_q z
-  - final real parameter p:          dF/dp = Re( conj(c_p) dp/dp_scalar ).
-
-The assembled matrix is M = M_0 M_1 ... M_{N-1}; the partial products L_k =
-M_0..M_{k-1} and R_k = M_k..M_{N-1} come from stack.forward_products /
-backward_products.  A perturbation of layer j moves the assembly by
-dM = L_j (dM_j) R_{j+1}, so the cotangent of layer j's matrix is
-c_{M_j} = L_j^H c_M R_{j+1}^H.  When a merit also depends on the internal fields
-f_k = R_k v_sub (which share the same partial products), the field cotangents
-fold into a single O(N) scan, so all merits run through one machine.
-
-Only thickness gradients are exposed here (the Phase 2 workhorse).  The index
-gradient is physically actionable only for graded-index / rugate designs and is
-added there.
+Complex cotangents use dF = Re(conj(c_z) dz).  Gradients are summed over the
+broadcast wavelength / angle sample axes.
 """
 
 from prysm.conf import config
@@ -47,8 +18,6 @@ from .stack import (
     backward_products,
 )
 
-
-# ---------------------------------------------------------------- per-layer M
 
 def _dchar_dbeta(beta, eta):
     """Derivative of the characteristic matrix w.r.t. its phase thickness beta."""
@@ -69,11 +38,7 @@ def _dchar_deta(beta, eta):
 
 
 def char_matrix_vjp(beta, eta, M_bar):
-    """Pull a characteristic-matrix cotangent back to (beta, eta) cotangents.
-
-    Adjoint of stack._char_matrix.  With c_M = M_bar the 2x2 cotangent, returns
-    c_beta = sum conj(dM/dbeta) * c_M and c_eta likewise (the holomorphic
-    pullback), each contracted over the trailing 2x2 axes.
+    """Pull a matrix cotangent back to beta and eta cotangents.
 
     Parameters
     ----------
@@ -85,7 +50,7 @@ def char_matrix_vjp(beta, eta, M_bar):
     Returns
     -------
     (ndarray, ndarray)
-        c_beta, c_eta, each shape (*calc,).
+        c_beta and c_eta.
 
     """
     dMdb = _dchar_dbeta(beta, eta)
@@ -95,24 +60,15 @@ def char_matrix_vjp(beta, eta, M_bar):
     return c_beta, c_eta
 
 
-# ---------------------------------------------------------------- forward pass
-
 class ForwardEval:
-    """Cached forward evaluation of a stack at one (wvl, theta, pol) sample set.
-
-    Holds the per-layer matrices and their phase/admittance, the partial
-    products, the assembled matrix, the amplitude coefficients, and the internal
-    boundary fields -- everything the backward sweep and the needle z-sweep
-    consume.  All arrays carry the broadcast (wvl, theta) shape in their leading
-    axes; the trailing axes are the 2x2 (matrices) or 2 (field vectors).
-    """
+    """Cached forward evaluation of a stack."""
 
     __slots__ = ('stack', 'wvl', 'theta0', 'pol', 'matrices', 'L', 'R', 'M',
                  'eta0', 'eta_sub', 'r', 't', 'v_sub', 'E', 'H',
                  'betas', 'etas', 'dbeta_dd', 'n0', 'ns', 'costs')
 
     def __init__(self, stack, wvl, theta0, pol):
-        """Evaluate stack at one illumination sample set and cache the state.
+        """Evaluate and cache stack state.
 
         Parameters
         ----------
@@ -122,8 +78,7 @@ class ForwardEval:
         theta0 : float or ndarray
             angle(s) of incidence in the ambient medium, radians.
         pol : str
-            polarization, 'p' or 's' (no 'avg' here; the merit layer averages
-            two ForwardEvals).
+            polarization, 'p' or 's'.
 
         """
         pol = pol.lower()
@@ -200,18 +155,12 @@ class ForwardEval:
 
 
 def forward_eval(stack, wvl, theta0, pol):
-    """Build a ForwardEval (see that class) for one illumination sample set."""
+    """Build a ForwardEval for one sample set."""
     return ForwardEval(stack, wvl, theta0, pol)
 
 
-# ---------------------------------------------------------------- cotangents
-
 def _rt_assembly_cotangent(fwd, r_bar, t_bar):
-    """Cotangent on the assembled matrix M from amplitude cotangents r_bar, t_bar.
-
-    Reverses M -> (B, C) -> (r, t).  r_bar / t_bar are the cotangents of r and t
-    in the Re(conj(.) d.) convention; the return is the 2x2 cotangent of M.
-    """
+    """Assembled-matrix cotangent from amplitude cotangents."""
     eta0 = fwd.eta0
     eta_sub = fwd.eta_sub
     M = fwd.M
@@ -253,11 +202,7 @@ def _physical_to_amplitude_cotangents(fwd, dR, dT):
 
 
 def _field_cotangents(fwd, dA, dEsq):
-    """Real field-quantity cotangents (per-layer A, per-boundary |E|^2) -> E,H bars.
-
-    Returns E_bar, H_bar each shape (N+1, *calc), the cotangents of the complex
-    boundary fields in the Re(conj(.) d.) convention.
-    """
+    """Field-quantity cotangents to E and H cotangents."""
     nb = len(fwd.R)              # N + 1 boundaries
     calc_shape = fwd.E.shape[1:]
     E_bar = np.zeros((nb,) + calc_shape, dtype=fwd.E.dtype)
@@ -280,23 +225,13 @@ def _field_cotangents(fwd, dA, dEsq):
 
 
 def assembly_cotangent(fwd, dR=None, dT=None):
-    """Total cotangent on the assembled matrix M for an R/T merit.
-
-    Used by the needle function, which perturbs the assembly directly; field
-    merits are not part of the needle path.
-    """
+    """Assembled-matrix cotangent for an R/T merit."""
     r_bar, t_bar = _physical_to_amplitude_cotangents(fwd, dR, dT)
     return _rt_assembly_cotangent(fwd, r_bar, t_bar)
 
 
 def layer_cotangents(fwd, dR=None, dT=None, dA=None, dEsq=None):
-    """Per-layer cotangents (c_beta, c_eta) of a scalar merit, one backward sweep.
-
-    The merit's dependence is supplied as real cotangents on the physical
-    response quantities at this sample set (dR, dT shape (*calc,); dA shape
-    (N, *calc); dEsq shape (N+1, *calc)).  The return is the cotangent of each
-    layer's phase thickness beta and admittance eta -- the common quantity the
-    thickness and index gradients each contract with their own dbeta, deta.
+    """Per-layer beta and eta cotangents for a scalar merit.
 
     Returns
     -------
@@ -308,10 +243,10 @@ def layer_cotangents(fwd, dR=None, dT=None, dA=None, dEsq=None):
     matrices = fwd.matrices
     R = fwd.R
 
-    # --- amplitude-path cotangent on the assembled matrix M = R[0]
+    # amplitude-path cotangent on the assembled matrix M = R[0]
     r_bar, t_bar = _physical_to_amplitude_cotangents(fwd, dR, dT)
 
-    # --- field-path cotangents: f_k = R_k v_sub feeds v_sub (-> t) and R_k.
+    # field-path cotangents: f_k = R_k v_sub feeds v_sub (-> t) and R_k.
     E_bar, H_bar = _field_cotangents(fwd, dA, dEsq)
     have_fields = (dA is not None) or (dEsq is not None)
 
@@ -339,7 +274,7 @@ def layer_cotangents(fwd, dR=None, dT=None, dA=None, dEsq=None):
     # fold the amplitude-path assembly cotangent into G_0 (since M == R[0]).
     G[0] = M_bar if G[0] is None else (G[0] + M_bar)
 
-    # --- O(N) scan: W_j = G_j + M_{j-1}^H W_{j-1};  c_{M_j} = W_j R_{j+1}^H.
+    # O(N) scan: W_j = G_j + M_{j-1}^H W_{j-1};  c_{M_j} = W_j R_{j+1}^H.
     c_beta = [None] * N
     c_eta = [None] * N
     W = None
@@ -357,16 +292,12 @@ def layer_cotangents(fwd, dR=None, dT=None, dA=None, dEsq=None):
 
 
 def thickness_gradient(fwd, dR=None, dT=None, dA=None, dEsq=None):
-    """Gradient of a scalar merit w.r.t. every layer thickness, one backward sweep.
-
-    See layer_cotangents for the merit-cotangent arguments.  Only beta depends on
-    thickness (deta/d(thickness) = 0), so the gradient contracts c_beta with
-    dbeta/d(thickness) = 2 pi n cos(theta) / lambda.
+    """Gradient of a scalar merit w.r.t. every layer thickness.
 
     Returns
     -------
     ndarray
-        real gradient w.r.t. the N layer thicknesses, summed over calc, shape (N,).
+        real gradient, one value per layer.
 
     """
     N = len(fwd.matrices)
@@ -378,18 +309,12 @@ def thickness_gradient(fwd, dR=None, dT=None, dA=None, dEsq=None):
 
 
 def index_gradient(fwd, dR=None, dT=None, dA=None, dEsq=None):
-    """Gradient of a scalar merit w.r.t. every layer index, one backward sweep.
-
-    The layer index enters through both its phase thickness beta and its
-    admittance eta (and, off normal incidence, the refraction angle).  This is
-    the design variable for graded-index / rugate films (Phase 6); for a
-    fixed-material library only thickness is continuous, so prefer
-    thickness_gradient there.
+    """Gradient of a scalar merit w.r.t. every layer index.
 
     Returns
     -------
     ndarray
-        real gradient w.r.t. the N layer indices, summed over calc, shape (N,).
+        real gradient, one value per layer.
 
     """
     N = len(fwd.matrices)

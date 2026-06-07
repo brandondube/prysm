@@ -1,41 +1,8 @@
-"""Stack representation + field / partial-product engine.
+"""Thin-film stack utilities with internal field access.
 
-This is the foundation the rest of the coatings package is built on.  The core
-2x2 transfer-matrix primitives in prysm.thinfilm collapse a stack into the two
-A-matrix coefficients needed for r and t and throw away the intermediate state.
-Needle optimization, analytic gradients, field-constrained design, and
-monitoring simulation all need that intermediate state -- the partial products
-of the per-layer characteristic matrices and the internal electric/magnetic
-field at every boundary.  This module computes it once and exposes it.
-
-Conventions
------------
-The per-layer characteristic matrix follows the optical-admittance form used by
-prysm.thinfilm.multilayer_stack_rt (the -i time convention),
-
-    M_j = [[cos b_j,            -i sin b_j / eta_j],
-           [-i eta_j sin b_j,    cos b_j         ]]
-
-with phase thickness b_j = (2 pi / lambda) n_j d_j cos(theta_j) and tilted
-admittance eta_j = n_j / cos(theta_j) for p polarization, n_j cos(theta_j) for
-s.  The matrix relates the tangential fields at the two boundaries of a layer,
-
-    [E, H]_top = M_j [E, H]_bottom,
-
-so the assembly relation is [E, H]_front = (M_1 ... M_N) [E, H]_substrate.  A
-unit-amplitude incident wave fixes the substrate-side state to t [1, eta_sub],
-from which the field at any boundary follows by a partial product and r, t, R,
-T, and per-layer absorptance follow from the boundary fields.
-
-Matrices carry the 2x2 in their trailing two axes, shape (*calc, 2, 2), where
-calc is whatever shape the wavelength / angle broadcast to.  This lets numpy
-matmul batch the products directly, without the axis juggling thinfilm needs for
-its (2, 2, *calc) layout.
-
-Angles are in radians here (this is the low-level engine); thinfilm.snell_aor
-and np.radians bridge from degrees.  Thicknesses and wavelengths are microns.
-The engine is backend-pure (no float() coercion) so the same forward pass is
-reused by the Phase 2 analytic-gradient adjoint.
+Layers are ambient-side first.  Angles are radians; thicknesses and wavelengths
+are microns.  Characteristic matrices use trailing 2x2 axes and broadcast over
+the leading sample axes.
 """
 
 from prysm.conf import config
@@ -44,14 +11,7 @@ from prysm.thinfilm import _cos_snell
 
 
 def _resolve(index, wvl):
-    """Resolve a possibly-dispersive index to its value at wvl.
-
-    A material exposing nk(wvl) (the prysm.x.materials convention) is read as its
-    complex index so absorption is carried into the stack; calling such a
-    material directly would return only the real n.  A plain callable n(wvl) or a
-    constant is used as given.  Duck-typed on nk, so coatings keeps no import
-    dependency on x.materials.
-    """
+    """Resolve a constant, callable, or material index at wavelength wvl."""
     nk = getattr(index, 'nk', None)
     if callable(nk):
         return nk(wvl)
@@ -68,14 +28,14 @@ def _admittance(n, cost, pol):
 
 
 def _char_matrix(beta, eta):
-    """Per-layer characteristic matrix of shape (*calc, 2, 2).
+    """Per-layer characteristic matrix.
 
     Parameters
     ----------
     beta : ndarray or float
-        phase thickness (2 pi / lambda) n d cos(theta), possibly complex.
+        phase thickness, possibly complex.
     eta : ndarray or float
-        tilted optical admittance of the layer for the polarization.
+        tilted optical admittance.
 
     """
     cosb = np.cos(beta) + 0j
@@ -98,26 +58,18 @@ def _eye2():
 
 
 class Stack:
-    """A multilayer thin-film stack: ordered layers between ambient and substrate.
-
-    Layers are ordered from the ambient (incidence) side toward the substrate.
-    Each layer index, the substrate index, and the ambient index may be a fixed
-    value (real or complex), a callable n(wavelength) dispersion model, or a
-    prysm.x.materials material -- a material is read through its nk method so a
-    lossy glass carries its absorption into the stack.
+    """A multilayer thin-film stack.
 
     Parameters
     ----------
     indices : sequence
-        per-layer refractive index, ambient side first.  Each entry is a fixed
-        value or a callable n(wvl).
+        per-layer refractive index, ambient side first.
     thicknesses : sequence or ndarray
-        per-layer physical thickness, microns.  Broadcast to one value per
-        layer; these are the design variables for refinement.
+        per-layer physical thicknesses, microns.
     substrate_index : float, complex, or callable
         index of the medium after the last layer.
     ambient_index : float, complex, or callable, optional
-        index of the incidence medium, default 1.0 (vacuum / air).
+        index of the incidence medium.
 
     """
 
@@ -150,10 +102,6 @@ class Stack:
 def stack_characteristic_matrices(stack, wvl, theta0, pol):
     """Per-layer characteristic matrices for a stack.
 
-    Thin wrapper that resolves the per-layer Snell angle (referenced to the
-    ambient via the invariant n sin(theta) = const) and admittance, then builds
-    each layer matrix.
-
     Parameters
     ----------
     stack : Stack
@@ -167,7 +115,7 @@ def stack_characteristic_matrices(stack, wvl, theta0, pol):
     Returns
     -------
     list of ndarray
-        one (*calc, 2, 2) matrix per layer, ambient side first.
+        one matrix per layer, ambient side first.
 
     """
     pol = pol.lower()
@@ -182,7 +130,7 @@ def stack_characteristic_matrices(stack, wvl, theta0, pol):
 
 
 def forward_products(matrices):
-    """Cumulative left products L_k = M_1 ... M_k.
+    """Cumulative left products of a matrix stack.
 
     Parameters
     ----------
@@ -192,8 +140,7 @@ def forward_products(matrices):
     Returns
     -------
     list of ndarray
-        length N+1; entry k is the product of the first k matrices, with entry
-        0 the identity and entry N the full assembly product.
+        length N+1; entry 0 is the identity.
 
     """
     L = [_eye2()]
@@ -203,7 +150,7 @@ def forward_products(matrices):
 
 
 def backward_products(matrices):
-    """Cumulative right products R_k = M_{k+1} ... M_N.
+    """Cumulative right products of a matrix stack.
 
     Parameters
     ----------
@@ -213,9 +160,7 @@ def backward_products(matrices):
     Returns
     -------
     list of ndarray
-        length N+1; entry k is the product of the matrices below boundary k,
-        with entry N the identity and entry 0 the full assembly product.  R_k
-        applied to the substrate-side field vector gives the field at boundary k.
+        length N+1; entry N is the identity.
 
     """
     N = len(matrices)
@@ -227,13 +172,7 @@ def backward_products(matrices):
 
 
 def _evaluate(stack, wvl, theta0, pol):
-    """Shared forward pass.
-
-    Returns matrices, backward products R, eta0, eta_sub, r, t, and the boundary
-    field vectors (N+1, *calc, 2) where component 0 is tangential E and 1 is
-    tangential H.  r and t are the Macleod-normalized amplitude coefficients for
-    a unit-amplitude incident wave.
-    """
+    """Shared transfer-matrix forward pass."""
     pol = pol.lower()
     if pol not in ('p', 's'):
         raise ValueError("unknown polarization, use 'p' or 's'")
@@ -265,7 +204,7 @@ def _evaluate(stack, wvl, theta0, pol):
 
 
 def stack_rt(stack, wvl, theta0, pol):
-    """Amplitude reflection and transmission coefficients of a stack.
+    """Amplitude reflection and transmission coefficients.
 
     Parameters
     ----------
@@ -280,10 +219,7 @@ def stack_rt(stack, wvl, theta0, pol):
     Returns
     -------
     (ndarray, ndarray)
-        r, t amplitude coefficients.  r matches thinfilm.multilayer_stack_rt; t
-        is normalized so the substrate-side tangential E equals t for a
-        unit-amplitude incident wave (the p-polarization t differs from
-        thinfilm's by a cos(theta0)/cos(theta_sub) substrate-column factor).
+        r and t for a unit-amplitude incident wave.
 
     """
     _, _, _, _, r, t, _ = _evaluate(stack, wvl, theta0, pol)
@@ -293,11 +229,6 @@ def stack_rt(stack, wvl, theta0, pol):
 def internal_fields(stack, wvl, theta0, pol):
     """Tangential electric and magnetic field at every boundary.
 
-    Boundary k lies between layer k and layer k+1 (boundary 0 is ambient/first
-    layer, boundary N is last layer/substrate); the fields are continuous across
-    each boundary so a single value per boundary is unambiguous.  Amplitudes are
-    for a unit-amplitude incident wave; |E|^2 is the standing-wave intensity.
-
     Parameters
     ----------
     stack : Stack
@@ -311,8 +242,7 @@ def internal_fields(stack, wvl, theta0, pol):
     Returns
     -------
     (ndarray, ndarray)
-        E, H each of shape (N+1, *calc); the leading axis indexes boundaries
-        from the ambient side.
+        E and H; leading axis indexes boundaries from the ambient side.
 
     """
     *_, fields = _evaluate(stack, wvl, theta0, pol)
@@ -322,21 +252,11 @@ def internal_fields(stack, wvl, theta0, pol):
 def field_at_depth(stack, z, wvl, theta0, pol):
     """Tangential field at arbitrary depth(s) inside the stack.
 
-    Depth is measured from the front boundary (z = 0 at the ambient/first-layer
-    interface) increasing toward the substrate.  Within the layer containing z,
-    the field is propagated from that layer's substrate-side boundary by a
-    partial characteristic matrix, so the result is continuous with
-    internal_fields at the boundaries.
-
-    This sampler takes scalar wvl, theta0, and pol (one illumination condition)
-    and an array of depths -- the usual mode for a standing-wave |E(z)|^2 plot
-    or a needle z-sweep.
-
     Parameters
     ----------
     stack : Stack
     z : float or ndarray
-        depth(s) into the stack, microns.
+        depth(s) into the stack from the ambient side, microns.
     wvl : float
         wavelength, microns.
     theta0 : float
@@ -382,12 +302,7 @@ def field_at_depth(stack, z, wvl, theta0, pol):
 
 
 def RTA(stack, wvl, theta0, pol):
-    """Reflectance, transmittance, and per-layer absorptance of a stack.
-
-    The per-layer absorptance is the drop in the net power flux toward the
-    substrate across the layer, recovered from the boundary fields -- the split
-    r and t alone cannot give.  By construction R + sum(A) + T = 1, and for a
-    lossless stack every A is zero.
+    """Reflectance, transmittance, and per-layer absorptance.
 
     Parameters
     ----------
@@ -402,8 +317,7 @@ def RTA(stack, wvl, theta0, pol):
     Returns
     -------
     (ndarray, ndarray, ndarray)
-        R, T, and A; A has shape (N, *calc) with one absorptance per layer,
-        ambient side first.
+        R, T, and A; A has one leading entry per layer.
 
     """
     _, _, eta0, eta_sub, r, t, fields = _evaluate(stack, wvl, theta0, pol)

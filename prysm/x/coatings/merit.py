@@ -1,21 +1,7 @@
-"""Merit terms (objectives) for coating design.
+"""Merit terms for coating design.
 
-A merit term ties a physical response quantity (reflectance, transmittance,
-per-layer absorptance, internal field) over a grid of (wavelength, angle,
-polarization) samples to a target, with a weight.  Each term knows how to
-evaluate its weighted sum-of-squares value, its residual vector (for the
-least-squares path), and -- through the analytic adjoint in diff.py -- its
-gradient with respect to every layer thickness.
-
-A MeritFunction is a weighted collection of terms; its value and gradient are
-the sums of the terms'.  This is the object refine / synthesize optimize.
-
-Conventions
------------
-Wavelengths and thicknesses are microns; angles are radians (the low-level
-convention -- use numpy.radians on degrees).  Polarization is 's', 'p', or
-'avg' (unpolarized = mean of s and p).  Targets and weights broadcast against
-the (wavelength, angle) sample grid.
+Wavelengths and thicknesses are microns; angles are radians.  Polarization is
+'s', 'p', or 'avg'.  Targets and weights broadcast over the sample grid.
 """
 
 from prysm.conf import config
@@ -43,11 +29,7 @@ def _validate_term_shapes(wvl, theta, target, weight):
 
 
 class _Term:
-    """Base spectral/angular merit term over a (wvl, theta, pol) grid.
-
-    Subclasses define the physical quantity and how its cotangent enters the
-    thickness gradient.
-    """
+    """Base spectral/angular merit term."""
 
     quantity = None
 
@@ -68,8 +50,6 @@ class _Term:
         weight : float or ndarray, optional
             relative weight of each sample in the sum-of-squares merit.
 
-        wvl, theta, target, and weight must broadcast to a common grid shape.
-
         """
         self.wvl = _as_grid(wvl)
         self.theta = _as_grid(theta)
@@ -81,27 +61,19 @@ class _Term:
         self.weight = _as_grid(weight)
         _validate_term_shapes(self.wvl, self.theta, self.target, self.weight)
 
-    # --- subclass hooks ---------------------------------------------------
+    # subclass hooks
     def _quantity(self, fwd):
         raise NotImplementedError
 
     def _seed_kw(self, fwd, dq):
-        """Map a cotangent dq on this term's quantity to diff-engine seed kwargs.
-
-        Returns a dict like {'dR': ...} / {'dA': ...} suitable for
-        diff.thickness_gradient / index_gradient / assembly_cotangent.
-        """
+        """Map a quantity cotangent to diff-engine seed kwargs."""
         raise NotImplementedError
 
     def _is_assembly_quantity(self):
-        """Whether the quantity depends on the stack only through assembled M.
-
-        True for reflectance / transmittance (needle-eligible); False for the
-        field / absorptance terms that read the internal partial products.
-        """
+        """Whether the quantity depends only on the assembled matrix."""
         return False
 
-    # --- shared machinery -------------------------------------------------
+    # shared machinery
     def _pols(self):
         return ('s', 'p') if self.pol == 'avg' else (self.pol,)
 
@@ -132,10 +104,7 @@ class _Term:
         return np.broadcast_to(dF_dq, q.shape) / npol
 
     def value_and_grad(self, stack, grad_fn=thickness_gradient):
-        """Scalar value and gradient via grad_fn (thickness_gradient default).
-
-        Pass diff.index_gradient as grad_fn for index-variable (rugate) design.
-        """
+        """Scalar value and gradient via grad_fn."""
         q, fwds = self._evaluate(stack)
         val = float(np.sum(self.weight * (q - self.target) ** 2))
         dF_dq = self._dF_dq(q, len(fwds))
@@ -145,13 +114,7 @@ class _Term:
         return val, grad
 
     def assembly_seeds(self, stack):
-        """List of (ForwardEval, M_cotangent) pairs for the needle function.
-
-        One pair per polarization sample; the assembled-matrix cotangent already
-        carries this term's weight and the (q - target) residual, so the needle
-        function contracts it directly against the inserted-layer perturbation.
-        Only reflectance / transmittance terms qualify (assembly-only quantity).
-        """
+        """List of (ForwardEval, M_cotangent) pairs for the needle function."""
         if not self._is_assembly_quantity():
             raise NotImplementedError(
                 'needle synthesis supports reflectance / transmittance targets')
@@ -192,11 +155,7 @@ class Transmittance(_Term):
 
 
 class LayerAbsorptance(_Term):
-    """Target the absorptance A of one named layer over a sample grid.
-
-    layer is the index of the layer (ambient side first); the absorptance is the
-    fraction of incident power dissipated within it.
-    """
+    """Target the absorptance A of one layer over a sample grid."""
 
     quantity = 'A'
 
@@ -214,13 +173,7 @@ class LayerAbsorptance(_Term):
 
 
 class FieldIntensityAtBoundary(_Term):
-    """Target the standing-wave intensity |E|^2 at one boundary.
-
-    Boundary k lies between layer k-1 and layer k (boundary 0 is the ambient /
-    first-layer interface, boundary N is the last-layer / substrate interface).
-    Minimizing the peak interface intensity is the laser-damage-resistance
-    objective; maximizing it inside an active layer is the inverse.
-    """
+    """Target the standing-wave intensity |E|^2 at one boundary."""
 
     quantity = 'Esq'
 
@@ -240,17 +193,10 @@ class FieldIntensityAtBoundary(_Term):
 class PeakFieldAtInterfaces(_Term):
     """Target the peak standing-wave intensity over a set of boundaries.
 
-    The quantity is max_k |E_k|^2 over the selected boundaries -- the field at the
-    hottest interface, which governs laser-induced damage.  Minimizing it (target
-    0) flattens the standing wave at the interfaces.  The gradient is the
-    subgradient at the per-sample argmax boundary, which equals the gradient away
-    from ties.
-
     Parameters
     ----------
     boundaries : sequence of int, optional
-        boundary indices to consider (0 is the ambient face, N the substrate
-        face).  Default: every boundary.
+        boundary indices to consider; default every boundary.
 
     """
 
@@ -285,17 +231,12 @@ class PeakFieldAtInterfaces(_Term):
 
 
 class FieldInLayer(_Term):
-    """Target the standing-wave intensity within a designated layer.
-
-    The quantity is the mean of |E|^2 at the layer's two bounding boundaries -- a
-    smooth proxy for the field inside the layer.  Drive it up (large target) for
-    an active / gain layer, down (target 0) to protect a sensitive layer.
+    """Target mean standing-wave intensity at a layer's boundaries.
 
     Parameters
     ----------
     layer : int
-        layer index (ambient side first); the field is sampled at boundaries
-        layer and layer + 1.
+        layer index, ambient side first.
 
     """
 
@@ -317,13 +258,7 @@ class FieldInLayer(_Term):
 
 
 class MeritFunction:
-    """A weighted collection of merit terms.
-
-    The value, residual vector, and thickness gradient are the concatenation /
-    sum across the terms, so a single MeritFunction can mix reflectance,
-    transmittance, absorptance, and field objectives at once (the multi-objective
-    design path).
-    """
+    """A weighted collection of merit terms."""
 
     __slots__ = ('terms',)
 
@@ -351,10 +286,7 @@ class MeritFunction:
         return np.concatenate([t.residuals(stack) for t in self.terms])
 
     def value_and_grad(self, stack, grad_fn=thickness_gradient):
-        """Total merit and gradient via grad_fn (thickness_gradient default).
-
-        Pass diff.index_gradient as grad_fn for index-variable (rugate) design.
-        """
+        """Total merit and gradient via grad_fn."""
         val = 0.0
         grad = np.zeros(len(stack), dtype=config.precision)
         for t in self.terms:
