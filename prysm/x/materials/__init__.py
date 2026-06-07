@@ -36,6 +36,7 @@ air = _lookup.air
 vacuum = _lookup.vacuum
 glass = _lookup.glass
 lookup = _lookup.lookup
+resolve_index = _lookup.resolve_index
 
 __all__ = [
     'AGFCatalog',
@@ -76,5 +77,6 @@ __all__ = [
     'glass',
     'load_agf_catalog',
     'lookup',
+    'resolve_index',
     'vacuum',
 ]

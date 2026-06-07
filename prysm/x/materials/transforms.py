@@ -18,28 +18,40 @@ def _metadata_with_parent(parent, metadata=None):
     return out
 
 
-def _call_correction(correction, wvl_um, temperature):
-    correction_n = getattr(correction, 'n', None)
-    if callable(correction_n):
-        return correction_n(wvl_um, temperature=temperature)
-    if not callable(correction):
-        return correction
+def _compile_correction(spec):
+    """Compile a correction spec into a (wvl_um, temperature) -> value callable.
+
+    Resolved once at construction, so the per-evaluation path is a plain call and
+    a TypeError raised inside a correction is never confused with an arity
+    mismatch.  A material contributes through its n method; a non-callable is a
+    constant; a callable is bound to the argument shape its signature accepts:
+    positional (wvl, temperature), keyword temperature, or wvl alone.
+    """
+    material_n = getattr(spec, 'n', None)
+    if callable(material_n):
+        return lambda wvl_um, temperature: material_n(wvl_um, temperature=temperature)
+    if not callable(spec):
+        return lambda wvl_um, temperature: spec
     try:
-        call_signature = inspect.signature(correction)
+        signature = inspect.signature(spec)
     except (TypeError, ValueError):
-        try:
-            return correction(wvl_um, temperature)
-        except TypeError:
-            return correction(wvl_um)
+        def call_builtin(wvl_um, temperature):
+            try:
+                return spec(wvl_um, temperature)
+            except TypeError:
+                return spec(wvl_um)
+        return call_builtin
     try:
-        call_signature.bind(wvl_um, temperature)
+        signature.bind(0.0, None)
     except TypeError:
-        try:
-            call_signature.bind(wvl_um, temperature=temperature)
-        except TypeError:
-            return correction(wvl_um)
-        return correction(wvl_um, temperature=temperature)
-    return correction(wvl_um, temperature)
+        pass
+    else:
+        return lambda wvl_um, temperature: spec(wvl_um, temperature)
+    try:
+        signature.bind(0.0, temperature=None)
+    except TypeError:
+        return lambda wvl_um, temperature: spec(wvl_um)
+    return lambda wvl_um, temperature: spec(wvl_um, temperature=temperature)
 
 
 class MaterialTransform(BaseMaterial):
@@ -81,6 +93,7 @@ class TemperatureShiftedMaterial(MaterialTransform):
     def __init__(self, parent, dn_dT, reference_temperature, **kwargs):
         super().__init__(parent, **kwargs)
         self.dn_dT_model = dn_dT
+        self._dn_dT = _compile_correction(dn_dT)
         self.reference_temperature = reference_temperature
 
     def n(self, wvl_um, temperature=None):
@@ -89,7 +102,7 @@ class TemperatureShiftedMaterial(MaterialTransform):
             temperature = self.reference_temperature
         self._check_temperature(temperature)
         base = self.parent.n(wvl_um, temperature=self.reference_temperature)
-        slope = _call_correction(self.dn_dT_model, wvl_um, temperature)
+        slope = self._dn_dT(wvl_um, temperature)
         return base + slope * (temperature - self.reference_temperature)
 
 
@@ -100,19 +113,21 @@ class IndexOffsetMaterial(MaterialTransform):
         super().__init__(parent, **kwargs)
         self.offset = offset
         self.k_offset = k_offset
+        self._offset = _compile_correction(offset)
+        self._k_offset = None if k_offset is None else _compile_correction(k_offset)
 
     def n(self, wvl_um, temperature=None):
         """Return parent n plus offset."""
-        return self.parent.n(wvl_um, temperature=temperature) + _call_correction(
-            self.offset, wvl_um, temperature
+        return self.parent.n(wvl_um, temperature=temperature) + self._offset(
+            wvl_um, temperature
         )
 
     def k(self, wvl_um, temperature=None):
         """Return parent k plus optional offset."""
         out = super().k(wvl_um, temperature=temperature)
-        if self.k_offset is None:
+        if self._k_offset is None:
             return out
-        return out + _call_correction(self.k_offset, wvl_um, temperature)
+        return out + self._k_offset(wvl_um, temperature)
 
 
 class StressOpticMaterial(MaterialTransform):
@@ -121,11 +136,12 @@ class StressOpticMaterial(MaterialTransform):
     def __init__(self, parent, coefficient, stress, **kwargs):
         super().__init__(parent, **kwargs)
         self.coefficient = coefficient
+        self._coefficient = _compile_correction(coefficient)
         self.stress = stress
 
     def n(self, wvl_um, temperature=None):
         """Return parent n plus stress-optic correction."""
-        coefficient = _call_correction(self.coefficient, wvl_um, temperature)
+        coefficient = self._coefficient(wvl_um, temperature)
         return self.parent.n(wvl_um, temperature=temperature) + coefficient * self.stress
 
 

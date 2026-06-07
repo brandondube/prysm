@@ -1,0 +1,45 @@
+"""The index-spec resolver: the single owner of the glass/index spec grammar."""
+
+import pytest
+
+from prysm.x.materials import MIRROR, air, lookup, resolve_index
+from prysm.x.materials import Catalog, ConstantMaterial
+
+
+def test_resolve_index_sentinels_and_air():
+    assert resolve_index(None) is None
+    assert resolve_index(MIRROR) is MIRROR
+    assert resolve_index('MIRROR') is MIRROR
+    assert resolve_index('mirror') is MIRROR
+    assert resolve_index('') is air
+    assert resolve_index('   ') is air
+    assert resolve_index('AIR') is air
+    assert resolve_index('vacuum') is air
+
+
+def test_resolve_index_numbers_and_callables():
+    assert resolve_index(1.5)(0.55) == 1.5
+    # complex index is preserved (a complex-aware caller keeps n + 1j*k)
+    assert resolve_index(1.2 + 0.3j)(0.55) == 1.2 + 0.3j
+    f = lambda wvl: 2.0
+    assert resolve_index(f) is f
+    material = ConstantMaterial('glass', 1.7)
+    assert resolve_index(material) is material
+
+
+def test_resolve_index_name_requires_resolver():
+    # a glass name needs a catalog; without one it refuses rather than guessing
+    with pytest.raises(TypeError, match='without a catalog'):
+        resolve_index('N-BK7')
+    catalog = Catalog.from_materials([ConstantMaterial('N-BK7', 1.5168)])
+    resolved = resolve_index('N-BK7', name_resolver=catalog.material_for_name)
+    assert resolved.n(0.55) == pytest.approx(1.5168)
+
+
+def test_lookup_projects_blank_to_air_and_resolves_names():
+    catalog = Catalog.from_materials([ConstantMaterial('N-BK7', 1.5168)])
+    assert lookup(None) is air
+    assert lookup('') is air
+    assert lookup('AIR') is air
+    assert lookup('MIRROR') is MIRROR
+    assert lookup('N-BK7', database=catalog).n(0.55) == pytest.approx(1.5168)

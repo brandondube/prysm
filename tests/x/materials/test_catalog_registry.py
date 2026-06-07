@@ -23,6 +23,17 @@ def test_catalog_chain_namespace_lookup_and_ambiguity():
         chain.material_for_name('BK7')
 
 
+def test_registry_resolves_by_name_via_shared_record_query():
+    # the registry shares the RecordSet query seam, so name resolution and the
+    # namespace:name getitem work the same as on a Catalog or a chain.
+    registry = MaterialRegistry.from_catalogs(Catalog.from_materials([
+        ConstantMaterial('N-BK7', 1.5, catalog='SCHOTT'),
+        ConstantMaterial('S-BSL7', 1.52, catalog='OHARA'),
+    ]))
+    assert registry.material_for_name('N-BK7').n(0.55) == pytest.approx(1.5)
+    assert registry['OHARA:S-BSL7'].n(0.55) == pytest.approx(1.52)
+
+
 def test_registry_metadata_and_computed_search():
     low = TabulatedMaterial(
         'low',
@@ -79,7 +90,7 @@ def test_registry_computed_criteria_validate_arity():
 
 
 def test_registry_k_max_treats_missing_k_as_transparent():
-    # a missing_k='raise' member must not abort the k_max filter (Finding #3).
+    # a missing_k='raise' member must not abort the k_max filter.
     opaque_unknown = ConstantMaterial('X', 2.0, missing_k='raise', catalog='LAB')
     clear = ConstantMaterial('Y', 1.5, missing_k='zero', catalog='LAB')
     registry = MaterialRegistry.from_catalogs(

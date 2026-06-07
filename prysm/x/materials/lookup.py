@@ -42,13 +42,49 @@ def glass(name, database=None):
     )
 
 
+def resolve_index(spec, name_resolver=None):
+    """Resolve any index spec to a callable n(wvl), MIRROR, air, or None.
+
+    The single owner of the material/index spec grammar shared by the raytracing
+    glass layer.  Each caller projects the result to what it needs (raytracing
+    takes the real part; a complex-aware caller keeps n + 1j*k).
+
+    Grammar
+    -------
+    None                          -> None    (no index; a reflective / eval surface)
+    the MIRROR sentinel           -> MIRROR
+    'MIRROR' (any case)           -> MIRROR
+    '', 'AIR', 'VACUUM'           -> air     (unit-index callable)
+    a real or complex number      -> a constant callable
+    a callable or material        -> returned unchanged
+    any other string (glass name) -> name_resolver(name), or TypeError if None
+
+    name_resolver is the catalog hook a glass name routes through; leaving it None
+    forbids name resolution (and any implicit catalog download) for callers that
+    only normalize already-resolved specs.
+    """
+    if spec is None:
+        return None
+    if spec is MIRROR:
+        return MIRROR
+    if isinstance(spec, str):
+        key = spec.strip().upper()
+        if spec == MIRROR or key == 'MIRROR':
+            return MIRROR
+        if not key or key in ('AIR', 'VACUUM'):
+            return air
+        if name_resolver is None:
+            raise TypeError(f'cannot resolve glass name {spec!r} without a catalog')
+        return name_resolver(spec)
+    if callable(spec):
+        return spec
+    value = spec
+    return lambda wvl: value
+
+
 def lookup(name, database=None):
     """Resolve a glass token to a callable material, air, or the MIRROR sentinel."""
-    if name is None or not str(name).strip():
-        return air
-    key = str(name).strip().upper()
-    if key in ('AIR', 'VACUUM'):
-        return air
-    if key == 'MIRROR':
-        return MIRROR
-    return glass(name, database=database)
+    resolved = resolve_index(
+        name, name_resolver=lambda token: glass(token, database=database)
+    )
+    return air if resolved is None else resolved

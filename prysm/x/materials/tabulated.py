@@ -296,7 +296,7 @@ def _interp_grid(wavelengths, temperatures, grid, wvl, temp, extrapolate):
 
     Fully vectorized over the broadcast (wavelength, temperature) query points:
     no per-point Python loop and no item assignment, so it stays backend-pure
-    and avoids per-element host syncs (Finding #2).
+    and avoids per-element host syncs.
     """
     wvl_b, temp_b = np.broadcast_arrays(wvl, temp)
     w = np.reshape(wvl_b, (-1,))

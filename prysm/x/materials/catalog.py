@@ -77,7 +77,68 @@ def _record_matches_filters(record, filters):
     return True
 
 
-class Catalog:
+def _resolve_record(records, name, qualifiers):
+    """Return the one record matching name and qualifiers.
+
+    Raises KeyError on no match and AmbiguousMaterialError on more than one.
+    catalog and namespace are accepted as aliases for the namespace filter.
+    """
+    qualifiers = dict(qualifiers)
+    catalog = qualifiers.pop('catalog', None)
+    if catalog is None:
+        catalog = qualifiers.pop('namespace', None)
+    matches = [
+        record for record in records
+        if _matches_name(record, name)
+        and _record_matches_filters(record, {'catalog': catalog, **qualifiers})
+    ]
+    if not matches:
+        raise KeyError(f'no material named {name!r}')
+    if len(matches) > 1:
+        raise AmbiguousMaterialError(name, matches)
+    return matches[0]
+
+
+def _search_records(records, query, filters):
+    """Return records matching a name query and metadata filters."""
+    return [
+        record for record in records
+        if _record_matches_query(record, query)
+        and _record_matches_filters(record, filters)
+    ]
+
+
+class RecordSet:
+    """Query behavior shared by every catalog over a records() sequence.
+
+    A RecordSet is anything that can produce a flat sequence of MaterialRecord
+    via records().  Name resolution, ambiguity handling, the namespace ":" split,
+    and metadata search live here once; Catalog, CatalogChain, the registry, and
+    the format-specific catalogs supply only records() (or override a method when
+    they own a faster index, as RefractiveIndexCatalog does).
+    """
+
+    def records(self):
+        """Return the records in this set; subclasses implement."""
+        raise NotImplementedError
+
+    def search(self, query=None, **metadata_filters):
+        """Search catalog metadata without forcing material instantiation."""
+        return _search_records(self.records(), query, metadata_filters)
+
+    def material_for_name(self, name, **qualifiers):
+        """Resolve one material by name or raise on missing/ambiguous matches."""
+        return _resolve_record(self.records(), name, qualifiers).load()
+
+    def __getitem__(self, key):
+        """Lookup by name, or by namespace:name."""
+        if isinstance(key, str) and ':' in key:
+            namespace, name = key.split(':', 1)
+            return self.material_for_name(name, catalog=namespace)
+        return self.material_for_name(key)
+
+
+class Catalog(RecordSet):
     """In-memory catalog over material records."""
 
     def __init__(self, records=(), *, namespace=None):
@@ -97,39 +158,8 @@ class Catalog:
         """Return all material records."""
         return self._records
 
-    def search(self, query=None, **metadata_filters):
-        """Search catalog metadata without forcing material instantiation."""
-        return [
-            record for record in self._records
-            if _record_matches_query(record, query)
-            and _record_matches_filters(record, metadata_filters)
-        ]
 
-    def material_for_name(self, name, **qualifiers):
-        """Resolve one material by name or raise on missing/ambiguous matches."""
-        catalog = qualifiers.pop('catalog', None)
-        if catalog is None:
-            catalog = qualifiers.pop('namespace', None)
-        matches = [
-            record for record in self._records
-            if _matches_name(record, name)
-            and _record_matches_filters(record, {'catalog': catalog, **qualifiers})
-        ]
-        if not matches:
-            raise KeyError(f'no material named {name!r}')
-        if len(matches) > 1:
-            raise AmbiguousMaterialError(name, matches)
-        return matches[0].load()
-
-    def __getitem__(self, key):
-        """Lookup by name, or by namespace:name."""
-        if isinstance(key, str) and ':' in key:
-            catalog, name = key.split(':', 1)
-            return self.material_for_name(name, catalog=catalog)
-        return self.material_for_name(key)
-
-
-class CatalogChain:
+class CatalogChain(RecordSet):
     """Bundle several catalogs with explicit ambiguity rules."""
 
     def __init__(self, catalogs):
@@ -142,34 +172,3 @@ class CatalogChain:
             for catalog in self.catalogs
             for record in catalog.records()
         )
-
-    def search(self, query=None, **metadata_filters):
-        """Search across all catalogs."""
-        return [
-            record for catalog in self.catalogs
-            for record in catalog.search(query, **metadata_filters)
-        ]
-
-    def material_for_name(self, name, **qualifiers):
-        """Resolve one material by name across the chain."""
-        qualifiers = dict(qualifiers)
-        catalog_name = qualifiers.pop('catalog', None)
-        if catalog_name is None:
-            catalog_name = qualifiers.pop('namespace', None)
-        matches = [
-            record for record in self.records()
-            if _matches_name(record, name)
-            and _record_matches_filters(record, {'catalog': catalog_name, **qualifiers})
-        ]
-        if not matches:
-            raise KeyError(f'no material named {name!r}')
-        if len(matches) > 1:
-            raise AmbiguousMaterialError(name, matches)
-        return matches[0].load()
-
-    def __getitem__(self, key):
-        """Lookup by name, or by namespace:name."""
-        if isinstance(key, str) and ':' in key:
-            catalog, name = key.split(':', 1)
-            return self.material_for_name(name, catalog=catalog)
-        return self.material_for_name(key)

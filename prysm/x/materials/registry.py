@@ -1,6 +1,11 @@
 """Searchable material registry with computed-property filters."""
 
-from .catalog import CatalogChain, _record_matches_filters, _record_matches_query
+from .catalog import (
+    CatalogChain,
+    RecordSet,
+    _record_matches_filters,
+    _record_matches_query,
+)
 from .core import MissingKError
 
 
@@ -13,8 +18,12 @@ _COMPUTED_CRITERIA = {
 }
 
 
-class MaterialRegistry:
-    """Index many catalogs and search metadata or computed properties."""
+class MaterialRegistry(RecordSet):
+    """Index many catalogs and search metadata or computed properties.
+
+    A RecordSet (so material_for_name and namespaced lookup come for free); the
+    overridden search adds computed-property criteria on top of metadata search.
+    """
 
     def __init__(self, records):
         self._records = tuple(records)

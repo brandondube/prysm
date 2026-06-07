@@ -317,8 +317,7 @@ class RefractiveIndexCatalog(Catalog):
 
 def _record_match_names(record):
     """Normalized names a record can be looked up by (name, variant, aliases)."""
-    candidates = (record.name, record.variant) + tuple(record.aliases)
-    return {_normalize_name(candidate) for candidate in candidates if candidate}
+    return {_normalize_name(name) for name in record.names_for_match() if name}
 
 
 def _rii_record(shelf, book, page, filepath, namespace):

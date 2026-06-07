@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from prysm.mathops import np, optimize
 
 from .core import BaseMaterial, MaterialRangeError
+from .formulas import schott, sellmeier
 from .tabulated import MaterialData, TabulatedMaterial
 
 
@@ -82,13 +83,7 @@ def _schott_design(wvl):
 
 
 def _sellmeier1_eval(wvl, coeffs, terms):
-    b = coeffs[:terms]
-    c = coeffs[terms:]
-    w2 = wvl * wvl
-    n2 = 1.0 + wvl * 0
-    for bi, ci in zip(b, c):
-        n2 = n2 + bi * w2 / (w2 - ci)
-    return np.sqrt(n2)
+    return sellmeier(wvl, coeffs[:terms], coeffs[terms:])
 
 
 def _evaluate_fit_model(model, coeffs, wvl, terms):
@@ -108,16 +103,7 @@ def _evaluate_fit_model(model, coeffs, wvl, terms):
     if model == 'sellmeier1':
         return _sellmeier1_eval(wvl, coeffs, terms)
     if model == 'schott':
-        w2 = wvl * wvl
-        n2 = (
-            coeffs[0]
-            + coeffs[1] * w2
-            + coeffs[2] / w2
-            + coeffs[3] / w2 ** 2
-            + coeffs[4] / w2 ** 3
-            + coeffs[5] / w2 ** 4
-        )
-        return np.sqrt(n2)
+        return schott(wvl, *coeffs[:6])
     raise ValueError(model)
 
 

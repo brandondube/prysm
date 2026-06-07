@@ -56,7 +56,7 @@ class TemperatureSellmeierMaterial(BaseMaterial):
 
         Vectorized over the broadcast (wavelength, temperature) query: the
         temperature polynomials and the Sellmeier sum are whole-array ops with
-        no per-point loop or item assignment (Finding #2).
+        no per-point loop or item assignment.
         """
         if temperature is None:
             raise ValueError(f'temperature is required for {self.name}')

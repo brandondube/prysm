@@ -292,52 +292,42 @@ class BaseMaterial:
         n_long = self.n(wvl_long_um, temperature=temperature)
         return (n_center - 1) / (n_short - n_long)
 
-    def dn_dlambda(self, wvl_um, temperature=None):
-        """Finite-difference derivative of n with respect to wavelength.
+    def _central_difference(self, evaluate, x, h_floor, valid_range, extrapolate):
+        """Range-clamped central difference of evaluate() about x.
 
-        The evaluation points are clamped into the valid wavelength range, so
-        at a closed band edge the central difference degrades to a one-sided
-        difference instead of evaluating out of range.
+        Clamping the +/-h points into valid_range degrades the central
+        difference to a one-sided difference at a closed band edge instead of
+        evaluating out of range; a collapsed interval yields 0 (the derivative
+        of a locally-constant sample), not 0/0.
         """
-        h = np.maximum(np.abs(wvl_um) * 1e-6, 1e-6)
-        hi_point = np.add(wvl_um, h)
-        lo_point = np.subtract(wvl_um, h)
-        if self.wavelength_range is not None and not self.metadata.get('extrapolate_wavelength'):
-            lo, hi = self.wavelength_range
+        h = np.maximum(np.abs(x) * 1e-6, h_floor)
+        hi_point = np.add(x, h)
+        lo_point = np.subtract(x, h)
+        if valid_range is not None and not extrapolate:
+            lo, hi = valid_range
             if hi is not None:
                 hi_point = np.minimum(hi_point, hi)
             if lo is not None:
                 lo_point = np.maximum(lo_point, lo)
-        num = self.n(hi_point, temperature=temperature) - self.n(
-            lo_point, temperature=temperature
-        )
+        num = evaluate(hi_point) - evaluate(lo_point)
         denom = hi_point - lo_point
-        # a closed band edge or a zero-width range can collapse the interval;
-        # the derivative of a locally-constant sample is 0, not 0/0.
         return np.where(denom == 0, 0.0, num / np.where(denom == 0, 1.0, denom))
+
+    def dn_dlambda(self, wvl_um, temperature=None):
+        """Finite-difference derivative of n with respect to wavelength."""
+        return self._central_difference(
+            lambda w: self.n(w, temperature=temperature),
+            wvl_um, 1e-6, self.wavelength_range,
+            self.metadata.get('extrapolate_wavelength'),
+        )
 
     def dn_dT(self, wvl_um, temperature):
-        """Finite-difference derivative of n with respect to temperature.
-
-        The evaluation points are clamped into the valid temperature range so
-        the difference is defined at a closed band edge.
-        """
-        h = np.maximum(np.abs(temperature) * 1e-6, 1e-3)
-        hi_point = np.add(temperature, h)
-        lo_point = np.subtract(temperature, h)
-        if self.temperature_range is not None and not self.metadata.get('extrapolate_temperature'):
-            lo, hi = self.temperature_range
-            if hi is not None:
-                hi_point = np.minimum(hi_point, hi)
-            if lo is not None:
-                lo_point = np.maximum(lo_point, lo)
-        num = self.n(wvl_um, temperature=hi_point) - self.n(
-            wvl_um, temperature=lo_point
+        """Finite-difference derivative of n with respect to temperature."""
+        return self._central_difference(
+            lambda t: self.n(wvl_um, temperature=t),
+            temperature, 1e-3, self.temperature_range,
+            self.metadata.get('extrapolate_temperature'),
         )
-        denom = hi_point - lo_point
-        # a closed band edge or a single-temperature range can collapse the
-        # interval; the derivative of a locally-constant sample is 0, not 0/0.
-        return np.where(denom == 0, 0.0, num / np.where(denom == 0, 1.0, denom))
 
     def record(self, *, loader=None, catalog=None):
         """Create a metadata record for this material.

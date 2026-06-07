@@ -3,9 +3,22 @@ import pytest
 from prysm.x.materials import (
     ConstantMaterial,
     IndexOffsetMaterial,
+    StressOpticMaterial,
     TemperatureGridMaterial,
     TemperatureShiftedMaterial,
 )
+
+
+def test_correction_accepts_scalar_and_wavelength_only_callable():
+    base = ConstantMaterial('base', 1.5)
+    # a bare scalar correction is a constant offset
+    assert IndexOffsetMaterial(base, 0.01).n(0.55) == pytest.approx(1.51)
+    # a wavelength-only callable is bound to its (wvl) shape, not handed a temperature
+    sloped = IndexOffsetMaterial(base, lambda wvl: 0.1 * wvl)
+    assert sloped.n(0.5, temperature=300) == pytest.approx(1.55)
+    # a (wvl, temperature) positional callable receives the query temperature
+    stressed = StressOpticMaterial(base, lambda wvl, temperature: temperature * 1e-4, stress=2.0)
+    assert stressed.n(0.5, temperature=300) == pytest.approx(1.5 + 300 * 1e-4 * 2.0)
 
 
 def test_material_correction_receives_temperature():

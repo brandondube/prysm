@@ -44,7 +44,17 @@ from prysm.thinfilm import _cos_snell
 
 
 def _resolve(index, wvl):
-    """Resolve a possibly-dispersive index to its value at wvl."""
+    """Resolve a possibly-dispersive index to its value at wvl.
+
+    A material exposing nk(wvl) (the prysm.x.materials convention) is read as its
+    complex index so absorption is carried into the stack; calling such a
+    material directly would return only the real n.  A plain callable n(wvl) or a
+    constant is used as given.  Duck-typed on nk, so coatings keeps no import
+    dependency on x.materials.
+    """
+    nk = getattr(index, 'nk', None)
+    if callable(nk):
+        return nk(wvl)
     if callable(index):
         return index(wvl)
     return index
@@ -92,8 +102,9 @@ class Stack:
 
     Layers are ordered from the ambient (incidence) side toward the substrate.
     Each layer index, the substrate index, and the ambient index may be a fixed
-    value (real or complex) or a callable n(wavelength) dispersion model -- the
-    glass / air callables from prysm.x.materials work directly.
+    value (real or complex), a callable n(wavelength) dispersion model, or a
+    prysm.x.materials material -- a material is read through its nk method so a
+    lossy glass carries its absorption into the stack.
 
     Parameters
     ----------
