@@ -48,6 +48,7 @@ from prysm.conf import config
 from prysm.mathops import np
 
 from .design import _TraceCache
+from .sensitivity import central_difference
 
 
 def _as_lens(lensdata):
@@ -302,11 +303,11 @@ def sensitivity_table(prescription, perturbations, merit, *, step=None):
                 'sensitivity': 0.0,
             })
             continue
+        def probe(value, p=p):
+            p.set(value)
+            return merit(prescription)
         try:
-            p.set(p.nominal + h)
-            m_plus = float(merit(prescription))
-            p.set(p.nominal - h)
-            m_minus = float(merit(prescription))
+            m_plus, m_minus = central_difference(probe, p.nominal, h)
         finally:
             p.set(p.nominal)
         rows.append({

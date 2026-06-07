@@ -39,15 +39,16 @@ from prysm import thinfilm
 
 from . import spencer_and_murty as sm
 from .spencer_and_murty import (
-    STYPE_REFLECT, STYPE_REFRACT, raytrace, valid_mask,
+    STYPE_REFLECT, STYPE_REFRACT, raytrace,
 )
-from .launch import Sampling, launch
+from .launch import Sampling
 from .paraxial import first_order
 from .opt import (
     _pupil_center_chief_index,
     opd_from_raytrace_eic, xp_reference_sphere,
 )
 from .analysis import _apply_field_and_output, _filtered_chief_index
+from ._trace_grid import trace_cell
 from ._meta import (
     system_epd, system_wavelength, object_space_index, image_space_index,
 )
@@ -612,21 +613,27 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
     n_object = object_space_index(prescription, wavelength)
 
     sampling = Sampling.rect(n=npupil)
-    P, S = launch(prescription, field, wavelength, sampling,
-                  epd=epd, pupil_z=pupil_z)
+
+    # launch + trace + valid-mask through the shared per-cell tracer; the
+    # intensity-aware trace_fn carries the scalar coating amplitude or the
+    # polarization ray-trace matrix, both forwarding the geometric trace.
+    def _trace_fn(presc, P, S, w):
+        if polarized:
+            return raytrace_prt(presc, P, S, w, coatings=coatings)
+        return raytrace_field(presc, P, S, w, coatings=coatings)
+
+    record = trace_cell(prescription, field, wavelength, sampling,
+                        epd=epd, pupil_z=pupil_z, trace_fn=_trace_fn)
+    valid = record.valid
+    result = record.trace
     if polarized:
-        pr = raytrace_prt(prescription, P, S, wavelength,
-                          coatings=coatings)
-        trace = pr.trace
+        trace = result.trace
         coating_amp = None
-        P_matrix_all = pr.P_matrix
+        P_matrix_all = result.P_matrix
     else:
-        ft = raytrace_field(prescription, P, S, wavelength,
-                            coatings=coatings)
-        trace = ft.trace
-        coating_amp = ft.amplitude
+        trace = result.trace
+        coating_amp = result.amplitude
         P_matrix_all = None
-    valid = valid_mask(trace.status, trace.P[-1])
 
     # the uniform entrance-pupil sample grid -- the pupil coordinate of every
     # ray.  Use this, not the launch positions P (which collapse onto the

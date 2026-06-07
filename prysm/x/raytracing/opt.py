@@ -476,6 +476,44 @@ def locate_xp(P_chief, S_chief, P_img, P_sk):
 
 # ---------- spot statistics ----------
 
+def centroid_referenced_rms(x, y, *, axis=-1, center=None):
+    """RMS distance from a per-slice center, reduced over the sample axis.
+
+    The shared spot-size numeric core.  x and y are matching transverse
+    coordinate arrays; with center None the reference is their centroid (the
+    nanmean over axis), so the result is the centroid-referenced RMS radius.
+    Pass center=(cx, cy) to measure the RMS about an explicit point instead.
+    The centroid and the reduction are NaN-aware, so a bundle may carry
+    NaN-padded invalid samples (the grid spot metrics over a SpotGrid) or be
+    pre-filtered down to its valid rays (the single-bundle spot metrics).
+
+    Parameters
+    ----------
+    x, y : ndarray
+        transverse coordinate arrays of the same shape.
+    axis : int, optional
+        the sample axis reduced; default the trailing axis.
+    center : tuple of (ndarray or float), optional
+        explicit (cx, cy) reference; default the per-slice centroid.
+
+    Returns
+    -------
+    ndarray
+        RMS radius with the sample axis removed.
+
+    """
+    x = np.asarray(x)
+    y = np.asarray(y)
+    if center is None:
+        cx = np.nanmean(x, axis=axis, keepdims=True)
+        cy = np.nanmean(y, axis=axis, keepdims=True)
+    else:
+        cx, cy = center
+    dx = x - cx
+    dy = y - cy
+    return np.sqrt(np.nanmean(dx * dx + dy * dy, axis=axis))
+
+
 def spot_centroid(P_final, status=None):
     """Mean (x, y) position of valid rays at a surface plane.
 
@@ -529,10 +567,9 @@ def rms_spot_radius(P_final, status=None, centroid=None):
         P_final = P_final[valid]
     if P_final.shape[0] == 0:
         return float('nan')
-    if centroid is None:
-        centroid = P_final[..., :2].mean(axis=0)
-    diffs = P_final[..., :2] - np.asarray(centroid)
-    return float(np.sqrt(np.mean(np.sum(diffs * diffs, axis=-1))))
+    center = None if centroid is None else tuple(np.asarray(centroid))
+    return float(centroid_referenced_rms(
+        P_final[..., 0], P_final[..., 1], axis=0, center=center))
 
 
 def geometric_psf_histogram(P_final, status=None, bins=64, extent=None):

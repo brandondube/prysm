@@ -1328,6 +1328,12 @@ def _wavelength_colors(wavelengths, colors):
     return [f'C{j % 10}' for j in range(len(wavelengths))]
 
 
+def _wavelength_legend(ax, nw, legend=True):
+    """Wavelength legend policy: drawn on ax only for a multi-wavelength grid."""
+    if legend and nw > 1:
+        ax.legend(fontsize='small', loc='best')
+
+
 def _plot_fan_grid(grid, value_label, *, axes, colors, sharey, figsize,
                    legend, fig, axs):
     """Shared layout for ray-aberration and OPD fan grids.
@@ -1379,8 +1385,7 @@ def _plot_fan_grid(grid, value_label, *, axes, colors, sharey, figsize,
                 ax.set_xlabel(f'normalized pupil {axis}')
             if ci == 0:
                 ax.set_ylabel(f'{_field_label(fields[i])}\n{value_label}')
-    if legend and nw > 1:
-        axs[0][0].legend(fontsize='small', loc='best')
+    _wavelength_legend(axs[0][0], nw, legend)
     fig.tight_layout()
     return fig, axs
 
@@ -1521,7 +1526,6 @@ def plot_spot_diagrams(spot_grid, *, ncols=None, colors=None, marker='+',
             ax.set_ylim(-lim, lim)
     for idx in range(nf, nrows * ncols):
         flat[idx].axis('off')
-    if legend and nw > 1:
-        flat[0].legend(fontsize='small', loc='best')
+    _wavelength_legend(flat[0], nw, legend)
     fig.tight_layout()
     return fig, axs

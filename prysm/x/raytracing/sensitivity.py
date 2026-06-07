@@ -14,6 +14,64 @@ from prysm.conf import config
 from prysm.mathops import np
 
 
+def central_difference(probe, base, h):
+    """Central-difference probe of a scalar about base by +/- h.
+
+    probe(value) -> scalar evaluates the figure of merit with the single varied
+    DOF set to value; base is its unperturbed value and h the half-step.
+    Returns (f_plus, f_minus) = (probe(base + h), probe(base - h)); the
+    derivative is (f_plus - f_minus) / (2 * h).  A caller that also needs the
+    raw evaluations -- a sensitivity table reporting merit_plus / merit_minus --
+    reads them off the pair.  probe leaves the DOF at the last value it set, so
+    the caller restores it.
+    """
+    return float(probe(base + h)), float(probe(base - h))
+
+
+def fd_jacobian(f, x, step=1e-6, mask=None):
+    """Central-difference gradient of a scalar f over the vector x.
+
+    f(x) -> scalar.  Component i is stepped by h_i = step * (|x_i| or 1); a
+    False entry in mask leaves that component's derivative at 0.  x is copied
+    for each probe (never mutated in place here), so f sees exactly one varied
+    component at a time.
+
+    Parameters
+    ----------
+    f : callable
+        f(x) -> scalar over the free vector.
+    x : array_like
+        the point at which the gradient is taken.
+    step : float, optional
+        relative FD step; the per-component half-step is step * (|x_i| or 1).
+    mask : array_like of bool, optional
+        components to differentiate; others keep derivative 0.
+
+    Returns
+    -------
+    J : ndarray
+        shape (len(x),) gradient of f at x.
+
+    """
+    x = np.asarray(x)
+    n = len(x)
+    J = np.zeros(n, dtype=config.precision)
+    for i in range(n):
+        if mask is not None and not mask[i]:
+            continue
+        v0 = float(x[i])
+        h = step * (abs(v0) if v0 != 0.0 else 1.0)
+
+        def probe(value, i=i):
+            xx = np.array(x, copy=True)
+            xx[i] = value
+            return f(xx)
+
+        fp, fm = central_difference(probe, v0, h)
+        J[i] = (fp - fm) / (2.0 * h)
+    return J
+
+
 def merit_jacobian_free(lensdata, merit, method='fd', step=1e-6):
     """Gradient of a scalar merit w.r.t. a LensData's dense free vector.
 
@@ -45,22 +103,13 @@ def merit_jacobian_free(lensdata, merit, method='fd', step=1e-6):
     x0 = lensdata.pack()
     n = len(x0)
     if method == 'fd':
-        J = np.empty(n, dtype=config.precision)
+        def f(x):
+            lensdata.update(x)
+            return float(merit())
         try:
-            for i in range(n):
-                v0 = float(x0[i])
-                h = step * (abs(v0) if v0 != 0.0 else 1.0)
-                x = np.array(x0, copy=True)
-                x[i] = v0 + h
-                lensdata.update(x)
-                fp = float(merit())
-                x[i] = v0 - h
-                lensdata.update(x)
-                fm = float(merit())
-                J[i] = (fp - fm) / (2.0 * h)
+            return fd_jacobian(f, x0, step=step)
         finally:
             lensdata.update(x0)
-        return J
     if method == 'autograd':
         if np.__name__ != 'torch':
             raise RuntimeError(

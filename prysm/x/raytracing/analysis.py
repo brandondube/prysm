@@ -12,6 +12,7 @@ from .spencer_and_murty import raytrace, valid_mask
 from .opt import (
     xp_reference_sphere,
     opd_from_raytrace_eic,
+    centroid_referenced_rms,
     _pupil_center_chief_index,
 )
 from ._line_math import line_intersection_params
@@ -19,6 +20,10 @@ from .paraxial import paraxial_image_distance, first_order
 from .launch import Field, Sampling, launch
 from ._meta import (
     system_wavelength, system_epd, object_space_index, image_space_index,
+)
+from ._trace_grid import (
+    iter_trace_grid, trace_cell, _resolve_fields, _resolve_wavelengths,
+    _require_epd,
 )
 from .surfaces import Conic, EvenAsphere, Plane, Sphere
 
@@ -70,17 +75,6 @@ def _center_valid(values, valid, reference, chief_index, *, allow_none=False):
                            allow_none=allow_none)
     mask = valid.reshape(valid.shape + (1,) * (values.ndim - 1))
     return np.where(mask, values - ref, np.nan), ref
-
-
-def _require_epd(prescription, epd, wvl=None):
-    """Resolve epd from an explicit value or the system; error if neither."""
-    epd = system_epd(prescription, epd, wvl)
-    if epd is None:
-        raise TypeError(
-            'epd is required; pass epd=... or supply an OpticalSystem whose '
-            'aperture spec resolves it.'
-        )
-    return epd
 
 
 def _first_order_geometry_failure(exc):
@@ -166,9 +160,8 @@ def resolve_exit_pupil(prescription, wavelength, *, stop_index=None, epd=None,
         epd_geo = system_epd(prescription, epd, wavelength)
         if epd_geo is None:
             epd_geo = 1.0  # chief is a single pupil-center ray; epd only nominal
-        P, S = launch(prescription, field, wavelength, Sampling.chief(),
-                      epd=epd_geo)
-        tr = raytrace(prescription, P, S, wavelength)
+        tr = trace_cell(prescription, field, wavelength, Sampling.chief(),
+                        epd=epd_geo).trace
         P_chief_final, S_chief_final = tr.P[-1, 0], tr.S[-1, 0]
     _, _, P_xp = xp_reference_sphere(P_chief_final, S_chief_final,
                                      axis_point=axis_point, axis_dir=axis_dir)
@@ -514,23 +507,29 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
     paraxial_xy = np.zeros((n, 2), dtype=config.precision)
     percent = np.zeros(n, dtype=config.precision)
     chief = Sampling.chief()
-    for i, field in enumerate(fields):
-        P_r, S_r = launch(prescription, field, wavelength, chief,
-                          epd=epd, pupil_z=pupil_z)
-        tr_r = raytrace(prescription, P_r, S_r, wavelength)
-        real_xy[i] = tr_r.P[-1, 0, :2]
 
-        ax, ay = field.angle_radians()
-        small = Field(
-            float(np.degrees(ax * paraxial_fraction)),
-            float(np.degrees(ay * paraxial_fraction)),
-            kind='angle', unit='deg',
-        )
-        P_p, S_p = launch(prescription, small, wavelength, chief,
-                          epd=epd, pupil_z=pupil_z)
-        tr_p = raytrace(prescription, P_p, S_p, wavelength)
+    # the paraxial proxy is a second chief ray at a tiny fraction of each field
+    # angle.  Trace the real and the proxy chief grids through the shared
+    # iterator (one chief sample per field, the single resolved wavelength) and
+    # walk them cell-for-cell.
+    angles = [field.angle_radians() for field in fields]
+    proxy_fields = [
+        Field(float(np.degrees(ax * paraxial_fraction)),
+              float(np.degrees(ay * paraxial_fraction)),
+              kind='angle', unit='deg')
+        for ax, ay in angles
+    ]
+    real = iter_trace_grid(prescription, fields, [wavelength], chief,
+                           epd=epd, pupil_z=pupil_z)
+    proxy = iter_trace_grid(prescription, proxy_fields, [wavelength], chief,
+                            epd=epd, pupil_z=pupil_z)
+    for rr, pr, (ax, ay) in zip(real, proxy, angles):
+        i = rr.i
+        real_xy[i] = rr.trace.P[-1, 0, :2]
+        proxy_xy = pr.trace.P[-1, 0, :2]
+
         if distortion_type == 'linear-angle':
-            paraxial_xy[i] = tr_p.P[-1, 0, :2] / paraxial_fraction
+            paraxial_xy[i] = proxy_xy / paraxial_fraction
         elif distortion_type == 'f-tan':
             small_slopes = np.array([
                 np.tan(ax * paraxial_fraction),
@@ -540,7 +539,7 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
                                     dtype=config.precision)
             focal_scale = np.zeros(2, dtype=config.precision)
             nonzero = np.abs(small_slopes) > 0.0
-            focal_scale[nonzero] = tr_p.P[-1, 0, :2][nonzero] / small_slopes[nonzero]
+            focal_scale[nonzero] = proxy_xy[nonzero] / small_slopes[nonzero]
             paraxial_xy[i] = focal_scale * field_slopes
         else:
             raise ValueError(
@@ -662,6 +661,11 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
     y_fan_z = np.zeros(n, dtype=config.precision)
     chief = Sampling.chief()
     r_marg = float(marginal_fraction) * float(epd) / 2.0
+    # the marginal probe is built by hand (chief launch, then a fixed lab-frame
+    # position offset shared by all three rays), not by iter_trace_grid: a
+    # non-chief Sampling would route each marginal through the entrance pupil and
+    # trigger 'real' ray aiming, changing this differential bundle.  Keep it
+    # open-coded -- it is the one grid analysis that is not a Sampling launch.
     for i, field in enumerate(fields):
         P0, S0 = launch(prescription, field, wavelength, chief, epd=epd)
         P = np.repeat(P0, 3, axis=0)
@@ -755,14 +759,13 @@ def _best_focus_shift_from_trace(P_final, S_final, status=None):
 
 def _best_focus_z(prescription, wavelength, *, epd, field, sampling):
     """Lab-frame centroid-RMS best focus for a traced bundle."""
-    epd = _require_epd(prescription, epd, wavelength)
     if field is None:
         field = Field(0.0, 0.0, unit='deg')
     if sampling is None:
         sampling = Sampling.hex(nrings=8)
-    P, S = launch(prescription, field, wavelength, sampling, epd=epd)
-    tr = raytrace(prescription, P, S, wavelength)
-    dz = _best_focus_shift_from_trace(tr.P[-1], tr.S[-1], tr.status)
+    r = trace_cell(prescription, field, wavelength, sampling, epd=epd)
+    dz = _best_focus_shift_from_trace(r.trace.P[-1], r.trace.S[-1],
+                                      r.trace.status)
     return float(_surfaces_for_reference(prescription)[-1].P[2]) + dz
 
 
@@ -868,18 +871,16 @@ def lateral_color(prescription, fields, wavelengths, *, epd=None):
         chief-ray (x, y) at the image plane.
 
     """
+    # resolve epd once (at the reference wavelength), so the same pupil size is
+    # used for every wavelength; passing the resolved float makes the iterator's
+    # per-wavelength epd resolution an identity.
     epd = _require_epd(prescription, epd)
     fields = list(fields)
     wavelengths = list(wavelengths)
-    n_f = len(fields)
-    n_w = len(wavelengths)
-    out = np.zeros((n_f, n_w, 2), dtype=config.precision)
-    chief = Sampling.chief()
-    for i, field in enumerate(fields):
-        for j, w in enumerate(wavelengths):
-            P, S = launch(prescription, field, float(w), chief, epd=epd)
-            tr = raytrace(prescription, P, S, float(w))
-            out[i, j] = tr.P[-1, 0, :2]
+    out = np.zeros((len(fields), len(wavelengths), 2), dtype=config.precision)
+    for r in iter_trace_grid(prescription, fields, wavelengths,
+                             Sampling.chief(), epd=epd):
+        out[r.i, r.j] = r.trace.P[-1, 0, :2]
     return out
 
 
@@ -889,27 +890,6 @@ def lateral_color(prescription, fields, wavelengths, *, epd=None):
 # that: they trace every (field, wavelength) with one fixed pupil sampling and
 # return a stacked, labelled grid.  The plotting layer turns a grid into a
 # figure; the same grid can be pickled, fed to a merit, or differenced.
-
-def _resolve_fields(prescription, fields):
-    """Fields to evaluate, defaulting to the system's FieldSet, else on-axis."""
-    if fields is not None:
-        return list(fields)
-    sys_fields = getattr(prescription, 'fields', None)
-    if sys_fields is not None and len(sys_fields) > 0:
-        return list(sys_fields)
-    return [Field(0.0, 0.0)]
-
-
-def _resolve_wavelengths(prescription, wavelengths):
-    """Wavelengths (microns) to evaluate, defaulting to the system's set."""
-    if wavelengths is not None:
-        return [float(w) for w in wavelengths]
-    wv = getattr(prescription, 'wavelengths', None)
-    if wv:
-        values = wv.values() if hasattr(wv, 'values') else wv
-        return [float(w) for w in values]
-    return [system_wavelength(prescription, None)]
-
 
 def _fan_grid_setup(prescription, fields, wavelengths, nrays, distribution):
     fields = _resolve_fields(prescription, fields)
@@ -923,22 +903,18 @@ def _fan_grid_setup(prescription, fields, wavelengths, nrays, distribution):
     return fields, wavelengths, x_fan, y_fan, pupil, x, y
 
 
-def _fan_image_error(prescription, field, wavelength, axis, sampling, epd,
-                     reference):
-    """Reference-subtracted image error of one ray fan, full length with NaN.
+def _fan_image_error(record, axis, reference):
+    """Reference-subtracted image error of one traced ray fan, NaN-padded.
 
-    Returns one value per fan sample (NaN where the ray failed), the transverse
+    Returns one value per fan sample (NaN where the ray failed): the transverse
     image-plane error in the fan's own axis measured from the chief or centroid.
     Rays clipped by a real aperture during the trace carry a failure status, so
     the valid mask NaNs them and the fan stays full length.
     """
     ax = _axis_index(axis)
-    P, S = launch(prescription, field, wavelength, sampling, epd=epd)
-    tr = raytrace(prescription, P, S, wavelength)
-    valid = valid_mask(tr.status, tr.P[-1])
-    image = tr.P[-1, :, ax]
-    ci = _pupil_center_chief_index(P)
-    centered, _ = _center_valid(image, valid, reference, ci)
+    image = record.trace.P[-1, :, ax]
+    ci = _pupil_center_chief_index(record.P)
+    centered, _ = _center_valid(image, record.valid, reference, ci)
     return centered
 
 
@@ -987,13 +963,13 @@ def ray_aberration_fans(prescription, fields=None, wavelengths=None, *,
     fields, wavelengths, x_fan, y_fan, pupil, x, y = _fan_grid_setup(
         prescription, fields, wavelengths, nrays, distribution,
     )
-    for i, field in enumerate(fields):
-        for j, w in enumerate(wavelengths):
-            epd_w = _require_epd(prescription, epd, w)
-            x[i, j] = _fan_image_error(prescription, field, w, 'x', x_fan,
-                                       epd_w, reference)
-            y[i, j] = _fan_image_error(prescription, field, w, 'y', y_fan,
-                                       epd_w, reference)
+    # the x and y fans are separate bundles but share the (field, wavelength)
+    # grid; zip two iterations so each pair is the same cell.
+    for xr, yr in zip(
+            iter_trace_grid(prescription, fields, wavelengths, x_fan, epd=epd),
+            iter_trace_grid(prescription, fields, wavelengths, y_fan, epd=epd)):
+        x[xr.i, xr.j] = _fan_image_error(xr, 'x', reference)
+        y[yr.i, yr.j] = _fan_image_error(yr, 'y', reference)
     return RayFanGrid(tuple(fields),
                       np.asarray(wavelengths, dtype=config.precision),
                       pupil, x, y)
@@ -1013,14 +989,11 @@ def _exit_pupil_for(prescription, wavelength, *, field=None, stop_index=None,
                               epd=epd, field=field)
 
 
-def _opd_fan(prescription, field, tilt_field, wavelength, sampling, epd,
-             P_xp, output, n_pupil):
-    """OPD of one ray fan, full length with NaN where rays failed."""
-    P, S = launch(prescription, field, wavelength, sampling, epd=epd)
-    tr = raytrace(prescription, P, S, wavelength)
+def _opd_fan(prescription, record, tilt_field, P_xp, output, n_pupil):
+    """OPD of one traced ray fan, full length with NaN where rays failed."""
     opd, _, _, valid = _wavefront_from_trace(
-        prescription, P, wavelength, tr, P_xp=P_xp, field=tilt_field,
-        output=output,
+        prescription, record.P, record.wvl, record.trace, P_xp=P_xp,
+        field=tilt_field, output=output,
     )
     full = np.full(n_pupil, np.nan, dtype=config.precision)
     full[valid] = opd
@@ -1071,18 +1044,21 @@ def opd_fans(prescription, fields=None, wavelengths=None, *, nrays=21,
         prescription, fields, wavelengths, nrays, distribution,
     )
     n_pupil = pupil.shape[0]
-    for i, field in enumerate(fields):
+    # zip the x and y fan iterations so each pair is the same (field,
+    # wavelength) cell, whose two fans share one exit-pupil resolution.
+    for xr, yr in zip(
+            iter_trace_grid(prescription, fields, wavelengths, x_fan, epd=epd),
+            iter_trace_grid(prescription, fields, wavelengths, y_fan, epd=epd)):
+        field = yr.field
         # angular field tilt is removed inside wavefront; height fields carry
         # no launch-plane tilt to remove.
         tilt_field = field if getattr(field, 'kind', 'angle') == 'angle' else None
-        for j, w in enumerate(wavelengths):
-            epd_w = _require_epd(prescription, epd, w)
-            P_xp = _exit_pupil_for(prescription, w, field=field,
-                                   stop_index=stop_index, epd=epd_w)
-            x[i, j] = _opd_fan(prescription, field, tilt_field, w, x_fan,
-                               epd_w, P_xp, output, n_pupil)
-            y[i, j] = _opd_fan(prescription, field, tilt_field, w, y_fan,
-                               epd_w, P_xp, output, n_pupil)
+        P_xp = _exit_pupil_for(prescription, yr.wvl, field=field,
+                               stop_index=stop_index, epd=yr.epd)
+        x[xr.i, xr.j] = _opd_fan(prescription, xr, tilt_field, P_xp, output,
+                                 n_pupil)
+        y[yr.i, yr.j] = _opd_fan(prescription, yr, tilt_field, P_xp, output,
+                                 n_pupil)
     return OPDFanGrid(tuple(fields),
                       np.asarray(wavelengths, dtype=config.precision),
                       pupil, x, y)
@@ -1135,25 +1111,22 @@ def spot_diagrams(prescription, fields=None, wavelengths=None, *,
     y = np.full((nf, nw, n_samples), np.nan, dtype=config.precision)
     valid = np.zeros((nf, nw, n_samples), dtype=bool)
     reference_xy = np.full((nf, nw, 2), np.nan, dtype=config.precision)
-    for i, field in enumerate(fields):
-        for j, w in enumerate(wavelengths):
-            epd_w = _require_epd(prescription, epd, w)
-            P, S = launch(prescription, field, w, sampling, epd=epd_w)
-            tr = raytrace(prescription, P, S, w)
-            # rays clipped by a real aperture during the trace are status-
-            # flagged (not deleted), so the bundle stays full length and those
-            # samples come out NaN via the valid mask.
-            v = valid_mask(tr.status, tr.P[-1])
-            xi = tr.P[-1, :, 0]
-            yi = tr.P[-1, :, 1]
-            image_xy = np.stack([xi, yi], axis=1)
-            ci = _pupil_center_chief_index(P)
-            centered, ref = _center_valid(image_xy, v, reference, ci,
-                                          allow_none=True)
-            x[i, j] = centered[:, 0]
-            y[i, j] = centered[:, 1]
-            valid[i, j] = v
-            reference_xy[i, j] = ref
+    for r in iter_trace_grid(prescription, fields, wavelengths, sampling,
+                             epd=epd):
+        # rays clipped by a real aperture during the trace are status-flagged
+        # (not deleted), so the bundle stays full length and those samples come
+        # out NaN via the valid mask.
+        v = r.valid
+        xi = r.trace.P[-1, :, 0]
+        yi = r.trace.P[-1, :, 1]
+        image_xy = np.stack([xi, yi], axis=1)
+        ci = _pupil_center_chief_index(r.P)
+        centered, ref = _center_valid(image_xy, v, reference, ci,
+                                      allow_none=True)
+        x[r.i, r.j] = centered[:, 0]
+        y[r.i, r.j] = centered[:, 1]
+        valid[r.i, r.j] = v
+        reference_xy[r.i, r.j] = ref
     return SpotGrid(tuple(fields),
                     np.asarray(wavelengths, dtype=config.precision),
                     x, y, valid, reference_xy)
@@ -1181,8 +1154,8 @@ def spot_rms_radius(spot_grid):
         wavelengths[j].
 
     """
-    xc, yc = _spot_centered(spot_grid)
-    return np.sqrt(np.nanmean(xc * xc + yc * yc, axis=2))
+    return centroid_referenced_rms(np.asarray(spot_grid.x),
+                                   np.asarray(spot_grid.y), axis=2)
 
 
 def spot_geometric_radius(spot_grid):

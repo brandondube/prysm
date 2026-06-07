@@ -295,6 +295,21 @@ class Shape:
         return sag_t, gx_t, gy_t
 
 
+def _shape_from_params(cls, p):
+    """Rebuild a descriptor-declared shape from its stored parameter dict.
+
+    The DOF and meta keys (SCALAR_DOFS + VECTOR_DOFS + META_KEYS) name the shape
+    constructor's keyword arguments exactly, so a shape reconstructs by handing
+    each stored value back by name -- the single builder behind every editable
+    shape's from_params, derived from the self-describing descriptors instead of
+    written out per class.  Bound per class (from_params = classmethod(
+    _shape_from_params)) so it stays the opt-in registration marker: a shape that
+    does not bind it is not editable by LensData.
+    """
+    keys = cls.SCALAR_DOFS + cls.VECTOR_DOFS + cls.META_KEYS
+    return cls(**{key: p[key] for key in keys})
+
+
 class CallableShape(Shape):
     """Shape wrapper for user-supplied sag and optional normal callables."""
 
@@ -338,10 +353,7 @@ class Plane(Shape):
     META_KEYS = ()
     CATEGORIES = {}
 
-    @classmethod
-    def from_params(cls, p):
-        """Rebuild a Plane from its parameter dict."""
-        return cls()
+    from_params = classmethod(_shape_from_params)
 
     def __init__(self):
         """Initialize a plane sag shape."""
@@ -403,10 +415,7 @@ class Sphere(Shape):
     META_KEYS = ()
     CATEGORIES = {'curvature': ['c'], 'radius': ['c']}
 
-    @classmethod
-    def from_params(cls, p):
-        """Rebuild a Sphere from its parameter dict."""
-        return cls(p['c'])
+    from_params = classmethod(_shape_from_params)
 
     def __init__(self, c):
         """Initialize a spherical sag shape."""
@@ -476,10 +485,7 @@ class Conic(Shape):
     META_KEYS = ()
     CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k']}
 
-    @classmethod
-    def from_params(cls, p):
-        """Rebuild a Conic from its parameter dict."""
-        return cls(p['c'], p['k'])
+    from_params = classmethod(_shape_from_params)
 
     def __init__(self, c, k):
         """Initialize a conic sag shape."""
@@ -550,10 +556,7 @@ class OffAxisConic(Shape):
     META_KEYS = ('dx', 'dy')
     CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k']}
 
-    @classmethod
-    def from_params(cls, p):
-        """Rebuild an OffAxisConic from its parameter dict."""
-        return cls(p['c'], p['k'], dx=p['dx'], dy=p['dy'])
+    from_params = classmethod(_shape_from_params)
 
     def __init__(self, c, k, dx=0.0, dy=0.0):
         """Initialize an off-axis conic sag shape."""
@@ -619,10 +622,7 @@ class EvenAsphere(ConicSeedMixin, Shape):
     CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
                   'coefs': ['coefs']}
 
-    @classmethod
-    def from_params(cls, p):
-        """Rebuild an EvenAsphere from its parameter dict."""
-        return cls(p['c'], p['k'], p['coefs'])
+    from_params = classmethod(_shape_from_params)
 
     def __init__(self, c, k, coefs):
         """Initialize an even asphere sag shape."""
@@ -670,11 +670,7 @@ class Q2D(ConicSeedMixin, Shape):
     META_KEYS = ('normalization_radius', 'cm0', 'ams', 'bms', 'dx', 'dy')
     CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k']}
 
-    @classmethod
-    def from_params(cls, p):
-        """Rebuild a Q2D from its parameter dict."""
-        return cls(p['c'], p['k'], p['normalization_radius'],
-                   p['cm0'], p['ams'], p['bms'], dx=p['dx'], dy=p['dy'])
+    from_params = classmethod(_shape_from_params)
 
     def __init__(self, c, k, normalization_radius, cm0, ams, bms,
                  dx=0.0, dy=0.0):
@@ -739,11 +735,7 @@ class Zernike(ConicSeedMixin, Shape):
     CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
                   'coefs': ['coefs']}
 
-    @classmethod
-    def from_params(cls, p):
-        """Rebuild a Zernike from its parameter dict."""
-        return cls(p['c'], p['k'], p['normalization_radius'],
-                   p['nms'], p['coefs'], norm=p['norm'])
+    from_params = classmethod(_shape_from_params)
 
     def __init__(self, c, k, normalization_radius, nms, coefs, norm=True):
         """Initialize a Zernike sag shape."""
@@ -803,11 +795,7 @@ class XY(ConicSeedMixin, Shape):
     CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
                   'coefs': ['coefs']}
 
-    @classmethod
-    def from_params(cls, p):
-        """Rebuild an XY polynomial shape from its parameter dict."""
-        return cls(p['c'], p['k'], p['normalization_radius'],
-                   p['mns'], p['coefs'])
+    from_params = classmethod(_shape_from_params)
 
     def __init__(self, c, k, normalization_radius, mns, coefs):
         """Initialize an x-y polynomial sag shape."""
@@ -867,11 +855,7 @@ class Chebyshev(ConicSeedMixin, Shape):
     CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
                   'coefs': ['coefs']}
 
-    @classmethod
-    def from_params(cls, p):
-        """Rebuild a Chebyshev shape from its parameter dict."""
-        return cls(p['c'], p['k'], p['x_norm'], p['y_norm'],
-                   p['mns'], p['coefs'])
+    from_params = classmethod(_shape_from_params)
 
     def __init__(self, c, k, x_norm, y_norm, mns, coefs):
         """Initialize a Chebyshev sag shape."""
@@ -931,11 +915,7 @@ class Jacobi(ConicSeedMixin, Shape):
     CATEGORIES = {'curvature': ['c'], 'radius': ['c'], 'conic': ['k'],
                   'coefs': ['coefs']}
 
-    @classmethod
-    def from_params(cls, p):
-        """Rebuild a Jacobi shape from its parameter dict."""
-        return cls(p['c'], p['k'], p['normalization_radius'],
-                   p['alpha'], p['beta'], p['ns'], p['coefs'])
+    from_params = classmethod(_shape_from_params)
 
     def __init__(self, c, k, normalization_radius, alpha, beta, ns, coefs):
         """Initialize a radial Jacobi sag shape."""
@@ -990,10 +970,7 @@ class Toroid(ConicSeedMixin, Shape):
     CATEGORIES = {'curvature': ['c_x', 'c_y'], 'conic': ['k_y'],
                   'coefs': ['coefs_y']}
 
-    @classmethod
-    def from_params(cls, p):
-        """Rebuild a Toroid from its parameter dict."""
-        return cls(p['c_x'], p['c_y'], p['k_y'], p['coefs_y'])
+    from_params = classmethod(_shape_from_params)
 
     def __init__(self, c_x, c_y, k_y, coefs_y):
         """Initialize a toroidal sag shape."""
@@ -1044,10 +1021,7 @@ class Biconic(ConicSeedMixin, Shape):
     META_KEYS = ()
     CATEGORIES = {'curvature': ['c_x', 'c_y'], 'conic': ['k_x', 'k_y']}
 
-    @classmethod
-    def from_params(cls, p):
-        """Rebuild a Biconic from its parameter dict."""
-        return cls(p['c_x'], p['c_y'], p['k_x'], p['k_y'])
+    from_params = classmethod(_shape_from_params)
 
     def __init__(self, c_x, c_y, k_x, k_y):
         """Initialize a biconic sag shape."""

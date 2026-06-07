@@ -18,7 +18,7 @@ import warnings
 from prysm.conf import config
 from prysm.mathops import np
 
-from ..materials import MIRROR
+from ..materials import MIRROR, resolve_index
 from .surfaces import (
     Biconic,
     Chebyshev,
@@ -285,19 +285,17 @@ def _bounds_for_dof(nominal, lo, hi, relative, is_radius):
 
 
 def _as_material_callable(material):
-    """Coerce a material spec into an n(wvl) callable or None.
+    """Coerce an already-resolved material spec into an n(wvl) callable or None.
 
     Refractive surfaces need a callable index; reflective/eval surfaces never
     have their index queried, so MIRROR and None both compile to None.  A bare
-    number is wrapped in a constant callable.
+    number is wrapped in a constant callable.  Glass-name resolution is the IO
+    layer's job (it owns the catalog), so a bare name is rejected here rather
+    than triggering an implicit database download.
 
     """
-    if material is None or material is MIRROR or material == MIRROR:
-        return None
-    if callable(material):
-        return material
-    value = float(material)
-    return lambda wvl: value
+    resolved = resolve_index(material)
+    return None if resolved is MIRROR else resolved
 
 
 def _invalidate_row_owner(row):
