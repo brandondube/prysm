@@ -1,4 +1,4 @@
-"""Various optimization algorithms."""
+"""Optimization algorithms."""
 
 from prysm.mathops import np
 
@@ -19,9 +19,7 @@ def runN(optimizer, N):
     Parameters
     ----------
     optimizer : Any
-        any optimizer from this file, or any type which implements
-            def step(self): -> (xk, fk, gk)
-                pass
+        Object with a step() method returning (x, f, g).
     N : int
         number of iterations to perform
 
@@ -175,25 +173,7 @@ def run_until(optimizer, governor, *, maxiter=None):
 
 
 class _Accumulator:
-    """Shared state for accumulator-based optimizers (AdaGrad / RMSProp).
-
-    Holds a per-parameter accumulator initialized to zeros that subclass
-    step methods update with some function of the gradient.  The
-    problem, x, alpha, bounds, eps, iter state is the same as
-    every other optimizer in this module.
-
-    Subclasses with additional hyperparameters override __init__ to call
-    super().__init__(fg, x0, alpha, lower_bounds, upper_bounds) and then set
-    their extras.  Bounds are enforced by projecting iterates into the box;
-    active-bound gradient components that point out of the box are zeroed
-    before updating the accumulator.
-
-    Subclass contract for step:
-        return (x, f, g) where (f, g) were evaluated at x (the
-        iterate before this step's update) and self.x holds the updated
-        iterate.
-
-    """
+    """Shared state for accumulator-based optimizers."""
     def __init__(self, fg, x0, alpha, lower_bounds=None, upper_bounds=None):
         self.problem = as_problem(fg)
         self.x0 = x0
@@ -206,21 +186,7 @@ class _Accumulator:
 
 
 class _MomentBased:
-    """Shared state for moment-based optimizers (Adam / RAdam / AdaMomentum / Yogi).
-
-    Holds first- and second-moment buffers m and v initialized to
-    zeros that subclass step methods update from the gradient.  Two
-    decay rates beta1 and beta2 live here too.  Bounds are enforced by
-    projecting iterates into the box; active-bound gradient components that
-    point out of the box are zeroed before updating the moments.
-
-    Subclasses with additional hyperparameters (e.g. RAdam's rhoinf)
-    override __init__ to call super().__init__(fg, x0, alpha, beta1,
-    beta2, lower_bounds, upper_bounds) and then set their extras.
-
-    Subclass contract for step: see _Accumulator.
-
-    """
+    """Shared state for moment-based optimizers."""
     def __init__(self, fg, x0, alpha, beta1=0.9, beta2=0.999,
                  lower_bounds=None, upper_bounds=None):
         self.problem = as_problem(fg)
@@ -239,17 +205,11 @@ class _MomentBased:
 class GradientDescent:
     r"""Gradient Descent optimization routine.
 
-    Gradient Descent travels a constant step size alpha along the negative of
-    the gradient on each iteration.  The update is:
+    Uses a constant step size along the negative gradient:
 
     .. math::
         x_{k+1} = x_k - α g_k
 
-    where g is the gradient vector
-
-    The user may anneal alpha over the course
-    of optimization if they wish.  The cost function is not used, nor higher
-    order information.
     """
     def __init__(self, fg, x0, alpha, lower_bounds=None, upper_bounds=None):
         """Create a new GradientDescent optimizer.
@@ -257,15 +217,11 @@ class GradientDescent:
         Parameters
         ----------
         fg : callable
-            a function which returns (f, g) where f is the scalar cost, and
-            g is the vector gradient.
-        x0 : callable
-            the parameter vector immediately prior to optimization
+            Function returning (f, g).
+        x0 : ndarray
+            Initial parameter vector.
         alpha : float
-            the step size
-            the user may mutate self.alpha over the course of optimization
-            with no negative effects (except optimization blowing up from a bad
-            choice of new alpha)
+            Step size.
         lower_bounds, upper_bounds : ndarray, optional
             per-variable hard bounds.  None means unconstrained on that side.
 
@@ -291,27 +247,13 @@ class GradientDescent:
 class AdaGrad(_Accumulator):
     r"""Adaptive Gradient Descent optimization routine.
 
-    Gradient Descent has the same step size for each parameter.  Adagrad self-
-    learns a unique step size for each parameter based on accumulation of the
-    square of the gradient over the course of optimization.  The update is:
+    Accumulates squared gradients to scale each parameter's step:
 
     .. math::
         s_k &= s_{k-1} + (g*g) \\
         x_{k+1} &= x_k - α g_k / \sqrt{s_k \,}
 
-    The purpose of the square and square root operations is essentially to destroy
-    the sign of g in the denomenator gain.  An alternative may be to simply do
-    s_k = s_(k-1) + abs(g), which would have less numerical precision issues.
-
-    Ref [1] describes a ""fully connected"" version of AdaGrad that is a cousin
-    of sorts to BFGS, storing an NxN matrix.  This is intractible for large N.
-    The implementation here is sister to most implementations in the wild, and
-    is the "Diagonal" implementation, which stores no information about the
-    relationship between "spatial" elements of the gradient vector.  Only the
-    temporal relationship between the gradient and its past is stored.
-
-    Constructed with AdaGrad(fg, x0, alpha) — see _Accumulator
-    for the shared init signature.
+    This is diagonal AdaGrad: only per-parameter history is stored.
 
     References
     ----------
@@ -337,23 +279,11 @@ class AdaGrad(_Accumulator):
 class RMSProp(_Accumulator):
     r"""RMSProp optimization routine.
 
-    RMSProp keeps a moving average of the squared gradient of each parameter.
-
-    It is very similar to AdaGrad, except that the decay built into it allows
-    it to forget old gradients.  This makes it often superior for non-convex
-    problems, where navigation from one valley into another poisons AdaGrad, but
-    RMSProp will eventually forget about the old valley.
-
-    The update is:
+    Uses a decayed moving average of squared gradients:
 
     .. math::
         s_k &= γ * s_{k-1} + (1-γ)*(g*g) \\
         x_{k+1} &= x_k - α g_k / \sqrt{s_k \,}
-
-    The decay terms gamma form a "moving average" that is squared, with the
-    square root in the gain it is a "root mean square."
-
-    RMSProp is an unpublished algorithm.  Its source is Ref [1]
 
     References
     ----------
@@ -386,14 +316,7 @@ class RMSProp(_Accumulator):
 class Adam(_MomentBased):
     r"""ADAM optimization routine.
 
-    ADAM, or "Adaptive moment estimation" uses moving average estimates of the
-    mean of the gradient and of its "uncentered variance".  This causes the
-    algorithm to combine several properties of AdaGrad and RMSPRop, as well as
-    perform a form of self-annealing, where the step size will naturally decay
-    as the optimizer converges.  This can cause ADAM to recover itself after
-    diverging, if the divergence is not too extreme.
-
-    The update is:
+    Uses bias-corrected first and second moment estimates:
 
     .. math::
         m &\equiv \text{mean} \\
@@ -403,9 +326,6 @@ class Adam(_MomentBased):
         \hat{m}_k &= m_k / (1 - β_1^k) \\
         \hat{v}_k &= v_k / (1 - β_2^k) \\
         x_{k+1} &= x_k - α * \hat{m}_k / \sqrt{\hat{v}_k \,} \\
-
-    Constructed with Adam(fg, x0, alpha, beta1=0.9, beta2=0.999) —
-    see _MomentBased for the shared init signature.
 
     References
     ----------
@@ -438,13 +358,7 @@ class Adam(_MomentBased):
 class RAdam(_MomentBased):
     r"""RADAM optimization routine.
 
-    RADAM or Rectified ADAM is a modification of ADAM, which seeks to remove
-    any need for warmup time with ADAM, and to stabilize the variance estimate
-    or second moment that ADAM uses.  These properties make RADAM more invariant
-    to the choice of hyperparameters, especially alpha, and avoid distorting
-    the trajectory of optimization in early iterations.
-
-    The update is:
+    Rectifies Adam's adaptive learning rate during early iterations:
 
     .. math::
         m &\equiv \text{mean} \\
@@ -484,21 +398,14 @@ class RAdam(_MomentBased):
         f, g = self.problem.fg(self.x)
         g_step = _project_gradient(self, g)
         gsq = g_step*g_step
-        # update momentum estimates
         self.m = beta1*self.m + (1-beta1) * g_step
         self.v = beta2*self.v + (1-beta2) * (gsq)
-        # torch exp_avg_sq.mul_(beta2).addcmul_(grad,grad,value=1-beta2)
-        # == v
 
-        # going to use this many times, local lookup is cheaper
         rhoinf = self.rhoinf
         rho = rhoinf - (2*k*beta2k)/(1-beta2k)
         x = self.x
         if rho >= 5:  # 5 was 4 in the paper, but PyTorch uses 5, most others too
-            # l = np.sqrt((1-beta2k)/self.v)  # NOQA
-            # commented out l exactly as in paper
-            # seems to blow up all the time, must be a typo; missing sqrt(v)
-            # torch computes vhat same as ADAM, assume that's the typo
+            # The paper's l expression omits sqrt(v); use the common Adam form.
             mhat = self.m / (1 - beta1**k)
             l = np.sqrt(1 - beta2k) / (np.sqrt(self.v)+self.eps)  # NOQA
             num = (rho - 4) * (rho - 2) * rhoinf
@@ -514,12 +421,7 @@ class RAdam(_MomentBased):
 class AdaMomentum(_MomentBased):
     r"""AdaMomentum optimization routine.
 
-    AdaMomentum is an algorithm that is extremely similar to Adam, differing
-    only in the calculation of v.  The idea is to reduce teh variance of the
-    correction, which can plausibly improve the generality of found solutions,
-    i.e. enter wider local/global minima.
-
-    The update is:
+    Adam variant that builds v from the first-moment estimate:
 
     .. math::
         m &\equiv \text{mean} \\
@@ -529,9 +431,6 @@ class AdaMomentum(_MomentBased):
         \hat{m}_k &= m_k / (1 - β_1^k) \\
         \hat{v}_k &= v_k / (1 - β_2^k) \\
         x_{k+1} &= x_k - α * \hat{m}_k / \sqrt{\hat{v}_k \,} \\
-
-    Constructed with AdaMomentum(fg, x0, alpha, beta1=0.9, beta2=0.999) —
-    see _MomentBased for the shared init signature.
 
     References
     ----------
@@ -563,17 +462,7 @@ class AdaMomentum(_MomentBased):
 class Yogi(_MomentBased):
     r"""YOGI optimization routine.
 
-    YOGI is a modification of ADAM, which replaces the multiplicative update
-    to the exponentially moving averaged estimate of the variance of the gradient
-    with an additive one.  The premise for this is that multiplicative update
-    causes ADAM to forget past gradients too quickly, tailoring it to more
-    localized behavior in the second order momentum term.  The additive update
-    in YOGI essentially makes the second order momentum update over a larger
-    space.  This allows Yogi to perform better than ADAM for some non-convex
-    or otherwise tumultuous cost functions, which have many changes in local
-    curvature.
-
-    The update is:
+    Adam variant with an additive second-moment update:
 
     .. math::
         m &\equiv \text{mean} \\
@@ -581,9 +470,6 @@ class Yogi(_MomentBased):
         m_k &= β_1 m_{k-1} + (1-β_1) * g \\
         v_k &= v_{k-1} - (1-β_2) * \text{sign}(v_{k-1} - (g^2))*(g^2) \\
         x_{k+1} &= x_k - α * m_k / \sqrt{v_k \,} \\
-
-    Constructed with Yogi(fg, x0, alpha, beta1=0.9, beta2=0.999) —
-    see _MomentBased for the shared init signature.
 
     References
     ----------

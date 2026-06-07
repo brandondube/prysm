@@ -1,25 +1,4 @@
-"""Optimization problem protocol and adapter for prysm.x.optym.
-
-The class Problem is used to model an optimization problem.  Users may
-subclass it and provide any of the hooks:
-
-    _f(x) -> float
-    _g(x) -> ndarray
-    _fg(x) -> (float, ndarray)
-    _h(x) -> ndarray
-    _hvp(x, v) -> ndarray
-
-Each hook is enabled with the matching has_* capability flag.  Undefined
-derivative methods are filled in with finite differences when enough lower
-order information is available.
-
-The adapter as_problem takes a callable fg(x) -> (f, g) and returns
-a Problem.  It performs a silent passthrough when given a Problem.
-This is used for backwards compatibility / ease of onramp -- a user can
-provide a simple function, or if they wish to make a more optimized problem
-they are free to.
-
-"""
+"""Optimization problem protocol and callable adapter."""
 from prysm.mathops import np  # noqa: F401  (kept for downstream subclasses)
 
 
@@ -29,10 +8,8 @@ _FD_METHODS = ('forward', 'central')
 class Problem:
     """Base class for optimization problems.
 
-    Subclasses advertise the hooks they provide with capability flags and then
-    implement the matching private methods.  For example, a scalar-only problem
-    can define has_f = True and _f(self, x); g will then be computed
-    by finite differences.
+    Subclasses set has_* flags for the private hooks they implement.  Missing
+    derivatives are finite-differenced when lower-order information is present.
 
     Parameters
     ----------
@@ -196,13 +173,9 @@ class Problem:
 
 
 class _CallableProblem(Problem):
-    """Adapter wrapping fg(x) -> (f, g) as a Problem.
+    """Wrap fg(x) -> (f, g) as a Problem.
 
-    Caches the most recent (x, (f, g)) pair by array identity so that a
-    f followed by g at the same x object reuses a single fg evaluation.  This
-    covers the common case where an optimizer or line search probes the same
-    iterate twice without mutating it.
-
+    The most recent x identity is cached for f-then-g reuse.
     """
 
     has_fg = True
@@ -223,19 +196,17 @@ class _CallableProblem(Problem):
 
 
 def as_problem(obj):
-    """Normalize a Problem-like object or plain callable into a Problem.
+    """Return a Problem-like object for obj.
 
     Parameters
     ----------
     obj : Problem-like or callable
-        Either a Problem instance, any object exposing fg(x), or a plain
-        callable fg(x) -> (f, g).
+        Problem instance, object exposing fg(x), or callable fg(x) -> (f, g).
 
     Returns
     -------
     Problem or Problem-like
-        obj itself if it already exposes the expected protocol; otherwise
-        a _CallableProblem wrapping obj.
+        obj itself or a _CallableProblem wrapper.
 
     Raises
     ------

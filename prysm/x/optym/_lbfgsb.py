@@ -12,10 +12,7 @@ from .problem import as_problem
 def _scipy_has_c_lbfgsb():
     """True if scipy ships the C port of L-BFGS-B (>= 1.15).
 
-    SciPy 1.15 replaced the Fortran 77 L-BFGS-B driver with a C port.  The
-    setulb signature changed: csave and iprint were dropped, an ln_task
-    output array was added, and task is now an int array (not a 60-byte
-    char array) whose first element encodes the request code.
+    SciPy 1.15 changed setulb's workspace and task representation.
     """
     parts = scipy.__version__.split(".")
     try:
@@ -87,29 +84,7 @@ class _DriverStop:
 
 
 class _LBFGSBBase:
-    """Shared scaffolding for L-BFGS-B drivers (F77 and C ports).
-
-    Holds the part of the L-BFGS-B state that is identical between the two
-    drivers — problem, bounds, nbd, x, g, wa, iwa,
-    lsave/isave/dsave, the magic factr=pgtol=0 settings to defeat
-    early convergence, and the step / run_to orchestration.
-
-    The pieces that differ between the F77 and C drivers are factored out
-    into a small set of hooks that subclasses implement:
-
-    * _int_dtype() — integer dtype for the work arrays.
-    * _init_driver_state() — allocate driver-specific buffers (f,
-      task, csave/ln_task as applicable, plus the initial
-      'START' poke for F77).
-    * _call_driver() — one invocation of setulb with the
-      driver-appropriate argument list.
-    * _decode_task() — return one of 'FG', 'NEW_X',
-      'CONVERGENCE', 'STOP', or None.
-    * _store_fg(f, g) — write f and g into the driver's buffers.
-    * _read_f() — current f as a Python float.
-    * _task_diagnostic() — human-readable task string for error messages.
-
-    """
+    """Shared scaffolding for SciPy L-BFGS-B drivers."""
 
     def __init__(self, fg, x0, memory=10, lower_bounds=None, upper_bounds=None):
         """Create a new L-BFGS-B optimizer.
@@ -117,13 +92,11 @@ class _LBFGSBBase:
         Parameters
         ----------
         fg : callable or Problem
-            either fg(x) -> (f, g) or a Problem-shaped object; see
-            as_problem.
+            fg(x) -> (f, g) or a Problem-shaped object.
         x0 : ndarray
             the parameter vector immediately prior to optimization.
         memory : int
-            number of recent gradient vectors used for the approximate
-            Newton step (typical 10–30).
+            Number of recent gradient vectors retained.
         lower_bounds, upper_bounds : ndarray, optional
             hard bounds per variable; None is unconstrained.
 
@@ -133,7 +106,7 @@ class _LBFGSBBase:
         self.n = len(x0)
         self.m = memory
 
-        # f77 driver explodes for f32 dtype — keep both drivers on float64
+        # F77 driver requires float64; keep both drivers on that dtype.
         ffloat_dtype = np.float64
         int_dtype = self._int_dtype()  # NOQA - defined by subclasses.
 
@@ -184,7 +157,7 @@ class _LBFGSBBase:
 
     @property
     def g(self):
-        """Current iterate as a snapshot, not the driver's mutable buffer."""
+        """Current gradient as a snapshot, not the driver's mutable buffer."""
         return self._g.copy()
 
     def _view_s(self):
@@ -222,8 +195,7 @@ class _LBFGSBBase:
         """Perform one iteration of optimization.
 
         Drives the underlying setulb call sequence until it signals a
-        completed iteration (NEW_X), termination (CONVERGENCE), or an
-        error (STOP).  Each NEW_X corresponds to one outer iteration.
+        completed iteration, termination, or error.
         """
         x_start = self._x.copy()
         f_start = None
@@ -299,36 +271,7 @@ class _LBFGSBBase:
 
 
 class F77LBFGSB(_LBFGSBBase):
-    """Limited Memory Broyden Fletcher Goldfarb Shannon optimizer, variant B (L-BFGS-B).
-
-    L-BFGS-B is a Quasi-Newton method which uses the previous m gradient vectors
-    to perform the BFGS update, which itself is an approximation of Newton's
-    Method.
-
-    The "L" in L-BFGS is Limited Memory, due to this m*n storage requirement,
-    where m is a small integer (say 10 to 30), and n is the number of variables.
-
-    At its core, L-BFGS solves the BFGS update using an adaptive line search,
-    satisfying the strong Wolfe conditions, which guarantee that it does not
-    move uphill.
-
-    Variant B (BFGS-B) incorporates subspace minimization, which further
-    accelerates convergence.
-
-    Subspace minimization is the practice of forming a lower-dimensional "manifold"
-    (essentially, enclosing Euclidean geometry) for the problem at a given
-    iteration, and then exactly solving for the minimum of that manifold.
-
-    The combination of subspace minimization and a quasi-newton update give
-    L-BFGS-B exponential convergence, where it may converge by an order of
-    magnitude in cost or more on each iteration.
-
-    This wrapper around Jorge Nocedal's Fortran code made available through
-    SciPy attenpts to defeat the built-in convergence tests of lbfgsb.f, but
-    is not always successful due to the nature of floating point arithmetic.
-    Unlike all other classes in this file, L-BFGS-B may refuse to step(), and
-    may stop early in a runN or run_to call.  A warning will be generated in
-    such instances.
+    """L-BFGS-B optimizer using SciPy's legacy Fortran driver.
 
     References
     ----------
@@ -407,17 +350,7 @@ class F77LBFGSB(_LBFGSBBase):
 class CLBFGSB(_LBFGSBBase):
     """L-BFGS-B optimizer using the SciPy >= 1.15 C driver.
 
-    Behaves identically to F77LBFGSB from the user's perspective,
-    but targets the C port of L-BFGS-B that replaced the Fortran 77 driver
-    in SciPy 1.15.  The differences vs. the Fortran driver are internal:
-
-    * csave and iprint are no longer arguments to setulb.
-    * A new two-element integer ln_task workspace array is required.
-    * task is a length-2 integer array; task[0] carries the request
-      code (3=FG, 1=NEW_X, 4=CONVERGENCE, 5=STOP).
-
-    See F77LBFGSB for parameter documentation; this class accepts
-    the same arguments and exposes the same step/run_to interface.
+    See F77LBFGSB for parameter documentation.
     """
 
     def _int_dtype(self):

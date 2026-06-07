@@ -198,11 +198,7 @@ def _solve_kkt(H, grad, A, b):
 def _normal_matrix(residuals, jacobian, damping):
     H = jacobian.T @ jacobian
     damping = np.asarray(damping, dtype=float)
-    # Add damping onto the diagonal in place.  H is freshly allocated by the
-    # matmul above so this never aliases a shared buffer, and it avoids
-    # materializing an n x n identity (scalar) or diag matrix (vector) just to
-    # add it straight back on.  A 0-d damping broadcasts across the diagonal,
-    # so the scalar and per-variable cases share one path.
+    # H is fresh, so add scalar or per-variable damping in place.
     if np.any(damping):
         idx = np.arange(jacobian.shape[1])
         H[idx, idx] += damping.astype(H.dtype, copy=False)

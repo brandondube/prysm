@@ -3,7 +3,7 @@ from prysm.mathops import np
 
 
 class SpatialGradient2D:
-    """Spatial parital derivatives and adjoints."""
+    """Spatial partial derivatives and adjoints."""
 
     def forward_x(self, x):
         """Compute the X spatial gradient of an array."""

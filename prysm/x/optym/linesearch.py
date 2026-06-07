@@ -12,12 +12,9 @@ from .problem import as_problem
 
 
 def _cubicmin(a, fa, fpa, b, fb, c, fc):
-    """
-    Finds the minimizer for a cubic polynomial that goes through the
-    points (a,fa), (b,fb), and (c,fc) with derivative at a of fpa.
+    """Return the cubic interpolant minimizer.
 
     If no minimizer can be found, return None.
-
     """
     # f(x) = A *(x-a)^3 + B*(x-a)^2 + C*(x-a) + D
     # this function operates on quasi-scalars; do not run on GPU
@@ -49,11 +46,7 @@ def _cubicmin(a, fa, fpa, b, fb, c, fc):
 
 
 def _quadmin(a, fa, fpa, b, fb):
-    """
-    Finds the minimizer for a quadratic polynomial that goes through
-    the points (a,fa), (b,fb) with derivative at a of fpa.
-
-    """
+    """Return the quadratic interpolant minimizer."""
     # f(x) = B*(x-a)^2 + C*(x-a) + D
     # this function operates on quasi-scalars; do not run on GPU
     np = truenp
@@ -104,27 +97,13 @@ def _zoom(
     phi_rec = phi0
     a_rec = 0
     while True:
-        # interpolate to find a trial step length between a_lo and
-        # a_hi Need to choose interpolation here. Use cubic
-        # interpolation and then if the result is within delta *
-        # dalpha or outside of the interval bounded by a_lo or a_hi
-        # then use quadratic interpolation, if the result is still too
-        # close, then use bisection
-
         dalpha = a_hi - a_lo
         if dalpha < 0:
             a, b = a_hi, a_lo
         else:
             a, b = a_lo, a_hi
 
-        # minimizer of cubic interpolant
-        # (uses phi_lo, derphi_lo, phi_hi, and the most recent value of phi)
-        #
-        # if the result is too close to the end points (or out of the
-        # interval), then use quadratic interpolation with phi_lo,
-        # derphi_lo and phi_hi if the result is still too close to the
-        # end points (or out of the interval) then use bisection
-
+        # Prefer cubic interpolation, then quadratic, then bisection.
         if i > 0:
             cchk = delta1 * dalpha
             a_j = _cubicmin(a_lo, phi_lo, derphi_lo, a_hi, phi_hi, a_rec, phi_rec)
@@ -133,8 +112,6 @@ def _zoom(
             a_j = _quadmin(a_lo, phi_lo, derphi_lo, a_hi, phi_hi)
             if (a_j is None) or (a_j > b - qchk) or (a_j < a + qchk):
                 a_j = a_lo + 0.5 * dalpha
-
-        # Check new value of a_j
 
         phi_aj = phi(a_j)
         if (phi_aj > phi0 + c1 * a_j * derphi0) or (phi_aj >= phi_lo):
@@ -196,7 +173,7 @@ def ls_strong_wolfe(
     c1, c2 : float
         Wolfe constants. Standard defaults: c1=1e-4, c2=0.9.
     maxiter : int
-        bracket-phase iteration cap (10 is plenty in practice).
+        Bracket-phase iteration cap.
 
     Returns
     -------
@@ -217,12 +194,7 @@ def ls_strong_wolfe(
         fg_at_xk = problem.fg(xk)
     fk, gk = fg_at_xk
 
-    # _zoom needs phi(alpha) and derphi(alpha) as separate callables. Each
-    # alpha produces a fresh xk+alpha*pk array, so the Problem's internal
-    # identity cache cannot bridge phi-then-derphi at the same alpha. Cache
-    # the joint fg result here, keyed on alpha.  Also cache the full
-    # gradient ga so the caller can recover it via the return value and
-    # skip an extra fg evaluation at the accepted alpha.
+    # Cache joint fg(alpha) so phi, derphi, and the accepted gradient share it.
     _cache_alpha = [None]
     _cache_val = [None, None, None]  # phi, derphi, g
     dot = np.dot

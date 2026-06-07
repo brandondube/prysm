@@ -1,17 +1,7 @@
-"""L-BFGS-B (Byrd-Lu-Nocedal-Zhu 1995 + Morales-Nocedal 2011), pure-Python,
-backend-shim friendly.
+"""Pure-Python, backend-shim friendly L-BFGS-B.
 
-Compact L-BFGS representation, generalized Cauchy point, primal direct
-subspace minimization with the Morales-Nocedal 2011 projection refinement.
-All vector and matrix arithmetic flows through prysm.mathops.np so the same
-code runs on numpy, cupy, or any other shim-compatible backend.  Scalars
-from the Wolfe line search live on the host; an n-sized iterate, n-sized
-gradient, m*n history, and 2m-sized intermediates live on the backend.
-
-Behaves like every other class in optimizers.py: step returns
-(x_pre, f_pre, g_pre); the only StopIteration it raises is when the line
-search reports no acceptable step length.  Termination otherwise is the
-governor's responsibility.
+Implements BLNZ 1995 with the Morales-Nocedal 2011 projection refinement.
+Array work goes through prysm.mathops.np; Wolfe scalars live on the host.
 """
 import math
 
@@ -212,34 +202,19 @@ class PrysmLBFGSB:
     Byrd, Lu, Nocedal, and Zhu, "A Limited-Memory Algorithm for Bound
     Constrained Optimization", SIAM J. Sci. Comput. 16(5), 1995, with the
     subspace-minimization refinement of Morales and Nocedal, "Remark on
-    Algorithm 778", ACM Trans. Math. Softw. 38(1), 2011: rather than
-    truncating the path from x_k to the unconstrained subspace minimizer
-    x_hat at the first bound it hits, the iterate is taken to be the
-    componentwise projection of x_hat into the box whenever that direction
-    is descent, falling back to BLNZ truncation only when projection
-    yields an ascent direction.
-
-    Choose this over the scipy-backed LBFGSB when any of: (1) the
-    objective lives on a non-numpy backend (cupy, pytorch) where the
-    scipy Fortran wrapper would force a host round-trip per fg call;
-    (2) you want to run at config.precision = 32, which the scipy
-    driver refuses; (3) you want the governor to drive termination
-    without inheriting the scipy task-string state machine.  The pure-
-    Python implementation closes the gap with the scipy driver as n grows
-    in the Rosenbrock CPU benchmark, but remains slower for tiny problems
-    due to Python per-call overhead.
+    Algorithm 778", ACM Trans. Math. Softw. 38(1), 2011.  The subspace
+    minimizer is projected into the box when that direction is descent;
+    otherwise the original BLNZ truncation rule is used.
 
     Parameters
     ----------
     fg : callable or Problem
-        either fg(x) -> (f, g) or a Problem-shaped object; see
-        as_problem.
+        fg(x) -> (f, g) or a Problem-shaped object.
     x0 : ndarray
         the parameter vector immediately prior to optimization.  Its dtype
         sets the dtype of every internal array.
     memory : int
-        number of recent (s, y) pairs retained for the L-BFGS approximation
-        (typical 10-30).
+        Number of recent (s, y) pairs retained.
     lower_bounds, upper_bounds : ndarray, optional
         per-variable hard bounds.  None means unconstrained on that side;
         +/-inf entries in an explicit array work the same way.
@@ -297,19 +272,13 @@ class PrysmLBFGSB:
         # number of coords driven to a bound by the last _cauchy sweep;
         # set each call, read by step() for telemetry without a reduction.
         self._cauchy_breaks = 0
-        # Reusable internal work arrays.  These are deliberately lazy:
-        # unbounded problems never allocate the large bounded-path scratch,
-        # and bounded problems grow each buffer only to the largest shape
-        # reached so far.
+        # Lazy reusable work arrays.
         self._scratch = {}
 
     def _scratch_array(self, name, shape, dtype=None):
         """Return a reusable scratch array of exactly shape.
 
-        Buffers grow but never shrink: when the cached array is larger than
-        requested a same-rank, same-dtype slice view is returned.  The common
-        case (exact match, or a fresh allocation) returns the buffer itself,
-        avoiding a per-call view object in the inner loop.
+        Buffers grow but never shrink; oversize buffers return a slice view.
         """
         if dtype is None:
             dtype = self.x.dtype
@@ -554,34 +523,12 @@ class PrysmLBFGSB:
     def _cauchy(self, g, W=None, M=None, M_lu=None):
         """Generalized Cauchy point along the projected gradient path.
 
-        Implements BLNZ Algorithm CP.  W, M, and an LU factorization of
-        M (as returned by linalg.lu_factor) default to freshly built
-        matrices; callers that already have them in hand (step()) pass
-        them in to avoid the duplicate build.  Returns
-            xc        - (n,) Cauchy point
-            c         - (2k,) Wᵀ(xc − x) for the subspace solve
-            free_mask - (n,) bool, True where xc is interior
+        Implements BLNZ Algorithm CP.  Optional W, M, and M_lu are reused
+        from step() when available.  Returns the Cauchy point, W.T@(xc-x),
+        and a mask of interior variables.
 
-        Batched-precompute design (replaces the original per-breakpoint
-        solves):
-
-        - p_j (= p before the j-th breakpoint's rank-1 update) is a
-          cumulative sum  p_0 + Σ_{i<j} g_{b_i} w_{b_i}  -- one big
-          cumsum over the breakpoint-ordered W rows.
-        - c_j is a similar cumsum involving the sequence of dt * p_i.
-        - M⁻¹ p_j and M⁻¹ c_j over every j are then two single batched
-          lu_solve calls against M (since M doesn't change during the
-          sweep), and the per-iteration w_b·M⁻¹{p,c} dot products fall
-          out of one einsum each.
-        - The per-iteration M⁻¹ w_b appears as a column of M⁻¹ Wᵀ that
-          was already precomputed for the wMw diagonal.
-
-        The result is two batched solves and a handful of einsums up
-        front, then a fully vectorized (df, ddf, dt_min) state machine:
-        ddf is a pure cumsum and df is a cumsum given ddf, so the whole
-        recurrence and its first-minimizer break index reduce to two
-        cumsums and one argmax — no Python loop and no per-breakpoint
-        backend calls.
+        The breakpoint recurrence is evaluated with prefix sums plus batched
+        solves against M, avoiding per-breakpoint backend calls.
         """
         x = self.x
         n = self.n
@@ -654,10 +601,7 @@ class PrysmLBFGSB:
             ddf_init = theta * gtg - p_init @ Mp_init
 
             if n_active == 0:
-                # No breakpoints in finite time — the projected-gradient
-                # path is unconstrained on this step.  Skip the batched
-                # precompute (its dt_seq would degenerate to inf and the
-                # lu_solve would choke on a NaN).
+                # No finite breakpoints; skip the inf-valued batched path.
                 p_final = p_init
                 c_final = self._scratch_array('_cauchy_c_final', (2 * k,), dtype)
                 c_final.fill(0)
@@ -674,9 +618,7 @@ class PrysmLBFGSB:
                                           (n_active, 2 * k), dtype)
                 np.take(W, idx_a, axis=0, out=W_a)              # (n_a, 2k)
 
-                # Build "p before iter j" and "c before iter j" via the
-                # closed-form cumulative sums that fall out of the rank-1
-                # recurrences in BLNZ Algorithm CP.
+                # Prefix states before each breakpoint in BLNZ Algorithm CP.
                 dP_seq = self._scratch_array('_cauchy_dP_seq',
                                              (n_active, 2 * k), dtype)
                 cum_dP = self._scratch_array('_cauchy_cum_dP',
@@ -702,10 +644,7 @@ class PrysmLBFGSB:
                 if n_active > 1:
                     C_before[1:] = cum_dC[:-1]
 
-                # One batched lu_solve replaces n_active separate
-                # M-solves.  lu_solve takes the RHS as (m, k); the
-                # transposes turn our (n_a, 2k) row layout into
-                # column-vectors and back.
+                # One batched solve replaces n_active separate M-solves.
                 Mp_array = linalg.lu_solve(M_lu, P_before.T).T  # (n_a, 2k)
                 Mc_array = linalg.lu_solve(M_lu, C_before.T).T  # (n_a, 2k)
 
@@ -721,15 +660,8 @@ class PrysmLBFGSB:
 
         # ---- Vectorized (df, ddf, dt_min) state machine ----
         #
-        # In the per-breakpoint recurrence the only sequentially-coupled
-        # quantities are df and ddf.  ddf is a pure cumulative sum (its
-        # update at iter j doesn't depend on df); df at iter j depends on
-        # ddf at iter j via dt·ddf, but ddf is already cumulative-known.
-        # So we compute the full (n_active+1,) arrays of df / ddf / dt_min
-        # in two cumsums and pick out the break index with one argmax.
-        # That replaces the Python scalar loop entirely and gives the GPU
-        # a path that never round-trips a scalar to host inside the
-        # sweep.
+        # df and ddf reduce to cumulative sums; the first minimizer is an argmax
+        # over the breakpoint predicate, with no per-breakpoint host sync.
         if n_active == 0:
             K = 0
             # Scalar branch path: materialize the two 0-d seeds to host.
@@ -796,15 +728,10 @@ class PrysmLBFGSB:
             dt_min_final = float(dt_min_at_iter[K])
             t_old_final = 0.0 if K == 0 else float(t_a[K - 1])
 
-        # K is exactly the number of coords driven to a bound during the
-        # sweep, so free_mask ends with n - K free entries.  Stash it for
-        # step()'s telemetry: free_mask.sum() == n - K identically, so the
-        # caller derives both free-var and break counts from K and skips a
-        # device->host reduction sync.
+        # K is the number of coords driven to a bound during the sweep.
         self._cauchy_breaks = K
 
-        # Batch-write the per-breakpoint backend updates.  K is the
-        # number of iterations that ran; visited == sorted_indices[:K].
+        # Batch-write the visited breakpoint updates.
         if K > 0:
             visited = sorted_indices[:K]
             visited_t = t_sorted[:K]
@@ -826,9 +753,7 @@ class PrysmLBFGSB:
                 p = P_before[K]
                 c = C_before[K]
             else:
-                # ran every active breakpoint; last update is dP_seq /
-                # dC_seq at index n_active-1, which P_before / C_before
-                # don't include because they store BEFORE-iter state.
+                # Add the final update because prefix arrays store before-state.
                 p = self._scratch_array('_cauchy_p_final', (2 * k,), dtype)
                 c = self._scratch_array('_cauchy_c_final', (2 * k,), dtype)
                 np.add(P_before[n_active - 1], dP_seq[n_active - 1], out=p)
@@ -842,8 +767,7 @@ class PrysmLBFGSB:
 
         # final partial step along the active segment's d
         if not np.isfinite(dt_min):
-            # exhausted all breakpoints with a non-convex model; cap
-            # at the last breakpoint and stop.
+            # Exhausted all breakpoints with a non-convex model.
             dt_min = 0.0
         else:
             dt_min = max(dt_min, 0.0)
@@ -901,12 +825,7 @@ class PrysmLBFGSB:
 
     def _subspace_solve(self, xc, c, free_mask, g, W=None, M=None, M_lu=None,
                         n_free=None):
-        """Return the subspace displacement Δx (full length, zero on
-        active coords) such that xc + Δx minimizes the quadratic model
-        on the free subspace.  W, M, and an LU factorization of M are
-        accepted from the caller to share work with _cauchy within the
-        same outer step.
-        """
+        """Return the full-length free-subspace displacement Δx."""
         n = self.n
         k = self._k
         dtype = self.x.dtype
@@ -1103,23 +1022,14 @@ class PrysmLBFGSB:
             g = g.ravel()
 
         if not self._has_bounds:
-            # Cauchy + subspace solve reduces to the L-BFGS direction
-            # -H_k g when no bound is finite.  The two-loop recursion
-            # delivers -H_k g without materializing the (n, 2k) W or
-            # (2k, 2k) M matrices, which is a clear win in the absence
-            # of bounds where neither is reused.
+            # Unbounded case: two-loop recursion gives -H_k g directly.
             p = self._two_loop(g)
             alpha_max = None
             free_mask_count = self.n
             cauchy_breaks = 0
             subspace_mode = 'unbounded'
         else:
-            # Build W, M, and an LU factor of M once per outer iteration;
-            # _cauchy and _subspace_solve both consume them.  The LU
-            # factor is shared by every per-breakpoint M-solve in the
-            # Cauchy sweep and the one in _subspace_solve, replacing
-            # O(breakpoints) full factorizations with O(breakpoints)
-            # back-substitutions.
+            # W, M, and M_lu are shared by the Cauchy and subspace stages.
             if self._k > 0:
                 W = self._W()
                 M = self._M()
@@ -1136,11 +1046,7 @@ class PrysmLBFGSB:
             x_hat = self._scratch_array('_step_x_hat', (self.n,), self.x.dtype)
             np.add(xc, dx, out=x_hat)
 
-            # Morales-Nocedal 2011: project x_hat into the box and use that
-            # as the trial point.  If the resulting direction is descent,
-            # take the full unit step as the line-search ceiling.  Otherwise
-            # revert to the BLNZ truncation rule that walks from x_k toward
-            # x_hat until the first bound is reached.
+            # Morales-Nocedal projection, with BLNZ truncation as fallback.
             x_bar = self._scratch_array('_step_x_bar', (self.n,), self.x.dtype)
             np.maximum(x_hat, self.l, out=x_bar)
             np.minimum(x_bar, self.u, out=x_bar)
@@ -1156,13 +1062,10 @@ class PrysmLBFGSB:
                 np.subtract(x_hat, self.x, out=p)
                 alpha_max = self._max_alpha_inside_box(self.x, p)
                 subspace_mode = 'truncated'
-            # _cauchy set self._cauchy_breaks = K; free_mask has exactly
-            # n - K free entries, so derive both without re-reducing it.
             cauchy_breaks = self._cauchy_breaks
             free_mask_count = n_free
 
-        # No room to move, or the Cauchy+subspace direction degenerated
-        # to zero (e.g. every coord is at a bound being pushed into).
+        # No room to move, or the direction degenerated to zero.
         if (alpha_max is not None and alpha_max <= 0.0) or not bool(np.any(p)):
             self.last_step_metadata = {'reason': 'no_descent'}
             raise StopIteration(_OptimizerStop(False, 'no descent direction'))
@@ -1178,9 +1081,7 @@ class PrysmLBFGSB:
             self.last_step_metadata = {'reason': 'linesearch_fail'}
             raise StopIteration(_OptimizerStop(False, 'line search failed'))
 
-        # The Wolfe search has already evaluated (f, g) at xk + alpha*pk
-        # via its internal cache; reuse the gradient instead of paying
-        # an extra fg for it.
+        # Reuse the gradient already computed by the Wolfe search.
         if g_new.ndim != 1:
             g_new = g_new.ravel()
 
@@ -1188,13 +1089,9 @@ class PrysmLBFGSB:
         np.multiply(p, alpha, out=s)
         x_new = self.x + s
         if self._has_bounds:
-            # Defensive clip: the Wolfe search may walk fractionally past a
-            # bound under floating-point roundoff even with maxalpha set.
-            # The clipped point is within an ULP of x_new, so the cached
-            # g_new is still the right representative for the curvature update.
+            # Clip possible roundoff beyond a bound.
             np.maximum(x_new, self.l, out=x_new)
             np.minimum(x_new, self.u, out=x_new)
-            # honor the clip in the history update too
             np.subtract(x_new, self.x, out=s)
 
         y = self._scratch_array('_step_y', (self.n,), self.x.dtype)

@@ -15,16 +15,7 @@ from prysm.conf import config
 class Softmax:
     """Softmax activation function.
 
-    Softmax is a soft, differntiable alternative to argmax.  It is used as a
-    component of GumbelSoftmaxEncoder to ecourage / softly force variables to
-    take on one of K discrete states.
-
-    The arrays passed to forward() and reverse() may take any number of dimensions.
-    The understanding of the inputs should be that the final dimension is what
-    is being softmaxed over, and all preceeding dimensions are independent variables.
-
-    For example, to softmax a 256x256 array over 4 activation levels, the input
-    should be 256x256x4.
+    The final axis holds logits; leading axes are independent variables.
 
     """
     def __init__(self):
@@ -39,13 +30,12 @@ class Softmax:
         Parameters
         ----------
         x : ndarray, shape (A,B,C, ... K)
-            any number of leading dimensions, required trailing dimension of
-            size K, where K is the number of levels to be used with an encoder
+            Logits with K levels along the final axis.
 
         Returns
         -------
         ndarray
-            same shape as x, activated x, where sum(axis=K) == 1
+            Same shape as x, with sum(axis=-1) == 1.
 
         """
         assert x.ndim > 1, "prysm's softmax is meant for use with multiple independent variables at once"
@@ -67,8 +57,7 @@ class Softmax:
         Parameters
         ----------
         grad : ndarray
-            gradient of scalar cost function w.r.t. following step in forward
-            problem,  of same shape as passed to forward()
+            Upstream gradient, same shape as the input to forward().
 
         Returns
         -------
@@ -95,22 +84,17 @@ class Softmax:
 
 
 class GumbelSoftmax:
-    """GumbelSoftmax combines the softmax activation function with stochastic Gumbel noise to encourage variables to fall into discrete categories.
+    """Softmax with stochastic Gumbel noise.
 
     See:
     https://arxiv.org/pdf/1611.01144.pdf
     https://arxiv.org/pdf/1611.00712.pdf
 
-    You most likely want to use GumbelSoftmaxEncoder, not this class directly.
-
     """
     def __init__(self, tau=1, eps=None):
         """Create a new GumbelSoftmax estimator.
 
-        tau is the temperature parameter,
-        as tau -> 0, output becomes increasingly discrete; tau should be
-        annealed towards zero, but never exactly zero, over the course of
-        design/optimization.
+        tau is the temperature; smaller positive values are more discrete.
         """
         self.tau = tau
         self.eps = eps or np.finfo(config.precision).eps
@@ -131,7 +115,7 @@ class GumbelSoftmax:
         # diverges only at the numerical boundary, which we want to guard.
         u = self.rng.uniform(low=0, high=1, size=shp)
         g = -np.log(-np.log(u + eps) + eps)
-        # x are the "logits" from the paper, add gumbel noise and normalize by temperature
+        # Add Gumbel noise to logits and normalize by temperature.
         y = x + g
         yy = y / self.tau
         return self.smax.forward(yy)
@@ -144,14 +128,14 @@ class GumbelSoftmax:
 
 
 class DiscreteEncoder:
-    """An encoder that embds a continuous encoder, which encourages values to cluster at discrete states."""
+    """Continuous proxy for discrete-valued variables."""
     def __init__(self, estimator, levels):
         """Create a new DiscreteEncoder.
 
         Parameters
         ----------
         estimator : an initialized estimator
-            for example GumbelSoftmax()
+            For example GumbelSoftmax().
         levels : int or ndarray
             if int, self-generates arange(levels)
             else, expected to be K discrete, non-overlapping integer states
@@ -167,14 +151,13 @@ class DiscreteEncoder:
     def forward(self, x):
         """Forward pass through the continuous proxy for optimization.
 
-        use discretize() to view the current best fit discrete realization.
+        Use discretize() to view the current discrete realization.
         """
         levels = self.levels
         expanded_levels = levels[None, :]
 
         samples = self.est.forward(x)
-        # this product is of shape (N,K) for N variables and K levels
-        # it is then contracted over the levels axis
+        # Contract over levels.
         # TODO: this can be done with tensordot / sum_of_2d_modes?
         tmp = (samples * expanded_levels)
         self.tmpshape = tmp.shape
@@ -184,23 +167,14 @@ class DiscreteEncoder:
         """Backpropagation through the continuous proxy for optimization."""
         levels = self.levels
         expanded_levels = levels[None, :]
-        # TODO: this can be done with tensordot?
-        # explanation:
-        # grad over sum is "1"
-        # with chain rule, d/dx * d/dy, so 1x grad over the dim
-        # mul by 1 is a no-op, so just use broadcast_to to expand
-        # dimensionality
-        # then backprop rule for mul is just mul, so do that
-        # then go through the estimator backwards; done
+        # Expand the upstream gradient over levels, then backprop the estimator.
         tmpbar = (np.broadcast_to(grad[:, None], self.tmpshape) * expanded_levels)
         return self.est.backprop(tmpbar)
 
     def discretize(self, x):
         """Perform discrete encoding of x.
 
-        Note that when the estimator weights are not yet converged or non-sparse
-        the output of this function will not match closely to the continuous proxy
-        that is actually being optimized.
+        Early in optimization, this may differ from the continuous proxy.
         """
         encoded = self.est.forward(x)
         # encoded will be (A,B,C ... K)
@@ -211,16 +185,6 @@ class DiscreteEncoder:
 
 class _AffineActivation:
     """Base for elementwise activations of the form y = a · f(x - x0) + y0.
-
-    Subclasses implement two methods that take x (the activation input,
-    *not* an upstream gradient) and apply the affine pre- and post-shift:
-
-      forward(x) returns the activation value at x.
-      backprop(x) returns dy/dx at x
-      (the local derivative evaluated at x; multiplied by an upstream gradient
-      by the caller if standard chain-rule backprop is wanted).
-
-    The shared constructor takes the three affine parameters:
 
     Parameters
     ----------
