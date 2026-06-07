@@ -1,11 +1,4 @@
-"""Plotting functions for raytraces.
-
-This is the one module in prysm.x.raytracing that uses import numpy as np
-directly: matplotlib's renderer only accepts true numpy arrays, so we cannot
-go through the swappable prysm.mathops backend here.  User-supplied arrays
-(phist, shist, ...) may be cupy/torch tensors when alternate backends are in
-use, so each public function calls array_to_true_numpy at entry.
-"""
+"""Plotting functions for raytraces."""
 
 import warnings
 
@@ -414,35 +407,7 @@ def mirror_substrate_outline(surf, result, surface_index=0, *, backing,
         index of surf within the traced prescription, used to read the ray
         positions at that surface.
     backing : mapping or str
-        substrate geometry.  As a string it names the mode; as a mapping it
-        may carry the following keys:
-
-        mode (or kind)
-            'surface' / 'optical' / 'none' draws only the optical surface;
-            'parallel' offsets the rear face parallel to the optical surface;
-            'flat_parent' puts a flat rear face at the parent vertex z;
-            'flat_aperture' puts a flat rear face tangent near a reference
-            point, giving a near-uniform-thickness (hockey-puck) substrate.
-        thickness
-            axial substrate thickness; required for every mode except the
-            optical-surface-only modes.
-        side (or direction)
-            which way the substrate is thick: 'auto' (default) picks the side
-            that thickens away from the optical surface; 'front'/'rear' (or
-            '+'/'-', or a signed number) force it.
-        reference
-            for flat_aperture only, the axis coordinate the flat is tangent
-            to: 'aperture' (default, the parent vertex clipped to the drawn
-            aperture), 'parent', 'center', or a numeric coordinate.
-        od_radius (or outer_radius / radius)
-            outer half-diameter of the substrate.  Falls back to
-            surf.bounding['outer_radius'] and then to the traced extent.
-        clear_radius
-            inner clear-aperture radius punched out of the optical face.
-        center (or aperture_center / center_x / center_y)
-            local coordinate at the center of the drawn substrate aperture.
-            The string 'rays' centers the aperture on the traced footprint in
-            the plotted meridian.
+        substrate geometry.
     points : int, optional
         number of points sampled along the surface profile.
     y : str, optional
@@ -650,14 +615,7 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
     index_atol : float, optional
         Absolute tolerance for comparing material index to ambient_index.
     mirror_backing : mapping, sequence, str, optional
-        Mechanical substrate geometry for reflective surfaces.  A mapping is
-        keyed by surface index or by mirror index.  A sequence is aligned to
-        reflective surfaces.  Each entry may define mode, thickness,
-        od_radius, clear_radius, side, and reference.  Supported modes are
-        surface, parallel, flat_parent, and flat_aperture.  The flat_aperture
-        mode uses a flat rear cut tangent near the aperture point closest to
-        the parent vertex by default, producing a near-uniform-thickness OAP
-        substrate.
+        substrate geometry for reflective surfaces.
     points : int, optional
         the number of points used in making the curve for the surface
     lw : float, optional
@@ -679,14 +637,7 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
     ax : matplotlib.axes.Axis
         An axis object
     lens_edges : mapping or sequence, optional
-        Mechanical edge geometry for refracting lens groups.  A mapping is
-        keyed by the first surface index of a group, or by group index.  A
-        sequence is aligned to lens groups.  Each entry may define
-        od_radius, clear_radius, clear_radius_front, clear_radius_rear, and
-        a features list.  Supported feature kinds are square, square_cut,
-        seat, chamfer, and flat.  When omitted, the edge geometry carried by
-        the prescription itself (Surface.edge, set from a LensData row's edge=)
-        is used; an explicit value here overrides it.
+        edge geometry for refracting lens groups.
 
     Returns
     -------
@@ -876,26 +827,24 @@ def plot_transverse_ray_aberration(phist, lw=1, ls='-', c='r', alpha=1,
     ls : str, optional
         line style
     c : color
-        anything matplotlib interprets as a color, strings, 3-tuples, 4-tuples, ...
+        matplotlib color.
     alpha : float
-        opacity of the rays, 1=fully opaque, 0=fully transparent
+        opacity.
     zorder : int
         stack order in the plot, higher z orders are on top of lower z orders
     axis : str, {'x', 'y'}
         which ray position to plot, x or y
     fig : matplotlib.figure.Figure
-        A figure object
+        figure object.
     ax : matplotlib.axes.Axis
-        An axis object
+        axis object.
     chief_index : int, optional
         row index of the chief ray; default N//2.
     status : ndarray, optional
         per-ray status from raytrace.  Invalid rays are excluded when
         provided.
     reference : str, optional
-        image-plane registration point: chief (default) or centroid.  Use
-        centroid when the chief ray does not survive, such as a fan through
-        the central obscuration of a Cassegrain.
+        image-plane registration point: 'chief' or 'centroid'.
 
     Returns
     -------
@@ -951,9 +900,9 @@ def plot_wave_aberration_fan(coord, opd, *, wavelength=None, units='waves',
     ls : str, optional
         line style
     c : color
-        anything matplotlib interprets as a color, strings, 3-tuples, 4-tuples, ...
+        matplotlib color.
     alpha : float
-        opacity of the rays, 1=fully opaque, 0=fully transparent
+        opacity.
     zorder : int
         stack order in the plot, higher z orders are on top of lower z orders
     axis : str, {'x', 'y'}
@@ -961,9 +910,9 @@ def plot_wave_aberration_fan(coord, opd, *, wavelength=None, units='waves',
     label : str, optional
         legend label for this fan.
     fig : matplotlib.figure.Figure
-        A figure object
+        figure object.
     ax : matplotlib.axes.Axis
-        An axis object
+        axis object.
 
     Returns
     -------
@@ -1010,27 +959,21 @@ def plot_spot_diagram(phist, marker='+', c='k', alpha=1, zorder=4, s=None,
     Parameters
     ----------
     phist : RayTraceResult, list, or ndarray
-        Trace result or position history from spencer_and_murty.raytrace.  An
-        ndarray is iterated as (jj+1, N, 3); only the final surface is plotted.
+        Trace result or position history.
     marker : str, optional
         marker style
     c : color
-        anything matplotlib interprets as a color, strings, 3-tuples, 4-tuples, ...
+        matplotlib color.
     alpha : float
-        opacity of the rays, 1=fully opaque, 0=fully transparent
+        opacity.
     zorder : int
         stack order in the plot, higher z orders are on top of lower z orders
     s : float
         marker size or variable used for marker size
     origin : str or iterable, optional
-        center to subtract before plotting.  None (default) plots raw image
-        coordinates; 'centroid' subtracts the centroid of the valid rays in
-        this bundle; a length-2 iterable subtracts an explicit (x, y) — pass a
-        common reference (e.g. the chief-wavelength centroid from
-        opt.spot_centroid) to register several chromatic bundles to one center.
+        center to subtract before plotting.
     status : ndarray, optional
-        per-ray status from raytrace.  Invalid rays are excluded when provided
-        (taken from the RayTraceResult automatically).
+        per-ray status from raytrace.
     label : str, optional
         legend label for this bundle.
     equal_aspect : bool, optional
@@ -1103,12 +1046,6 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
                          label=None, fig=None, ax=None):
     """Plot field-curvature x/y fan curves.
 
-    Composes analysis.field_curvature: for each field the x-fan (solid) and
-    y-fan (dashed) longitudinal foci are plotted as a focus shift on the
-    horizontal axis against field magnitude on the vertical axis.  For pure-y
-    fields on an axisymmetric system the legend uses the classical sagittal
-    and tangential labels; otherwise it uses X and Y fan labels.
-
     Parameters
     ----------
     prescription : sequence of Surface or LensData
@@ -1120,13 +1057,9 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
     epd : float, optional
         entrance pupil diameter; defaults from a system aperture spec.
     marginal_fraction : float, optional
-        pupil zone for the marginal ray, as a fraction of EPD/2.  Default
-        1e-3 -- the differential (Coddington) field curves; see
-        analysis.field_curvature.
+        pupil zone for the marginal ray, as a fraction of EPD/2.
     reference : str or float, optional
-        zero of the focus-shift axis: 'image' (default) references the last
-        surface vertex; a number references that lab-frame z; None plots the
-        raw lab-frame z.
+        zero of the focus-shift axis.
     c : color, optional
         curve color; both fans share it and are distinguished by line style.
     lw : float, optional
@@ -1136,8 +1069,7 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
     zorder : int, optional
         stack order.
     label : str, optional
-        base legend label; the curves append S/T for the classical case, else
-        X/Y.
+        base legend label.
     fig : matplotlib.figure.Figure
     ax : matplotlib.axes.Axis
 
@@ -1185,21 +1117,14 @@ def plot_chromatic_focal_shift(prescription, wavelengths=None, *,
                                zorder=4, label=None, fig=None, ax=None):
     """Plot focus shift against wavelength.
 
-    Composes analysis.chromatic_focal_shift.  The horizontal axis is
-    wavelength in microns, and the vertical axis is longitudinal best-focus
-    shift in prescription length units.  When wavelengths is omitted, the
-    curve spans the full wavelength range carried by an OpticalSystem.
-
     Parameters
     ----------
     prescription : sequence of Surface or LensData
         the optical system.
     wavelengths : iterable of float, optional
-        wavelengths in microns.  If omitted, samples spans the full range of
-        prescription.wavelengths.
+        wavelengths in microns.
     reference_wavelength : float, optional
-        wavelength in microns whose focus is used as zero.  Defaults to the
-        prescription reference wavelength when available.
+        wavelength whose focus is used as zero.
     focus : str, optional
         'best' (default) or 'paraxial'; see analysis.chromatic_focal_shift.
     epd : float, optional
@@ -1251,10 +1176,6 @@ def plot_distortion(prescription, fields, wavelength=None, *, epd=None,
                     c='r', lw=1, alpha=1, zorder=4, label=None,
                     fig=None, ax=None):
     """Plot percent distortion against field magnitude.
-
-    Composes analysis.distortion.  The horizontal axis is the chief-ray
-    image-plane error as a percentage of the paraxial image height; the
-    vertical axis is field magnitude.
 
     Parameters
     ----------

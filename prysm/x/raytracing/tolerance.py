@@ -1,48 +1,4 @@
-"""Tolerancing: sensitivity tables and Monte Carlo over the analysis primitives.
-
-Two top-level entry points wrap the Variable factories from design.py
-with a perturbation distribution:
-
-- sensitivity_table(prescription, perturbations, merit, *, step=None) ->
-  SensitivityTable.  For each perturbation, perturb the prescription by
-  +/- step and record the resulting change in merit; report the
-  centered-difference dMerit/dParam along with absolute +/- deltas.
-- monte_carlo(prescription, perturbations, merit, n_trials, *, seed)
-  -> MonteCarloResult.  Draw n_trials independent samples from each
-  perturbation's distribution, run the merit on the perturbed
-  prescription each time, restore the prescription on exit.  The
-  MonteCarloResult exposes .merits (raw array), .summary() (stats
-  dict), and .yield_at(threshold) (fraction with merit <= threshold).
-
-Perturbations target a single LensData DOF slot, addressed by a category
-('curvature', 'radius', 'conic', 'coefs', 'thickness', 'tilt', 'decenter')
-and a surface index.  The .normal / .normal_relative / .uniform / .triangular
-classmethods capture the slot's nominal value at construction and store a step
-(one-sigma or half-width).  An optional name= kwarg labels the table row.
-
-Limitations to keep in mind:
-- Perturbations are independent / orthogonal; correlated perturbations
-  (e.g. glass index vs temperature) require a custom sampler.
-- The merit callable receives the perturbed LensData and must return a
-  scalar.  Use operand_as_merit() to wrap a design.py operand.
-
-Example
--------
-    from prysm.x.raytracing.tolerance import (
-        Perturbation, sensitivity_table, monte_carlo, operand_as_merit,
-    )
-    from prysm.x.raytracing.design import RmsSpotRadius
-    P, S = launch(ld, Field(0., 0.), 0.55, Sampling.hex(nrings=4), epd=10.0)
-    perts = [
-        Perturbation.normal_relative(ld, 'curvature', 0, 0.001, name='c1'),
-        Perturbation.normal(ld, 'conic', 0, 0.01, name='k1'),
-        Perturbation.normal(ld, 'thickness', 0, 0.02, name='t1'),
-    ]
-    merit = operand_as_merit(RmsSpotRadius(P, S, wavelength=0.55))
-    table = sensitivity_table(ld, perts, merit)
-    result = monte_carlo(ld, perts, merit, n_trials=1000, seed=42)
-
-"""
+"""Finite-difference tolerance sensitivity and Monte Carlo tools."""
 
 from prysm.conf import config
 from prysm.mathops import np
@@ -63,8 +19,6 @@ def _resolve_slot(lensdata, category, surface, component=None):
     to three DOFs; pass component to select one by its offset -- decenter
     0/1/2 = dx/dy/dz, tilt 0/1/2 = rz/ry/rx (matching CoordBreak's layout).
 
-    Accepts either a LensData or an OpticalSystem wrapping one.
-
     """
     lensdata = _as_lens(lensdata)
     slots = lensdata._category_slots(category, surface)
@@ -83,14 +37,7 @@ def _resolve_slot(lensdata, category, surface, component=None):
 # ---------- Perturbation ----------------------------------------------------
 
 class Perturbation:
-    """A single LensData DOF slot plus a sampling distribution.
-
-    Built via the classmethod factories Perturbation.normal /
-    .normal_relative / .uniform / .triangular; each captures the slot's
-    nominal value at construction and stores a step (one-sigma or
-    half-width) used as the default for sensitivity FD.
-
-    """
+    """A LensData DOF slot plus a sampling distribution."""
 
     __slots__ = ('name', 'lensdata', 'slot', 'sampler', 'nominal', 'step')
 

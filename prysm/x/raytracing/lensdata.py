@@ -1,16 +1,4 @@
-"""LensData: the editable, optimizable spine of a system.
-
-LensData owns the sequential rows of an optical system and all of its numeric
-degrees of freedom (curvature, conic, asphere coefficients, thickness, tilt,
-and decenter).  The compiled list[Surface] that the kernel traces is a cheap,
-throwaway artifact rebuilt from the rows on demand by to_surfaces.
-
-System-level metadata (aperture, fields, wavelengths, units, stop, provenance)
-lives on the OpticalSystem that wraps a LensData; see system.py.  Object- and
-image-space media are carried by the object / last surface materials rather
-than a single ambient scalar.
-
-"""
+"""Editable LensData rows and surface compilation."""
 
 import math
 import warnings

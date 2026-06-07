@@ -1,41 +1,4 @@
-"""Code V .seq (sequential lens) prescription reader.
-
-Parses a sequential .seq into an OpticalSystem (sequential rows + metadata),
-mirroring the contract of zemax.read_zmx.  Supported source length units are
-converted to millimeters at import, and the returned OpticalSystem reports
-unit='mm'.
-
-Supported subset (raise informative error otherwise):
-- Header: TITLE, DIM, WL, REF, EPD, YAN, XAN, RDM/CUM
-- Surface boundaries: SO (object), S (new surface), SI (image), GO (end).
-  Each carries Code V free-format positional data: radius (or curvature in
-  CUM mode), thickness, then an optional glass name.
-- Per-surface: RDY (radius Y), CUY (curvature Y), THI (thickness),
-  K (conic Y), GLA (glass), CAO/CA/CAI (circular or annular clear aperture),
-  ASP and A/B/C/D (even-asphere coefs)
-- Decenter / tilt: XDE/YDE/ZDE (decenter), ADE/BDE/CDE (tilt, degrees),
-  and the DAR (decenter-and-return) block flag
-- FNO image-space F-number aperture, angle fields (YAN/XAN), image-height
-  fields (YIM/XIM), and field-side vignetting factors (VUX/VUY/VLX/VLY)
-
-Out of scope:
-- Toroid (TOR command)
-- Solves, pickups, zoom configurations
-- BEN/REV/RET decenter types, GLB/GLO global references
-
-The C-suffixed codes (CCY, CCX, THC, KC, AC, ADC, BDC, CDC, XDC, ...) are Code V
-optimization coupling/control codes, not geometry; they are ignored.  In
-particular CCY is the Y-curvature coupling code -- the conic constant is K.
-
-Code V wavelengths (WL) are in nanometers; prysm uses microns, so they are
-divided by 1000 on import.
-
-Commands are case-insensitive.  Per Code V, semicolons separate multiple
-commands on the same physical line; commands may span lines via `&` (not
-supported — newline ends the command).  Comment lines start with `!` and
-are stripped.
-
-"""
+"""Code V .seq prescription reader."""
 
 import math
 

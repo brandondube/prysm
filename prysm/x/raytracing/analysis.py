@@ -29,11 +29,7 @@ from .surfaces import Conic, EvenAsphere, Plane, Sphere
 
 
 # ---------- result containers ----------------------------------------------
-# Plain namedtuples: the analyses below are pure data producers, so the result
-# is a labelled bundle of arrays, not an object with behaviour.  Every grid
-# array is indexed [field_index, wavelength_index, sample_index]; the fields and
-# wavelengths members map those leading indices back to the physical Field /
-# wavelength so the indexing is never ambiguous.
+# Grid arrays are indexed [field_index, wavelength_index, sample_index].
 
 DistortionResult = namedtuple('DistortionResult', ['real_xy', 'paraxial_xy', 'percent'])
 FieldCurvatureResult = namedtuple('FieldCurvatureResult', ['x_fan_z', 'y_fan_z'])
@@ -88,20 +84,8 @@ def resolve_exit_pupil(prescription, wavelength, *, stop_index=None, epd=None,
                        field=None, chief=None, axis_point=None, axis_dir=None):
     """Locate the exit-pupil reference point P_xp for a wavefront evaluation.
 
-    The explicit, side-effect-free resolution that wavefront() deliberately no
-    longer does.  Two routes, in order:
-
-    1. Paraxial: when an aperture stop is resolvable (stop_index, else the
-       prescription's stop_index), the paraxial exit pupil is first_order's
-       xp_z on the optical axis, (0, 0, xp_z).  This is field-independent and
-       depends only on (lens, wavelength), so a grid analysis resolves it once
-       per wavelength.  Raises when the paraxial exit pupil is at infinity
-       (afocal) -- pass P_xp explicitly there.
-    2. Geometric: with no resolvable stop (e.g. an off-axis field on a bare
-       surface list), take a chief ray's closest approach to the optical axis
-       (xp_reference_sphere).  The chief is the pre-traced (P, S) pair in chief
-       when given (so a caller reuses a bundle it already traced), else the
-       chief ray for field is traced here.
+    Uses the paraxial exit pupil when a stop is resolvable.  Otherwise, uses
+    the closest approach of a chief ray to the optical axis.
 
     Parameters
     ----------
@@ -181,33 +165,18 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None,
     axis : str
         which axis to report: 'x' or 'y'.
     chief_index : int, optional
-        row index of the chief ray; default: the ray nearest the pupil center
-        (correct for any sampling, unlike a fixed N//2 which is the center only
-        for fan/rect grids).  Used as the registration ray when reference is
-        chief, and to center the pupil coordinate in both cases.
+        row index of the chief ray.  Defaults to the ray nearest pupil center.
     status : ndarray, optional
         per-ray status from raytrace.  Invalid rays are excluded when
         provided.  If omitted, rays with non-finite image coordinates are
         excluded.
     reference : str, optional
-        image-plane registration point that the error is measured from.
-        chief (default) subtracts the chief ray's landing; centroid subtracts
-        the mean landing of the surviving rays.  Centroid matches the option
-        of the same name in Zemax and CODE V and is the natural choice when
-        the chief ray does not survive -- e.g. it falls inside the central
-        obscuration of a Cassegrain.
+        image-plane registration point: 'chief' or 'centroid'.
 
     Returns
     -------
     pupil : ndarray, shape (N,)
-        pupil (x or y) coordinate for each ray, measured as the launch
-        offset from the chief ray.  Reporting it chief-relative keeps the fan
-        centered on the pupil even when the bundle was shifted laterally at
-        the launch plane to route through an off-axis entrance pupil (the
-        default for a system with an interior stop); on axis, or with the
-        stop at the first surface, the chief launches on axis and this is
-        just the launch coordinate.  Matches the convention used by
-        wavefront().
+        pupil coordinate along the selected axis.
     delta : ndarray, shape (N,)
         image-plane (x or y) offset from the reference for each ray.
 
@@ -221,12 +190,7 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None,
 
     valid = valid_mask(status, P_hist[-1])
 
-    # the pupil coordinate is referenced the same way as the image error, so
-    # the fan stays centered on the pupil.  Using chief_index (N//2) for the
-    # pupil zero is only correct when that ray is the pupil center; an annular
-    # (obscured) bundle has no center sample there, so the centroid reference
-    # subtracts the launch centroid instead -- otherwise the pupil axis comes
-    # out lopsided even though the system is on axis.
+    # Use the same reference convention for pupil and image coordinates.
     if reference == 'chief':
         ref_pupil = launch[chief_index]
     elif reference == 'centroid':
@@ -294,15 +258,7 @@ def _wavefront_from_trace(prescription, P, wavelength, trace, *, P_xp,
 
 
 def _apply_field_and_output(opd, x_pupil, y_pupil, field, output, wavelength):
-    """Field-tilt removal + length/waves scaling shared by the wavefront paths.
-
-    Adds the collimated launch-plane tilt back in (an angular field tilts the
-    reference plane) and converts to the requested output.  Returns
-    (opd_out, scale): scale is the factor opd was multiplied by -- 1.0 for
-    length, -1/(wavelength*1e-3) for waves -- so a differential caller can scale
-    its dOPD/dtau maps by the same factor.  The field tilt is tau-independent,
-    so it shifts opd but contributes nothing to the tangent maps.
-    """
+    """Field-tilt removal and length/waves scaling for wavefront paths."""
     if field is not None:
         ax, ay = field.angle_radians()
         opd = opd + (np.sin(ax) * x_pupil + np.sin(ay) * y_pupil)
@@ -322,14 +278,6 @@ def wavefront(prescription, P, S, wavelength, *,
               reference='chief'):
     """Trace and compute OPD on the chief-ray-centered reference sphere.
 
-    A pure OPD kernel: it traces the bundle and evaluates the optical path
-    difference on the exit-pupil reference sphere via the cancellation-free
-    (Welford-rationalized) intersection in opt.opd_from_raytrace_eic.  It does
-    no first-order / exit-pupil resolution -- pass a resolved P_xp.  Resolve it
-    once with resolve_exit_pupil (or the cached OpticalSystem.exit_pupil) and
-    feed it in; for a lens-design OPD fan that is the paraxial exit-pupil center
-    (0, 0, xp_z).
-
     Parameters
     ----------
     prescription : sequence of Surface
@@ -339,42 +287,26 @@ def wavefront(prescription, P, S, wavelength, *,
     wavelength : float
         in microns.
     P_xp : iterable
-        exit-pupil reference point (required).  Centers the reference sphere's
-        radius R = |P_xp - P_img|.  Resolve it with resolve_exit_pupil or
-        OpticalSystem.exit_pupil.
+        exit-pupil reference point.
     chief_index : int, optional
         row index of the chief ray.  Defaults to the launch ray nearest the
         pupil center, with invalid rays excluded when reference='centroid'.
     pupil_coords : tuple of array_like, optional
-        x and y pupil coordinates to return and to use for angular-field
-        tilt correction.  This is useful when P has been propagated to a
-        physical object-side plane for correct OPL accumulation but the
-        desired pupil coordinate remains the entrance-pupil coordinate.
+        x and y pupil coordinates to return and use for tilt correction.
     field : Field, optional
         angular field used to remove the launch-plane tilt from collimated
         object-space bundles.  No tilt correction is applied when omitted.
     output : str, optional
-        'length' returns OPD in prescription length units with prysm's
-        sign convention (longer ray OPL is positive).  'waves' returns
-        lens-design wavefront-error convention in waves, chief == 0,
-        equivalent to -(OPD + launch_tilt) / wavelength.  The 'waves'
-        conversion assumes the prescription is in millimeters and wavelength
-        is in microns (waves = OPD_mm / (wavelength_um * 1e-3)).
+        'length' or 'waves'.
     reference : str, optional
-        'chief' (default) anchors the reference sphere on the chief ray and
-        raises if that ray is obscured.  'centroid' anchors instead on the
-        surviving ray nearest the pupil center, so OPD analysis works for an
-        obscured or vignetted bundle (e.g. a Cassegrain, whose central
-        obstruction removes the geometric chief).  When the chief ray is valid
-        the two are identical.
+        'chief' or 'centroid'.
 
     Returns
     -------
     opd : ndarray, shape (N,)
-        OPD relative to chief, on the reference sphere centered at the
-        chief-ray image point.  Units and sign are controlled by output.
+        OPD relative to chief.  Units are controlled by output.
     x_pupil, y_pupil : ndarray, shape (N,)
-        launch (x, y) coordinates — the canonical pupil parameterization.
+        pupil coordinates.
 
     """
     if reference not in ('chief', 'centroid'):
@@ -455,12 +387,6 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
                pupil_z=None):
     """Per-field image-plane error of the chief ray vs a paraxial proxy.
 
-    For each field, traces the real chief ray and a paraxial proxy chief
-    ray (same direction, scaled down by paraxial_fraction).  By default,
-    distortion is measured against the lens-design f-tan ideal image
-    height.  The scaled-angle proxy is available with
-    distortion_type='linear-angle'.
-
     Parameters
     ----------
     prescription : sequence of Surface
@@ -469,16 +395,11 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
     wavelength : float
         in microns.
     epd : float
-        entrance pupil diameter (only enters as the chief-ray pupil-z
-        location is the EP; the chief is a single ray at pupil center so
-        epd does not affect the trace, but launch() needs it nominally).
+        entrance pupil diameter.
     paraxial_fraction : float
         scale factor for the paraxial-proxy field angles.  Default 1e-4.
     distortion_type : str, optional
-        'f-tan' (default) or 'linear-angle'.  f-tan compares real chief-ray
-        landing against a paraxial focal scale times tan(field angle).
-        linear-angle scales the tiny-field chief-ray landing directly by
-        1/paraxial_fraction.
+        'f-tan' (default) or 'linear-angle'.
     pupil_z : float, optional
         z position of the entrance pupil used for chief-ray launch.  If
         omitted, launch() defaults to the first surface vertex.
@@ -493,10 +414,7 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
     paraxial_xy : ndarray, shape (n_fields, 2)
         scaled-up paraxial chief-ray landing per field.
     percent : ndarray, shape (n_fields,)
-        signed percent distortion, 100 * (h_real - h_ref) / h_ref, where
-        h_ref is the ideal (paraxial) image height and h_real is the real
-        chief-ray height projected onto the ideal direction.  Positive is
-        pincushion, negative is barrel; 0 for the on-axis field.
+        signed percent distortion.
 
     """
     wavelength = system_wavelength(prescription, wavelength)
@@ -508,10 +426,7 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
     percent = np.zeros(n, dtype=config.precision)
     chief = Sampling.chief()
 
-    # the paraxial proxy is a second chief ray at a tiny fraction of each field
-    # angle.  Trace the real and the proxy chief grids through the shared
-    # iterator (one chief sample per field, the single resolved wavelength) and
-    # walk them cell-for-cell.
+    # Compare the real chief ray to a tiny-field paraxial proxy.
     angles = [field.angle_radians() for field in fields]
     proxy_fields = [
         Field(float(np.degrees(ax * paraxial_fraction)),
@@ -611,16 +526,6 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
                     marginal_fraction=1e-3):
     """X- and y-fan focus shifts per field point.
 
-    For each field, traces a 3-ray chief+marginal bundle in x and y and
-    locates the longitudinal focus by intersecting each marginal ray with the
-    chief.  Result is z, in lab-frame, where each fan converges; subtract
-    prescription[-1].P[2] to get a shift relative to the last surface vertex.
-
-    For pure-y fields on axisymmetric systems these are the classical
-    sagittal (x fan) and tangential (y fan) field curves.  For non-axisymmetric
-    systems or fields with x and y components, interpret the returned arrays as
-    x-fan and y-fan focus positions.
-
     Parameters
     ----------
     prescription : sequence of Surface
@@ -631,14 +536,7 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
     epd : float
         entrance pupil diameter.
     marginal_fraction : float
-        radius used for the marginal ray, as a fraction of EPD/2.  Default
-        1e-3, i.e. a near-chief ray, which returns the differential
-        (Coddington) fan foci.  In the classical pure-y axisymmetric case,
-        these are sagittal and tangential field curves.  A finite zone (e.g.
-        0.7) instead reports
-        where that real zonal fan focuses, which folds in coma and oblique
-        spherical aberration and can differ from the differential foci by an
-        order of magnitude at high aperture and field.
+        marginal-ray radius as a fraction of EPD/2.
 
     Returns
     -------
@@ -646,11 +544,9 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
         A namedtuple (x_fan_z, y_fan_z); element i of each array corresponds to
         fields[i].
     x_fan_z : ndarray, shape (n_fields,)
-        z position where the x-fan marginal converges with the chief, in lab
-        frame.  This is sagittal for pure-y fields on an axisymmetric system.
+        z position where the x-fan marginal converges with the chief.
     y_fan_z : ndarray, shape (n_fields,)
-        z position where the y-fan marginal converges with the chief.  This is
-        tangential for pure-y fields on an axisymmetric system.
+        z position where the y-fan marginal converges with the chief.
 
     """
     wavelength = system_wavelength(prescription, wavelength)
@@ -661,11 +557,7 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
     y_fan_z = np.zeros(n, dtype=config.precision)
     chief = Sampling.chief()
     r_marg = float(marginal_fraction) * float(epd) / 2.0
-    # the marginal probe is built by hand (chief launch, then a fixed lab-frame
-    # position offset shared by all three rays), not by iter_trace_grid: a
-    # non-chief Sampling would route each marginal through the entrance pupil and
-    # trigger 'real' ray aiming, changing this differential bundle.  Keep it
-    # open-coded -- it is the one grid analysis that is not a Sampling launch.
+    # Use fixed lab-frame marginal offsets, not a Sampling launch.
     for i, field in enumerate(fields):
         P0, S0 = launch(prescription, field, wavelength, chief, epd=epd)
         P = np.repeat(P0, 3, axis=0)
@@ -788,13 +680,6 @@ def chromatic_focal_shift(prescription, wavelengths=None, *,
                           epd=None, field=None, sampling=None, samples=101):
     """Best-focus shift as a smooth function of wavelength.
 
-    Focus is evaluated at each sampled wavelength, then the focus at the
-    reference wavelength is subtracted.  By default the wavelength grid is a
-    dense linear sweep spanning all wavelengths carried by an OpticalSystem.
-    With focus='best' the focus depth is the axial plane that minimizes
-    centroid-referenced RMS spot radius of the traced bundle.  With
-    focus='paraxial' it reports the paraxial focal shift.
-
     Parameters
     ----------
     prescription : sequence of Surface
@@ -823,8 +708,7 @@ def chromatic_focal_shift(prescription, wavelengths=None, *,
     wavelengths : ndarray, shape (n_wavelengths,)
         wavelength grid in microns.
     shift : ndarray, shape (n_wavelengths,)
-        focus shift in prescription length units.  Positive means downstream
-        of the reference-wavelength best focus.
+        focus shift in prescription length units.
 
     """
     wavelengths = _chromatic_wavelength_samples(prescription, wavelengths,
@@ -871,9 +755,7 @@ def lateral_color(prescription, fields, wavelengths, *, epd=None):
         chief-ray (x, y) at the image plane.
 
     """
-    # resolve epd once (at the reference wavelength), so the same pupil size is
-    # used for every wavelength; passing the resolved float makes the iterator's
-    # per-wavelength epd resolution an identity.
+    # Use one pupil size for all wavelengths.
     epd = _require_epd(prescription, epd)
     fields = list(fields)
     wavelengths = list(wavelengths)
@@ -885,11 +767,7 @@ def lateral_color(prescription, fields, wavelengths, *, epd=None):
 
 
 # ---------- grid analyses (consistent sampling across field & wavelength) ---
-# Commercial codes build a ray-fan / spot / OPD-fan plot for every field and
-# wavelength from a single command.  These functions are the array-data half of
-# that: they trace every (field, wavelength) with one fixed pupil sampling and
-# return a stacked, labelled grid.  The plotting layer turns a grid into a
-# figure; the same grid can be pickled, fed to a merit, or differenced.
+# Stacked grid data for ray-fan, OPD-fan, and spot plots.
 
 def _fan_grid_setup(prescription, fields, wavelengths, nrays, distribution):
     fields = _resolve_fields(prescription, fields)
@@ -923,12 +801,6 @@ def ray_aberration_fans(prescription, fields=None, wavelengths=None, *,
                         reference='chief'):
     """Transverse ray-aberration fans for every field and wavelength.
 
-    Traces an x (sagittal) and a y (tangential) ray fan for each field and
-    wavelength using one shared normalized pupil sampling, so the result stacks
-    cleanly and a single pupil axis serves every curve.  This is the data step
-    behind plotting.plot_ray_fans; the grid can be saved, differenced, or used
-    as an optimizer merit without re-tracing.
-
     Parameters
     ----------
     prescription : sequence of Surface or OpticalSystem
@@ -951,20 +823,13 @@ def ray_aberration_fans(prescription, fields=None, wavelengths=None, *,
     Returns
     -------
     RayFanGrid
-        A namedtuple (fields, wavelengths, pupil, x, y).  fields is the tuple of
-        Field evaluated; wavelengths is an array of microns; pupil is the shared
-        normalized pupil coordinate (-1..1) along the fan.  x and y have shape
-        (n_fields, n_wavelengths, nrays): x is the sagittal (X) fan image error
-        in x, y is the tangential (Y) fan image error in y, both
-        reference-subtracted and in prescription length units.  Index as
-        x[field_index, wavelength_index, pupil_index]; failed rays are NaN.
+        namedtuple (fields, wavelengths, pupil, x, y).
 
     """
     fields, wavelengths, x_fan, y_fan, pupil, x, y = _fan_grid_setup(
         prescription, fields, wavelengths, nrays, distribution,
     )
-    # the x and y fans are separate bundles but share the (field, wavelength)
-    # grid; zip two iterations so each pair is the same cell.
+    # x/y fan iterators have matching cell order.
     for xr, yr in zip(
             iter_trace_grid(prescription, fields, wavelengths, x_fan, epd=epd),
             iter_trace_grid(prescription, fields, wavelengths, y_fan, epd=epd)):
@@ -1005,12 +870,6 @@ def opd_fans(prescription, fields=None, wavelengths=None, *, nrays=21,
              output='waves'):
     """Wavefront (OPD) fans for every field and wavelength.
 
-    The OPD analogue of ray_aberration_fans: for each field and wavelength it
-    traces an x and y fan and evaluates the optical path difference on the
-    chief-ray reference sphere (composing analysis.wavefront), sharing one
-    normalized pupil sampling.  This is the data step behind
-    plotting.plot_opd_fans.
-
     Parameters
     ----------
     prescription : sequence of Surface or OpticalSystem
@@ -1033,19 +892,14 @@ def opd_fans(prescription, fields=None, wavelengths=None, *, nrays=21,
     Returns
     -------
     OPDFanGrid
-        A namedtuple (fields, wavelengths, pupil, x, y).  pupil is the shared
-        normalized pupil coordinate (-1..1).  x and y have shape
-        (n_fields, n_wavelengths, nrays): the OPD along the x fan and the y fan,
-        chief-referenced (chief == 0).  Index as
-        x[field_index, wavelength_index, pupil_index]; failed rays are NaN.
+        namedtuple (fields, wavelengths, pupil, x, y).
 
     """
     fields, wavelengths, x_fan, y_fan, pupil, x, y = _fan_grid_setup(
         prescription, fields, wavelengths, nrays, distribution,
     )
     n_pupil = pupil.shape[0]
-    # zip the x and y fan iterations so each pair is the same (field,
-    # wavelength) cell, whose two fans share one exit-pupil resolution.
+    # x/y fan iterators have matching cell order.
     for xr, yr in zip(
             iter_trace_grid(prescription, fields, wavelengths, x_fan, epd=epd),
             iter_trace_grid(prescription, fields, wavelengths, y_fan, epd=epd)):
@@ -1068,11 +922,6 @@ def spot_diagrams(prescription, fields=None, wavelengths=None, *,
                   sampling=None, epd=None, reference='centroid'):
     """Image-plane spot data for every field and wavelength.
 
-    Traces one fixed 2D pupil sampling for each field and wavelength and returns
-    the image-plane landings, reference-subtracted so each (field, wavelength)
-    bundle is centered.  This is the data step behind plotting.plot_spot_diagrams
-    and feeds spot_rms_radius / spot_geometric_radius.
-
     Parameters
     ----------
     prescription : sequence of Surface or OpticalSystem
@@ -1092,12 +941,7 @@ def spot_diagrams(prescription, fields=None, wavelengths=None, *,
     Returns
     -------
     SpotGrid
-        A namedtuple (fields, wavelengths, x, y, valid, reference).  x, y, and
-        valid have shape (n_fields, n_wavelengths, n_samples): the centered
-        image coordinates and a per-ray validity mask.  reference has shape
-        (n_fields, n_wavelengths, 2): the absolute (x, y) center that was
-        subtracted, so absolute landings are recoverable.  Index as
-        x[field_index, wavelength_index, sample_index].
+        namedtuple (fields, wavelengths, x, y, valid, reference).
 
     """
     fields = _resolve_fields(prescription, fields)

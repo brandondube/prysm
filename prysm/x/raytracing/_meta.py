@@ -1,22 +1,4 @@
-"""Metadata helpers for the analysis / launch / paraxial / plotting layer.
-
-An OpticalSystem carries the system metadata (aperture, wavelengths, stop
-index) and duck-types as the compiled surface sequence (it delegates len / iter
-/ getitem / to_surfaces to its lens).  These helpers let the consuming
-functions default those values from an OpticalSystem when the caller omits
-them, while still accepting a bare LensData or list of Surface for low-level
-use.
-
-Duck-typed on purpose (no OpticalSystem import) so the layer modules can use
-them without an import cycle: an OpticalSystem exposes a wavelength resolver
-method, an aperture, a stop_index, etc.; a list of Surface does not.
-
-Object- and image-space media come from the surface materials: the object index
-is the object surface's material (the leading eval row), and image-space
-queries require an explicit trailing eval image surface so the penultimate
-surface's post-surface material is unambiguous.  There is no single ambient
-scalar.
-"""
+"""Metadata helpers for raytracing system wrappers."""
 
 from .spencer_and_murty import STYPE_EVAL
 

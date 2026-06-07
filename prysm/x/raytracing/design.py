@@ -1,37 +1,4 @@
-"""Design layer: Operands and the `Problem` class.
-
-A thin layer over the kernel that turns a LensData into a design
-loop:
-
-- **Variables** are the LensData's free DOFs.  Mark them with
-  `lensdata.vary(...)` / `freeze(...)`; the dense free vector
-  (`lensdata.pack()`) is what the optimizer mutates.  `Problem` reads
-  and writes that vector via `pack` / `update`, so there is no separate
-  variable layer — the system re-lays-out from the free vector on every eval.
-- **Operands** are vanilla classes with
-  `__call__(prescription, cache) -> scalar` plus a `target` and
-  `weight`.  Trace-based operands ask the per-call cache for their
-  ray-trace; paraxial operands compute directly from the prescription.  A
-  LensData duck-types as the compiled surface sequence the operands consume.
-- **Problem** wraps a LensData + operands.
-  `residuals(x)` returns the per-operand weighted residual vector for the
-  least-squares objective.  Hard equality and inequality operands are
-  evaluated separately as unweighted constraint functions for
-  `optym.damped_least_squares`, so quantities such as focal length can be
-  solved exactly instead of balanced as soft merit terms.  `merit(x)` returns
-  the scalar sum of squared objective residuals for scalar optimizers;
-  `jacobian(x)` reuses `sensitivity.merit_jacobian_free` to compute the
-  gradient of that scalar objective (FD or torch autograd) w.r.t. the free
-  vector.
-
-A trace cache is created fresh on each `residuals` / `merit` call so
-multiple operands sharing the same launch bundle and wavelength evaluate
-the trace once per call.  The cache lifetime is one merit call, not
-global; cache hits are based on object identity (`id(P)`, `id(S)`,
-and the float wavelength), so operands should hold references to the
-same launch arrays rather than copies.
-
-"""
+"""Design operands and optimization problems for raytracing systems."""
 
 from prysm.conf import config
 from prysm.mathops import np
@@ -57,16 +24,7 @@ from ._meta import object_space_index, image_space_index
 # ---------- Trace cache ------------------------------------------------------
 
 class _TraceCache:
-    """Per-merit-call ray-trace cache keyed by `(id(P), id(S), wvl)`.
-
-    Two operands sharing the same launch bundle and wavelength evaluate
-    the trace once per merit call.  Identity-based keying assumes the
-    user retains the same `P`, `S` array objects across operands
-    (the operand constructors capture references).
-
-    Not thread-safe; not reusable across merit calls.
-
-    """
+    """Per-merit-call raytrace cache keyed by `(id(P), id(S), wvl)`."""
 
     __slots__ = ('_prescription', '_cache', '_n_traces', '_xp_cache')
 
@@ -293,20 +251,7 @@ class ParaxialImageDistance(Merit):
 
 
 class WavefrontRMS(Merit):
-    """RMS of the OPD across one launch bundle.
-
-    Seedable.  The OPD is taken on the chief-ray reference sphere via the
-    equally-inclined-chords kernel (opt.opd_from_raytrace_eic, forced onto the
-    sphere branch so value and seed are exact transposes), and the exit pupil is
-    located the one shared way (analysis.resolve_exit_pupil): the paraxial exit
-    pupil when a stop is resolvable, else the chief ray's closest approach to the
-    optical axis.  value is sqrt(mean(opd**2)) over valid rays; the seed is its
-    cotangent on the image-plane ray position, direction, and total OPL, with
-    the reference sphere's dependence on the chief ray folded back onto the
-    chief ray.  With the chief ray in the bundle (the usual convention), its OPD
-    is identically zero and does not bias the RMS.
-
-    """
+    """RMS of OPD on the chief-ray reference sphere."""
 
     name = 'rms_wfe'
 

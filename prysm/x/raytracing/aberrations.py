@@ -1,22 +1,4 @@
-"""Surface-by-surface third-order (Seidel) and primary chromatic aberrations.
-
-The classical complement to a real-ray Zernike fit: where analysis.wavefront
-tells you what the wavefront *is*, the Seidel sums tell you which surface
-*made* it.  Each surface contributes S-I (spherical), S-II (coma), S-III
-(astigmatism), S-IV (Petzval/field curvature), and S-V (distortion); the
-column sums are the system third-order aberrations.  Rotationally symmetric
-aspheres (conic, even asphere) add a fourth-order surface contribution.  When
-two or more wavelengths are available the primary chromatic terms C-I (axial)
-and C-II (lateral) are computed as well.
-
-The math follows Welford, Aberrations of Optical Systems, and matches the
-surface-contribution form used by classical lens-design codes.  Inputs are the
-paraxial marginal (axial) and chief rays, traced here in real-slope
-coordinates so the refraction invariant A = n' i' = n i is exact at each
-surface.  Mirrors carry a signed index (n' = -n), so folded systems need no
-unfolding -- the same convention paraxial.system_matrix uses.
-
-"""
+"""Third-order Seidel and primary chromatic aberrations."""
 
 from prysm.conf import config
 from prysm.mathops import np

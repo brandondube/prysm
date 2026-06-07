@@ -1,24 +1,4 @@
-"""OpticalSystem: the system-level handle over a LensData.
-
-Commercial codes separate system concerns (aperture, fields, wavelengths,
-units, the stop) from the lens-data editor (the ordered surfaces, their
-materials, clear apertures, and coordinate breaks).  prysm mirrors that split:
-OpticalSystem owns the system metadata and wraps a LensData (the surface
-spine), while LensData is reduced to the editable/optimizable rows.
-
-OpticalSystem duck-types as the compiled surface sequence by delegating the
-sequence protocol (len/iter/getitem), to_surfaces, rows, and surfaces to its
-lens.  The analysis / paraxial / launch layer therefore consumes an
-OpticalSystem exactly as it consumed a metadata-carrying LensData before, but
-now reads aperture / fields / wavelengths / stop off the system instead of the
-lens.
-
-ApertureSpec generalizes the bare entrance-pupil diameter into a mode + value
-(EPD, image/object F-number, image/object numerical aperture) and resolves to a
-paraxial entrance-pupil diameter that launch consumes.  FieldSet is a small
-tabular container for the system's fields.
-
-"""
+"""System-level metadata wrapper for LensData."""
 
 import math
 
@@ -47,15 +27,8 @@ class ApertureSpec:
     """The aperture of an optical system: a mode plus a value.
 
     mode is one of EPD, FNO_IMAGE, FNO_OBJECT, NA_IMAGE, NA_OBJECT (module-level
-    string constants).  EPD is an entrance-pupil diameter directly; the F-number
-    and numerical-aperture modes are resolved against the system's paraxial
-    first-order data to an equivalent entrance-pupil diameter that launch
-    consumes.
-
-    Object-space modes (object F-number, object NA) describe the cone leaving a
-    finite-conjugate object and are illegal on an infinite-conjugate system;
-    validate enforces that.  Focusing modes are illegal on an afocal system (no
-    net power).
+    string constants).  F-number and numerical-aperture modes resolve to an
+    equivalent entrance-pupil diameter.
 
     """
 
@@ -276,43 +249,7 @@ class OpticalSystem:
                  reference_wavelength=None, unit=None, title=None,
                  stop_index=None, ray_aiming='paraxial', source_path=None,
                  source_format=None, extras=None):
-        """Initialize a system over a lens.
-
-        Parameters
-        ----------
-        lens : LensData
-            The surface spine.
-        aperture : ApertureSpec or float, optional
-            System aperture.  A bare float is taken as an entrance-pupil
-            diameter.
-        fields : sequence or FieldSet, optional
-            Field specifications coercible to Field instances.
-        wavelengths : mapping or sequence, optional
-            Named or indexed wavelengths in microns.
-        reference_wavelength : str or float, optional
-            Default wavelength used when none is supplied.
-        unit : str, optional
-            Length unit label.
-        title : str, optional
-            Free-text system title.
-        stop_index : int, optional
-            Index of the aperture stop among the compiled surfaces.
-        ray_aiming : str, optional
-            How launch positions a bundle relative to the stop, a selectable
-            mode in the spirit of Code V / Zemax: 'paraxial' (default) routes
-            the pupil sampling onto the paraxial entrance pupil (exact for an
-            infinite-conjugate stop image); 'real' iterates real rays so the
-            pupil sampling maps linearly onto the stop (correcting pupil
-            aberration / distortion), with the aperture-defined marginal held.
-            Orthogonal to the aperture mode -- it applies to every ApertureSpec.
-        source_path : str, optional
-            Path of the source prescription, when loaded from disk.
-        source_format : str, optional
-            Format name of the source prescription.
-        extras : dict, optional
-            Additional metadata carried through IO.
-
-        """
+        """Initialize a system over a lens."""
         self.lens = lens
         if aperture is not None and not isinstance(aperture, ApertureSpec):
             aperture = ApertureSpec.epd(aperture)

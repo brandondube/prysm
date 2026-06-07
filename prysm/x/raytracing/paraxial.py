@@ -1,18 +1,4 @@
-"""Paraxial (ABCD-matrix) ray tracing for sequential systems.
-
-The system matrix walks a prescription surface-by-surface, alternating
-translations through gaps with surface refraction/reflection.  Mirrors flip
-the sign of the running index of refraction; combined with signed lab-frame
-gaps and a translation entry of t/n, this automatically handles
-propagation-direction reversals at mirrors with no need to "unfold" the
-system.
-
-Matrices act on the column vector (y, u) where u = n * theta is the
-reduced angle.  Coordinates are referenced to the vertex of each successive
-surface; no leading translation is applied (the first surface vertex is the
-input plane).
-
-"""
+"""Paraxial ABCD-matrix tracing for sequential systems."""
 
 from prysm.conf import config
 from prysm.mathops import np
@@ -404,65 +390,7 @@ def entrance_pupil_z(prescription, wvl=None, stop_index=None):
 
 
 class FirstOrderProperties:
-    """Paraxial first-order properties of a prescription.
-
-    Populated by first_order.  Attributes that cannot be computed for
-    the supplied inputs are left as None; the __repr__ skips those
-    rows so the output is always a clean, ordered summary.
-
-    Always set
-    ----------
-    wavelength : float
-        wavelength used, microns.
-    n_object, n_image : float
-        signed indices in object and image space.  n_image is negative
-        if the prescription contains an odd number of reflections.
-    n_surfaces, n_refractive, n_reflective, n_eval : int
-        prescription counts.
-    total_track : float
-        z of the last entry minus z of the first.
-
-    Set when the system has net power
-    ---------------------------------
-    efl : float
-        effective focal length, signed.
-    bfl : float
-        back focal length, last powered vertex to rear focal point.
-    ffl : float
-        front focal length, front focal point to first powered vertex.
-    paraxial_image_distance : float
-        signed distance from the last entry's vertex to the image plane.
-    paraxial_image_z : float
-        lab-frame z-position of the paraxial image plane.
-
-    Set when epd is supplied
-    ----------------------------
-    epd : float
-        echoed input.
-    fno : float
-        |efl| / epd.
-    na_image : float
-        paraxial image-space numerical aperture, |C| * epd / 2
-        (assumes collimated object-space input).
-
-    Set when stop_index is supplied
-    -----------------------------------
-    stop_index : int
-        echoed input.
-    ep_z, xp_z : float
-        lab-frame z-positions of the entrance and exit pupils.  None
-        if the corresponding pupil is at infinity (telecentric).
-    ep_distance, xp_distance : float
-        signed distances from the first and last entries' vertices to the
-        EP and XP.
-
-    Set when both epd and stop_index are supplied
-    -----------------------------------------------------
-    stop_diameter, ep_diameter, xp_diameter : float
-        physical diameters.  ep_diameter == epd by definition;
-        included for symmetry.
-
-    """
+    """Paraxial first-order properties of a prescription."""
 
     __slots__ = (
         'wavelength', 'n_object', 'n_image',
@@ -519,16 +447,6 @@ class FirstOrderProperties:
 def first_order(prescription, wvl=None, *, epd=None, stop_index=None):
     """Compute paraxial first-order properties of a prescription.
 
-    Combines effective_focal_length, back_focal_length,
-    front_focal_length, paraxial_image_distance, and optional
-    pupil / F-number calculations into a single report.  Returns a
-    FirstOrderProperties instance whose __repr__ is a multi-line
-    summary suitable for printing.
-
-    When an OpticalSystem is passed, wvl, epd (via its aperture spec), and
-    stop_index each default to the corresponding system metadata it carries;
-    the object-space index comes from the object surface material.
-
     Parameters
     ----------
     prescription : sequence of Surface
@@ -536,24 +454,14 @@ def first_order(prescription, wvl=None, *, epd=None, stop_index=None):
         wavelength in microns (or a system wavelength name).  None defaults
         to the reference wavelength, else 0.6328.
     epd : float, optional
-        entrance pupil diameter.  When supplied, F-number and image-space
-        NA are computed; combined with stop_index, pupil diameters as
-        well.  Defaults from the system aperture spec when omitted.
+        entrance pupil diameter.
     stop_index : int, optional
-        index of the aperture stop within prescription.  When
-        supplied, paraxial entrance and exit pupil z-positions are
-        computed.  Defaults from the system stop_index when omitted.
-        Convention: the stop is treated as an aperture in a
-        plane (no refraction at the stop in the EP path); the stop's own
-        refraction, if any, is carried by the post-stop matrix used for
-        XP location.
+        aperture-stop index.
 
     Returns
     -------
     FirstOrderProperties
-        attributes are set per the input arguments; quantities that are
-        not computable (afocal system, telecentric pupil, etc.) are
-        None.
+        computed properties; unavailable quantities are None.
 
     """
     surfaces = _first_order_surfaces(prescription)

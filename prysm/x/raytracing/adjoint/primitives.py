@@ -1,24 +1,4 @@
-"""Adjoint (reverse-mode) primitives for differential ray tracing.
-
-Each function here is the exact transpose of the corresponding forward-mode
-primitive in prysm.x.raytracing._diff_raytrace.  Where the forward primitive
-maps tangent inputs (Pdot, Sdot, ...) to tangent outputs (dPj, dSprime, ...),
-the adjoint maps a cotangent of the outputs (..._bar) back to cotangents of the
-inputs, satisfying the dot-product identity
-
-    <output_bar, output_tangent> == <input_bar, input_tangent>
-
-to machine precision for any nominal evaluation point.
-
-Layout convention (single merit head, N rays):
-    cotangent vector   (N, 3)        per-ray scalar   (N,)
-    pose cotangents     Qdot_bar (3,), Rdot_bar (3, 3)   (ray-independent)
-    index cotangents    scalars
-
-A scalar merit therefore costs one backward sweep regardless of the number of
-tolerance parameters P; the per-parameter gradient is recovered by contracting
-the pose/shape/index cotangents with the assembled seed arrays.
-"""
+"""Adjoint primitives for differential ray tracing."""
 
 from prysm.mathops import np, row_dot
 

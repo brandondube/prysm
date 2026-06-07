@@ -1,7 +1,6 @@
 """Spencer & Murty's General Ray-Trace algorithm."""
 
-# don't uncomment this line, this is a very obscure import
-# not using it at the moment for GPU compatibility
+# Obsolete numpy-only fast path, kept as a note for archaeology.
 # from numpy.core.umath_tests import inner1d
 
 from prysm.conf import config
@@ -10,9 +9,7 @@ from prysm.mathops import np, row_dot
 SURFACE_INTERSECTION_DEFAULT_MAXITER = 100
 DEFAULT_TOL_SAG = 1e-12
 
-# Surface-type constants live here (rather than in surfaces.py) so that
-# spencer_and_murty.raytrace() and paraxial.system_matrix() can import them
-# without cycling through surfaces.py.  surfaces.py imports them from here.
+# Surface-type constants live here to avoid an import cycle with surfaces.py.
 STYPE_REFLECT = -1
 STYPE_REFRACT = -2
 STYPE_EVAL = -3  # NOQA
@@ -515,86 +512,26 @@ def _launch_medium_index(surfaces, wvl):
 def raytrace(surfaces, P, S, wvl, tol_sag=None):
     """Perform a raytrace through a sequence of surfaces.
 
-    Notes
-    -----
-    When P and S are single dimensional, a single ray is traced.
-
-    When they have two dimensions, the first dimension is the "batch" and the
-    second contains [X,Y,Z] and [k,l,m] for each ray in the batch.
-
-    There is no internal ray aiming or other adjustment to P and S.
-
-    In a batch raytrace, there is no reason all rows of P and S must belong to
-    the same ray bundle.
-
-    wvl does not matter and is not used in raytraces with only reflective
-    surfaces
-
-    A ray originating "at infinity" would have
-    P = [Px, Py, -1e99]
-    S = [0, 0, 1] # propagating in the +z direction
-    though the value of P is not so important,
-    since S defines the ray as moving in the +z direction only
-
     Parameters
     ----------
     surfaces : iterable
-        the surfaces to trace through;
-        a surface is defined by the interface:
-        surf.sag_and_normal(x,y) -> z sag, unit normal
-        surf.typ in {STYPE}
-        surf.P, surface global coordinates, [X,Y,Z]
-        surf.R, surface rotation matrix (may be None)
-        surf.n(wvl) -> refractive index (wvl in um)
+        surfaces to trace through.
     P : ndarray
-        shape (3,) or (N,3), any float dtype
-        position (X0,Y0,Z0) at the outset of the raytrace
+        shape (3,) or (N, 3), starting positions.
     S : ndarray
-        shape (3,) or (N,3), any float dtype
-        (k,l,m) starting direction cosines
+        shape (3,) or (N, 3), starting direction cosines.
     wvl : float
-        wavelength of light, um
+        wavelength of light, microns.
     tol_sag : float, optional
-        convergence tolerance in sag for newton-raphson iteration intersecting
-        with surfaces that cannot be analytically intersected
+        convergence tolerance for Newton surface intersections.
 
     Returns
     -------
     RayTraceResult
-        Vanilla class carrying P (position history, (jj+1, ..., 3)),
-        S (direction-cosine history, (jj+1, ..., 3)), OPL
-        (per-segment optical path length history, (jj+1, ...)), and
-        status (per-ray complex status, see module-level STATUS_*
-        constants).
-
-        OPL_hist[0] is zero by convention.  OPL_hist[j+1] is the OPL of the
-        segment from P_hist[j] to P_hist[j+1] (i.e., the path through the
-        medium preceding surface j).  The cumulative OPL up to surface j is
-        OPL_hist[:j+2].sum(axis=0).
-
-    Implementation Notes
-    --------------------
-    See Spencer & Murty, General Ray-Tracing Procedure JOSA 1961
-
-    Steps (I, II, III, IV) utilize the functions:
-    I   -> transform_to_local_coords
-    II  -> Surface.intersect (analytic when the shape supplies it,
-           otherwise Newton-Raphson via newton_raphson_solve_s)
-    III -> reflect or refract
-    IV  -> transform_to_global_coords
-
-    Surface-level apertures (surf.aperture) are checked at step II's
-    intersection point; rays falling outside are flagged STATUS_CLIP.  TIR
-    is detected at step III by post-refract NaN inspection.  Once a ray's
-    status becomes non-zero it is excluded from further status updates so
-    only the first failure surface is recorded.
+        position, direction, OPL, and status histories.
 
     """
-    # Surfaces whose intersect() has a closed-form geometric solution get
-    # STATUS_MISS on failure (negative discriminant / outside supporting
-    # region); Newton-driven surfaces get STATUS_NEWTON for non-convergence.
-    # Discrimination is via Surface._analytic_intersect, copied from the
-    # shape object during construction.
+    # Analytic misses and Newton non-convergence get distinct status codes.
     P = np.asarray(P)
     S = np.asarray(S)
     # promote 1D single-ray inputs to 2D batch shape for the duration of the

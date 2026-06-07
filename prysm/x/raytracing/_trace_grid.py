@@ -1,24 +1,4 @@
-"""The traced (field x wavelength) grid -- shared preamble for grid analyses.
-
-Every whole-system grid analysis (ray-aberration fans, OPD fans, spot diagrams,
-lateral color, distortion) walks the same path: default the wavelength and the
-entrance-pupil diameter from the system metadata, resolve the field list, then
-loop over every (field, wavelength), launch one pupil sampling, trace it, and
-mask the invalid rays.  This module owns that path so each analysis shrinks to an
-extractor over the traced records.
-
-The launch + trace + valid-mask triple was open-coded in eight places and the
-defaulting preamble in five.  iter_trace_grid is the single generator behind all
-of them: it yields one TraceRecord per (field, wavelength) cell, carrying the
-launch coordinates, the raytrace result, and the valid-ray mask.  The analysis
-reads off the one quantity it wants and writes it into its own grid at the
-record's [i, j].
-
-The module sits below analysis and field in the layering -- it imports only
-launch, the kernel, opt, and the metadata helpers -- so both build on it without
-a cycle.  field.pupil_field traces its single-cell bundle through the same
-trace_cell entry the grid loop uses, passing an intensity-aware trace_fn.
-"""
+"""Shared field/wavelength trace-grid helpers."""
 
 from .spencer_and_murty import raytrace, valid_mask
 from .launch import Field, launch
@@ -58,13 +38,7 @@ def _require_epd(prescription, epd, wvl=None):
 
 
 class TraceRecord:
-    """One traced (field, wavelength) cell of a grid.
-
-    The labelled output of one launch + raytrace: the launch coordinates, the
-    raytrace result, and the valid-ray mask, tagged with the grid indices and the
-    physical field / wavelength / entrance-pupil diameter they were traced at.  An
-    analysis extracts one quantity per record -- an image-plane landing, a fan
-    error, an OPD -- and writes it into its own grid at [i, j].
+    """One traced (field, wavelength) cell.
 
     Attributes
     ----------
@@ -79,10 +53,9 @@ class TraceRecord:
     P, S : ndarray, shape (N, 3)
         launch positions and direction cosines.
     trace : RayTraceResult
-        the raytrace result (or an intensity-aware result that forwards the same
-        P / S / OPL / status, for field.pupil_field).
+        the raytrace result.
     valid : ndarray, shape (N,)
-        boolean per-ray validity mask (status ok and finite landing).
+        per-ray validity mask.
 
     """
 
@@ -113,13 +86,7 @@ def _launch_trace(prescription, field, wvl, sampling, *, epd, pupil_z, aim_to,
 
 def trace_cell(prescription, field, wvl, sampling, *, epd=None, pupil_z=None,
                aim_to=None, trace_fn=raytrace):
-    """Launch, trace, and valid-mask a single (field, wavelength) bundle.
-
-    The per-cell primitive behind iter_trace_grid, and the single-bundle entry
-    field.pupil_field shares.  epd is resolved per call -- an explicit float
-    passes straight through, None defers to the system aperture spec at wvl.
-    trace_fn defaults to the geometric kernel; field.py passes an intensity-aware
-    raytrace_field / raytrace_prt that forwards the same P / S / OPL / status.
+    """Launch and trace one (field, wavelength) bundle.
 
     Returns
     -------
@@ -135,14 +102,7 @@ def trace_cell(prescription, field, wvl, sampling, *, epd=None, pupil_z=None,
 
 def iter_trace_grid(prescription, fields, wavelengths, sampling, *,
                     epd=None, pupil_z=None, aim_to=None, trace_fn=raytrace):
-    """Trace one pupil sampling over every (field, wavelength) cell.
-
-    Defaults the field list and the wavelength list from the system metadata
-    (idempotent when already-resolved lists are passed), then yields one
-    TraceRecord per cell in row-major order (field outer, wavelength inner).  The
-    deterministic order lets a two-sampling analysis -- an x and a y fan -- zip
-    two iterations cell-for-cell and share per-cell work such as the exit-pupil
-    resolution.
+    """Trace one pupil sampling over every field and wavelength.
 
     Parameters
     ----------
@@ -162,13 +122,12 @@ def iter_trace_grid(prescription, fields, wavelengths, sampling, *,
     aim_to : int, optional
         explicit per-ray stop-aiming surface; forwarded to launch.
     trace_fn : callable, optional
-        the trace step (prescription, P, S, wvl) -> trace; defaults to the
-        geometric raytrace kernel.
+        trace step; defaults to the geometric raytrace kernel.
 
     Yields
     ------
     TraceRecord
-        one per (field, wavelength) cell, in row-major order.
+        one per cell, in row-major order.
 
     """
     fields = _resolve_fields(prescription, fields)

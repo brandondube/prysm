@@ -1,32 +1,4 @@
-"""Zemax .zmx (text) prescription reader.
-
-Parses a sequential .zmx into a list of Surface objects plus header
-metadata.  Supports the surface types that prysm.x.raytracing models
-natively: STANDARD (conic), EVENASPH (even asphere), TOROIDAL, BICONICX,
-and the COORDBRK pseudo-surface (folds into the next surface as
-tilt+decenter).
-ZERNSAG and XYPOLY are recognized but currently raise NotImplementedError
-because mapping their PARM coefficient layouts onto prysm shape parameters is
-non-trivial.
-
-The header is parsed for: WAVL (wavelengths), ENPD (entrance pupil
-diameter), STOP (stop surface index), FNUM, FTYP/XFLN/YFLN (fields),
-UNIT (length units).  Supported source length units are converted to
-millimeters at import, and the returned OpticalSystem reports unit='mm'.
-
-Returns an OpticalSystem carrying the sequential rows (compiled to surfaces
-on demand) plus all supported metadata fields.
-
-Out of scope (raises informative NotImplementedError):
-- Multi-configuration (MNCA / MOFF) data
-- Nonsequential ray-trace blocks (NSC*)
-- USERSURF and other extension surface types
-- Reverse / forward toggles, affine vignetting factors, polarization
-
-For files outside this subset, supply a manually-built prescription
-instead of read_zmx.
-
-"""
+"""Zemax .zmx prescription reader."""
 
 from prysm.mathops import np
 

@@ -1,34 +1,4 @@
-"""Complex pupil field from a ray trace, for physical-optics propagation.
-
-The geometric trace in spencer_and_murty is intensity-blind: it carries
-positions, directions, and optical path length, but no amplitude.  This module
-realizes the complex electric field A*exp(i*k*W) on the exit-pupil reference
-sphere and resamples it onto a regular grid so it can be handed to
-prysm.propagation.
-
-The diffraction model is Hopkins 1981 (Optica Acta 28, no. 5, 667-714),
-section 10: the scalar point-spread function is the 2D Fourier transform of the
-pupil function f = a * exp(i*k*W) taken over the exit-pupil reference sphere,
-and that transform is only valid when the pupil coordinates are the coordinates
-of points on the reference sphere -- i.e. proportional to the ray direction
-cosines (sine space), not the tan-space crossing of a flat exit-pupil plane.
-The real amplitude a over the sphere is where energy conservation lives; it is
-the square root of the local areal magnification of the ray bundle.
-
-Amplitude is built from composable factors:
-
-- amplitude_apodization: geometric energy conservation (areal Jacobian of the
-  entrance-pupil to reference-sphere mapping).  Always meaningful; needs no
-  coating model and no kernel change.  This is Hopkins' a(X', Y').
-- a coating factor from interface_coefficients (the shared seam): the scalar,
-  unpolarized default multiplies sqrt((T_s + T_p) / 2) per interface.
-- the polarization ray-trace matrix (see raytrace_prt), which replaces the
-  scalar coating factor with the full vector treatment.
-
-This module sits above analysis in the layering and is the one raytracing
-module besides plotting that reaches outside the package -- it imports
-prysm.propagation to build the output wavefront.
-"""
+"""Complex pupil fields from ray traces."""
 
 from prysm.conf import config
 from prysm.mathops import np, row_dot, interpolate
@@ -55,26 +25,12 @@ from ._meta import (
 
 
 def _complex_sqrt(x):
-    """Square root with negative reals sent to the imaginary axis.
-
-    Replaces np.lib.scimath.sqrt (a numpy-only construct) with a cast to the
-    configured complex precision ahead of the root.  The behavior that matters
-    is preserved: a beyond-critical-angle discriminant (1 - sin^2 < 0) becomes
-    an imaginary cosine, which callers detect with np.imag(...) != 0 to flag
-    total internal reflection.  Casting up front also honors config.precision
-    (complex64 under a 32-bit precision) and stays portable across backends.
-    """
+    """Square root in configured complex precision."""
     return np.sqrt(np.asarray(x, dtype=config.precision_complex))
 
 
 class FieldTraceResult:
-    """A geometric trace plus a per-ray scalar amplitude.
-
-    The intensity-aware companion to RayTraceResult: it carries the same
-    trace, plus amplitude, the real per-ray amplitude transmittance through the
-    system (1 == lossless).  The geometric trace is left untouched, so the
-    intensity-blind fast path is unaffected.
-    """
+    """A geometric trace plus per-ray scalar amplitude."""
 
     __slots__ = ('trace', 'amplitude')
 
@@ -171,10 +127,6 @@ def surface_normals_from_trace(prescription, trace, wavelength):
 def interface_coefficients(n0, n1, cosI, *, coating=None, wavelength=None):
     """Complex s- and p-amplitude coefficients at one interface.
 
-    The shared seam consumed by both the scalar coating-aware path and the
-    polarization ray trace.  With coating None the bare-interface Fresnel
-    coefficients are returned; a coating spec routes through a thin-film stack.
-
     Parameters
     ----------
     n0 : float
@@ -186,8 +138,7 @@ def interface_coefficients(n0, n1, cosI, *, coating=None, wavelength=None):
     cosI : ndarray
         cosine of the angle of incidence (may be signed); abs is used.
     coating : object, optional
-        thin-film stack specification.  Reserved for multilayer support via
-        thinfilm.multilayer_stack_rt; None gives the bare Fresnel interface.
+        thin-film stack specification.  None gives the bare Fresnel interface.
     wavelength : float, optional
         wavelength in microns; required for a multilayer coating.
 
@@ -555,12 +506,6 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
                 output='length', reference='chief', polarized=False):
     """Realize the complex pupil field on the exit-pupil reference sphere.
 
-    Traces a structured (rect) entrance-pupil grid, computes the wavefront
-    error and the physical amplitude (geometric energy apodization times the
-    unpolarized coating factor) at each ray's reference-sphere landing, and
-    returns the scattered sine-space samples.  The result is the input to
-    pupil_field_to_wavefront for physical-optics propagation.
-
     Parameters
     ----------
     prescription : sequence of Surface or LensData
@@ -573,11 +518,9 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
     npupil : int
         entrance-pupil grid is npupil by npupil.
     stop_index : int, optional
-        aperture-stop surface index, used to locate the paraxial exit pupil
-        when P_xp is not given.
+        aperture-stop surface index.
     P_xp : iterable, optional
-        exit-pupil center.  Overrides the paraxial estimate; required for an
-        on-axis field unless stop_index is supplied.
+        exit-pupil center.
     P_img : iterable, optional
         reference-sphere center; defaults to the real chief-ray image point.
     axis_dir : iterable, optional
@@ -589,16 +532,12 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
     output : str
         'length' (default) or 'waves' for the returned opd units.
     reference : str
-        'chief' (default) anchors the reference sphere on the pupil-center
-        chief ray and raises if it is obscured; 'centroid' falls back to the
-        surviving ray nearest the pupil center for an obscured or vignetted
-        bundle (e.g. a Cassegrain), mirroring analysis.wavefront.
+        'chief' or 'centroid'.
 
     Returns
     -------
     PupilField
-        scattered sine-space samples (valid rays only) plus the efl (R'),
-        image-space index, and pupil/image anchors.
+        scattered sine-space samples.
 
     """
     wavelength = system_wavelength(prescription, wavelength)
@@ -614,9 +553,6 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
 
     sampling = Sampling.rect(n=npupil)
 
-    # launch + trace + valid-mask through the shared per-cell tracer; the
-    # intensity-aware trace_fn carries the scalar coating amplitude or the
-    # polarization ray-trace matrix, both forwarding the geometric trace.
     def _trace_fn(presc, P, S, w):
         if polarized:
             return raytrace_prt(presc, P, S, w, coatings=coatings)
@@ -635,19 +571,10 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
         coating_amp = result.amplitude
         P_matrix_all = None
 
-    # the uniform entrance-pupil sample grid -- the pupil coordinate of every
-    # ray.  Use this, not the launch positions P (which collapse onto the
-    # object point for a finite-conjugate / object-height field), for the
-    # apodization area, the circular mask, the chief, and the field tilt.
+    # Entrance-pupil coordinates are the pupil coordinates of the rays.
     pupil_xy = sampling.build(0.5 * epd)
 
-    # chief ray anchoring the reference sphere, the OPD, and the circular pupil.
-    # reference='chief' (default) takes the pupil-center ray and raises if it
-    # is obscured; reference='centroid' falls back to the surviving ray nearest
-    # the pupil center, so an obscured/vignetted bundle (e.g. a Cassegrain)
-    # still resolves -- mirroring analysis.wavefront.  Resolved on the trace
-    # validity (before the circular mask it centers) so the chief is never
-    # excluded by its own aperture.
+    # Anchor the reference sphere before applying the circular pupil mask.
     mask = valid if reference == 'centroid' else None
     chief_index = _pupil_center_chief_index(pupil_xy, mask)
     if not bool(valid[chief_index]):
@@ -665,10 +592,7 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
             'the surviving ray nearest the pupil center'
         )
 
-    # the rect sampling fills a square; the entrance pupil of diameter epd is
-    # the inscribed circle.  Referenced to the chief so it tracks the bundle
-    # (matching analysis.wavefront's pupil coordinate).  Mask the corner rays
-    # so the pupil -- and hence the diffraction PSF -- is circular.
+    # Rect sampling fills a square; the entrance pupil is the inscribed circle.
     r_entrance = np.hypot(pupil_xy[:, 0] - pupil_xy[chief_index, 0],
                           pupil_xy[:, 1] - pupil_xy[chief_index, 1])
     circ = r_entrance <= (0.5 * epd) * (1.0 + 1e-9)

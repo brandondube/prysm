@@ -1,28 +1,4 @@
-"""Manual forward-mode differential ray trace (tangent bundle through the kernel).
-
-This is the engine behind first-order wavefront-differential tolerancing:
-trace the nominal system once and propagate, alongside the ray state, a tangent
-(Pdot, Sdot, Ldot) = d(P, S, OPL)/dtau for every perturbation parameter at once.
-The tangents carry a trailing parameter axis, so one nominal trace yields every
-tolerance's sensitivity.
-
-The primitives mirror spencer_and_murty 1:1 (d_transform_local, d_intersect,
-d_refract, d_reflect, d_transform_global, d_opl_segment) and are exact
-closed-form derivatives, not autograd.  Each was validated against central
-finite differences of the actual kernel.
-
-Layout convention (N rays, P parameters):
-    nominal vector   (N, 3)        tangent vector   (N, 3, P)
-    nominal scalar   (N,)          tangent scalar   (N, P)
-    pose tangent     Qdot (3, P), Rdot (3, 3, P)   (ray-independent)
-    index tangent    (P,)          (ray-independent)
-
-Shape derivatives needed: the sag Hessian (sag_hessian) and the explicit
-parameter partials (sag_param_partials) of the perturbed surface.  The
-unnormalized normal g and its magnitude come for free from the nominal unit
-normal (g = n_hat / n_hat_z, ||g|| = 1 / n_hat_z), so the intersection and
-normal tangents work for any shape that supplies a Hessian.
-"""
+"""Forward-mode differential ray tracing."""
 
 from prysm.conf import config
 from prysm.mathops import np, row_dot
@@ -84,11 +60,6 @@ def d_transform_local(Reff, Q, P, S, Pdot, Sdot, Qdot, Rdot):
 def d_intersect(P0, S_loc, Q_loc, n_hat, P0dot, S_locdot,
                 hessian, dsag_param, dgx_param, dgy_param):
     """Differential of the implicit ray/surface intersection.
-
-    Implicit equation F = Z - sag(X, Y; theta) = 0 along Pj = P0 + s S_loc.
-    The unnormalized normal g = (-sag_x, -sag_y, 1) and ||g|| are recovered
-    from the nominal unit normal (g = n_hat / n_hat_z).  The implicit function
-    theorem gives sdot; the Hessian + explicit shape partials give dn_hat.
 
     Parameters
     ----------
@@ -209,30 +180,18 @@ _GEN = {
 
 
 class DiffSeed:
-    """Explicit tangent of one perturbation parameter on a compiled surface list.
-
-    A parameter perturbs the system through explicit tangents that activate at
-    the surface(s) it touches; everything left unset contributes a zero tangent.
+    """Tangent seed for one perturbation parameter.
 
     Attributes
     ----------
     pose : dict
-        {surface_index: (Qdot (3,), Rdot (3, 3) or None)} vertex-position and
-        rotation-matrix tangents.  A dict so a thickness/despace can fan out to
-        every downstream surface.
+        {surface_index: (Qdot, Rdot)} vertex and rotation tangents.
     shape : tuple or None
-        (surface_index, name) naming a shape DOF ('c', 'k', or a freeform
-        coefficient resolved by the shape's sag_param_partials).
+        (surface_index, name) of a shape DOF.
     sag_partials : tuple or None
-        (surface_index, fn) where fn(Xj, Yj) -> (sag_t, gx_t, gy_t) supplies
-        the explicit sag/sag-gradient partials of a perturbation that is NOT a
-        stored shape DOF -- e.g. a Zernike surface irregularity (CYN/CYD).  The
-        partials are evaluated at the nominal local intersection; the nominal
-        sag/Hessian are untouched.  A simple callable so any analytic departure
-        term plugs in without modifying the surface classes.
+        (surface_index, fn) for explicit sag/sag-gradient partials.
     index : tuple or None
-        (surface_index, value) tangent of the index FOLLOWING that surface;
-        fans forward to every downstream segment until the next refraction.
+        (surface_index, value) tangent of the medium after that surface.
     name : str
         label for reporting.
 
@@ -269,15 +228,7 @@ def seed_shape_param(surface, param_name, name=None):
 
 def seed_irregularity(surface, n, m, normalization_radius, *, norm=True,
                       name=None):
-    """Seed for a Zernike surface-irregularity (CYN/CYD) tolerance.
-
-    Models the irregularity as an added departure delta z = a Z_n^m(x/R, y/R)
-    on the named surface and seeds the tangent wrt its amplitude a (sag length
-    units).  Unlike a shape DOF this need not be present on the nominal surface
-    -- the partials come from sags.zernike_irregularity_partials evaluated at
-    the nominal intersection, so a plain Sphere/Conic can be toleranced for
-    irregularity it does not nominally carry.  CYN is (n, m) = (2, 2) (cylinder
-    along the axes), CYD is (2, -2) (45-degree cylinder); any (n, m) is allowed.
+    """Seed for a Zernike surface-irregularity tolerance.
 
     """
     from .sags import zernike_irregularity_partials  # local: keep the kernel
@@ -292,13 +243,7 @@ def seed_irregularity(surface, n, m, normalization_radius, *, norm=True,
 
 
 def seed_decenter(surface, axis, name=None):
-    """Seed for a decenter (DSX/DSY) tolerance: vertex moves along axis.
-
-    Analytic pose primitive: validated directly against finite differences. The
-    Perturbation->seed mapping (seed_from_perturbation) does NOT use this; it
-    derives pose tangents from the compiled layout (_pose_tangents_via_layout)
-    so coord-break framing and solves are handled uniformly.
-    """
+    """Seed for a decenter tolerance: vertex moves along axis."""
     idx = {'x': 0, 'y': 1, 'z': 2}[axis]
     q = np.zeros(3, dtype=config.precision)
     q[idx] = 1.0
@@ -306,16 +251,7 @@ def seed_decenter(surface, axis, name=None):
 
 
 def seed_despace(surfaces, name='despace'):
-    """Seed for a despace/thickness (DLZ/DLT) tolerance.
-
-    surfaces is an iterable of (surface_index, sign): each named vertex moves
-    sign units along +z.  A despace is a single surface with sign +1; a
-    thickness fans out to every downstream surface (sign flips after a fold).
-
-    Analytic pose primitive: validated directly against finite differences. The
-    Perturbation->seed mapping derives the fan-out from the compiled layout
-    instead (see seed_decenter).
-    """
+    """Seed for a despace/thickness tolerance."""
     q_plus = np.array([0., 0., 1.], dtype=config.precision)
     pose = {}
     for sidx, sgn in surfaces:
@@ -328,10 +264,6 @@ def seed_tilt(surface, axis, R_nominal=None, name=None):
 
     R_total = R_nominal @ R_tilt(a), so Rdot = R_nominal @ generator.  Pass
     R_nominal=None for an untilted surface (identity).
-
-    Analytic pose primitive: validated directly against finite differences. The
-    Perturbation->seed mapping derives Rdot from the compiled layout instead
-    (see seed_decenter).
     """
     G = _GEN[axis].astype(config.precision)
     Rdot = G if R_nominal is None else (np.asarray(R_nominal, dtype=config.precision) @ G)
@@ -389,19 +321,7 @@ def _as_rot(R):
 
 
 def _pose_tangents_via_layout(perturbation, h):
-    """Per-surface (Qdot, Rdot) of the compiled layout wrt one DOF, by central FD.
-
-    Recompiles the LensData with the targeted DOF at nominal +/- h and central-
-    differences every compiled Surface's vertex P and rotation R.  This is the
-    explicit pose tangent the differential trace consumes, and it captures
-    thickness fan-out (mirror-fold aware), coordinate-break frame propagation,
-    and any solve-/pickup-induced pose motion uniformly -- without re-deriving
-    the layout by hand.  The layout is an O(surfaces) recompile, not a re-trace,
-    so the wavefront-differential speed advantage holds.
-
-    Returns the seed's pose dict {surface_index: (Qdot (3,), Rdot (3,3) or None)},
-    sparse over the surfaces the DOF actually moves.
-    """
+    """Per-surface (Qdot, Rdot) of the compiled layout wrt one DOF."""
     ld = perturbation.lensdata
     nominal = perturbation.nominal
     try:
@@ -430,28 +350,8 @@ def _pose_tangents_via_layout(perturbation, h):
 def seed_from_perturbation(perturbation, *, pose_step=1e-6):
     """Build the DiffSeed matching a tolerance.Perturbation on a LensData.
 
-    Maps a lens-design tolerance set onto the differential trace:
-
-    - curvature (DLR) / radius -> the surface's shape DOF 'c'
-    - conic -> the surface's shape DOF 'k'
-    - thickness (DLT) / despace (DLZ) -> downstream pose fan-out, mirror-fold
-      and solve aware
-    - tilt (BTX/BTY) / decenter (DSX/DSY) on a coordinate break -> the pose
-      tangents that break induces on every surface it reframes
-
-    Shape tangents go through the surface's analytic sag_param_partials; pose
-    tangents come from a central difference of the compiled layout (an
-    O(surfaces) recompile, not a re-trace).  pose_step is that layout-FD step in
-    the DOF's own units; the layout is exactly linear in translations and smooth
-    in rotations, so it is accurate well below the trace-FD validation floor.  A
-    shape perturbation still gets its layout-FD pose tangents, so a curvature or
-    conic change that moves the image plane through an image-distance solve is
-    captured too.
-
-    Limitations: freeform-coefficient (CYN/CYD) and index (DLN) tolerances are
-    not LensData DOF slots and stay on the FD sensitivity_table; a pickup that
-    couples one shape DOF to another is not differentiated through (the seed
-    activates only the perturbed surface).
+    Shape tangents use sag_param_partials; pose tangents are obtained by
+    finite-differencing the compiled layout.
 
     """
     group, row_idx, off = perturbation.slot
@@ -672,10 +572,6 @@ def _eye3():
 def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None):
     """Trace (P, S) and propagate the tangent bundle for every seed.
 
-    Runs the authoritative nominal trace via spencer_and_murty.raytrace, then
-    propagates (Pdot, Sdot, Ldot) through the differential primitives using the
-    nominal positions/normals recomputed in lockstep with the kernel.
-
     Parameters
     ----------
     surfaces : sequence of Surface
@@ -804,10 +700,6 @@ def _dot_vt(u, Vt):
 def d_closest_point_on_axis(P, S, Pdot, Sdot, axis_point, axis_dir):
     """Exit-pupil point on the optical axis and its tangent.
 
-    Differentiates opt._closest_approach_on_axis (the foot of the common
-    perpendicular from the chief ray to the axis line).  The axis
-    (axis_point, axis_dir) is fixed; only the chief ray (P, S) moves.
-
     Returns (P_xp (3,), P_xp_dot (3, P)).
     """
     A = np.asarray(P, dtype=config.precision)
@@ -838,14 +730,7 @@ def d_closest_point_on_axis(P, S, Pdot, Sdot, axis_point, axis_dir):
 
 
 def d_intersect_reference_sphere(P, S, Pdot, Sdot, C, Cdot, R, Rdot):
-    """Tangent of the reference-sphere segment length t for a ray bundle.
-
-    Differentiates spencer_and_murty.intersect_reference_sphere with BOTH the
-    sphere center C and radius R moving (the chief image point and exit-pupil
-    distance both shift under a perturbation).
-
-    Returns tdot (N, P).
-    """
+    """Tangent of the reference-sphere segment length t."""
     dvec = P - C[None, :]
     dvecdot = Pdot - Cdot[None, :, :]
     b = row_dot(S, dvec)
@@ -867,19 +752,7 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
                             chief_index=None,
                             axis_point=None, axis_dir=None, P_xp=None,
                             field=None, output='length'):
-    """Trace, compute OPD on the chief reference sphere, and its tangent maps.
-
-    The differential analog of analysis.wavefront: returns the nominal OPD plus
-    the per-tolerance wavefront-derivative maps dW_p = dOPD/dtau_p (one column
-    per seed).  The reference sphere centers on the chief image point C and has
-    radius R = ||P_xp - C||; both C and (for the auto-located exit pupil) P_xp
-    move with the perturbation, and that motion is differentiated in closed
-    form.
-
-    Parameters mirror analysis.wavefront; seeds defines the trailing parameter
-    axis (see raytrace_with_tangents).  output='length' returns dW in length
-    units (prysm OPD sign: longer OPL positive); output='waves' returns
-    -dOPD/lambda (lens-design wavefront-error convention), assuming mm / um.
+    """OPD and per-seed OPD tangents on the chief reference sphere.
 
     Returns
     -------

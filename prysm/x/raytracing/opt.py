@@ -15,25 +15,12 @@ def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
              tol=1e-12, maxiter=20, strict=True, vary='position'):
     """Aim a bundle of rays so each lands at target_xy on a surface.
 
-    Stop-aiming is a 2-input -> 2-output root find per ray: find the launch
-    parameter (the transverse launch position, or the transverse launch
-    direction) such that the ray lands at target_xy on
-    prescription[surface_index].  The landing map (paraxial pupil-to-surface
-    transfer plus mild aberration) is smooth and nearly linear, so a batched
-    damped Newton on the per-ray 2x2 landing Jacobian solves the whole bundle
-    in a handful of iterations.  Cost is ~3 batched traces per iteration,
-    independent of the number of rays.
-
-    Backend-pure (no scipy): runs natively on numpy, cupy, or torch.
-
     Parameters
     ----------
     P : ndarray
-        shape (N, 3), launch positions.  Modified in place when vary is
-        position; carried unchanged when vary is direction.
+        shape (N, 3), launch positions.
     S : ndarray
-        shape (N, 3), launch direction cosines.  Modified in place (the
-        transverse pair, z recomputed from |S| == 1) when vary is direction.
+        shape (N, 3), launch direction cosines.
     prescription : sequence of Surface
         the system traced through during aiming.
     surface_index : int
@@ -49,15 +36,9 @@ def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
     maxiter : int, optional
         Newton iteration cap.
     strict : bool, optional
-        if True (default), raise RuntimeError listing any rays that did not
-        converge; if False, return them at their best-effort parameter.
+        if True, raise when any ray did not converge.
     vary : str, optional
-        'position' (default) varies the transverse launch position (Px, Py)
-        with the launch z and direction held fixed -- correct for collimated
-        bundles.  'direction' varies the transverse direction cosines (Sx, Sy)
-        (Sz recomputed to keep S a unit vector) with the launch position held
-        fixed -- correct for a finite-conjugate bundle that must all emanate
-        from one object point.
+        'position' (default) or 'direction'.
 
     Returns
     -------
@@ -364,23 +345,6 @@ def opd_from_raytrace_eic(P_hist, S_hist, OPL_hist, P_img, P_xp,
                           infinite_threshold=1.0e8):
     """OPD on the exit-pupil reference surface, robust to extreme conjugates.
 
-    The OPD primitive for the analysis and field layers: sums OPL through the
-    prescription, extends each ray to the reference sphere centered on P_img
-    with radius |P_xp - P_img|, and reports the result relative to the chief
-    (chief OPD = 0).  Uses a cancellation-free (Welford-rationalized)
-    intersection of each ray with the reference sphere and falls back
-    automatically to a planar reference through P_xp
-    normal to the chief direction when the reference-sphere radius exceeds
-    infinite_threshold.  The legacy form t = -b - sqrt(b**2 - cc) loses
-    precision when |b| ~ sqrt(...) -- the regime reached for long
-    conjugates -- because the two large terms cancel.  Here the cancelling
-    branch is rationalized to t = cc / (-b + sqrt(...)), whose denominator
-    is a sum of like-signed quantities; the non-cancelling branch is left
-    in its original form, so the result is bit-identical to the legacy
-    path for benign cases and merely more accurate for extreme ones.  The
-    plane fallback handles the strict afocal limit where the reference
-    sphere is not well defined at all.
-
     Parameters
     ----------
     P_hist, S_hist, OPL_hist : ndarray
@@ -395,9 +359,7 @@ def opd_from_raytrace_eic(P_hist, S_hist, OPL_hist, P_img, P_xp,
     chief_index : int, optional
         row of the chief ray.  Default: the ray nearest the pupil center.
     infinite_threshold : float
-        reference-sphere radius (in prescription length units) above which
-        the planar reference is used; finite-conjugate systems are far
-        below the default and behave identically to the legacy path.
+        reference-sphere radius above which the planar reference is used.
 
     Returns
     -------

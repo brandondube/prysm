@@ -408,57 +408,28 @@ def launch(prescription, field, wavelength, sampling, *,
            aim_to=None, aim_target=(0.0, 0.0), aim_strict=True):
     """Build (P, S) for one field, wavelength, and pupil sampling.
 
-    Combines a Field, a Sampling pattern, and a prescription into absolute
-    launch positions and direction cosines ready for raytrace.  kind='angle'
-    fields launch a collimated bundle; kind='height' fields launch a
-    finite-conjugate bundle diverging from the object point.
-
-    When the prescription knows its aperture stop (an OpticalSystem carries
-    stop_index), off-axis bundles are positioned relative to the stop by the
-    system's ray_aiming mode.  'paraxial' (default) routes the sampling onto
-    the paraxial entrance pupil: collimated bundles are shifted laterally at
-    the launch plane so each ray crosses its pupil coordinate at the
-    entrance-pupil z, and finite-conjugate bundles aim at the entrance-pupil
-    plane.  'real' iterates real rays so the pupil sampling maps linearly onto
-    the stop (correcting pupil aberration / distortion) with the aperture-
-    defined marginal held.  This makes the pupil coordinate of every ray
-    meaningful for any stop location, not only a stop at the first surface.
-    Pass aim_to=... to run explicit per-ray stop aiming regardless of the mode.
-
     Parameters
     ----------
     prescription : sequence of Surface
-        the system to launch into; only prescription[0].P (and prescription
-        up to aim_to) is consulted here.
+        the system to launch into.
     field : Field
         the field point.  kind='angle' or kind='height'.
     wavelength : float
-        wavelength in microns.  Only consumed when aim_to is set (the aim
-        trace needs it); it has no effect on the launch geometry itself.
+        wavelength in microns.
     sampling : Sampling
         pupil sampling pattern.
     epd : float, optional
-        entrance pupil diameter; the pattern is built with extent = epd/2.
-        Required for non-chief samplings unless pupil_extent is given.
-        Defaults from the LensData epd when the prescription is a LensData.
+        entrance pupil diameter.
     pupil_extent : float, optional
         pattern outer half-extent, used in place of epd/2 when given.
     pupil_z : float, optional
-        z position the collimated rays start at (the launch plane).  Default:
-        the first surface vertex z.  With entrance-pupil routing active the
-        landing on the pupil is unaffected by this choice; it only sets where
-        along each ray the launch point sits.
+        z position of the collimated launch plane.
     aim_to : int, optional
-        if given, run per-ray stop aiming so each ray lands at aim_target on
-        prescription[aim_to].
+        aimed surface index.
     aim_target : (float, float), optional
         target xy at the aimed surface.  Default (0, 0) (chief-ray aim).
     aim_strict : bool, optional
-        forwarded to aim_rays when aim_to is set.  True (default) raises if any
-        ray cannot be aimed (the ray TIRs or misses while aiming).  Pass False
-        for vignetting or wide-field studies where some rays are expected to be
-        unaimable; those rays return best-effort launch positions and are then
-        flagged by the trace status downstream.
+        forwarded to aim_rays when aim_to is set.
 
     Returns
     -------

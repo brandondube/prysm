@@ -1,53 +1,4 @@
-"""Wavefront-differential tolerancing front end.
-
-One nominal differential trace (via _diff_raytrace.wavefront_with_tangents)
-yields the nominal OPD W0 and the per-tolerance wavefront-derivative maps
-dW_p = dOPD/dtau_p.  From those this module builds the Rimmer-style
-wavefront-error quadratic and everything derived from it, with no further ray
-tracing.
-
-Reference: M. P. Rimmer, "Analysis of Perturbed Lens Systems," Applied Optics
-9(3), 533-537 (1970).
-
-The model is the small-degradation linearization of the wavefront,
-    W(tau) = W0 + sum_p dW_p tau_p,
-so RMS wavefront error squared is the pupil quadratic form
-    RMS^2(tau) = mean(W^2) = C + B . tau + tau^T G tau,
-    C   = mean(W0^2)                 (nominal RMS^2),
-    B_p = 2 mean(W0 dW_p)            (linear / cross term with the nominal),
-    G_pq = mean(dW_p dW_q)           (Gram; A_p = G_pp is the self term).
-This matches design.WavefrontRMS exactly (RMS about zero, chief anchored at 0),
-which is the merit the FD sensitivity_table / slow monte_carlo validate against.
-
-For a single tolerance scaled by T this is the standard quadratic form
-    RMS(T) = sqrt(A T^2 + B T + C),
-and everything else follows:
-
-- sensitivity      dRMS/dtau at 0 = B / (2 sqrt(C))  (matches the FD slope)
-- inverse sens.    solve A T^2 + B T + C = RMS_target^2 for the allowed range
-- RSS roll-up      independent zero-mean tau: E[RMS^2] = C + sum_p sigma_p^2 A_p
-- fast Monte Carlo draw tau vectors, evaluate the quadratic (no re-trace) ->
-  a merit distribution / cumulative-probability curve, validated against the
-  slow re-tracing monte_carlo.
-
-Cross-terms (off-diagonal G) are captured automatically -- the advantage over
-FD, which only ever moves one tolerance at a time.
-
-Example
--------
-    from prysm.x.raytracing.launch import Field, Sampling, launch
-    from prysm.x.raytracing.tolerance import Perturbation
-    from prysm.x.raytracing.wavefront_differential import wavefront_differential
-    P, S = launch(ld, Field(2.5, 2.5), 0.55, Sampling.rect(n=7), epd=10.0)
-    perts = [
-        Perturbation.normal(ld, 'curvature', 0, 1e-4, name='c1'),
-        Perturbation.normal(ld, 'thickness', 0, 0.02, name='t1'),
-    ]
-    wd = wavefront_differential(ld, perts, P, S, 0.55)
-    print(wd.sensitivity_table())
-    result = wd.fast_monte_carlo(perts, n_trials=10000, seed=0)
-
-"""
+"""Wavefront-differential tolerancing tools."""
 
 from prysm.conf import config
 from prysm.mathops import np
@@ -64,55 +15,32 @@ def wavefront_differential(lensdata, perturbations, P, S, wavelength, *,
                            chief_index=None,
                            axis_point=None, axis_dir=None, P_xp=None,
                            field=None, pose_step=1e-6):
-    """Build the wavefront-differential model from one nominal trace.
-
-    Maps the perturbations to differential seeds, runs the single nominal
-    differential trace, and returns a WavefrontDifferential holding the
-    quadratic (C, B, Gram) for the launched bundle.
-
-    extra_seeds appends already-built DiffSeeds as further tolerance columns --
-    the home for perturbations that are not LensData DOF slots, in particular a
-    Zernike surface irregularity (CYN/CYD via _diff_raytrace.seed_irregularity).
-    They get the full quadratic / sensitivity / Zernike-coefficient
-    treatment; only fast_monte_carlo (which needs Perturbation samplers) does
-    not cover them.
-
-    If compensators are given, their derivative maps are traced alongside the
-    tolerances (still one trace) and the wavefront W0 and every tolerance map
-    are projected onto the orthogonal complement of the compensator subspace
-    (SVD least squares).  The returned model is then the compensated one: every
-    sensitivity, RMS, and Monte Carlo is reported after the compensators have
-    been re-optimized per perturbation -- the linear-least-squares analog of
-    lens-design software re-solving the back focus (etc.) for each tolerance.
+    """Build a wavefront-differential model from one nominal trace.
 
     Parameters
     ----------
     lensdata : LensData
         the nominal system; the perturbations must target this same LensData.
     perturbations : sequence of tolerance.Perturbation
-        the tolerance set; defines the parameter axis order.  Their .step
-        values are the default per-tolerance scales used for sensitivity and
-        RSS roll-up.
+        tolerance set; defines the parameter-axis order.
     P, S : ndarray, (N, 3)
         launch bundle (typically from launch()).
     wavelength : float
         microns.
     extra_seeds : sequence of _diff_raytrace.DiffSeed, optional
-        extra tolerance columns appended after the perturbations (e.g.
-        irregularity); not mapped from LensData DOFs.
+        extra tolerance columns appended after the perturbations.
     extra_names : sequence of str, optional
         names for the extra_seeds columns; defaults to each seed's .name.
     extra_steps : sequence of float, optional
-        per-column default scales for the extra_seeds; defaults to 1.0.
+        per-column default scales for extra_seeds.
     compensators : sequence of tolerance.Perturbation, optional
-        DOFs (e.g. an image-gap despace for back focus) re-optimized per
-        perturbation by projecting them out of the wavefront.
+        DOFs projected out by least squares.
     comp_rcond : float, optional
         relative singular-value cutoff for the compensator pseudo-inverse.
     chief_index, axis_point, axis_dir, P_xp, field
-        forwarded to wavefront_with_tangents (reference-sphere controls).
+        forwarded to wavefront_with_tangents.
     pose_step : float, optional
-        layout-FD step for pose tangents (see seeds_from_perturbations).
+        layout finite-difference step for pose tangents.
 
     Returns
     -------
@@ -188,36 +116,13 @@ def project_out(v, basis):
 
 
 def compensate(opd, tol_maps, comp_maps, *, rcond=1e-9):
-    """Project the wavefront and tolerance maps off the compensator subspace.
-
-    The compensated wavefront for a perturbation is the residual after the
-    best least-squares compensator motion, i.e. the projection of W0 + (tol
-    maps) onto the orthogonal complement of span(comp_maps).  Doing it to W0
-    and to each tolerance map turns the compensated tolerancing problem back
-    into a plain wavefront-error quadratic on the projected maps.
-
-    Returns (opd_proj, tol_maps_proj, basis) where basis is the orthonormal
-    compensator basis used for the projection.
-    """
+    """Project the wavefront and tolerance maps off the compensator subspace."""
     basis = _orthonormal_basis(comp_maps, rcond)
     return project_out(opd, basis), project_out(tol_maps, basis), basis
 
 
 class WavefrontDifferential:
-    """The wavefront-error quadratic for one launch bundle and a fixed tolerance set.
-
-    Holds the nominal wavefront W0 and the per-tolerance derivative maps dW,
-    plus the assembled quadratic coefficients
-        C   nominal RMS^2 = mean(W0^2)
-        B   (P,) linear coefficients 2 mean(W0 dW_p)
-        G   (P, P) Gram mean(dW_p dW_q); A = diag(G) is the self term.
-    All RMS values are in the OPD length units of the trace (prysm gauge,
-    chief == 0), the same units design.WavefrontRMS reports.
-
-    Construct via wavefront_differential(); the bare constructor is handy for
-    feeding precomputed (opd, dW) maps.
-
-    """
+    """Wavefront-error quadratic for one launch bundle and tolerance set."""
 
     __slots__ = ('W0', 'dW', 'names', 'steps', 'x_pupil', 'y_pupil',
                  'n_samples', 'n_params', 'C', 'B', 'G', 'A', 'rms_nominal',
@@ -268,10 +173,7 @@ class WavefrontDifferential:
         return np.sqrt(np.maximum(val, 0.0))
 
     def sensitivity(self):
-        """dRMS/dtau at nominal for every tolerance: B / (2 sqrt(C)).
-
-        The first-order slope the FD sensitivity_table of WavefrontRMS measures.
-        """
+        """dRMS/dtau at nominal for every tolerance."""
         if self.rms_nominal == 0.0:
             # at a perfect wavefront the slope is undefined (RMS ~ |T|);
             # report sqrt(A) as the local rate of |W| growth.
@@ -281,12 +183,7 @@ class WavefrontDifferential:
     # ---------- full quadratic form ----------------------------------------
 
     def predict_rms_sq(self, tau):
-        """RMS^2(tau) = C + B . tau + tau^T G tau, vectorized over rows of tau.
-
-        tau is (P,) for a single perturbation vector or (M, P) for a batch;
-        returns a scalar or (M,) accordingly.  The form is a mean of squares,
-        so it is >= 0 up to roundoff (clipped at 0).
-        """
+        """RMS^2(tau), vectorized over rows of tau."""
         tau = np.asarray(tau, dtype=config.precision)
         single = tau.ndim == 1
         if single:
@@ -308,17 +205,6 @@ class WavefrontDifferential:
 
     def zernike_sensitivity(self, nms, *, normalization_radius=None, norm=True):
         """Sensitivity of fitted wavefront Zernike coefficients to each tolerance.
-
-        Fits the nominal wavefront W0 and every per-tolerance map dW_p onto the
-        Zernike basis nms with analysis.wavefront_zernike_fit.  The least-squares
-        fit is linear in the OPD, so fitting dW_p yields exactly dc/dtau_p; a
-        single shared normalization radius keeps the basis identical across all
-        the fits.  Reports per-coefficient sensitivities (for wavefront content
-        such as astigmatism or coma growth) alongside the scalar RMS
-        sensitivity.
-
-        Needs the pupil coordinates the model was built with (present when it
-        came from wavefront_differential).
 
         Parameters
         ----------
@@ -366,14 +252,7 @@ class WavefrontDifferential:
         return self.comp_maps is not None
 
     def compensator_motions(self):
-        """Per-tolerance compensator motion rate dc/dtau (K, P).
-
-        The least-squares compensator setting that minimizes the perturbed
-        wavefront is c(tau) = -M+ (W0 + D tau); the part that tracks each
-        tolerance is dc/dtau = -M+ D (D the unprojected tolerance maps), the
-        usual compensator-pickup table next to each tolerance.  Raises if there
-        are no compensators.
-        """
+        """Per-tolerance compensator motion rate dc/dtau, shape (K, P)."""
         if self.comp_motions is None:
             raise ValueError('this model has no compensators')
         return self.comp_motions
@@ -391,12 +270,6 @@ class WavefrontDifferential:
     def expected_rms_sq(self, scales=None, *, cross_terms=False):
         """E[RMS^2] for independent zero-mean tolerances of std `scales`.
 
-        With tau_p independent, zero-mean, variance sigma_p^2, the linear term
-        averages out and E[RMS^2] = C + sum_p sigma_p^2 A_p (diagonal Gram).
-        Set cross_terms=True to instead include the full Gram, which is only
-        correct when the perturbations are correlated with covariance G-shaped;
-        for the standard independent case leave it False.
-
         scales defaults to the perturbations' .step (one sigma / half-width).
         """
         s = self._scales(scales)
@@ -412,13 +285,7 @@ class WavefrontDifferential:
             scales, cross_terms=cross_terms), 0.0)))
 
     def rms_change_per_tolerance(self, scales=None):
-        """Per-tolerance RMS minus nominal at tau_p = +scale_p (others 0).
-
-        This is the individual-sensitivity column of the Rimmer-style
-        quadratic; sqrt sum of squares of these is one common (conservative)
-        RSS estimate, while
-        expected_rms() is the statistically exact independent roll-up.
-        """
+        """Per-tolerance RMS minus nominal at tau_p = +scale_p."""
         s = self._scales(scales)
         rms_p = np.sqrt(np.maximum(self.A * s * s + self.B * s + self.C, 0.0))
         return rms_p - self.rms_nominal
@@ -429,14 +296,8 @@ class WavefrontDifferential:
         """Allowed per-tolerance value range for a target RMS increase.
 
         Solves A T^2 + B T + C = RMS_target^2 with RMS_target = rms_nominal +
-        target_delta_rms, returning (T_lo, T_hi) per tolerance -- the interval
+        target_delta_rms, returning (T_lo, T_hi) per tolerance: the interval
         of values keeping the single-tolerance RMS at or below the target.
-
-        Because RMS_target > rms_nominal the constant term C - RMS_target^2 is
-        negative, so a tolerance with any sensitivity (A > 0) has one negative
-        and one positive root straddling 0.  A purely linear tolerance (A ~ 0)
-        gets one finite bound and +/- inf on the slack side; a tolerance with
-        no first-order effect at all (A ~ 0 and B ~ 0) is unbounded both ways.
 
         Returns
         -------
@@ -471,17 +332,7 @@ class WavefrontDifferential:
 
     def fast_monte_carlo(self, perturbations, n_trials, *, seed=None,
                          record_samples=False):
-        """Monte Carlo over the quadratic -- no re-tracing.
-
-        Draws tau exactly as tolerance.monte_carlo does (per trial, per
-        perturbation, same RNG order), so with a shared seed the sampled
-        deviations match the slow re-tracing run and the merit distributions
-        agree to the linearization error.  Returns a tolerance.MonteCarloResult
-        so it is directly comparable to monte_carlo's output.
-
-        perturbations must be the same sequence (same order) the model was
-        built from; their nominals define tau = sample - nominal.
-        """
+        """Monte Carlo over the quadratic."""
         perturbations = list(perturbations)
         if len(perturbations) != self.n_params:
             raise ValueError(
