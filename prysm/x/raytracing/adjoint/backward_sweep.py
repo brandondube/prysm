@@ -18,7 +18,11 @@ from prysm.x.raytracing.spencer_and_murty import (
     STYPE_REFLECT,
     valid_mask,
 )
-from prysm.x.raytracing._diff_raytrace import _assemble_seeds, _eye3
+from prysm.x.raytracing._diff_raytrace import (
+    _assemble_seeds,
+    _eye3,
+    _reject_gratings,
+)
 from prysm.x.raytracing._meta import object_space_index
 
 from .primitives import (
@@ -86,6 +90,7 @@ def _forward_with_intermediates(surfaces, P, S, wvl, tol_sag=None):
 
     Returns (RayTraceResult, TraceIntermediates).
     """
+    _reject_gratings(surfaces)
     P = np.asarray(P)
     S = np.asarray(S)
     if P.ndim == 1:
@@ -94,7 +99,11 @@ def _forward_with_intermediates(surfaces, P, S, wvl, tol_sag=None):
     P = P.astype(config.precision)
     S = S.astype(config.precision)
 
-    trace = raytrace(surfaces, P, S, wvl, tol_sag=tol_sag)
+    # keep_intermediates hands back the per-surface Interaction objects, so the
+    # nominal local intersection / normal / bent direction come straight off the
+    # forward trace -- the adjoint no longer re-runs the Newton intersect or
+    # re-derives the bend.
+    trace = raytrace(surfaces, P, S, wvl, tol_sag=tol_sag, keep_intermediates=True)
     valid = valid_mask(trace.status, trace.P[-1])
 
     inters = []
@@ -106,30 +115,16 @@ def _forward_with_intermediates(surfaces, P, S, wvl, tol_sag=None):
         P_in = trace.P[j]
         S_in = trace.S[j]
 
-        # Step I (local) recomputed for the nominal intermediates.
-        Pmq = P_in - Q
-        P0 = (Reff @ Pmq.T).T
-        S_loc = (Reff @ S_in.T).T
-
-        Q_loc, n_hat, _ = surf.intersect(P0, S_loc, tol_sag=tol_sag)
+        step = trace.intermediates[j]
+        P0 = step.P0
+        S_loc = step.S_loc
+        Q_loc = step.Q_loc
+        n_hat = step.n_hat
+        Sprime = step.Sprime
         Xj = Q_loc[..., 0]
         Yj = Q_loc[..., 1]
         hessian = surf.shape.sag_hessian(Xj, Yj)
-
-        if surf.typ == STYPE_REFRACT:
-            nprime = float(surf.material.n(wvl))
-            cosI = np.sum(n_hat * S_loc, axis=-1)
-            mu = nj / nprime
-            factor = (np.sign(cosI) * np.sqrt(1.0 - mu * mu * (1.0 - cosI * cosI))
-                      - mu * cosI)
-            Sprime = mu * S_loc + factor[:, None] * n_hat
-        elif surf.typ == STYPE_REFLECT:
-            nprime = None
-            cosI = np.sum(S_loc * n_hat, axis=-1)
-            Sprime = S_loc - 2.0 * cosI[:, None] * n_hat
-        else:
-            nprime = None
-            Sprime = S_loc
+        nprime = float(step.n_post) if surf.typ == STYPE_REFRACT else None
 
         seg = trace.P[j + 1] - trace.P[j]
 

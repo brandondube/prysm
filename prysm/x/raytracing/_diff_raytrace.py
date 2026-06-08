@@ -569,6 +569,21 @@ def _eye3():
     return np.eye(3, dtype=config.precision)
 
 
+def _reject_gratings(surfaces):
+    """Refuse to differentiate a prescription containing a grating surface.
+
+    The forward (d_*) and reverse (adj_*) Spencer & Murty primitives have no
+    grating term -- a grating surface traces as a plain mirror/lens in the AD
+    stacks, silently yielding wrong derivatives.  Fail loudly until a grating
+    diffraction primitive is added on both sides.
+    """
+    if any(getattr(s, 'grating', None) is not None for s in surfaces):
+        raise NotImplementedError(
+            'differential/adjoint raytrace does not model grating diffraction; '
+            'remove the grating or add a grating AD primitive before tracing '
+            'tangents/cotangents through it.')
+
+
 def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None):
     """Trace (P, S) and propagate the tangent bundle for every seed.
 
@@ -590,6 +605,7 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None):
     DiffTraceResult
 
     """
+    _reject_gratings(surfaces)
     seeds = list(seeds)
     n_params = len(seeds)
     P = np.asarray(P)
@@ -602,7 +618,9 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None):
     n_rays = P.shape[0]
     jj = len(surfaces)
 
-    trace = raytrace(surfaces, P, S, wvl, tol_sag=tol_sag)
+    # keep the per-surface Interaction objects so the nominal local intersection
+    # and normal come straight off the forward trace -- no second Newton solve.
+    trace = raytrace(surfaces, P, S, wvl, tol_sag=tol_sag, keep_intermediates=True)
 
     Qdot_s, Rdot_s, nprimedot_s, shape_params, sag_partial_fns = _assemble_seeds(
         jj, seeds, n_params)
@@ -627,12 +645,13 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None):
         Qdot_j = Qdot_s[j]
         Rdot_j = Rdot_s[j]
 
-        # Step I: to local
+        # Step I: to local (P0/S_loc here are bit-identical to inter.P0/S_loc)
         P0, S_loc, P0dot, S_locdot = d_transform_local(
             Reff, Q, Pj_prev, trace.S[j], Pdot, Sdot, Qdot_j, Rdot_j)
 
-        # nominal local intersection + normal
-        Q_loc, n_hat, _ = surf.intersect(P0, S_loc, tol_sag=tol_sag)
+        # nominal local intersection + normal, captured from the forward trace
+        inter = trace.intermediates[j]
+        Q_loc, n_hat = inter.Q_loc, inter.n_hat
 
         # shape derivatives at the intersection
         Xj = Q_loc[..., 0]

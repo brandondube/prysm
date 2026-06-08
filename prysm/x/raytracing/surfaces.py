@@ -22,6 +22,16 @@ from .spencer_and_murty import (
     STYPE_EVAL,
     STYPE_REFLECT,
     STYPE_REFRACT,
+    STATUS_OK,
+    STATUS_MISS,
+    STATUS_NEWTON,
+    STATUS_CLIP,
+    STATUS_TIR,
+    STATUS_EVANESCENT,
+    refract,
+    reflect,
+    transform_to_local_coords,
+    transform_to_global_coords,
 )
 from .intersections import (
     SURFACE_INTERSECTION_DEFAULT_MAXITER,
@@ -1068,6 +1078,32 @@ class Biconic(ConicSeedMixin, Shape):
         return z, gradient_to_unit_normal(ddx, ddy)
 
 
+class Interaction:
+    """Result of one Surface.interact: the outgoing ray plus per-surface locals.
+
+    The kernel reads P / S / n_post / opl / code to march and record status;
+    the local-frame fields (P0, S_loc, Q_loc, n_hat, Sprime) are the nominal
+    intermediates the AD stacks would otherwise recompute (re-running the
+    Newton intersect), captured here when raytrace is asked to keep them.
+    """
+
+    __slots__ = ('P', 'S', 'n_post', 'opl', 'code',
+                 'P0', 'S_loc', 'Q_loc', 'n_hat', 'Sprime')
+
+    def __init__(self, P, S, n_post, opl, code,
+                 P0, S_loc, Q_loc, n_hat, Sprime):
+        self.P = P              # global outgoing position
+        self.S = S              # global outgoing direction
+        self.n_post = n_post    # index following the surface
+        self.opl = opl          # OPL of the incoming segment (+ grating phase)
+        self.code = code        # per-ray STATUS_* outcome at this surface
+        self.P0 = P0            # local incoming position (post transform)
+        self.S_loc = S_loc      # local incoming direction
+        self.Q_loc = Q_loc      # local intersection point
+        self.n_hat = n_hat      # local surface normal at Q_loc
+        self.Sprime = Sprime    # local post-bend direction (pre global xform)
+
+
 class Surface:
     """A posed optical surface with a shape and interaction mode."""
 
@@ -1191,6 +1227,103 @@ class Surface:
         S_diff = s_diff_tan + (sign * normal_mag)[..., np.newaxis] * n_hat
         S_diff = np.where(valid[..., np.newaxis], S_diff, S_specular)
         return S_diff, valid
+
+    def grating_phase(self, P_local, wvl):
+        """OPL added by the grating phase at local intersection points.
+
+        The diffractive contribution is order*wvl*(q . r), with q = g_vec/period
+        -- the same q diffract adds to the transverse direction.  Its in-plane
+        gradient equals the transverse optical momentum order*wvl*q that diffract
+        imparts, so the bent ray and this term describe one self-consistent
+        wavefront (Fermat).  Without it, OPD/wavefront through the grating omits
+        the grating phase entirely.
+
+        Parameters
+        ----------
+        P_local : ndarray
+            intersection points in the surface local frame, last axis xyz.
+        wvl : float
+            wavelength, same length units as the grating period.
+
+        Returns
+        -------
+        ndarray
+            per-ray OPL contribution, shape P_local.shape[:-1].
+
+        """
+        period, g_vec, order = self.grating
+        g_vec = np.asarray(g_vec, dtype=P_local.dtype)
+        q = g_vec / period
+        return order * wvl * (q * P_local).sum(-1)
+
+    def interact(self, P_in, S_in, n_pre, wvl, tol_sag=None):
+        """March one bundle through this surface: intersect, clip, bend, diffract.
+
+        The single forward-physics seam for the kernel.  Composes the Spencer &
+        Murty primitives in order -- to-local, intersect, aperture, reflect /
+        refract, grating direction + phase, to-global, segment OPL -- and folds
+        the per-ray outcome into one STATUS_* code with first-failure precedence
+        (a clipped ray is never re-judged for TIR, etc.).  The kernel owns only
+        the active-set bookkeeping and the NaN presentation.
+
+        Parameters
+        ----------
+        P_in, S_in : ndarray
+            global incoming position and direction, shape (N, 3).
+        n_pre : float or ndarray
+            index of the medium preceding the surface.
+        wvl : float
+            wavelength, microns.
+        tol_sag : float, optional
+            Newton convergence tolerance, resolved at the leaf.
+
+        Returns
+        -------
+        Interaction
+            outgoing ray, following index, segment OPL, per-ray status code, and
+            the local-frame intermediates.
+
+        """
+        P0, S_loc = transform_to_local_coords(P_in, self.P, S_in, self.R)
+        Q_loc, n_hat, converged = self.intersect(P0, S_loc, tol_sag=tol_sag)
+
+        miss = STATUS_MISS if self._analytic_intersect else STATUS_NEWTON
+        code = np.where(converged, STATUS_OK, miss)
+
+        if self.aperture is not None:
+            inside = np.asarray(self.aperture(Q_loc[..., 0], Q_loc[..., 1]),
+                                dtype=bool)
+            code = np.where(converged & ~inside, STATUS_CLIP, code)
+
+        if self.typ == STYPE_REFLECT:
+            Sprime = reflect(S_loc, n_hat)
+            n_post = n_pre
+        elif self.typ == STYPE_REFRACT:
+            n_post = self.material.n(wvl)
+            Sprime = refract(n_pre, n_post, S_loc, n_hat)
+            tir = np.isnan(Sprime).any(axis=-1)
+            code = np.where((code == STATUS_OK) & tir, STATUS_TIR, code)
+        else:
+            Sprime = S_loc
+            n_post = n_pre
+
+        opl_grating = None
+        if self.grating is not None and self.typ in (STYPE_REFLECT, STYPE_REFRACT):
+            Sprime, valid_diff = self.diffract(Sprime, n_hat, n_post, wvl)
+            code = np.where((code == STATUS_OK) & ~valid_diff,
+                            STATUS_EVANESCENT, code)
+            opl_grating = self.grating_phase(Q_loc, wvl)
+
+        Rt = None if self.R is None else self.R.T
+        P_out, S_out = transform_to_global_coords(Q_loc, self.P, Sprime, Rt)
+
+        seg = P_out - P_in
+        opl = n_pre * np.sqrt(np.sum(seg * seg, axis=-1))
+        if opl_grating is not None:
+            opl = opl + opl_grating
+
+        return Interaction(P_out, S_out, n_post, opl, code,
+                           P0, S_loc, Q_loc, n_hat, Sprime)
 
     def intersect(self, P, S, tol_sag=None, maxiter=None):
         """Intersect rays with the surface shape.

@@ -27,6 +27,7 @@ STYPE_EVAL = -3  # NOQA
 #   -1        analytic intersection had negative discriminant at surface
 #             int(real) (geometry says the ray never touches the surface).
 #   -2        total internal reflection at surface int(real).
+#   -3        diffracted grating order is evanescent at surface int(real).
 #
 # Sign of imag distinguishes the two failure families: positive = ray made it
 # to the surface but couldn't be processed; negative = ray never made it.
@@ -35,6 +36,7 @@ STATUS_NEWTON = 1   # numerical: Newton-Raphson didn't converge
 STATUS_CLIP = 2     # numerical: aperture clipped
 STATUS_MISS = -1    # geometric: no analytic intersection
 STATUS_TIR = -2     # geometric: total internal reflection
+STATUS_EVANESCENT = -3  # geometric: diffracted order does not propagate
 
 _STATUS_LABELS = {
     STATUS_OK: 'OK',
@@ -42,6 +44,7 @@ _STATUS_LABELS = {
     STATUS_CLIP: 'CLIPPED',
     STATUS_MISS: 'MISS',
     STATUS_TIR: 'TIR',
+    STATUS_EVANESCENT: 'EVANESCENT',
 }
 
 
@@ -52,14 +55,17 @@ class RayTraceResult:
 
     """
 
-    __slots__ = ('P', 'S', 'OPL', 'status', 'status_record')
+    __slots__ = ('P', 'S', 'OPL', 'status', 'status_record', 'intermediates')
 
-    def __init__(self, P, S, OPL, status):
+    def __init__(self, P, S, OPL, status, intermediates=None):
         self.P = P
         self.S = S
         self.OPL = OPL
         self.status = status
         self.status_record = RayStatus.from_encoded(status)
+        # per-surface Interaction objects when raytrace(keep_intermediates=True);
+        # the AD stacks read these instead of re-running the Newton intersect.
+        self.intermediates = intermediates
 
     def __repr__(self):
         return (
@@ -155,50 +161,6 @@ def valid_mask(status, P=None):
     if P is not None:
         valid = valid & _finite_ray_mask(P)
     return valid
-
-
-def _failure_code_for_surface(surf):
-    if getattr(surf, '_analytic_intersect', False):
-        return STATUS_MISS
-    return STATUS_NEWTON
-
-
-def _record_failure(status, active, failed, surf_idx, code):
-    failed = active & failed
-    if failed.any():
-        status[failed] = surf_idx + code * 1j
-        active = active & ~failed
-    return active
-
-
-def _apply_aperture_status(surf, Pj, active, status, surf_idx):
-    if surf.aperture is None or not active.any():
-        return active
-    inside = np.asarray(surf.aperture(Pj[..., 0], Pj[..., 1]), dtype=bool)
-    return _record_failure(status, active, ~inside, surf_idx, STATUS_CLIP)
-
-
-def _bend_rays(surf, Sj, n_hat, wvl, nj, active, status, surf_idx):
-    if surf.typ == STYPE_REFLECT:
-        return reflect(Sj, n_hat), nj, active
-    if surf.typ == STYPE_REFRACT:
-        nprime = surf.material.n(wvl)
-        pre_refract = active.copy()
-        Sjp1 = refract(nj, nprime, Sj, n_hat)
-        tir = pre_refract & np.isnan(Sjp1).any(axis=-1)
-        active = _record_failure(status, active, tir, surf_idx, STATUS_TIR)
-        return Sjp1, nprime, active
-    return Sj, nj, active
-
-
-def _apply_grating_status(surf, Sjp1, r, n_post, wvl, active, status, surf_idx):
-    if (surf.grating is None
-            or surf.typ not in (STYPE_REFLECT, STYPE_REFRACT)
-            or not active.any()):
-        return Sjp1, active
-    Sjp1_diff, valid_diff = surf.diffract(Sjp1, r, n_post, wvl)
-    active = _record_failure(status, active, ~valid_diff, surf_idx, STATUS_TIR)
-    return Sjp1_diff, active
 
 
 def resolve_tol_sag(tol_sag, dtype):
@@ -509,7 +471,7 @@ def _launch_medium_index(surfaces, wvl):
     return 1.0
 
 
-def raytrace(surfaces, P, S, wvl, tol_sag=None):
+def raytrace(surfaces, P, S, wvl, tol_sag=None, keep_intermediates=False):
     """Perform a raytrace through a sequence of surfaces.
 
     Parameters
@@ -524,6 +486,12 @@ def raytrace(surfaces, P, S, wvl, tol_sag=None):
         wavelength of light, microns.
     tol_sag : float, optional
         convergence tolerance for Newton surface intersections.
+    keep_intermediates : bool, optional
+        when True, attach the per-surface Interaction objects (local-frame
+        intersection, normal, post-bend direction, ...) to the result so the
+        differential / adjoint stacks can read them instead of re-running the
+        Newton intersect.  Off by default -- the common analysis path does not
+        need them and they pin extra arrays alive.
 
     Returns
     -------
@@ -554,33 +522,25 @@ def raytrace(surfaces, P, S, wvl, tol_sag=None):
     # surface carries the object-space material, otherwise the bundle launches
     # in air.  To launch inside glass, prepend an eval surface with that glass.
     nj = _launch_medium_index(surfaces, wvl)
+    intermediates = [] if keep_intermediates else None
     for j, surf in enumerate(surfaces):
         surf_idx = j + 1  # 1-based index recorded in status.real
-        P0, Sj = transform_to_local_coords(Pj, surf.P, Sj, surf.R)
-        Pj, r, valid = surf.intersect(P0, Sj, tol_sag=tol_sag)
+        # the surface owns its physics; the kernel owns the active set, the
+        # OPL/status histories, and the NaN presentation of failed rays.
+        step = surf.interact(Pj, Sj, nj, wvl, tol_sag=tol_sag)
 
         active = valid_mask(status)
-        if not valid.all():
-            active = _record_failure(status, active, ~valid, surf_idx,
-                                     _failure_code_for_surface(surf))
+        failed = active & (step.code != STATUS_OK)
+        if failed.any():
+            # first failure wins: record the surface and code, drop from active.
+            status[failed] = surf_idx + 1j * step.code[failed]
+            active = active & ~failed
 
-        active = _apply_aperture_status(surf, Pj, active, status, surf_idx)
-        Sjp1, n_post, active = _bend_rays(surf, Sj, r, wvl, nj, active,
-                                          status, surf_idx)
-        Sjp1, active = _apply_grating_status(surf, Sjp1, r, n_post, wvl,
-                                             active, status, surf_idx)
-
-        if surf.R is None:
-            Rt = None
-        else:
-            Rt = surf.R.T
-        Pjp1, Sjp1 = transform_to_global_coords(Pj, surf.P, Sjp1, Rt)
-
-        seg = Pjp1 - P_hist[j]
-        seg_len = np.sqrt(np.sum(seg * seg, axis=-1))
-        OPL_hist[j+1] = nj * seg_len
+        Pjp1 = step.P
+        Sjp1 = step.S
+        OPL_hist[j+1] = step.opl
         if surf.typ == STYPE_REFRACT:
-            nj = n_post
+            nj = step.n_post
 
         inactive = ~active
         if inactive.any():
@@ -592,6 +552,8 @@ def raytrace(surfaces, P, S, wvl, tol_sag=None):
         P_hist[j+1] = Pjp1
         S_hist[j+1] = Sjp1
         Pj, Sj = Pjp1, Sjp1
+        if intermediates is not None:
+            intermediates.append(step)
 
     # rays that survived all surfaces: status.real records the highest
     # surface index reached (= jj for fully successful rays).
@@ -605,7 +567,7 @@ def raytrace(surfaces, P, S, wvl, tol_sag=None):
         # status stays as a length-1 array so attribute access is consistent
         # across single-ray and batched calls.
 
-    return RayTraceResult(P_hist, S_hist, OPL_hist, status)
+    return RayTraceResult(P_hist, S_hist, OPL_hist, status, intermediates)
 
 
 def intersect_reference_sphere(P, S, C, R):

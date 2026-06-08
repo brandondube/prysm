@@ -4,8 +4,7 @@ import pytest
 
 from prysm.x import materials
 from tests.x.raytracing.surface_helpers import (
-    plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
-    chebyshev, jacobi, toroid, biconic,
+    plane, sphere, conic, off_axis_conic, even_asphere, q2d
 )
 
 from prysm.x.raytracing.surfaces import (
@@ -18,9 +17,6 @@ from prysm.x.raytracing.surfaces import (
     conic_sag_der_xy,
     even_asphere_sag,
     even_asphere_sag_der_xy,
-    ray_plane_intersect,
-    ray_sphere_intersect,
-    ray_conic_intersect,
 )
 from prysm.x.raytracing.sags import (
     _q2d_sigma_inv_der,
@@ -31,7 +27,6 @@ from prysm.x.raytracing.sags import (
 from prysm.x.raytracing.spencer_and_murty import (
     intersect as newton_intersect,
     raytrace,
-    transform_to_local_coords,
 )
 from prysm.x.raytracing.raygen import generate_collimated_ray_fan
 

@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from prysm.x.raytracing import (
-    LensData, OpticalSystem, ApertureSpec, FRAUNHOFER_LINES_UM,
+    LensData, OpticalSystem, FRAUNHOFER_LINES_UM,
     Field, Sampling, launch,
 )
 from prysm.x import materials

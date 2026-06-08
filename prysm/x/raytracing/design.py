@@ -505,12 +505,12 @@ class Distortion(Merit):
         self.paraxial_fraction = float(paraxial_fraction)
 
     def __call__(self, prescription, cache):
-        _, _, percent = _analysis.distortion(
+        result = _analysis.distortion(
             prescription, [self.field], self.wavelength,
             epd=self.epd,
             paraxial_fraction=self.paraxial_fraction,
         )
-        return float(percent[0])
+        return float(result.percent[0])
 
 
 class FieldCurvature(Merit):
@@ -532,12 +532,12 @@ class FieldCurvature(Merit):
         self.marginal_fraction = float(marginal_fraction)
 
     def __call__(self, prescription, cache):
-        sag_z, tan_z = _analysis.field_curvature(
+        result = _analysis.field_curvature(
             prescription, [self.field], self.wavelength,
             epd=self.epd,
             marginal_fraction=self.marginal_fraction,
         )
-        return float(abs(sag_z[0] - tan_z[0]))
+        return float(abs(result.x_fan_z[0] - result.y_fan_z[0]))
 
 
 # ---------- Problem ----------------------------------------------------------

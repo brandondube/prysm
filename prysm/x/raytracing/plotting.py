@@ -25,16 +25,7 @@ from ._meta import system_wavelength
 
 import numpy as np  # see module docstring; do not "fix" to mathops np
 
-
-def _require_raytrace_result(result):
-    if not isinstance(result, RayTraceResult):
-        raise TypeError('expected a RayTraceResult')
-    return result
-
-
-def _to_np(x, dtype=None):
-    """Bring a possibly-cupy/torch array back to true numpy for matplotlib."""
-    return np.asarray(array_to_true_numpy(x), dtype=dtype)
+_to_np = array_to_true_numpy
 
 
 def _axis_pair(coord, y):
@@ -78,7 +69,6 @@ def plot_ray_paths(result, *, x='z', y='y', lw=1, ls='-', c='r', alpha=1,
         An axis object
 
     """
-    result = _require_raytrace_result(result)
     fig, ax = share_fig_ax(fig, ax)
 
     ph = _to_np(result.P)
@@ -115,8 +105,8 @@ def _axis_extent_from_phist(phist, j, y, surf=None, center=0.0):
 
 
 def _global_plot_coordinates(surf, sag, ploty, x, y):
-    sag = np.asarray(sag, dtype=float)
-    ploty = np.asarray(ploty, dtype=float)
+    sag = np.asarray(sag)
+    ploty = np.asarray(ploty)
     xpart, ypart = _axis_pair(ploty, y)
     local = np.stack([xpart, ypart, sag - surf.P[2]], axis=-1)
     dirs = np.zeros_like(local)
@@ -165,7 +155,7 @@ def _surface_profile(surf, phist, j, points, y, radius=None, clear_radius=None,
         xpt, ypt = _axis_pair(eval_coord, y)
 
     sag = surf.sag(xpt, ypt)
-    sag = np.asarray(sag, dtype=float) + surf.P[2]
+    sag = np.asarray(sag) + surf.P[2]
     edge_sag = sag.copy()
     mask = np.asarray(mask)
     if mask.size == 0:
@@ -194,7 +184,7 @@ def _surface_drawable_radius(surf, radius, axis, center=0.0, samples=512):
     # the probe deliberately reaches past a steep surface's equator, where the
     # sag is undefined; that NaN is the signal we are looking for
     with np.errstate(invalid='ignore'):
-        sag = np.asarray(surf.sag(xpt, ypt), dtype=float)
+        sag = surf.sag(xpt, ypt)
     bad = ~np.isfinite(sag)
     if not bad.any():
         return radius
@@ -355,9 +345,9 @@ def _mirror_substrate_outline_from_phist(surf, phist, surface_index, backing,
         inner = float(surf.bounding.get('inner_radius', 0.0))
     inner = float(backing.get('inner_radius', inner))
     if inner > 0.0:
-        ploty_arr = np.asarray(ploty, dtype=float)
-        front = np.asarray(sag, dtype=float)
-        rear = np.asarray(rear_sag, dtype=float).copy()
+        ploty_arr = np.asarray(ploty)
+        front = np.asarray(sag)
+        rear = np.asarray(rear_sag).copy()
         rear[np.abs(ploty_arr - center) < inner] = np.nan
         xx, yy = [], []
         for sel in (ploty_arr >= center + inner, ploty_arr <= center - inner):
@@ -379,7 +369,6 @@ def mirror_surface_outline(surf, result, surface_index=0, *, points=100,
                            x='z', y='y', radius=None, clear_radius=None,
                            center=0.0):
     """Return X/Y arrays for drawing one mirror optical surface."""
-    result = _require_raytrace_result(result)
     phist = _to_np(result.P)
     x = x.lower()
     y = y.lower()
@@ -422,7 +411,6 @@ def mirror_substrate_outline(surf, result, surface_index=0, *, backing,
         z (axial) and transverse coordinates of the closed substrate outline.
 
     """
-    result = _require_raytrace_result(result)
     phist = _to_np(result.P)
     x = x.lower()
     y = y.lower()
@@ -652,7 +640,6 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
     y = y.lower()
     fig, ax = share_fig_ax(fig, ax)
     ax.set(aspect='equal')
-    result = _require_raytrace_result(result)
     phist = _to_np(result.P)
 
     lens_groups = lens_groups_from_surfaces(
@@ -923,8 +910,8 @@ def plot_wave_aberration_fan(coord, opd, *, wavelength=None, units='waves',
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    coord = _to_np(coord, dtype=float)
-    opd = _to_np(opd, dtype=float)
+    coord = _to_np(coord)
+    opd = _to_np(opd)
 
     units = units.lower()
     if units in ('wave', 'waves'):
@@ -1012,9 +999,9 @@ def plot_spot_diagram(phist, marker='+', c='k', alpha=1, zorder=4, s=None,
             else:
                 raise ValueError("origin string must be 'centroid'")
         if isinstance(origin, (list, tuple)):
-            origin = np.asarray(origin, dtype=float)
+            origin = np.asarray(origin)
         else:
-            origin = _to_np(origin, dtype=float)
+            origin = _to_np(origin)
         x = x - origin[0]
         y = y - origin[1]
     ax.scatter(x, y, c=c, s=s, marker=marker, alpha=alpha, zorder=zorder,
@@ -1037,7 +1024,7 @@ def _field_axis_values(fields):
             values.append(np.degrees(np.hypot(ax_rad, ay_rad)))
         else:
             values.append(np.hypot(field.hx, field.hy))
-    return np.asarray(values, dtype=float)
+    return np.asarray(values)
 
 
 def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
@@ -1081,12 +1068,12 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
     """
     fig, ax = share_fig_ax(fig, ax)
     fields = list(fields)
-    x_fan_z, y_fan_z = field_curvature(
+    result = field_curvature(
         prescription, fields, wavelength, epd=epd,
         marginal_fraction=marginal_fraction,
     )
-    x_fan_z = _to_np(x_fan_z, dtype=float)
-    y_fan_z = _to_np(y_fan_z, dtype=float)
+    x_fan_z = _to_np(result.x_fan_z)
+    y_fan_z = _to_np(result.y_fan_z)
     if reference is None:
         ref = 0.0
     elif isinstance(reference, str):
@@ -1162,8 +1149,8 @@ def plot_chromatic_focal_shift(prescription, wavelengths=None, *,
         focus=focus, epd=epd, field=field, sampling=sampling,
         samples=samples,
     )
-    shifts = _to_np(shifts, dtype=float)
-    wavelengths = _to_np(wavelengths, dtype=float)
+    shifts = _to_np(shifts)
+    wavelengths = _to_np(wavelengths)
     ax.plot(wavelengths, shifts, c=c, marker=marker, lw=lw, alpha=alpha,
             zorder=zorder, label=label)
     ax.set_xlabel('wavelength [um]')
@@ -1211,11 +1198,11 @@ def plot_distortion(prescription, fields, wavelength=None, *, epd=None,
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    _, _, percent = distortion(
+    result = distortion(
         prescription, fields, wavelength, epd=epd,
         distortion_type=distortion_type, pupil_z=pupil_z,
     )
-    percent = _to_np(percent, dtype=float)
+    percent = _to_np(result.percent)
     field_values = _field_axis_values(list(fields))
     ax.plot(percent, field_values, c=c, lw=lw, alpha=alpha, zorder=zorder,
             label=label)
@@ -1266,10 +1253,10 @@ def _plot_fan_grid(grid, value_label, *, axes, colors, sharey, figsize,
     import matplotlib.pyplot as plt
 
     fields = grid.fields
-    wavelengths = _to_np(grid.wavelengths, dtype=float)
-    pupil = _to_np(grid.pupil, dtype=float)
-    grid_x = _to_np(grid.x, dtype=float)
-    grid_y = _to_np(grid.y, dtype=float)
+    wavelengths = _to_np(grid.wavelengths)
+    pupil = _to_np(grid.pupil)
+    grid_x = _to_np(grid.x)
+    grid_y = _to_np(grid.y)
     nf = len(fields)
     nw = len(wavelengths)
 
@@ -1410,9 +1397,9 @@ def plot_spot_diagrams(spot_grid, *, ncols=None, colors=None, marker='+',
     import matplotlib.pyplot as plt
 
     fields = spot_grid.fields
-    wavelengths = _to_np(spot_grid.wavelengths, dtype=float)
-    xs = _to_np(spot_grid.x, dtype=float)
-    ys = _to_np(spot_grid.y, dtype=float)
+    wavelengths = _to_np(spot_grid.wavelengths)
+    xs = _to_np(spot_grid.x)
+    ys = _to_np(spot_grid.y)
     nf = len(fields)
     nw = len(wavelengths)
 

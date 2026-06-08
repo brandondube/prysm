@@ -4,11 +4,10 @@ import pytest
 
 from prysm.x import materials
 from tests.x.raytracing.surface_helpers import (
-    plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
-    chebyshev, jacobi, toroid, biconic,
+    plane, sphere, conic
 )
 
-from prysm.x.raytracing.surfaces import Surface, annular_aperture, circular_aperture
+from prysm.x.raytracing.surfaces import annular_aperture, circular_aperture
 from prysm.x.raytracing.spencer_and_murty import (
     raytrace,
     RayTraceResult,

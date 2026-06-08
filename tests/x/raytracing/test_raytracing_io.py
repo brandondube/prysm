@@ -13,7 +13,7 @@ from prysm.x.raytracing.io import read_zmx, read_seq, SurfaceSpec, build_surface
 from prysm.x.raytracing.surfaces import (
     Conic, EvenAsphere, Plane, Toroid, Biconic,
     Zernike, XY,
-    STYPE_REFLECT, STYPE_REFRACT, STYPE_EVAL,
+    STYPE_REFLECT, STYPE_EVAL,
 )
 from prysm.x.raytracing.io._indexing import (
     noll_to_nm, fringe_to_nm, xy_j_to_mn,

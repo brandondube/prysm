@@ -3,12 +3,8 @@ import numpy as np
 import pytest
 
 from prysm.x import materials
-from tests.x.raytracing.surface_helpers import (
-    plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
-    chebyshev, jacobi, toroid, biconic,
-)
+from tests.x.raytracing.surface_helpers import plane, conic
 
-from prysm.x.raytracing.surfaces import Surface
 from prysm.x.raytracing.spencer_and_murty import raytrace
 from prysm.x.raytracing.launch import Field, Sampling, launch
 

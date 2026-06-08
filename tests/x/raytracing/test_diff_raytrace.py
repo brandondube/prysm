@@ -199,3 +199,24 @@ def test_all_seeds_simultaneously():
         dP = res.Pdot[-1][:, :, p]
         dP_fd, _, _ = fd_state(op, om, P, S, h)
         np.testing.assert_allclose(dP, dP_fd, rtol=1e-6, atol=1e-7)
+
+
+def test_ad_stacks_reject_gratings():
+    """Both AD stacks have no grating primitive; a grating surface must raise,
+    not silently trace as a plain surface and return wrong derivatives."""
+    from prysm.x.raytracing.adjoint.backward_sweep import (
+        _forward_with_intermediates,
+    )
+    n_glass = materials.ConstantMaterial(1.6)
+    s0 = conic(c=1 / 50.0, k=0.0, interaction='refr', P=[0, 0, 0.0],
+               material=n_glass)
+    s0.grating = (1e-3, [1.0, 0.0, 0.0], 1)
+    img = plane(interaction='eval', P=[0, 0, 40.0])
+    surfaces = [s0, img]
+    P = np.array([[0.0, 1.0, -5.0]])
+    S = np.array([[0.0, 0.0, 1.0]])
+    seeds = [seed_curvature(s0)]
+    with pytest.raises(NotImplementedError, match='grating'):
+        raytrace_with_tangents(surfaces, P, S, 0.55, seeds)
+    with pytest.raises(NotImplementedError, match='grating'):
+        _forward_with_intermediates(surfaces, P, S, 0.55)

@@ -2,6 +2,7 @@
 """
 
 from collections import namedtuple
+from dataclasses import dataclass
 
 from prysm.conf import config
 from prysm.mathops import np
@@ -31,8 +32,20 @@ from .surfaces import Conic, EvenAsphere, Plane, Sphere
 # ---------- result containers ----------------------------------------------
 # Grid arrays are indexed [field_index, wavelength_index, sample_index].
 
-DistortionResult = namedtuple('DistortionResult', ['real_xy', 'paraxial_xy', 'percent'])
-FieldCurvatureResult = namedtuple('FieldCurvatureResult', ['x_fan_z', 'y_fan_z'])
+
+@dataclass(frozen=True, slots=True)
+class DistortionResult:
+    real_xy: object
+    paraxial_xy: object
+    percent: object
+
+
+@dataclass(frozen=True, slots=True)
+class FieldCurvatureResult:
+    x_fan_z: object
+    y_fan_z: object
+
+
 RayFanGrid = namedtuple('RayFanGrid', ['fields', 'wavelengths', 'pupil', 'x', 'y'])
 OPDFanGrid = namedtuple('OPDFanGrid', ['fields', 'wavelengths', 'pupil', 'x', 'y'])
 SpotGrid = namedtuple('SpotGrid', ['fields', 'wavelengths', 'x', 'y', 'valid', 'reference'])
@@ -407,8 +420,8 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
     Returns
     -------
     DistortionResult
-        A namedtuple (real_xy, paraxial_xy, percent); element i of each array
-        corresponds to fields[i].
+        Object with real_xy, paraxial_xy, and percent attributes; element i of
+        each array corresponds to fields[i].
     real_xy : ndarray, shape (n_fields, 2)
         actual chief-ray image-plane (x, y) per field.
     paraxial_xy : ndarray, shape (n_fields, 2)
@@ -541,8 +554,8 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
     Returns
     -------
     FieldCurvatureResult
-        A namedtuple (x_fan_z, y_fan_z); element i of each array corresponds to
-        fields[i].
+        Object with x_fan_z and y_fan_z attributes; element i of each array
+        corresponds to fields[i].
     x_fan_z : ndarray, shape (n_fields,)
         z position where the x-fan marginal converges with the chief.
     y_fan_z : ndarray, shape (n_fields,)

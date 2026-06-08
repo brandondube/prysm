@@ -11,7 +11,6 @@ from prysm.x.raytracing import (
     CoordBreak,
     Field,
     LensData,
-    SurfaceRow,
     raytrace,
 )
 from prysm.x import materials
@@ -21,7 +20,6 @@ from prysm.x.raytracing.surfaces import (
     EvenAsphere,
     Plane,
     Surface,
-    Sphere,
     Zernike,
     circular_aperture,
 )

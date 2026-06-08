@@ -60,6 +60,7 @@ def local_vertex_curvatures(surf):
         return c, c
     return 0.0, 0.0
 
+# TODO: should these be removed?  Not used?
 
 def local_x_vertex_curvature(surf):
     """Local x-section vertex curvature of surf."""

@@ -217,16 +217,22 @@ def test_grating_equation_normal_incidence(order):
                                atol=1e-12)
 
 
-def test_grating_evanescent_flagged_as_tir():
-    """m*lambda/d > 1 ⇒ evanescent diffraction; status.imag = STATUS_TIR (-2)."""
+def test_grating_evanescent_flagged_as_evanescent():
+    """m*lambda/d > 1 ⇒ evanescent diffracted order; status.imag = EVANESCENT.
+
+    A non-propagating diffraction order is its own failure mode, distinct from
+    total internal reflection -- decode_status must not report it as TIR.
+    """
+    from prysm.x.raytracing.spencer_and_murty import STATUS_EVANESCENT
     g_surf = plane(interaction='refl', P=[0, 0, 0])
     g_surf.grating = (0.5e-3, [1.0, 0.0, 0.0], 2)  # m*l/d = 2*0.55e-3/0.5e-3 = 2.2
     img = plane(interaction='eval', P=[0, 0, -10.0])
     P = np.array([[0.0, 0.0, -5.0]])
     S = np.array([[0.0, 0.0, 1.0]])
     r = raytrace([g_surf, img], P, S, wvl=0.55e-3)
-    assert r.status.imag.item() == -2  # STATUS_TIR
+    assert r.status.imag.item() == STATUS_EVANESCENT  # -3, not TIR (-2)
     assert r.status.real.item() == 1   # failed at surface 1 (the grating)
+    assert 'EVANESCENT' in r.status_record.text[0]
 
 
 def test_refraction_grating_equation():
@@ -244,6 +250,42 @@ def test_refraction_grating_equation():
     expected_z = +np.sqrt(1 - expected_x ** 2)
     np.testing.assert_allclose(r.S[1].squeeze(),
                                [expected_x, 0, expected_z], atol=1e-12)
+
+
+def test_grating_phase_enters_opl():
+    """The grating phase order*wvl*x/d is added to the OPL at the grating.
+
+    A linear grating bends the ray AND adds a diffractive phase; an OPD/
+    wavefront through it is wrong by the whole grating phase if the OPL term
+    is dropped.  Normal-incidence reflection from a plane grating at z=0: the
+    incoming segment is purely geometric (length 5), so OPL[1] isolates the
+    grating phase order*wvl*x_local/d.
+    """
+    d = 1e-3
+    wvl = 0.55e-3
+    x0 = 2.0
+    img = plane(interaction='eval', P=[0, 0, -10.0])
+    P = np.array([[x0, 0.0, -5.0]])
+    S = np.array([[0.0, 0.0, 1.0]])
+
+    g1 = plane(interaction='refl', P=[0, 0, 0])
+    g1.grating = (d, [1.0, 0.0, 0.0], 1)
+    r1 = raytrace([g1, img], P, S, wvl=wvl)
+    np.testing.assert_allclose(r1.OPL[1].item(), 5.0 + wvl * x0 / d, rtol=0, atol=1e-12)
+
+    # zeroth order adds no phase: OPL stays the bare geometric length
+    g0 = plane(interaction='refl', P=[0, 0, 0])
+    g0.grating = (d, [1.0, 0.0, 0.0], 0)
+    r0 = raytrace([g0, img], P, S, wvl=wvl)
+    np.testing.assert_allclose(r0.OPL[1].item(), 5.0, rtol=0, atol=1e-12)
+
+    # the phase is self-consistent with the bend: d(OPL)/dx == transverse
+    # optical momentum the grating imparts (= order*wvl/d for unit g_vec)
+    x1 = 3.0
+    P2 = np.array([[x1, 0.0, -5.0]])
+    r2 = raytrace([g1, img], P2, S, wvl=wvl)
+    dopl = r2.OPL[1].item() - r1.OPL[1].item()
+    np.testing.assert_allclose(dopl / (x1 - x0), wvl / d, rtol=1e-12)
 
 
 def test_grating_off_curved_surface():
