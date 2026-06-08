@@ -487,9 +487,9 @@ def lens_groups_from_surfaces(prescription, *, wvl=0.587,
                 )
             continue
 
-        if not callable(surf.n):
-            raise ValueError('refracting surfaces must define a callable material')
-        n_post = surf.n(wvl)
+        if surf.material is None:
+            raise ValueError('refracting surfaces must define a material')
+        n_post = surf.material.n(wvl)
         if np.isscalar(n_post):
             n_post = float(n_post)
         else:

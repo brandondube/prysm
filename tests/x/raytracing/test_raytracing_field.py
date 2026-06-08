@@ -10,6 +10,7 @@ import pytest
 from scipy.special import j1
 
 from prysm import thinfilm
+from prysm.x import materials
 from tests.x.raytracing.surface_helpers import plane, conic
 from prysm.x.raytracing.spencer_and_murty import (
     raytrace, intersect_reference_sphere,
@@ -32,11 +33,11 @@ def _slow_parabola(epd_focal_ratio=50.0):
 
 def _fast_singlet():
     """A fast equiconvex singlet, heavy spherical aberration."""
-    ng = lambda w: 1.5
+    ng = materials.ConstantMaterial(1.5)
     s1 = conic(c=1 / 20.0, k=0.0, interaction='refr', P=[0, 0, 0],
                material=ng)
     s2 = conic(c=-1 / 20.0, k=0.0, interaction='refr', P=[0, 0, 4.0],
-               material=lambda w: 1.0)
+               material=materials.air)
     img = plane(interaction='eval', P=[0, 0, 23.0])
     return [s1, s2, img]
 
@@ -69,7 +70,7 @@ def test_fresnel_energy_conservation_p_pol():
 
 def _flat_refractor(angle_deg=0.0):
     """Flat refracting interface n=1->1.5 at z=0, eval plane downstream."""
-    s1 = plane(interaction='refr', P=[0, 0, 0], material=lambda w: 1.5)
+    s1 = plane(interaction='refr', P=[0, 0, 0], material=materials.ConstantMaterial(1.5))
     img = plane(interaction='eval', P=[0, 0, 10.0])
     return [s1, img]
 
@@ -192,8 +193,8 @@ def test_raytrace_field_tir_gives_zero_amplitude():
     # angle is ~41.8 deg, so all rays totally internally reflect and transmit
     # no power.  The launch medium (n=1.5) is carried by a leading eval object
     # surface -- the convention for an immersed launch.
-    presc = [plane(interaction='eval', P=[0, 0, -5.0], material=lambda w: 1.5),
-             plane(interaction='refr', P=[0, 0, 0], material=lambda w: 1.0),
+    presc = [plane(interaction='eval', P=[0, 0, -5.0], material=materials.ConstantMaterial(1.5)),
+             plane(interaction='refr', P=[0, 0, 0], material=materials.air),
              plane(interaction='eval', P=[0, 0, 10.0])]
     wvl = 0.55e-3
     P, S = launch(presc, Field(0.0, 50.0, kind='angle'), wvl,
@@ -328,11 +329,11 @@ def test_pupil_field_finite_conjugate_apodization_does_not_collapse():
     spacing and the amplitude collapsed to zero.  Using the pupil-sample grid
     fixes it -- the amplitude must be finite and nonzero.
     """
-    ng = lambda w: 1.5
+    ng = materials.ConstantMaterial(1.5)
     presc = [conic(c=1 / 30., k=0, interaction='refr', P=[0, 0, 0],
                    material=ng),
              conic(c=-1 / 30., k=0, interaction='refr', P=[0, 0, 3.],
-                   material=lambda w: 1.0),
+                   material=materials.air),
              plane(interaction='eval', P=[0, 0, 51.])]
     fld = Field(0.0, 0.0, kind='height', object_z=-80.0)
     pf = field.pupil_field(presc, fld, 0.5, epd=6.0, npupil=48,
@@ -346,7 +347,7 @@ def test_pupil_field_finite_conjugate_apodization_does_not_collapse():
 
 def test_prt_matrix_matches_fresnel_diattenuation():
     """A single dielectric interface: |P.s|=sqrt(Ts), |P.p|=sqrt(Tp)."""
-    presc = [plane(interaction='refr', P=[0, 0, 0], material=lambda w: 1.5),
+    presc = [plane(interaction='refr', P=[0, 0, 0], material=materials.ConstantMaterial(1.5)),
              plane(interaction='eval', P=[0, 0, 10.0])]
     wvl = 0.5
     # 40 deg collimated, tilt about x -> plane of incidence is y-z, s = x
@@ -386,11 +387,11 @@ def test_prt_unpolarized_degenerates_to_scalar_mirror():
 
 def test_prt_unpolarized_degenerates_to_scalar_dielectric():
     """A low-AOI refractive system's unpolarized PRT PSF equals the scalar."""
-    ng = lambda w: 1.5
+    ng = materials.ConstantMaterial(1.5)
     presc = [conic(c=1 / 120., k=0, interaction='refr', P=[0, 0, 0],
                    material=ng),
              conic(c=-1 / 120., k=0, interaction='refr', P=[0, 0, 3.],
-                   material=lambda w: 1.0),
+                   material=materials.air),
              plane(interaction='eval', P=[0, 0, 120.])]
     wvl = 0.5
     pf_s = field.pupil_field(presc, Field(0., 0.), wvl, epd=6.0, npupil=96,

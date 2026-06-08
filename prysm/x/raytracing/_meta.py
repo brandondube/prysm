@@ -44,9 +44,9 @@ def system_stop_index(prescription, stop_index):
 
 def _surface_medium_index(surface, wavelength, fallback):
     """Evaluate a surface's post-surface medium index, or return fallback."""
-    n = getattr(surface, 'n', None)
-    if callable(n):
-        return float(n(wavelength))
+    material = getattr(surface, 'material', None)
+    if material is not None:
+        return float(material.n(wavelength))
     return float(fallback)
 
 

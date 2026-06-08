@@ -43,7 +43,7 @@ _COOKE = [
 def cooke():
     lens = LensData()
     for R, t, n in _COOKE:
-        mat = float(n) if n != 1.0 else pmat.air
+        mat = pmat.ConstantMaterial(n) if n != 1.0 else pmat.air
         lens.add(Conic(1.0 / R, 0.0), thickness=t, material=mat)
     lens.add(Plane(), typ='eval', material=pmat.air, semidiameter=1e3)
     return OpticalSystem(lens, aperture=EPD, fields=[0.0, 14.0, 20.0],
@@ -54,7 +54,7 @@ def cooke():
 def biconvex_stop_first():
     """Stop at the first surface -> entrance pupil at the first surface."""
     lens = LensData()
-    lens.add(Conic(1 / 50.0, 0.0), thickness=6.0, material=1.5)
+    lens.add(Conic(1 / 50.0, 0.0), thickness=6.0, material=pmat.ConstantMaterial(1.5))
     lens.add(Conic(-1 / 50.0, 0.0), thickness=46.0, material=pmat.air)
     lens.add(Plane(), typ='eval', material=pmat.air, semidiameter=1e3)
     return OpticalSystem(lens, aperture=20.0, fields=[0.0, 10.0],

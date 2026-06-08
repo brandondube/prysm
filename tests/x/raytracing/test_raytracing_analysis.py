@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from tests.x.raytracing.surface_helpers import (
     plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
     chebyshev, jacobi, toroid, biconic,
@@ -41,11 +42,11 @@ def _concave_parabola():
 
 def _spherical_singlet():
     """Two-surface BK7-like singlet, f ~= 50 mm."""
-    n_glass = lambda w: 1.5
+    n_glass = materials.ConstantMaterial(1.5)
     s1 = conic(c=1 / 50.0, k=0.0, interaction='refr',
                        P=[0, 0, 0], material=n_glass)
     s2 = conic(c=-1 / 50.0, k=0.0, interaction='refr',
-                       P=[0, 0, 5.0], material=lambda w: 1.0)
+                       P=[0, 0, 5.0], material=materials.air)
     img = plane(interaction='eval', P=[0, 0, 100.0])
     return [s1, s2, img]
 
@@ -211,7 +212,7 @@ def test_resolve_exit_pupil_decentered_system_stop_falls_back_to_axis_route():
 
 def test_wavefront_uses_penultimate_surface_image_medium():
     presc = _spherical_singlet()
-    presc[-2].n = lambda w: 1.25
+    presc[-2].material = materials.ConstantMaterial(1.25)
     wvl = 0.55
     P, S = launch(presc, Field(0., 0.), wvl,
                   Sampling.fan(n=9), epd=4.0, pupil_z=-5.0)
@@ -232,7 +233,7 @@ def test_wavefront_uses_penultimate_surface_image_medium():
 
 def test_wavefront_uses_surface_zero_object_medium_when_present():
     object_surface = plane(interaction='eval', P=[0, 0, -10.0],
-                           material=lambda w: 1.2)
+                           material=materials.ConstantMaterial(1.2))
     presc = [object_surface] + _spherical_singlet()
     wvl = 0.55
     P, S = launch(presc, Field(0., 0.), wvl,
@@ -421,11 +422,11 @@ def test_axial_color_constant_index_returns_constant_bfd():
 def test_axial_color_varying_index_changes_bfd():
     """A toy dispersion (n decreasing with wvl) should monotonically shift
     the paraxial image."""
-    n_glass = lambda w: 1.6 - 0.1 * (w - 0.45) / 0.2
+    n_glass = materials.FormulaMaterial('GLASS', lambda w: 1.6 - 0.1 * (w - 0.45) / 0.2)
     s1 = conic(c=1 / 50.0, k=0.0, interaction='refr',
                        P=[0, 0, 0], material=n_glass)
     s2 = conic(c=-1 / 50.0, k=0.0, interaction='refr',
-                       P=[0, 0, 5.0], material=lambda w: 1.0)
+                       P=[0, 0, 5.0], material=materials.air)
     img = plane(interaction='eval', P=[0, 0, 100.0])
     presc = [s1, s2, img]
     bfd = axial_color(presc, [0.45, 0.55, 0.65])
@@ -445,11 +446,11 @@ def test_chromatic_focal_shift_paraxial_matches_axial_color_difference():
 
 
 def test_chromatic_focal_shift_reference_wavelength_is_zero():
-    n_glass = lambda w: 1.6 - 0.1 * (w - 0.45) / 0.2
+    n_glass = materials.FormulaMaterial('GLASS', lambda w: 1.6 - 0.1 * (w - 0.45) / 0.2)
     s1 = conic(c=1 / 50.0, k=0.0, interaction='refr',
                        P=[0, 0, 0], material=n_glass)
     s2 = conic(c=-1 / 50.0, k=0.0, interaction='refr',
-                       P=[0, 0, 5.0], material=lambda w: 1.0)
+                       P=[0, 0, 5.0], material=materials.air)
     img = plane(interaction='eval', P=[0, 0, 100.0])
     presc = [s1, s2, img]
     wvl, shifts = chromatic_focal_shift(

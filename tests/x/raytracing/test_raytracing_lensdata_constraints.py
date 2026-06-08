@@ -9,8 +9,7 @@ from prysm.x import materials
 from prysm.x.raytracing.surfaces import Conic, EvenAsphere, Plane
 
 
-def _air(wvl):
-    return 1.0
+_air = materials.air
 
 
 def make_triplet():

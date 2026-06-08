@@ -437,7 +437,8 @@ def write_zmx(system):
         block.append(f'  DISZ {disz:g}')
         if is_refl:
             block.append('  GLAS MIRROR')
-        elif not is_eval:
+        elif not is_eval and row.material is not _materials.air \
+                and row.material is not _materials.vacuum:
             page = getattr(row.material, 'page_info', None)
             if page and page.get('page'):
                 block.append(f'  GLAS {page["page"]}')

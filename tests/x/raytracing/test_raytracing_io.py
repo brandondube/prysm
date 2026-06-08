@@ -206,7 +206,7 @@ def test_zmx_singlet_curvatures_match_input(refractiveindex_database):
 
 def test_zmx_singlet_glass_resolves_to_bk7(refractiveindex_database):
     pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
-    np.testing.assert_allclose(float(pf.surfaces[0].n(0.587)), 1.5168, atol=1e-3)
+    np.testing.assert_allclose(float(pf.surfaces[0].material.n(0.587)), 1.5168, atol=1e-3)
 
 
 def test_zmx_singlet_image_is_eval_plane(refractiveindex_database):
@@ -552,7 +552,7 @@ def test_seq_singlet_curvatures_match_radii(refractiveindex_database):
 
 def test_seq_singlet_glass_resolves(refractiveindex_database):
     pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
-    np.testing.assert_allclose(float(pf.surfaces[0].n(0.587)),
+    np.testing.assert_allclose(float(pf.surfaces[0].material.n(0.587)),
                                1.5168, atol=1e-3)
 
 
@@ -1142,7 +1142,7 @@ def test_seq_positional_radius_thickness_glass(refractiveindex_database):
                   database=refractiveindex_database)
     np.testing.assert_allclose(pf.surfaces[0].params['c'], 1 / 50.0)
     np.testing.assert_allclose(pf.surfaces[1].params['c'], -1 / 50.0)
-    np.testing.assert_allclose(float(pf.surfaces[0].n(0.587)), 1.5168,
+    np.testing.assert_allclose(float(pf.surfaces[0].material.n(0.587)), 1.5168,
                                atol=1e-3)
     # SO/S/SI consume their positional thickness: vertices stack the gaps.
     assert pf.surfaces[0].P[2] == 0.0
@@ -1240,5 +1240,5 @@ def test_seq_glass_catalog_suffix_stripped(refractiveindex_database):
         'SO 0. 1E10\nS 50 5 BK7_SCHOTT\nS -50 95\nSI 0 0\nGO\n'
     )
     pf = read_seq(txt, _is_text=True, database=refractiveindex_database)
-    np.testing.assert_allclose(float(pf.surfaces[0].n(0.587)), 1.5168,
+    np.testing.assert_allclose(float(pf.surfaces[0].material.n(0.587)), 1.5168,
                                atol=1e-3)

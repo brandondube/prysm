@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from tests.x.raytracing.surface_helpers import (
     plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
     chebyshev, jacobi, toroid, biconic,
@@ -60,8 +61,8 @@ def _tir_unaimable_bundle():
     """
     prescription = [
         plane(interaction='eval', P=np.array([0., 0., -100.]),
-              material=lambda w: 1.5),
-        plane(interaction='refr', P=np.array([0., 0., 0.]), material=lambda w: 1.0),
+              material=materials.ConstantMaterial(1.5)),
+        plane(interaction='refr', P=np.array([0., 0., 0.]), material=materials.air),
         plane(interaction='eval', P=np.array([0., 0., 10.])),
     ]
     theta = np.deg2rad(60.0)
@@ -94,10 +95,10 @@ def _singlet_with_internal_stop(n_glass=1.5):
     """Two refractive conics with a plane stop between them."""
     return [
         conic(c=1 / 50.0, k=0.0, interaction='refr', P=np.array([0., 0., 0.]),
-              material=lambda w: n_glass),
+              material=materials.ConstantMaterial(n_glass)),
         plane(interaction='eval', P=np.array([0., 0., 2.5])),
         conic(c=-1 / 50.0, k=0.0, interaction='refr', P=np.array([0., 0., 5.]),
-              material=lambda w: 1.0),
+              material=materials.air),
         plane(interaction='eval', P=np.array([0., 0., 100.])),
     ]
 
@@ -145,7 +146,7 @@ def test_aim_rays_onto_tilted_surface():
     """Aiming works when the aim surface is tilted out of the xy plane."""
     presc = [
         conic(c=1 / 50.0, k=0.0, interaction='refr', P=np.array([0., 0., 0.]),
-              material=lambda w: 1.5),
+              material=materials.ConstantMaterial(1.5)),
         plane(interaction='eval', P=np.array([0., 0., 3.0]), tilt=(0., 8., 0.)),
         plane(interaction='eval', P=np.array([0., 0., 50.])),
     ]
@@ -163,8 +164,8 @@ def test_aim_rays_masks_divergent_ray():
     rest of the bundle still aims (strict=False)."""
     presc = [
         plane(interaction='eval', P=np.array([0., 0., -5.]),
-              material=lambda w: 1.5),
-        plane(interaction='refr', P=np.array([0., 0., 0.]), material=lambda w: 1.0),
+              material=materials.ConstantMaterial(1.5)),
+        plane(interaction='refr', P=np.array([0., 0., 0.]), material=materials.air),
         plane(interaction='eval', P=np.array([0., 0., 10.])),
     ]
     # ray 0 is steep enough to TIR (glass -> air); rays 1, 2 are gentle
@@ -191,8 +192,8 @@ def test_aim_rays_strict_raises_listing_indices():
     """strict=True raises a RuntimeError that names the un-aimable ray."""
     presc = [
         plane(interaction='eval', P=np.array([0., 0., -5.]),
-              material=lambda w: 1.5),
-        plane(interaction='refr', P=np.array([0., 0., 0.]), material=lambda w: 1.0),
+              material=materials.ConstantMaterial(1.5)),
+        plane(interaction='refr', P=np.array([0., 0., 0.]), material=materials.air),
         plane(interaction='eval', P=np.array([0., 0., 10.])),
     ]
     S = np.array([

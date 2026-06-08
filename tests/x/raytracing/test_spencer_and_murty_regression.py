@@ -16,6 +16,7 @@ import os
 
 import numpy as np
 
+from prysm.x import materials
 from tests.x.raytracing.surface_helpers import (
     plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
     chebyshev, jacobi, toroid, biconic,
@@ -45,7 +46,7 @@ def _ray_batch():
 
 def _asphere():
     return even_asphere(1 / 10.0, -1.0, (1e-4, 1e-6), 'refr',
-                                np.array([0.0, 0.0, 0.0]), material=lambda w: 1.5)
+                                np.array([0.0, 0.0, 0.0]), material=materials.ConstantMaterial(1.5))
 
 
 def test_bare_newton_snapshot():

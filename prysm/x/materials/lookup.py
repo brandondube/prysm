@@ -1,25 +1,23 @@
 """Raytracing-facing material lookup helpers.
 
-A glass token resolves to a callable material via a catalog object that
-exposes material_for_name(name).  When no catalog is supplied the
-refractiveindex.info database is used (downloaded on first use); AIR / VACUUM /
-blank resolve to unit index and MIRROR to a reflective sentinel.
+A glass token resolves to a material via a catalog object that exposes
+material_for_name(name).  When no catalog is supplied the refractiveindex.info
+database is used (downloaded on first use); AIR / VACUUM / blank resolve to the
+unit-index air singleton and MIRROR to a reflective sentinel.
 """
+
+from .core import ConstantMaterial
 
 
 MIRROR = '__MIRROR__'
 
 _DEFAULT_CATALOG = None
 
-
-def air(wvl):
-    """Index of air using the pure-vacuum approximation."""
-    return 1.0
-
-
-def vacuum(wvl):
-    """Index of vacuum."""
-    return 1.0
+# Unit-index media as MaterialProtocol singletons (n == 1, k == 0).  Identity is
+# meaningful: resolve_index maps AIR / VACUUM / blank to the air singleton, and
+# the IO / listings display layers treat both as a blank glass via identity.
+air = ConstantMaterial('air', 1.0)
+vacuum = ConstantMaterial('vacuum', 1.0)
 
 
 def _default_catalog():

@@ -15,8 +15,7 @@ from prysm.x.raytracing.paraxial import (
 from prysm.x.raytracing.surfaces import Conic, EvenAsphere, Plane
 
 
-def n_bk7(wvl):
-    return 1.5168
+n_bk7 = materials.ConstantMaterial('N-BK7', 1.5168)
 
 
 def make_singlet(c0=1 / 102.0, c1=-1 / 102.0, gap=95.0, with_image=True):
@@ -106,7 +105,7 @@ def test_image_solve_places_eval_at_paraxial_image():
 
 def test_image_solve_preserves_leading_object_eval_medium():
     lens = LensData()
-    (lens.add(Plane(), typ='eval', material=lambda wvl: 1.33, thickness=40.0)
+    (lens.add(Plane(), typ='eval', material=materials.ConstantMaterial(1.33), thickness=40.0)
          .add(Conic(1 / 100.0, 0.0), thickness=5.0, material=n_bk7,
               semidiameter=10.0)
          .add(Conic(-1 / 100.0, 0.0), thickness=10.0,

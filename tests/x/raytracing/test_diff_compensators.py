@@ -18,6 +18,7 @@ agree.
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
@@ -37,12 +38,10 @@ FLD = Field(0.8, 0.0)
 DEFOCUS = 0.2   # image plane displaced from paraxial focus -> focus-compensable
 
 
-def _glass(w):
-    return 1.6
+_glass = materials.ConstantMaterial(1.6)
 
 
-def _air(w):
-    return 1.0
+_air = materials.air
 
 
 def singlet():

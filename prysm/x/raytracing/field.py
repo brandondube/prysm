@@ -115,7 +115,7 @@ def surface_normals_from_trace(prescription, trace, wavelength):
         n0[j] = nj
         typ[j] = surf.typ
         if surf.typ == STYPE_REFRACT:
-            nprime = float(surf.n(wavelength))
+            nprime = float(surf.material.n(wavelength))
             n1[j] = nprime
             nj = nprime
         else:
@@ -958,7 +958,7 @@ def raytrace_prt(prescription, P, S, wavelength, *,
         p_out = np.cross(k_out, s)
 
         if surf.typ == STYPE_REFRACT:
-            n1 = float(surf.n(wavelength))
+            n1 = float(surf.material.n(wavelength))
         else:
             n1 = nj
         a_s, a_p = _interface_jones(nj, n1, cosI, surf.typ, coating=coating)

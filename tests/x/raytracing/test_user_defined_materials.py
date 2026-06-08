@@ -9,22 +9,21 @@ from prysm.x.raytracing.io import write_seq, write_zmx
 from prysm.x.raytracing.surfaces import Conic, Plane
 
 
-def test_constant_numeric_and_callable_materials_compile_through_lensdata():
+def test_material_objects_compile_through_lensdata_verbatim():
+    # Refractive surfaces consume MaterialProtocol objects directly: the object
+    # is carried to the compiled surface verbatim (identity holds, no wrapping).
+    # Bare numbers / callables and glass-name strings are intentionally not
+    # accepted -- resolve them to a material object first.
     mat = materials.ConstantMaterial(1.5, name='CONST')
-
-    def n_callable(wvl):
-        return 1.6
+    other = materials.ConstantMaterial(1.6, name='OTHER')
 
     ld = (LensData()
           .add(Plane(), thickness=1.0, material=mat)
-          .add(Plane(), thickness=1.0, material=n_callable)
+          .add(Plane(), thickness=1.0, material=other)
           .add(Plane(), typ='eval'))
-    assert ld.surfaces[0].n is mat
-    assert ld.surfaces[0].n(0.55) == pytest.approx(1.5)
-    assert ld.surfaces[1].n is n_callable
-
-    numeric = LensData().add(Plane(), material=1.7)
-    assert numeric.surfaces[0].n(0.55) == pytest.approx(1.7)
+    assert ld.surfaces[0].material is mat
+    assert ld.surfaces[0].material.n(0.55) == pytest.approx(1.5)
+    assert ld.surfaces[1].material is other
 
 
 def test_tabulated_material_scalar_vector_and_interp_alias():

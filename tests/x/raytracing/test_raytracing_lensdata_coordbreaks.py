@@ -6,6 +6,7 @@ Covers basic, decenter-and-return, return, reverse, bend, and mirror folding.
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from prysm.coordinates import make_rotation_matrix
 from prysm.x.raytracing import LensData, raytrace, valid_mask
 from prysm.x.raytracing.lensdata import R_rh, _ben_auto_gamma
@@ -13,8 +14,7 @@ from prysm.x.raytracing.raygen import generate_collimated_ray_fan
 from prysm.x.raytracing.surfaces import Conic, Plane
 
 
-def _air(wvl):
-    return 1.0
+_air = materials.air
 
 
 # ---------------------------------------------------------------------------

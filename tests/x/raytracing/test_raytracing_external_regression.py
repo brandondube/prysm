@@ -28,7 +28,7 @@ def _sellmeier(B1, B2, B3, C1, C2, C3):
             + B3 * w2 / (w2 - C3)
         )
 
-    return n
+    return materials.FormulaMaterial('SELLMEIER', n)
 
 
 _SK16 = _sellmeier(

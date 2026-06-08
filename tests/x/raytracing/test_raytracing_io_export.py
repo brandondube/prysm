@@ -11,14 +11,10 @@ from prysm.x.raytracing.io import read_seq, write_seq, read_zmx, write_zmx
 from prysm.x.raytracing.surfaces import Conic, EvenAsphere, Plane
 
 
-def _air(wvl):
-    return 1.0
-
-
 def make_refractive():
     lens = LensData()
-    (lens.add(Conic(1 / 50.0, 0.0), thickness=5.0, material=_air)
-         .add(Conic(-1 / 50.0, -0.5), thickness=95.0, material=_air)
+    (lens.add(Conic(1 / 50.0, 0.0), thickness=5.0, material=materials.air)
+         .add(Conic(-1 / 50.0, -0.5), thickness=95.0, material=materials.air)
          .add(Plane(), typ='eval'))
     return OpticalSystem(lens, aperture=10.0, wavelengths=[0.55])
 

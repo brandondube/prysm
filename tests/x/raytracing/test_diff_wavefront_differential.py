@@ -16,6 +16,7 @@ differential trace:
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
@@ -35,12 +36,10 @@ WVL = 0.5
 NG = 1.6
 
 
-def _glass(w):
-    return NG
+_glass = materials.ConstantMaterial(NG)
 
 
-def _air(w):
-    return 1.0
+_air = materials.air
 
 
 def _place_image(ld, gap_row):
@@ -99,8 +98,8 @@ def test_nominal_rms_matches_wavefrontrms():
 
 
 def test_wavefront_differential_resolves_system_wavelength_name():
-    def dispersive(w):
-        return 1.5 + 0.02 * (w - 0.55)
+    dispersive = materials.FormulaMaterial(
+        'DISP', lambda w: 1.5 + 0.02 * (w - 0.55))
 
     lens = LensData()
     (lens.add(Conic(1 / 40.0, 0.0), typ='refr', thickness=4.0,

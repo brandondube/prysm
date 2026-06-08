@@ -6,7 +6,7 @@ import warnings
 from prysm.conf import config
 from prysm.mathops import np
 
-from ..materials import MIRROR, resolve_index
+from ..materials import MIRROR
 from .surfaces import (
     Biconic,
     Chebyshev,
@@ -272,20 +272,6 @@ def _bounds_for_dof(nominal, lo, hi, relative, is_radius):
     return (blo, bhi)
 
 
-def _as_material_callable(material):
-    """Coerce an already-resolved material spec into an n(wvl) callable or None.
-
-    Refractive surfaces need a callable index; reflective/eval surfaces never
-    have their index queried, so MIRROR and None both compile to None.  A bare
-    number is wrapped in a constant callable.  Glass-name resolution is the IO
-    layer's job (it owns the catalog), so a bare name is rejected here rather
-    than triggering an implicit database download.
-
-    """
-    resolved = resolve_index(material)
-    return None if resolved is MIRROR else resolved
-
-
 def _invalidate_row_owner(row):
     owner = getattr(row, '_owner', None)
     if owner is not None:
@@ -480,8 +466,13 @@ class SurfaceRow:
             Surface shape whose registered adapter defines the row DOFs.
         thickness : float, optional
             Gap to the next row.
-        material : callable, float, str, or None, optional
-            Material specification carried until compilation.
+        material : MaterialProtocol, None, or MIRROR, optional
+            Optical material carried verbatim until compilation.  Refractive
+            surfaces require a MaterialProtocol object (its .n / .nk supply the
+            real / complex index); reflective surfaces take MIRROR and eval
+            surfaces None.  Bare numbers, lambdas, and glass-name strings are
+            not accepted -- resolve them to a material object first (see
+            x.materials).
         typ : str, optional
             Surface interaction type.
         semidiameter : float, optional
@@ -973,7 +964,7 @@ class LensData:
         """
         return Surface(
             shape=row.build_shape(), interaction=row.typ, P=P, R=R,
-            material=_as_material_callable(row.material),
+            material=None if row.material is MIRROR else row.material,
             bounding=row.bounding, aperture=row.aperture, grating=row.grating,
             edge=getattr(row, 'edge', None),
         )

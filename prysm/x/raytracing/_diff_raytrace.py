@@ -442,7 +442,7 @@ def _paraxial_walk_matrix_tangent(surfaces, wvl, n_start, n_start_dot,
             c = _paraxial_curvature(surf)
             cdot = cdot_s[k]
             if surf.typ == STYPE_REFRACT:
-                nprime = float(surf.n(wvl))
+                nprime = float(surf.material.n(wvl))
                 nprime_dot = nprimedot_s[k]
             elif surf.typ == STYPE_REFLECT:
                 nprime = -n
@@ -659,7 +659,7 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None):
 
         # Step III: bend
         if surf.typ == STYPE_REFRACT:
-            nprime = float(surf.n(wvl))
+            nprime = float(surf.material.n(wvl))
             nprimedot = nprimedot_s[j]
             Sprime, dSprime = d_refract(nj, nprime, S_loc, n_hat,
                                         S_locdot, dn_hat, nj_dot, nprimedot)

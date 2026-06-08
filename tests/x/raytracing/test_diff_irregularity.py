@@ -15,6 +15,7 @@ Two stretch deliverables of the wavefront-differential notes:
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
@@ -47,14 +48,14 @@ C0, K0 = 1 / 40.0, -0.6
 
 def make_system(irr=None):
     """Two-surface refractor.  irr=((n, m), amp) puts that Zernike mode on s0."""
-    n_glass = lambda w: NG
+    n_glass = materials.ConstantMaterial(NG)
     if irr is None:
         s0 = conic(c=C0, k=K0, interaction='refr', P=[0, 0, 0.0], material=n_glass)
     else:
         (n, m), amp = irr
         s0 = zernike(c=C0, k=K0, normalization_radius=RN, nms=[(n, m)],
                      coefs=[amp], interaction='refr', P=[0, 0, 0.0], material=n_glass)
-    s1 = conic(c=-1 / 55.0, k=0.2, interaction='refr', P=[0, 0, 6.0], material=lambda w: 1.0)
+    s1 = conic(c=-1 / 55.0, k=0.2, interaction='refr', P=[0, 0, 6.0], material=materials.air)
     img = plane(interaction='eval', P=[0, 0, 56.0])
     return [s0, s1, img]
 
@@ -145,12 +146,10 @@ def test_irregularity_partials_value_matches_zernike_surface():
 NG_LD = 1.6
 
 
-def _glass(w):
-    return NG_LD
+_glass = materials.ConstantMaterial(NG_LD)
 
 
-def _air(w):
-    return 1.0
+_air = materials.air
 
 
 def singlet():

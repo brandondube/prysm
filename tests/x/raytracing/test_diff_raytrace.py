@@ -10,6 +10,7 @@ trailing parameter axis.
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from prysm.x.raytracing.spencer_and_murty import raytrace
 from prysm.x.raytracing._diff_raytrace import (
     raytrace_with_tangents,
@@ -32,13 +33,13 @@ BASE = dict(c0=1 / 40.0, k0=-0.6, c1=-1 / 55.0, k1=0.2,
 
 def make_system(**over):
     p = dict(BASE, **over)
-    n_glass = lambda w: p['ng']
+    n_glass = materials.ConstantMaterial(p['ng'])
     s0 = conic(c=p['c0'], k=p['k0'], interaction='refr', P=[0, 0, p['z0']], material=n_glass)
     kw1 = {}
     if p['tiltx1'] != 0.0:
         kw1 = dict(tilt=(0.0, 0.0, p['tiltx1']), tilt_radians=True)
     s1 = conic(c=p['c1'], k=p['k1'], interaction='refr',
-               P=[p['x1'], p['y1'], p['z1']], material=lambda w: 1.0, **kw1)
+               P=[p['x1'], p['y1'], p['z1']], material=materials.air, **kw1)
     img = plane(interaction='eval', P=[0, 0, p['zimg']])
     return [s0, s1, img]
 
@@ -156,7 +157,7 @@ def test_fd_fallback_freeform_curvature():
 
     def system(c):
         s0 = even_asphere(c=c, k=k0, coefs=coefs, interaction='refr',
-                          P=[0, 0, 0], material=lambda w: NG)
+                          P=[0, 0, 0], material=materials.ConstantMaterial(NG))
         img = plane(interaction='eval', P=[0, 0, 56.0])
         return [s0, img]
 

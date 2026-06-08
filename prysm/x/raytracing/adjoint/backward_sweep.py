@@ -117,7 +117,7 @@ def _forward_with_intermediates(surfaces, P, S, wvl, tol_sag=None):
         hessian = surf.shape.sag_hessian(Xj, Yj)
 
         if surf.typ == STYPE_REFRACT:
-            nprime = float(surf.n(wvl))
+            nprime = float(surf.material.n(wvl))
             cosI = np.sum(n_hat * S_loc, axis=-1)
             mu = nj / nprime
             factor = (np.sign(cosI) * np.sqrt(1.0 - mu * mu * (1.0 - cosI * cosI))

@@ -24,9 +24,9 @@ from prysm.x.raytracing.io._common import warn_vignetting_ignored
 def _singlet(aperture=ApertureSpec.epd(20.0), with_object=None):
     ld = LensData()
     if with_object is not None:
-        ld.add(Plane(), typ='eval', material=lambda wvl: with_object,
+        ld.add(Plane(), typ='eval', material=materials.ConstantMaterial(with_object),
                thickness=200.0)
-    (ld.add(Conic(1 / 102.0, 0.0), thickness=6.0, material=lambda w: 1.5168,
+    (ld.add(Conic(1 / 102.0, 0.0), thickness=6.0, material=materials.ConstantMaterial(1.5168),
             semidiameter=12.0)
        .add(Conic(-1 / 102.0, 0.0), thickness=95.0, material=materials.air,
             semidiameter=12.0)

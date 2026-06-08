@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from tests.x.raytracing.surface_helpers import (
     plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
     chebyshev, jacobi, toroid, biconic,
@@ -100,9 +101,9 @@ def test_zero_tilt_zero_decenter_match_no_perturbation():
     bit-for-bit on intersection."""
     P_vertex = np.array([0., 0., 5.])
     surf_a = sphere(c=1 / 50.0, interaction='refr', P=P_vertex,
-                            material=lambda wvl: 1.5)
+                            material=materials.ConstantMaterial(1.5))
     surf_b = sphere(c=1 / 50.0, interaction='refr', P=P_vertex,
-                            material=lambda wvl: 1.5,
+                            material=materials.ConstantMaterial(1.5),
                             tilt=(0., 0., 0.), decenter=(0., 0., 0.))
     P0 = np.array([1., 0., -10.])
     S0 = np.array([0., 0., 1.])
@@ -124,7 +125,7 @@ def test_tilt_decenter_threaded_through_all_factories():
     tilt = (1., 2., 3.)
     factories = [
         plane(interaction='eval', P=P0, tilt=tilt, decenter=decenter),
-        sphere(c=1 / 100., interaction='refr', P=P0, material=lambda w: 1.5,
+        sphere(c=1 / 100., interaction='refr', P=P0, material=materials.ConstantMaterial(1.5),
                        tilt=tilt, decenter=decenter),
         conic(c=1 / 100., k=-1., interaction='refl', P=P0,
                       tilt=tilt, decenter=decenter),
@@ -132,11 +133,11 @@ def test_tilt_decenter_threaded_through_all_factories():
                                dx=10., dy=0.,
                                tilt=tilt, decenter=decenter),
         even_asphere(c=1 / 100., k=0.0, coefs=[1e-8],
-                             interaction='refr', P=P0, material=lambda w: 1.5,
+                             interaction='refr', P=P0, material=materials.ConstantMaterial(1.5),
                              tilt=tilt, decenter=decenter),
         q2d(c=1 / 100., k=0.0, normalization_radius=10.,
                     cm0=(0.,), ams=(), bms=(),
-                    interaction='refr', P=P0, material=lambda w: 1.5,
+                    interaction='refr', P=P0, material=materials.ConstantMaterial(1.5),
                     tilt=tilt, decenter=decenter),
     ]
     expected_P = P0 + np.array(decenter)

@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
@@ -12,8 +13,7 @@ from prysm.x.raytracing.tolerance import (
 )
 
 
-def _n_glass(w):
-    return 1.5
+_n_glass = materials.ConstantMaterial(1.5)
 
 
 # ---------- helpers --------------------------------------------------------
@@ -23,7 +23,7 @@ def _spherical_singlet():
     (lens.add(Conic(1 / 50.0, 0.0), typ='refr', thickness=5.0,
               material=_n_glass)
          .add(Conic(-1 / 50.0, 0.0), typ='refr', thickness=95.0,
-              material=lambda w: 1.0)
+              material=materials.air)
          .add(Plane(), typ='eval'))
     return OpticalSystem(lens, aperture=10.0, wavelengths=[0.55e-3])
 

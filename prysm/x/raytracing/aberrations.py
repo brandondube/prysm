@@ -89,7 +89,7 @@ def paraxial_trace(prescription, y0, theta0, wvl, n_ambient):
         theta_b = theta
         n_b = n
         if surf.typ == STYPE_REFRACT:
-            n_a = float(surf.n(wvl))
+            n_a = float(surf.material.n(wvl))
             theta_a = (n_b * theta_b - y * (n_a - n_b) * c) / n_a
         elif surf.typ == STYPE_REFLECT:
             n_a = -n_b
@@ -135,7 +135,7 @@ def _signed_indices(surfaces, wvl, n_ambient):
     for surf in surfaces:
         n_b.append(n)
         if surf.typ == STYPE_REFRACT:
-            n = float(surf.n(wvl))
+            n = float(surf.material.n(wvl))
         elif surf.typ == STYPE_REFLECT:
             n = -n
         n_a.append(n)

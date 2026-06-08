@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from tests.x.raytracing.surface_helpers import (
     plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
     chebyshev, jacobi, toroid, biconic,
@@ -470,11 +471,11 @@ def test_even_asphere_intersect_matches_naive_newton():
     c, k = 1 / 5.0, -0.5
     coefs = (1e-3, 1e-5, 1e-7)
     P0 = np.array([0.0, 0.0, 0.0])
-    s_asph = even_asphere(c, k, coefs, 'refr', P0, material=lambda w: 1.5)
+    s_asph = even_asphere(c, k, coefs, 'refr', P0, material=materials.ConstantMaterial(1.5))
     # bare Surface using the same sag and normal
     bare = Surface(shape=CallableShape(s_asph.sag, s_asph.sag_and_normal,
                                        params=dict(s_asph.params)),
-                   interaction='refr', P=P0, material=lambda w: 1.5)
+                   interaction='refr', P=P0, material=materials.ConstantMaterial(1.5))
     P, S = _ray_batch(span=1.5)
     Q_a, n_a, _ = s_asph.intersect(P, S)
     Q_b, n_b, _ = bare.intersect(P, S)
@@ -487,7 +488,7 @@ def test_even_asphere_intersect_converges_with_low_maxiter():
     c, k = 1 / 10.0, -1.0
     coefs = (1e-4, 1e-6)
     s = even_asphere(c, k, coefs, 'refr',
-                             np.array([0.0, 0.0, 0.0]), material=lambda w: 1.5)
+                             np.array([0.0, 0.0, 0.0]), material=materials.ConstantMaterial(1.5))
     P, S = _ray_batch(span=2.0)
     # 5 iterations is comfortably enough when seeded from the conic root;
     # the same call on a bare Surface starting from t=0 would need many more

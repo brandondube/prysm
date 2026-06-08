@@ -19,9 +19,7 @@ from prysm.x.raytracing.paraxial import paraxial_image_distance
 
 
 def _n_const(value):
-    def n(wvl):
-        return value
-    return n
+    return materials.ConstantMaterial(value)
 
 
 def _singlet(epd=8.0):

@@ -8,6 +8,7 @@ pins `merit_jacobian_free` directly against analytic paraxial derivatives.
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.surfaces import Conic
 from prysm.x.raytracing.sensitivity import merit_jacobian_free
@@ -28,7 +29,7 @@ def test_fd_jacobian_single_sphere_curvature():
     expected = -n_glass / ((n_glass - 1.0) * c0 * c0)
 
     ld = LensData().add(
-        Conic(c0, 0.0), typ='refr', material=lambda wvl: n_glass,
+        Conic(c0, 0.0), typ='refr', material=materials.ConstantMaterial(n_glass),
         thickness=0.0)
     ld.vary('curvature', surfaces=0)
     J = merit_jacobian_free(
@@ -46,9 +47,9 @@ def test_fd_jacobian_efl_doublet_curvatures():
     expected_dfdc1 = -f * f * (n_glass - 1.0)
     expected_dfdc2 = +f * f * (n_glass - 1.0)
     ld = (LensData()
-          .add(Conic(c1, 0.0), typ='refr', material=lambda wvl: n_glass,
+          .add(Conic(c1, 0.0), typ='refr', material=materials.ConstantMaterial(n_glass),
                thickness=1e-9)
-          .add(Conic(c2, 0.0), typ='refr', material=lambda wvl: 1.0,
+          .add(Conic(c2, 0.0), typ='refr', material=materials.air,
                thickness=0.0))
     ld.vary('curvature', surfaces=[0, 1])
     J = merit_jacobian_free(
@@ -61,7 +62,7 @@ def test_fd_jacobian_restores_free_vector():
     """After Jacobian evaluation the LensData is back to its nominal free
     vector (no transient perturbation leaks out)."""
     ld = LensData().add(
-        Conic(1 / 50.0, 0.0), typ='refr', material=lambda wvl: 1.5,
+        Conic(1 / 50.0, 0.0), typ='refr', material=materials.ConstantMaterial(1.5),
         thickness=0.0)
     ld.vary('curvature', surfaces=0)
     x0 = ld.pack()
@@ -72,7 +73,7 @@ def test_fd_jacobian_restores_free_vector():
 
 def test_fd_jacobian_unknown_method_raises():
     ld = LensData().add(
-        Conic(1 / 50.0, 0.0), typ='refr', material=lambda wvl: 1.5,
+        Conic(1 / 50.0, 0.0), typ='refr', material=materials.ConstantMaterial(1.5),
         thickness=0.0)
     ld.vary('curvature', surfaces=0)
     with pytest.raises(ValueError, match="method must be"):
@@ -87,7 +88,7 @@ def test_autograd_method_requires_torch_backend():
     """With the default numpy backend, asking for 'autograd' must error
     helpfully rather than silently producing nonsense."""
     ld = LensData().add(
-        Conic(1 / 50.0, 0.0), typ='refr', material=lambda wvl: 1.5,
+        Conic(1 / 50.0, 0.0), typ='refr', material=materials.ConstantMaterial(1.5),
         thickness=0.0)
     ld.vary('curvature', surfaces=0)
     with pytest.raises(RuntimeError, match='backend to be torch'):

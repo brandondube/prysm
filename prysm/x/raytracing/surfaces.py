@@ -1088,8 +1088,10 @@ class Surface:
             constant.
         pose : tuple or object, optional
             Surface pose as (P, R) or an object with P and R attributes.
-        material : callable, optional
-            Refractive-index model n(wavelength) for refractive surfaces.
+        material : MaterialProtocol or None, optional
+            Optical material for refractive surfaces; its .n(wavelength) gives
+            the real geometric index and .nk(wavelength) the complex index.
+            None for reflective / eval surfaces.
         aperture : callable, optional
             Aperture predicate evaluated in local surface coordinates.
         grating : tuple, optional
@@ -1131,14 +1133,13 @@ class Surface:
                                    dtype=config.precision)
         if typ == STYPE_REFRACT and material is None:
             raise ValueError(
-                'refractive surfaces must have a refractive index function, '
-                'not None')
+                'refractive surfaces must have a material, not None')
 
         self.shape = shape
         self.typ = typ
         self.P = P
         self.R = R
-        self.n = material
+        self.material = material
         self.params = shape.params
         self.bounding = bounding
         self.aperture = aperture

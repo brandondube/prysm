@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from tests.x.raytracing.surface_helpers import (
     plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
     chebyshev, jacobi, toroid, biconic,
@@ -202,9 +203,9 @@ def test_total_internal_reflection_marked_as_tir():
     # the launch medium (n=1.5) is carried by a leading eval object surface
     pres = [
         plane(interaction='eval', P=np.array([0., 0., -10.]),
-                      material=lambda wvl: 1.5),  # object immersed in glass
+                      material=materials.ConstantMaterial(1.5)),  # object immersed in glass
         plane(interaction='refr', P=np.array([0., 0., 0.]),
-                      material=lambda wvl: 1.0),  # the medium AFTER the surface
+                      material=materials.air),  # the medium AFTER the surface
     ]
     angle = np.radians(50.0)  # > critical
     # ray in n=1.5 medium hitting the surface at 50° to z (normal)

@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from tests.x.raytracing.surface_helpers import (
     plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
     chebyshev, jacobi, toroid, biconic,
@@ -217,10 +218,10 @@ def test_launch_collimated_beam_traces_to_focus():
 def _refractive_singlet_with_internal_stop(n_glass=1.5):
     """A two-surface lens with an extra plane between them acting as a stop."""
     s1 = conic(c=1 / 50.0, k=0.0, interaction='refr',
-                       P=[0, 0, 0], material=lambda w: n_glass)
+                       P=[0, 0, 0], material=materials.ConstantMaterial(n_glass))
     stop = plane(interaction='eval', P=[0, 0, 2.5])
     s2 = conic(c=-1 / 50.0, k=0.0, interaction='refr',
-                       P=[0, 0, 5.0], material=lambda w: 1.0)
+                       P=[0, 0, 5.0], material=materials.air)
     img = plane(interaction='eval', P=[0, 0, 100.0])
     return [s1, stop, s2, img]
 

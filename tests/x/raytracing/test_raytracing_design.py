@@ -53,7 +53,7 @@ def _refractive_singlet(c1=1 / 50.0, c2=-1 / 50.0, gap=5.0, n=1.5):
     """Sphere/sphere singlet (index n) with an image plane 100 past the rear
     vertex."""
     lens = LensData()
-    (lens.add(Conic(c1, 0.0), typ='refr', material=lambda w: n,
+    (lens.add(Conic(c1, 0.0), typ='refr', material=materials.ConstantMaterial(n),
               thickness=gap)
          .add(Conic(c2, 0.0), typ='refr', material=materials.air,
               thickness=100.0)

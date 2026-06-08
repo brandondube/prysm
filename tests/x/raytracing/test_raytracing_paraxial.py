@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from tests.x.raytracing.surface_helpers import (
     plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
     chebyshev, jacobi, toroid, biconic,
@@ -54,9 +55,9 @@ def test_system_matrix_thin_lens_efl():
     f_lens = 1.0 / ((n_glass - 1) * (1.0 / R1 - 1.0 / R2))
     rx = [
         sphere(c=1.0 / R1, interaction='refr', P=np.array([0., 0., 0.]),
-                       material=lambda wvl: n_glass),
+                       material=materials.ConstantMaterial(n_glass)),
         sphere(c=1.0 / R2, interaction='refr', P=np.array([0., 0., 1e-9]),
-                       material=lambda wvl: 1.0),
+                       material=materials.air),
     ]
     M, n = system_matrix(rx, wvl=0.55)
     np.testing.assert_allclose(M[0, 0], 1.0, atol=1e-9)
@@ -82,7 +83,7 @@ def test_image_distance_single_refracting_sphere():
     expected = n_glass * R / (n_glass - 1.0)
     rx = [
         sphere(c=1.0 / R, interaction='refr', P=np.array([0., 0., 0.]),
-                       material=lambda wvl: n_glass),
+                       material=materials.ConstantMaterial(n_glass)),
     ]
     bfd = paraxial_image_distance(rx, wvl=0.55)
     np.testing.assert_allclose(bfd, expected, rtol=1e-12)
@@ -94,7 +95,7 @@ def test_image_distance_unchanged_by_eval_plane_after_last_surface():
     n_glass = 1.5
     rx_base = [
         sphere(c=1.0 / R, interaction='refr', P=np.array([0., 0., 0.]),
-                       material=lambda wvl: n_glass),
+                       material=materials.ConstantMaterial(n_glass)),
     ]
     rx_with_eval = rx_base + [
         plane(interaction='eval', P=np.array([0., 0., 100.])),
@@ -119,7 +120,7 @@ def test_paraxial_image_distance_single_sphere():
     expected = n_glass * R / (n_glass - 1.0)  # 150, measured from the vertex
     rx = [
         sphere(c=1 / R, interaction='refr', P=np.array([0., 0., 0.]),
-                       material=lambda wvl: n_glass),
+                       material=materials.ConstantMaterial(n_glass)),
     ]
     bfd = paraxial_image_distance(rx, wvl=0.6328)
     np.testing.assert_allclose(bfd, expected, rtol=1e-9)
@@ -148,9 +149,9 @@ def test_efl_thin_lens_matches_lensmakers():
     f_lens = 1.0 / ((n_glass - 1) * (1.0 / R1 - 1.0 / R2))
     rx = [
         sphere(c=1.0 / R1, interaction='refr', P=np.array([0., 0., 0.]),
-                       material=lambda wvl: n_glass),
+                       material=materials.ConstantMaterial(n_glass)),
         sphere(c=1.0 / R2, interaction='refr', P=np.array([0., 0., 1e-9]),
-                       material=lambda wvl: 1.0),
+                       material=materials.air),
     ]
     efl = effective_focal_length(rx, wvl=0.55)
     np.testing.assert_allclose(efl, f_lens, rtol=1e-6)
@@ -158,7 +159,7 @@ def test_efl_thin_lens_matches_lensmakers():
 
 def test_lensdata_without_wavelengths_uses_default_wavelength():
     ld = LensData().add(Conic(1 / 50.0, 0.0),
-                        typ='refr', material=lambda wvl: 1.5)
+                        typ='refr', material=materials.ConstantMaterial(1.5))
     np.testing.assert_allclose(effective_focal_length(ld), 100.0)
 
 
@@ -172,8 +173,8 @@ def test_object_index_comes_from_object_surface_material():
 
     def _lens(n_obj):
         ld = LensData()
-        ld.add(Plane(), typ='eval', material=lambda wvl: n_obj, thickness=10.0)
-        ld.add(Conic(c, 0.0), typ='refr', material=lambda wvl: 1.5)
+        ld.add(Plane(), typ='eval', material=materials.ConstantMaterial(n_obj), thickness=10.0)
+        ld.add(Conic(c, 0.0), typ='refr', material=materials.ConstantMaterial(1.5))
         return ld
 
     ld = _lens(1.33)
@@ -204,9 +205,9 @@ def test_efl_rc_telescope_matches_design():
 
 def test_local_vertex_curvature_helpers_report_astigmatic_sections():
     bic = biconic(1 / 80.0, 1 / 50.0, 0.0, 0.0, 'refr',
-                  P=np.array([0., 0., 0.]), material=lambda wvl: 1.5)
+                  P=np.array([0., 0., 0.]), material=materials.ConstantMaterial(1.5))
     tor = toroid(1 / 70.0, 1 / 40.0, 0.0, (), 'refr',
-                 P=np.array([0., 0., 0.]), material=lambda wvl: 1.5)
+                 P=np.array([0., 0., 0.]), material=materials.ConstantMaterial(1.5))
     assert local_x_vertex_curvature(bic) == pytest.approx(1 / 80.0)
     assert local_y_vertex_curvature(bic) == pytest.approx(1 / 50.0)
     assert local_x_vertex_curvature(tor) == pytest.approx(1 / 70.0)
@@ -218,10 +219,10 @@ def test_paraxial_matrix_uses_local_y_curvature_for_astigmatic_surfaces():
     for surf, cy in [
             (biconic(1 / 80.0, 1 / 50.0, 0.0, 0.0, 'refr',
                      P=np.array([0., 0., 0.]),
-                     material=lambda wvl: n_glass), 1 / 50.0),
+                     material=materials.ConstantMaterial(n_glass)), 1 / 50.0),
             (toroid(1 / 70.0, 1 / 40.0, 0.0, (), 'refr',
                     P=np.array([0., 0., 0.]),
-                    material=lambda wvl: n_glass), 1 / 40.0),
+                    material=materials.ConstantMaterial(n_glass)), 1 / 40.0),
     ]:
         expected = 1.0 / ((n_glass - 1.0) * cy)
         np.testing.assert_allclose(effective_focal_length([surf], wvl=0.55),
@@ -240,7 +241,7 @@ def test_image_space_index_requires_explicit_image_surface():
     n_glass = 1.5
     rx = [
         sphere(c=1 / 50.0, interaction='refr', P=np.array([0., 0., 0.]),
-               material=lambda wvl: n_glass),
+               material=materials.ConstantMaterial(n_glass)),
     ]
     with pytest.raises(ValueError, match='trailing eval image surface'):
         image_space_index(rx, 0.55)
@@ -255,7 +256,7 @@ def test_image_space_index_requires_explicit_image_surface():
 def test_bfl_matches_image_distance_when_last_surface_is_powered():
     rx = [
         sphere(c=1 / 50.0, interaction='refr', P=np.array([0., 0., 0.]),
-                       material=lambda wvl: 1.5),
+                       material=materials.ConstantMaterial(1.5)),
     ]
     bfl = back_focal_length(rx, wvl=0.55)
     bfd = paraxial_image_distance(rx, wvl=0.55)
@@ -267,7 +268,7 @@ def test_bfl_unchanged_by_trailing_eval_planes():
     must not change it."""
     rx_base = [
         sphere(c=1 / 50.0, interaction='refr', P=np.array([0., 0., 0.]),
-                       material=lambda wvl: 1.5),
+                       material=materials.ConstantMaterial(1.5)),
     ]
     rx_eval = rx_base + [
         plane(interaction='eval', P=np.array([0., 0., 50.])),
@@ -286,9 +287,9 @@ def test_ffl_thin_lens_matches_lensmakers():
     f_lens = 1.0 / ((n_glass - 1) * (1.0 / R1 - 1.0 / R2))
     rx = [
         sphere(c=1.0 / R1, interaction='refr', P=np.array([0., 0., 0.]),
-                       material=lambda wvl: n_glass),
+                       material=materials.ConstantMaterial(n_glass)),
         sphere(c=1.0 / R2, interaction='refr', P=np.array([0., 0., 1e-9]),
-                       material=lambda wvl: 1.0),
+                       material=materials.air),
     ]
     ffl = front_focal_length(rx, wvl=0.55)
     np.testing.assert_allclose(abs(ffl), f_lens, rtol=1e-6)
@@ -299,7 +300,7 @@ def test_ffl_unchanged_by_leading_eval_planes():
     not change it."""
     rx_base = [
         sphere(c=1 / 50.0, interaction='refr', P=np.array([0., 0., 10.]),
-                       material=lambda wvl: 1.5),
+                       material=materials.ConstantMaterial(1.5)),
     ]
     rx_eval = [
         plane(interaction='eval', P=np.array([0., 0., 0.])),
@@ -319,10 +320,10 @@ def test_ffl_no_power_raises():
 def _thin_lens_prescription(R1=100.0, R2=-100.0, n_glass=1.5, z0=0.0):
     return [
         sphere(c=1.0 / R1, interaction='refr', P=np.array([0., 0., z0]),
-                       material=lambda wvl: n_glass),
+                       material=materials.ConstantMaterial(n_glass)),
         sphere(c=1.0 / R2, interaction='refr',
                        P=np.array([0., 0., z0 + 1e-9]),
-                       material=lambda wvl: 1.0),
+                       material=materials.air),
     ]
 
 

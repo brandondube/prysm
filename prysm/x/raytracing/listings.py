@@ -12,7 +12,7 @@ No plotting and no matplotlib here -- these are text tables for inspection.
 
 from .spencer_and_murty import STYPE_EVAL, STYPE_REFLECT, STYPE_REFRACT
 from .surfaces import _map_stype
-from ..materials import MIRROR
+from ..materials import MIRROR, air, vacuum
 from .lensdata import CoordBreak, SurfaceRow
 
 
@@ -46,7 +46,7 @@ def material_str(material, typ):
     if _map_stype(typ) == STYPE_REFLECT or material is MIRROR \
             or material == MIRROR:
         return 'MIRROR'
-    if material is None:
+    if material is None or material is air or material is vacuum:
         return ''
     name = getattr(material, 'name', None)
     if name:

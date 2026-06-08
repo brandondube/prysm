@@ -6,6 +6,7 @@ adjoint Jacobian can be checked against the validated forward tangents.
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from tests.x.raytracing.surface_helpers import conic, plane
 
 NG = 1.62
@@ -17,11 +18,11 @@ BASE = dict(c0=1 / 40.0, k0=-0.6, c1=-1 / 55.0, k1=0.2,
 
 def make_system(**over):
     p = dict(BASE, **over)
-    n_glass = lambda w: p['ng']
+    n_glass = materials.ConstantMaterial(p['ng'])
     s0 = conic(c=p['c0'], k=p['k0'], interaction='refr',
                P=[0, 0, p['z0']], material=n_glass)
     s1 = conic(c=p['c1'], k=p['k1'], interaction='refr',
-               P=[p['x1'], p['y1'], p['z1']], material=lambda w: 1.0)
+               P=[p['x1'], p['y1'], p['z1']], material=materials.air)
     img = plane(interaction='eval', P=[0, 0, p['zimg']])
     return [s0, s1, img]
 

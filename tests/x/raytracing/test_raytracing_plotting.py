@@ -2,6 +2,7 @@
 import matplotlib
 import numpy as np
 import pytest
+from prysm.x import materials
 from prysm.x.raytracing import OpticalSystem
 
 matplotlib.use('Agg')
@@ -28,8 +29,8 @@ from prysm.x.raytracing.surfaces import Conic, OffAxisConic, Plane, Surface
 
 def _singlet_lensdata():
     """A simple constant-index biconvex singlet with a 3-point field set."""
-    n15 = lambda wvl: 1.5  # noqa: E731 - terse constant index for the test
-    air = lambda wvl: 1.0  # noqa: E731
+    n15 = materials.ConstantMaterial(1.5)
+    air = materials.air
     lens = LensData()
     (lens.add(Conic(1 / 60.0, 0.0), thickness=4.0, material=n15,
               semidiameter=8.0)
@@ -54,7 +55,7 @@ def _refracting_plane(z, outer_radius=1, inner_radius=None, n=1.0):
         shape=Plane(),
         interaction='refr',
         P=np.asarray([0., 0., z]),
-        material=lambda wvl: n,
+        material=materials.ConstantMaterial(n),
         bounding=bounding,
     )
 
@@ -359,9 +360,9 @@ def test_plot_optics_bridges_steep_surface_to_od_with_normal_segment():
     # the element keeps its full diameter, the outline stays finite, and a
     # warning is emitted.
     gentle = Surface(shape=Conic(1 / 5.0, 0.0), interaction='refr',
-                     P=np.asarray([0., 0., 0.]), material=lambda wvl: 1.5)
+                     P=np.asarray([0., 0., 0.]), material=materials.ConstantMaterial(1.5))
     steep = Surface(shape=Conic(1 / 0.5, 0.0), interaction='refr',
-                    P=np.asarray([0., 0., 1.0]), material=lambda wvl: 1.0)
+                    P=np.asarray([0., 0., 1.0]), material=materials.air)
     prescription = [gentle, steep]
 
     with pytest.warns(UserWarning, match='flat edge'):
@@ -392,10 +393,10 @@ def test_plot_optics_draws_clear_aperture_land_to_od_silently():
     # (normal to the OD).  Unlike a surface that physically cannot reach the OD,
     # an intentional smaller aperture is silent -- no warning.
     front = Surface(shape=Conic(1 / 50.0, 0.0), interaction='refr',
-                    P=np.asarray([0., 0., 0.]), material=lambda wvl: 1.5,
+                    P=np.asarray([0., 0., 0.]), material=materials.ConstantMaterial(1.5),
                     bounding={'outer_radius': 1.0})
     rear = Surface(shape=Conic(-1 / 50.0, 0.0), interaction='refr',
-                   P=np.asarray([0., 0., 1.0]), material=lambda wvl: 1.0,
+                   P=np.asarray([0., 0., 1.0]), material=materials.air,
                    bounding={'outer_radius': 3.0})
     prescription = [front, rear]
 
@@ -451,9 +452,9 @@ def test_lensdata_add_edge_propagates_to_compiled_surface():
             'features': [{'kind': 'chamfer', 'side': 'both',
                           'z_start': 0.0, 'z_end': 0.5, 'depth': 0.3}]}
     lens = LensData()
-    (lens.add(Conic(1 / 60.0, 0.0), thickness=4.0, material=lambda w: 1.5,
+    (lens.add(Conic(1 / 60.0, 0.0), thickness=4.0, material=materials.ConstantMaterial(1.5),
               semidiameter=8.0, edge=edge)
-         .add(Conic(-1 / 60.0, 0.0), thickness=95.0, material=lambda w: 1.0,
+         .add(Conic(-1 / 60.0, 0.0), thickness=95.0, material=materials.air,
               semidiameter=8.0))
     ld = OpticalSystem(lens, aperture=10.0, wavelengths={'d': 0.5876},
                        reference_wavelength='d')

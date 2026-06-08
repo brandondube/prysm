@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from tests.x.raytracing.surface_helpers import (
     plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
     chebyshev, jacobi, toroid, biconic,
@@ -233,7 +234,7 @@ def test_refraction_grating_equation():
     d = 1e-3
     wvl = 0.55e-3
     n_glass = 1.5
-    g_surf = plane(interaction='refr', P=[0, 0, 0], material=lambda w: n_glass)
+    g_surf = plane(interaction='refr', P=[0, 0, 0], material=materials.ConstantMaterial(n_glass))
     g_surf.grating = (d, [1.0, 0.0, 0.0], 1)
     img = plane(interaction='eval', P=[0, 0, 10.0])
     P = np.array([[0.0, 0.0, -5.0]])

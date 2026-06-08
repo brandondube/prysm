@@ -7,6 +7,7 @@ surface, so those analyses only need to test their extractor.
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from tests.x.raytracing.surface_helpers import conic, plane
 
 from prysm.x.raytracing import LensData, OpticalSystem, ApertureSpec, Field
@@ -26,9 +27,9 @@ from prysm.x.raytracing._trace_grid import (
 def _singlet_system(fields=None, wavelengths=None, ref='d'):
     """Sphere/sphere singlet with system metadata (stop at the first surface)."""
     lens = LensData()
-    (lens.add(Conic(1 / 50.0, 0.0), typ='refr', material=lambda w: 1.5168,
+    (lens.add(Conic(1 / 50.0, 0.0), typ='refr', material=materials.ConstantMaterial(1.5168),
               thickness=5.0)
-         .add(Conic(-1 / 50.0, 0.0), typ='refr', material=lambda w: 1.0,
+         .add(Conic(-1 / 50.0, 0.0), typ='refr', material=materials.air,
               thickness=95.0)
          .add(Plane(), typ='eval'))
     if fields is None:
@@ -44,9 +45,9 @@ def _bare_singlet():
     """A plain surface list (no system metadata)."""
     return [
         conic(c=1 / 50.0, k=0.0, interaction='refr', P=[0, 0, 0],
-              material=lambda w: 1.5),
+              material=materials.ConstantMaterial(1.5)),
         conic(c=-1 / 50.0, k=0.0, interaction='refr', P=[0, 0, 5.0],
-              material=lambda w: 1.0),
+              material=materials.air),
         plane(interaction='eval', P=[0, 0, 100.0]),
     ]
 

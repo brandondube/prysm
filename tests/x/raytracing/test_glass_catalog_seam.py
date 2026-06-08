@@ -93,8 +93,8 @@ def test_readers_accept_catalog_adapter():
     catalog = agf_catalog()
     zmx = read_zmx(ZMX_NBK7, _is_text=True, database=catalog)
     seq = read_seq(SEQ_NBK7, _is_text=True, database=catalog)
-    assert zmx.surfaces[0].n(0.5875618) == pytest.approx(1.5168000345)
-    assert seq.surfaces[0].n(0.5875618) == pytest.approx(1.5168000345)
+    assert zmx.surfaces[0].material.n(0.5875618) == pytest.approx(1.5168000345)
+    assert seq.surfaces[0].material.n(0.5875618) == pytest.approx(1.5168000345)
 
 
 class ExplodingCatalog:

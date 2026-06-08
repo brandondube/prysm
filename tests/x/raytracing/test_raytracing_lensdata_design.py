@@ -15,8 +15,7 @@ from prysm.x.raytracing.paraxial import effective_focal_length
 from prysm.x.raytracing.surfaces import Conic, Plane
 
 
-def n_bk7(wvl):
-    return 1.5168
+n_bk7 = materials.ConstantMaterial('N-BK7', 1.5168)
 
 
 def make_singlet(image_gap=95.0, with_image=True):

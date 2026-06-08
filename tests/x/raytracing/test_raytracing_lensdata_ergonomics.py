@@ -17,13 +17,11 @@ from prysm.x.raytracing._meta import (
 )
 
 
-def _n_bk7(wvl):
-    return 1.5168
+_n_bk7 = materials.ConstantMaterial('N-BK7', 1.5168)
 
 
-def _dispersive(wvl):
-    # toy dispersion so wavelength selection actually moves the answer
-    return 1.5 + 0.01 / wvl
+# toy dispersion so wavelength selection actually moves the answer
+_dispersive = materials.FormulaMaterial('DISP', lambda wvl: 1.5 + 0.01 / wvl)
 
 
 def _singlet(material=_n_bk7):

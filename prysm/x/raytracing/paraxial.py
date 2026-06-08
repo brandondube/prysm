@@ -145,7 +145,7 @@ def _apply_surface_matrix(M, n, surf, wvl):
         n_prime = -n
         return _refraction_matrix(c, n, n_prime) @ M, n_prime
     if surf.typ == STYPE_REFRACT:
-        n_prime = float(surf.n(wvl))
+        n_prime = float(surf.material.n(wvl))
         return _refraction_matrix(c, n, n_prime) @ M, n_prime
     return M, n
 

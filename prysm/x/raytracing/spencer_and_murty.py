@@ -182,7 +182,7 @@ def _bend_rays(surf, Sj, n_hat, wvl, nj, active, status, surf_idx):
     if surf.typ == STYPE_REFLECT:
         return reflect(Sj, n_hat), nj, active
     if surf.typ == STYPE_REFRACT:
-        nprime = surf.n(wvl)
+        nprime = surf.material.n(wvl)
         pre_refract = active.copy()
         Sjp1 = refract(nj, nprime, Sj, n_hat)
         tir = pre_refract & np.isnan(Sjp1).any(axis=-1)
@@ -495,7 +495,7 @@ def _launch_medium_index(surfaces, wvl):
     """Index of the medium the bundle launches in.
 
     The object medium is carried by the surface sequence itself: when the
-    leading surface is an eval (object) surface, its material n(wvl) is the
+    leading surface is an eval (object) surface, its material's .n(wvl) is the
     launch medium; otherwise the launch medium is air (n = 1).  Kept tensor
     clean (no float coercion) so a tolerance that perturbs the object medium
     threads through autograd.
@@ -503,9 +503,9 @@ def _launch_medium_index(surfaces, wvl):
     if len(surfaces) > 0:
         first = surfaces[0]
         if getattr(first, 'typ', None) == STYPE_EVAL:
-            n = getattr(first, 'n', None)
-            if callable(n):
-                return n(wvl)
+            material = getattr(first, 'material', None)
+            if material is not None:
+                return material.n(wvl)
     return 1.0
 
 

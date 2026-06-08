@@ -15,6 +15,7 @@ structure and every tolerance has a non-vanishing first-order sensitivity.
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
@@ -34,12 +35,10 @@ WVL = 0.5
 NG = 1.6
 
 
-def _glass(w):
-    return NG
+_glass = materials.ConstantMaterial(NG)
 
 
-def _air(w):
-    return 1.0
+_air = materials.air
 
 
 def _place_image(ld, gap_row):

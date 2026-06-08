@@ -620,7 +620,8 @@ def _glass_name(material, typ):
     from ..surfaces import _map_stype
     if _map_stype(typ) == STYPE_REFLECT:
         return 'REFL'
-    if material is None:
+    if material is None or material is _materials.air \
+            or material is _materials.vacuum:
         return None
     page_info = getattr(material, 'page_info', None)
     if page_info and page_info.get('page'):

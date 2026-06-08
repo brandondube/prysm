@@ -27,8 +27,7 @@ from prysm.x.raytracing.surfaces import (
 )
 
 
-def n_bk7(wvl):
-    return 1.5168
+n_bk7 = materials.ConstantMaterial('N-BK7', 1.5168)
 
 
 def make_singlet_lensdata(image_gap=95.0):
@@ -109,7 +108,8 @@ def test_direct_surface_row_thickness_edit_invalidates_cache():
 
 
 def test_direct_surface_row_array_and_metadata_edits_invalidate_cache():
-    ld = LensData().add(Conic(1 / 100.0, 0.0), typ='refr', material=1.5,
+    ld = LensData().add(Conic(1 / 100.0, 0.0), typ='refr',
+                        material=materials.ConstantMaterial(1.5),
                         bounding={'outer_radius': 4.0})
     before = ld.surfaces
 
@@ -117,8 +117,8 @@ def test_direct_surface_row_array_and_metadata_edits_invalidate_cache():
     assert ld.surfaces is not before
     assert ld.surfaces[0].shape.params['c'] == pytest.approx(1 / 50.0)
 
-    ld.rows[0].material = 1.6
-    assert ld.surfaces[0].n(0.55) == pytest.approx(1.6)
+    ld.rows[0].material = materials.ConstantMaterial(1.6)
+    assert ld.surfaces[0].material.n(0.55) == pytest.approx(1.6)
 
     ld.rows[0].aperture = circular_aperture(2.0)
     blocked = ld.surfaces[0].aperture(np.array([3.0]), np.array([0.0]))
@@ -139,16 +139,11 @@ def test_direct_coordbreak_array_edit_invalidates_cache():
     np.testing.assert_allclose(after[0].P, [3.0, 0.0, 0.0])
 
 
-def test_material_callable_identity_is_preserved():
+def test_material_object_identity_is_preserved():
+    # a MaterialProtocol object is carried to the compiled surface verbatim --
+    # no wrapping, so identity holds.
     ld = make_singlet_lensdata()
-    assert ld.surfaces[0].n is n_bk7
-
-
-def test_float_material_is_wrapped_into_a_callable():
-    ld = LensData().add(Conic(1 / 50.0, 0.0), thickness=3.0,
-                        material=1.5, semidiameter=5.0)
-    surf = ld.surfaces[0]
-    assert surf.n(0.5) == pytest.approx(1.5)
+    assert ld.surfaces[0].material is n_bk7
 
 
 # ---------------------------------------------------------------------------

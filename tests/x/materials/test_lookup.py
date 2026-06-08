@@ -2,7 +2,7 @@
 
 import pytest
 
-from prysm.x.materials import MIRROR, air, lookup, resolve_index
+from prysm.x.materials import MIRROR, air, vacuum, lookup, resolve_index
 from prysm.x.materials import Catalog, ConstantMaterial
 
 
@@ -15,6 +15,17 @@ def test_resolve_index_sentinels_and_air():
     assert resolve_index('   ') is air
     assert resolve_index('AIR') is air
     assert resolve_index('vacuum') is air
+
+
+def test_air_singleton_is_a_material_protocol():
+    # air / vacuum are MaterialProtocol singletons, not bare callables: they
+    # carry .n (real), .nk (complex), and __call__ aliasing .n.
+    assert air.n(0.55) == 1.0
+    assert air.nk(0.55) == 1.0 + 0j
+    assert air(0.55) == 1.0
+    assert vacuum.n(0.55) == 1.0
+    assert vacuum.nk(0.55) == 1.0 + 0j
+    assert vacuum(0.55) == 1.0
 
 
 def test_resolve_index_numbers_and_callables():

@@ -18,15 +18,15 @@ from prysm.x.raytracing.paraxial import paraxial_image_distance
 
 
 def _n_const(value):
-    def n(wvl):
-        return value
-    return n
+    return materials.ConstantMaterial(value)
 
 
-def _bk7_dispersive(wvl):
-    # Sellmeier at 3 prysm-relevant wavelengths; enough dispersion to make CI/CII nonzero
-    # (representative N-BK7-ish values).
-    return {0.4861327: 1.5224, 0.5875618: 1.5168, 0.6562725: 1.5143}[float(wvl)]
+# Sellmeier-ish at 3 prysm-relevant wavelengths; enough dispersion to make
+# CI/CII nonzero (representative N-BK7-ish values).
+_bk7_dispersive = materials.FormulaMaterial(
+    'N-BK7',
+    lambda wvl: {0.4861327: 1.5224, 0.5875618: 1.5168, 0.6562725: 1.5143}[float(wvl)],
+)
 
 
 def _singlet(epd=8.0, c1=1 / 61.0, gap=None, material=None, dispersive=False):
