@@ -91,15 +91,10 @@ def biconic(c_x, c_y, k_x, k_y, interaction, P, material=None, **kwargs):
                    P=P, material=material, **kwargs)
 
 
-def wf_auto(prescription, P, S, wavelength, *, chief_index=None,
-            stop_index=None, epd=None, axis_point=None, axis_dir=None, **kw):
-    """Resolve P_xp the way the pre-refactor wavefront() did, then call it.
-
-    The kernel analysis.wavefront is now pure (P_xp required); this test
-    convenience reproduces its old default resolution -- paraxial exit pupil
-    when a stop is resolvable, else geometric from this bundle's own chief ray
-    -- so tests that exercised the auto path keep working unchanged otherwise.
-    """
+def wavefront_with_resolved_exit_pupil(
+        prescription, P, S, wavelength, *, chief_index=None, stop_index=None,
+        epd=None, axis_point=None, axis_dir=None, **kw):
+    """Resolve P_xp from the traced chief ray, then evaluate wavefront."""
     tr = raytrace(prescription, P, S, wavelength)
     ci = chief_index if chief_index is not None else _pupil_center_chief_index(P)
     P_xp = resolve_exit_pupil(prescription, wavelength, stop_index=stop_index,

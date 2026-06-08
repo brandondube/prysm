@@ -20,10 +20,6 @@ from prysm.x.raytracing.analysis import (
     spot_diagrams,
     spot_rms_radius,
     spot_geometric_radius,
-    distortion,
-    field_curvature,
-    DistortionResult,
-    FieldCurvatureResult,
     RayFanGrid,
     OPDFanGrid,
     SpotGrid,
@@ -167,28 +163,6 @@ def test_spot_diagrams_default_sampling():
     sys = _singlet_system()
     grid = spot_diagrams(sys)
     assert grid.x.shape[0] == 2 and grid.x.shape[1] == 3
-
-
-# ---------- namedtuple re-skin of distortion / field_curvature --------------
-
-def test_distortion_is_namedtuple_backward_compatible():
-    sys = _singlet_system(fields=[Field(0, 0), Field(0, 2), Field(0, 4)])
-    result = distortion(sys, list(sys.fields), 0.5876)
-    assert isinstance(result, DistortionResult)
-    # positional unpacking (the historical 3-tuple) still works
-    real_xy, paraxial_xy, percent = result
-    np.testing.assert_array_equal(real_xy, result.real_xy)
-    np.testing.assert_array_equal(percent, result.percent)
-    assert percent.shape == (3,)
-
-
-def test_field_curvature_is_namedtuple_backward_compatible():
-    sys = _singlet_system(fields=[Field(0, 0), Field(0, 3)])
-    result = field_curvature(sys, list(sys.fields), 0.5876)
-    assert isinstance(result, FieldCurvatureResult)
-    x_fan_z, y_fan_z = result
-    np.testing.assert_array_equal(x_fan_z, result.x_fan_z)
-    assert x_fan_z.shape == (2,)
 
 
 # ---------- plotters --------------------------------------------------------

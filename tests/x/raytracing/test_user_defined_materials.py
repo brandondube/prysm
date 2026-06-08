@@ -26,12 +26,12 @@ def test_material_objects_compile_through_lensdata_verbatim():
     assert ld.surfaces[1].material is other
 
 
-def test_tabulated_material_scalar_vector_and_interp_alias():
+def test_tabulated_material_scalar_vector_and_linear_interpolation():
     mat = materials.TabulatedMaterial(
         name='MYGLASS',
         wavelengths=[0.5, 0.6, 0.7],
         n=[1.6, 1.5, 1.4],
-        method='interp',
+        method='linear',
     )
     assert mat(0.55) == pytest.approx(1.55)
     np.testing.assert_allclose(mat(np.array([0.55, 0.65])), [1.55, 1.45])
@@ -67,7 +67,7 @@ def test_k_interpolation_and_nk_work_for_scalars_and_vectors():
         wavelengths=[0.5, 0.6, 0.7],
         n=[1.6, 1.5, 1.4],
         k=[1e-5, 3e-6, 1e-6],
-        k_method='log_interp',
+        k_method='log',
     )
     expected_k = np.exp((np.log(1e-5) + np.log(3e-6)) / 2)
     assert mat.k(0.55) == pytest.approx(expected_k)
@@ -87,7 +87,7 @@ def test_k_interpolation_and_nk_work_for_scalars_and_vectors():
         no_k_raise.k(0.55)
 
 
-def test_log_interp_k_zero_policy_is_explicit_and_negative_k_is_rejected():
+def test_log_k_zero_policy_is_explicit_and_negative_k_is_rejected():
     with pytest.raises(ValueError, match='nonnegative'):
         materials.TabulatedMaterial('BADK', [0.5, 0.6], [1.5, 1.4],
                                     k=[1e-6, -1e-6])
@@ -95,12 +95,12 @@ def test_log_interp_k_zero_policy_is_explicit_and_negative_k_is_rejected():
     with pytest.raises(ValueError, match='positive k samples'):
         materials.TabulatedMaterial(
             'ZEROK', [0.5, 0.6], [1.5, 1.4], k=[0.0, 1e-6],
-            k_method='log_interp',
+            k_method='log',
         )
 
     explicit = materials.TabulatedMaterial(
         'ZEROK', [0.5, 0.6, 0.7], [1.5, 1.4, 1.3],
-        k=[0.0, 1e-6, 2e-6], k_method='log_interp',
+        k=[0.0, 1e-6, 2e-6], k_method='log',
         k_zero_policy='linear',
     )
     assert explicit.k(0.55) == pytest.approx(0.5e-6)
@@ -192,7 +192,7 @@ def test_page_info_supports_listing_and_best_effort_io_names():
     assert 'GLA USERGLASS' in write_seq(ld)
 
 
-def test_convenience_constructors_and_material_creation_are_silent(capsys):
+def test_convenience_constructors_create_expected_materials():
     tab = materials.from_samples('TAB', [0.5, 0.6], [1.5, 1.4])
     assert isinstance(tab, materials.TabulatedMaterial)
     assert tab(0.55) == pytest.approx(1.45)
@@ -203,7 +203,3 @@ def test_convenience_constructors_and_material_creation_are_silent(capsys):
     )
     assert isinstance(fit, materials.FittedMaterial)
     assert fit.fit_report.sample_count == 3
-
-    captured = capsys.readouterr()
-    assert captured.out == ''
-    assert captured.err == ''

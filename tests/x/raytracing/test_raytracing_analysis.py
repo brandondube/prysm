@@ -325,11 +325,11 @@ def test_zernike_fit_norm_radius_must_be_positive():
 
 def test_distortion_zero_for_on_axis_field():
     presc = _spherical_singlet()
-    real_xy, paraxial_xy, percent = distortion(
+    result = distortion(
         presc, [Field(0., 0., unit='deg')], 0.55, epd=4.0,
     )
-    np.testing.assert_allclose(real_xy[0], 0.0, atol=1e-12)
-    assert percent[0] == 0.0
+    np.testing.assert_allclose(result.real_xy[0], 0.0, atol=1e-12)
+    assert result.percent[0] == 0.0
 
 
 def test_distortion_returns_per_field_arrays():
@@ -337,23 +337,23 @@ def test_distortion_returns_per_field_arrays():
     fields = [Field(0., 0., unit='deg'),
               Field(0., 1., unit='deg'),
               Field(0., 2., unit='deg')]
-    real_xy, paraxial_xy, percent = distortion(
+    result = distortion(
         presc, fields, 0.55, epd=4.0,
     )
-    assert real_xy.shape == (3, 2)
-    assert paraxial_xy.shape == (3, 2)
-    assert percent.shape == (3,)
+    assert result.real_xy.shape == (3, 2)
+    assert result.paraxial_xy.shape == (3, 2)
+    assert result.percent.shape == (3,)
 
 
 def test_distortion_paraxial_proxy_scales_linearly():
     """For a small field, the paraxial-proxy landing should match the real
     landing (no third-order distortion at small angles)."""
     presc = _spherical_singlet()
-    real_xy, paraxial_xy, percent = distortion(
+    result = distortion(
         presc, [Field(0., 0.05, unit='deg')], 0.55, epd=4.0,
     )
     # at 0.05 deg a paraxial-quality system should have <0.1% distortion
-    assert abs(percent[0]) < 0.1
+    assert abs(result.percent[0]) < 0.1
 
 
 def test_distortion_sign_distinguishes_barrel_and_pincushion():
@@ -363,10 +363,10 @@ def test_distortion_sign_distinguishes_barrel_and_pincushion():
     # would report both as the same positive number.
     presc = _spherical_singlet()
     field = [Field(0., 8., unit='deg')]
-    _, _, barrel = distortion(presc, field, 0.55, epd=4.0, pupil_z=-30.0)
-    _, _, pincushion = distortion(presc, field, 0.55, epd=4.0, pupil_z=30.0)
-    assert barrel[0] < 0.0
-    assert pincushion[0] > 0.0
+    barrel = distortion(presc, field, 0.55, epd=4.0, pupil_z=-30.0)
+    pincushion = distortion(presc, field, 0.55, epd=4.0, pupil_z=30.0)
+    assert barrel.percent[0] < 0.0
+    assert pincushion.percent[0] > 0.0
 
 
 # ---------- field_curvature -------------------------------------------------
@@ -375,17 +375,17 @@ def test_field_curvature_on_axis_sag_equals_tan():
     """For an on-axis field of an axisymmetric system, sag and tan focus
     coincide (within FP)."""
     presc = _spherical_singlet()
-    sag, tan = field_curvature(presc, [Field(0., 0., unit='deg')],
-                               0.55, epd=4.0)
-    np.testing.assert_allclose(sag, tan, atol=1e-9)
+    result = field_curvature(presc, [Field(0., 0., unit='deg')],
+                             0.55, epd=4.0)
+    np.testing.assert_allclose(result.x_fan_z, result.y_fan_z, atol=1e-9)
 
 
 def test_field_curvature_returns_arrays_of_correct_shape():
     presc = _spherical_singlet()
     fields = [Field(0., h, unit='deg') for h in (0., 1., 2.)]
-    sag, tan = field_curvature(presc, fields, 0.55, epd=4.0)
-    assert sag.shape == (3,)
-    assert tan.shape == (3,)
+    result = field_curvature(presc, fields, 0.55, epd=4.0)
+    assert result.x_fan_z.shape == (3,)
+    assert result.y_fan_z.shape == (3,)
 
 
 def test_field_curvature_default_is_differential():
@@ -397,16 +397,16 @@ def test_field_curvature_default_is_differential():
     """
     presc = _spherical_singlet()
     fields = [Field(0., 8., unit='deg')]
-    sag_d, tan_d = field_curvature(presc, fields, 0.55, epd=4.0)
-    sag_lim, tan_lim = field_curvature(presc, fields, 0.55, epd=4.0,
-                                       marginal_fraction=1e-4)
-    sag_zone, tan_zone = field_curvature(presc, fields, 0.55, epd=4.0,
-                                         marginal_fraction=0.7)
+    differential = field_curvature(presc, fields, 0.55, epd=4.0)
+    limit = field_curvature(presc, fields, 0.55, epd=4.0,
+                            marginal_fraction=1e-4)
+    zonal = field_curvature(presc, fields, 0.55, epd=4.0,
+                            marginal_fraction=0.7)
     # default agrees with the differential limit ...
-    np.testing.assert_allclose(sag_d, sag_lim, atol=5e-3)
-    np.testing.assert_allclose(tan_d, tan_lim, atol=5e-3)
+    np.testing.assert_allclose(differential.x_fan_z, limit.x_fan_z, atol=5e-3)
+    np.testing.assert_allclose(differential.y_fan_z, limit.y_fan_z, atol=5e-3)
     # ... and is meaningfully distinct from the 0.7-zone focus
-    assert abs(float(tan_d[0] - tan_zone[0])) > 0.1
+    assert abs(float(differential.y_fan_z[0] - zonal.y_fan_z[0])) > 0.1
 
 
 # ---------- axial / lateral color ------------------------------------------

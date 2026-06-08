@@ -112,8 +112,9 @@ def test_distortion_defaults_epd_and_wavelength():
     fields = [Field(0, 0), Field(0, 1.0)]
     a = distortion(sys, fields)
     b = distortion(sys, fields, sys.wavelength('d'), epd=sys.epd)
-    for x, y in zip(a, b):
-        np.testing.assert_allclose(x, y)
+    np.testing.assert_allclose(a.real_xy, b.real_xy)
+    np.testing.assert_allclose(a.paraxial_xy, b.paraxial_xy)
+    np.testing.assert_allclose(a.percent, b.percent)
 
 
 def test_field_curvature_defaults_epd_and_wavelength():
@@ -121,8 +122,8 @@ def test_field_curvature_defaults_epd_and_wavelength():
     fields = [Field(0, 0), Field(0, 1.0)]
     a = field_curvature(sys, fields)
     b = field_curvature(sys, fields, sys.wavelength('d'), epd=sys.epd)
-    np.testing.assert_allclose(a[0], b[0])
-    np.testing.assert_allclose(a[1], b[1])
+    np.testing.assert_allclose(a.x_fan_z, b.x_fan_z)
+    np.testing.assert_allclose(a.y_fan_z, b.y_fan_z)
 
 
 def test_analysis_surface_list_without_epd_raises():

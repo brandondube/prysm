@@ -34,7 +34,9 @@ from prysm.x.raytracing.wavefront_differential import (
     wavefront_differential, WavefrontDifferential,
 )
 from prysm.x.raytracing.surfaces import Zernike
-from tests.x.raytracing.surface_helpers import conic, zernike, plane, wf_auto
+from tests.x.raytracing.surface_helpers import (
+    conic, zernike, plane, wavefront_with_resolved_exit_pupil,
+)
 
 
 # ---------- kernel-level: seed_irregularity dW vs FD ------------------------
@@ -84,8 +86,10 @@ def test_irregularity_dW_matches_fd(mode):
     seed = seed_irregularity(0, mode[0], mode[1], RN)
     _, _, _, dW = wavefront_with_tangents(make_system(), P, S, WVL, [seed])
     h = 1e-6
-    op, _, _ = wf_auto(make_system((mode, +h)), P, S, WVL)
-    om, _, _ = wf_auto(make_system((mode, -h)), P, S, WVL)
+    op, _, _ = wavefront_with_resolved_exit_pupil(
+        make_system((mode, +h)), P, S, WVL)
+    om, _, _ = wavefront_with_resolved_exit_pupil(
+        make_system((mode, -h)), P, S, WVL)
     dW_fd = (op - om) / (2 * h)
     # FD of the composed trace->OPD pipeline is truncation-limited; the analytic
     # tangent is the more accurate of the two.
@@ -99,8 +103,10 @@ def test_irregularity_waves_output_scales():
     _, _, _, dW = wavefront_with_tangents(make_system(), P, S, WVL, [seed],
                                           output='waves')
     h = 1e-6
-    op, _, _ = wf_auto(make_system((mode, +h)), P, S, WVL, output='waves')
-    om, _, _ = wf_auto(make_system((mode, -h)), P, S, WVL, output='waves')
+    op, _, _ = wavefront_with_resolved_exit_pupil(
+        make_system((mode, +h)), P, S, WVL, output='waves')
+    om, _, _ = wavefront_with_resolved_exit_pupil(
+        make_system((mode, -h)), P, S, WVL, output='waves')
     np.testing.assert_allclose(dW[:, 0], (op - om) / (2 * h),
                                rtol=1e-5, atol=1e-6)
 
@@ -125,8 +131,10 @@ def test_multiple_irregularity_seeds_one_trace():
     assert dW.shape[1] == 3
     h = 1e-6
     for p, mode in enumerate([(2, 2), (2, -2)]):
-        op, _, _ = wf_auto(make_system((mode, +h)), P, S, WVL)
-        om, _, _ = wf_auto(make_system((mode, -h)), P, S, WVL)
+        op, _, _ = wavefront_with_resolved_exit_pupil(
+            make_system((mode, +h)), P, S, WVL)
+        om, _, _ = wavefront_with_resolved_exit_pupil(
+            make_system((mode, -h)), P, S, WVL)
         np.testing.assert_allclose(dW[:, p], (op - om) / (2 * h),
                                    rtol=1e-5, atol=1e-7)
 
@@ -203,7 +211,8 @@ def test_zernike_sensitivity_matches_fd():
     def fit_perturbed(pert, T):
         try:
             pert.set(pert.nominal + T)
-            opd, x, y = wf_auto(ld, P, S, 0.5, output='length')
+            opd, x, y = wavefront_with_resolved_exit_pupil(
+                ld, P, S, 0.5, output='length')
             c, _ = wavefront_zernike_fit(opd, x, y, NMS,
                                          normalization_radius=R)
         finally:

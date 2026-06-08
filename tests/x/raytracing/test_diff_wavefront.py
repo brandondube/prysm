@@ -20,7 +20,9 @@ from prysm.x.raytracing._diff_raytrace import (
     seed_tilt,
     seed_index,
 )
-from tests.x.raytracing.surface_helpers import conic, plane, wf_auto
+from tests.x.raytracing.surface_helpers import (
+    conic, plane, wavefront_with_resolved_exit_pupil,
+)
 
 
 NG = 1.62
@@ -59,8 +61,10 @@ def ray_bundle():
 
 
 def fd_opd(over_plus, over_minus, P, S, h, output='length'):
-    opd_p, _, _ = wf_auto(make_system(**over_plus), P, S, WVL, output=output)
-    opd_m, _, _ = wf_auto(make_system(**over_minus), P, S, WVL, output=output)
+    opd_p, _, _ = wavefront_with_resolved_exit_pupil(
+        make_system(**over_plus), P, S, WVL, output=output)
+    opd_m, _, _ = wavefront_with_resolved_exit_pupil(
+        make_system(**over_minus), P, S, WVL, output=output)
     return (opd_p - opd_m) / (2 * h)
 
 
@@ -158,8 +162,8 @@ def test_nominal_opd_matches_analysis_wavefront(output, field):
     """
     P, S = ray_bundle()
     sys = make_system()
-    opd_ref, x_ref, y_ref = wf_auto(sys, P, S, WVL, field=field,
-                                      output=output)
+    opd_ref, x_ref, y_ref = wavefront_with_resolved_exit_pupil(
+        sys, P, S, WVL, field=field, output=output)
     opd, x, y, _ = wavefront_with_tangents(sys, P, S, WVL, [seed_curvature(0)],
                                            field=field, output=output)
     np.testing.assert_allclose(opd, opd_ref, rtol=0, atol=1e-12)

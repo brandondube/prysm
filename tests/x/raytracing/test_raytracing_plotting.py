@@ -694,11 +694,11 @@ def test_plot_field_curvature_plots_s_and_t_vs_field():
         # x-values differ from the raw lab-frame foci by that vertex z
         image_z = float(ld[-1].P[2])
         from prysm.x.raytracing.analysis import field_curvature
-        sag, tan = field_curvature(ld, ld.fields, ld.wavelength('d'))
+        result = field_curvature(ld, ld.fields, ld.wavelength('d'))
         np.testing.assert_allclose(ax.lines[0].get_xdata(),
-                                   np.asarray(sag) - image_z)
+                                   np.asarray(result.x_fan_z) - image_z)
         np.testing.assert_allclose(ax.lines[1].get_xdata(),
-                                   np.asarray(tan) - image_z)
+                                   np.asarray(result.y_fan_z) - image_z)
         # on-axis sagittal and tangential foci coincide
         np.testing.assert_allclose(ax.lines[0].get_xdata()[0],
                                    ax.lines[1].get_xdata()[0])
@@ -747,8 +747,8 @@ def test_plot_distortion_plots_percent_vs_field():
         line = ax.lines[0]
         np.testing.assert_allclose(line.get_ydata(), [0., 3., 5.])
         from prysm.x.raytracing.analysis import distortion
-        _, _, percent = distortion(ld, ld.fields, ld.wavelength('d'))
-        np.testing.assert_allclose(line.get_xdata(), percent)
+        result = distortion(ld, ld.fields, ld.wavelength('d'))
+        np.testing.assert_allclose(line.get_xdata(), result.percent)
         assert line.get_xdata()[0] == 0.0  # no distortion on axis
         assert ax.get_xlabel() == 'distortion [%]'
     finally:

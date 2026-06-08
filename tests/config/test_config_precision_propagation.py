@@ -70,22 +70,22 @@ def _expected_dtype(precision):
 def test_distortion_dtype_follows_config_precision(precision):
     presc = _parabola()
     fields = [Field(0.0, 0.0), Field(0.1, 0.0)]
-    real_xy, paraxial_xy, percent = distortion(
+    result = distortion(
         presc, fields, 0.55e-3, epd=10.0,
     )
     expected = _expected_dtype(precision)
-    assert real_xy.dtype == expected
-    assert paraxial_xy.dtype == expected
-    assert percent.dtype == expected
+    assert result.real_xy.dtype == expected
+    assert result.paraxial_xy.dtype == expected
+    assert result.percent.dtype == expected
 
 
 def test_field_curvature_dtype_follows_config_precision(precision):
     presc = _parabola()
     fields = [Field(0.0, 0.0), Field(0.1, 0.0)]
-    sag_z, tan_z = field_curvature(presc, fields, 0.55e-3, epd=10.0)
+    result = field_curvature(presc, fields, 0.55e-3, epd=10.0)
     expected = _expected_dtype(precision)
-    assert sag_z.dtype == expected
-    assert tan_z.dtype == expected
+    assert result.x_fan_z.dtype == expected
+    assert result.y_fan_z.dtype == expected
 
 
 def test_axial_color_dtype_follows_config_precision(precision):

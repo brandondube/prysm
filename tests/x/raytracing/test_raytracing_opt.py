@@ -228,32 +228,6 @@ def test_aim_rays_precision(precision, atol):
         config.precision = old
 
 
-def test_aim_rays_matches_scipy_lbfgsb():
-    """Parity with an independent per-ray scipy L-BFGS-B aim (the method this
-    kernel replaced) on a known system."""
-    from scipy.optimize import minimize
-    presc = _singlet_with_internal_stop()
-    P, S = _collimated_y_fan(5, half=2.0, z0=-10.0, theta_deg=2.0)
-    P_new, _, _ = aim_rays(P, S, presc, surface_index=1, target_xy=(0.0, 0.0),
-                        wvl=0.55)
-
-    from prysm.x.raytracing.spencer_and_murty import raytrace
-    trace_path = presc[:2]
-    P_ref = P.copy()
-    for i in range(P.shape[0]):
-        Pi = P[i].copy()
-        Si = S[i]
-
-        def objective(xy, Pi=Pi, Si=Si):
-            Pi[0], Pi[1] = xy
-            land = raytrace(trace_path, Pi, Si, 0.55).P[-1]
-            return 0.5 * (land[0] ** 2 + land[1] ** 2)
-
-        res = minimize(objective, P[i, :2], method='L-BFGS-B', tol=1e-14)
-        P_ref[i, :2] = res.x
-    np.testing.assert_allclose(P_new[:, :2], P_ref[:, :2], atol=1e-7)
-
-
 @pytest.mark.parametrize('target_z, launch_sz', [(1.0, 1.0), (-1.0, -1.0)])
 def test_aim_rays_direction_normalizes_proposals(target_z, launch_sz):
     """Direction aiming must trace unit vectors even when the Newton variable

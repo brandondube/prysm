@@ -73,11 +73,6 @@ def _interp1d(x, xp, fp, method, extrapolate):
 
 def _normalize_interp_method(method):
     key = str(method).lower()
-    aliases = {
-        'interp': 'linear',
-        'log_interp': 'log',
-    }
-    key = aliases.get(key, key)
     if key not in ('linear', 'nearest', 'pchip', 'log'):
         raise ValueError(
             "interpolation method must be 'linear', 'nearest', 'pchip', or 'log'"

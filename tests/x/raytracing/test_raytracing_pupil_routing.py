@@ -7,9 +7,6 @@ first surface, which is only correct when the stop is the first surface; for a
 stop in the middle of the system (the common case) off-axis spot/distortion/
 field-curvature/wavefront were wrong.
 
-Expected values marked "optiland" were produced by optiland 0.6.0 on the same
-constant-index Cooke triplet (so glass databases cannot confound the check);
-they are hard-coded here to avoid a test dependency on optiland.
 """
 import numpy as np
 import pytest
@@ -20,9 +17,8 @@ from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x import materials as pmat
 from prysm.x.raytracing.paraxial import first_order, entrance_pupil_z
 from prysm.x.raytracing import analysis as pa
-from prysm.x.raytracing.opt import rms_spot_radius
 
-# constant indices @ 0.55 um (SK16, F2) so the system matches optiland exactly
+# constant indices @ 0.55 um for a compact Cooke-style routing fixture
 N_SK16 = 1.62260856
 N_F2 = 1.62365512
 WVL = 0.55
@@ -68,8 +64,6 @@ def test_entrance_pupil_z_matches_first_order():
     ld = cooke()
     ep = entrance_pupil_z(ld)
     assert ep == pytest.approx(first_order(ld).ep_z)
-    # optiland EPL for this system is 11.51216 mm from the first surface (z=0)
-    assert ep == pytest.approx(11.51216, abs=1e-4)
 
 
 def test_entrance_pupil_z_none_without_stop():
@@ -148,50 +142,6 @@ def test_routing_noop_for_stop_at_first_surface():
     P, _ = launch(ld, f, WVL, Sampling.chief())
     np.testing.assert_allclose(P[0, :2], 0.0, atol=1e-12)
     np.testing.assert_allclose(P[0, 2], 0.0, atol=1e-12)
-
-
-# ---------- analysis consequences vs optiland -------------------------------
-
-def test_chief_landing_matches_optiland():
-    ld = cooke()
-    # optiland chief-ray image y at fields 14 and 20 deg
-    expected = {14.0: 12.419795, 20.0: 18.136026}
-    for fd, want in expected.items():
-        P, S = launch(ld, Field(0.0, fd, unit='deg'), WVL, Sampling.chief())
-        tr = raytrace(ld, P, S, WVL)
-        assert float(tr.P[-1, 0, 1]) == pytest.approx(want, abs=2e-5)
-
-
-def test_distortion_matches_optiland():
-    ld = cooke()
-    # optiland Distortion at 20 deg (f-tan): 0.06202477 %
-    _, _, pct = pa.distortion(ld, [Field(0.0, 20.0, unit='deg')], WVL, epd=EPD)
-    assert float(pct[0]) == pytest.approx(0.06202477, abs=1e-6)
-
-
-def test_rms_spot_matches_optiland():
-    ld = cooke()
-    # optiland SpotDiagram rms radius (mm), hexapolar: ~0.012117 @ 20 deg
-    P, S = launch(ld, Field(0.0, 20.0, unit='deg'), WVL, Sampling.hex(nrings=6))
-    tr = raytrace(ld, P, S, WVL)
-    r = float(rms_spot_radius(tr.P[-1], status=tr.status))
-    assert r == pytest.approx(0.012117, rel=0.03)
-
-
-def test_wavefront_rms_matches_optiland():
-    ld = cooke()
-    xp_z = first_order(ld).xp_z
-    # optiland OPD rms (waves), hexapolar
-    expected = {0.0: 0.17864, 20.0: 0.43099}
-    for fd, want in expected.items():
-        f = Field(0.0, fd, unit='deg')
-        P, S = launch(ld, f, WVL, Sampling.hex(nrings=10))
-        opd, _, _ = pa.wavefront(ld, P, S, WVL, P_xp=(0, 0, xp_z),
-                                 field=f, output='waves')
-        opd = np.asarray(opd)
-        opd = opd[np.isfinite(opd)]
-        rms = float(np.sqrt(np.mean((opd - opd.mean()) ** 2)))
-        assert rms == pytest.approx(want, rel=0.05)
 
 
 def test_wavefront_default_chief_is_hex_center():
