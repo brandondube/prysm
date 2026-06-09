@@ -847,9 +847,42 @@ class LensData:
             edge=None):
         """Append a surface row.  Returns self for chaining.
 
-        edge carries mechanical edge geometry (outer diameter, chamfers,
-        seats, ...) for layout drawing; on the front surface of a lens element
-        it is the element's edge spec consumed by plotting.plot_optics.
+        The primary way to build a prescription; chain calls in declaration
+        order from object to image (see the constructor examples).
+
+        Parameters
+        ----------
+        shape : Shape
+            the surface sag shape (Sphere, Conic, Plane, EvenAsphere, ...).
+        thickness : float, optional
+            axial gap to the next surface in length units.  After a reflective
+            surface the layout folds, so a positive thickness still means
+            physical separation downstream.
+        material : MaterialProtocol, optional
+            post-surface medium; its .n(wavelength) supplies the real index.
+            Required for typ='refr'; pass the ambient material (e.g.
+            materials.air) on the exit surface of an element, and None for
+            reflective / eval surfaces.  Bare numbers, lambdas, and glass-name
+            strings are not accepted -- resolve them via x.materials first.
+        typ : str, optional
+            surface interaction: 'refr' (refract, default), 'refl' (reflect),
+            or 'eval' (a non-interacting plane, e.g. the object or image).
+        semidiameter : float, optional
+            clear semi-diameter; in the absence of aperture / bounding it sets
+            both a circular clipping aperture and the drawn radial extent.
+        aperture : callable, optional
+            aperture predicate in local surface coordinates (see
+            circular_aperture, annular_aperture); clips rays and overrides the
+            semidiameter aperture.
+        bounding : dict, optional
+            cosmetic edge / substrate geometry (outer_radius, inner_radius) for
+            layout drawing; does not clip rays.
+        grating : tuple, optional
+            diffraction grating data (period, grating_vector, order).
+        edge : dict, optional
+            mechanical edge geometry (outer diameter, chamfers, seats, ...) for
+            layout drawing; on the front surface of a lens element it is the
+            element edge spec consumed by plotting.plot_optics.
 
         """
         self.rows.append(SurfaceRow(

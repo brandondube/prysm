@@ -28,21 +28,21 @@ def make_singlet(image_gap=95.0, with_image=True):
         lens.add(Plane(), typ='eval', material=materials.air,
                  semidiameter=12.0)
     return OpticalSystem(lens, aperture=20.0, fields=[0],
-                         wavelengths=FRAUNHOFER_LINES_UM,
-                         reference_wavelength='d')
+                         wavelengths=list(FRAUNHOFER_LINES_UM.values()),
+                         reference=1)
 
 
 def test_problem_x0_is_the_packed_free_vector():
     ld = make_singlet(with_image=False)
     ld.lens.vary('curvature', surfaces=[0, 1])
-    prob = Problem(ld, [EFL(ld.wavelength('d'), target=100.0)])
+    prob = Problem(ld, [EFL(ld.wavelength(), target=100.0)])
     np.testing.assert_allclose(prob.x0(), [1 / 102.0, -1 / 102.0])
 
 
 def test_problem_residuals_track_the_free_vector():
     ld = make_singlet(with_image=False)
     ld.lens.vary('curvature', surfaces=1)
-    wvl = ld.wavelength('d')
+    wvl = ld.wavelength()
     target = 100.0
     prob = Problem(ld, [EFL(wvl, target=target)])
     r0 = prob.residuals(prob.x0())
@@ -53,7 +53,7 @@ def test_problem_residuals_track_the_free_vector():
 def test_lensdata_efl_optimization_converges():
     ld = make_singlet(with_image=False)
     ld.lens.vary('curvature', surfaces=1)  # one DOF, one operand -> well posed
-    wvl = ld.wavelength('d')
+    wvl = ld.wavelength()
     target = 80.0
     prob = Problem(ld, equality_constraints=[EFL(wvl, target=target)])
     res = prob.solve(damping=1e-8, xtol=1e-12, ftol=1e-12,
@@ -67,7 +67,7 @@ def test_lensdata_thickness_and_curvature_jointly_varied():
     # the free vector mixes shape and gap DOFs and the optimizer moves both.
     ld = make_singlet(with_image=False)
     ld.lens.vary('curvature', surfaces=1).vary('thickness', surfaces=0)
-    wvl = ld.wavelength('d')
+    wvl = ld.wavelength()
     prob = Problem(ld, equality_constraints=[EFL(wvl, target=90.0)])
     x0 = prob.x0()
     assert len(x0) == 2
@@ -79,7 +79,7 @@ def test_lensdata_thickness_and_curvature_jointly_varied():
 def test_focal_length_constraint_is_not_an_objective_residual():
     ld = make_singlet(with_image=False)
     ld.lens.vary('curvature', surfaces=1)
-    wvl = ld.wavelength('d')
+    wvl = ld.wavelength()
     prob = Problem(ld, equality_constraints=[EFL(wvl, target=90.0)])
     assert prob.residuals(prob.x0()).size == 0
     assert prob.equalities(prob.x0()).shape == (1,)
@@ -88,7 +88,7 @@ def test_focal_length_constraint_is_not_an_objective_residual():
 def test_fd_free_jacobian_matches_numeric_merit_gradient():
     ld = make_singlet(with_image=False)
     ld.lens.vary('curvature', surfaces=[0, 1])
-    wvl = ld.wavelength('d')
+    wvl = ld.wavelength()
     prob = Problem(ld, [EFL(wvl, target=100.0)])
     x = prob.x0()
     J = prob.jacobian(x, method='fd', step=1e-7)
@@ -107,7 +107,7 @@ def test_fd_free_jacobian_matches_numeric_merit_gradient():
 def test_jacobian_restores_free_vector():
     ld = make_singlet(with_image=False)
     ld.lens.vary('curvature', surfaces=[0, 1])
-    prob = Problem(ld, [EFL(ld.wavelength('d'), target=100.0)])
+    prob = Problem(ld, [EFL(ld.wavelength(), target=100.0)])
     x0 = prob.x0()
     prob.jacobian(x0)
     np.testing.assert_allclose(ld.lens.pack(), x0)
@@ -115,7 +115,7 @@ def test_jacobian_restores_free_vector():
 
 def test_rms_spot_operand_decreases_under_optimization():
     ld = make_singlet(image_gap=96.0)
-    wvl = ld.wavelength('d')
+    wvl = ld.wavelength()
     P, S = launch(ld, ld.field(0), wvl, Sampling.hex(nrings=3), epd=ld.epd)
     op = RmsSpotRadius(P, S, wvl)
     ld.lens.vary('curvature', surfaces=[0, 1])
@@ -131,7 +131,7 @@ def test_rms_spot_operand_decreases_under_optimization():
 def test_lensdata_autograd_jacobian_requires_torch():
     ld = make_singlet(with_image=False)
     ld.lens.vary('curvature', surfaces=1)
-    prob = Problem(ld, [EFL(ld.wavelength('d'), target=100.0)])
+    prob = Problem(ld, [EFL(ld.wavelength(), target=100.0)])
     with pytest.raises(RuntimeError, match='backend to be torch'):
         prob.jacobian(prob.x0(), method='autograd')
 

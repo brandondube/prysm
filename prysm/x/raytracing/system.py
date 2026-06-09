@@ -1,7 +1,9 @@
 """System-level metadata wrapper for LensData."""
 
 import math
+import warnings
 
+from prysm.conf import config
 from prysm.mathops import np
 
 from .paraxial import (
@@ -197,7 +199,16 @@ class FieldSet:
     __slots__ = ('fields',)
 
     def __init__(self, fields=None):
-        """Initialize from a sequence of field specs (coerced to Field)."""
+        """Initialize a field set.
+
+        Parameters
+        ----------
+        fields : iterable, optional
+            field specs.  Each entry is coerced to a Field: a Field passes
+            through, a scalar becomes an on-axis-x y field, and a length-2
+            sequence becomes (x, y).  None gives an empty set.
+
+        """
         self.fields = _coerce_fields(fields)
 
     def __len__(self):
@@ -233,8 +244,9 @@ class OpticalSystem:
     """System-level handle wrapping a LensData spine.
 
     Owns the aperture (an ApertureSpec), the fields (a FieldSet), the
-    wavelengths and reference wavelength, the length unit, provenance, and the
-    integer stop index, and holds the LensData that carries the surfaces.
+    wavelengths and their weights, the integer reference-wavelength index, the
+    length unit, provenance, and the integer stop index, and holds the LensData
+    that carries the surfaces.
 
     Duck-types as the compiled surface sequence: len/iter/getitem, to_surfaces,
     rows, and surfaces all delegate to the lens, so the paraxial / analysis /
@@ -244,25 +256,63 @@ class OpticalSystem:
 
     """
 
-    __slots__ = ('lens', 'aperture', 'fields', 'wavelengths',
-                 'reference_wavelength', 'unit', 'title', 'stop_index',
+    __slots__ = ('lens', 'aperture', 'fields', 'wavelengths', 'weights',
+                 'reference', 'unit', 'title', 'stop_index',
                  'ray_aiming', 'source_path', 'source_format', 'extras',
-                 '_derived')
+                 '_derived', '_trace_cache')
 
     def __init__(self, lens, *, aperture=None, fields=None, wavelengths=None,
-                 reference_wavelength=None, unit=None, title=None,
+                 weights=None, reference=None, unit=None, title=None,
                  stop_index=None, ray_aiming='paraxial', source_path=None,
                  source_format=None, extras=None):
-        """Initialize a system over a lens."""
+        """Initialize a system over a lens.
+
+        Parameters
+        ----------
+        lens : LensData
+            the surface spine; the system delegates surface access to it.
+        aperture : ApertureSpec or float, optional
+            the system aperture.  A bare float is taken as an entrance-pupil
+            diameter.
+        fields : FieldSet or iterable, optional
+            field points; a bare iterable is coerced to a FieldSet.
+        wavelengths : iterable of float, optional
+            wavelengths in micrometers.
+        weights : iterable of float, optional
+            spectral weights parallel to wavelengths; defaults to all ones.
+            A length mismatch raises ValueError.
+        reference : int, optional
+            index into wavelengths of the reference wavelength; defaults to 0.
+            Read the resolved micron value back through reference_wavelength.
+        unit : str, optional
+            length unit label (e.g. mm) carried for listings and IO.
+        title : str, optional
+            free-text system title.
+        stop_index : int, optional
+            row index of the aperture stop.
+        ray_aiming : str, optional
+            paraxial (default) or real stop aiming.
+        source_path, source_format : optional
+            provenance of an imported system.
+        extras : mapping, optional
+            unparsed import metadata, copied onto the system.
+
+        """
         self.lens = lens
         if aperture is not None and not isinstance(aperture, ApertureSpec):
             aperture = ApertureSpec.epd(aperture)
         self.aperture = aperture
         self.fields = fields if isinstance(fields, FieldSet) else FieldSet(fields)
         self.wavelengths = _coerce_wavelengths(wavelengths)
-        if reference_wavelength is None and self.wavelengths:
-            reference_wavelength = next(iter(self.wavelengths))
-        self.reference_wavelength = reference_wavelength
+        self.weights = _coerce_weights(weights, self.wavelengths)
+        if len(self.wavelengths) and float(np.max(self.wavelengths)) >= 200.0:
+            offender = float(np.max(self.wavelengths))
+            warnings.warn(
+                f'wavelengths are micrometers; {offender:g} looks like '
+                'nanometers',
+                stacklevel=2,
+            )
+        self.reference = 0 if reference is None else int(reference)
         self.unit = unit
         self.title = title
         self.stop_index = stop_index
@@ -277,6 +327,10 @@ class OpticalSystem:
         # version-keyed cache of derived first-order quantities (e.g. the exit
         # pupil); invalidated implicitly via self.lens._version in the key.
         self._derived = {}
+        # cache of analysis grids for the convenience plot methods, keyed by a
+        # live metadata fingerprint (see _fingerprint) so it invalidates on any
+        # system change -- reassignment or in-place mutation.
+        self._trace_cache = {}
 
     # -- surface-sequence delegation (duck-type as the compiled surfaces) --
     def to_surfaces(self):
@@ -307,14 +361,28 @@ class OpticalSystem:
     # system intentionally does NOT delegate add / vary / pack / update / etc.
 
     # -- metadata resolvers (moved off LensData) --
+    @property
+    def reference_wavelength(self):
+        """Resolved reference wavelength in microns (wavelengths[reference]).
+
+        Read-only: the stored handle is the integer reference index; this
+        returns the micron value it points at, or None when no wavelengths are
+        set.
+        """
+        if len(self.wavelengths) == 0:
+            return None
+        return float(self.wavelengths[self.reference])
+
     def wavelength(self, wavelength=None):
-        """Resolve a wavelength name or scalar to microns."""
+        """Resolve a wavelength to microns.
+
+        None selects the reference wavelength (falling back to 0.6328 microns
+        when no wavelengths are set); any other value is taken as a literal
+        micron value.
+        """
         if wavelength is None:
-            wavelength = self.reference_wavelength
-        if wavelength is None:
-            return 0.6328
-        if isinstance(wavelength, str):
-            return float(self.wavelengths[wavelength])
+            ref = self.reference_wavelength
+            return 0.6328 if ref is None else ref
         return float(wavelength)
 
     def field(self, field=None):
@@ -409,6 +477,118 @@ class OpticalSystem:
         self.lens.solve_image_distance(surface, wavelength=wvl)
         return self
 
+    # -- convenience plotting (lazy plotting import; cached grids) --
+    def _fingerprint(self):
+        """Hashable snapshot of the live metadata that drives a grid trace.
+
+        Read fresh on every call so the trace cache invalidates on any change
+        -- a slot reassignment OR an in-place mutation (appending to fields,
+        editing a wavelength) -- which a bare version counter would miss.
+        """
+        aperture = self.aperture
+        ap = None if aperture is None else (aperture.mode, aperture.value)
+        fields = tuple((f.kind, f.hx, f.hy, f.unit, f.object_z)
+                       for f in self.fields)
+        return (self.lens._version, ap, fields,
+                tuple(float(w) for w in self.wavelengths),
+                tuple(float(w) for w in self.weights),
+                self.reference, self.stop_index, self.ray_aiming)
+
+    def _cached_grid(self, kind, fn, kwargs):
+        """Return fn(self, **kwargs), memoized on the live fingerprint.
+
+        kwargs are the data-function arguments; their repr keys the cache so a
+        Sampling or an explicit field / wavelength override still produces a
+        stable, hashable key.  Only the data grid is cached -- the convenience
+        methods regenerate the figure on every call.
+        """
+        # settle any lazy lens dependencies first: an image-distance solve
+        # writes a gap on the first compile, bumping lens._version mid-trace, so
+        # resolving it here lets the fingerprint read the settled version and
+        # repeated calls hit instead of re-tracing.
+        self.lens.to_surfaces()
+        key = (self._fingerprint(), kind, repr(tuple(sorted(kwargs.items()))))
+        cache = self._trace_cache
+        if key not in cache:
+            cache[key] = fn(self, **kwargs)
+        return cache[key]
+
+    def layout_2d(self, **kwargs):
+        """Draw a 2D layout of the system: the optics plus a ray fan per field.
+
+        A thin delegate to plotting.layout (see it for parameters); imports the
+        plotting layer lazily so matplotlib stays an optional dependency.
+
+        Returns
+        -------
+        (matplotlib.figure.Figure, matplotlib.axes.Axis)
+
+        """
+        from . import plotting
+        return plotting.layout(self, **kwargs)
+
+    def plot_spots(self, *, fields=None, wavelengths=None, sampling=None,
+                   epd=None, reference='centroid', **plot_kwargs):
+        """Spot diagrams for the system fields and wavelengths.
+
+        Runs analysis.spot_diagrams (cached on the system fingerprint) and draws
+        it with plotting.plot_spot_diagrams.  The data keywords (fields,
+        wavelengths, sampling, epd, reference) size the grid; any remaining
+        keywords forward to the plotter.
+
+        Returns
+        -------
+        (matplotlib.figure.Figure, ndarray of matplotlib.axes.Axes)
+
+        """
+        from . import plotting
+        from .analysis import spot_diagrams
+        grid = self._cached_grid('spots', spot_diagrams, dict(
+            fields=fields, wavelengths=wavelengths, sampling=sampling,
+            epd=epd, reference=reference))
+        return plotting.plot_spot_diagrams(grid, **plot_kwargs)
+
+    def plot_ray_fans(self, *, fields=None, wavelengths=None, nrays=21,
+                      epd=None, distribution='uniform', reference='chief',
+                      **plot_kwargs):
+        """Transverse ray-aberration fans for the system.
+
+        Runs analysis.ray_aberration_fans (cached) and draws it with
+        plotting.plot_ray_fans; data keywords size the grid, the rest forward to
+        the plotter.
+
+        Returns
+        -------
+        (matplotlib.figure.Figure, ndarray of matplotlib.axes.Axes)
+
+        """
+        from . import plotting
+        from .analysis import ray_aberration_fans
+        grid = self._cached_grid('ray_fans', ray_aberration_fans, dict(
+            fields=fields, wavelengths=wavelengths, nrays=nrays, epd=epd,
+            distribution=distribution, reference=reference))
+        return plotting.plot_ray_fans(grid, **plot_kwargs)
+
+    def plot_opd_fans(self, *, fields=None, wavelengths=None, nrays=21,
+                      epd=None, distribution='uniform', stop_index=None,
+                      output='waves', **plot_kwargs):
+        """Wavefront (OPD) fans for the system.
+
+        Runs analysis.opd_fans (cached) and draws it with plotting.plot_opd_fans;
+        data keywords size the grid, the rest forward to the plotter.
+
+        Returns
+        -------
+        (matplotlib.figure.Figure, ndarray of matplotlib.axes.Axes)
+
+        """
+        from . import plotting
+        from .analysis import opd_fans
+        grid = self._cached_grid('opd_fans', opd_fans, dict(
+            fields=fields, wavelengths=wavelengths, nrays=nrays, epd=epd,
+            distribution=distribution, stop_index=stop_index, output=output))
+        return plotting.plot_opd_fans(grid, **plot_kwargs)
+
     # -- listings delegate to the lens --
     def list_surfaces(self, *, unit=None):
         """Tabular surface listing (lens data editor)."""
@@ -427,8 +607,8 @@ class OpticalSystem:
         """Return a copy: the lens is copied; metadata containers are copied."""
         return OpticalSystem(
             self.lens.copy(), aperture=self.aperture,
-            fields=list(self.fields), wavelengths=dict(self.wavelengths),
-            reference_wavelength=self.reference_wavelength, unit=self.unit,
+            fields=list(self.fields), wavelengths=self.wavelengths,
+            weights=self.weights, reference=self.reference, unit=self.unit,
             title=self.title, stop_index=self.stop_index,
             ray_aiming=self.ray_aiming,
             source_path=self.source_path, source_format=self.source_format,
@@ -469,16 +649,39 @@ def _coerce_fields(fields):
 
 
 def _coerce_wavelengths(wavelengths):
-    """Coerce wavelength metadata to a dictionary.
+    """Coerce wavelength metadata to a 1-D micron array.
 
-    Sequence inputs are keyed by stringified integer index.
+    None becomes an empty array.
 
     """
     if wavelengths is None:
-        return {}
-    if hasattr(wavelengths, 'items'):
-        return dict(wavelengths)
-    return {str(i): float(w) for i, w in enumerate(wavelengths)}
+        return np.asarray([], dtype=config.precision)
+    if hasattr(wavelengths, 'keys'):
+        raise TypeError(
+            'wavelengths must be a sequence of micron floats, not a mapping; '
+            'pass e.g. list(FRAUNHOFER_LINES_UM.values()) and select the '
+            'reference by integer index'
+        )
+    return np.asarray([float(w) for w in wavelengths], dtype=config.precision)
+
+
+def _coerce_weights(weights, wavelengths):
+    """Coerce spectral weights to an array parallel to wavelengths.
+
+    None defaults to all ones; an explicit sequence must match the wavelength
+    count.
+
+    """
+    n = len(wavelengths)
+    if weights is None:
+        return np.ones(n, dtype=config.precision)
+    weights = np.asarray([float(w) for w in weights], dtype=config.precision)
+    if len(weights) != n:
+        raise ValueError(
+            f'weights length {len(weights)} does not match the {n} '
+            'wavelengths'
+        )
+    return weights
 
 
 # imported at module end to avoid a circular import at package load time

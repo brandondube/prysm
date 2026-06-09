@@ -43,7 +43,7 @@ def cooke():
         lens.add(Conic(1.0 / R, 0.0), thickness=t, material=mat)
     lens.add(Plane(), typ='eval', material=pmat.air, semidiameter=1e3)
     return OpticalSystem(lens, aperture=EPD, fields=[0.0, 14.0, 20.0],
-                         wavelengths={'w': WVL}, reference_wavelength='w',
+                         wavelengths=[WVL], reference=0,
                          stop_index=STOP_INDEX)
 
 
@@ -54,7 +54,7 @@ def biconvex_stop_first():
     lens.add(Conic(-1 / 50.0, 0.0), thickness=46.0, material=pmat.air)
     lens.add(Plane(), typ='eval', material=pmat.air, semidiameter=1e3)
     return OpticalSystem(lens, aperture=20.0, fields=[0.0, 10.0],
-                         wavelengths={'w': WVL}, reference_wavelength='w',
+                         wavelengths=[WVL], reference=0,
                          stop_index=0)
 
 

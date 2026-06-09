@@ -258,9 +258,9 @@ def _telecentric_slow(epd=3.0):
           .add(Conic(-c, 0.0), thickness=120.0, material=materials.air,
                semidiameter=8.0))
     sp = OpticalSystem(probe, aperture=epd, fields=[Field(0, 0, kind='angle')],
-                       wavelengths={'d': 0.5875618}, reference_wavelength='d',
+                       wavelengths=[0.5875618], reference=0,
                        stop_index=0)
-    ffl = first_order(sp, 'd', stop_index=0).ffl
+    ffl = first_order(sp, stop_index=0).ffl
     lens = LensData()
     (lens.add(Plane(), typ='eval', material=materials.air, semidiameter=epd / 2)
          .add(Conic(c, 0.0), thickness=2.0, material=mat, semidiameter=10.0)
@@ -268,9 +268,9 @@ def _telecentric_slow(epd=3.0):
          .add(Plane(), typ='eval', material=materials.air, semidiameter=15.0))
     lens.rows[0].thickness = abs(ffl)
     sysT = OpticalSystem(lens, aperture=epd, fields=[Field(0, 0, kind='angle')],
-                         wavelengths={'d': 0.5875618}, reference_wavelength='d',
+                         wavelengths=[0.5875618], reference=0,
                          stop_index=0)
-    wvl = sysT.wavelength('d')
+    wvl = sysT.wavelength()
     # focus distance from the last lens surface (exclude the image plane row)
     lens.rows[2].thickness = paraxial_image_distance(
         sysT.to_surfaces()[:-1], wvl)

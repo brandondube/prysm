@@ -331,9 +331,9 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
     fields = _angle_fields_from_header(header)
     ref_idx = header.get('reference_wvl_index')
     wavelengths = header['wavelengths']
-    reference_wavelength = None
+    reference = None
     if ref_idx is not None and 1 <= ref_idx <= len(wavelengths):
-        reference_wavelength = float(wavelengths[ref_idx - 1])
+        reference = ref_idx - 1
 
     aperture = None
     if header['epd'] is not None:
@@ -347,7 +347,7 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
         ld,
         aperture=aperture,
         fields=fields, wavelengths=wavelengths,
-        reference_wavelength=reference_wavelength, unit='mm',
+        reference=reference, unit='mm',
         title=header['title'],
         source_path=path_for_meta, source_format='codev',
         extras=header['extras'],
@@ -668,7 +668,8 @@ def write_seq(system):
     """
     from ..lensdata import CoordBreak
     lines = ['LEN', 'CUM', 'DIM M']
-    wvls = list(getattr(system, 'wavelengths', {}).values())
+    wvls = getattr(system, 'wavelengths', None)
+    wvls = [] if wvls is None else [float(w) for w in wvls]
     if wvls:
         lines.append('WL ' + ' '.join(f'{w * 1000.0:g}' for w in wvls))
     epd = getattr(system, 'epd', None)

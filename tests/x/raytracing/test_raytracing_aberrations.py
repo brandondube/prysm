@@ -43,9 +43,9 @@ def _singlet(epd=8.0, c1=1 / 61.0, gap=None, material=None, dispersive=False):
                     material=materials.air, semidiameter=10.0))
     ld_probe = OpticalSystem(
         probe_lens, aperture=epd, fields=[Field(0, 0.0, kind='angle')],
-        wavelengths=FRAUNHOFER_LINES_UM, reference_wavelength='d',
+        wavelengths=list(FRAUNHOFER_LINES_UM.values()), reference=1,
         stop_index=0, unit='mm')
-    wvl = ld_probe.wavelength('d')
+    wvl = ld_probe.wavelength()
     if gap is None:
         gap = paraxial_image_distance(ld_probe, wvl)
     lens = LensData()
@@ -57,15 +57,16 @@ def _singlet(epd=8.0, c1=1 / 61.0, gap=None, material=None, dispersive=False):
               semidiameter=12.0))
     ld = OpticalSystem(
         lens, aperture=epd, fields=[Field(0, 0.0, kind='angle')],
-        wavelengths=(FRAUNHOFER_LINES_UM if dispersive else {'d': 0.5875618}),
-        reference_wavelength='d', stop_index=0, unit='mm')
+        wavelengths=(list(FRAUNHOFER_LINES_UM.values()) if dispersive
+                     else [0.5875618]),
+        reference=(1 if dispersive else 0), stop_index=0, unit='mm')
     return ld
 
 
 def test_optical_invariant_constant_across_surfaces():
     """H is the Lagrange invariant -- conserved by paraxial refraction."""
     ld = _singlet()
-    wvl = ld.wavelength('d')
+    wvl = ld.wavelength()
     field = Field(0.0, 2.0, kind='angle')
     (y0m, u0m), (y0c, u0c) = _marginal_chief_launch(
         ld, field, wvl, 1.0, epd=ld.epd, stop_index=0)
@@ -82,7 +83,7 @@ def test_petzval_matches_analytic_sum():
     ld = _singlet()
     field = Field(0.0, 2.0, kind='angle')
     res = seidel_aberrations(ld, field=field)
-    wvl = ld.wavelength('d')
+    wvl = ld.wavelength()
     (y0m, u0m), _ = _marginal_chief_launch(
         ld, field, wvl, 1.0, epd=ld.epd, stop_index=0)
     marg = paraxial_trace(ld, y0m, u0m, wvl, 1.0)
@@ -102,7 +103,7 @@ def test_W040_matches_real_ray_rho4_coefficient():
     opposite signs.
     """
     ld = _singlet(epd=8.0)
-    wvl = ld.wavelength('d')
+    wvl = ld.wavelength()
     field = Field(0.0, 0.0, kind='angle')
     res = seidel_aberrations(ld, field=field)
     W040_len = res.sums['SI'] / 8.0

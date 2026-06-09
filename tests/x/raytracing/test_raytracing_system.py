@@ -33,8 +33,8 @@ def _singlet(aperture=ApertureSpec.epd(20.0), with_object=None):
        .add(Plane(), typ='eval', material=materials.air, semidiameter=12.0))
     stop = 1 if with_object is not None else 0
     return OpticalSystem(ld, aperture=aperture,
-                         wavelengths=FRAUNHOFER_LINES_UM,
-                         reference_wavelength='d', stop_index=stop, unit='mm')
+                         wavelengths=list(FRAUNHOFER_LINES_UM.values()),
+                         reference=1, stop_index=stop, unit='mm')
 
 
 def _afocal(aperture):
@@ -43,8 +43,8 @@ def _afocal(aperture):
        .add(Plane(), typ='refr', material=materials.air, thickness=10.0)
        .add(Plane(), typ='eval', material=materials.air))
     return OpticalSystem(ld, aperture=aperture,
-                         wavelengths=FRAUNHOFER_LINES_UM,
-                         reference_wavelength='d', stop_index=1, unit='mm')
+                         wavelengths=list(FRAUNHOFER_LINES_UM.values()),
+                         reference=1, stop_index=1, unit='mm')
 
 
 # ---------- ApertureSpec ----------------------------------------------------
@@ -287,7 +287,7 @@ def test_vignetting_warning_fires_only_when_present():
 
 def test_exit_pupil_matches_first_order_and_caches():
     sys = _singlet()
-    wvl = sys.wavelength('d')
+    wvl = sys.wavelength()
     P_xp = sys.exit_pupil(wvl)
     np.testing.assert_allclose(P_xp[2], sys.first_order(wvl).xp_z)
     np.testing.assert_allclose(np.asarray(P_xp[:2], dtype=float), 0.0)
@@ -297,7 +297,7 @@ def test_exit_pupil_matches_first_order_and_caches():
 
 def test_exit_pupil_cache_invalidated_by_lens_edit():
     sys = _singlet()
-    wvl = sys.wavelength('d')
+    wvl = sys.wavelength()
     first = sys.exit_pupil(wvl)
     v0 = sys.lens._version
     # an edit through the lens bumps the version and so misses the cache
@@ -309,7 +309,7 @@ def test_exit_pupil_cache_invalidated_by_lens_edit():
 
 def test_exit_pupil_cache_keyed_by_stop_index():
     sys = _singlet()
-    wvl = sys.wavelength('d')
+    wvl = sys.wavelength()
     xp0 = sys.exit_pupil(wvl)
     # stop_index is a plain slot write (no hook), so it is part of the cache
     # key: reassigning it must not return the stale pupil.
@@ -321,9 +321,77 @@ def test_exit_pupil_cache_keyed_by_stop_index():
 def test_resolve_exit_pupil_paraxial_branch_field_independent():
     from prysm.x.raytracing.analysis import resolve_exit_pupil
     sys = _singlet()
-    wvl = sys.wavelength('d')
+    wvl = sys.wavelength()
     on_axis = resolve_exit_pupil(sys, wvl, field=Field(0.0, 0.0))
     off_axis = resolve_exit_pupil(sys, wvl, field=Field(0.0, 5.0))
     # the paraxial exit pupil depends only on (lens, wavelength), not field
     np.testing.assert_allclose(np.asarray(on_axis, dtype=float),
                                np.asarray(off_axis, dtype=float), atol=1e-12)
+
+
+# ---------- wavelength model ------------------------------------------------
+
+def test_wavelengths_are_a_flat_micron_array():
+    sys = OpticalSystem(LensData(), wavelengths=[0.486, 0.587, 0.656])
+    assert isinstance(sys.wavelengths, np.ndarray)
+    np.testing.assert_allclose(sys.wavelengths, [0.486, 0.587, 0.656])
+
+
+def test_wavelength_resolver_two_branches():
+    sys = OpticalSystem(LensData(), wavelengths=[0.486, 0.587, 0.656],
+                        reference=1)
+    # None -> the reference-index wavelength
+    assert sys.wavelength() == pytest.approx(0.587)
+    assert sys.wavelength(None) == pytest.approx(0.587)
+    # any value -> a literal micron value
+    assert sys.wavelength(0.5) == pytest.approx(0.5)
+
+
+def test_reference_defaults_to_zero_and_property_reads_microns():
+    sys = OpticalSystem(LensData(), wavelengths=[0.4, 0.6])
+    assert sys.reference == 0
+    assert sys.reference_wavelength == pytest.approx(0.4)
+    with pytest.raises(AttributeError):
+        sys.reference_wavelength = 0.5  # read-only
+
+
+def test_wavelength_default_when_no_wavelengths():
+    sys = OpticalSystem(LensData())
+    assert len(sys.wavelengths) == 0
+    assert sys.reference_wavelength is None
+    assert sys.wavelength() == pytest.approx(0.6328)
+
+
+def test_weights_default_to_ones_and_validate_length():
+    sys = OpticalSystem(LensData(), wavelengths=[0.4, 0.6])
+    np.testing.assert_allclose(sys.weights, [1.0, 1.0])
+    sys2 = OpticalSystem(LensData(), wavelengths=[0.4, 0.6], weights=[2.0, 3.0])
+    np.testing.assert_allclose(sys2.weights, [2.0, 3.0])
+    with pytest.raises(ValueError, match='weights length'):
+        OpticalSystem(LensData(), wavelengths=[0.4, 0.6], weights=[1.0])
+
+
+def test_wavelengths_mapping_is_rejected_with_a_clear_message():
+    with pytest.raises(TypeError, match='not a mapping'):
+        OpticalSystem(LensData(), wavelengths={'d': 0.587})
+
+
+def test_nanometer_wavelength_guard():
+    with pytest.warns(UserWarning, match='nanometers'):
+        OpticalSystem(LensData(), wavelengths=[486.0, 587.0])
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')  # no warning for micron values
+        OpticalSystem(LensData(), wavelengths=[0.486, 0.587])
+
+
+def test_solve_image_distance_lands_d_line_paraxial_image():
+    from prysm.x.raytracing.paraxial import paraxial_image_distance
+    sys = _singlet()  # FRAUNHOFER wavelengths, reference index 1 (d-line)
+    wvl = sys.reference_wavelength
+    sys.solve_image_distance()  # defaults to the reference (d) wavelength
+    surfaces = sys.to_surfaces()
+    # the image plane sits at the d-line paraxial image of the last powered surface
+    expected = (float(surfaces[-2].P[2])
+                + float(paraxial_image_distance(surfaces[:-1], wvl=wvl)))
+    assert float(surfaces[-1].P[2]) == pytest.approx(expected, abs=1e-9)

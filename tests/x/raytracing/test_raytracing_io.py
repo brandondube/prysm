@@ -192,7 +192,7 @@ def test_zmx_parses_singlet_surface_count(refractiveindex_database):
 def test_zmx_singlet_header_fields(refractiveindex_database):
     pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
     assert pf.epd == 10.0
-    assert list(pf.wavelengths.values()) == [0.55]
+    np.testing.assert_allclose(pf.wavelengths, [0.55])
     assert pf.stop_index == 0  # Zemax SURF 1 -> our index 0
     assert pf.unit == 'mm'
 
@@ -794,7 +794,7 @@ GO
 def test_seq_header_wavelengths_and_reference(refractiveindex_database):
     pf = read_seq(_SEQ_HEADER, _is_text=True, database=refractiveindex_database)
     # Code V WL is nanometers; the reader converts to microns.
-    np.testing.assert_allclose(list(pf.wavelengths.values()),
+    np.testing.assert_allclose(pf.wavelengths,
                                [0.48613, 0.58756, 0.65627])
 
 
@@ -1154,7 +1154,7 @@ def test_seq_wavelength_converted_nm_to_um(refractiveindex_database):
     """Code V WL is nanometers; the reader stores microns."""
     pf = read_seq(_SEQ_POSITIONAL, _is_text=True,
                   database=refractiveindex_database)
-    np.testing.assert_allclose(list(pf.wavelengths.values()), [0.5876])
+    np.testing.assert_allclose(pf.wavelengths, [0.5876])
 
 
 _SEQ_K_CONIC = """\

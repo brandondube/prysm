@@ -31,9 +31,9 @@ def _singlet(epd=8.0):
           .add(Conic(-1 / 61.0, 0.0), thickness=50.0, material=materials.air,
                semidiameter=10.0))
     sysp = OpticalSystem(probe, aperture=epd, fields=[Field(0, 0.0, kind='angle')],
-                         wavelengths={'d': 0.5875618}, reference_wavelength='d',
+                         wavelengths=[0.5875618], reference=0,
                          stop_index=0, unit='mm')
-    wvl = sysp.wavelength('d')
+    wvl = sysp.wavelength()
     foc = paraxial_image_distance(sysp, wvl)
     lens = LensData()
     (lens.add(Conic(1 / 61.0, 0.0), thickness=6.0, material=mat, semidiameter=10.0)
@@ -41,7 +41,7 @@ def _singlet(epd=8.0):
               semidiameter=10.0)
          .add(Plane(), typ='eval', material=materials.air, semidiameter=12.0))
     return OpticalSystem(lens, aperture=epd, fields=[Field(0, 0.0, kind='angle')],
-                         wavelengths={'d': 0.5875618}, reference_wavelength='d',
+                         wavelengths=[0.5875618], reference=0,
                          stop_index=0, unit='mm')
 
 
@@ -56,9 +56,9 @@ def _telecentric(epd=6.0):
           .add(Conic(-c, 0.0), thickness=60.0, material=materials.air,
                semidiameter=14.0))
     sp = OpticalSystem(probe, aperture=epd, fields=[Field(3, 0.0, kind='angle')],
-                       wavelengths={'d': 0.5875618}, reference_wavelength='d',
+                       wavelengths=[0.5875618], reference=0,
                        stop_index=0, unit='mm')
-    ffl = first_order(sp, 'd', stop_index=0).ffl
+    ffl = first_order(sp, stop_index=0).ffl
     lens = LensData()
     (lens.add(Plane(), typ='eval', material=materials.air, semidiameter=epd / 2)
          .add(Conic(c, 0.0), thickness=3.0, material=mat, semidiameter=20.0)
@@ -66,9 +66,9 @@ def _telecentric(epd=6.0):
          .add(Plane(), typ='eval', material=materials.air, semidiameter=30.0))
     lens.rows[0].thickness = abs(ffl)
     sysT = OpticalSystem(lens, aperture=epd, fields=[Field(3, 0.0, kind='angle')],
-                         wavelengths={'d': 0.5875618}, reference_wavelength='d',
+                         wavelengths=[0.5875618], reference=0,
                          stop_index=0, unit='mm')
-    wvl = sysT.wavelength('d')
+    wvl = sysT.wavelength()
     lens.rows[2].thickness = paraxial_image_distance(sysT, wvl)
     return sysT
 
@@ -87,7 +87,7 @@ def _sphere_root_opd(trace, C, R, n_image, chief):
 
 def test_closing_matches_reference_sphere_root_to_machine_precision():
     ld = _singlet()
-    wvl = ld.wavelength('d')
+    wvl = ld.wavelength()
     P, S = launch(ld, Field(0.0, 0.0, kind='angle'), wvl,
                   Sampling.fan(n=41, axis='y'), epd=ld.epd)
     trace = raytrace(ld, P, S, wvl)
@@ -111,7 +111,7 @@ def test_closing_matches_reference_sphere_root_to_machine_precision():
 
 def test_closing_is_finite_and_signed_at_telecentric_kappa_zero():
     ld = _telecentric()
-    wvl = ld.wavelength('d')
+    wvl = ld.wavelength()
     fo = first_order(ld, wvl, stop_index=0)
     assert fo.xp_z is None  # exit pupil genuinely at infinity
     kappa = reference_sphere_curvature(None, np.zeros(3))
@@ -134,7 +134,7 @@ def test_closing_kappa_zero_is_limit_of_small_curvature():
     """kappa=0 (telecentric) is the continuous limit of a tiny finite curvature,
     not a separate branch."""
     ld = _singlet()
-    wvl = ld.wavelength('d')
+    wvl = ld.wavelength()
     P, S = launch(ld, Field(0.0, 0.0, kind='angle'), wvl,
                   Sampling.fan(n=21, axis='y'), epd=ld.epd)
     trace = raytrace(ld, P, S, wvl)

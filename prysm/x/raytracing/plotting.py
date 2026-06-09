@@ -9,6 +9,7 @@ from prysm.mathops import array_to_true_numpy
 
 from .spencer_and_murty import (
     RayTraceResult,
+    raytrace,
     transform_to_global_coords,
     transform_to_local_coords,
     valid_mask,
@@ -20,8 +21,10 @@ from .analysis import (
     distortion,
     _field_curvature_labels,
 )
+from .launch import launch, Sampling
 from .surfaces import STYPE_REFLECT, STYPE_REFRACT
 from ._meta import system_wavelength
+from ._trace_grid import _resolve_fields
 
 import numpy as np  # see module docstring; do not "fix" to mathops np
 
@@ -796,6 +799,71 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
         else:
             j += 1
 
+    return fig, ax
+
+
+def layout(system, *, fields=None, wavelength=None, sampling=None, axis='y',
+           x='z', y='y', colors=None, lw=1, alpha=1,
+           mirror_backing=None, lens_edges=None, fig=None, ax=None):
+    """Draw a 2D layout: the optics plus a ray fan per field.
+
+    A one-call composition of plot_optics (once) and plot_ray_paths (per field)
+    for the common show-me-the-system view.  Tracing happens here, so system
+    must carry (or be given) enough metadata to launch -- an aperture, fields,
+    and a wavelength.
+
+    Parameters
+    ----------
+    system : OpticalSystem or sequence of Surface
+        the optical system to draw.
+    fields : iterable of Field, optional
+        fields to trace; defaults to the system field set, else the on-axis
+        field.
+    wavelength : float, optional
+        wavelength in microns; defaults to the system reference wavelength.
+    sampling : Sampling or int, optional
+        pupil sampling for the drawn fans; an int is shorthand for a fan of
+        that many rays along axis.  Defaults to a 3-ray fan along axis.
+    axis : str, optional
+        fan axis 'y' (default) or 'x', used when sampling is None or an int.
+    x, y : str, optional
+        position components mapped to the plot horizontal and vertical axes;
+        defaults to the traditional z-y meridional view.
+    colors : sequence, optional
+        one matplotlib color per field; defaults to the property cycle.
+    lw, alpha : float, optional
+        ray line width and opacity.
+    mirror_backing, lens_edges : optional
+        forwarded to plot_optics for substrate / edge drawing.
+    fig : matplotlib.figure.Figure, optional
+    ax : matplotlib.axes.Axis, optional
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        A figure object
+    matplotlib.axes.Axis
+        An axis object
+
+    """
+    wvl = system_wavelength(system, wavelength)
+    fields = _resolve_fields(system, fields)
+    if sampling is None:
+        sampling = Sampling.fan(n=3, axis=axis)
+    elif isinstance(sampling, int):
+        sampling = Sampling.fan(n=int(sampling), axis=axis)
+    if colors is None:
+        colors = [f'C{i % 10}' for i in range(len(fields))]
+
+    results = [raytrace(system, *launch(system, field, wvl, sampling), wvl)
+               for field in fields]
+
+    fig, ax = plot_optics(system, results[0], wvl=wvl, x=x, y=y,
+                          mirror_backing=mirror_backing, lens_edges=lens_edges,
+                          fig=fig, ax=ax)
+    for result, color in zip(results, colors):
+        plot_ray_paths(result, x=x, y=y, c=color, lw=lw, alpha=alpha,
+                       fig=fig, ax=ax)
     return fig, ax
 
 

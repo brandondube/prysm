@@ -402,8 +402,9 @@ def write_zmx(system):
                 'surface'
             )
         lines.append(f'STOP {stop_surface}')
-    for w in getattr(system, 'wavelengths', {}).values():
-        lines.append(f'WAVL {w:g}')
+    wvls = getattr(system, 'wavelengths', None)
+    for w in ([] if wvls is None else wvls):
+        lines.append(f'WAVL {float(w):g}')
 
     lines += ['SURF 0', '  TYPE STANDARD', '  CURV 0.0', '  DISZ INFINITY']
 

@@ -38,7 +38,7 @@ def _singlet_lensdata():
               semidiameter=8.0)
          .add(Plane(), typ='eval', material=air, semidiameter=20.0))
     ld = OpticalSystem(lens, aperture=10.0, fields=[0.0, 3.0, 5.0],
-                       wavelengths={'d': 0.5876}, reference_wavelength='d')
+                       wavelengths=[0.5876], reference=0)
     ld.solve_image_distance()
     return ld
 
@@ -456,8 +456,8 @@ def test_lensdata_add_edge_propagates_to_compiled_surface():
               semidiameter=8.0, edge=edge)
          .add(Conic(-1 / 60.0, 0.0), thickness=95.0, material=materials.air,
               semidiameter=8.0))
-    ld = OpticalSystem(lens, aperture=10.0, wavelengths={'d': 0.5876},
-                       reference_wavelength='d')
+    ld = OpticalSystem(lens, aperture=10.0, wavelengths=[0.5876],
+                       reference=0)
 
     surfaces = ld.to_surfaces()
     assert surfaces[0].edge is edge
@@ -694,7 +694,7 @@ def test_plot_field_curvature_plots_s_and_t_vs_field():
         # x-values differ from the raw lab-frame foci by that vertex z
         image_z = float(ld[-1].P[2])
         from prysm.x.raytracing.analysis import field_curvature
-        result = field_curvature(ld, ld.fields, ld.wavelength('d'))
+        result = field_curvature(ld, ld.fields, ld.wavelength())
         np.testing.assert_allclose(ax.lines[0].get_xdata(),
                                    np.asarray(result.x_fan_z) - image_z)
         np.testing.assert_allclose(ax.lines[1].get_xdata(),
@@ -747,7 +747,7 @@ def test_plot_distortion_plots_percent_vs_field():
         line = ax.lines[0]
         np.testing.assert_allclose(line.get_ydata(), [0., 3., 5.])
         from prysm.x.raytracing.analysis import distortion
-        result = distortion(ld, ld.fields, ld.wavelength('d'))
+        result = distortion(ld, ld.fields, ld.wavelength())
         np.testing.assert_allclose(line.get_xdata(), result.percent)
         assert line.get_xdata()[0] == 0.0  # no distortion on axis
         assert ax.get_xlabel() == 'distortion [%]'

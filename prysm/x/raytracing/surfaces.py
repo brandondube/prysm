@@ -366,7 +366,7 @@ class Plane(Shape):
     from_params = classmethod(_shape_from_params)
 
     def __init__(self):
-        """Initialize a plane sag shape."""
+        """Initialize a plane sag shape (local z = 0; no parameters)."""
         super().__init__()
 
     def sag(self, x, y):
@@ -428,7 +428,15 @@ class Sphere(Shape):
     from_params = classmethod(_shape_from_params)
 
     def __init__(self, c):
-        """Initialize a spherical sag shape."""
+        """Initialize a spherical sag shape.
+
+        Parameters
+        ----------
+        c : float
+            vertex curvature, the reciprocal radius of curvature (c = 1/R).
+            Pass 1/R, not R; c = 0 is a plane.
+
+        """
         super().__init__(c=c)
 
     def sag(self, x, y):
@@ -498,7 +506,17 @@ class Conic(Shape):
     from_params = classmethod(_shape_from_params)
 
     def __init__(self, c, k):
-        """Initialize a conic sag shape."""
+        """Initialize a conic sag shape.
+
+        Parameters
+        ----------
+        c : float
+            vertex curvature, the reciprocal radius of curvature (c = 1/R).
+        k : float
+            conic constant: 0 a sphere, -1 a parabola, k < -1 a hyperbola,
+            -1 < k < 0 a prolate ellipse, k > 0 an oblate ellipse.
+
+        """
         super().__init__(c=c, k=k)
 
     def sag(self, x, y):
@@ -635,7 +653,19 @@ class EvenAsphere(ConicSeedMixin, Shape):
     from_params = classmethod(_shape_from_params)
 
     def __init__(self, c, k, coefs):
-        """Initialize an even asphere sag shape."""
+        """Initialize an even asphere sag shape.
+
+        Parameters
+        ----------
+        c : float
+            base conic vertex curvature (c = 1/R).
+        k : float
+            base conic constant (see Conic).
+        coefs : sequence of float
+            even-power radial coefficients a4, a6, a8, ... multiplying
+            r^4, r^6, r^8, ... on top of the conic base; empty for a pure conic.
+
+        """
         coefs = tuple(coefs) if coefs is not None else ()
         super().__init__(c=c, k=k, coefs=coefs)
 
@@ -983,7 +1013,21 @@ class Toroid(ConicSeedMixin, Shape):
     from_params = classmethod(_shape_from_params)
 
     def __init__(self, c_x, c_y, k_y, coefs_y):
-        """Initialize a toroidal sag shape."""
+        """Initialize a toroidal sag shape.
+
+        The x section is a circle of curvature c_x; the y section is an even
+        asphere of curvature c_y, conic k_y, and coefficients coefs_y.
+
+        Parameters
+        ----------
+        c_x, c_y : float
+            vertex curvatures (1/R) of the x and y sections.
+        k_y : float
+            conic constant of the y section.
+        coefs_y : sequence of float
+            even-asphere coefficients of the y section (r^4, r^6, ...).
+
+        """
         coefs_y = tuple(coefs_y) if coefs_y is not None else ()
         super().__init__(c_x=c_x, c_y=c_y, k_y=k_y, coefs_y=coefs_y)
 

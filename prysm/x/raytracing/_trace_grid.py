@@ -20,9 +20,8 @@ def _resolve_wavelengths(prescription, wavelengths):
     if wavelengths is not None:
         return [float(w) for w in wavelengths]
     wv = getattr(prescription, 'wavelengths', None)
-    if wv:
-        values = wv.values() if hasattr(wv, 'values') else wv
-        return [float(w) for w in values]
+    if wv is not None and len(wv):
+        return [float(w) for w in wv]
     return [system_wavelength(prescription, None)]
 
 

@@ -632,13 +632,9 @@ def _surfaces_for_reference(prescription):
 def _system_wavelength_range(prescription):
     """Wavelength span from OpticalSystem metadata, or None."""
     wavelengths = getattr(prescription, 'wavelengths', None)
-    if not wavelengths:
+    if wavelengths is None or len(wavelengths) == 0:
         return None
-    if isinstance(wavelengths, dict):
-        values = wavelengths.values()
-    else:
-        values = wavelengths
-    values = [float(w) for w in values]
+    values = [float(w) for w in wavelengths]
     return min(values), max(values)
 
 

@@ -22,6 +22,25 @@ class Field:
 
     def __init__(self, hx=0.0, hy=0.0, kind='angle', unit='deg',
                  object_z=None, vignetting=None):
+        """Initialize a field point.
+
+        Parameters
+        ----------
+        hx, hy : float, optional
+            field coordinates: ray angles for kind='angle' (in unit), or object
+            heights in length units for kind='height'.
+        kind : str, optional
+            'angle' for a collimated source (default) or 'height' for a
+            finite-conjugate object point.
+        unit : str, optional
+            angular unit for kind='angle', 'deg' (default) or 'rad'.
+        object_z : float, optional
+            absolute z of the object plane; required for kind='height'.
+        vignetting : mapping, optional
+            per-field Code V side-vignetting factors vux, vlx, vuy, vly, each
+            in 0..1; an all-zero mapping is treated as no vignetting.
+
+        """
         if kind not in ('angle', 'height'):
             raise ValueError(
                 f"Field kind must be 'angle' or 'height', got {kind!r}"
@@ -92,6 +111,20 @@ class Sampling:
     __slots__ = ('kind', 'opts')
 
     def __init__(self, kind, **opts):
+        """Initialize a pupil sampling pattern.
+
+        Prefer the classmethod factories (chief, fan, cross, rect, hex, spiral)
+        over calling this directly; they name the per-pattern options.
+
+        Parameters
+        ----------
+        kind : str
+            pattern name: 'chief', 'fan', 'cross', 'rect', 'hex', or 'spiral'.
+        **opts
+            pattern-specific options (e.g. n, nrings, distribution,
+            obscuration) consumed by build.
+
+        """
         self.kind = kind
         self.opts = opts
 

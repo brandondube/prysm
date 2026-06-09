@@ -7,9 +7,8 @@ def system_wavelength(prescription, wvl):
     """Resolve a wavelength against a system's metadata.
 
     When prescription is an OpticalSystem, defers to its wavelength resolver
-    (None -> reference wavelength, a name string -> microns, a scalar ->
-    float).  For a bare lens / surface sequence, None resolves to the kernel
-    default of 0.6328 microns.
+    (None -> reference wavelength, a scalar -> float microns).  For a bare lens
+    / surface sequence, None resolves to the kernel default of 0.6328 microns.
     """
     resolver = getattr(prescription, 'wavelength', None)
     if callable(resolver):

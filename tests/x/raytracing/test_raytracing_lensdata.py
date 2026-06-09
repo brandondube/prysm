@@ -278,11 +278,10 @@ def test_bounds_default_to_infinite():
 
 def test_metadata_absorbed_and_resolved():
     sys = OpticalSystem(make_singlet_lensdata(), aperture=20.0, fields=[0],
-                        wavelengths=FRAUNHOFER_LINES_UM,
-                        reference_wavelength='d')
+                        wavelengths=list(FRAUNHOFER_LINES_UM.values()),
+                        reference=1)
     assert sys.epd == 20.0
-    assert sys.reference_wavelength == 'd'
-    assert sys.wavelength('d') == pytest.approx(FRAUNHOFER_LINES_UM['d'])
+    assert sys.reference_wavelength == pytest.approx(FRAUNHOFER_LINES_UM['d'])
     assert sys.wavelength() == pytest.approx(FRAUNHOFER_LINES_UM['d'])
     assert sys.wavelength(0.5) == pytest.approx(0.5)
     assert isinstance(sys.field(0), Field)

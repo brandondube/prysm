@@ -33,17 +33,17 @@ def _singlet(material=_n_bk7):
          .add(Plane(), typ='eval', material=materials.air,
               semidiameter=12.0))
     return OpticalSystem(lens, aperture=20.0, fields=[0, 1.0],
-                         wavelengths=FRAUNHOFER_LINES_UM,
-                         reference_wavelength='d', stop_index=0)
+                         wavelengths=list(FRAUNHOFER_LINES_UM.values()),
+                         reference=1, stop_index=0)
 
 
 # ---------- the _meta helpers ----------------------------------------------
 
-def test_system_wavelength_defaults_and_resolves_names():
+def test_system_wavelength_defaults_and_resolves():
     sys = _singlet()
-    assert system_wavelength(sys, None) == pytest.approx(sys.wavelength('d'))
-    assert system_wavelength(sys, 'F') == pytest.approx(sys.wavelength('F'))
+    assert system_wavelength(sys, None) == pytest.approx(sys.reference_wavelength)
     assert system_wavelength(sys, 0.5) == pytest.approx(0.5)
+    assert sys.wavelength(0.5) == pytest.approx(0.5)
 
 
 def test_surface_list_defaults_wavelength_to_kernel_default():
@@ -67,22 +67,22 @@ def test_system_epd_and_stop_defaults():
 def test_efl_defaults_wavelength_to_reference():
     sys = _singlet()
     assert effective_focal_length(sys) == pytest.approx(
-        effective_focal_length(sys, wvl=sys.wavelength('d')))
+        effective_focal_length(sys, wvl=sys.wavelength()))
 
 
-def test_efl_resolves_wavelength_name_with_dispersion():
+def test_efl_resolves_wavelength_with_dispersion():
     sys = _singlet(material=_dispersive)
-    by_name = effective_focal_length(sys, wvl='F')
-    by_value = effective_focal_length(sys, wvl=sys.wavelength('F'))
-    assert by_name == pytest.approx(by_value)
+    f_val = FRAUNHOFER_LINES_UM['F']
+    c_val = FRAUNHOFER_LINES_UM['C']
     # dispersion makes F differ from C
-    assert by_name != pytest.approx(effective_focal_length(sys, wvl='C'))
+    assert (effective_focal_length(sys, wvl=f_val)
+            != pytest.approx(effective_focal_length(sys, wvl=c_val)))
 
 
 def test_first_order_defaults_wavelength_epd_stop():
     sys = _singlet()
     fo = first_order(sys)
-    assert fo.wavelength == pytest.approx(sys.wavelength('d'))
+    assert fo.wavelength == pytest.approx(sys.wavelength())
     assert fo.epd == pytest.approx(20.0)   # epd defaulted -> fno computed
     assert fo.fno is not None
     assert fo.stop_index == 0              # stop defaulted -> pupils computed
@@ -92,7 +92,7 @@ def test_first_order_defaults_wavelength_epd_stop():
 
 def test_launch_defaults_epd_from_system():
     sys = _singlet()
-    wvl = sys.wavelength('d')
+    wvl = sys.wavelength()
     P1, S1 = launch(sys, sys.field(0), wvl, Sampling.hex(nrings=2))
     P2, S2 = launch(sys, sys.field(0), wvl, Sampling.hex(nrings=2), epd=sys.epd)
     np.testing.assert_allclose(P1, P2)
@@ -111,7 +111,7 @@ def test_distortion_defaults_epd_and_wavelength():
     sys = _singlet()
     fields = [Field(0, 0), Field(0, 1.0)]
     a = distortion(sys, fields)
-    b = distortion(sys, fields, sys.wavelength('d'), epd=sys.epd)
+    b = distortion(sys, fields, sys.wavelength(), epd=sys.epd)
     np.testing.assert_allclose(a.real_xy, b.real_xy)
     np.testing.assert_allclose(a.paraxial_xy, b.paraxial_xy)
     np.testing.assert_allclose(a.percent, b.percent)
@@ -121,7 +121,7 @@ def test_field_curvature_defaults_epd_and_wavelength():
     sys = _singlet()
     fields = [Field(0, 0), Field(0, 1.0)]
     a = field_curvature(sys, fields)
-    b = field_curvature(sys, fields, sys.wavelength('d'), epd=sys.epd)
+    b = field_curvature(sys, fields, sys.wavelength(), epd=sys.epd)
     np.testing.assert_allclose(a.x_fan_z, b.x_fan_z)
     np.testing.assert_allclose(a.y_fan_z, b.y_fan_z)
 

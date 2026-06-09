@@ -27,8 +27,8 @@ def make_singlet(c0=1 / 102.0, c1=-1 / 102.0, gap=95.0, with_image=True):
     if with_image:
         lens.add(Plane(), typ='eval', material=materials.air,
                  semidiameter=10.0)
-    return OpticalSystem(lens, aperture=20.0, wavelengths=FRAUNHOFER_LINES_UM,
-                         reference_wavelength='d')
+    return OpticalSystem(lens, aperture=20.0, wavelengths=list(FRAUNHOFER_LINES_UM.values()),
+                         reference=1)
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +98,7 @@ def test_image_solve_places_eval_at_paraxial_image():
     ld.solve_image_distance()
     s = ld.surfaces
     lens = [x for x in s if x.typ != -3]
-    pid = float(paraxial_image_distance(lens, wvl=ld.wavelength('d')))
+    pid = float(paraxial_image_distance(lens, wvl=ld.wavelength()))
     gap = float(np.asarray(s[-1].P)[2]) - float(np.asarray(s[-2].P)[2])
     assert gap == pytest.approx(pid)
 
@@ -112,11 +112,11 @@ def test_image_solve_preserves_leading_object_eval_medium():
               material=materials.air, semidiameter=10.0)
          .add(Plane(), typ='eval', material=materials.air,
               semidiameter=10.0))
-    sys = OpticalSystem(lens, aperture=20.0, wavelengths=FRAUNHOFER_LINES_UM,
-                        reference_wavelength='d')
+    sys = OpticalSystem(lens, aperture=20.0, wavelengths=list(FRAUNHOFER_LINES_UM.values()),
+                        reference=1)
     sys.solve_image_distance()
     s = sys.surfaces
-    wvl = sys.wavelength('d')
+    wvl = sys.wavelength()
     expected = float(paraxial_image_distance(s[:-1], wvl=wvl))
     gap = float(np.asarray(s[-1].P)[2]) - float(np.asarray(s[-2].P)[2])
     assert gap == pytest.approx(expected)
@@ -137,7 +137,7 @@ def test_image_solve_tracks_curvature_changes():
     ld.lens.update(np.array([1 / 70.0]))  # stronger front -> shorter back focus
     s = ld.surfaces
     lens = [x for x in s if x.typ != -3]
-    pid = float(paraxial_image_distance(lens, wvl=ld.wavelength('d')))
+    pid = float(paraxial_image_distance(lens, wvl=ld.wavelength()))
     gap = float(np.asarray(s[-1].P)[2]) - float(np.asarray(s[-2].P)[2])
     assert gap == pytest.approx(pid)
 
@@ -155,7 +155,7 @@ def test_solve_and_pickup_compose_in_optimization():
     ld.lens.pickup('curvature', 1, from_surface=0, scale=-1.0)
     ld.solve_image_distance()
     ld.lens.vary('curvature', surfaces=0)
-    wvl = ld.wavelength('d')
+    wvl = ld.wavelength()
     prob = Problem(ld, equality_constraints=[EFL(wvl, target=120.0)])
     res = prob.solve(damping=1e-8, maxiter=10)
     assert res.success

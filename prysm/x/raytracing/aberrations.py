@@ -422,9 +422,6 @@ def seidel_aberrations(prescription, field=None, wvl=None, *,
         unit = getattr(prescription, 'unit', None) or 'mm'
     if wavelengths is None:
         wavelengths = getattr(prescription, 'wavelengths', None)
-    if isinstance(wavelengths, dict):
-        # LensData stores wavelengths as {name: microns}
-        wavelengths = list(wavelengths.values())
     surfaces = _surfaces_of(prescription)
     _assert_rotational_third_order_geometry(surfaces)
 

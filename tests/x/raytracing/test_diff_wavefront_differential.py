@@ -97,7 +97,7 @@ def test_nominal_rms_matches_wavefrontrms():
     np.testing.assert_allclose(wd.rms_nominal, m_nom, rtol=1e-10)
 
 
-def test_wavefront_differential_resolves_system_wavelength_name():
+def test_wavefront_differential_resolves_system_wavelength():
     dispersive = materials.FormulaMaterial(
         'DISP', lambda w: 1.5 + 0.02 * (w - 0.55))
 
@@ -107,18 +107,18 @@ def test_wavefront_differential_resolves_system_wavelength_name():
          .add(Conic(-1 / 40.0, 0.0), typ='refr', thickness=20.0,
               material=_air)
          .add(Plane(), typ='eval'))
-    sys = OpticalSystem(lens, aperture=10.0, wavelengths={'d': 0.55},
-                        reference_wavelength='d')
-    sys.solve_image_distance(wavelength='d')
-    P, S = launch(sys, Field(0.0, 0.0), sys.wavelength('d'),
+    sys = OpticalSystem(lens, aperture=10.0, wavelengths=[0.55], reference=0)
+    sys.solve_image_distance()
+    P, S = launch(sys, Field(0.0, 0.0), sys.wavelength(),
                   Sampling.rect(n=3), epd=10.0, pupil_z=-5.0)
     perts = [Perturbation.normal(sys, 'curvature', 0, 1e-5, name='c1')]
     with pytest.raises(ValueError, match='near-axial chief ray'):
-        wavefront_differential(sys, perts, P, S, 'd')
-    by_name = wavefront_differential(sys, perts, P, S, 'd', P_xp=(0, 0, 0))
+        wavefront_differential(sys, perts, P, S, None)
+    # None resolves to the system reference wavelength; an explicit float agrees.
+    by_ref = wavefront_differential(sys, perts, P, S, None, P_xp=(0, 0, 0))
     by_value = wavefront_differential(sys, perts, P, S, 0.55, P_xp=(0, 0, 0))
-    np.testing.assert_allclose(by_name.W0, by_value.W0)
-    np.testing.assert_allclose(by_name.dW, by_value.dW)
+    np.testing.assert_allclose(by_ref.W0, by_value.W0)
+    np.testing.assert_allclose(by_ref.dW, by_value.dW)
 
 
 def test_sensitivity_matches_fd_sensitivity_table():
