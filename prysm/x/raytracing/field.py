@@ -12,10 +12,10 @@ from .spencer_and_murty import (
     STYPE_REFLECT, STYPE_REFRACT, raytrace,
 )
 from .launch import Sampling
-from .paraxial import first_order
+from .paraxial import first_order, effective_focal_length
 from .opt import (
     _pupil_center_chief_index,
-    opd_from_raytrace_eic, xp_reference_sphere,
+    hopkins_eic_closing, reference_sphere_curvature, xp_reference_sphere,
 )
 from .analysis import _apply_field_and_output, _filtered_chief_index
 from ._trace_grid import trace_cell
@@ -267,48 +267,62 @@ def raytrace_field(prescription, P, S, wavelength, *,
     return FieldTraceResult(trace, amplitude)
 
 
-def reference_sphere_coords(Q, P_xp, axis_dir=None):
-    """Sine-space pupil coordinates of reference-sphere landing points.
+def _axis_perp_basis(axis_dir, dtype):
+    """Orthonormal (u, v) spanning the plane perpendicular to the optical axis."""
+    if axis_dir is None:
+        w = np.array([0.0, 0.0, 1.0], dtype=dtype)
+    else:
+        w = np.asarray(axis_dir, dtype=dtype)
+        w = w / np.sqrt(np.sum(w * w))
+    helper = np.array([1.0, 0.0, 0.0], dtype=dtype)
+    if abs(float(np.sum(helper * w))) > 0.9:
+        helper = np.array([0.0, 1.0, 0.0], dtype=dtype)
+    u = helper - np.sum(helper * w) * w
+    u = u / np.sqrt(np.sum(u * u))
+    v = np.cross(w, u)
+    return u, v
 
-    Projects each ray's reference-sphere intersection Q onto the plane through
-    the exit-pupil center P_xp perpendicular to the optical axis, giving the
-    transverse coordinates of points on the sphere.  These are Hopkins'
-    (X', Y') and are proportional to the ray direction cosines (sine space) --
-    the only parameterization for which the diffraction PSF is the plain
-    Fourier transform of the pupil function.
+
+def sine_space_coords(S_last, S_chief, scale, axis_dir=None):
+    """Sine-space (direction-cosine) pupil coordinates of a ray bundle.
+
+    Hopkins' (X', Y') pupil coordinates are proportional to the transverse ray
+    direction cosines -- the only parameterization for which the diffraction
+    PSF is the plain Fourier transform of the pupil function.  Here they are
+    taken directly from the direction cosines (chief-relative), so they stay
+    finite and well-defined for every conjugate, including an exit pupil at
+    infinity (image-space telecentric) where a position-on-the-sphere
+    coordinate would diverge.  scale carries the length units: |EFL| maps the
+    dimensionless direction-cosine difference to the equivalent physical pupil
+    height, paired with focus(efl = scale / n_image) so the F-number
+    scale = |EFL| / EPD is correct and bounded for all focusing systems.
 
     Parameters
     ----------
-    Q : ndarray, shape (N, 3)
-        reference-sphere intersection points, e.g. from
-        spencer_and_murty.intersect_reference_sphere.
-    P_xp : ndarray, shape (3,)
-        exit-pupil center (a point on the optical axis).
+    S_last : ndarray, shape (N, 3)
+        post-final-surface ray direction cosines.
+    S_chief : ndarray, shape (3,)
+        chief-ray direction cosines (the pupil-coordinate origin).
+    scale : float
+        length scale (|EFL|, or the reference-sphere radius for a tilted system
+        whose paraxial EFL is undefined).
     axis_dir : iterable, optional
         optical-axis direction; default +z.
 
     Returns
     -------
     X, Y : ndarray, shape (N,)
-        transverse (sine-space) pupil coordinates, referenced to P_xp, in the
-        same length units as the prescription.
+        sine-space pupil coordinates, referenced to the chief, in the same
+        length units as the prescription.
 
     """
-    Q = np.asarray(Q)
-    P_xp = np.asarray(P_xp, dtype=Q.dtype)
-    if axis_dir is None:
-        w = np.array([0.0, 0.0, 1.0], dtype=Q.dtype)
-    else:
-        w = np.asarray(axis_dir, dtype=Q.dtype)
-        w = w / np.sqrt(np.sum(w * w))
-    # build an orthonormal in-plane basis (u, v) perpendicular to the axis w
-    helper = np.array([1.0, 0.0, 0.0], dtype=Q.dtype)
-    if abs(float(np.sum(helper * w))) > 0.9:
-        helper = np.array([0.0, 1.0, 0.0], dtype=Q.dtype)
-    u = helper - np.sum(helper * w) * w
-    u = u / np.sqrt(np.sum(u * u))
-    v = np.cross(w, u)
-    d = Q - P_xp
+    S_last = np.asarray(S_last)
+    S_chief = np.asarray(S_chief, dtype=S_last.dtype)
+    u, v = _axis_perp_basis(axis_dir, S_last.dtype)
+    # chief minus ray (not ray minus chief): the reference-sphere landing sits
+    # downstream of the exit-pupil plane, so this sign matches the legacy
+    # position-on-sphere coordinate's orientation.
+    d = float(scale) * (S_chief[None, :] - S_last)
     return d @ u, d @ v
 
 
@@ -360,8 +374,8 @@ def amplitude_apodization(entrance_xy, sphere_xy, *, valid=None):
     entrance_xy : ndarray, shape (M, M, 2)
         entrance-pupil sample coordinates on a structured grid.
     sphere_xy : ndarray, shape (M, M, 2)
-        the corresponding reference-sphere (sine-space) coordinates from
-        reference_sphere_coords, reshaped to the same grid.
+        the corresponding sine-space pupil coordinates from sine_space_coords,
+        reshaped to the same grid.
     valid : ndarray, shape (M, M), optional
         boolean mask of surviving rays; masked entries return amplitude 0.
 
@@ -472,10 +486,8 @@ def _resolve_exit_pupil(prescription, field, wavelength, epd,
                 raise
         else:
             if fo.xp_z is None:
-                raise ValueError(
-                    'paraxial exit pupil is at infinity (telecentric); pass P_xp '
-                    'explicitly for a planar reference'
-                )
+                # exit pupil at infinity (telecentric): curvature kappa = 0.
+                return None, P_img
             P_xp = np.array([0.0, 0.0, float(fo.xp_z)], dtype=P_img.dtype)
             return P_xp, P_img
 
@@ -498,6 +510,24 @@ def _resolve_exit_pupil(prescription, field, wavelength, epd,
         )
     _, R, P_xp = xp_reference_sphere(chief_P, chief_S, axis_dir=w)
     return P_xp, P_img
+
+
+def _pupil_coordinate_scale(prescription, wavelength, P_xp, center):
+    """Length scale for the sine-space pupil coordinate.
+
+    |EFL| for a centered system -- finite and well-defined through the
+    telecentric limit, and the natural pairing with the F-number |EFL|/EPD.
+    Falls back to the geometric reference-sphere radius for a tilted/decentered
+    system whose paraxial EFL is undefined (that case then requires a finite
+    exit pupil to anchor the radius).
+    """
+    try:
+        return abs(float(effective_focal_length(prescription, wvl=wavelength)))
+    except ValueError:
+        if P_xp is None:
+            raise
+        return float(np.sqrt(np.sum((np.asarray(P_xp)
+                                     - np.asarray(center)) ** 2)))
 
 
 def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
@@ -602,19 +632,23 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
         prescription, field, wavelength, epd, stop_index,
         P_xp, P_img, trace.P[-1, chief_index], trace.S[-1, chief_index],
         axis_dir=axis_dir)
-    R = float(np.sqrt(np.sum((np.asarray(P_xp) - P_img) ** 2)))
+    curvature = reference_sphere_curvature(P_xp, P_img)
 
-    # OPD on the reference sphere (valid rays), mirroring analysis.wavefront
+    # OPD on the chief-image reference sphere (valid rays), mirroring
+    # analysis.wavefront.  Determinate through the telecentric kappa = 0 limit.
     filtered_chief = _filtered_chief_index(valid, chief_index)
     n_image = image_space_index(prescription, wavelength, fallback=n_object)
-    opd = opd_from_raytrace_eic(trace.P[:, valid], trace.S[:, valid],
-                                trace.OPL[:, valid],
-                                P_img=P_img, P_xp=P_xp, n_image=n_image,
-                                chief_index=filtered_chief)
+    opd = hopkins_eic_closing(trace.P[:, valid], trace.S[:, valid],
+                              trace.OPL[:, valid],
+                              center=P_img, curvature=curvature,
+                              n_image=n_image, chief_index=filtered_chief)
 
-    # sine-space sphere coordinates (all rays, then mask)
-    Q, _ = sm.intersect_reference_sphere(trace.P[-1], trace.S[-1], P_img, R)
-    X_all, Y_all = reference_sphere_coords(Q, P_xp, axis_dir)
+    # sine-space pupil coordinates from the ray direction cosines (all rays,
+    # then mask).  The |EFL| length scale keeps the F-number |EFL|/EPD correct
+    # while staying finite when the exit pupil is at infinity (telecentric).
+    scale = _pupil_coordinate_scale(prescription, wavelength, P_xp, P_img)
+    X_all, Y_all = sine_space_coords(trace.S[-1], trace.S[-1, chief_index],
+                                     scale, axis_dir)
 
     # amplitude: geometric apodization (structured grid) times coating factor
     entrance_xy = np.ascontiguousarray(pupil_xy).reshape(npupil, npupil, 2)
@@ -643,8 +677,9 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
     P_matrix = None if P_matrix_all is None else P_matrix_all[valid]
     return PupilField(
         X=X_all[valid], Y=Y_all[valid], amplitude=amplitude_all[valid],
-        opd=opd, wavelength=wavelength, efl=R / n_image, n_image=n_image,
-        P_xp=np.asarray(P_xp), P_img=P_img, P_matrix=P_matrix)
+        opd=opd, wavelength=wavelength, efl=scale / n_image, n_image=n_image,
+        P_xp=(None if P_xp is None else np.asarray(P_xp)),
+        P_img=P_img, P_matrix=P_matrix)
 
 
 def _resample_grid(pf, npix, margin):

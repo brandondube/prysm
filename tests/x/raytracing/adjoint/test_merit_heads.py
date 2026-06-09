@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from prysm.x.raytracing.spencer_and_murty import (
-    raytrace, intersect_reference_sphere, valid_mask,
+    raytrace, valid_mask,
 )
 from prysm.x.raytracing._diff_raytrace import (
     wavefront_with_tangents,
@@ -54,7 +54,12 @@ def _merit_wfe(system, P, S, n_image=1.0):
     P_xp = _closest_approach_on_axis(C, tr.S[-1][chief],
                                      np.zeros(3), np.array([0., 0., 1.]))
     R = float(np.sqrt(np.sum((P_xp - C) ** 2)))
-    _, t = intersect_reference_sphere(tr.P[-1][valid], tr.S[-1][valid], C, R)
+    # independent reference-sphere oracle (the deleted -b - sqrt root), inlined
+    # so this stays decoupled from the production EIC closing it validates.
+    d = tr.P[-1][valid] - C
+    b = np.sum(tr.S[-1][valid] * d, axis=-1)
+    cc = np.sum(d * d, axis=-1) - R * R
+    t = -b - np.sqrt(b * b - cc)
     OPL_total = tr.OPL[:, valid].sum(axis=0) + n_image * t
     valid_idx = np.nonzero(valid)[0]
     chief_v = int(np.nonzero(valid_idx == chief)[0][0])

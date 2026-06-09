@@ -12,7 +12,8 @@ from prysm.polynomials import zernike_nm_seq, lstsq
 from .spencer_and_murty import raytrace, valid_mask
 from .opt import (
     xp_reference_sphere,
-    opd_from_raytrace_eic,
+    hopkins_eic_closing,
+    reference_sphere_curvature,
     centroid_referenced_rms,
     _pupil_center_chief_index,
 )
@@ -123,8 +124,10 @@ def resolve_exit_pupil(prescription, wavelength, *, stop_index=None, epd=None,
 
     Returns
     -------
-    P_xp : ndarray, shape (3,)
-        exit-pupil reference point, ready to pass to wavefront(P_xp=...).
+    P_xp : ndarray, shape (3,), or None
+        exit-pupil reference point, ready to pass to wavefront(P_xp=...).  None
+        when the exit pupil is at infinity (image-space telecentric); the EIC
+        closing reads that as its curvature kappa = 0 limit.
 
     """
     resolved_stop = (stop_index if stop_index is not None
@@ -142,10 +145,10 @@ def resolve_exit_pupil(prescription, wavelength, *, stop_index=None, epd=None,
                 raise
         else:
             if fo.xp_z is None:
-                raise ValueError(
-                    'paraxial exit pupil is at infinity; pass P_xp '
-                    'explicitly for a planar or finite reference'
-                )
+                # exit pupil at infinity (image-space telecentric): the EIC
+                # closing takes this as its curvature kappa = 0 limit, so there
+                # is nothing to anchor -- signal it with None.
+                return None
             return np.array([0.0, 0.0, float(fo.xp_z)], dtype=config.precision)
 
     # geometric route: take the chief ray's axis closest-approach.
@@ -230,10 +233,17 @@ def _resolve_chief_index(P, valid, reference, chief_index):
     return _pupil_center_chief_index(P, mask)
 
 
-def _wavefront_from_trace(prescription, P, wavelength, trace, *, P_xp,
+def _wavefront_from_trace(prescription, P, wavelength, trace, *, P_xp=None,
                           chief_index=None, pupil_coords=None, field=None,
                           output='length', reference='chief'):
-    """Wavefront kernel for callers that already have the raytrace result."""
+    """Wavefront kernel for callers that already have the raytrace result.
+
+    P_xp anchors the reference sphere through the exit-pupil point; pass None
+    (the default) to resolve it from the prescription -- a resolvable stop gives
+    the paraxial exit pupil, an off-axis chief its axis closest-approach, and an
+    image-space-telecentric system the curvature kappa = 0 (exit pupil at
+    infinity) the closing handles natively.
+    """
     valid = valid_mask(trace.status, trace.P[-1])
     chief_index = _resolve_chief_index(P, valid, reference, chief_index)
     if not bool(valid[chief_index]):
@@ -251,13 +261,20 @@ def _wavefront_from_trace(prescription, P, wavelength, trace, *, P_xp,
     n_object = object_space_index(prescription, wavelength)
     n_image = image_space_index(prescription, wavelength, fallback=n_object)
     P_chief_final = trace.P[-1, chief_index]
+    if P_xp is None:
+        # resolve from the prescription; None back means the exit pupil is at
+        # infinity (telecentric) -> curvature 0, handled below.
+        P_xp = resolve_exit_pupil(
+            prescription, wavelength, field=field,
+            chief=(P_chief_final, trace.S[-1, chief_index]))
+    if P_xp is not None:
+        P_xp = np.asarray(P_xp, dtype=P.dtype)
+    curvature = reference_sphere_curvature(P_xp, P_chief_final)
     filtered_chief = _filtered_chief_index(valid, chief_index)
-    opd = opd_from_raytrace_eic(trace.P[:, valid], trace.S[:, valid],
-                                trace.OPL[:, valid],
-                                P_img=P_chief_final,
-                                P_xp=np.asarray(P_xp, dtype=P.dtype),
-                                n_image=n_image,
-                                chief_index=filtered_chief)
+    opd = hopkins_eic_closing(trace.P[:, valid], trace.S[:, valid],
+                              trace.OPL[:, valid],
+                              center=P_chief_final, curvature=curvature,
+                              n_image=n_image, chief_index=filtered_chief)
     if pupil_coords is None:
         x_pupil = P[valid, 0] - P[chief_index, 0]
         y_pupil = P[valid, 1] - P[chief_index, 1]
@@ -285,7 +302,7 @@ def _apply_field_and_output(opd, x_pupil, y_pupil, field, output, wavelength):
 
 
 def wavefront(prescription, P, S, wavelength, *,
-              P_xp,
+              P_xp=None,
               chief_index=None,
               pupil_coords=None, field=None, output='length',
               reference='chief'):
@@ -299,8 +316,11 @@ def wavefront(prescription, P, S, wavelength, *,
         launch positions and direction cosines (typically from launch()).
     wavelength : float
         in microns.
-    P_xp : iterable
-        exit-pupil reference point.
+    P_xp : iterable, optional
+        exit-pupil reference point.  Default None resolves it from the
+        prescription (paraxial exit pupil for a resolvable stop, the chief-ray
+        axis closest-approach otherwise); an image-space-telecentric system
+        resolves to the curvature kappa = 0 limit (exit pupil at infinity).
     chief_index : int, optional
         row index of the chief ray.  Defaults to the launch ray nearest the
         pupil center, with invalid rays excluded when reference='centroid'.
@@ -324,12 +344,6 @@ def wavefront(prescription, P, S, wavelength, *,
     """
     if reference not in ('chief', 'centroid'):
         raise ValueError(f"reference must be 'chief' or 'centroid', got {reference!r}")
-    if P_xp is None:
-        raise TypeError(
-            'P_xp is required; resolve it with resolve_exit_pupil(...) or '
-            'OpticalSystem.exit_pupil(...) and pass it in.  wavefront does no '
-            'exit-pupil resolution of its own.'
-        )
     trace = raytrace(prescription, P, S, wavelength)
     opd, x_pupil, y_pupil, _ = _wavefront_from_trace(
         prescription, P, wavelength, trace, P_xp=P_xp,

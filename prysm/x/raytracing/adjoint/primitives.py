@@ -261,79 +261,92 @@ def adj_transform_local(Reff, P, Q, S, P0dot_bar, S_locdot_bar):
 
 # ---------- 1.7 reference sphere --------------------------------------------
 
-def adj_intersect_reference_sphere_full(P, S, C, R, t_bar):
-    """Adjoint of intersect_reference_sphere's t wrt the ray AND the sphere.
+def adj_eic_closing_full(P, S, C, kappa, s_bar):
+    """Adjoint of the determinate EIC closing segment s_tilde, wrt ray + sphere.
 
-    The full transpose of spencer_and_murty.intersect_reference_sphere's segment
-    length t, returning cotangents for the ray (P, S) and for the sphere
-    geometry (center C, radius R).  The C / R cotangents close the reference
-    sphere's dependence on the chief ray (handled by the WFE merit head).
+    The full transpose of opt.hopkins_eic_closing's per-ray segment
+    s_tilde = -b - kappa m / (1 + sqrt(1 + kappa^2 m)), b = S.(P - C),
+    m = b^2 - |P - C|^2, returning cotangents for the ray (P, S), the reference
+    center C, and the curvature kappa = 1/R.  The C / kappa cotangents close the
+    reference sphere's dependence on the chief ray and the exit pupil (handled
+    by the WFE merit head).  The determinate replacement for the sphere-segment
+    adjoint.
 
     Parameters
     ----------
     P, S : ndarray, (N, 3)
         nominal ray origins (last surface) and directions.
     C : ndarray, (3,)
-        sphere center (chief image point).
-    R : float
-        sphere radius.
-    t_bar : ndarray, (N,)
-        cotangent of the reference-sphere segment length.
+        reference center (chief image point).
+    kappa : float
+        reference-sphere curvature 1/R.
+    s_bar : ndarray, (N,)
+        cotangent of the closing segment.
 
     Returns
     -------
     P_bar, S_bar : ndarray, (N, 3)
     C_bar : ndarray, (3,)
-    R_bar : float
+    kappa_bar : float
 
     """
-    dvec = P - C[None, :]
-    b = row_dot(S, dvec)
-    cc = row_dot(dvec, dvec) - R * R
-    disc = b * b - cc
+    r = P - C[None, :]
+    b = row_dot(S, r)
+    rr = row_dot(r, r)
+    m = b * b - rr
+    k = float(kappa)
+    disc = 1.0 + k * k * m
     disc = np.where(disc < 0, np.zeros_like(disc), disc)
-    sqrt_disc = np.sqrt(disc)
-    safe = sqrt_disc == 0
-    sqrt_disc_safe = np.where(safe, 1.0, sqrt_disc)
+    w = np.sqrt(disc)
+    wsafe = np.where(w == 0, 1.0, w)
+    g = k * m
+    h = 1.0 + w
 
-    # forward: t = -b - sqrt_disc;  sqrt_disc_dot = discdot/(2 sqrt_disc_safe)
-    #   discdot = 2 b bdot - ccdot
-    #   bdot = dvec . Sdot + S . (Pdot - Cdot)
-    #   ccdot = 2 dvec . (Pdot - Cdot) - 2 R Rdot
-    bdot_bar = -t_bar
-    sqrt_disc_dot_bar = -t_bar
-    discdot_bar = sqrt_disc_dot_bar / (2.0 * sqrt_disc_safe)
-    bdot_bar = bdot_bar + 2.0 * b * discdot_bar
-    ccdot_bar = -discdot_bar
+    # forward: s = -b - g / h
+    b_bar = -s_bar
+    g_bar = -s_bar / h
+    h_bar = s_bar * g / (h * h)
+    w_bar = h_bar                                  # h = 1 + w
+    disc_bar = w_bar / (2.0 * wsafe)               # w = sqrt(disc)
+    # disc = 1 + k^2 m
+    m_bar = k * k * disc_bar
+    k_bar = 2.0 * k * m * disc_bar
+    # g = k m
+    m_bar = m_bar + k * g_bar
+    k_bar = k_bar + m * g_bar
+    # m = b^2 - rr
+    b_bar = b_bar + 2.0 * b * m_bar
+    rr_bar = -m_bar
+    # rr = r.r ; b = S.r
+    r_bar = 2.0 * r * rr_bar[:, None] + S * b_bar[:, None]
+    S_bar = r * b_bar[:, None]
+    # r = P - C
+    P_bar = r_bar
+    C_bar = -r_bar.sum(axis=0)
+    kappa_bar = float(np.sum(k_bar))
+    return P_bar, S_bar, C_bar, kappa_bar
 
-    P_bar = 2.0 * dvec * ccdot_bar[:, None] + S * bdot_bar[:, None]
-    S_bar = dvec * bdot_bar[:, None]
-    C_bar = -(S * bdot_bar[:, None]).sum(axis=0) \
-        - 2.0 * (dvec * ccdot_bar[:, None]).sum(axis=0)
-    R_bar = -2.0 * R * np.sum(ccdot_bar)
-    return P_bar, S_bar, C_bar, R_bar
 
+def adj_eic_closing(P, S, C, kappa, s_bar):
+    """Adjoint of the EIC closing segment (rays only).
 
-def adj_intersect_reference_sphere(P, S, C, R, t_bar):
-    """Adjoint of intersect_reference_sphere's segment length t (rays only).
-
-    Holds the sphere center C and radius R fixed; their motion (which couples
-    through the chief ray) is recovered separately via
-    adj_intersect_reference_sphere_full.
+    Holds the reference center C and curvature kappa fixed; their motion (which
+    couples through the chief ray and exit pupil) is recovered separately via
+    adj_eic_closing_full.
 
     Parameters
     ----------
     P, S : ndarray, (N, 3)
     C : ndarray, (3,)
-    R : float
-    t_bar : ndarray, (N,)
+    kappa : float
+    s_bar : ndarray, (N,)
 
     Returns
     -------
     P_bar, S_bar : ndarray, (N, 3)
 
     """
-    P_bar, S_bar, _, _ = adj_intersect_reference_sphere_full(P, S, C, R, t_bar)
+    P_bar, S_bar, _, _ = adj_eic_closing_full(P, S, C, kappa, s_bar)
     return P_bar, S_bar
 
 
@@ -400,7 +413,7 @@ __all__ = [
     'adj_reflect',
     'adj_intersect',
     'adj_transform_local',
-    'adj_intersect_reference_sphere',
-    'adj_intersect_reference_sphere_full',
+    'adj_eic_closing',
+    'adj_eic_closing_full',
     'adj_closest_point_on_axis',
 ]

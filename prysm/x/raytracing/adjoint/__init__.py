@@ -16,8 +16,8 @@ from .primitives import (
     adj_reflect,
     adj_intersect,
     adj_transform_local,
-    adj_intersect_reference_sphere,
-    adj_intersect_reference_sphere_full,
+    adj_eic_closing,
+    adj_eic_closing_full,
     adj_closest_point_on_axis,
 )
 from .backward_sweep import (
@@ -43,8 +43,8 @@ __all__ = [
     'adj_reflect',
     'adj_intersect',
     'adj_transform_local',
-    'adj_intersect_reference_sphere',
-    'adj_intersect_reference_sphere_full',
+    'adj_eic_closing',
+    'adj_eic_closing_full',
     'adj_closest_point_on_axis',
     # sweep
     'SurfaceIntermediate',

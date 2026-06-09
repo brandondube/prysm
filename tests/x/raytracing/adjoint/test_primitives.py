@@ -18,7 +18,7 @@ from prysm.x.raytracing._diff_raytrace import (
     d_reflect,
     d_transform_global,
     d_opl_segment,
-    d_intersect_reference_sphere,
+    d_eic_closing,
     d_closest_point_on_axis,
 )
 from prysm.x.raytracing.adjoint.primitives import (
@@ -28,8 +28,8 @@ from prysm.x.raytracing.adjoint.primitives import (
     adj_reflect,
     adj_transform_global,
     adj_opl_segment,
-    adj_intersect_reference_sphere,
-    adj_intersect_reference_sphere_full,
+    adj_eic_closing,
+    adj_eic_closing_full,
     adj_closest_point_on_axis,
 )
 
@@ -205,48 +205,48 @@ def test_adj_transform_local(rng):
 
 # ---------- 1.7 -------------------------------------------------------------
 
-def test_adj_intersect_reference_sphere(rng):
+def test_adj_eic_closing(rng):
     # benign converging geometry: rays near origin aimed +z, center ahead.
     P = rng.standard_normal((N, 3)) * 0.3
     S = np.tile(np.array([0.0, 0.0, 1.0]), (N, 1))
     S = S + rng.standard_normal((N, 3)) * 0.02
     S /= np.linalg.norm(S, axis=1, keepdims=True)
     C = np.array([0.0, 0.0, 50.0])
-    R = 50.0
+    kappa = 1.0 / 50.0
     Pdot = rng.standard_normal((N, 3, 1))
     Sdot = rng.standard_normal((N, 3, 1))
     Cdot = np.zeros((3, 1))
-    Rdot = np.zeros(1)
+    kappa_dot = np.zeros(1)
 
-    tdot = d_intersect_reference_sphere(P, S, Pdot, Sdot, C, Cdot, R, Rdot)
-    t_bar = rng.standard_normal(N)
-    P_bar, S_bar = adj_intersect_reference_sphere(P, S, C, R, t_bar)
+    sdot = d_eic_closing(P, S, Pdot, Sdot, C, Cdot, kappa, kappa_dot)
+    s_bar = rng.standard_normal(N)
+    P_bar, S_bar = adj_eic_closing(P, S, C, kappa, s_bar)
 
-    lhs = _vdot(t_bar, tdot[..., 0])
+    lhs = _vdot(s_bar, sdot[..., 0])
     rhs = _vdot(P_bar, Pdot[..., 0]) + _vdot(S_bar, Sdot[..., 0])
     assert np.isclose(lhs, rhs, rtol=RTOL)
 
 
-def test_adj_intersect_reference_sphere_full(rng):
-    """Full transpose: ray AND sphere (C, R) cotangents."""
+def test_adj_eic_closing_full(rng):
+    """Full transpose: ray AND reference (center C, curvature kappa)."""
     P = rng.standard_normal((N, 3)) * 0.3
     S = np.tile(np.array([0.0, 0.0, 1.0]), (N, 1)) + rng.standard_normal((N, 3)) * 0.02
     S /= np.linalg.norm(S, axis=1, keepdims=True)
     C = np.array([0.0, 0.0, 50.0])
-    R = 50.0
+    kappa = 1.0 / 50.0
     Pdot = rng.standard_normal((N, 3, 1))
     Sdot = rng.standard_normal((N, 3, 1))
     Cdot = rng.standard_normal((3, 1))
-    Rdot = rng.standard_normal(1)
+    kappa_dot = rng.standard_normal(1)
 
-    tdot = d_intersect_reference_sphere(P, S, Pdot, Sdot, C, Cdot, R, Rdot)
-    t_bar = rng.standard_normal(N)
-    P_bar, S_bar, C_bar, R_bar = adj_intersect_reference_sphere_full(
-        P, S, C, R, t_bar)
+    sdot = d_eic_closing(P, S, Pdot, Sdot, C, Cdot, kappa, kappa_dot)
+    s_bar = rng.standard_normal(N)
+    P_bar, S_bar, C_bar, kappa_bar = adj_eic_closing_full(
+        P, S, C, kappa, s_bar)
 
-    lhs = _vdot(t_bar, tdot[..., 0])
+    lhs = _vdot(s_bar, sdot[..., 0])
     rhs = (_vdot(P_bar, Pdot[..., 0]) + _vdot(S_bar, Sdot[..., 0])
-           + _vdot(C_bar, Cdot[..., 0]) + float(R_bar) * float(Rdot[0]))
+           + _vdot(C_bar, Cdot[..., 0]) + float(kappa_bar) * float(kappa_dot[0]))
     assert np.isclose(lhs, rhs, rtol=RTOL)
 
 

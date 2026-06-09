@@ -10,7 +10,7 @@ from .spencer_and_murty import (
     valid_mask,
 )
 from ._line_math import normalize_vector
-from .opt import opd_from_raytrace_eic, _chief_axis_perp_norm
+from .opt import hopkins_eic_closing, _chief_axis_perp_norm
 from .analysis import (
     _pupil_center_chief_index,
     _filtered_chief_index,
@@ -748,23 +748,42 @@ def d_closest_point_on_axis(P, S, Pdot, Sdot, axis_point, axis_dir):
     return P_xp, P_xp_dot
 
 
-def d_intersect_reference_sphere(P, S, Pdot, Sdot, C, Cdot, R, Rdot):
-    """Tangent of the reference-sphere segment length t."""
-    dvec = P - C[None, :]
-    dvecdot = Pdot - Cdot[None, :, :]
-    b = row_dot(S, dvec)
-    bdot = _dot_nt(dvec, Sdot) + _dot_nt(S, dvecdot)
-    cc = row_dot(dvec, dvec) - R * R
-    ccdot = 2.0 * _dot_nt(dvec, dvecdot) - 2.0 * R * Rdot[None, :]
-    disc = b * b - cc
+def d_eic_closing(P, S, Pdot, Sdot, C, Cdot, kappa, kappa_dot):
+    """Tangent of the determinate EIC closing segment s_tilde.
+
+    Forward-mode derivative of opt.hopkins_eic_closing's per-ray segment
+    s_tilde = -b - kappa m / (1 + sqrt(1 + kappa^2 m)), b = S.(P - C),
+    m = b^2 - |P - C|^2, with respect to the ray (P, S), the reference center
+    C, and the reference-sphere curvature kappa = 1/R.  The determinate
+    (cancellation-free) replacement for the reference-sphere segment tangent.
+
+    Returns
+    -------
+    sdot : ndarray, (N, Pp)
+        per-ray, per-parameter tangent of the closing segment.
+
+    """
+    r = P - C[None, :]
+    rdot = Pdot - Cdot[None, :, :]
+    b = row_dot(S, r)
+    bdot = _dot_nt(r, Sdot) + _dot_nt(S, rdot)
+    rr = row_dot(r, r)
+    rrdot = 2.0 * _dot_nt(r, rdot)
+    m = b * b - rr
+    mdot = 2.0 * b[:, None] * bdot - rrdot
+    k = float(kappa)
+    disc = 1.0 + k * k * m
     disc = np.where(disc < 0, np.zeros_like(disc), disc)
-    discdot = 2.0 * b[:, None] * bdot - ccdot
-    sqrt_disc = np.sqrt(disc)
-    safe = sqrt_disc == 0
-    sqrt_disc_safe = np.where(safe, 1.0, sqrt_disc)
-    sqrt_disc_dot = discdot / (2.0 * sqrt_disc_safe[:, None])
-    tdot = -bdot - sqrt_disc_dot
-    return tdot
+    discdot = 2.0 * k * kappa_dot[None, :] * m[:, None] + k * k * mdot
+    w = np.sqrt(disc)
+    wsafe = np.where(w == 0, 1.0, w)
+    wdot = discdot / (2.0 * wsafe[:, None])
+    g = k * m
+    gdot = kappa_dot[None, :] * m[:, None] + k * mdot
+    h = 1.0 + w
+    # s = -b - g / h;  h_dot = w_dot
+    sdot = -bdot - (gdot * h[:, None] - g[:, None] * wdot) / (h[:, None] ** 2)
+    return sdot
 
 
 def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
@@ -826,19 +845,19 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
             'reference-sphere radius is degenerate; pass a nondegenerate P_xp'
         )
     Rdot = _dot_vt(delta, delta_dot) / R
+    # reference-sphere curvature kappa = 1/R is the closing's determinate handle
+    kappa = 1.0 / R
+    kappa_dot = -Rdot / (R * R)
 
     filtered_chief = _filtered_chief_index(valid, chief_index)
 
     n_image = image_space_index(surfaces, wavelength, fallback=n_object)
-    # value on the rationalized sphere root (bit-identical to the plain
-    # -b - sqrt root that d_intersect_reference_sphere differentiates below);
-    # force the sphere branch (never the afocal plane fallback) so the value
-    # stays consistent with the analytic tangent.
-    opd = opd_from_raytrace_eic(trace.P[:, valid], trace.S[:, valid],
-                                trace.OPL[:, valid],
-                                P_img=P_chief_final, P_xp=P_xp,
-                                n_image=n_image, chief_index=filtered_chief,
-                                infinite_threshold=np.inf)
+    # nominal value via the determinate EIC closing -- identical to
+    # analysis.wavefront, so the nominal cannot drift between the two paths.
+    opd = hopkins_eic_closing(trace.P[:, valid], trace.S[:, valid],
+                              trace.OPL[:, valid],
+                              center=P_chief_final, curvature=kappa,
+                              n_image=n_image, chief_index=filtered_chief)
 
     P_last_f = trace.P[-1, valid]
     S_last_f = trace.S[-1, valid]
@@ -846,10 +865,10 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
     Sdot_last_f = res.Sdot[-1][valid]
     Ldot_total_f = res.Ldot.sum(axis=0)[valid]
 
-    tdot = d_intersect_reference_sphere(P_last_f, S_last_f,
-                                        Pdot_last_f, Sdot_last_f,
-                                        C, Cdot, R, Rdot)
-    opl_total_dot = Ldot_total_f + n_image * tdot
+    sdot = d_eic_closing(P_last_f, S_last_f,
+                         Pdot_last_f, Sdot_last_f,
+                         C, Cdot, kappa, kappa_dot)
+    opl_total_dot = Ldot_total_f + n_image * sdot
     opd_dot = opl_total_dot - opl_total_dot[filtered_chief][None, :]
 
     x_pupil = P[valid, 0] - P[chief_index, 0]
@@ -873,7 +892,7 @@ __all__ = [
     'd_transform_global',
     'd_opl_segment',
     'd_closest_point_on_axis',
-    'd_intersect_reference_sphere',
+    'd_eic_closing',
     'DiffSeed',
     'DiffTraceResult',
     'raytrace_with_tangents',

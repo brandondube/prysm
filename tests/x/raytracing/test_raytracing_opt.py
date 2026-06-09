@@ -19,7 +19,7 @@ from prysm.x.raytracing.opt import (
     geometric_psf_histogram,
 )
 from prysm.x.raytracing.spencer_and_murty import (
-    STATUS_CLIP, STATUS_MISS, intersect_reference_sphere,
+    STATUS_CLIP, STATUS_MISS,
 )
 from prysm.x.raytracing.paraxial import paraxial_image_distance
 from prysm.x.raytracing.auto import rc_prescription_from_efl_bfl_sep
@@ -296,15 +296,6 @@ def test_xp_reference_sphere_rejects_axial_chief():
     with pytest.raises(ValueError, match='near-axial chief ray'):
         xp_reference_sphere(P_chief, S_chief)
 
-
-def test_intersect_reference_sphere_rejects_degenerate_radius():
-    P = np.array([[0.0, 1.0, 0.0],
-                  [0.0, -1.0, 0.0]])
-    S = np.array([[0.0, 0.0, 1.0],
-                  [0.0, 0.0, 1.0]])
-    C = np.array([0.0, 0.0, 10.0])
-    with pytest.raises(ValueError, match='degenerate'):
-        intersect_reference_sphere(P, S, C, 0.0)
 
 # ---------- end-to-end RC sanity check ----------
 

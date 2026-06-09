@@ -246,7 +246,8 @@ def xp_reference_sphere(P_chief, S_chief, axis_point=None, axis_dir=None):
 
     For tilted/decentered systems, supply axis_point and axis_dir explicitly,
     or compute P_xp via independent means (e.g., from a bundle of chief rays
-    from different fields) and pass it directly to opd_from_raytrace_eic.
+    from different fields) and convert it to a reference-sphere curvature with
+    reference_sphere_curvature for hopkins_eic_closing.
 
     Parameters
     ----------
@@ -320,7 +321,7 @@ def eic_distance(P_a, d_a, P_b, d_b):
     the OPL contribution from the difference in start points -- the
     geometric piece of a Hopkins-style wavefront aberration calculation.
     Provided here as a primitive for users porting classical formulas; the
-    OPD path in opd_from_raytrace_eic does not need it because prysm has the
+    OPD path in hopkins_eic_closing does not need it because prysm has the
     full OPL_hist along each ray in global coordinates.
 
     Parameters
@@ -340,26 +341,77 @@ def eic_distance(P_a, d_a, P_b, d_b):
     return num / denom
 
 
-def opd_from_raytrace_eic(P_hist, S_hist, OPL_hist, P_img, P_xp,
-                          n_image=1.0, chief_index=None,
-                          infinite_threshold=1.0e8):
-    """OPD on the exit-pupil reference surface, robust to extreme conjugates.
+def reference_sphere_curvature(P_xp, center):
+    """Curvature kappa = 1/R of the chief-image reference sphere.
+
+    The reference sphere is centered on the image point center and passes
+    through the exit-pupil point P_xp, so R = |P_xp - center|.  Returns the
+    curvature kappa = 1/R, which is the determinate handle the EIC closing
+    uses: a finite exit pupil gives kappa > 0, and an exit pupil at infinity
+    (image-space telecentric / afocal) is the kappa = 0 limit -- signalled by
+    P_xp is None.  Parametrizing by curvature keeps the closing finite through
+    that limit, where the radius R itself diverges.
+
+    Parameters
+    ----------
+    P_xp : iterable or None
+        exit-pupil point; None means the exit pupil is at infinity (kappa 0).
+    center : iterable
+        reference-sphere center -- the chief-ray image point.
+
+    Returns
+    -------
+    float
+        kappa, the reference-sphere curvature.
+
+    """
+    if P_xp is None:
+        return 0.0
+    R = float(np.sqrt(np.sum((np.asarray(P_xp) - np.asarray(center)) ** 2)))
+    if R <= 1e-12:
+        raise ValueError(
+            'reference-sphere radius is degenerate (the exit pupil coincides '
+            'with the image point); pass a separated P_xp'
+        )
+    return 1.0 / R
+
+
+def hopkins_eic_closing(P_hist, S_hist, OPL_hist, *, center, curvature,
+                        n_image=1.0, chief_index=None):
+    """Determinate equally-inclined-chord OPD on the chief-image reference sphere.
+
+    Closes the wavefront the way Hopkins (1981) does -- referencing every ray
+    to the chief-ray image point through the equally-inclined chord -- but in a
+    branch-free, cancellation-free form parametrized by the reference sphere's
+    finite center and its curvature kappa = 1/R.  The segment from the last
+    surface to the sphere, t = -b - sqrt(b^2 - |r|^2 + R^2) with r = P_last -
+    center and b = S_last . r, is rewritten by shifting off the common radius:
+
+        s = t + R = -b - kappa |r|^2-corrected-term, exactly
+        s = -b - kappa * m / (1 + sqrt(1 + kappa^2 * m)),   m = b^2 - |r|^2.
+
+    The common -R is ray-independent and drops out under the chief reference,
+    so n_image * s is the reference-sphere OPD to machine precision for a
+    finite pupil, while staying finite as the exit pupil recedes to infinity
+    (kappa -> 0, s -> -b).  No explicit radius, no exit-pupil coordinate, no
+    sqrt-of-negative clamp branch, no infinite-pupil special case -- the single
+    formula spans infinite-conjugate, afocal, telecentric, and
+    non-telecentric image space.  The chief-image reference focus is built in,
+    so Hopkins' separate focal-shift term e' is implicit here.
 
     Parameters
     ----------
     P_hist, S_hist, OPL_hist : ndarray
-        ray history from raytrace, shapes (jj+1, N, 3), (jj+1, N, 3),
-        (jj+1, N).
-    P_img : iterable
-        chief image point -- sphere center.
-    P_xp : iterable
-        exit-pupil center -- sets the sphere radius R = |P_xp - P_img|.
+        ray history from raytrace, shapes (jj+1, N, 3), (jj+1, N, 3), (jj+1, N).
+    center : iterable
+        chief-ray image point -- the reference-sphere center.
+    curvature : float
+        reference-sphere curvature kappa = 1/R (see reference_sphere_curvature);
+        0 for an exit pupil at infinity.
     n_image : float
         index in image space.
     chief_index : int, optional
         row of the chief ray.  Default: the ray nearest the pupil center.
-    infinite_threshold : float
-        reference-sphere radius above which the planar reference is used.
 
     Returns
     -------
@@ -368,41 +420,21 @@ def opd_from_raytrace_eic(P_hist, S_hist, OPL_hist, P_img, P_xp,
         length units as the prescription.
 
     """
-    P_img = np.asarray(P_img)
-    P_xp = np.asarray(P_xp)
-    R = float(np.sqrt(np.sum((P_xp - P_img) ** 2)))
+    C = np.asarray(center)
     P_last = P_hist[-1]
     S_last = S_hist[-1]
     OPL_through = OPL_hist.sum(axis=0)
     if chief_index is None:
         chief_index = _pupil_center_chief_index(P_hist[0])
-
-    if (not np.isfinite(R)) or R > infinite_threshold:
-        # planar reference through P_xp normal to the chief direction --
-        # the Mikš limit of the reference sphere as R -> infinity.
-        d_c = S_last[chief_index]
-        denom = (S_last * d_c).sum(axis=-1)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            s = ((P_xp - P_last) * d_c).sum(axis=-1) / denom
-    else:
-        # cancellation-free sphere intersection equivalent to
-        # spencer_and_murty.intersect_reference_sphere's -b - sqrt root.
-        g = P_last - P_img
-        beta = (S_last * g).sum(axis=-1)
-        gamma = (g * g).sum(axis=-1) - R * R
-        disc = beta * beta - gamma
-        spencer_and_murty._validate_reference_sphere_intersection(
-            P_last, P_img, R, disc)
-        disc = np.where(disc < 0, np.zeros_like(disc), disc)
-        sq = np.sqrt(disc)
-        # cancellation occurs when -beta and -sqrt are opposite-signed
-        # (i.e. beta < 0, the converging-beam case); rationalize that branch.
-        denom = -beta + sq
-        safe = np.where(denom == 0, np.ones_like(denom), denom)
-        s = np.where(beta < 0,
-                     np.where(denom == 0, np.zeros_like(gamma), gamma / safe),
-                     -beta - sq)
-
+    k = float(curvature)
+    r = P_last - C
+    b = (S_last * r).sum(axis=-1)
+    m = b * b - (r * r).sum(axis=-1)
+    disc = 1.0 + k * k * m
+    # the same domain as the explicit root: disc = (b^2 - |r|^2 + R^2)/R^2 >= 0
+    # exactly when the ray meets the sphere.  Clamp FP noise on grazing rays.
+    disc = np.where(disc < 0, np.zeros_like(disc), disc)
+    s = -b - k * m / (1.0 + np.sqrt(disc))
     OPL_total = OPL_through + n_image * s
     return OPL_total - OPL_total[chief_index]
 

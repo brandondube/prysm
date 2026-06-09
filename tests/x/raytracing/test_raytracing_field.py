@@ -12,9 +12,7 @@ from scipy.special import j1
 from prysm import thinfilm
 from prysm.x import materials
 from tests.x.raytracing.surface_helpers import plane, conic
-from prysm.x.raytracing.spencer_and_murty import (
-    raytrace, intersect_reference_sphere,
-)
+from prysm.x.raytracing.spencer_and_murty import raytrace
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.surfaces import annular_aperture
 from prysm.x.raytracing import opt, field
@@ -203,22 +201,23 @@ def test_raytrace_field_tir_gives_zero_amplitude():
     assert np.all(ft.amplitude == 0.0)
 
 
-# ---------- reference-sphere (sine-space) coordinates ----------------------
+# ---------- sine-space pupil coordinates -----------------------------------
 
-def test_reference_sphere_coords_are_sine_space():
-    """Coordinates of sphere points scale with sin(theta), not tan(theta)."""
-    # build rays converging to the origin from radius R on a sphere; the
-    # transverse coordinate of a point at polar angle theta is R*sin(theta).
-    R = 50.0
+def test_sine_space_coords_scale_with_sin_theta():
+    """The direction-cosine pupil coordinate scales with sin(theta) (sine
+    space), not tan(theta) -- the parameterization that makes the PSF a plain
+    Fourier transform.  Determinate for every conjugate (no exit pupil needed)."""
+    scale = 50.0
     thetas = np.radians(np.array([0.0, 10.0, 20.0, 30.0]))
-    # points on the sphere centered at origin, in the y-z plane
-    Q = np.stack([np.zeros_like(thetas),
-                  R * np.sin(thetas),
-                  -R * np.cos(thetas)], axis=-1)
-    P_xp = np.array([0.0, 0.0, -R])     # exit pupil on axis at sphere bottom
-    X, Y = field.reference_sphere_coords(Q, P_xp)
+    S_chief = np.array([0.0, 0.0, 1.0])
+    # rays at polar angle theta in the y-z plane
+    S_last = np.stack([np.zeros_like(thetas),
+                       np.sin(thetas),
+                       np.cos(thetas)], axis=-1)
+    X, Y = field.sine_space_coords(S_last, S_chief, scale)
     assert np.allclose(X, 0.0, atol=1e-9)
-    assert np.allclose(Y, R * np.sin(thetas), atol=1e-9)
+    # |Y| = scale * sin(theta): sine space, not tangent space
+    assert np.allclose(np.abs(Y), scale * np.sin(thetas), atol=1e-9)
 
 
 # ---------- Phase 2: orchestration + propagation bridge --------------------
@@ -244,6 +243,65 @@ def test_pupil_field_low_na_matches_airy():
     core = r < 2 * 1.22 * wvl * F
     corr = np.corrcoef(I[core].ravel(), airy[core].ravel())[0, 1]
     assert corr > 0.999
+
+
+def _telecentric_slow(epd=3.0):
+    """Image-space-telecentric slow singlet: stop one front-focal-distance
+    ahead of the lens, so the exit pupil is at infinity (xp_z is None)."""
+    from prysm.x.raytracing import OpticalSystem, LensData
+    from prysm.x.raytracing.surfaces import Conic, Plane
+    from prysm.x.raytracing.paraxial import first_order, paraxial_image_distance
+    mat = materials.ConstantMaterial(1.5168)
+    c = 1.0 / 120.0
+    probe = LensData()
+    (probe.add(Conic(c, 0.0), thickness=2.0, material=mat, semidiameter=8.0)
+          .add(Conic(-c, 0.0), thickness=120.0, material=materials.air,
+               semidiameter=8.0))
+    sp = OpticalSystem(probe, aperture=epd, fields=[Field(0, 0, kind='angle')],
+                       wavelengths={'d': 0.5875618}, reference_wavelength='d',
+                       stop_index=0)
+    ffl = first_order(sp, 'd', stop_index=0).ffl
+    lens = LensData()
+    (lens.add(Plane(), typ='eval', material=materials.air, semidiameter=epd / 2)
+         .add(Conic(c, 0.0), thickness=2.0, material=mat, semidiameter=10.0)
+         .add(Conic(-c, 0.0), thickness=120.0, material=materials.air, semidiameter=10.0)
+         .add(Plane(), typ='eval', material=materials.air, semidiameter=15.0))
+    lens.rows[0].thickness = abs(ffl)
+    sysT = OpticalSystem(lens, aperture=epd, fields=[Field(0, 0, kind='angle')],
+                         wavelengths={'d': 0.5875618}, reference_wavelength='d',
+                         stop_index=0)
+    wvl = sysT.wavelength('d')
+    # focus distance from the last lens surface (exclude the image plane row)
+    lens.rows[2].thickness = paraxial_image_distance(
+        sysT.to_surfaces()[:-1], wvl)
+    return sysT, wvl
+
+
+def test_pupil_field_telecentric_exit_pupil_at_infinity_is_airy():
+    """An image-space-telecentric system has its exit pupil at infinity, where a
+    position-on-the-sphere coordinate would diverge; the sine-space (direction
+    cosine) coordinate scaled by |EFL| stays finite, so the F-number EFL/EPD is
+    bounded and the well-corrected on-axis PSF is a clean, centered Airy."""
+    from prysm.x.raytracing.paraxial import first_order
+    sysT, wvl = _telecentric_slow(epd=3.0)
+    assert first_order(sysT, wvl, stop_index=0).xp_z is None
+    pf = field.pupil_field(sysT, Field(0., 0.), wvl, npupil=96, stop_index=0)
+    assert np.all(np.isfinite(pf.X)) and np.all(np.isfinite(pf.Y))
+    assert np.isfinite(pf.efl) and pf.efl > 0
+    assert pf.P_xp is None  # exit pupil at infinity, recorded as such
+    psf, dx = field.pupil_field_psf(pf, npix=128, Q=6)
+    assert np.all(np.isfinite(psf))
+    cy, cx = np.unravel_index(psf.argmax(), psf.shape)
+    assert abs(cy - psf.shape[0] // 2) <= 1 and abs(cx - psf.shape[1] // 2) <= 1
+    I = psf / psf.max()
+    yy, xx = np.indices(I.shape)
+    r = np.hypot(xx - cx, yy - cy) * dx
+    F = abs(pf.efl) / 3.0
+    x = np.pi * r / (wvl * F)
+    x = np.where(x == 0, 1e-9, x)
+    airy = (2 * j1(x) / x) ** 2
+    core = r < 2 * 1.22 * wvl * F
+    assert np.corrcoef(I[core].ravel(), airy[core].ravel())[0, 1] > 0.999
 
 
 def test_pupil_field_to_wavefront_is_pupil_space():

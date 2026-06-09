@@ -10,7 +10,10 @@ from prysm.x.optym.least_squares import (  # NOQA - re-export for users
 
 from .spencer_and_murty import raytrace, valid_mask
 from .sensitivity import merit_jacobian_free as _merit_jacobian_free
-from .opt import rms_spot_radius, _pupil_center_chief_index, opd_from_raytrace_eic
+from .opt import (
+    rms_spot_radius, _pupil_center_chief_index,
+    hopkins_eic_closing, reference_sphere_curvature,
+)
 from .paraxial import (
     effective_focal_length,
     back_focal_length,
@@ -330,14 +333,16 @@ class WavefrontRMS(Merit):
             raise ValueError(
                 'reference-sphere radius is degenerate; pass a nondegenerate P_xp'
             )
+        curvature = reference_sphere_curvature(P_xp, C)
         chief_v = _analysis._filtered_chief_index(valid, chief)
-        opd = opd_from_raytrace_eic(
+        opd = hopkins_eic_closing(
             trace.P[:, valid], trace.S[:, valid], trace.OPL[:, valid],
-            P_img=C, P_xp=P_xp, n_image=n_image, chief_index=chief_v,
-            infinite_threshold=np.inf)
+            center=C, curvature=curvature, n_image=n_image,
+            chief_index=chief_v)
         rms = float(np.sqrt(np.mean(opd * opd)))
         return dict(valid=valid, chief=chief, chief_v=chief_v, C=C, R=R,
-                    delta=delta, P_xp=P_xp, xp_mode=xp_mode, opd=opd, rms=rms,
+                    curvature=curvature, delta=delta, P_xp=P_xp,
+                    xp_mode=xp_mode, opd=opd, rms=rms,
                     n_image=n_image, P_last=P_last, S_last=S_last)
 
     def __call__(self, prescription, cache, *, return_seed=False):
@@ -366,7 +371,7 @@ class WavefrontRMS(Merit):
         # local import keeps the optimizer/design import surface free of the
         # adjoint subpackage (and dodges any import-time cycle).
         from .adjoint.primitives import (
-            adj_intersect_reference_sphere_full,
+            adj_eic_closing_full,
             adj_closest_point_on_axis,
         )
 
@@ -375,6 +380,7 @@ class WavefrontRMS(Merit):
         chief_v = g['chief_v']
         C = g['C']
         R = g['R']
+        curvature = g['curvature']
         delta = g['delta']
         xp_mode = g['xp_mode']
         opd = g['opd']
@@ -392,13 +398,15 @@ class WavefrontRMS(Merit):
         opl_total_bar = opd_bar.copy()
         opl_total_bar[chief_v] = opl_total_bar[chief_v] - opd_bar.sum()
         L_bar[valid] = opl_total_bar
-        t_bar = n_image * opl_total_bar
+        s_bar = n_image * opl_total_bar
 
-        P_rs, S_rs, C_bar, R_bar = adj_intersect_reference_sphere_full(
-            P_last[valid], S_last[valid], C, R, t_bar)
+        P_rs, S_rs, C_bar, kappa_bar = adj_eic_closing_full(
+            P_last[valid], S_last[valid], C, curvature, s_bar)
         P_bar[valid] = P_bar[valid] + P_rs
         S_bar[valid] = S_bar[valid] + S_rs
 
+        # kappa = 1/R  ->  R_bar = -kappa_bar / R^2
+        R_bar = -kappa_bar / (R * R)
         delta_bar = R_bar * delta / R
         C_bar = C_bar - delta_bar            # delta = P_xp - C
         P_xp_bar = delta_bar

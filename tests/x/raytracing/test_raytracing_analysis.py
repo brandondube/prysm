@@ -26,7 +26,9 @@ from prysm.x.raytracing.analysis import (
     chromatic_focal_shift,
     lateral_color,
 )
-from prysm.x.raytracing.opt import opd_from_raytrace_eic
+from prysm.x.raytracing.opt import (
+    hopkins_eic_closing, reference_sphere_curvature,
+)
 
 
 # ---------- helpers ---------------------------------------------------------
@@ -222,10 +224,13 @@ def test_wavefront_uses_penultimate_surface_image_medium():
     trace = raytrace(presc, P, S, wvl)
     chief = len(P) // 2
     C = trace.P[-1, chief]
-    expected = opd_from_raytrace_eic(trace.P, trace.S, trace.OPL, C, P_xp,
-                                     n_image=1.25, chief_index=chief)
-    wrong_air = opd_from_raytrace_eic(trace.P, trace.S, trace.OPL, C, P_xp,
-                                      n_image=1.0, chief_index=chief)
+    kappa = reference_sphere_curvature(P_xp, C)
+    expected = hopkins_eic_closing(trace.P, trace.S, trace.OPL, center=C,
+                                   curvature=kappa, n_image=1.25,
+                                   chief_index=chief)
+    wrong_air = hopkins_eic_closing(trace.P, trace.S, trace.OPL, center=C,
+                                    curvature=kappa, n_image=1.0,
+                                    chief_index=chief)
 
     np.testing.assert_allclose(opd, expected, atol=1e-12)
     assert np.max(np.abs(expected - wrong_air)) > 1e-8
@@ -244,8 +249,10 @@ def test_wavefront_uses_surface_zero_object_medium_when_present():
     trace = raytrace(presc, P, S, wvl)
     chief = len(P) // 2
     C = trace.P[-1, chief]
-    expected = opd_from_raytrace_eic(trace.P, trace.S, trace.OPL, C, P_xp,
-                                     n_image=1.0, chief_index=chief)
+    expected = hopkins_eic_closing(
+        trace.P, trace.S, trace.OPL, center=C,
+        curvature=reference_sphere_curvature(P_xp, C),
+        n_image=1.0, chief_index=chief)
 
     np.testing.assert_allclose(opd, expected, atol=1e-12)
 

@@ -107,7 +107,7 @@ from .field import (
     pupil_field_to_wavefront,
     raytrace_field,
     raytrace_prt,
-    reference_sphere_coords,
+    sine_space_coords,
     surface_normals_from_trace,
     unpolarized_amplitude,
 )
@@ -194,7 +194,7 @@ __all__ = [
     'FieldTraceResult',
     'PRTResult',
     'amplitude_apodization',
-    'reference_sphere_coords',
+    'sine_space_coords',
     'interface_coefficients',
     'surface_normals_from_trace',
     'unpolarized_amplitude',

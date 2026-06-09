@@ -22,6 +22,10 @@ _APERTURE_MODES = (EPD, FNO_IMAGE, FNO_OBJECT, NA_IMAGE, NA_OBJECT)
 _OBJECT_SPACE_MODES = (FNO_OBJECT, NA_OBJECT)
 _POWER_EPS = 1e-30
 
+# cache sentinel: distinguishes an unresolved key from a resolved None (an exit
+# pupil at infinity / telecentric, which the EIC closing reads as curvature 0).
+_EXIT_PUPIL_MISS = object()
+
 
 class ApertureSpec:
     """The aperture of an optical system: a mode plus a value.
@@ -376,8 +380,10 @@ class OpticalSystem:
 
         Returns
         -------
-        P_xp : ndarray, shape (3,)
+        P_xp : ndarray, shape (3,), or None
             exit-pupil reference point, ready to pass to wavefront(P_xp=...).
+            None when the exit pupil is at infinity (image-space telecentric),
+            which the EIC closing reads as its curvature kappa = 0 limit.
 
         """
         from .analysis import resolve_exit_pupil
@@ -389,8 +395,8 @@ class OpticalSystem:
             getattr(field, 'hx', None), getattr(field, 'hy', None),
             getattr(field, 'kind', None))
         key = (self.lens._version, float(wvl), field_key, resolved_stop)
-        cached = self._derived.get(key)
-        if cached is None:
+        cached = self._derived.get(key, _EXIT_PUPIL_MISS)
+        if cached is _EXIT_PUPIL_MISS:
             cached = resolve_exit_pupil(
                 self, wvl, stop_index=resolved_stop, epd=epd, field=field,
                 axis_point=axis_point, axis_dir=axis_dir)
