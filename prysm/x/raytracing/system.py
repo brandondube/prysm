@@ -589,6 +589,114 @@ class OpticalSystem:
             distribution=distribution, stop_index=stop_index, output=output))
         return plotting.plot_opd_fans(grid, **plot_kwargs)
 
+    def plot_field_curvature(self, *, fields=None, wavelength=None, epd=None,
+                             marginal_fraction=1e-3, **plot_kwargs):
+        """Field-curvature (x/y fan focus shift) curves for the system.
+
+        Runs analysis.field_curvature (cached on the system fingerprint) and
+        draws it with plotting.plot_field_curvature; data keywords size the
+        evaluation, the rest forward to the plotter.
+
+        Returns
+        -------
+        (matplotlib.figure.Figure, matplotlib.axes.Axis)
+
+        """
+        from . import plotting
+        from .analysis import field_curvature
+        grid = self._cached_grid('field_curvature', field_curvature, dict(
+            fields=fields, wavelength=wavelength, epd=epd,
+            marginal_fraction=marginal_fraction))
+        return plotting.plot_field_curvature(
+            self, fields, result=grid, **plot_kwargs)
+
+    def plot_distortion(self, *, fields=None, wavelength=None, epd=None,
+                        distortion_type='f-tan', pupil_z=None, **plot_kwargs):
+        """Percent-distortion curve for the system.
+
+        Runs analysis.distortion (cached) and draws it with
+        plotting.plot_distortion; data keywords size the evaluation, the rest
+        forward to the plotter.
+
+        Returns
+        -------
+        (matplotlib.figure.Figure, matplotlib.axes.Axis)
+
+        """
+        from . import plotting
+        from .analysis import distortion
+        grid = self._cached_grid('distortion', distortion, dict(
+            fields=fields, wavelength=wavelength, epd=epd,
+            distortion_type=distortion_type, pupil_z=pupil_z))
+        return plotting.plot_distortion(
+            self, fields, result=grid, **plot_kwargs)
+
+    def plot_chromatic_focal_shift(self, *, wavelengths=None,
+                                   reference_wavelength=None, focus='best',
+                                   epd=None, field=None, sampling=None,
+                                   samples=101, **plot_kwargs):
+        """Chromatic focal-shift curve for the system.
+
+        Runs analysis.chromatic_focal_shift (cached) and draws it with
+        plotting.plot_chromatic_focal_shift; data keywords size the wavelength
+        sweep, the rest forward to the plotter.  When wavelengths is omitted
+        the sweep spans the system wavelength set with samples points.
+
+        Returns
+        -------
+        (matplotlib.figure.Figure, matplotlib.axes.Axis)
+
+        """
+        from . import plotting
+        from .analysis import chromatic_focal_shift
+        data = self._cached_grid(
+            'chromatic_focal_shift', chromatic_focal_shift, dict(
+                wavelengths=wavelengths,
+                reference_wavelength=reference_wavelength, focus=focus,
+                epd=epd, field=field, sampling=sampling, samples=samples))
+        return plotting.plot_chromatic_focal_shift(
+            self, result=data, **plot_kwargs)
+
+    def plot_axial_color(self, *, wavelengths=None, **plot_kwargs):
+        """Paraxial focus shift over the system wavelength set (axial color).
+
+        Runs analysis.axial_color (cached) and draws it with
+        plotting.plot_axial_color; wavelengths sizes the evaluation, the rest
+        (including reference_wavelength) forward to the plotter.  See
+        plot_chromatic_focal_shift for a smooth real-ray sweep.
+
+        Returns
+        -------
+        (matplotlib.figure.Figure, matplotlib.axes.Axis)
+
+        """
+        from . import plotting
+        from .analysis import axial_color
+        data = self._cached_grid('axial_color', axial_color, dict(
+            wavelengths=wavelengths))
+        return plotting.plot_axial_color(
+            self, wavelengths, result=data, **plot_kwargs)
+
+    def plot_lateral_color(self, *, fields=None, wavelengths=None, epd=None,
+                           **plot_kwargs):
+        """Lateral-color curves for the system, one per non-reference wavelength.
+
+        Runs analysis.lateral_color (cached) and draws it with
+        plotting.plot_lateral_color; data keywords size the chief-ray grid, the
+        rest (including reference_wavelength) forward to the plotter.
+
+        Returns
+        -------
+        (matplotlib.figure.Figure, matplotlib.axes.Axis)
+
+        """
+        from . import plotting
+        from .analysis import lateral_color
+        data = self._cached_grid('lateral_color', lateral_color, dict(
+            fields=fields, wavelengths=wavelengths, epd=epd))
+        return plotting.plot_lateral_color(
+            self, fields, wavelengths, result=data, **plot_kwargs)
+
     # -- listings delegate to the lens --
     def list_surfaces(self, *, unit=None):
         """Tabular surface listing (lens data editor)."""

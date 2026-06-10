@@ -409,7 +409,7 @@ def wavefront_zernike_fit(opd, x_pupil, y_pupil, nms, *,
 
 # ---------- distortion ------------------------------------------------------
 
-def distortion(prescription, fields, wavelength=None, *, epd=None,
+def distortion(prescription, fields=None, wavelength=None, *, epd=None,
                paraxial_fraction=1e-4, distortion_type='f-tan',
                pupil_z=None):
     """Per-field image-plane error of the chief ray vs a paraxial proxy.
@@ -417,8 +417,9 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
     Parameters
     ----------
     prescription : sequence of Surface
-    fields : iterable of Field
-        field points to evaluate.  Must all be kind='angle'.
+    fields : iterable of Field, optional
+        field points to evaluate.  Must all be kind='angle'.  None defaults
+        to the system FieldSet, else the on-axis field.
     wavelength : float
         in microns.
     epd : float
@@ -446,7 +447,7 @@ def distortion(prescription, fields, wavelength=None, *, epd=None,
     """
     wavelength = system_wavelength(prescription, wavelength)
     epd = _require_epd(prescription, epd, wavelength)
-    fields = list(fields)
+    fields = _resolve_fields(prescription, fields)
     n = len(fields)
     real_xy = np.zeros((n, 2), dtype=config.precision)
     paraxial_xy = np.zeros((n, 2), dtype=config.precision)
@@ -549,15 +550,16 @@ def _line_intersection_z(P0, S0, P1, S1):
     return 0.5 * (float(Q0[2]) + float(Q1[2]))
 
 
-def field_curvature(prescription, fields, wavelength=None, *, epd=None,
+def field_curvature(prescription, fields=None, wavelength=None, *, epd=None,
                     marginal_fraction=1e-3):
     """X- and y-fan focus shifts per field point.
 
     Parameters
     ----------
     prescription : sequence of Surface
-    fields : iterable of Field
-        field points to evaluate.  Must all be kind='angle'.
+    fields : iterable of Field, optional
+        field points to evaluate.  Must all be kind='angle'.  None defaults
+        to the system FieldSet, else the on-axis field.
     wavelength : float
         in microns.
     epd : float
@@ -578,7 +580,7 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
     """
     wavelength = system_wavelength(prescription, wavelength)
     epd = _require_epd(prescription, epd, wavelength)
-    fields = list(fields)
+    fields = _resolve_fields(prescription, fields)
     n = len(fields)
     x_fan_z = np.zeros(n, dtype=config.precision)
     y_fan_z = np.zeros(n, dtype=config.precision)
@@ -603,14 +605,15 @@ def field_curvature(prescription, fields, wavelength=None, *, epd=None,
 
 # ---------- color -----------------------------------------------------------
 
-def axial_color(prescription, wavelengths):
+def axial_color(prescription, wavelengths=None):
     """Paraxial image distance at each of several wavelengths.
 
     Parameters
     ----------
     prescription : sequence of Surface
-    wavelengths : iterable of float
-        wavelengths in microns.
+    wavelengths : iterable of float, optional
+        wavelengths in microns.  None defaults to the system set, else the
+        reference wavelength.
 
     Returns
     -------
@@ -618,6 +621,7 @@ def axial_color(prescription, wavelengths):
         signed paraxial image distance from the last surface vertex.
 
     """
+    wavelengths = _resolve_wavelengths(prescription, wavelengths)
     return np.array([
         paraxial_image_distance(prescription, wvl=float(w))
         for w in wavelengths
@@ -755,7 +759,7 @@ def chromatic_focal_shift(prescription, wavelengths=None, *,
     return wavelengths, foci - ref
 
 
-def lateral_color(prescription, fields, wavelengths, *, epd=None):
+def lateral_color(prescription, fields=None, wavelengths=None, *, epd=None):
     """Chief-ray image-plane landing at every (field, wavelength) pair.
 
     The lateral chromatic aberration at field i is the difference between
@@ -765,10 +769,12 @@ def lateral_color(prescription, fields, wavelengths, *, epd=None):
     Parameters
     ----------
     prescription : sequence of Surface
-    fields : iterable of Field
-        field points (kind='angle').
-    wavelengths : iterable of float
-        wavelengths in microns.
+    fields : iterable of Field, optional
+        field points (kind='angle').  None defaults to the system FieldSet,
+        else the on-axis field.
+    wavelengths : iterable of float, optional
+        wavelengths in microns.  None defaults to the system set, else the
+        reference wavelength.
     epd : float
         entrance pupil diameter.
 
@@ -780,8 +786,8 @@ def lateral_color(prescription, fields, wavelengths, *, epd=None):
     """
     # Use one pupil size for all wavelengths.
     epd = _require_epd(prescription, epd)
-    fields = list(fields)
-    wavelengths = list(wavelengths)
+    fields = _resolve_fields(prescription, fields)
+    wavelengths = _resolve_wavelengths(prescription, wavelengths)
     out = np.zeros((len(fields), len(wavelengths), 2), dtype=config.precision)
     for r in iter_trace_grid(prescription, fields, wavelengths,
                              Sampling.chief(), epd=epd):

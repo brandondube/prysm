@@ -1,5 +1,7 @@
 """OpticalSystem convenience plot methods (layout_2d, plot_spots,
-plot_ray_fans, plot_opd_fans) and the live-fingerprint trace cache."""
+plot_ray_fans, plot_opd_fans, plot_field_curvature, plot_distortion,
+plot_chromatic_focal_shift, plot_axial_color, plot_lateral_color) and the
+live-fingerprint trace cache."""
 import matplotlib
 import numpy as np
 import pytest
@@ -11,7 +13,10 @@ from prysm.x.raytracing import (
     OpticalSystem, ApertureSpec, LensData, Sphere, Plane, Field, Sampling,
 )
 from prysm.x import materials
-from prysm.x.raytracing.analysis import spot_diagrams, ray_aberration_fans
+from prysm.x.raytracing.analysis import (
+    spot_diagrams, ray_aberration_fans, field_curvature, axial_color,
+    lateral_color,
+)
 
 
 def _doublet():
@@ -93,6 +98,83 @@ def test_convenience_grid_equals_explicit_two_step():
         reference='centroid'))
     np.testing.assert_allclose(cached.x, explicit.x, equal_nan=True)
     np.testing.assert_allclose(cached.y, explicit.y, equal_nan=True)
+
+
+# ---------- curve plot methods ----------------------------------------------
+
+def test_plot_field_curvature_defaults_from_system():
+    sys = _doublet()
+    fig, ax = sys.plot_field_curvature()
+    try:
+        assert len(ax.lines) == 2  # x and y fans
+        assert len(ax.lines[0].get_ydata()) == len(sys.fields)
+    finally:
+        plt.close(fig)
+
+
+def test_plot_distortion_defaults_from_system():
+    sys = _doublet()
+    fig, ax = sys.plot_distortion()
+    try:
+        assert len(ax.lines) == 1
+        assert len(ax.lines[0].get_xdata()) == len(sys.fields)
+    finally:
+        plt.close(fig)
+
+
+def test_plot_chromatic_focal_shift_spans_system_wavelengths():
+    sys = _doublet()
+    fig, ax = sys.plot_chromatic_focal_shift(focus='paraxial', samples=7)
+    try:
+        x = ax.lines[0].get_xdata()
+        assert len(x) == 7
+        assert x[0] == pytest.approx(min(sys.wavelengths))
+        assert x[-1] == pytest.approx(max(sys.wavelengths))
+    finally:
+        plt.close(fig)
+
+
+def test_plot_axial_color_zero_at_reference_wavelength():
+    sys = _doublet()
+    fig, ax = sys.plot_axial_color()
+    try:
+        line = ax.lines[0]
+        x = line.get_xdata()
+        y = line.get_ydata()
+        assert len(x) == len(sys.wavelengths)
+        assert y[sys.reference] == pytest.approx(0.0)
+        # crown-flint doublet: the shift matches the paraxial BFD differences
+        bfd = axial_color(sys)
+        np.testing.assert_allclose(y, bfd - bfd[sys.reference])
+    finally:
+        plt.close(fig)
+
+
+def test_plot_lateral_color_one_curve_per_nonreference_wavelength():
+    sys = _doublet()
+    fig, ax = sys.plot_lateral_color()
+    try:
+        assert len(ax.lines) == len(sys.wavelengths) - 1
+        assert len(ax.lines[0].get_ydata()) == len(sys.fields)
+        # pure +y fields: the signed projection is the chief-ray y difference
+        landing = lateral_color(sys)
+        expected = landing[:, 0, 1] - landing[:, sys.reference, 1]
+        np.testing.assert_allclose(ax.lines[0].get_xdata(), expected,
+                                   atol=1e-12)
+        # the on-axis field has zero lateral color
+        assert ax.lines[0].get_xdata()[0] == pytest.approx(0.0)
+    finally:
+        plt.close(fig)
+
+
+def test_curve_convenience_data_cached_and_matches_explicit():
+    sys = _doublet()
+    explicit = field_curvature(sys)
+    kw = dict(fields=None, wavelength=None, epd=None, marginal_fraction=1e-3)
+    cached = sys._cached_grid('field_curvature', field_curvature, kw)
+    np.testing.assert_allclose(cached.x_fan_z, explicit.x_fan_z)
+    np.testing.assert_allclose(cached.y_fan_z, explicit.y_fan_z)
+    assert sys._cached_grid('field_curvature', field_curvature, kw) is cached
 
 
 # ---------- the fingerprint trace cache -------------------------------------

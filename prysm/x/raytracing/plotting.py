@@ -16,15 +16,17 @@ from .spencer_and_murty import (
 )
 from .analysis import (
     transverse_ray_aberration,
+    axial_color,
     chromatic_focal_shift,
     field_curvature,
     distortion,
+    lateral_color,
     _field_curvature_labels,
 )
 from .launch import launch, Sampling
 from .surfaces import STYPE_REFLECT, STYPE_REFRACT
 from ._meta import system_wavelength
-from ._trace_grid import _resolve_fields
+from ._trace_grid import _resolve_fields, _resolve_wavelengths
 
 import numpy as np  # see module docstring; do not "fix" to mathops np
 
@@ -1095,8 +1097,8 @@ def _field_axis_values(fields):
     return np.asarray(values)
 
 
-def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
-                         marginal_fraction=1e-3,
+def plot_field_curvature(prescription, fields=None, wavelength=None, *,
+                         epd=None, marginal_fraction=1e-3, result=None,
                          reference='image', c='r', lw=1, alpha=1, zorder=4,
                          label=None, fig=None, ax=None):
     """Plot field-curvature x/y fan curves.
@@ -1105,14 +1107,19 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
     ----------
     prescription : sequence of Surface or LensData
         the optical system.
-    fields : iterable of Field
-        field points to evaluate, all kind='angle'.
+    fields : iterable of Field, optional
+        field points to evaluate, all kind='angle'; defaults to the system
+        FieldSet.
     wavelength : float, optional
         in microns; defaults from a LensData reference wavelength.
     epd : float, optional
         entrance pupil diameter; defaults from a system aperture spec.
     marginal_fraction : float, optional
         pupil zone for the marginal ray, as a fraction of EPD/2.
+    result : FieldCurvatureResult, optional
+        precomputed analysis.field_curvature output for fields; when given no
+        rays are traced here and wavelength, epd, and marginal_fraction are
+        unused.
     reference : str or float, optional
         zero of the focus-shift axis.
     c : color, optional
@@ -1135,11 +1142,12 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    fields = list(fields)
-    result = field_curvature(
-        prescription, fields, wavelength, epd=epd,
-        marginal_fraction=marginal_fraction,
-    )
+    fields = _resolve_fields(prescription, fields)
+    if result is None:
+        result = field_curvature(
+            prescription, fields, wavelength, epd=epd,
+            marginal_fraction=marginal_fraction,
+        )
     x_fan_z = _to_np(result.x_fan_z)
     y_fan_z = _to_np(result.y_fan_z)
     if reference is None:
@@ -1167,7 +1175,7 @@ def plot_field_curvature(prescription, fields, wavelength=None, *, epd=None,
 def plot_chromatic_focal_shift(prescription, wavelengths=None, *,
                                reference_wavelength=None,
                                focus='best', epd=None, field=None,
-                               sampling=None, samples=101,
+                               sampling=None, samples=101, result=None,
                                c='r', marker=None, lw=1, alpha=1,
                                zorder=4, label=None, fig=None, ax=None):
     """Plot focus shift against wavelength.
@@ -1190,6 +1198,9 @@ def plot_chromatic_focal_shift(prescription, wavelengths=None, *,
         ray bundle used for focus='best'.
     samples : int, optional
         number of wavelength samples used when wavelengths is omitted.
+    result : tuple of ndarray, optional
+        precomputed (wavelengths, shifts) from analysis.chromatic_focal_shift;
+        when given no tracing happens here and the data keywords are unused.
     c : color, optional
         curve color.
     marker : str, optional
@@ -1212,11 +1223,14 @@ def plot_chromatic_focal_shift(prescription, wavelengths=None, *,
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    wavelengths, shifts = chromatic_focal_shift(
-        prescription, wavelengths, reference_wavelength=reference_wavelength,
-        focus=focus, epd=epd, field=field, sampling=sampling,
-        samples=samples,
-    )
+    if result is None:
+        result = chromatic_focal_shift(
+            prescription, wavelengths,
+            reference_wavelength=reference_wavelength,
+            focus=focus, epd=epd, field=field, sampling=sampling,
+            samples=samples,
+        )
+    wavelengths, shifts = result
     shifts = _to_np(shifts)
     wavelengths = _to_np(wavelengths)
     ax.plot(wavelengths, shifts, c=c, marker=marker, lw=lw, alpha=alpha,
@@ -1226,8 +1240,66 @@ def plot_chromatic_focal_shift(prescription, wavelengths=None, *,
     return fig, ax
 
 
-def plot_distortion(prescription, fields, wavelength=None, *, epd=None,
-                    distortion_type='f-tan', pupil_z=None,
+def plot_axial_color(prescription, wavelengths=None, *,
+                     reference_wavelength=None, result=None,
+                     c='r', marker='o', lw=1, alpha=1, zorder=4,
+                     label=None, fig=None, ax=None):
+    """Plot paraxial focus shift against wavelength (axial color).
+
+    A paraxial readout over the discrete system wavelength set; see
+    plot_chromatic_focal_shift for a smooth real-ray sweep.
+
+    Parameters
+    ----------
+    prescription : sequence of Surface or LensData
+        the optical system.
+    wavelengths : iterable of float, optional
+        wavelengths in microns; defaults to the system wavelength set.
+    reference_wavelength : float, optional
+        wavelength whose paraxial focus is the zero; the nearest grid
+        wavelength is used.  Defaults to the system reference wavelength.
+    result : ndarray, optional
+        precomputed analysis.axial_color output for wavelengths; when given
+        no paraxial solves happen here.
+    c : color, optional
+        curve color.
+    marker : str, optional
+        marker style; defaults to 'o' since the wavelength set is discrete.
+    lw : float, optional
+        line width.
+    alpha : float, optional
+        opacity.
+    zorder : int, optional
+        stack order.
+    label : str, optional
+        legend label.
+    fig : matplotlib.figure.Figure
+    ax : matplotlib.axes.Axis
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    matplotlib.axes.Axis
+
+    """
+    fig, ax = share_fig_ax(fig, ax)
+    wavelengths = _resolve_wavelengths(prescription, wavelengths)
+    if result is None:
+        result = axial_color(prescription, wavelengths)
+    bfd = _to_np(result)
+    wavelengths = np.asarray(wavelengths, dtype=float)
+    if reference_wavelength is None:
+        reference_wavelength = system_wavelength(prescription, None)
+    j_ref = int(np.argmin(np.abs(wavelengths - float(reference_wavelength))))
+    ax.plot(wavelengths, bfd - bfd[j_ref], c=c, marker=marker, lw=lw,
+            alpha=alpha, zorder=zorder, label=label)
+    ax.set_xlabel('wavelength [um]')
+    ax.set_ylabel('paraxial focus shift')
+    return fig, ax
+
+
+def plot_distortion(prescription, fields=None, wavelength=None, *, epd=None,
+                    distortion_type='f-tan', pupil_z=None, result=None,
                     c='r', lw=1, alpha=1, zorder=4, label=None,
                     fig=None, ax=None):
     """Plot percent distortion against field magnitude.
@@ -1236,8 +1308,9 @@ def plot_distortion(prescription, fields, wavelength=None, *, epd=None,
     ----------
     prescription : sequence of Surface or LensData
         the optical system.
-    fields : iterable of Field
-        field points to evaluate, all kind='angle'.
+    fields : iterable of Field, optional
+        field points to evaluate, all kind='angle'; defaults to the system
+        FieldSet.
     wavelength : float, optional
         in microns; defaults from a LensData reference wavelength.
     epd : float, optional
@@ -1246,6 +1319,10 @@ def plot_distortion(prescription, fields, wavelength=None, *, epd=None,
         'f-tan' (default) or 'linear-angle'; see analysis.distortion.
     pupil_z : float, optional
         z of the entrance pupil used for the chief-ray launch.
+    result : DistortionResult, optional
+        precomputed analysis.distortion output for fields; when given no rays
+        are traced here and wavelength, epd, distortion_type, and pupil_z are
+        unused.
     c : color, optional
         curve color.
     lw : float, optional
@@ -1266,15 +1343,94 @@ def plot_distortion(prescription, fields, wavelength=None, *, epd=None,
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    result = distortion(
-        prescription, fields, wavelength, epd=epd,
-        distortion_type=distortion_type, pupil_z=pupil_z,
-    )
+    fields = _resolve_fields(prescription, fields)
+    if result is None:
+        result = distortion(
+            prescription, fields, wavelength, epd=epd,
+            distortion_type=distortion_type, pupil_z=pupil_z,
+        )
     percent = _to_np(result.percent)
-    field_values = _field_axis_values(list(fields))
+    field_values = _field_axis_values(fields)
     ax.plot(percent, field_values, c=c, lw=lw, alpha=alpha, zorder=zorder,
             label=label)
     ax.set_xlabel('distortion [%]')
+    ax.set_ylabel('field')
+    return fig, ax
+
+
+def plot_lateral_color(prescription, fields=None, wavelengths=None, *,
+                       epd=None, reference_wavelength=None, result=None,
+                       colors=None, lw=1, alpha=1, zorder=4, legend=True,
+                       fig=None, ax=None):
+    """Plot lateral color (chief-ray height error vs reference) against field.
+
+    One curve per non-reference wavelength: the signed difference of the
+    chief-ray image height from the reference-wavelength height, projected
+    onto the reference landing direction so the sign survives (the distortion
+    convention).  Fields whose reference landing is on axis read zero.
+
+    Parameters
+    ----------
+    prescription : sequence of Surface or LensData
+        the optical system.
+    fields : iterable of Field, optional
+        field points to evaluate, all kind='angle'; defaults to the system
+        FieldSet.
+    wavelengths : iterable of float, optional
+        wavelengths in microns; defaults to the system wavelength set.
+    epd : float, optional
+        entrance pupil diameter; defaults from a system aperture spec.
+    reference_wavelength : float, optional
+        wavelength whose chief-ray landing is the zero; the nearest grid
+        wavelength is used.  Defaults to the system reference wavelength.
+    result : ndarray, optional
+        precomputed analysis.lateral_color landing grid for fields and
+        wavelengths; when given no rays are traced here and epd is unused.
+    colors : sequence, optional
+        one matplotlib color per wavelength; defaults to the property cycle.
+    lw : float, optional
+        line width.
+    alpha : float, optional
+        opacity.
+    zorder : int, optional
+        stack order.
+    legend : bool, optional
+        draw a wavelength legend when more than one curve is drawn.
+    fig : matplotlib.figure.Figure
+    ax : matplotlib.axes.Axis
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    matplotlib.axes.Axis
+
+    """
+    fig, ax = share_fig_ax(fig, ax)
+    fields = _resolve_fields(prescription, fields)
+    wavelengths = _resolve_wavelengths(prescription, wavelengths)
+    if result is None:
+        result = lateral_color(prescription, fields, wavelengths, epd=epd)
+    landing = _to_np(result)
+    wavelengths = np.asarray(wavelengths, dtype=float)
+    if reference_wavelength is None:
+        reference_wavelength = system_wavelength(prescription, None)
+    j_ref = int(np.argmin(np.abs(wavelengths - float(reference_wavelength))))
+
+    ref = landing[:, j_ref, :]
+    href = np.hypot(ref[:, 0], ref[:, 1])
+    safe = np.where(href > 0, href, 1.0)
+    height = (landing * ref[:, None, :]).sum(axis=-1) / safe[:, None]
+    delta = np.where(href[:, None] > 0, height - href[:, None], 0.0)
+
+    field_values = _field_axis_values(fields)
+    wl_colors = _wavelength_colors(wavelengths, colors)
+    for j in range(len(wavelengths)):
+        if j == j_ref:
+            continue
+        ax.plot(delta[:, j], field_values, c=wl_colors[j], lw=lw, alpha=alpha,
+                zorder=zorder, label=_wavelength_label(wavelengths[j]))
+    _wavelength_legend(ax, len(wavelengths), legend)
+    ax.set_xlabel('lateral color')
     ax.set_ylabel('field')
     return fig, ax
 
