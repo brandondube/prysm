@@ -579,6 +579,36 @@ def test_cauchy_matches_brute_force_with_history(seed):
     np.testing.assert_array_equal(free, free_ref)
 
 
+@pytest.mark.parametrize('seed', [0, 1, 2, 3, 4])
+def test_cauchy_chunked_sweep_carry_matches_brute_force(seed):
+    """The sweep state carried across chunk boundaries reproduces the
+    single-pass result; chunk=2 forces many carries on a 30-var problem."""
+    rng = np.random.default_rng(seed)
+    n = 30
+    fg, x_star = _make_quadratic(dim=n, seed=seed + 500)
+    x0 = rng.standard_normal(n)
+    opt = PrysmLBFGSB(fg, x0, memory=4)
+    _populate_history(opt, 3, fg)
+    opt._cauchy_chunk = 2
+
+    x = opt.x
+    g = rng.standard_normal(n)
+    # wide bounds so the sweep crosses many breakpoints before stopping
+    l = x - rng.uniform(0.05, 4.0, n)
+    u = x + rng.uniform(0.05, 4.0, n)
+    opt.l = l
+    opt.u = u
+
+    xc, c, free = opt._cauchy(g)
+    B = _dense_B(opt)
+    xc_ref, free_ref = _brute_cauchy(x, g, l, u, B)
+    np.testing.assert_allclose(xc, xc_ref, atol=1e-9, rtol=1e-9)
+    np.testing.assert_array_equal(free, free_ref)
+    # the auxiliary c must equal W.T @ (xc - x) for the subspace stage
+    c_ref = opt._W().T @ (xc_ref - x)
+    np.testing.assert_allclose(c, c_ref, atol=1e-9, rtol=1e-9)
+
+
 def test_cauchy_already_active_variable():
     """A coord already at its bound with gradient pushing further into it
     is processed at t=0 and emerges as active with no motion."""

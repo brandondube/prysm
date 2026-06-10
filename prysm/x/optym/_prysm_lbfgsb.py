@@ -236,10 +236,16 @@ class PrysmLBFGSB:
 
         dtype = x0.dtype
         self._eps = float(np.finfo(dtype).eps)  # curvature-condition floor
+        # match the bounds to x0's dtype so e.g. float64 bounds cannot
+        # promote float32 arithmetic anywhere downstream.
         if lower_bounds is None:
             lower_bounds = np.full(self.n, -np.inf, dtype=dtype)
+        else:
+            lower_bounds = np.asarray(lower_bounds, dtype=dtype)
         if upper_bounds is None:
             upper_bounds = np.full(self.n, np.inf, dtype=dtype)
+        else:
+            upper_bounds = np.asarray(upper_bounds, dtype=dtype)
         self.l = lower_bounds  # NOQA - mirrors the math
         self.u = upper_bounds
         # When no coord has a finite bound, the Cauchy point + subspace
@@ -272,6 +278,10 @@ class PrysmLBFGSB:
         # number of coords driven to a bound by the last _cauchy sweep;
         # set each call, read by step() for telemetry without a reduction.
         self._cauchy_breaks = 0
+        # initial breakpoint-sweep chunk; grows geometrically within a
+        # sweep.  The sweep usually stops within the first few breakpoints,
+        # so this bounds the common-case work of _cauchy.
+        self._cauchy_chunk = 64
         # Lazy reusable work arrays.
         self._scratch = {}
 
@@ -341,62 +351,67 @@ class PrysmLBFGSB:
         i = self._hist_next
         return np.concatenate([rows[i:], rows[:i]], axis=0)
 
-    def _ordered_rows_work(self, rows, name):
-        """History rows in oldest-newest order, copying only after wrap."""
-        k = self._k
-        if k < self.m or self._hist_next == 0:
-            return rows[:k]
+    def _WM(self):
+        """Build W_k and M_k together.
 
-        out = self._scratch_array(name, (k,) + rows.shape[1:], rows.dtype)
-        i = self._hist_next
-        n_tail = self.m - i
-        out[:n_tail] = rows[i:]
-        out[n_tail:] = rows[:i]
-        return out
-
-    def _W(self):
-        """The (n, 2k) compact matrix W_k = [Y_k, θ_k S_k]."""
+        W is returned transposed -- Wt, shape (2k, n) -- so that its
+        construction and every downstream consumer (gathers, batched
+        solves, einsums) operate along contiguous rows.  The history ring
+        buffer is consumed in physical order; only the small (k, k)
+        products are permuted into logical (oldest-newest) order.
+        """
         k = self._k
-        W = self._scratch_array('_compact_W', (self.n, 2 * k), self.x.dtype)
-        Y = self._ordered_rows_work(self.Y, '_ordered_Y')
-        S = self._ordered_rows_work(self.S, '_ordered_S')
-        W[:, :k] = Y.T
-        np.multiply(S.T, self.theta, out=W[:, k:])
-        return W
-
-    def _M(self):
-        """The (2k, 2k) middle matrix from the compact representation."""
-        k = self._k
+        m = self.m
         dtype = self.x.dtype
-        S = self._ordered_rows_work(self.S, '_ordered_S')
-        Y = self._ordered_rows_work(self.Y, '_ordered_Y')
-        ys = self._ordered_rows_work(self.ys, '_ordered_ys')
+        theta = self.theta
+        S = self.S[:k]
+        Y = self.Y[:k]
+        ys = self.ys[:k]
+
+        Wt = self._scratch_array('_compact_Wt', (2 * k, self.n), dtype)
+        if k == m and self._hist_next:
+            # wrapped ring buffer: physical row order != logical order.
+            order = (np.arange(k) + self._hist_next) % m
+            np.take(Y, order, axis=0, out=Wt[:k])
+            np.take(S, order, axis=0, out=Wt[k:])
+            Wt[k:] *= theta
+        else:
+            order = None
+            Wt[:k] = Y
+            np.multiply(S, theta, out=Wt[k:])
+
         SY = self._scratch_array('_compact_SY', (k, k), dtype)
         SS = self._scratch_array('_compact_SS', (k, k), dtype)
         M = self._scratch_array('_compact_M', (2 * k, 2 * k), dtype)
-
-        np.matmul(S, Y.T, out=SY)  # (i,j) = s_i . y_j
-        np.matmul(S, S.T, out=SS)  # (i,j) = s_i . s_j
+        np.matmul(S, Y.T, out=SY)  # (i,j) = s_i . y_j, physical order
+        np.matmul(S, S.T, out=SS)  # (i,j) = s_i . s_j, physical order
+        if order is not None:
+            SY = SY[order][:, order]
+            SS = SS[order][:, order]
+            ys = ys[order]
         M.fill(0)
-        diag_idx = self._scratch_array('_compact_diag_idx', (k,), int)
-        diag_idx[:] = np.arange(k)
-        M[diag_idx, diag_idx] = -ys
-        # strict lower triangular of S Y^T, filled by columns/rows.  k is the
-        # small L-BFGS memory parameter, so this avoids full k-by-k temporaries.
-        for i in range(1, k):
-            row = SY[i, :i]
-            M[k + i, :i] = row
-            M[:i, k + i] = row
-        np.multiply(SS, self.theta, out=M[k:, k:])
-        return M
+        idx = np.arange(k)
+        M[idx, idx] = -ys
+        L = np.tril(SY, -1)  # strict lower triangle of S Yᵀ
+        M[k:, :k] = L
+        M[:k, k:] = L.T
+        np.multiply(SS, theta, out=M[k:, k:])
+        return Wt, M
+
+    def _W(self):
+        """The (n, 2k) compact matrix W_k = [Y_k, θ_k S_k]."""
+        return self._WM()[0].T
+
+    def _M(self):
+        """The (2k, 2k) middle matrix from the compact representation."""
+        return self._WM()[1]
 
     def _Bv(self, v):
         """Apply B_k v using the compact form."""
         if self._k == 0:
             return self.theta * v
-        W = self._W()
-        M = self._M()
-        return self.theta * v - W @ np.linalg.solve(M, W.T @ v)
+        Wt, M = self._WM()
+        return self.theta * v - Wt.T @ np.linalg.solve(M, Wt @ v)
 
     def _Hg(self, g):
         """Return the L-BFGS descent direction −H_k g.
@@ -406,14 +421,11 @@ class PrysmLBFGSB:
         """
         if self._k == 0:
             return -g
-        W = self._W()
-        M = self._M()
+        Wt, M = self._WM()
         theta = self.theta
-        WtW = W.T @ W
-        N = -M + WtW / theta
-        Wtg = W.T @ g
-        Ninv_Wtg = np.linalg.solve(N, Wtg)
-        Hg = g / theta - (W @ Ninv_Wtg) / (theta * theta)
+        N = -M + (Wt @ Wt.T) / theta
+        Ninv_Wtg = np.linalg.solve(N, Wt @ g)
+        Hg = g / theta - (Wt.T @ Ninv_Wtg) / (theta * theta)
         return -Hg
 
     # ---------------- generalized Cauchy point ----------------
@@ -520,15 +532,19 @@ class PrysmLBFGSB:
         np.copyto(out, 0.0, where=mask)
         return out
 
-    def _cauchy(self, g, W=None, M=None, M_lu=None):
+    def _cauchy(self, g, Wt=None, M=None, M_lu=None):
         """Generalized Cauchy point along the projected gradient path.
 
-        Implements BLNZ Algorithm CP.  Optional W, M, and M_lu are reused
+        Implements BLNZ Algorithm CP.  Optional Wt, M, and M_lu are reused
         from step() when available.  Returns the Cauchy point, W.T@(xc-x),
         and a mask of interior variables.
 
-        The breakpoint recurrence is evaluated with prefix sums plus batched
-        solves against M, avoiding per-breakpoint backend calls.
+        The breakpoint recurrence is evaluated in chunks: within a chunk it
+        reduces to prefix sums plus batched solves against M, and the sweep
+        exits at the first chunk containing the path minimizer.  Chunks grow
+        geometrically from self._cauchy_chunk, so the common case (minimizer
+        within the first few breakpoints) does O(chunk) work while the worst
+        case stays within ~15% of one full-width pass.
         """
         x = self.x
         n = self.n
@@ -548,12 +564,6 @@ class PrysmLBFGSB:
         free_mask.fill(True)
         xc[:] = x
 
-        # 0-d backend scalar, not a host float: gtg only ever seeds the
-        # df/ddf cumsum arrays (device) below, so keeping it on the
-        # backend saves a device->host sync in the common path.  It is
-        # materialized to host only in the no-finite-breakpoint branch.
-        gtg = g @ g
-
         # Permute gradient and breakpoint time arrays into visit order once.
         g_sorted = self._scratch_array('_cauchy_g_sorted', (n,), dtype)
         t_sorted = self._scratch_array('_cauchy_t_sorted', (n,), dtype)
@@ -565,168 +575,162 @@ class PrysmLBFGSB:
         np.isfinite(t_sorted, out=finite_mask)
         n_active = int(finite_mask.sum())
 
-        # Per-breakpoint scalar inputs always needed when n_active > 0,
-        # regardless of whether history is empty (k == 0).
-        if n_active > 0:
-            idx_a = sorted_indices[:n_active]
-            t_a = t_sorted[:n_active]
-            g_a = g_sorted[:n_active]
-            # dt_j = t_a[j] - t_a[j-1] (t_a[-1] := 0); cumulative path
-            # segment lengths shared by the vectorized state machine and
-            # (when k > 0) the C_before cumsum.
-            dt_seq = self._scratch_array('_cauchy_dt_seq', (n_active,), dtype)
-            dt_seq[0] = t_a[0]
-            dt_seq[1:] = t_a[1:] - t_a[:-1]
-
+        # Seed the sweep state: df/ddf as host scalars (the chunk loop syncs
+        # at its break predicate anyway), p = Wᵀd and c = 0 carried in
+        # reusable buffers.  With no history there are no W M⁻¹ Wᵀ
+        # correction terms and p, c are empty placeholders.
+        gtg = g @ g
         if k == 0:
-            df_init = -gtg
-            ddf_init = theta * gtg
-            p_final = self._scratch_array('_cauchy_p_final', (0,), dtype)
-            c_final = self._scratch_array('_cauchy_c_final', (0,), dtype)
-            # No history → no rank-1 corrections from W·M⁻¹W^T.  The
-            # per-breakpoint Δdf, Δddf reduce to just the g² and θ·g²·t
-            # terms below.
-            wb_Mp_arr = wb_Mc_arr = wMw_b_arr = None
+            df = -float(gtg)
+            ddf = float(theta * gtg)
+            p = self._scratch_array('_cauchy_p_carry', (0,), dtype)
+            c = self._scratch_array('_cauchy_c_carry', (0,), dtype)
         else:
-            if W is None:
-                W = self._W()
-            if M is None:
-                M = self._M()
+            if Wt is None or M is None:
+                Wt, M = self._WM()
             if M_lu is None:
-                M_lu = linalg.lu_factor(M)
+                M_lu = linalg.lu_factor(M, check_finite=False)
 
-            p_init = W.T @ d                              # (2k,)
-            Mp_init = linalg.lu_solve(M_lu, p_init)       # (2k,)
-            df_init = -gtg
-            ddf_init = theta * gtg - p_init @ Mp_init
+            p_init = Wt @ d                               # (2k,)
+            Mp_init = linalg.lu_solve(M_lu, p_init, check_finite=False)
+            df = -float(gtg)
+            ddf = float(theta * gtg - p_init @ Mp_init)
+            p = self._scratch_array('_cauchy_p_carry', (2 * k,), dtype)
+            c = self._scratch_array('_cauchy_c_carry', (2 * k,), dtype)
+            p[:] = p_init
+            c.fill(0)
 
-            if n_active == 0:
-                # No finite breakpoints; skip the inf-valued batched path.
-                p_final = p_init
-                c_final = self._scratch_array('_cauchy_c_final', (2 * k,), dtype)
-                c_final.fill(0)
-                wb_Mp_arr = wb_Mc_arr = wMw_b_arr = None
-            else:
-                # MinvWT used here for the wMw diagonal; recomputed inside
-                # _subspace_solve via its own M_lu re-use.
-                MinvWT = linalg.lu_solve(M_lu, W.T)            # (2k, n)
-                wMw_diag = self._scratch_array('_cauchy_wMw_diag',
-                                               (n,), dtype)
-                np.einsum('ij,ji->i', W, MinvWT, out=wMw_diag)  # (n,)
-
-                W_a = self._scratch_array('_cauchy_W_a',
-                                          (n_active, 2 * k), dtype)
-                np.take(W, idx_a, axis=0, out=W_a)              # (n_a, 2k)
-
-                # Prefix states before each breakpoint in BLNZ Algorithm CP.
-                dP_seq = self._scratch_array('_cauchy_dP_seq',
-                                             (n_active, 2 * k), dtype)
-                cum_dP = self._scratch_array('_cauchy_cum_dP',
-                                             (n_active, 2 * k), dtype)
-                P_before = self._scratch_array('_cauchy_P_before',
-                                               (n_active, 2 * k), dtype)
-                np.multiply(W_a, g_a[:, None], out=dP_seq)     # (n_a, 2k)
-                np.cumsum(dP_seq, axis=0, out=cum_dP)          # (n_a, 2k)
-                P_before[0] = p_init
-                if n_active > 1:
-                    P_before[1:] = cum_dP[:-1]
-                    P_before[1:] += p_init
-
-                dC_seq = self._scratch_array('_cauchy_dC_seq',
-                                             (n_active, 2 * k), dtype)
-                cum_dC = self._scratch_array('_cauchy_cum_dC',
-                                             (n_active, 2 * k), dtype)
-                C_before = self._scratch_array('_cauchy_C_before',
-                                               (n_active, 2 * k), dtype)
-                np.multiply(P_before, dt_seq[:, None], out=dC_seq)
-                np.cumsum(dC_seq, axis=0, out=cum_dC)          # (n_a, 2k)
-                C_before[0].fill(0)
-                if n_active > 1:
-                    C_before[1:] = cum_dC[:-1]
-
-                # One batched solve replaces n_active separate M-solves.
-                Mp_array = linalg.lu_solve(M_lu, P_before.T).T  # (n_a, 2k)
-                Mc_array = linalg.lu_solve(M_lu, C_before.T).T  # (n_a, 2k)
-
-                wb_Mp_arr = self._scratch_array('_cauchy_wb_Mp',
-                                                (n_active,), dtype)
-                wb_Mc_arr = self._scratch_array('_cauchy_wb_Mc',
-                                                (n_active,), dtype)
-                np.einsum('ij,ij->i', W_a, Mp_array, out=wb_Mp_arr)
-                np.einsum('ij,ij->i', W_a, Mc_array, out=wb_Mc_arr)
-                wMw_b_arr = self._scratch_array('_cauchy_wMw_b',
-                                                (n_active,), dtype)
-                np.take(wMw_diag, idx_a, out=wMw_b_arr)           # (n_a,)
-
-        # ---- Vectorized (df, ddf, dt_min) state machine ----
+        # ---- Chunked (df, ddf, dt_min) state machine ----
         #
-        # df and ddf reduce to cumulative sums; the first minimizer is an argmax
-        # over the breakpoint predicate, with no per-breakpoint host sync.
-        if n_active == 0:
-            K = 0
-            # Scalar branch path: materialize the two 0-d seeds to host.
-            dt_min_final = self._next_dt_min(float(df_init), float(ddf_init))
-            t_old_final = 0.0
-        else:
-            ddf_step = self._scratch_array('_cauchy_ddf_step',
-                                           (n_active,), dtype)
-            df_alpha = self._scratch_array('_cauchy_df_alpha',
-                                           (n_active,), dtype)
-            active_work = self._scratch_array('_cauchy_active_work',
-                                              (n_active,), dtype)
+        # Within a chunk, df and ddf reduce to cumulative sums and the first
+        # minimizer to an argmax over the breakpoint predicate -- one host
+        # sync per chunk instead of one per breakpoint.
+        K = None
+        dt_min_final = None
+        t_prev = 0.0
+        lo = 0
+        chunk = self._cauchy_chunk
+        while lo < n_active:
+            hi = min(lo + chunk, n_active)
+            m_c = hi - lo
+            idx_c = sorted_indices[lo:hi]
+            t_c = t_sorted[lo:hi]
+            g_c = g_sorted[lo:hi]
+            # dt_c[j] is the path length from breakpoint j-1 (or the
+            # carry-in point) to breakpoint j.
+            dt_c = self._scratch_array('_cauchy_dt_c', (m_c,), dtype)
+            dt_c[0] = t_c[0] - t_prev
+            dt_c[1:] = t_c[1:] - t_c[:-1]
+
             if k > 0:
-                np.multiply(g_a, g_a, out=ddf_step)
-                df_alpha[:] = ddf_step
-                ddf_step *= -theta
-                np.multiply(g_a, wb_Mp_arr, out=active_work)
-                active_work *= 2.0
-                ddf_step -= active_work
-                np.multiply(df_alpha, wMw_b_arr, out=active_work)
-                ddf_step -= active_work
+                W_cT = self._scratch_array('_cauchy_W_cT', (2 * k, m_c), dtype)
+                np.take(Wt, idx_c, axis=1, out=W_cT)
+                # w_bᵀ M⁻¹ w_b for this chunk's rows only.
+                MinvWcT = linalg.lu_solve(M_lu, W_cT, check_finite=False)
+                wMw_b = self._scratch_array('_cauchy_wMw_b', (m_c,), dtype)
+                np.einsum('ib,ib->b', W_cT, MinvWcT, out=wMw_b)
 
-                np.multiply(df_alpha, t_a, out=active_work)
-                active_work *= theta
-                df_alpha -= active_work
-                np.multiply(g_a, wb_Mc_arr, out=active_work)
-                df_alpha -= active_work
-            else:
-                np.multiply(g_a, g_a, out=ddf_step)
-                df_alpha[:] = ddf_step
-                ddf_step *= -theta
-                np.multiply(df_alpha, t_a, out=active_work)
-                active_work *= theta
-                df_alpha -= active_work
-            # ddf_at_iter[j] = ddf_init + sum(ddf_step[:j])
-            ddf_at_iter = self._scratch_array('_cauchy_ddf_at_iter',
-                                              (n_active + 1,), dtype)
-            ddf_at_iter[0] = ddf_init
-            np.cumsum(ddf_step, out=ddf_at_iter[1:])
-            ddf_at_iter[1:] += ddf_init
-            # df_at_iter[j+1] = df_at_iter[j] + dt_seq[j]*ddf_at_iter[j] + df_alpha[j]
-            df_step = self._scratch_array('_cauchy_df_step',
-                                          (n_active,), dtype)
-            np.multiply(dt_seq, ddf_at_iter[:-1], out=df_step)
+                # Prefix states before each breakpoint in BLNZ Algorithm CP,
+                # held transposed -- (2k, m_c) -- so the cumulative sums run
+                # along contiguous memory.
+                dP_T = self._scratch_array('_cauchy_dP_T', (2 * k, m_c), dtype)
+                P_T = self._scratch_array('_cauchy_P_T', (2 * k, m_c), dtype)
+                np.multiply(W_cT, g_c, out=dP_T)         # dP_T[:, b] = g_b w_b
+                P_T[:, 0] = p
+                if m_c > 1:
+                    np.cumsum(dP_T[:, :-1], axis=1, out=P_T[:, 1:])
+                    P_T[:, 1:] += p[:, None]
+
+                dC_T = self._scratch_array('_cauchy_dC_T', (2 * k, m_c), dtype)
+                C_T = self._scratch_array('_cauchy_C_T', (2 * k, m_c), dtype)
+                np.multiply(P_T, dt_c, out=dC_T)         # dC_T[:, b] = Δt_b P_b
+                C_T[:, 0] = c
+                if m_c > 1:
+                    np.cumsum(dC_T[:, :-1], axis=1, out=C_T[:, 1:])
+                    C_T[:, 1:] += c[:, None]
+
+                # One batched solve replaces m_c separate M-solves.
+                Mp_T = linalg.lu_solve(M_lu, P_T, check_finite=False)
+                Mc_T = linalg.lu_solve(M_lu, C_T, check_finite=False)
+
+                wb_Mp = self._scratch_array('_cauchy_wb_Mp', (m_c,), dtype)
+                wb_Mc = self._scratch_array('_cauchy_wb_Mc', (m_c,), dtype)
+                np.einsum('ib,ib->b', W_cT, Mp_T, out=wb_Mp)
+                np.einsum('ib,ib->b', W_cT, Mc_T, out=wb_Mc)
+
+            ddf_step = self._scratch_array('_cauchy_ddf_step', (m_c,), dtype)
+            df_alpha = self._scratch_array('_cauchy_df_alpha', (m_c,), dtype)
+            work = self._scratch_array('_cauchy_active_work', (m_c,), dtype)
+            # Δddf and Δdf at each breakpoint; the w_b terms are the rank-one
+            # corrections from W M⁻¹ Wᵀ and vanish when history is empty.
+            np.multiply(g_c, g_c, out=ddf_step)
+            df_alpha[:] = ddf_step
+            ddf_step *= -theta
+            if k > 0:
+                np.multiply(g_c, wb_Mp, out=work)
+                work *= 2.0
+                ddf_step -= work
+                np.multiply(df_alpha, wMw_b, out=work)
+                ddf_step -= work
+            np.multiply(df_alpha, t_c, out=work)
+            work *= theta
+            df_alpha -= work
+            if k > 0:
+                np.multiply(g_c, wb_Mc, out=work)
+                df_alpha -= work
+
+            # ddf_at[j] = ddf + sum(ddf_step[:j])
+            ddf_at = self._scratch_array('_cauchy_ddf_at_iter',
+                                         (m_c + 1,), dtype)
+            ddf_at[0] = ddf
+            np.cumsum(ddf_step, out=ddf_at[1:])
+            ddf_at[1:] += ddf
+            # df_at[j+1] = df_at[j] + dt_c[j]*ddf_at[j] + df_alpha[j]
+            df_step = self._scratch_array('_cauchy_df_step', (m_c,), dtype)
+            np.multiply(dt_c, ddf_at[:-1], out=df_step)
             df_step += df_alpha
-            df_at_iter = self._scratch_array('_cauchy_df_at_iter',
-                                             (n_active + 1,), dtype)
-            df_at_iter[0] = df_init
-            np.cumsum(df_step, out=df_at_iter[1:])
-            df_at_iter[1:] += df_init
+            df_at = self._scratch_array('_cauchy_df_at_iter',
+                                        (m_c + 1,), dtype)
+            df_at[0] = df
+            np.cumsum(df_step, out=df_at[1:])
+            df_at[1:] += df
 
-            dt_min_at_iter = self._next_dt_min_vec(df_at_iter, ddf_at_iter)
+            dt_min_at = self._next_dt_min_vec(df_at, ddf_at)
 
-            # Break check at iter j: dt_min_at_iter[j] < dt_seq[j].
-            # First True index along the active prefix is K.  np.argmax
+            # Break check at iter j: dt_min_at[j] < dt_c[j].  np.argmax
             # returns 0 on an all-False input, so check that separately.
             break_pred = self._scratch_array('_cauchy_break_pred',
-                                             (n_active,), bool)
-            np.less(dt_min_at_iter[:n_active], dt_seq, out=break_pred)
+                                             (m_c,), bool)
+            np.less(dt_min_at[:m_c], dt_c, out=break_pred)
             if bool(break_pred.any()):
-                K = int(np.argmax(break_pred))
-            else:
-                K = n_active
-            dt_min_final = float(dt_min_at_iter[K])
-            t_old_final = 0.0 if K == 0 else float(t_a[K - 1])
+                j = int(np.argmax(break_pred))
+                K = lo + j
+                dt_min_final = float(dt_min_at[j])
+                t_old = t_prev if j == 0 else float(t_c[j - 1])
+                if k > 0:
+                    # p and c at iter K, before its breakpoint update.
+                    p = P_T[:, j]
+                    c = C_T[:, j]
+                break
+
+            # No minimizer in this chunk; carry the state past it.
+            df = float(df_at[m_c])
+            ddf = float(ddf_at[m_c])
+            t_prev = float(t_c[-1])
+            if k > 0:
+                # Prefix arrays hold before-states; add the final update.
+                np.add(P_T[:, -1], dP_T[:, -1], out=p)
+                np.add(C_T[:, -1], dC_T[:, -1], out=c)
+            lo = hi
+            chunk *= 8
+
+        if K is None:
+            # Path exhausted without an interior minimizer (or no finite
+            # breakpoints at all): the model minimum lies past the last
+            # breakpoint along the carried direction.
+            K = n_active
+            dt_min_final = self._next_dt_min(df, ddf)
+            t_old = t_prev
 
         # K is the number of coords driven to a bound during the sweep.
         self._cauchy_breaks = K
@@ -746,24 +750,7 @@ class PrysmLBFGSB:
             d[visited] = 0
             free_mask[visited] = False
 
-        if k > 0 and n_active > 0:
-            # p_K and c_K are the values _at_ iter K, recovered from the
-            # precomputed prefix-sum arrays.
-            if K < n_active:
-                p = P_before[K]
-                c = C_before[K]
-            else:
-                # Add the final update because prefix arrays store before-state.
-                p = self._scratch_array('_cauchy_p_final', (2 * k,), dtype)
-                c = self._scratch_array('_cauchy_c_final', (2 * k,), dtype)
-                np.add(P_before[n_active - 1], dP_seq[n_active - 1], out=p)
-                np.add(C_before[n_active - 1], dC_seq[n_active - 1], out=c)
-        else:
-            p = p_final
-            c = c_final
-
         dt_min = dt_min_final
-        t_old = t_old_final
 
         # final partial step along the active segment's d
         if not np.isfinite(dt_min):
@@ -823,7 +810,7 @@ class PrysmLBFGSB:
     # to be an ascent direction (gᵀd ≥ 0) the algorithm reverts to the
     # original BLNZ truncation rule.  See step() for the switch.
 
-    def _subspace_solve(self, xc, c, free_mask, g, W=None, M=None, M_lu=None,
+    def _subspace_solve(self, xc, c, free_mask, g, Wt=None, M=None, M_lu=None,
                         n_free=None):
         """Return the full-length free-subspace displacement Δx."""
         n = self.n
@@ -840,7 +827,9 @@ class PrysmLBFGSB:
 
         zc = self._scratch_array('_subspace_zc', (n,), dtype)
         np.subtract(xc, self.x, out=zc)
-        theta = float(self.theta)
+        # 0-d backend scalar; every use below is out= or in-place, so it
+        # never promotes the dtype and never forces a device->host sync.
+        theta = self.theta
 
         if k == 0:
             # B = θI, so B_F^{-1} = (1/θ) I and Δx_F = -(1/θ) r_c.
@@ -851,20 +840,18 @@ class PrysmLBFGSB:
             np.copyto(dx, rc_full, where=free_mask)
             return dx
 
-        if W is None:
-            W = self._W()
-        if M is None:
-            M = self._M()
+        if Wt is None or M is None:
+            Wt, M = self._WM()
         if M_lu is None:
-            M_lu = linalg.lu_factor(M)
+            M_lu = linalg.lu_factor(M, check_finite=False)
 
-        Mc = linalg.lu_solve(M_lu, c)
+        Mc = linalg.lu_solve(M_lu, c, check_finite=False)
         # r_c, full-length, then row-slice to F.
         rc_full = self._scratch_array('_subspace_rc_full', (n,), dtype)
         np.multiply(zc, theta, out=rc_full)
         rc_full += g
         WMc = self._scratch_array('_subspace_WMc', (n,), dtype)
-        np.matmul(W, Mc, out=WMc)
+        np.matmul(Wt.T, Mc, out=WMc)
         rc_full -= WMc
 
         if n_free is None:
@@ -877,19 +864,19 @@ class PrysmLBFGSB:
 
         if idx_F is None:
             rc_F = rc_full
-            W_F = W
+            W_FT = Wt
         else:
             rc_F = self._scratch_array('_subspace_rc_F', (n_free,), dtype)
-            W_F = self._scratch_array('_subspace_W_F', (n_free, 2 * k), dtype)
+            W_FT = self._scratch_array('_subspace_W_FT', (2 * k, n_free), dtype)
             np.take(rc_full, idx_F, out=rc_F)
-            np.take(W, idx_F, axis=0, out=W_F)   # (|F|, 2k)
+            np.take(Wt, idx_F, axis=1, out=W_FT)   # (2k, |F|)
 
         N = self._scratch_array('_subspace_N', (2 * k, 2 * k), dtype)
-        np.matmul(W_F.T, W_F, out=N)         # (2k, 2k)
+        np.matmul(W_FT, W_FT.T, out=N)       # (2k, 2k)
         N /= theta
         N -= M
         WF_rcF = self._scratch_array('_subspace_WF_rcF', (2 * k,), dtype)
-        np.matmul(W_F.T, rc_F, out=WF_rcF)
+        np.matmul(W_FT, rc_F, out=WF_rcF)
         # One-shot solve here; not worth factoring N up front.  Using
         # np.linalg.solve (vs linalg.solve) sidesteps scipy's noisy
         # ill-conditioning warnings — N can be poorly scaled near
@@ -899,7 +886,7 @@ class PrysmLBFGSB:
         dx_F = self._scratch_array('_subspace_dx_F', (n_free,), dtype)
         np.multiply(rc_F, -1.0 / theta, out=dx_F)
         WF_N_inv = self._scratch_array('_subspace_WF_N_inv', (n_free,), dtype)
-        np.matmul(W_F, N_inv, out=WF_N_inv)
+        np.matmul(W_FT.T, N_inv, out=WF_N_inv)
         WF_N_inv /= theta * theta
         dx_F += WF_N_inv
         if idx_F is None:
@@ -947,9 +934,14 @@ class PrysmLBFGSB:
         the production unconstrained-step path, where it is several times
         faster than _Hg because it never materializes the (n, 2k) W or
         (2k, 2k) M matrices.
+
+        The returned array is a reusable scratch buffer, valid until the
+        next call.
         """
         k = self._k
-        q = g.copy()
+        q = self._scratch_array('_two_loop_q', (self.n,), g.dtype)
+        tmp = self._scratch_array('_two_loop_tmp', (self.n,), g.dtype)
+        q[:] = g
         alphas = self._alphas
         S = self.S
         Y = self.Y
@@ -958,23 +950,23 @@ class PrysmLBFGSB:
         for i in range(k - 1, -1, -1):
             slot = self._hist_slot(i)
             alpha_i = dot(S[slot], q) * rho[slot]
-            q -= alpha_i * Y[slot]
+            np.multiply(Y[slot], alpha_i, out=tmp)
+            q -= tmp
             alphas[i] = alpha_i
 
         if k > 0:
             slot = self._hist_slot(k - 1)
             y_last = Y[slot]
-            gamma = self.ys[slot] / dot(y_last, y_last)
-            r = gamma * q
-        else:
-            r = q
+            q *= self.ys[slot] / dot(y_last, y_last)  # gamma = 1/theta
 
         for i in range(k):
             slot = self._hist_slot(i)
-            beta_i = dot(Y[slot], r) * rho[slot]
-            r += S[slot] * (alphas[i] - beta_i)
+            beta_i = dot(Y[slot], q) * rho[slot]
+            np.multiply(S[slot], alphas[i] - beta_i, out=tmp)
+            q += tmp
 
-        return -r
+        np.negative(q, out=q)
+        return q
 
     def _update_history(self, s, y):
         """Append a new (s, y) pair, dropping the oldest if at capacity.
@@ -1025,23 +1017,22 @@ class PrysmLBFGSB:
             # Unbounded case: two-loop recursion gives -H_k g directly.
             p = self._two_loop(g)
             alpha_max = None
-            free_mask_count = self.n
+            n_free = self.n
             cauchy_breaks = 0
             subspace_mode = 'unbounded'
         else:
-            # W, M, and M_lu are shared by the Cauchy and subspace stages.
+            # Wt, M, and M_lu are shared by the Cauchy and subspace stages.
             if self._k > 0:
-                W = self._W()
-                M = self._M()
-                M_lu = linalg.lu_factor(M)
+                Wt, M = self._WM()
+                M_lu = linalg.lu_factor(M, check_finite=False)
             else:
-                W = None
+                Wt = None
                 M = None
                 M_lu = None
 
-            xc, c_vec, free_mask = self._cauchy(g, W, M, M_lu)
+            xc, c_vec, free_mask = self._cauchy(g, Wt, M, M_lu)
             n_free = self.n - self._cauchy_breaks
-            dx = self._subspace_solve(xc, c_vec, free_mask, g, W, M, M_lu,
+            dx = self._subspace_solve(xc, c_vec, free_mask, g, Wt, M, M_lu,
                                       n_free=n_free)
             x_hat = self._scratch_array('_step_x_hat', (self.n,), self.x.dtype)
             np.add(xc, dx, out=x_hat)
@@ -1063,7 +1054,6 @@ class PrysmLBFGSB:
                 alpha_max = self._max_alpha_inside_box(self.x, p)
                 subspace_mode = 'truncated'
             cauchy_breaks = self._cauchy_breaks
-            free_mask_count = n_free
 
         # No room to move, or the direction degenerated to zero.
         if (alpha_max is not None and alpha_max <= 0.0) or not bool(np.any(p)):
@@ -1102,7 +1092,7 @@ class PrysmLBFGSB:
         self.iter += 1
         self.last_step_metadata = {
             'alpha': float(alpha),
-            'free_vars': free_mask_count,
+            'free_vars': n_free,
             'cauchy_breaks': cauchy_breaks,
             'subspace_solved': True,
             'subspace_mode': subspace_mode,
