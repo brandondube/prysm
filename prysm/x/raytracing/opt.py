@@ -61,7 +61,7 @@ def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
 
     if vary == 'direction':
         sz_sign = np.sign(S[:, 2])
-        sz_sign = np.where(sz_sign == 0, 1.0, sz_sign)
+        sz_sign[sz_sign == 0] = 1.0
         sz_anchor = sz_sign * np.abs(S[:, 2])
 
         def apply(var):
@@ -69,7 +69,7 @@ def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
             sy = var[:, 1]
             norm = np.sqrt(sx * sx + sy * sy + sz_anchor * sz_anchor)
             zero_norm = norm == 0
-            norm = np.where(zero_norm, 1.0, norm)
+            norm[zero_norm] = 1.0
             S[:, 0] = sx / norm
             S[:, 1] = sy / norm
             S[:, 2] = np.where(zero_norm, sz_sign, sz_anchor / norm)
@@ -127,13 +127,13 @@ def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
 
         rx = r[:, 0]
         ry = r[:, 1]
-        safe_det = np.where(singular, 1.0, det)
-        d0 = (-rx * d + b * ry) / safe_det  # closed-form 2x2 solve J@d = -r
-        d1 = (rx * c - a * ry) / safe_det
+        det[singular] = 1.0  # safe denominator; singular rays frozen below
+        d0 = (-rx * d + b * ry) / det  # closed-form 2x2 solve J@d = -r
+        d1 = (rx * c - a * ry) / det
 
         freeze = dead | singular
-        delta = np.stack([np.where(freeze, 0.0, d0),
-                          np.where(freeze, 0.0, d1)], axis=1)
+        delta = np.stack([d0, d1], axis=1)
+        delta[freeze] = 0.0
         dead = dead | singular
 
         # damped step: backtrack if the active-ray max residual rose
@@ -151,10 +151,10 @@ def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
         # rays that went non-finite this step revert to their last good
         # parameter and are flagged dead; everyone else takes the step
         bad = ~np.isfinite(rn_try)
-        keep_old = bad[:, np.newaxis]
-        var = np.where(keep_old, var, var_try)
-        r = np.where(keep_old, r, r_try)
-        rn = np.where(bad, rn, rn_try)
+        var_try[bad] = var[bad]
+        r_try[bad] = r[bad]
+        rn_try[bad] = rn[bad]
+        var, r, rn = var_try, r_try, rn_try
         dead = dead | bad
 
     apply(var)
@@ -303,7 +303,7 @@ def _pupil_center_chief_index(P, valid=None):
     center = np.mean(P[:, :2], axis=0)
     d2 = np.sum((P[:, :2] - center) ** 2, axis=1)
     if valid is not None:
-        d2 = np.where(valid, d2, np.inf)
+        d2[~valid] = np.inf
     return int(np.argmin(d2))
 
 
@@ -433,7 +433,7 @@ def hopkins_eic_closing(P_hist, S_hist, OPL_hist, *, center, curvature,
     disc = 1.0 + k * k * m
     # the same domain as the explicit root: disc = (b^2 - |r|^2 + R^2)/R^2 >= 0
     # exactly when the ray meets the sphere.  Clamp FP noise on grazing rays.
-    disc = np.where(disc < 0, np.zeros_like(disc), disc)
+    disc[disc < 0] = 0.0
     s = -b - k * m / (1.0 + np.sqrt(disc))
     OPL_total = OPL_through + n_image * s
     return OPL_total - OPL_total[chief_index]
@@ -531,7 +531,7 @@ def spot_centroid(P_final, status=None):
     if valid is not None:
         P_final = P_final[valid]
     if P_final.shape[0] == 0:
-        return np.array([np.nan, np.nan])
+        return np.array([np.nan, np.nan], dtype=P_final.dtype)
     return P_final[..., :2].mean(axis=0)
 
 

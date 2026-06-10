@@ -296,7 +296,7 @@ def adj_eic_closing_full(P, S, C, kappa, s_bar):
     m = b * b - rr
     k = float(kappa)
     disc = 1.0 + k * k * m
-    disc = np.where(disc < 0, np.zeros_like(disc), disc)
+    disc[disc < 0] = 0.0
     w = np.sqrt(disc)
     wsafe = np.where(w == 0, 1.0, w)
     g = k * m

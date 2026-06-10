@@ -188,7 +188,8 @@ def _power_transmittance(n0, n1, cosI):
     # beyond the critical angle cost1 is imaginary -> no transmitted power
     tir = np.imag(cost1) != 0
     T = 0.5 * (T_s + T_p)
-    return np.where(tir, 0.0, T)
+    T[tir] = 0.0
+    return T
 
 
 def unpolarized_amplitude(prescription, trace, wavelength, *,
@@ -340,19 +341,20 @@ def _inpaint_nan(arr):
     hole = ~np.isfinite(arr)
     if not np.any(hole):
         return arr
-    arr = np.where(hole, 0.0, arr)
+    arr[hole] = 0.0
+    # neighbor count depends only on the grid shape; build it once
+    cnt = np.zeros_like(arr)
+    cnt[1:] += 1.0
+    cnt[:-1] += 1.0
+    cnt[:, 1:] += 1.0
+    cnt[:, :-1] += 1.0
     for _ in range(int(max(arr.shape))):
         acc = np.zeros_like(arr)
-        cnt = np.zeros_like(arr)
         acc[1:] += arr[:-1]
-        cnt[1:] += 1.0
         acc[:-1] += arr[1:]
-        cnt[:-1] += 1.0
         acc[:, 1:] += arr[:, :-1]
-        cnt[:, 1:] += 1.0
         acc[:, :-1] += arr[:, 1:]
-        cnt[:, :-1] += 1.0
-        arr = np.where(hole, acc / cnt, arr)
+        arr[hole] = acc[hole] / cnt[hole]
     return arr
 
 
@@ -408,9 +410,9 @@ def amplitude_apodization(entrance_xy, sphere_xy, *, valid=None):
     mag = np.abs(detJ)
     with np.errstate(divide='ignore', invalid='ignore'):
         amp = 1.0 / np.sqrt(mag)
-    amp = np.where(np.isfinite(amp), amp, 0.0)
+    amp[~np.isfinite(amp)] = 0.0
     if valid is not None:
-        amp = np.where(valid, amp, 0.0)
+        amp[~valid] = 0.0
     return amp
 
 
@@ -702,7 +704,7 @@ def _resample_grid(pf, npix, margin):
     pts = np.stack([x, y], axis=-1)
     opd_grid = interpolate.griddata(pts, opd, (xg, yg), method='cubic',
                                     fill_value=0.0)
-    opd_grid = np.where(np.isfinite(opd_grid), opd_grid, 0.0)
+    opd_grid[~np.isfinite(opd_grid)] = 0.0
     phase_nm = opd_grid * 1.0e6   # length (mm) -> nm
     return finite, pts, (xg, yg), dx, phase_nm
 
@@ -718,9 +720,9 @@ def _griddata_complex(pts, values, grid_pts):
                               fill_value=0.0)
     im = interpolate.griddata(pts, np.imag(values), grid_pts, method='cubic',
                               fill_value=0.0)
-    g = np.where(np.isfinite(re), re, 0.0) + 1j * np.where(np.isfinite(im),
-                                                           im, 0.0)
-    return g
+    re[~np.isfinite(re)] = 0.0
+    im[~np.isfinite(im)] = 0.0
+    return re + 1j * im
 
 
 def pupil_field_to_wavefront(pf, *, npix=256, margin=1.05,
@@ -764,7 +766,7 @@ def pupil_field_to_wavefront(pf, *, npix=256, margin=1.05,
         amp = np.asarray(pf.amplitude)[finite]
         amp_grid = interpolate.griddata(pts, amp, grid_pts, method='cubic',
                                         fill_value=0.0)
-        amp_grid = np.where(np.isfinite(amp_grid), amp_grid, 0.0)
+        amp_grid[~np.isfinite(amp_grid)] = 0.0
         return Wavefront(amp_grid * phase_term, pf.wavelength, dx)
 
     if input_polarization is None:
@@ -921,8 +923,8 @@ def _interface_jones(n0, n1, cosI, typ, *, coating=None):
         a_p = t_p * oblique
         # beyond the critical angle no power is transmitted
         tir = np.imag(cost1) != 0
-        a_s = np.where(tir, 0.0, a_s)
-        a_p = np.where(tir, 0.0, a_p)
+        a_s[tir] = 0.0
+        a_p[tir] = 0.0
         return (a_s.astype(config.precision_complex),
                 a_p.astype(config.precision_complex))
     ones = np.ones_like(cosI, dtype=config.precision_complex)
@@ -978,13 +980,13 @@ def raytrace_prt(prescription, P, S, wavelength, *,
         # normal incidence: plane of incidence is undefined; any perpendicular
         # to k_in works because a_s == a_p there.
         degen = (s_norm[..., 0] < 1e-12)
-        fallback = np.cross(k_in, np.array([1.0, 0.0, 0.0]))
+        xhat = np.array([1.0, 0.0, 0.0], dtype=k_in.dtype)
+        fallback = np.cross(k_in, xhat)
         fb_norm = np.sqrt(np.sum(fallback * fallback, axis=-1, keepdims=True))
         small = fb_norm[..., 0] < 1e-12
         if np.any(small):
-            fallback = np.where(small[:, None],
-                                np.cross(k_in, np.array([0.0, 1.0, 0.0])),
-                                fallback)
+            yhat = np.array([0.0, 1.0, 0.0], dtype=k_in.dtype)
+            fallback[small] = np.cross(k_in[small], yhat)
             fb_norm = np.sqrt(np.sum(fallback * fallback, axis=-1,
                                      keepdims=True))
         s_norm_safe = np.where(s_norm > 0, s_norm, 1.0)

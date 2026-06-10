@@ -75,7 +75,7 @@ def _conic_quadratic_t(c, kappa, P1, S, dx, dy):
     C_ = Xp * Xp + Yp * Yp
     disc = B_ * B_ - A_ * C_
     disc_nonneg = (disc >= 0)
-    disc = np.where(disc_nonneg, disc, np.zeros_like(disc))
+    disc = np.where(disc_nonneg, disc, 0.0)
     sqrt_disc = np.sqrt(disc)
     # z_dir picks the vertex-side root along the ray's propagation sense;
     # sign(0) -> +1 so a ray travelling in the tangent plane still resolves.
@@ -83,13 +83,15 @@ def _conic_quadratic_t(c, kappa, P1, S, dx, dy):
     # leaves a |c| under the radical: sqrt(disc_Welford) = |c| sqrt(disc_here),
     # so dividing through by c carries (|c|/c) = sign(c) onto the root.
     sign_c = 1.0 if c > 0 else -1.0
-    z_dir = np.where(Sz < 0, -np.ones_like(Sz), np.ones_like(Sz))
+    z_dir = np.ones_like(Sz)
+    z_dir[Sz < 0] = -1.0
     denom = z_dir * sign_c * sqrt_disc - B_
     # denom == 0 only for a ray tangent to the surface at the vertex
     # (B_ == 0 and disc == 0); the intersection is the vertex itself, t = 0.
-    safe_denom = np.where(denom == 0, np.ones_like(denom), denom)
+    vertex_tangent = (denom == 0)
+    safe_denom = np.where(vertex_tangent, 1.0, denom)
     t = C_ / safe_denom
-    t = np.where(denom == 0, np.zeros_like(t), t)
+    t = np.where(vertex_tangent, 0.0, t)
     return t, disc_nonneg
 
 

@@ -83,8 +83,9 @@ def _center_valid(values, valid, reference, chief_index, *, allow_none=False):
     values = np.asarray(values)
     ref = _reference_value(values, valid, reference, chief_index,
                            allow_none=allow_none)
-    mask = valid.reshape(valid.shape + (1,) * (values.ndim - 1))
-    return np.where(mask, values - ref, np.nan), ref
+    out = values - ref
+    out[~valid] = np.nan
+    return out, ref
 
 
 def _first_order_geometry_failure(exc):

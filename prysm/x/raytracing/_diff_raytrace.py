@@ -124,7 +124,7 @@ def d_refract(n, nprime, S_loc, n_hat, S_locdot, dn_hat, ndot_pre, ndot_post):
     # than let inf/NaN silently poison an otherwise-valid sensitivity column.
     with np.errstate(divide='ignore', invalid='ignore'):
         dcosT = -dsinT2 / (2.0 * cosT[:, None])
-    dcosT = np.where(np.isfinite(dcosT), dcosT, 0.0)
+    dcosT[~np.isfinite(dcosT)] = 0.0
     sign = np.sign(cosI)
     factor = sign * cosT - mu * cosI
     dfactor = (sign[:, None] * dcosT - mu * dcosI
@@ -773,7 +773,7 @@ def d_eic_closing(P, S, Pdot, Sdot, C, Cdot, kappa, kappa_dot):
     mdot = 2.0 * b[:, None] * bdot - rrdot
     k = float(kappa)
     disc = 1.0 + k * k * m
-    disc = np.where(disc < 0, np.zeros_like(disc), disc)
+    disc[disc < 0] = 0.0
     discdot = 2.0 * k * kappa_dot[None, :] * m[:, None] + k * k * mdot
     w = np.sqrt(disc)
     wsafe = np.where(w == 0, 1.0, w)

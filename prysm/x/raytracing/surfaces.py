@@ -744,8 +744,8 @@ class Q2D(ConicSeedMixin, Shape):
         ddx = dr * cost - dt * sint / safe_r
         ddy = dr * sint + dt * cost / safe_r
         if np.any(on_axis):
-            ddx = np.where(on_axis, np.zeros_like(ddx), ddx)
-            ddy = np.where(on_axis, np.zeros_like(ddy), ddy)
+            ddx = np.where(on_axis, 0.0, ddx)
+            ddy = np.where(on_axis, 0.0, ddy)
         return z, gradient_to_unit_normal(ddx, ddy)
 
 
@@ -1266,10 +1266,10 @@ class Surface:
         s_diff_tan = s_specular_tan + (order * wvl / n_post) * q_tan
         tan_sq = (s_diff_tan * s_diff_tan).sum(-1)
         valid = tan_sq <= 1.0
-        normal_mag = np.sqrt(np.where(valid, 1.0 - tan_sq, np.zeros_like(tan_sq)))
+        normal_mag = np.sqrt(np.where(valid, 1.0 - tan_sq, 0.0))
         sign = np.sign(s_dot_n[..., 0])
         S_diff = s_diff_tan + (sign * normal_mag)[..., np.newaxis] * n_hat
-        S_diff = np.where(valid[..., np.newaxis], S_diff, S_specular)
+        S_diff[~valid] = S_specular[~valid]
         return S_diff, valid
 
     def grating_phase(self, P_local, wvl):
@@ -1337,7 +1337,7 @@ class Surface:
         if self.aperture is not None:
             inside = np.asarray(self.aperture(Q_loc[..., 0], Q_loc[..., 1]),
                                 dtype=bool)
-            code = np.where(converged & ~inside, STATUS_CLIP, code)
+            code[converged & ~inside] = STATUS_CLIP
 
         if self.typ == STYPE_REFLECT:
             Sprime = reflect(S_loc, n_hat)
@@ -1346,7 +1346,7 @@ class Surface:
             n_post = self.material.n(wvl)
             Sprime = refract(n_pre, n_post, S_loc, n_hat)
             tir = np.isnan(Sprime).any(axis=-1)
-            code = np.where((code == STATUS_OK) & tir, STATUS_TIR, code)
+            code[(code == STATUS_OK) & tir] = STATUS_TIR
         else:
             Sprime = S_loc
             n_post = n_pre
@@ -1354,8 +1354,7 @@ class Surface:
         opl_grating = None
         if self.grating is not None and self.typ in (STYPE_REFLECT, STYPE_REFRACT):
             Sprime, valid_diff = self.diffract(Sprime, n_hat, n_post, wvl)
-            code = np.where((code == STATUS_OK) & ~valid_diff,
-                            STATUS_EVANESCENT, code)
+            code[(code == STATUS_OK) & ~valid_diff] = STATUS_EVANESCENT
             opl_grating = self.grating_phase(Q_loc, wvl)
 
         Rt = None if self.R is None else self.R.T

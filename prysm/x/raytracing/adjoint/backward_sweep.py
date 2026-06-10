@@ -77,12 +77,15 @@ class TraceIntermediates:
 
 def _sanitize_vec(arr, valid, dummy):
     """Replace invalid-ray rows of an (N, 3) array with a finite dummy."""
-    out = np.where(valid[:, None], arr, dummy[None, :])
-    return out.astype(config.precision)
+    out = arr.astype(config.precision)  # astype copies; the input is not mutated
+    out[~valid] = dummy
+    return out
 
 
 def _sanitize_scalar(arr, valid):
-    return np.where(valid, arr, np.zeros_like(arr)).astype(config.precision)
+    out = arr.astype(config.precision)  # astype copies; the input is not mutated
+    out[~valid] = 0.0
+    return out
 
 
 def _forward_with_intermediates(surfaces, P, S, wvl, tol_sag=None):
@@ -199,10 +202,15 @@ def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
 
     valid = intermediates.valid
     P_bar, S_bar, L_bar = cotangent_seed
-    # zero the cotangent for clipped/failed rays
-    P_bar = np.where(valid[:, None], P_bar, 0.0).astype(config.precision)
-    S_bar = np.where(valid[:, None], S_bar, 0.0).astype(config.precision)
-    L_bar = np.where(valid, L_bar, 0.0).astype(config.precision)
+    # zero the cotangent for clipped/failed rays; astype copies, so the
+    # caller's seed arrays are not mutated
+    invalid = ~valid
+    P_bar = P_bar.astype(config.precision)
+    P_bar[invalid] = 0.0
+    S_bar = S_bar.astype(config.precision)
+    S_bar[invalid] = 0.0
+    L_bar = L_bar.astype(config.precision)
+    L_bar[invalid] = 0.0
 
     surf_inters = intermediates.surfaces
     for j in range(len(surfaces) - 1, -1, -1):
