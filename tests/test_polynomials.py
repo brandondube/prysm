@@ -803,6 +803,29 @@ def test_qbfs_zzprime_grads():
     assert np.allclose(zprime[1:-1], fd[1:-1], atol=2e-1)
 
 
+def test_clenshaw_qbfs_returns_alphas_like_siblings():
+    # clenshaw_qbfs returns the alphas table, matching clenshaw_qbfs_der's
+    # j=0 plane (and clenshaw_q2d / clenshaw_q2d_der); the sag assembly
+    # u^2(1-u^2) 2(a0+a1) lives in compute_z_Qbfs
+    u = np.linspace(0, 1, 32)
+    usq = u * u
+    coefs = [0.1, -0.2, 0.05]
+    alphas = polynomials.qpoly.clenshaw_qbfs(coefs, usq)
+    alphas_der = polynomials.qpoly.clenshaw_qbfs_der(coefs, usq, j=1)
+    np.testing.assert_allclose(alphas, alphas_der[0])
+
+    z = polynomials.qpoly.compute_z_Qbfs(coefs, u, usq)
+    z2, _ = polynomials.qpoly.compute_z_zprime_Qbfs(coefs, u, usq)
+    np.testing.assert_allclose(z, z2)
+
+    # len-1 and empty coefficient edge cases
+    z1 = polynomials.qpoly.compute_z_Qbfs([0.1], u, usq)
+    z1_ref, _ = polynomials.qpoly.compute_z_zprime_Qbfs([0.1], u, usq)
+    np.testing.assert_allclose(z1, z1_ref)
+    z0 = polynomials.qpoly.compute_z_Qbfs([], u, usq)
+    np.testing.assert_allclose(z0, 0)
+
+
 def test_qcon_zzprime_grads():
     # decent number of points, so that finite diff isn't awful
     r = np.linspace(-1, 1, 512)

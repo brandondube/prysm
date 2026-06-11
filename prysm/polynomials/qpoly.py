@@ -215,14 +215,18 @@ def clenshaw_qbfs(cs, usq, alphas=None):
     Returns
     -------
     ndarray
-        Qbfs surface, the quantity u^2(1-u^2) S(u^2) from Eq. (3.13)
+        the alphas array; the surface sag, the quantity u^2(1-u^2) S(u^2)
+        from Eq. (3.13), is u^2(1-u^2) times 2 times (alphas[0]+alphas[1]),
+        see compute_z_Qbfs for that assembly
         note: excludes the division by phi, since c and rho are unknown
 
     """
     x = usq
     cs = _trim_trailing_zeros(cs)
     if len(cs) == 0:
-        return np.zeros_like(x)
+        alphas = _initialize_alphas([0], x, alphas, j=0)
+        alphas[...] = 0
+        return alphas
 
     bs = change_basis_Qbfs_to_Pn(cs)
     alphas = _initialize_alphas(cs, x, alphas, j=0)
@@ -230,9 +234,7 @@ def clenshaw_qbfs(cs, usq, alphas=None):
     # c is 1.
     prefix = 2 - 4 * x
     _clenshaw_sum(bs, lambda n: prefix, lambda n: 1, alphas)
-    # alphas[1] is zero for the len-1 case (mode axis is padded to >=2 by
-    # _initialize_alphas), so the formula collapses correctly.
-    return (x * (1 - x)) * (2 * (alphas[0] + alphas[1]))
+    return alphas
 
 
 def clenshaw_qbfs_der(cs, usq, j=1, alphas=None):
@@ -352,12 +354,14 @@ def compute_z_zprime_Qbfs(coefs, u, usq):
 def compute_z_Qbfs(coefs, u, usq):
     """Sag-only sibling of compute_z_zprime_Qbfs.
 
-    clenshaw_qbfs already returns u^2 (1 - u^2) S(u^2), the full sag, so this
-    is just a thin name-parity wrapper that mirrors compute_z_zprime_Qbfs's
-    signature.
+    Assembles the surface u^2 (1 - u^2) S(u^2) from the alpha sums returned
+    by clenshaw_qbfs, mirroring compute_z_zprime_Qbfs's signature.
 
     """
-    return clenshaw_qbfs(coefs, usq)
+    alphas = clenshaw_qbfs(coefs, usq)
+    # alphas[1] is zero for the len-1 case (mode axis is padded to >=2 by
+    # _initialize_alphas), so the formula collapses correctly.
+    return (usq * (1 - usq)) * (2 * (alphas[0] + alphas[1]))
 
 
 def compute_z_zprime_Qcon(coefs, u, usq):
