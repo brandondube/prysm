@@ -56,6 +56,36 @@ def test_bgie_returns_finite_cost_and_grad():
     assert grad.shape == I.shape
 
 
+def test_bgie_zero_on_exact_linear_transform():
+    """Cost must be zero when I and D are related by exact gain and bias."""
+    rng = np.random.default_rng(1)
+    D = rng.standard_normal(64) + 2.0
+    I = 2.5 * D + 7.0
+    cost, grad = bias_and_gain_invariant_error(I, D)
+    np.testing.assert_allclose(cost, 0.0, atol=1e-20)
+    np.testing.assert_allclose(grad, 0.0, atol=1e-12)
+
+
+def test_bgie_grad_matches_finite_difference():
+    """The analytic gradient must match central differences; this exercises
+    the envelope-theorem argument that alpha and beta need no chain terms."""
+    rng = np.random.default_rng(2)
+    D = rng.standard_normal(16) + 1.0
+    I = rng.standard_normal(16) + 0.5
+    _, grad = bias_and_gain_invariant_error(I, D)
+    eps = 1e-6
+    fd = np.zeros_like(I)
+    for i in range(I.size):
+        Ip = I.copy()
+        Ip[i] += eps
+        Im = I.copy()
+        Im[i] -= eps
+        fp, _ = bias_and_gain_invariant_error(Ip, D)
+        fm, _ = bias_and_gain_invariant_error(Im, D)
+        fd[i] = (fp - fm) / (2 * eps)
+    np.testing.assert_allclose(grad, fd, rtol=1e-6, atol=1e-10)
+
+
 def test_bgie_masked_matches_unmasked_on_masked_subset():
     """The decorator-applied mask must produce the same cost and same gradient
     (within mask) as calling the unmasked function on the manually-extracted

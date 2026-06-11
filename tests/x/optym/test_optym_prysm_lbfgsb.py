@@ -785,6 +785,53 @@ def test_bounded_rosenbrock_5d():
         assert float(np.max(np.abs(g[free]))) < 1e-4
 
 
+def test_linesearch_accepts_armijo_descent_step_at_maxalpha_cap():
+    """A linear objective makes the curvature condition unreachable: the
+    slope is constant, so |phi'(alpha)| == |phi'(0)| > c2 |phi'(0)| for any
+    alpha.  The box caps the step at alpha=1 (projected mode); the cap point
+    satisfies Armijo and is descent, so the search must accept it (dcsrch
+    info=5 semantics at stpmax) instead of failing."""
+    def fg(x):
+        return float(-x.sum()), -np.ones_like(x)
+
+    lb = np.zeros(4)
+    ub = np.ones(4)
+    x0 = np.full(4, 0.25)
+    opt = PrysmLBFGSB(fg, x0, lower_bounds=lb, upper_bounds=ub, memory=5)
+    x, f, g = opt.step()  # must not raise StopIteration
+    assert opt.last_step_metadata['alpha'] == 1.0
+    np.testing.assert_allclose(opt.x, ub)
+    # at the corner with the gradient pulling outward there is genuinely no
+    # descent direction; that is the correct stop, not linesearch_fail
+    with pytest.raises(StopIteration):
+        opt.step()
+    assert opt.last_step_metadata.get('reason') == 'no_descent'
+
+
+def test_bounded_rosenbrock_large_dim_does_not_linesearch_fail():
+    """Regression: pre-2026-06-10 the bounded Rosenbrock at n >= ~3500
+    failed at iteration 2 with linesearch_fail.  The projected step ends
+    exactly on a box bound and the directional curvature ratio
+    |phi'(1)/phi'(0)| crosses c2=0.9 as n grows, making the strong-Wolfe
+    curvature condition unreachable inside the cap; the Armijo-satisfying
+    cap point must be accepted instead."""
+    n = 5000
+    lb = np.full(n, -2.0)
+    ub = np.full(n, 2.0)
+    x0 = np.full(n, -1.2)
+    opt = PrysmLBFGSB(_rosenbrock_fg, x0, lower_bounds=lb, upper_bounds=ub,
+                      memory=10)
+    f_first = None
+    f = None
+    for _ in range(10):
+        x, f, g = opt.step()  # iter 2 raised StopIteration before the fix
+        if f_first is None:
+            f_first = f
+    assert opt.iter == 10
+    assert f < f_first
+    assert np.all(opt.x >= lb) and np.all(opt.x <= ub)
+
+
 def test_no_descent_when_x_at_pulling_corner():
     """If x sits at a corner with the gradient pushing further into
     every active face, step() should signal no descent immediately."""

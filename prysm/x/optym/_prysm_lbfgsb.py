@@ -156,7 +156,7 @@ def _strong_wolfe_lean(
     phi_a1, derphi_a1, g_a1 = _wolfe_eval(problem, xk, pk, alpha1, dot)
 
     for i in range(maxiter):
-        if alpha1 == 0 or (maxalpha is not None and alpha0 == maxalpha):
+        if alpha1 == 0:
             break
 
         if (phi_a1 > phi0 + c1 * alpha1 * derphi0) or (i > 0 and phi_a1 >= phi_a0):
@@ -185,6 +185,14 @@ def _strong_wolfe_lean(
         alpha2 = 2.0 * alpha1
         if maxalpha is not None:
             alpha2 = min(alpha2, maxalpha)
+            if alpha2 == alpha1:
+                # Pinned at maxalpha: alpha1 satisfies sufficient decrease
+                # (checked above) and is still descent, but the curvature
+                # condition cannot be met inside the cap.  Accept the cap
+                # point rather than failing -- More-Thuente dcsrch info=5 /
+                # L-BFGS-B behavior at stpmax; the active-set machinery
+                # fixes the binding variable at its bound on the next step.
+                return alpha1, phi_a1, derphi_a1, g_a1
 
         alpha0 = alpha1
         alpha1 = alpha2

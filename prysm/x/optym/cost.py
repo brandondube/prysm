@@ -51,15 +51,16 @@ def bias_and_gain_invariant_error(I, D):  # NOQA
     Ihat = I - I.mean()
     Dhat = D - D.mean()
 
-    N = I.size
-
     num = (Ihat * Dhat).sum()
     den = (Ihat * Ihat).sum()
     alpha = num / den
 
     alphaI = alpha * I
 
-    beta = (D - alphaI) / N
+    # OLS intercept; with (alpha, beta) the inner least-squares optimum,
+    # d err/d alpha = d err/d beta = 0, so the gradient below is exact
+    # without chain terms through alpha or beta (envelope theorem)
+    beta = D.mean() - alpha * I.mean()
 
     R = 1 / ((D * D).sum())
     raw_err = (alphaI + beta) - D

@@ -82,6 +82,28 @@ def test_ls_strong_wolfe_respects_maxalpha():
     assert _wolfe_holds(fg, xk, pk, alpha, phi_a, derphi_a)
 
 
+def test_ls_strong_wolfe_accepts_cap_when_curvature_unreachable():
+    """A linear objective has constant slope, so the curvature condition
+    |phi'(alpha)| <= c2 |phi'(0)| can never hold.  With maxalpha capping the
+    step, the cap point satisfies sufficient decrease and is still descent;
+    the search must accept it (More-Thuente dcsrch info=5 at stpmax), not
+    return None."""
+    def fg(x):
+        return float(-x.sum()), -np.ones_like(x)
+
+    xk = np.zeros(3)
+    pk = np.ones(3)
+    alpha, phi_a, derphi_a, g_a = ls_strong_wolfe(fg, xk, pk, maxalpha=1.0)
+    assert alpha == 1.0
+    np.testing.assert_allclose(phi_a, -3.0)
+    np.testing.assert_allclose(derphi_a, -3.0)
+    np.testing.assert_allclose(g_a, -np.ones(3))
+    # also with a cap below the unit trial step
+    alpha, phi_a, derphi_a, g_a = ls_strong_wolfe(fg, xk, pk, maxalpha=0.25)
+    assert alpha == 0.25
+    np.testing.assert_allclose(phi_a, -0.75)
+
+
 def test_ls_strong_wolfe_uses_supplied_fgk():
     """If the caller passes fgk, ls_strong_wolfe must not re-evaluate fg at xk."""
     calls = {'n': 0}

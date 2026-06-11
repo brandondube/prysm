@@ -169,7 +169,11 @@ def ls_strong_wolfe(
     fg_at_xk : tuple, optional
         precomputed (f, g) at xk; saves one problem evaluation.
     maxalpha : float, optional
-        upper bound on the step length.
+        upper bound on the step length.  When the search reaches maxalpha
+        with sufficient decrease satisfied and the slope still negative,
+        the capped step is accepted even though the curvature condition is
+        unmet, matching More-Thuente dcsrch behavior at stpmax; bounded
+        callers rely on this to take box-boundary steps.
     c1, c2 : float
         Wolfe constants. Standard defaults: c1=1e-4, c2=0.9.
     maxiter : int
@@ -239,7 +243,7 @@ def ls_strong_wolfe(
     derphi_star = None
 
     for i in range(maxiter):
-        if alpha1 == 0 or (maxalpha is not None and alpha0 == maxalpha):
+        if alpha1 == 0:
             break
 
         # sufficient-decrease violation, or non-decreasing on a non-first step
@@ -292,6 +296,16 @@ def ls_strong_wolfe(
         alpha2 = 2.0 * alpha1
         if maxalpha is not None:
             alpha2 = min(alpha2, maxalpha)
+            if alpha2 == alpha1:
+                # Pinned at maxalpha: alpha1 satisfies sufficient decrease
+                # (checked above) and is still descent, but the curvature
+                # condition cannot be met inside the cap.  Accept the cap
+                # point rather than failing -- More-Thuente dcsrch info=5 /
+                # L-BFGS-B behavior at stpmax.
+                alpha_star = alpha1
+                phi_star = phi_a1
+                derphi_star = derphi_a1
+                break
 
         alpha0 = alpha1
         alpha1 = alpha2
