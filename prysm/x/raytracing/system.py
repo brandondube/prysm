@@ -26,7 +26,7 @@ _POWER_EPS = 1e-30
 
 # cache sentinel: distinguishes an unresolved key from a resolved None (an exit
 # pupil at infinity / telecentric, which the EIC closing reads as curvature 0).
-_EXIT_PUPIL_MISS = object()
+_DERIVED_MISS = object()
 
 
 class ApertureSpec:
@@ -402,9 +402,27 @@ class OpticalSystem:
         A first-order readout of the aperture definition (see
         ApertureSpec.entrance_pupil_diameter).
         """
+        return self.entrance_pupil_diameter()
+
+    def entrance_pupil_diameter(self, wvl=None):
+        """Equivalent entrance-pupil diameter at wvl, cached on the system.
+
+        Wraps ApertureSpec.entrance_pupil_diameter with the version-stamped
+        memo shared by first_order and entrance_pupil_z; the aperture mode and
+        value are part of the key so reassigning self.aperture cannot return a
+        stale diameter.  Returns None when no aperture is set.
+
+        """
         if self.aperture is None:
             return None
-        return float(self.aperture.entrance_pupil_diameter(self))
+        wvl = self.wavelength(wvl)
+        key = ('epd', self.lens._version, float(wvl),
+               self.aperture.mode, self.aperture.value)
+        cached = self._derived.get(key, _DERIVED_MISS)
+        if cached is _DERIVED_MISS:
+            cached = float(self.aperture.entrance_pupil_diameter(self, wvl))
+            self._derived[key] = cached
+        return cached
 
     @property
     def object_at_infinity(self):
@@ -426,9 +444,51 @@ class OpticalSystem:
 
     # -- first-order + solves --
     def first_order(self, wvl=None, *, epd=None, stop_index=None):
-        """Paraxial first-order properties (delegates to paraxial.first_order)."""
+        """Paraxial first-order properties, cached on the system.
+
+        Delegates to paraxial.first_order and memoizes the result keyed by the
+        lens edit version, wavelength, epd, and stop index, so the repeated
+        paraxial solves inside grid analyses and optimizer iterations collapse
+        to one per unique configuration.  Any lens edit bumps lens._version,
+        which is a cache miss.
+
+        """
         from .paraxial import first_order
-        return first_order(self, wvl=wvl, epd=epd, stop_index=stop_index)
+        wvl = self.wavelength(wvl)
+        resolved_stop = stop_index if stop_index is not None else self.stop_index
+        key = ('fo', self.lens._version, float(wvl), epd, resolved_stop)
+        cached = self._derived.get(key, _DERIVED_MISS)
+        if cached is _DERIVED_MISS:
+            cached = first_order(self, wvl=wvl, epd=epd,
+                                 stop_index=stop_index)
+            self._derived[key] = cached
+        return cached
+
+    def entrance_pupil_z(self, wvl=None, stop_index=None):
+        """Lab-frame z of the paraxial entrance pupil, cached on the system.
+
+        Wraps paraxial.entrance_pupil_z with the same version-stamped memo as
+        first_order; launch consults this method when the prescription is an
+        OpticalSystem so a field or wavelength grid (or an optimizer
+        iteration) resolves the entrance pupil once per wavelength instead of
+        once per bundle.
+
+        Returns
+        -------
+        float or None
+            lab-frame z of the entrance pupil; None when undefined (no stop,
+            or telecentric in object space).
+
+        """
+        from .paraxial import entrance_pupil_z
+        wvl = self.wavelength(wvl)
+        resolved_stop = stop_index if stop_index is not None else self.stop_index
+        key = ('ep_z', self.lens._version, float(wvl), resolved_stop)
+        cached = self._derived.get(key, _DERIVED_MISS)
+        if cached is _DERIVED_MISS:
+            cached = entrance_pupil_z(self, wvl, stop_index=stop_index)
+            self._derived[key] = cached
+        return cached
 
     def exit_pupil(self, wvl=None, field=None, *, stop_index=None, epd=None,
                    axis_point=None, axis_dir=None):
@@ -463,8 +523,8 @@ class OpticalSystem:
             getattr(field, 'hx', None), getattr(field, 'hy', None),
             getattr(field, 'kind', None))
         key = (self.lens._version, float(wvl), field_key, resolved_stop)
-        cached = self._derived.get(key, _EXIT_PUPIL_MISS)
-        if cached is _EXIT_PUPIL_MISS:
+        cached = self._derived.get(key, _DERIVED_MISS)
+        if cached is _DERIVED_MISS:
             cached = resolve_exit_pupil(
                 self, wvl, stop_index=resolved_stop, epd=epd, field=field,
                 axis_point=axis_point, axis_dir=axis_dir)

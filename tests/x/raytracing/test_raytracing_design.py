@@ -229,6 +229,32 @@ def test_damped_least_squares_runs_raytracing_problem_with_constraint():
     )
 
 
+def test_solve_warns_when_solver_reports_failure(monkeypatch):
+    """A failed solve still updates the lens but is never silent."""
+    from prysm.x.raytracing import design as design_mod
+
+    ld = _refractive_singlet()
+    ld.lens.vary('curvature', surfaces=0)
+    problem = Problem(ld, [RmsSpotRadius(
+        *launch(ld, Field(0., 0.), 0.55, Sampling.fan(n=5), epd=4.0),
+        wavelength=0.55)])
+    x0 = problem.x0()
+
+    def fake_dls(prob, x0=None, **kwargs):
+        from prysm.x.optym.least_squares import DampedLeastSquaresResult
+        return DampedLeastSquaresResult(
+            x=prob.x0(), residuals=np.zeros(1), cost=0.0, success=False,
+            message='equality constraints violated', nit=3, nfev=7, njev=3,
+            ncev=3, lambda_eq=np.zeros(0), lambda_ineq=np.zeros(0),
+            active_inequalities=np.zeros(0, dtype=int), history=[])
+
+    monkeypatch.setattr(design_mod, 'damped_least_squares', fake_dls)
+    with pytest.warns(UserWarning, match='did not converge'):
+        result = problem.solve()
+    assert not result.success
+    np.testing.assert_allclose(problem.x0(), x0)
+
+
 # ---------- Operand library --------------------------------------------------
 
 def test_wavefront_rms_operand_evaluates():

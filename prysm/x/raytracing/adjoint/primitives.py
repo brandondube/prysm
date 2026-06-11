@@ -27,6 +27,10 @@ def adj_opl_segment(n_pre, seg, L_bar):
     """
     seg_len = np.sqrt(row_dot(seg, seg))
     n_bar = np.sum(L_bar * seg_len)
+    # a zero-length segment (bundle launched on the surface itself) has a
+    # zero numerator as well; guard the denominator so 0/0 does not poison
+    # the sweep.  The cotangent of such a segment is exactly zero.
+    seg_len = np.where(seg_len == 0.0, 1.0, seg_len)
     dseg_bar = L_bar[:, None] * n_pre * seg / seg_len[:, None]
     return n_bar, dseg_bar
 

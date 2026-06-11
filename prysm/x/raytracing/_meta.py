@@ -28,10 +28,29 @@ def system_epd(prescription, epd, wvl=None):
     """
     if epd is not None:
         return float(epd)
+    f = getattr(prescription, 'entrance_pupil_diameter', None)
+    if callable(f):
+        # OpticalSystem: version-stamped cache over the aperture readout
+        return f(wvl)
     aperture = getattr(prescription, 'aperture', None)
     if aperture is not None:
         return float(aperture.entrance_pupil_diameter(prescription, wvl))
     return None
+
+
+def system_first_order(prescription, wvl=None, epd=None, stop_index=None):
+    """Paraxial first-order properties, via a system's cache when it has one.
+
+    When prescription is an OpticalSystem its version-stamped first_order memo
+    is consulted, so repeated paraxial solves inside grid analyses and
+    optimizer iterations collapse to one per unique configuration.  A bare
+    surface sequence pays the direct solve.
+    """
+    f = getattr(prescription, 'first_order', None)
+    if callable(f):
+        return f(wvl=wvl, epd=epd, stop_index=stop_index)
+    from .paraxial import first_order  # local: avoid a circular import
+    return first_order(prescription, wvl=wvl, epd=epd, stop_index=stop_index)
 
 
 def system_stop_index(prescription, stop_index):

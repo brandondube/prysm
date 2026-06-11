@@ -18,14 +18,15 @@ from .opt import (
     _pupil_center_chief_index,
 )
 from ._line_math import line_intersection_params
-from .paraxial import paraxial_image_distance, first_order
+from .paraxial import paraxial_image_distance
 from .launch import Field, Sampling, launch
 from ._meta import (
     system_wavelength, system_epd, object_space_index, image_space_index,
+    system_first_order,
 )
 from ._trace_grid import (
-    iter_trace_grid, trace_cell, _resolve_fields, _resolve_wavelengths,
-    _require_epd,
+    TraceRecord, iter_trace_grid, trace_cell, _resolve_fields,
+    _resolve_wavelengths, _require_epd,
 )
 from .surfaces import Conic, EvenAsphere, Plane, Sphere
 
@@ -135,8 +136,8 @@ def resolve_exit_pupil(prescription, wavelength, *, stop_index=None, epd=None,
                      else getattr(prescription, 'stop_index', None))
     if resolved_stop is not None:
         try:
-            fo = first_order(prescription, wvl=wavelength, epd=epd,
-                             stop_index=resolved_stop)
+            fo = system_first_order(prescription, wvl=wavelength, epd=epd,
+                                    stop_index=resolved_stop)
         except ValueError as exc:
             # a centered-ABCD geometry failure is only recoverable via the
             # geometric route when an explicit axis was supplied; otherwise

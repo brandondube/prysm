@@ -840,6 +840,7 @@ class LensData:
         self._dependent = set()  # slots driven by a pickup/solve (never free)
         self._surfaces_cache = None
         self._version = 0  # bumped on every edit; keys system-side derived caches
+        self._resolving = False  # True while solves/pickups write derived DOFs
 
     # -- construction --
     def add(self, shape, *, thickness=0.0, material=None, typ='refr',
@@ -904,7 +905,16 @@ class LensData:
         return self
 
     def _invalidate(self):
-        """Clear cached compiled surfaces and bump the edit version."""
+        """Clear cached compiled surfaces and bump the edit version.
+
+        Suppressed while _resolve_dependencies writes pickup/solve outputs:
+        those are derived from the user-edited state, not edits themselves, so
+        bumping the version there would make every version-keyed cache (the
+        system's paraxial memos and trace fingerprints) miss once per compile.
+
+        """
+        if self._resolving:
+            return
         self._surfaces_cache = None
         self._version += 1
 
@@ -945,37 +955,42 @@ class LensData:
         are backend-pure (no float() coercion) so they stay differentiable.
 
         """
-        for targets, sources, scale, offset in self._pickups:
-            for t, s in zip(targets, sources):
-                self.spec.set_value(t, scale * self.spec.get_value(s) + offset)
-        if self._image_solve is not None:
-            surf_idx, wvl = self._image_solve
-            surfaces = self._compile_surfaces()
-            surface_rows = [i for i, row in enumerate(self.rows)
-                            if isinstance(row, SurfaceRow)]
-            try:
-                solved_surface = surface_rows.index(surf_idx)
-            except ValueError as e:
-                raise ValueError(
-                    'image-distance solve target must be a surface row'
-                ) from e
-            image_surface = solved_surface + 1
-            if image_surface >= len(surface_rows):
-                raise ValueError(
-                    'image-distance solve target must be the gap before a '
-                    'trailing eval image plane'
-                )
-            image_row_idx = surface_rows[image_surface]
-            image_row = self.rows[image_row_idx]
-            if (image_surface != len(surface_rows) - 1
-                    or _map_stype(image_row.typ) != STYPE_EVAL):
-                raise ValueError(
-                    'image-distance solve target must be the gap before a '
-                    'trailing eval image plane'
-                )
-            lens = surfaces[:image_surface]
-            pid = paraxial_image_distance(lens, wvl=wvl)
-            self.rows[surf_idx].thickness = pid
+        self._resolving = True
+        try:
+            for targets, sources, scale, offset in self._pickups:
+                for t, s in zip(targets, sources):
+                    self.spec.set_value(
+                        t, scale * self.spec.get_value(s) + offset)
+            if self._image_solve is not None:
+                surf_idx, wvl = self._image_solve
+                surfaces = self._compile_surfaces()
+                surface_rows = [i for i, row in enumerate(self.rows)
+                                if isinstance(row, SurfaceRow)]
+                try:
+                    solved_surface = surface_rows.index(surf_idx)
+                except ValueError as e:
+                    raise ValueError(
+                        'image-distance solve target must be a surface row'
+                    ) from e
+                image_surface = solved_surface + 1
+                if image_surface >= len(surface_rows):
+                    raise ValueError(
+                        'image-distance solve target must be the gap before a '
+                        'trailing eval image plane'
+                    )
+                image_row_idx = surface_rows[image_surface]
+                image_row = self.rows[image_row_idx]
+                if (image_surface != len(surface_rows) - 1
+                        or _map_stype(image_row.typ) != STYPE_EVAL):
+                    raise ValueError(
+                        'image-distance solve target must be the gap before a '
+                        'trailing eval image plane'
+                    )
+                lens = surfaces[:image_surface]
+                pid = paraxial_image_distance(lens, wvl=wvl)
+                self.rows[surf_idx].thickness = pid
+        finally:
+            self._resolving = False
 
     def _build_surface(self, row, P, R=None):
         """Build a posed Surface from a LensData row.

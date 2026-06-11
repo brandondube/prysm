@@ -120,3 +120,61 @@ def test_dls_adaptive_damping_decreases_after_full_step():
     opt.step()
     assert opt.last_step_metadata['damping'] == 10.0
     assert opt.damping == 5.0
+
+
+class _AnalyticJacobianProblem:
+    """Linear residuals with an analytic Jacobian and call counters."""
+
+    def __init__(self, target, decline=False):
+        self.target = np.asarray(target, dtype=float)
+        self.decline = decline
+        self.n_res = 0
+        self.n_jac = 0
+
+    def residuals(self, x):
+        self.n_res += 1
+        return np.asarray(x, dtype=float) - self.target
+
+    def residual_jacobian(self, x):
+        self.n_jac += 1
+        if self.decline:
+            return None
+        return np.eye(self.target.size)
+
+
+def test_dls_uses_problem_residual_jacobian():
+    problem = _AnalyticJacobianProblem([3.0, 4.0])
+    result = damped_least_squares(
+        problem, x0=np.array([0.0, 0.0]), damping=0.0, maxiter=3,
+    )
+    assert result.success
+    np.testing.assert_allclose(result.x, [3.0, 4.0], atol=1e-12)
+    assert problem.n_jac >= 1
+    # no FD bookkeeping: nfev counts only the residual evals of the line
+    # search and acceptance tests, never 2 * n per linearization
+    assert result.nfev < result.njev * 2 * 2 + result.njev + 2
+
+
+def test_dls_falls_back_to_fd_when_jacobian_declines():
+    declined = _AnalyticJacobianProblem([3.0, 4.0], decline=True)
+    plain = _VectorResidualProblem([3.0, 4.0])
+    r1 = damped_least_squares(declined, x0=np.array([0.0, 0.0]),
+                              damping=0.0, maxiter=3)
+    r2 = damped_least_squares(plain, x0=np.array([0.0, 0.0]),
+                              damping=0.0, maxiter=3)
+    assert r1.success
+    np.testing.assert_allclose(r1.x, r2.x, atol=1e-12)
+    # FD ran: per-iteration nfev includes the 2 * n stencil
+    assert r1.nfev > r2.nit * 2  # at least the stencils
+    assert r1.nfev == r2.nfev
+
+
+def test_dls_analytic_jacobian_cuts_nfev_vs_fd():
+    fast = _AnalyticJacobianProblem([3.0, 4.0])
+    slow = _VectorResidualProblem([3.0, 4.0])
+    rf = damped_least_squares(fast, x0=np.array([0.0, 0.0]),
+                              damping=0.0, maxiter=3)
+    rs = damped_least_squares(slow, x0=np.array([0.0, 0.0]),
+                              damping=0.0, maxiter=3)
+    np.testing.assert_allclose(rf.x, rs.x, atol=1e-12)
+    assert rf.nfev < rs.nfev

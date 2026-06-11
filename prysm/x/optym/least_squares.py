@@ -109,6 +109,24 @@ class _ResidualProblemView:
     def residuals(self, x):
         return np.asarray(self.problem.residuals(x), dtype=float).ravel()
 
+    def jacobian(self, x, f0=None, step=1e-6):
+        """Residual Jacobian at x, plus whether finite differences ran.
+
+        A problem may provide its own residual_jacobian(x) (an analytic or
+        adjoint Jacobian); when present and it returns non-None, that is used
+        directly.  Otherwise central finite differences of residuals are
+        taken, which costs 2 * x.size residual evaluations.  Returns
+        (jacobian, used_fd) so the caller can keep an honest nfev count.
+
+        """
+        analytic = getattr(self.problem, 'residual_jacobian', None)
+        if callable(analytic):
+            J = analytic(x)
+            if J is not None:
+                return np.asarray(J, dtype=float), False
+        J = _finite_difference_jacobian(self.residuals, x, f0=f0, step=step)
+        return J, True
+
     def eq(self, x):
         return _eval_constraint_vector(self.eq_constraints, x)
 
@@ -395,10 +413,9 @@ def _copy_trial_into_state(state, trial):
 def _linearized_step(view, state, damping, damping_mode, damping_floor,
                      trust_radii, fd_step, constraint_tol,
                      active_tol, max_active_iter):
-    J = _finite_difference_jacobian(
-        view.residuals, state.x, f0=state.residuals, step=fd_step,
-    )
-    state.nfev += 2 * state.x.size
+    J, used_fd = view.jacobian(state.x, f0=state.residuals, step=fd_step)
+    if used_fd:
+        state.nfev += 2 * state.x.size
     state.njev += 1
     grad = J.T @ state.residuals
 
@@ -429,7 +446,12 @@ class DampedLeastSquares:
     Parameters
     ----------
     problem : object
-        Object with a residuals(x) method.
+        Object with a residuals(x) method.  When it also provides a
+        residual_jacobian(x) method returning the residual Jacobian (or None
+        to decline), that is used in place of finite differences for the
+        linearization -- one analytic Jacobian instead of 2 * n_params
+        residual evaluations per iteration.  Constraint Jacobians always use
+        finite differences.
     x0 : ndarray, optional
         Starting vector.  If omitted, problem.x0() is used.
     equality_constraints : callable or sequence of callables, optional

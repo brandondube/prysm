@@ -1,5 +1,7 @@
 """Design operands and optimization problems for raytracing systems."""
 
+import warnings
+
 from prysm.conf import config
 from prysm.mathops import np
 from prysm.x.optym.least_squares import (  # NOQA - re-export for users
@@ -18,10 +20,9 @@ from .paraxial import (
     effective_focal_length,
     back_focal_length,
     paraxial_image_distance,
-    first_order,
 )
 from . import analysis as _analysis
-from ._meta import object_space_index, image_space_index
+from ._meta import object_space_index, image_space_index, system_first_order
 
 
 # ---------- Trace cache ------------------------------------------------------
@@ -299,8 +300,9 @@ class WavefrontRMS(Merit):
                              else getattr(prescription, 'stop_index', None))
             if resolved_stop is not None:
                 try:
-                    fo = first_order(prescription, wvl=wavelength, epd=self.epd,
-                                     stop_index=resolved_stop)
+                    fo = system_first_order(
+                        prescription, wvl=wavelength, epd=self.epd,
+                        stop_index=resolved_stop)
                 except ValueError as exc:
                     if ((self.axis_point is None and self.axis_dir is None)
                             or not _analysis._first_order_geometry_failure(exc)):
@@ -569,14 +571,22 @@ class Problem:
     operands are hard constraints evaluated as `operand - target`, ignoring
     `weight`; inequalities use the optym convention g(x) >= 0.
 
+    gradient='auto' (the default) lets the solver take the residual Jacobian
+    from the adjoint backward sweep whenever every objective operand supports
+    it (overrides seed) -- one forward trace plus one reverse sweep per
+    operand instead of 2 * n_params re-traces of finite differences, and
+    exact to machine precision.  gradient='fd' opts out.  The adjoint treats
+    each operand's launch bundle as a frozen ray set (the bundle itself is
+    not re-aimed within the differentiation).
+
     Methods: x0, residuals, equalities,
-    inequalities, solve, merit, jacobian.
+    inequalities, solve, merit, jacobian, residual_jacobian.
 
     """
 
     def __init__(self, lensdata, operands=None, *,
                  equality_constraints=None, inequality_constraints=None,
-                 constraints=None):
+                 constraints=None, gradient='auto'):
         # accept either a LensData (the free-vector owner) or an OpticalSystem
         # wrapping one; the system is used as the prescription so operands see
         # its aperture / object medium, while pack/update act on the lens.
@@ -597,11 +607,15 @@ class Problem:
                     'use either constraints or equality_constraints, not both'
                 )
             equality_constraints = constraints
+        if gradient not in ('auto', 'fd'):
+            raise ValueError(
+                f"gradient must be 'auto' or 'fd', got {gradient!r}")
         self.lensdata = lensdata
         self.prescription = prescription  # duck-types as a surface sequence
         self.operands = list(operands or [])
         self.equality_constraints = _as_operand_list(equality_constraints)
         self.inequality_constraints = _as_operand_list(inequality_constraints)
+        self.gradient = gradient
 
     def x0(self):
         """Initial parameter vector — the LensData's packed free vector."""
@@ -665,6 +679,11 @@ class Problem:
         equality_constraints or inequality_constraints keywords are combined
         with the hard operands stored on this Problem.
 
+        The LensData is updated to the returned iterate even when the solver
+        reports failure (constraints violated, line search exhausted); a
+        UserWarning is emitted in that case so a non-converged design is never
+        silently accepted -- inspect result.success and result.message.
+
         """
         eq = _combine_constraints(
             self.equalities,
@@ -682,6 +701,12 @@ class Problem:
             **kwargs,
         )
         self._set_x(result.x)
+        if not result.success:
+            warnings.warn(
+                f'optimization did not converge: {result.message}; the lens '
+                'was updated to the best iterate anyway',
+                stacklevel=2,
+            )
         return result
 
     def _eval_merit(self, prescription):
@@ -709,13 +734,92 @@ class Problem:
         self._set_x(x)
         return float(self._eval_merit(self.prescription))
 
-    def jacobian(self, x, method='fd', step=1e-6):
-        """Gradient of the scalar merit w.r.t. x (length n_params).
+    def _free_slot_seeds(self):
+        """One DiffSeed per free DOF slot, built at the current lens state.
 
-        method='fd' (default) uses central differences; method='autograd'
-        requires the prysm backend to be torch.
+        Shape DOFs carry an analytic tangent; thickness/decenter/tilt enter
+        through layout-FD pose tangents (seed_from_perturbation).  Raises
+        NotImplementedError for DOFs the differential engine does not map
+        (vector shape coefficients) -- callers fall back to finite
+        differences.
 
         """
+        from .tolerance import Perturbation
+        from ._diff_raytrace import seeds_from_perturbations
+
+        ld = self.lensdata
+        perturbations = []
+        for slot in ld.spec.free_slots():
+            group, r, off = slot
+            nominal = float(ld.spec.get_value(slot))
+            perturbations.append(Perturbation(
+                ld, slot, None, nominal, step=0.0, name=f'{group}{r}.{off}'))
+        return seeds_from_perturbations(perturbations)
+
+    def residual_jacobian(self, x):
+        """Adjoint Jacobian of the weighted residual vector at x, or None.
+
+        Returns the (n_operands, n_free) matrix d residuals / d x from one
+        forward trace per launch bundle plus one reverse sweep per operand.
+        Returns None -- declining in favor of the caller's finite-difference
+        fallback -- when gradient='fd', there are no operands or free DOFs,
+        any objective operand does not support adjoint seeding, or a free DOF
+        has no differential-seed mapping.  damped_least_squares consults this
+        method automatically through its problem protocol.
+
+        The adjoint differentiates each operand's stored launch bundle as a
+        frozen ray set; it does not differentiate through bundle re-aiming.
+
+        """
+        if self.gradient != 'auto':
+            return None
+        ops = self.operands
+        if not ops:
+            return None
+        for op in ops:
+            if not op.seedable:
+                return None
+            if getattr(op, 'P', None) is None or getattr(op, 'S', None) is None:
+                return None
+        self._set_x(x)
+        try:
+            seeds = self._free_slot_seeds()
+        except NotImplementedError:
+            return None
+        if not seeds:
+            return None
+        # local import: design stays import-light, mirroring the seed path
+        from .adjoint.tolerance_analysis import multi_objective_sensitivity
+
+        groups = {}
+        for i, op in enumerate(ops):
+            key = (id(op.P), id(op.S), float(op.wavelength))
+            groups.setdefault(key, []).append(i)
+        J = np.zeros((len(ops), len(seeds)), dtype=config.precision)
+        for (_, _, wvl), idxs in groups.items():
+            first = ops[idxs[0]]
+            result = multi_objective_sensitivity(
+                self.prescription, first.P, first.S, wvl,
+                seeds, [ops[i] for i in idxs])
+            for row, i in zip(result.jacobian, idxs):
+                J[i] = ops[i].weight * row
+        return J
+
+    def jacobian(self, x, method='auto', step=1e-6):
+        """Gradient of the scalar merit w.r.t. x (length n_params).
+
+        method='auto' (default) uses the adjoint residual Jacobian when every
+        operand supports it (grad = 2 J^T r) and falls back to central finite
+        differences otherwise; method='fd' forces finite differences;
+        method='autograd' requires the prysm backend to be torch.
+
+        """
+        if method == 'auto':
+            J = self.residual_jacobian(x)
+            if J is not None:
+                r, _ = self._operand_vector(self.operands, weighted=True)
+                return 2.0 * (J.T @ r)
+            method = 'fd'
         self._set_x(x)
         return _merit_jacobian_free(
             self.lensdata, lambda: self._eval_merit(self.prescription),

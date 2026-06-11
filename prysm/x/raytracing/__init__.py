@@ -68,6 +68,8 @@ from .paraxial import (
     system_matrix,
 )
 from .analysis import (
+    TraceRecord,
+    iter_trace_grid,
     axial_color,
     chromatic_focal_shift,
     distortion,
@@ -161,6 +163,8 @@ __all__ = [
     'front_focal_length',
     'first_order',
     'FirstOrderProperties',
+    'TraceRecord',
+    'iter_trace_grid',
     'transverse_ray_aberration',
     'xp_reference_sphere',
     'locate_ep',

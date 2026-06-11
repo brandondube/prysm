@@ -10,6 +10,15 @@ from .spencer_and_murty import raytrace
 from ._meta import system_epd, object_space_index, system_stop_index
 
 
+def _entrance_pupil_z(prescription, wavelength):
+    """Entrance-pupil z, via the prescription's version-stamped cache when it
+    carries one (OpticalSystem) and the bare paraxial solve otherwise."""
+    f = getattr(prescription, 'entrance_pupil_z', None)
+    if callable(f):
+        return f(wavelength)
+    return entrance_pupil_z(prescription, wavelength)
+
+
 class Field:
     """A field point.
 
@@ -356,7 +365,7 @@ def _object_space_cone_PS(prescription, field, wavelength, sampling, na):
 
     obj = np.array([field.hx, field.hy, field.object_z], dtype=config.precision)
 
-    ep_z = entrance_pupil_z(prescription, wavelength)
+    ep_z = _entrance_pupil_z(prescription, wavelength)
     if ep_z is not None:
         axis_pt = np.array([0.0, 0.0, float(ep_z)], dtype=config.precision)
         chief = axis_pt - obj
@@ -519,7 +528,7 @@ def launch(prescription, field, wavelength, sampling, *,
         # onto the stop downstream.  Skipped only for explicit aim_to aiming.
         ep_z = None
         if aim_to is None:
-            ep_z = entrance_pupil_z(prescription, wavelength)
+            ep_z = _entrance_pupil_z(prescription, wavelength)
 
         if field.kind == 'angle':
             P, S = _collimated_PS(pupil_xy, pupil_z, field)

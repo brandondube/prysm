@@ -164,8 +164,11 @@ def d_opl_segment(n_pre, n_pre_dot, seg, dseg):
     dL = n_pre_dot ||seg|| + n_pre (seg . dseg) / ||seg||.
     """
     seg_len = np.sqrt(row_dot(seg, seg))
+    # zero-length segment (launch on the surface): numerator seg . dseg is
+    # zero too; guard the denominator so the tangent is 0, not 0/0.
+    safe_len = np.where(seg_len == 0.0, 1.0, seg_len)
     return (n_pre_dot[None, :] * seg_len[:, None]
-            + n_pre * _dot_nt(seg, dseg) / seg_len[:, None])
+            + n_pre * _dot_nt(seg, dseg) / safe_len[:, None])
 
 
 # ---------- perturbation seeds ----------------------------------------------
