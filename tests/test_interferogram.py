@@ -130,6 +130,30 @@ def test_fit_psd_returns_positive_model_parameters(sample_i_mutate):
     assert c > 0
 
 
+def test_fit_psd_recovers_abc_parameters():
+    from prysm.interferogram import abc_psd
+
+    f = np.logspace(-2, 1, 200)
+    true = (100.0, 0.5, 3.5)
+    psd = abc_psd(f, *true)
+    coefs = fit_psd(f, psd)
+    np.testing.assert_allclose(coefs, true, rtol=1e-4)
+
+
+def test_fit_psd_recovers_ab_parameters_closed_form():
+    from prysm.interferogram import ab_psd
+
+    f = np.logspace(-2, 1, 200)
+    true = (10.0, 2.5)
+    psd = ab_psd(f, *true)
+    coefs = fit_psd(f, psd, callable=ab_psd)
+    np.testing.assert_allclose(coefs, true, rtol=1e-10)
+    # optres path reports the closed-form solve
+    res = fit_psd(f, psd, callable=ab_psd, return_='optres')
+    assert res.success
+    np.testing.assert_allclose(res.x, true, rtol=1e-10)
+
+
 def test_constructor_default_dx_and_meta_wavelength():
     i = Interferogram(np.zeros((2, 2)), meta={'Wavelength': 1.23})
 

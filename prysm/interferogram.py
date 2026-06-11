@@ -429,8 +429,48 @@ def render_synthetic_surface(size, samples, rms=None, mask=None, psd_fcn=abc_psd
     return x, y, z
 
 
+def _loglog_linear_psd_fit(f, psd):
+    """Closed-form least-squares fit of ab_psd in log-log space.
+
+    log10 psd = log10(a) - b log10(f) is linear in (log10(a), b), so the
+    global optimum of the squared log residuals is available in closed form.
+    """
+    logf = np.log10(f)
+    logp = np.log10(psd)
+    lf = logf - logf.mean()
+    slope = (lf * (logp - logp.mean())).sum() / (lf * lf).sum()
+    a = 10.0 ** (logp.mean() - slope * logf.mean())
+    return a, -slope
+
+
+def _abc_psd_guess(f, psd):
+    """Data-derived seed for abc_psd: plateau, corner frequency, rolloff slope."""
+    npts = psd.shape[0]
+    # a: the low-frequency plateau level
+    k = max(3, npts // 10)
+    a = float(np.median(psd[:k]))
+    # c: log-log slope of the high-frequency rolloff, where abc -> a (nu/b)^-c
+    _, c = _loglog_linear_psd_fit(f[npts // 2:], psd[npts // 2:])
+    c = max(c, 0.5)
+    # b: the corner frequency, first crossing of the half-power level
+    below = np.nonzero(psd < (a / 2))[0]
+    if below.size > 0:
+        b = float(f[below[0]])
+    else:
+        b = float(np.sqrt(f[0] * f[-1]))  # mid-band (geometric) fallback
+    return [a, b, c]
+
+
 def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
-    """Fit parameters to a PSD curvnp.
+    """Fit parameters to a PSD curve.
+
+    The fit minimizes squared residuals of log10(model) against log10(psd).
+    For ab_psd the model is linear in log-log space and the global optimum is
+    computed in closed form; guess is ignored.  For abc_psd, when guess is
+    None a seed is derived from the data (plateau level, half-power corner,
+    rolloff slope) and refined with a bounded least-squares solve.  For any
+    other callable the optimization is a local least-squares solve from
+    guess, so a reasonable guess matters.
 
     Parameters
     ----------
@@ -448,7 +488,7 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
     Returns
     -------
     optres
-        scipy.optimization.OptimizationResult
+        scipy.optimize.OptimizeResult
     coefficients
         ndarray of coefficients
 
@@ -462,23 +502,39 @@ def fit_psd(f, psd, callable=abc_psd, guess=None, return_='coefficients'):
         f = f[5:]
         psd = psd[5:]
 
+    D = np.log10(psd)
+
+    if callable is ab_psd:
+        a, b = _loglog_linear_psd_fit(f, psd)
+        if return_.lower() != 'coefficients':
+            resid = np.log10(ab_psd(f, a, b)) - D
+            return optimize.OptimizeResult(
+                x=np.asarray([a, b]), success=True, status=0, fun=resid,
+                cost=0.5 * (resid * resid).sum(), nfev=1,
+                message='closed-form log-log linear least squares',
+            )
+        return np.asarray([a, b])
+
     if guess is None:
-        initial_args = [1] * nparams
-        initial_args[0] = 100
+        if callable is abc_psd:
+            initial_args = _abc_psd_guess(f, psd)
+        else:
+            initial_args = [1] * nparams
+            initial_args[0] = 100
     else:
         initial_args = guess
 
-    D = np.log10(psd)
-    N = D.shape[0]
-
-    def optfcn(x):
+    def residuals(x):
         M = callable(f, *x)
-        M = np.log10(M)
-        cost_vec = (D - M) ** 2
-        cost = cost_vec.sum() / N
-        return cost
+        return np.log10(M) - D
 
-    optres = optimize.basinhopping(optfcn, initial_args, minimizer_kwargs=dict(method='L-BFGS-B'))
+    if callable is abc_psd:
+        # a, b, c are all positive for the Lorentzian model; positivity also
+        # keeps the model positive, so the log residuals stay finite
+        bounds = (0, np.inf)
+    else:
+        bounds = (-np.inf, np.inf)
+    optres = optimize.least_squares(residuals, initial_args, bounds=bounds)
     if return_.lower() != 'coefficients':
         return optres
     else:
