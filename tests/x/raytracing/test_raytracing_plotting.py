@@ -12,6 +12,7 @@ from matplotlib import pyplot as plt
 from prysm.x.raytracing.plotting import (
     lens_groups_from_surfaces,
     mirror_substrate_outline,
+    mirror_surface_outline,
     plot_chromatic_focal_shift,
     plot_distortion,
     plot_field_curvature,
@@ -541,6 +542,24 @@ def test_mirror_substrate_outline_bores_a_through_hole():
     assert np.all(np.abs(y[finite]) >= 3.0 - 1e-9)
     # both faces are present out at the rim: front (z=sag~0) and flat back z=5
     assert np.isclose(x[finite].max(), 5.0)
+
+
+def test_mirror_clear_radius_is_an_outer_zone_limit_not_a_hole():
+    # clear_radius caps the drawn optical face toward the rim; it must NOT
+    # punch a central hole (that is bounding inner_radius, see the test above)
+    surf = _reflecting_surface(Conic(1 / 200.0, 0.0), outer_radius=10.0)
+    result = _trace_result([surf])
+    x, y = mirror_surface_outline(
+        surf, result, points=41, radius=10.0, clear_radius=5.0,
+    )
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    drawn = np.isfinite(x)
+    # everything beyond the clear radius is masked, the center is drawn
+    assert np.all(np.abs(y[drawn]) <= 5.0 + 1e-9)
+    assert drawn[np.argmin(np.abs(y))]
+    # the rim region exists in the sampling but is masked
+    assert np.any(~drawn & (np.abs(y) > 5.0))
 
 
 def test_mirror_substrate_outline_can_center_on_ray_footprint():

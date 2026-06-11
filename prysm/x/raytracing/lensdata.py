@@ -1207,10 +1207,15 @@ class LensData:
         category is one of 'curvature', 'radius', 'conic', 'coefs',
         'thickness', 'tilt', 'decenter'.  surfaces selects rows: int,
         list of ints, slice, or 'all' (default).  Applying a category to a row
-        that lacks it is a silent no-op.
+        that lacks it is a silent no-op.  Varying the image-distance solved
+        thickness clears that solve first; pickup-driven dependencies remain
+        frozen.
 
         """
-        for slot in self._category_slots(category, surfaces):
+        slots = self._category_slots(category, surfaces)
+        if category == 'thickness':
+            self._clear_image_distance_solve_if_selected(slots)
+        for slot in slots:
             if slot not in self._dependent:
                 self.spec._free[slot] = True
         return self
@@ -1334,6 +1339,40 @@ class LensData:
         self._dependent.add(slot)
         self._invalidate()
         return self
+
+    def clear_image_distance_solve(self):
+        """Disable the active paraxial image-distance solve, if any.
+
+        The solved thickness becomes an ordinary fixed DOF again.  Call
+        ``vary('thickness', surfaces=...)`` afterward to make it an optimizer
+        variable.  If another dependency such as a pickup targets the same
+        slot, that dependency remains in force.
+
+        """
+        if self._image_solve is None:
+            return self
+        surface, _ = self._image_solve
+        slot = ('thickness', surface, 0)
+        self._image_solve = None
+        if slot not in self._pickup_target_slots():
+            self._dependent.discard(slot)
+        self._invalidate()
+        return self
+
+    def _pickup_target_slots(self):
+        """Return slots currently driven by pickup dependencies."""
+        out = set()
+        for targets, _, _, _ in self._pickups:
+            out.update(targets)
+        return out
+
+    def _clear_image_distance_solve_if_selected(self, slots):
+        """Clear the image-distance solve when its thickness is selected."""
+        if self._image_solve is None:
+            return
+        surface, _ = self._image_solve
+        if ('thickness', surface, 0) in slots:
+            self.clear_image_distance_solve()
 
     def _select_rows(self, surfaces):
         """Resolve a row selector to concrete row indices.

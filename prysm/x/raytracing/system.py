@@ -477,6 +477,11 @@ class OpticalSystem:
         self.lens.solve_image_distance(surface, wavelength=wvl)
         return self
 
+    def clear_image_distance_solve(self):
+        """Disable the underlying lens image-distance solve, if any."""
+        self.lens.clear_image_distance_solve()
+        return self
+
     # -- convenience plotting (lazy plotting import; cached grids) --
     def _fingerprint(self):
         """Hashable snapshot of the live metadata that drives a grid trace.

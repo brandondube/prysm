@@ -130,6 +130,24 @@ def test_image_solve_freezes_the_solved_gap():
     assert len(ld.lens.pack()) == 0  # the solved gap is frozen
 
 
+def test_clear_image_solve_releases_the_solved_gap():
+    ld = make_singlet(gap=10.0)
+    ld.solve_image_distance(surface=1)
+    assert len(ld.lens.pack()) == 0
+    ld.clear_image_distance_solve()
+    assert ld.lens._image_solve is None
+    ld.lens.vary('thickness', surfaces=1)
+    assert len(ld.lens.pack()) == 1
+
+
+def test_vary_thickness_clears_matching_image_solve():
+    ld = make_singlet(gap=10.0)
+    ld.solve_image_distance(surface=1)
+    ld.lens.vary('thickness', surfaces=1)
+    assert ld.lens._image_solve is None
+    assert len(ld.lens.pack()) == 1
+
+
 def test_image_solve_tracks_curvature_changes():
     ld = make_singlet(gap=10.0)
     ld.solve_image_distance()

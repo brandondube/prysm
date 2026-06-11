@@ -373,7 +373,41 @@ def _mirror_substrate_outline_from_phist(surf, phist, surface_index, backing,
 def mirror_surface_outline(surf, result, surface_index=0, *, points=100,
                            x='z', y='y', radius=None, clear_radius=None,
                            center=0.0):
-    """Return X/Y arrays for drawing one mirror optical surface."""
+    """Return X/Y arrays for drawing one mirror optical surface.
+
+    Parameters
+    ----------
+    surf : Surface
+        the reflective surface to outline.
+    result : RayTraceResult
+        a trace whose ray positions bound the drawn extent when radius and
+        the surface bounding geometry are both unset.
+    surface_index : int, optional
+        index of surf within the traced prescription, used to read the ray
+        positions at that surface.
+    points : int, optional
+        number of points sampled along the surface profile.
+    x, y : str, optional
+        position components mapped to the plot horizontal and vertical axes;
+        defaults to the traditional z-y meridional view.
+    radius : float, optional
+        outer half-diameter of the drawn profile; defaults to the surface
+        bounding outer_radius, else the traced ray extent.
+    clear_radius : float, optional
+        radius of the optical zone; the profile is masked beyond it, toward
+        the rim.  This is an outer limit on the drawn face, NOT a central
+        hole -- a hole (bored or perforated mirror) comes from the surface
+        bounding inner_radius.
+    center : float or str, optional
+        transverse center of the drawn extent; the string rays (also chief,
+        footprint) centers on the mean ray height at the surface.
+
+    Returns
+    -------
+    xx, yy : ndarray, ndarray
+        plot coordinates of the surface profile in global coordinates.
+
+    """
     phist = _to_np(result.P)
     x = x.lower()
     y = y.lower()
@@ -401,7 +435,44 @@ def mirror_substrate_outline(surf, result, surface_index=0, *, backing,
         index of surf within the traced prescription, used to read the ray
         positions at that surface.
     backing : mapping or str
-        substrate geometry.
+        substrate geometry.  A string is shorthand for a mapping with only
+        mode set.  Recognized keys:
+
+        mode (or kind) : str
+            surface (synonyms optical, optical_surface, none) draws only
+            the optical face; parallel (equal, equal_thickness; the
+            default) offsets the face by thickness into a uniform-thickness
+            shell; flat_parent (parent, parent_vertex, vertex) closes with
+            a flat back at the parent vertex sag plus thickness;
+            flat_aperture (aperture, near_uniform, uniform, hockey_puck)
+            closes with a back plane parallel to the surface tangent at the
+            reference coordinate.
+        thickness : float
+            substrate thickness, required for any mode that draws a back.
+        od_radius (or outer_radius, radius) : float
+            outer half-diameter of the substrate; defaults to the surface
+            bounding outer_radius, else the traced ray extent.
+        clear_radius : float
+            radius of the optical zone; the drawn face is masked beyond it,
+            toward the rim.  This is an outer limit on the face, NOT a
+            central hole.
+        inner_radius : float
+            radius of a central bore; defaults to the surface bounding
+            inner_radius.  A bored substrate is open through both faces and
+            renders as two disjoint closed loops, one per side of the bore.
+        side (or direction) : str or float
+            which side of the face carries the substrate; auto (the
+            default) infers it from the sag departure, or give a signed
+            number or one of rear, back, right, positive / front, left,
+            negative.
+        center (or centre, aperture_center, center_x, center_y) : float or str
+            transverse center of the drawn aperture; the string rays (also
+            chief, footprint) centers on the mean ray height at the
+            surface.
+        reference : str or float
+            for flat_aperture mode, where the back plane's slope is
+            referenced: aperture (the default), parent, local_vertex, or a
+            numeric transverse coordinate.
     points : int, optional
         number of points sampled along the surface profile.
     y : str, optional
@@ -429,7 +500,13 @@ def plot_mirror_surface(surf, result, surface_index=0, *, points=100,
                         center=0.0,
                         lw=1, ls='-', c='k', alpha=1, zorder=3,
                         fig=None, ax=None):
-    """Draw one mirror optical surface."""
+    """Draw one mirror optical surface.
+
+    See mirror_surface_outline for the geometry parameters; in particular
+    clear_radius is the outer radius of the drawn optical zone, not a
+    central hole (a hole comes from the surface bounding inner_radius).
+
+    """
     fig, ax = share_fig_ax(fig, ax)
     xx, yy = mirror_surface_outline(
         surf, result, surface_index, points=points, y=y, radius=radius,
@@ -608,7 +685,10 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
     index_atol : float, optional
         Absolute tolerance for comparing material index to ambient_index.
     mirror_backing : mapping, sequence, str, optional
-        substrate geometry for reflective surfaces.
+        substrate geometry for reflective surfaces; see
+        mirror_substrate_outline for the schema.  A mapping of config keys
+        applies to every mirror; a mapping keyed by surface index, or a
+        sequence ordered by mirror, gives per-mirror geometry.
     points : int, optional
         the number of points used in making the curve for the surface
     lw : float, optional
@@ -630,7 +710,19 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
     ax : matplotlib.axes.Axis
         An axis object
     lens_edges : mapping or sequence, optional
-        edge geometry for refracting lens groups.
+        edge geometry for refracting lens groups, keyed by the group's first
+        surface index (mapping) or ordered by group (sequence); defaults to
+        the edge attribute carried by each group's first surface.
+        Recognized keys: od_radius (or outer_radius, radius) sets the
+        element outer half-diameter; clear_radius -- or the per-face
+        clear_radius_front, clear_radius_rear, and clear_radius_surface_N
+        for the Nth interior surface of a cemented group -- is the radius
+        of that face's optical zone, masking the drawn face beyond it
+        toward the rim (an outer limit, NOT a central hole); features is a
+        list of edge feature mappings (square_cut, chamfer, seat) applied
+        to the rim walls.  To cap a face's optical zone with a closed flat
+        land out to the OD, set bounding outer_radius on that surface
+        instead of clear_radius.
 
     Returns
     -------
