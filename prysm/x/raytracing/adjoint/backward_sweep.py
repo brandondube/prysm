@@ -218,7 +218,7 @@ def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
 
         # --- OPL segment: depends on outgoing P[j+1] (+dseg) and incoming
         #     P[j] (-dseg); L_bar is shared across segments.
-        n_bar, dseg_bar = adj_opl_segment(si.n_pre, si.seg, L_bar)
+        n_bar, dseg_bar = adj_opl_segment(si.n_pre, si.seg, L_bar, si.S_in)
         P_bar_out = P_bar + dseg_bar          # cotangent of dPjp1
         P_in_from_opl = -dseg_bar             # carry onto incoming position
 

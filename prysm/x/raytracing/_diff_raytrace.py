@@ -158,12 +158,18 @@ def d_transform_global(Reff, Q, Q_loc, Sprime, dPj, dSprime, Qdot, Rdot):
     return dPjp1, dSjp1
 
 
-def d_opl_segment(n_pre, n_pre_dot, seg, dseg):
-    """Differential of an OPL segment L = n_pre ||seg||.
+def d_opl_segment(n_pre, n_pre_dot, seg, dseg, S=None):
+    """Differential of an OPL segment L = n_pre sign ||seg||.
 
-    dL = n_pre_dot ||seg|| + n_pre (seg . dseg) / ||seg||.
+    dL = n_pre_dot sign ||seg|| + n_pre sign (seg . dseg) / ||seg||.
+
+    S, when given, is the nominal propagation direction along the segment;
+    sign(seg . S) matches the signed segment of Surface.interact (a virtual
+    backward segment subtracts path).  S=None assumes forward propagation.
     """
     seg_len = np.sqrt(row_dot(seg, seg))
+    if S is not None:
+        seg_len = np.sign(row_dot(seg, S)) * seg_len
     # zero-length segment (launch on the surface): numerator seg . dseg is
     # zero too; guard the denominator so the tangent is 0, not 0/0.
     safe_len = np.where(seg_len == 0.0, 1.0, seg_len)
@@ -700,7 +706,7 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None):
         # Step V: OPL segment (index preceding surface j is nj / nj_dot)
         seg = Pj_cur - Pj_prev
         dseg = dPjp1 - Pdot_prev
-        Ldot_hist[j + 1] = d_opl_segment(nj, nj_dot, seg, dseg)
+        Ldot_hist[j + 1] = d_opl_segment(nj, nj_dot, seg, dseg, trace.S[j])
 
         Pdot_hist[j + 1] = dPjp1
         Sdot_hist[j + 1] = dSjp1
