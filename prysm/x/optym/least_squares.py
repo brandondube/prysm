@@ -110,15 +110,7 @@ class _ResidualProblemView:
         return np.asarray(self.problem.residuals(x), dtype=float).ravel()
 
     def jacobian(self, x, f0=None, step=1e-6):
-        """Residual Jacobian at x, plus whether finite differences ran.
-
-        A problem may provide its own residual_jacobian(x) (an analytic or
-        adjoint Jacobian); when present and it returns non-None, that is used
-        directly.  Otherwise central finite differences of residuals are
-        taken, which costs 2 * x.size residual evaluations.  Returns
-        (jacobian, used_fd) so the caller can keep an honest nfev count.
-
-        """
+        """Return (J, used_fd), using problem.residual_jacobian when present."""
         analytic = getattr(self.problem, 'residual_jacobian', None)
         if callable(analytic):
             J = analytic(x)
@@ -446,12 +438,8 @@ class DampedLeastSquares:
     Parameters
     ----------
     problem : object
-        Object with a residuals(x) method.  When it also provides a
-        residual_jacobian(x) method returning the residual Jacobian (or None
-        to decline), that is used in place of finite differences for the
-        linearization -- one analytic Jacobian instead of 2 * n_params
-        residual evaluations per iteration.  Constraint Jacobians always use
-        finite differences.
+        Object with residuals(x).  Optional residual_jacobian(x) supplies the
+        residual linearization; constraints still use finite differences.
     x0 : ndarray, optional
         Starting vector.  If omitted, problem.x0() is used.
     equality_constraints : callable or sequence of callables, optional

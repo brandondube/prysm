@@ -150,8 +150,7 @@ def test_dls_uses_problem_residual_jacobian():
     assert result.success
     np.testing.assert_allclose(result.x, [3.0, 4.0], atol=1e-12)
     assert problem.n_jac >= 1
-    # no FD bookkeeping: nfev counts only the residual evals of the line
-    # search and acceptance tests, never 2 * n per linearization
+    # nfev excludes the skipped 2*n FD stencil.
     assert result.nfev < result.njev * 2 * 2 + result.njev + 2
 
 
@@ -164,7 +163,7 @@ def test_dls_falls_back_to_fd_when_jacobian_declines():
                               damping=0.0, maxiter=3)
     assert r1.success
     np.testing.assert_allclose(r1.x, r2.x, atol=1e-12)
-    # FD ran: per-iteration nfev includes the 2 * n stencil
+    # FD ran: nfev includes the 2*n stencil.
     assert r1.nfev > r2.nit * 2  # at least the stencils
     assert r1.nfev == r2.nfev
 

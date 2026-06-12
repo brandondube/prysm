@@ -6,36 +6,12 @@ from prysm.mathops import np, row_dot
 # ---------- 1.1 OPL segment -------------------------------------------------
 
 def adj_opl_segment(n_pre, seg, L_bar, S=None):
-    """Adjoint of d_opl_segment: dL = ndot s + n (seg . dseg)/s, s signed.
-
-    Parameters
-    ----------
-    n_pre : float
-        index of the medium preceding the surface (nominal).
-    seg : ndarray, (N, 3)
-        nominal segment vector P_{j+1} - P_j.
-    L_bar : ndarray, (N,)
-        cotangent of the segment OPL.
-    S : ndarray, (N, 3), optional
-        nominal propagation direction along the segment; sign(seg . S)
-        matches the signed segment of Surface.interact.  None assumes
-        forward propagation.
-
-    Returns
-    -------
-    n_bar : float
-        cotangent accumulated onto the preceding-index tangent.
-    dseg_bar : ndarray, (N, 3)
-        cotangent of the segment vector (fans into P_bar at both endpoints).
-
-    """
+    """Adjoint of signed OPL segment; returns cotangents for n_pre and seg."""
     seg_len = np.sqrt(row_dot(seg, seg))
     if S is not None:
         seg_len = np.sign(row_dot(seg, S)) * seg_len
     n_bar = np.sum(L_bar * seg_len)
-    # a zero-length segment (bundle launched on the surface itself) has a
-    # zero numerator as well; guard the denominator so 0/0 does not poison
-    # the sweep.  The cotangent of such a segment is exactly zero.
+    # Launch-on-surface segment: numerator is zero too.
     seg_len = np.where(seg_len == 0.0, 1.0, seg_len)
     dseg_bar = L_bar[:, None] * n_pre * seg / seg_len[:, None]
     return n_bar, dseg_bar

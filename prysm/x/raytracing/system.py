@@ -24,8 +24,7 @@ _APERTURE_MODES = (EPD, FNO_IMAGE, FNO_OBJECT, NA_IMAGE, NA_OBJECT)
 _OBJECT_SPACE_MODES = (FNO_OBJECT, NA_OBJECT)
 _POWER_EPS = 1e-30
 
-# cache sentinel: distinguishes an unresolved key from a resolved None (an exit
-# pupil at infinity / telecentric, which the EIC closing reads as curvature 0).
+# cache miss sentinel; cached None is a valid telecentric exit-pupil result.
 _DERIVED_MISS = object()
 
 
@@ -218,26 +217,12 @@ def _object_index(system, wvl):
 
 
 class FieldSet:
-    """An ordered set of field points with a tabular repr.
-
-    Wraps a list of launch.Field; iterable, sized, and indexable so it behaves
-    like the bare field list the analysis layer iterates.
-
-    """
+    """Ordered field points with a tabular repr."""
 
     __slots__ = ('fields',)
 
     def __init__(self, fields=None):
-        """Initialize a field set.
-
-        Parameters
-        ----------
-        fields : iterable, optional
-            field specs.  Each entry is coerced to a Field: a Field passes
-            through, a scalar becomes an on-axis-x y field, and a length-2
-            sequence becomes (x, y).  None gives an empty set.
-
-        """
+        """Initialize a field set."""
         self.fields = _coerce_fields(fields)
 
     def __len__(self):
@@ -270,20 +255,7 @@ class FieldSet:
 
 
 class OpticalSystem:
-    """System-level handle wrapping a LensData spine.
-
-    Owns the aperture (an ApertureSpec), the fields (a FieldSet), the
-    wavelengths and their weights, the integer reference-wavelength index, the
-    length unit, provenance, and the integer stop index, and holds the LensData
-    that carries the surfaces.
-
-    Duck-types as the compiled surface sequence: len/iter/getitem, to_surfaces,
-    rows, and surfaces all delegate to the lens, so the paraxial / analysis /
-    launch layer consumes an OpticalSystem exactly as a surface sequence while
-    reading system metadata off it.  Row editing and the optimizer free vector
-    are NOT delegated -- edit surfaces / drive the optimizer through os.lens.
-
-    """
+    """System metadata around a LensData surface spine."""
 
     __slots__ = ('lens', 'aperture', 'fields', 'wavelengths', 'weights',
                  'reference', 'unit', 'title', 'stop_index',
@@ -294,39 +266,7 @@ class OpticalSystem:
                  weights=None, reference=None, unit=None, title=None,
                  stop_index=None, ray_aiming='paraxial', source_path=None,
                  source_format=None, extras=None):
-        """Initialize a system over a lens.
-
-        Parameters
-        ----------
-        lens : LensData
-            the surface spine; the system delegates surface access to it.
-        aperture : ApertureSpec or float, optional
-            the system aperture.  A bare float is taken as an entrance-pupil
-            diameter.
-        fields : FieldSet or iterable, optional
-            field points; a bare iterable is coerced to a FieldSet.
-        wavelengths : iterable of float, optional
-            wavelengths in micrometers.
-        weights : iterable of float, optional
-            spectral weights parallel to wavelengths; defaults to all ones.
-            A length mismatch raises ValueError.
-        reference : int, optional
-            index into wavelengths of the reference wavelength; defaults to 0.
-            Read the resolved micron value back through reference_wavelength.
-        unit : str, optional
-            length unit label (e.g. mm) carried for listings and IO.
-        title : str, optional
-            free-text system title.
-        stop_index : int, optional
-            row index of the aperture stop.
-        ray_aiming : str, optional
-            paraxial (default) or real stop aiming.
-        source_path, source_format : optional
-            provenance of an imported system.
-        extras : mapping, optional
-            unparsed import metadata, copied onto the system.
-
-        """
+        """Initialize a system over a lens."""
         self.lens = lens
         if aperture is not None and not isinstance(aperture, ApertureSpec):
             aperture = ApertureSpec.epd(aperture)
@@ -353,12 +293,9 @@ class OpticalSystem:
         self.source_path = source_path
         self.source_format = source_format
         self.extras = dict(extras) if extras else {}
-        # version-keyed cache of derived first-order quantities (e.g. the exit
-        # pupil); invalidated implicitly via self.lens._version in the key.
+        # Version-keyed derived quantities.
         self._derived = {}
-        # cache of analysis grids for the convenience plot methods, keyed by a
-        # live metadata fingerprint (see _fingerprint) so it invalidates on any
-        # system change -- reassignment or in-place mutation.
+        # Analysis grids for convenience plot methods.
         self._trace_cache = {}
 
     # -- surface-sequence delegation (duck-type as the compiled surfaces) --
@@ -392,23 +329,13 @@ class OpticalSystem:
     # -- metadata resolvers (moved off LensData) --
     @property
     def reference_wavelength(self):
-        """Resolved reference wavelength in microns (wavelengths[reference]).
-
-        Read-only: the stored handle is the integer reference index; this
-        returns the micron value it points at, or None when no wavelengths are
-        set.
-        """
+        """Resolved reference wavelength in microns, or None."""
         if len(self.wavelengths) == 0:
             return None
         return float(self.wavelengths[self.reference])
 
     def wavelength(self, wavelength=None):
-        """Resolve a wavelength to microns.
-
-        None selects the reference wavelength (falling back to 0.6328 microns
-        when no wavelengths are set); any other value is taken as a literal
-        micron value.
-        """
+        """Resolve a wavelength to microns; None selects the reference."""
         if wavelength is None:
             ref = self.reference_wavelength
             return 0.6328 if ref is None else ref
@@ -426,22 +353,11 @@ class OpticalSystem:
 
     @property
     def epd(self):
-        """Equivalent entrance-pupil diameter, or None when no aperture is set.
-
-        A first-order readout of the aperture definition (see
-        ApertureSpec.entrance_pupil_diameter).
-        """
+        """Equivalent entrance-pupil diameter, or None."""
         return self.entrance_pupil_diameter()
 
     def entrance_pupil_diameter(self, wvl=None):
-        """Equivalent entrance-pupil diameter at wvl, cached on the system.
-
-        Wraps ApertureSpec.entrance_pupil_diameter with the version-stamped
-        memo shared by first_order and entrance_pupil_z; the aperture mode and
-        value are part of the key so reassigning self.aperture cannot return a
-        stale diameter.  Returns None when no aperture is set.
-
-        """
+        """Equivalent entrance-pupil diameter at wvl, cached on the system."""
         if self.aperture is None:
             return None
         wvl = self.wavelength(wvl)
@@ -460,8 +376,7 @@ class OpticalSystem:
         if not rows:
             return True
         first = rows[0]
-        # an object surface is the leading eval row carrying object-space gap;
-        # a finite object has finite leading thickness.
+        # Leading eval row with finite thickness is a finite-conjugate object.
         thi = getattr(first, 'thickness', None)
         from .spencer_and_murty import STYPE_EVAL
         from .surfaces import _map_stype
@@ -473,15 +388,7 @@ class OpticalSystem:
 
     # -- first-order + solves --
     def first_order(self, wvl=None, *, epd=None, stop_index=None):
-        """Paraxial first-order properties, cached on the system.
-
-        Delegates to paraxial.first_order and memoizes the result keyed by the
-        lens edit version, wavelength, epd, and stop index, so the repeated
-        paraxial solves inside grid analyses and optimizer iterations collapse
-        to one per unique configuration.  Any lens edit bumps lens._version,
-        which is a cache miss.
-
-        """
+        """Paraxial first-order properties, cached on the system."""
         from .paraxial import first_order
         wvl = self.wavelength(wvl)
         resolved_stop = stop_index if stop_index is not None else self.stop_index
@@ -494,21 +401,7 @@ class OpticalSystem:
         return cached
 
     def entrance_pupil_z(self, wvl=None, stop_index=None):
-        """Lab-frame z of the paraxial entrance pupil, cached on the system.
-
-        Wraps paraxial.entrance_pupil_z with the same version-stamped memo as
-        first_order; launch consults this method when the prescription is an
-        OpticalSystem so a field or wavelength grid (or an optimizer
-        iteration) resolves the entrance pupil once per wavelength instead of
-        once per bundle.
-
-        Returns
-        -------
-        float or None
-            lab-frame z of the entrance pupil; None when undefined (no stop,
-            or telecentric in object space).
-
-        """
+        """Lab-frame z of the paraxial entrance pupil, cached on the system."""
         from .paraxial import entrance_pupil_z
         wvl = self.wavelength(wvl)
         resolved_stop = stop_index if stop_index is not None else self.stop_index
@@ -521,28 +414,7 @@ class OpticalSystem:
 
     def exit_pupil(self, wvl=None, field=None, *, stop_index=None, epd=None,
                    axis_point=None, axis_dir=None):
-        """Resolved exit-pupil reference point P_xp, cached on the system.
-
-        Wraps analysis.resolve_exit_pupil and memoizes the result keyed by the
-        lens edit version, wavelength, field, and stop index, so a grid
-        analysis resolves the (field-independent, paraxial) exit pupil once per
-        wavelength instead of per field/wavelength/axis.  The cache is lazy and
-        explicit -- it computes on first access and never recomputes silently;
-        an edit through self.lens bumps lens._version (a cache miss), and
-        stop_index is part of the key so reassigning self.stop_index can't
-        return a stale pupil.
-
-        Parameters mirror analysis.resolve_exit_pupil; wvl and field default to
-        the system reference wavelength and on-axis field.
-
-        Returns
-        -------
-        P_xp : ndarray, shape (3,), or None
-            exit-pupil reference point, ready to pass to wavefront(P_xp=...).
-            None when the exit pupil is at infinity (image-space telecentric),
-            which the EIC closing reads as its curvature kappa = 0 limit.
-
-        """
+        """Resolved exit-pupil reference point P_xp, cached on the system."""
         from .analysis import resolve_exit_pupil
         wvl = self.wavelength(wvl)
         resolved_stop = stop_index if stop_index is not None else self.stop_index
@@ -581,36 +453,7 @@ class OpticalSystem:
         return self
 
     def set_vignetting(self, fields=None, wavelength=None, *, tol=1e-3):
-        """Solve vignetting factors against the real apertures and store them.
-
-        Runs launch.solve_vignetting per field -- a real-ray bisection of one
-        edge ray per pupil side through this system's own apertures and ray
-        aiming -- and writes the factors onto each Field.  With the factors
-        set, every consumer (layouts, fans, spots) launches its bundles
-        compressed onto the transmitted pupil through the ordinary vignetting
-        path; the trace itself stays deterministic.
-
-        Factors are referenced to the nominal pupil: pre-existing factors on a
-        field (hand-typed or imported) are overwritten, not composed with.
-        Sides whose nominal rim ray already transmits get a factor of exactly
-        0, and an entirely unvignetted field collapses to no stored factors.
-
-        Parameters
-        ----------
-        fields : iterable of Field or int, optional
-            fields to solve; an int indexes the system field list.  Defaults
-            to all system fields.  Field objects are mutated in place.
-        wavelength : float, optional
-            wavelength in microns; defaults to the reference wavelength.
-        tol : float, optional
-            bisection tolerance on the normalized pupil scale.
-
-        Returns
-        -------
-        OpticalSystem
-            self, for chaining.
-
-        """
+        """Solve per-field vignetting factors against the real apertures."""
         from .launch import solve_vignetting, _normalize_vignetting
         wvl = self.wavelength(wavelength)
         if fields is None:
@@ -624,12 +467,7 @@ class OpticalSystem:
 
     # -- convenience plotting (lazy plotting import; cached grids) --
     def _fingerprint(self):
-        """Hashable snapshot of the live metadata that drives a grid trace.
-
-        Read fresh on every call so the trace cache invalidates on any change
-        -- a slot reassignment OR an in-place mutation (appending to fields,
-        editing a wavelength) -- which a bare version counter would miss.
-        """
+        """Hashable snapshot of metadata that drives a grid trace."""
         aperture = self.aperture
         ap = None if aperture is None else (aperture.mode, aperture.value)
         fields = tuple(
@@ -643,17 +481,8 @@ class OpticalSystem:
                 self.reference, self.stop_index, self.ray_aiming)
 
     def _cached_grid(self, kind, fn, kwargs):
-        """Return fn(self, **kwargs), memoized on the live fingerprint.
-
-        kwargs are the data-function arguments; their repr keys the cache so a
-        Sampling or an explicit field / wavelength override still produces a
-        stable, hashable key.  Only the data grid is cached -- the convenience
-        methods regenerate the figure on every call.
-        """
-        # settle any lazy lens dependencies first: an image-distance solve
-        # writes a gap on the first compile, bumping lens._version mid-trace, so
-        # resolving it here lets the fingerprint read the settled version and
-        # repeated calls hit instead of re-tracing.
+        """Return fn(self, **kwargs), memoized on the live fingerprint."""
+        # Settle lazy lens dependencies before fingerprinting.
         self.lens.to_surfaces()
         key = (self._fingerprint(), kind, repr(tuple(sorted(kwargs.items()))))
         cache = self._trace_cache
@@ -662,33 +491,13 @@ class OpticalSystem:
         return cache[key]
 
     def layout_2d(self, **kwargs):
-        """Draw a 2D layout of the system: the optics plus a ray fan per field.
-
-        A thin delegate to plotting.layout (see it for parameters); imports the
-        plotting layer lazily so matplotlib stays an optional dependency.
-
-        Returns
-        -------
-        (matplotlib.figure.Figure, matplotlib.axes.Axis)
-
-        """
+        """Draw a 2D layout of the optics and rays."""
         from . import plotting
         return plotting.layout(self, **kwargs)
 
     def plot_spots(self, *, fields=None, wavelengths=None, sampling=None,
                    epd=None, reference='centroid', **plot_kwargs):
-        """Spot diagrams for the system fields and wavelengths.
-
-        Runs analysis.spot_diagrams (cached on the system fingerprint) and draws
-        it with plotting.plot_spot_diagrams.  The data keywords (fields,
-        wavelengths, sampling, epd, reference) size the grid; any remaining
-        keywords forward to the plotter.
-
-        Returns
-        -------
-        (matplotlib.figure.Figure, ndarray of matplotlib.axes.Axes)
-
-        """
+        """Spot diagrams for the system fields and wavelengths."""
         from . import plotting
         from .analysis import spot_diagrams
         grid = self._cached_grid('spots', spot_diagrams, dict(
@@ -699,17 +508,7 @@ class OpticalSystem:
     def plot_ray_fans(self, *, fields=None, wavelengths=None, nrays=21,
                       epd=None, distribution='uniform', reference='chief',
                       **plot_kwargs):
-        """Transverse ray-aberration fans for the system.
-
-        Runs analysis.ray_aberration_fans (cached) and draws it with
-        plotting.plot_ray_fans; data keywords size the grid, the rest forward to
-        the plotter.
-
-        Returns
-        -------
-        (matplotlib.figure.Figure, ndarray of matplotlib.axes.Axes)
-
-        """
+        """Transverse ray-aberration fans for the system."""
         from . import plotting
         from .analysis import ray_aberration_fans
         grid = self._cached_grid('ray_fans', ray_aberration_fans, dict(
@@ -720,16 +519,7 @@ class OpticalSystem:
     def plot_opd_fans(self, *, fields=None, wavelengths=None, nrays=21,
                       epd=None, distribution='uniform', stop_index=None,
                       output='waves', **plot_kwargs):
-        """Wavefront (OPD) fans for the system.
-
-        Runs analysis.opd_fans (cached) and draws it with plotting.plot_opd_fans;
-        data keywords size the grid, the rest forward to the plotter.
-
-        Returns
-        -------
-        (matplotlib.figure.Figure, ndarray of matplotlib.axes.Axes)
-
-        """
+        """Wavefront OPD fans for the system."""
         from . import plotting
         from .analysis import opd_fans
         grid = self._cached_grid('opd_fans', opd_fans, dict(
@@ -740,18 +530,7 @@ class OpticalSystem:
     def plot_field_curvature(self, *, fields=None, wavelength=None, epd=None,
                              marginal_fraction=1e-3, samples=101,
                              **plot_kwargs):
-        """Field-curvature (x/y fan focus shift) curves for the system.
-
-        Runs analysis.field_curvature (cached on the system fingerprint) and
-        draws it with plotting.plot_field_curvature; data keywords size the
-        evaluation, the rest forward to the plotter.  When fields is omitted
-        the curves sweep the system field span with samples points.
-
-        Returns
-        -------
-        (matplotlib.figure.Figure, matplotlib.axes.Axis)
-
-        """
+        """Field-curvature curves for the system."""
         from . import plotting
         from .analysis import field_curvature
         grid = self._cached_grid('field_curvature', field_curvature, dict(
@@ -763,18 +542,7 @@ class OpticalSystem:
     def plot_distortion(self, *, fields=None, wavelength=None, epd=None,
                         distortion_type='f-tan', pupil_z=None, samples=101,
                         **plot_kwargs):
-        """Percent-distortion curve for the system.
-
-        Runs analysis.distortion (cached) and draws it with
-        plotting.plot_distortion; data keywords size the evaluation, the rest
-        forward to the plotter.  When fields is omitted the curve sweeps the
-        system field span with samples points.
-
-        Returns
-        -------
-        (matplotlib.figure.Figure, matplotlib.axes.Axis)
-
-        """
+        """Percent-distortion curve for the system."""
         from . import plotting
         from .analysis import distortion
         grid = self._cached_grid('distortion', distortion, dict(
@@ -788,18 +556,7 @@ class OpticalSystem:
                                    reference_wavelength=None, focus='best',
                                    epd=None, field=None, sampling=None,
                                    samples=101, **plot_kwargs):
-        """Chromatic focal-shift curve for the system.
-
-        Runs analysis.chromatic_focal_shift (cached) and draws it with
-        plotting.plot_chromatic_focal_shift; data keywords size the wavelength
-        sweep, the rest forward to the plotter.  When wavelengths is omitted
-        the sweep spans the system wavelength set with samples points.
-
-        Returns
-        -------
-        (matplotlib.figure.Figure, matplotlib.axes.Axis)
-
-        """
+        """Chromatic focal-shift curve for the system."""
         from . import plotting
         from .analysis import chromatic_focal_shift
         data = self._cached_grid(
@@ -811,18 +568,7 @@ class OpticalSystem:
             self, result=data, **plot_kwargs)
 
     def plot_axial_color(self, *, wavelengths=None, **plot_kwargs):
-        """Paraxial focus shift over the system wavelength set (axial color).
-
-        Runs analysis.axial_color (cached) and draws it with
-        plotting.plot_axial_color; wavelengths sizes the evaluation, the rest
-        (including reference_wavelength) forward to the plotter.  See
-        plot_chromatic_focal_shift for a smooth real-ray sweep.
-
-        Returns
-        -------
-        (matplotlib.figure.Figure, matplotlib.axes.Axis)
-
-        """
+        """Paraxial focus shift over the wavelength set."""
         from . import plotting
         from .analysis import axial_color
         data = self._cached_grid('axial_color', axial_color, dict(
@@ -832,19 +578,7 @@ class OpticalSystem:
 
     def plot_lateral_color(self, *, fields=None, wavelengths=None, epd=None,
                            samples=101, **plot_kwargs):
-        """Lateral-color curves for the system, one per non-reference wavelength.
-
-        Runs analysis.lateral_color (cached) and draws it with
-        plotting.plot_lateral_color; data keywords size the chief-ray grid, the
-        rest (including reference_wavelength) forward to the plotter.  When
-        fields is omitted the curves sweep the system field span with samples
-        points.
-
-        Returns
-        -------
-        (matplotlib.figure.Figure, matplotlib.axes.Axis)
-
-        """
+        """Lateral-color curves for non-reference wavelengths."""
         from . import plotting
         from .analysis import lateral_color
         data = self._cached_grid('lateral_color', lateral_color, dict(
@@ -856,19 +590,7 @@ class OpticalSystem:
     def plot_full_field(self, *, metric='rms spot', samples=15,
                         max_field=None, wavelengths=None, sampling=None,
                         epd=None, stop_index=None, **plot_kwargs):
-        """Full-field display: a 2D metric map over the system field disc.
-
-        Runs analysis.full_field (cached) and draws it with
-        plotting.plot_full_field; data keywords size the field grid and the
-        per-point evaluation, the rest forward to the plotter.  See
-        analysis.full_field for the available metrics ('rms spot', 'rms wfe',
-        'distortion', 'lateral color').
-
-        Returns
-        -------
-        (matplotlib.figure.Figure, matplotlib.axes.Axis)
-
-        """
+        """2D metric map over the system field disc."""
         from . import plotting
         from .analysis import full_field
         grid = self._cached_grid('full_field', full_field, dict(
@@ -877,43 +599,17 @@ class OpticalSystem:
             stop_index=stop_index))
         return plotting.plot_full_field(grid, **plot_kwargs)
 
-    # -- optimization sugar (lazy design import, mirroring the plotting
-    #    delegates; the free vector itself stays a LensData concern) --
+    # -- optimization sugar --
     def problem(self, goal='spot', *, sampling=None, fields=None,
                 wavelengths=None, constraints=None):
-        """Assemble a design.Problem over this system's free vector.
-
-        A thin delegate to design.build_problem (see it for parameters): goal
-        items fan out over the system fields x wavelengths with the system
-        spectral weights, and constraints route by their bounds (target= for
-        an equality, min=/max= for inequalities).  Mark DOFs first with
-        self.lens.vary(...).  Returns a real Problem -- inspect or extend its
-        operands before solving.
-
-        Returns
-        -------
-        design.Problem
-
-        """
+        """Assemble a design.Problem over this system's free vector."""
         from .design import build_problem
         return build_problem(self, goal, sampling=sampling, fields=fields,
                              wavelengths=wavelengths, constraints=constraints)
 
     def optimize(self, goal='spot', *, sampling=None, fields=None,
                  wavelengths=None, constraints=None, **solve_kwargs):
-        """Build and solve an optimization problem in one shot.
-
-        The Code V aut; ...; go analogue: optimize('spot',
-        constraints=[EFL(target=100), TotalTrack(max=100)]).  Data keywords
-        size the problem (see problem); the rest forward to Problem.solve
-        (maxiter, damping, ...).  The solve scatters the result into the lens,
-        so the system is updated in place.
-
-        Returns
-        -------
-        DampedLeastSquaresResult
-
-        """
+        """Build and solve an optimization problem in one shot."""
         prob = self.problem(goal, sampling=sampling, fields=fields,
                             wavelengths=wavelengths, constraints=constraints)
         return prob.solve(**solve_kwargs)

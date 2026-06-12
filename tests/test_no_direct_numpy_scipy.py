@@ -35,6 +35,7 @@ ALLOWED = {
     # plotting wants matplotlib-compatible real-numpy arrays.
     'plotting.py': {'numpy'},
     'x/raytracing/plotting.py': {'numpy'},
+    'x/coatings/plotting.py': {'numpy'},
     # scipy.spatial.Delaunay has no cupy/torch equivalent; geometry.py is
     # host-only by design.
     'geometry.py': {'scipy'},  # `from scipy import spatial`

@@ -11,8 +11,7 @@ from ._meta import system_epd, object_space_index, system_stop_index
 
 
 def _entrance_pupil_z(prescription, wavelength):
-    """Entrance-pupil z, via the prescription's version-stamped cache when it
-    carries one (OpticalSystem) and the bare paraxial solve otherwise."""
+    """Entrance-pupil z, using a prescription cache when present."""
     f = getattr(prescription, 'entrance_pupil_z', None)
     if callable(f):
         return f(wavelength)
@@ -94,15 +93,7 @@ class Field:
 
 
 def _normalize_vignetting(vignetting):
-    """Normalize per-field Code V vignetting factors.
-
-    Factors are stored verbatim: each scales its side of the launched pupil
-    by (1 - factor), so negative values (Code V pupil expansion, common after
-    real-ray VUY optimization) are meaningful and tiny optimizer-noise values
-    are harmless.  A factor of 1 or more collapses or flips its side of the
-    pupil and is rejected.
-
-    """
+    """Normalize per-field Code V vignetting factors."""
     if vignetting is None:
         return None
     keys = ('vux', 'vlx', 'vuy', 'vly')
@@ -131,38 +122,12 @@ class Sampling:
     __slots__ = ('kind', 'opts')
 
     def __init__(self, kind, **opts):
-        """Initialize a pupil sampling pattern.
-
-        Prefer the classmethod factories (chief, points, fan, cross, rect, hex, spiral)
-        over calling this directly; they name the per-pattern options.
-
-        Parameters
-        ----------
-        kind : str
-            pattern name: 'chief', 'points', 'fan', 'cross', 'rect', 'hex', or 'spiral'.
-        **opts
-            pattern-specific options (e.g. n, nrings, distribution,
-            obscuration) consumed by build.
-
-        """
+        """Initialize a pupil sampling pattern."""
         self.kind = kind
         self.opts = opts
 
     def build(self, extent):
-        """Pupil sample coordinates scaled to the given extent.
-
-        Parameters
-        ----------
-        extent : float
-            outer half-extent of the pattern (typically EPD/2), in the same
-            length units as the pupil.
-
-        Returns
-        -------
-        ndarray
-            shape (N, 2) array of pupil (x, y) sample coordinates.
-
-        """
+        """Pupil sample coordinates scaled to the given extent."""
         kind = self.kind
         if kind == 'chief':
             return np.zeros((1, 2), dtype=config.precision)
@@ -205,10 +170,7 @@ class Sampling:
         else:
             raise ValueError(f'unknown sampling kind {kind!r}')
 
-        # a central obscuration (the shadow of a Cassegrain secondary, a
-        # spider hub, ...) is a pupil-sampling mask: it removes the real rays
-        # behind it but leaves reference rays (chief, paraxial marginals) to
-        # the analysis layer.  obscuration is the linear inner-radius ratio.
+        # Obscuration is the linear inner-radius ratio.
         obscuration = self.opts.get('obscuration')
         if obscuration:
             r = np.hypot(xy[:, 0], xy[:, 1])
@@ -222,25 +184,12 @@ class Sampling:
 
     @classmethod
     def points(cls, xy):
-        """Explicit pupil samples.
-
-        xy is a shape (N, 2) array of normalized pupil coordinates (rim at
-        radius 1); build scales them by the pupil extent like any other
-        pattern.  Useful for custom sampling layouts and for re-launching a
-        pattern with per-sample adjustments.
-
-        """
+        """Explicit normalized pupil samples."""
         return cls('points', xy=xy)
 
     @classmethod
     def fan(cls, n=11, axis='y', distribution='uniform', obscuration=None):
-        """A 1D fan of n rays along axis ('x' or 'y').
-
-        distribution selects the radial spacing of the fan samples.
-        obscuration, if given, is the linear central-obscuration ratio
-        (inner radius / outer extent); samples inside it are dropped.
-
-        """
+        """A 1D fan of n rays along axis ('x' or 'y')."""
         if axis == 'y':
             azi = 90
         elif axis == 'x':
@@ -252,35 +201,19 @@ class Sampling:
 
     @classmethod
     def cross(cls, n=11, distribution='uniform', obscuration=None):
-        """An x and y fan, 2*n rays total (the central ray appears twice).
-
-        obscuration, if given, is the linear central-obscuration ratio
-        (inner radius / outer extent); samples inside it are dropped.
-
-        """
+        """An x and y fan, 2*n rays total."""
         return cls('cross', n=int(n), distribution=distribution,
                    obscuration=obscuration)
 
     @classmethod
     def rect(cls, n=21, distribution='uniform', obscuration=None):
-        """A rectangular n by n grid of rays.
-
-        obscuration, if given, is the linear central-obscuration ratio
-        (inner radius / outer extent); samples inside it are dropped.
-
-        """
+        """A rectangular n by n grid of rays."""
         return cls('rect', n=int(n), distribution=distribution,
                    obscuration=obscuration)
 
     @classmethod
     def hex(cls, nrings=5, spacing=None, obscuration=None):
-        """A hexapolar grid of nrings concentric rings.
-
-        obscuration, if given, is the linear central-obscuration ratio
-        (inner radius / outer extent); samples inside it are dropped, giving
-        the annular pupil of an obstructed (e.g. Cassegrain) system.
-
-        """
+        """A hexapolar grid of nrings concentric rings."""
         return cls('hex', nrings=int(nrings), spacing=spacing,
                    obscuration=obscuration)
 
@@ -288,12 +221,7 @@ class Sampling:
     def spiral(cls, nrings=5, samples_per_ring=None,
                radial_distribution='cheby', include_center=True,
                obscuration=None):
-        """A radial-azimuthal spiral grid (Forbes-style Q-poly fitting grid).
-
-        obscuration, if given, is the linear central-obscuration ratio
-        (inner radius / outer extent); samples inside it are dropped.
-
-        """
+        """A radial-azimuthal spiral grid."""
         return cls('spiral', nrings=int(nrings),
                    samples_per_ring=samples_per_ring,
                    radial_distribution=radial_distribution,
@@ -358,19 +286,7 @@ def _perp_basis(w):
 
 
 def _object_space_cone_PS(prescription, field, wavelength, sampling, na):
-    """Sine-condition object cone for an object-space NA / F-number aperture.
-
-    The bundle leaves the finite-conjugate object point filling a cone whose
-    marginal ray makes object-space angle U with n_object * sin(U) == na (the
-    sine condition), so a normalized pupil coordinate rho maps to direction
-    sine rho * sin(U) -- the aplanatic parameterization, not the tan-space map
-    of the entrance-pupil-plane finite launch.  The cone is built about the
-    chief direction toward the paraxial entrance-pupil center; positioning it
-    on the stop (paraxial vs real) is the caller's ray-aiming step.
-
-    Returns (P, S, rho) where rho is the normalized pupil coordinate (rim at
-    radius 1) used by the ray-aiming step.
-    """
+    """Sine-condition object cone for an object-space NA / F-number aperture."""
     if field.kind != 'height':
         raise ValueError(
             'an object-space NA / F-number aperture requires a finite-'
@@ -411,17 +327,7 @@ def _object_space_cone_PS(prescription, field, wavelength, sampling, na):
 
 
 def _apply_vignetting(pupil_xy, field):
-    """Compress pupil samples onto the field's vignetted pupil.
-
-    Code V side-vignetting factors shrink (or, when negative, grow) each half
-    of the transmitted pupil: the upper x half-extent becomes (1 - vux) of
-    nominal, the lower (1 - vlx), and likewise in y.  Each sample is scaled
-    onto that span per side rather than clipped, so the bundle keeps its full
-    length, the marginal samples ride the vignetted pupil edge, and the
-    center sample stays the chief ray.  The map is proportional, so it applies
-    identically to normalized and physical pupil coordinates.
-
-    """
+    """Scale pupil samples by per-field side-vignetting factors."""
     vignetting = getattr(field, 'vignetting', None)
     if not vignetting:
         return pupil_xy
@@ -437,26 +343,14 @@ def _apply_vignetting(pupil_xy, field):
 
 
 def _real_aim_to_stop(P, S, rho, prescription, stop_index, wavelength, finite):
-    """Real-ray aiming: map the normalized pupil linearly onto the stop.
-
-    Traces the nominal bundle to the stop, fits the pupil->stop scale per axis
-    (the paraxial marginal landing the aperture implies), then aims every ray
-    so it lands at rho * scale on the stop.  This holds the aperture-defined
-    marginal fixed while correcting pupil aberration / distortion in the
-    interior and driving the chief exactly onto the stop center.  Collimated
-    bundles vary launch position; finite-conjugate bundles vary launch
-    direction (they share one object point).
-    """
+    """Aim a normalized pupil grid linearly onto the real stop."""
     trace_path = prescription[:stop_index + 1]
     tr = raytrace(trace_path, P, S, wavelength)
     L = tr.P[-1, :, :2]
     valid = np.isfinite(L).all(axis=1)
 
     def _scale(rk, lk):
-        # pupil->stop slope from the extreme pupil samples (a secant through
-        # the two rim rays): offset-free, so the chief maps to the stop center
-        # and the rim-to-rim aperture span is held while the interior is
-        # linearized.
+        # Pupil-to-stop secant through the two rim rays.
         rk = rk[valid]
         lk = lk[valid]
         if rk.size < 2:
@@ -514,9 +408,7 @@ def launch(prescription, field, wavelength, sampling, *,
                    and sampling.kind != 'chief')
     stop_index = system_stop_index(prescription, None)
 
-    # object-space NA / F-number apertures define the launch by an object-space
-    # cone (sine condition) rather than an entrance-pupil diameter, unless the
-    # caller forced an explicit pupil size.
+    # Object-space aperture modes launch from an object-space cone.
     object_mode = False
     if epd is None and pupil_extent is None:
         aperture = getattr(prescription, 'aperture', None)
@@ -553,9 +445,7 @@ def launch(prescription, field, wavelength, sampling, *,
             pupil_z = float(prescription[0].P[2])
         pupil_z = float(pupil_z)
 
-        # paraxial entrance-pupil routing seeds the bundle (it also fixes the
-        # aperture-defined marginal height); 'real' ray aiming then refines it
-        # onto the stop downstream.  Skipped only for explicit aim_to aiming.
+        # Paraxial EP routing seeds the bundle before optional real aiming.
         ep_z = None
         if aim_to is None:
             ep_z = _entrance_pupil_z(prescription, wavelength)
@@ -563,12 +453,7 @@ def launch(prescription, field, wavelength, sampling, *,
         if field.kind == 'angle':
             P, S = _collimated_PS(pupil_xy, pupil_z, field)
             if ep_z is not None:
-                # slide each launch point along its ray so the pupil coordinate
-                # is reached at the entrance-pupil z (chief then crosses the EP
-                # center).  The collimated bundle shares one direction, so a
-                # single slide moves every ray.  Stay backend-pure (no float())
-                # and add out-of-place so gradients w.r.t. the entrance-pupil
-                # location flow.
+                # Slide the collimated bundle to the entrance-pupil plane.
                 S0 = S[0]
                 shift = (pupil_z - ep_z) / S0[2]
                 offset = np.stack([shift * S0[0], shift * S0[1],
@@ -596,53 +481,11 @@ def launch(prescription, field, wavelength, sampling, *,
 
 
 def solve_vignetting(prescription, field, wavelength, *, tol=1e-3, maxiter=20):
-    """Solve real-ray vignetting factors for one field.
-
-    Bisects the radial scale of one edge ray per pupil side (+x, -x, +y, -y)
-    against transmission through the system apertures, launching each probe
-    bundle through the same aiming path as any analysis bundle.  The largest
-    transmitted edge e of a side gives its Code V factor 1 - e, referenced to
-    the nominal pupil: any factors already on the field are ignored, and the
-    result is meant to overwrite them, not compose with them.  Each factor is
-    the last passing bisection scale, so the factor edge ray transmits
-    strictly inside the limiting aperture rather than riding tangent to it.
-
-    Factors are floored at 0: a side whose edge ray transmits at the nominal
-    rim is reported unvignetted, and scales beyond the nominal pupil (Code V
-    pupil expansion, negative factors) are not probed.
-
-    Parameters
-    ----------
-    prescription : OpticalSystem or sequence of Surface
-        the system traced; its apertures, aperture spec, and ray aiming define
-        transmission.
-    field : Field
-        the field point to solve.  Not mutated.
-    wavelength : float
-        wavelength in microns.
-    tol : float, optional
-        bisection tolerance on the normalized radial scale.
-    maxiter : int, optional
-        maximum bisection iterations.
-
-    Returns
-    -------
-    dict
-        Code V factors vux, vlx, vuy, vly, each in [0, 1).
-
-    Raises
-    ------
-    ValueError
-        if the chief ray does not transmit (factors are referenced to it), or
-        if a side's edge ray fails at every probed scale.
-
-    """
-    # solve in the absolute normalized pupil: a clone without the field's
-    # current factors launches the canonical samples uncompressed.
+    """Solve Code V-style real-ray vignetting factors for one field."""
+    # Solve on an unvignetted clone.
     bare = Field(field.hx, field.hy, kind=field.kind, unit=field.unit,
                  object_z=field.object_z)
-    # row 0 is the chief; rows 1-4 are the per-side edge rays, ordered to
-    # match keys below.
+    # Row 0 is chief; rows 1-4 match keys below.
     edges = np.asarray([
         [0.0, 0.0],
         [1.0, 0.0],

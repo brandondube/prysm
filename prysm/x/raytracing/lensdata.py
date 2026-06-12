@@ -32,27 +32,7 @@ _DEG2RAD = math.pi / 180.0
 
 
 def R_rh(rz, ry, rx, radians=False):
-    """Right-handed rotation matrix from (rz, ry, rx), backend-pure.
-
-    Matches prysm.coordinates.make_rotation_matrix's ZYX convention
-    (M = Rx @ Ry @ Rz) but is built entirely through prysm.mathops.np so
-    it works under numpy, cupy, and torch and is differentiable w.r.t. tensor
-    angle inputs (the tilt DOFs of a coordinate break).  Angles are in degrees
-    unless radians is True.
-
-    Parameters
-    ----------
-    rz, ry, rx : float or array
-        Rotation angles about the z, y, and x axes.
-    radians : bool, optional
-        If True, the angles are radians; otherwise degrees.
-
-    Returns
-    -------
-    ndarray
-        3x3 rotation matrix (local-to-global).
-
-    """
+    """Right-handed ZYX rotation matrix, backend-pure."""
     k = 1.0 if radians else _DEG2RAD
     alpha = rx * k
     beta = ry * k
@@ -83,9 +63,7 @@ def R_rh(rz, ry, rx, radians=False):
     return Rx @ Ry @ Rz
 
 
-# 180-degree rotation about x: reverses the local +z (and +y) axes.  Folds the
-# running frame at a normal-incidence mirror so downstream rows march along the
-# reflected beam while staying a proper (det +1) rotation.
+# 180-degree x rotation for normal-incidence mirror folds.
 _FLIP_Z = np.asarray([[1.0, 0.0, 0.0],
                       [0.0, -1.0, 0.0],
                       [0.0, 0.0, -1.0]], dtype=config.precision)
@@ -140,27 +118,14 @@ def _none_if_identity(Rgl):
 
 
 def _apply_decenter_tilt(o, Rgl, decenter, tilt):
-    """Apply a coordinate-break decenter then tilt to the running frame.
-
-    Decenter is along the current local axes; tilt = R_rh(rz, ry, rx) composes
-    onto the global->local rotation.  Returns the new (o, Rgl).
-
-    """
+    """Apply coordinate-break decenter then tilt to a running frame."""
     o = o + _local_to_global(Rgl) @ decenter
     Rt = R_rh(tilt[0], tilt[1], tilt[2])
     return o, _compose_global_to_local(Rgl, Rt)
 
 
 class _FrameState:
-    """Mutable running frame for the general (coordinate-break) layout scan.
-
-    o is the global origin, Rgl the running global->local rotation (or
-    None for identity).  frames records each placed surface's frame for RET.
-    pending_pose carries a one-shot DAR decenter/tilt for the next surface;
-    pending_fold carries a BEN fold (rz, ry, rx) consumed at the next
-    reflecting surface.
-
-    """
+    """Mutable frame state for coordinate-break layout scans."""
 
     __slots__ = ('o', 'Rgl', 'frames', 'pending_pose', 'pending_fold')
 
@@ -180,20 +145,7 @@ class _FrameState:
 # ---------------------------------------------------------------------------
 
 class _ShapeDescriptor:
-    """Reads a Shape's self-declared DOF layout off the class (deepening 02).
-
-    A shape registers itself by declaring SCALAR_DOFS / VECTOR_DOFS / META_KEYS
-    / CATEGORIES class attributes and a from_params classmethod; this descriptor
-    surfaces those so SurfaceRow needs no private adapter table.  scalar_dofs are
-    single-value DOFs; vector_dofs are flat coefficient blocks of arbitrary
-    (structurally fixed) length.  The assembled parameter array for a row lays
-    the scalars out first, in order, then concatenates the vector blocks.
-    meta_keys name the static structural parameters carried verbatim and needed
-    to rebuild the shape.  categories maps a human category name ('curvature',
-    'conic', 'coefs', ...) to the DOF keys it selects, for the bulk
-    vary/freeze/constrain helpers.
-
-    """
+    """Shape-declared DOF layout used by SurfaceRow."""
 
     __slots__ = ('cls', 'scalar_dofs', 'vector_dofs', 'meta_keys',
                  'categories', 'build')
@@ -209,13 +161,7 @@ class _ShapeDescriptor:
 
 
 def _adapter_for(shape):
-    """Return the DOF descriptor for a shape, or raise if it is unregistered.
-
-    A shape is registered when its class declares a from_params classmethod
-    (alongside its SCALAR_DOFS / VECTOR_DOFS / META_KEYS / CATEGORIES); the
-    descriptor data lives on the shape class itself, not in a table here.
-
-    """
+    """Return the DOF descriptor for a registered shape."""
     cls = type(shape)
     if not hasattr(cls, 'from_params'):
         raise TypeError(
@@ -227,15 +173,7 @@ def _adapter_for(shape):
 
 
 def _bounds_for_dof(nominal, lo, hi, relative, is_radius):
-    """Compute ordered (lo, hi) DOF bounds for one constrained slot.
-
-    nominal is the stored DOF (curvature c for the 'radius'/'curvature'
-    categories).  For 'radius' (is_radius) the user-facing quantity is the
-    radius R = 1/c; bounds are computed in R then mapped back to curvature.
-    Returns None when the bound is degenerate (zero nominal under a relative
-    bound), signaling the slot should be left unbounded.
-
-    """
+    """Ordered (lo, hi) bounds for one constrained DOF slot."""
     if is_radius:
         if nominal == 0.0:
             if relative is not None:
@@ -432,14 +370,7 @@ class _RowList(list):
 # ---------------------------------------------------------------------------
 
 class SurfaceRow:
-    """One sequential optical surface in a LensData system.
-
-    Stores the shape as a kind + a flat numeric parameter array (its natural
-    DOFs) plus the static structural metadata needed to rebuild it, the gap to
-    the next surface (thickness, a DOF), the interaction type, the material,
-    and aperture/bounding data.
-
-    """
+    """One sequential optical surface in a LensData system."""
 
     _INVALIDATING_ATTRS = {
         'params', 'meta', 'thickness', 'material', 'typ', 'semidiameter',
@@ -458,36 +389,7 @@ class SurfaceRow:
     def __init__(self, shape, *, thickness=0.0, material=None, typ='refr',
                  semidiameter=None, aperture=None, bounding=None, grating=None,
                  edge=None):
-        """Initialize a surface row from a shape.
-
-        Parameters
-        ----------
-        shape : Shape
-            Surface shape whose registered adapter defines the row DOFs.
-        thickness : float, optional
-            Gap to the next row.
-        material : MaterialProtocol, None, or MIRROR, optional
-            Optical material carried verbatim until compilation.  Refractive
-            surfaces require a MaterialProtocol object (its .n / .nk supply the
-            real / complex index); reflective surfaces take MIRROR and eval
-            surfaces None.  Bare numbers, lambdas, and glass-name strings are
-            not accepted -- resolve them to a material object first (see
-            x.materials).
-        typ : str, optional
-            Surface interaction type.
-        semidiameter : float, optional
-            Clear semi-diameter used to create default aperture and bounding
-            data.
-        aperture : callable, optional
-            Aperture function to attach to the compiled surface.
-        bounding : dict, optional
-            Bounding metadata to attach to the compiled surface.
-        grating : object, optional
-            Grating model to attach to the compiled surface.
-        edge : dict, optional
-            Mechanical edge metadata for layout drawing.
-
-        """
+        """Initialize a surface row from a shape."""
         object.__setattr__(self, '_owner', None)
         adapter = _adapter_for(shape)
         params = []
@@ -555,14 +457,7 @@ class SurfaceRow:
         yield ('thickness', row_index, 0)
 
     def copy(self):
-        """Return a copy of the row.
-
-        Returns
-        -------
-        SurfaceRow
-            Row with copied numeric arrays and metadata containers.
-
-        """
+        """Return a copy of the row."""
         new = object.__new__(SurfaceRow)
         object.__setattr__(new, '_owner', None)
         new.shape_kind = self.shape_kind
@@ -583,12 +478,7 @@ class SurfaceRow:
 
 
 class CoordBreak:
-    """A right-handed coordinate break.
-
-    Carries a decenter (dx, dy, dz) and a tilt (rz, ry, rx) in degrees -- both
-    DOFs -- plus the break kind and gap thickness.
-
-    """
+    """A right-handed coordinate break."""
 
     _INVALIDATING_ATTRS = {
         'decenter', 'tilt', 'kind', 'ret_target', 'thickness',
@@ -603,22 +493,7 @@ class CoordBreak:
 
     def __init__(self, *, decenter=(0.0, 0.0, 0.0), tilt=(0.0, 0.0, 0.0),
                  kind='basic', ret_target=None, thickness=0.0):
-        """Initialize a coordinate break row.
-
-        Parameters
-        ----------
-        decenter : sequence of float, optional
-            Decenter along the current local x, y, and z axes.
-        tilt : sequence of float, optional
-            Right-handed rotations rz, ry, and rx in degrees.
-        kind : str, optional
-            Coordinate break kind.
-        ret_target : int, optional
-            Row index whose saved frame is restored by a return break.
-        thickness : float, optional
-            Gap after the coordinate break.
-
-        """
+        """Initialize a coordinate break row."""
         object.__setattr__(self, '_owner', None)
         self.decenter = np.asarray(decenter, dtype=config.precision)
         self.tilt = np.asarray(tilt, dtype=config.precision)
@@ -635,14 +510,7 @@ class CoordBreak:
         yield ('thickness', row_index, 0)
 
     def copy(self):
-        """Return a copy of the coordinate break.
-
-        Returns
-        -------
-        CoordBreak
-            Coordinate break with copied numeric arrays.
-
-        """
+        """Return a copy of the coordinate break."""
         new = object.__new__(CoordBreak)
         object.__setattr__(new, '_owner', None)
         new.decenter = np.array(self.decenter, copy=True)
@@ -658,15 +526,7 @@ class CoordBreak:
 # ---------------------------------------------------------------------------
 
 class ParamSpec:
-    """Maps each scalar DOF slot to a (row, group, offset) address and tracks which slots are free and their box bounds.
-
-    A *slot* is the tuple (group, row_index, offset) where group is one
-    of 'shape', 'thickness', 'decenter', 'tilt'.  The free subset is gathered
-    into a dense contiguous vector for the optimizer by pack, and
-    scattered back by scatter.  Free flags and bounds live in dicts
-    keyed by slot, so appending rows never invalidates existing selections.
-
-    """
+    """Free-vector slots, flags, and bounds for LensData rows."""
 
     def __init__(self, lensdata):
         self._ld = lensdata
@@ -687,24 +547,7 @@ class ParamSpec:
 
     # -- value access --
     def get_value(self, slot):
-        """Return the scalar value addressed by a slot.
-
-        Parameters
-        ----------
-        slot : tuple
-            Slot tuple of the form (group, row_index, offset).
-
-        Returns
-        -------
-        float
-            Current value of the addressed DOF.
-
-        Raises
-        ------
-        KeyError
-            If the slot group is unknown.
-
-        """
+        """Return the scalar value addressed by a slot."""
         group, r, off = slot
         row = self._ld.rows[r]
         if group == 'shape':
@@ -718,21 +561,7 @@ class ParamSpec:
         raise KeyError(group)
 
     def set_value(self, slot, value):
-        """Set the scalar value addressed by a slot.
-
-        Parameters
-        ----------
-        slot : tuple
-            Slot tuple of the form (group, row_index, offset).
-        value : float
-            New scalar value.
-
-        Raises
-        ------
-        KeyError
-            If the slot group is unknown.
-
-        """
+        """Set the scalar value addressed by a slot."""
         group, r, off = slot
         row = self._ld.rows[r]
         if group == 'shape':
@@ -756,14 +585,7 @@ class ParamSpec:
         return out
 
     def scatter(self, x):
-        """Write a dense free vector back into the rows.
-
-        Under the numpy backend this writes in place (cheap).  Under a
-        differentiable backend (torch) it rebuilds the affected per-row arrays
-        functionally so the autograd graph from the free vector to the emitted
-        surfaces is preserved (no in-place leaf mutation).
-
-        """
+        """Write a dense free vector back into the rows."""
         free = self.free_slots()
         if len(x) != len(free):
             raise ValueError(
@@ -816,23 +638,10 @@ class ParamSpec:
 # ---------------------------------------------------------------------------
 
 class LensData:
-    """The canonical, editable representation of a sequential optical system.
-
-    Build one row at a time with add (chainable) or via the IO readers.
-    to_surfaces compiles the rows into a throwaway list[Surface] the
-    kernel can trace; LensData also duck-types as that surface sequence (it is
-    iterable, sized, and indexable).  The optimizer talks to pack,
-    update, and bounds.
-
-    """
+    """Editable sequential optical system."""
 
     def __init__(self):
-        """Initialize an empty lens (no rows).
-
-        System metadata (aperture, fields, wavelengths, stop, unit) lives on the
-        OpticalSystem that wraps a LensData; see system.py.
-
-        """
+        """Initialize an empty lens."""
         self.rows = _RowList(self)
         self.spec = ParamSpec(self)
         self._pickups = []      # (target_slots, source_slots, scale, offset)
@@ -846,46 +655,7 @@ class LensData:
     def add(self, shape, *, thickness=0.0, material=None, typ='refr',
             semidiameter=None, aperture=None, bounding=None, grating=None,
             edge=None):
-        """Append a surface row.  Returns self for chaining.
-
-        The primary way to build a prescription; chain calls in declaration
-        order from object to image (see the constructor examples).
-
-        Parameters
-        ----------
-        shape : Shape
-            the surface sag shape (Sphere, Conic, Plane, EvenAsphere, ...).
-        thickness : float, optional
-            axial gap to the next surface in length units.  After a reflective
-            surface the layout folds, so a positive thickness still means
-            physical separation downstream.
-        material : MaterialProtocol, optional
-            post-surface medium; its .n(wavelength) supplies the real index.
-            Required for typ='refr'; pass the ambient material (e.g.
-            materials.air) on the exit surface of an element, and None for
-            reflective / eval surfaces.  Bare numbers, lambdas, and glass-name
-            strings are not accepted -- resolve them via x.materials first.
-        typ : str, optional
-            surface interaction: 'refr' (refract, default), 'refl' (reflect),
-            or 'eval' (a non-interacting plane, e.g. the object or image).
-        semidiameter : float, optional
-            clear semi-diameter; in the absence of aperture / bounding it sets
-            both a circular clipping aperture and the drawn radial extent.
-        aperture : callable, optional
-            aperture predicate in local surface coordinates (see
-            circular_aperture, annular_aperture); clips rays and overrides the
-            semidiameter aperture.
-        bounding : dict, optional
-            cosmetic edge / substrate geometry (outer_radius, inner_radius) for
-            layout drawing; does not clip rays.
-        grating : tuple, optional
-            diffraction grating data (period, grating_vector, order).
-        edge : dict, optional
-            mechanical edge geometry (outer diameter, chamfers, seats, ...) for
-            layout drawing; on the front surface of a lens element it is the
-            element edge spec consumed by plotting.plot_optics.
-
-        """
+        """Append a surface row and return self."""
         self.rows.append(SurfaceRow(
             shape, thickness=thickness, material=material, typ=typ,
             semidiameter=semidiameter, aperture=aperture, bounding=bounding,
@@ -905,14 +675,7 @@ class LensData:
         return self
 
     def _invalidate(self):
-        """Clear cached compiled surfaces and bump the edit version.
-
-        Suppressed while _resolve_dependencies writes pickup/solve outputs:
-        those are derived from the user-edited state, not edits themselves, so
-        bumping the version there would make every version-keyed cache (the
-        system's paraxial memos and trace fingerprints) miss once per compile.
-
-        """
+        """Clear compiled surfaces and bump the edit version."""
         if self._resolving:
             return
         self._surfaces_cache = None
@@ -920,18 +683,7 @@ class LensData:
 
     # -- compilation --
     def to_surfaces(self):
-        """Compile the rows into a list of posed Surface objects.
-
-        Systems with no coordinate breaks take the fast rotationally symmetric
-        (axial) path: surfaces lie on the z axis at the cumulative sum of
-        preceding thicknesses with no rotation (R=None), and reflective
-        surfaces fold the layout direction (downstream surfaces step toward
-        decreasing global z).  Systems containing coordinate breaks take the
-        general path: a forward scan accumulating the running frame (origin o,
-        global->local rotation Rgl), emitting a posed Surface per surface row
-        and folding/saving frames at coordinate breaks.
-
-        """
+        """Compile rows into posed Surface objects."""
         if self._surfaces_cache is not None:
             return self._surfaces_cache
 
@@ -947,14 +699,7 @@ class LensData:
         return self._to_surfaces_axial()
 
     def _resolve_dependencies(self):
-        """Apply pickups then solves so layout/trace/merit always agree.
-
-        Pickups derive a dependent DOF as scale*independent + offset.  The
-        image-distance solve sets a gap thickness to the paraxial image
-        distance of the powered surfaces, auto-placing the image plane.  Both
-        are backend-pure (no float() coercion) so they stay differentiable.
-
-        """
+        """Apply pickups then solves before compilation."""
         self._resolving = True
         try:
             for targets, sources, scale, offset in self._pickups:
@@ -993,23 +738,7 @@ class LensData:
             self._resolving = False
 
     def _build_surface(self, row, P, R=None):
-        """Build a posed Surface from a LensData row.
-
-        Parameters
-        ----------
-        row : SurfaceRow
-            Row to compile.
-        P : array_like
-            Surface origin in global coordinates.
-        R : ndarray, optional
-            Global-to-local rotation matrix.  None denotes identity.
-
-        Returns
-        -------
-        Surface
-            Compiled surface ready for ray tracing.
-
-        """
+        """Build a posed Surface from a LensData row."""
         return Surface(
             shape=row.build_shape(), interaction=row.typ, P=P, R=R,
             material=None if row.material is MIRROR else row.material,
@@ -1018,14 +747,7 @@ class LensData:
         )
 
     def _to_surfaces_axial(self):
-        """Compile rows for a system without coordinate breaks.
-
-        Returns
-        -------
-        list of Surface
-            Compiled surfaces placed along the global z axis.
-
-        """
+        """Compile rows for a system without coordinate breaks."""
         surfaces = []
         z = 0.0
         sign = 1.0
@@ -1037,14 +759,7 @@ class LensData:
         return surfaces
 
     def _to_surfaces_general(self):
-        """Compile rows for a system containing coordinate breaks.
-
-        Returns
-        -------
-        list of Surface
-            Compiled surfaces with accumulated origins and rotations.
-
-        """
+        """Compile rows for a system containing coordinate breaks."""
         surfaces = []
         state = _FrameState()
 
@@ -1084,22 +799,7 @@ class LensData:
         return surfaces
 
     def _apply_coordbreak(self, cb, state):
-        """Apply a coordinate break to the running layout state.
-
-        Parameters
-        ----------
-        cb : CoordBreak
-            Coordinate break row to consume.
-        state : _FrameState
-            Mutable running frame state.
-
-        Raises
-        ------
-        ValueError
-            If a return target has not been placed or the break kind is
-            unknown.
-
-        """
+        """Apply a coordinate break to the running layout state."""
         kind = cb.kind
         decenter = cb.decenter
         tilt = cb.tilt
@@ -1162,41 +862,15 @@ class LensData:
 
     # -- sequence protocol (duck-type as a surface list) --
     def __len__(self):
-        """Return the number of compiled surfaces.
-
-        Returns
-        -------
-        int
-            Number of surface rows after compilation.
-
-        """
+        """Return the number of compiled surfaces."""
         return len(self.to_surfaces())
 
     def __iter__(self):
-        """Iterate over compiled surfaces.
-
-        Returns
-        -------
-        iterator
-            Iterator over the compiled surface list.
-
-        """
+        """Iterate over compiled surfaces."""
         return iter(self.to_surfaces())
 
     def __getitem__(self, item):
-        """Return one or more compiled surfaces by index.
-
-        Parameters
-        ----------
-        item : int or slice
-            Index or slice into the compiled surface list.
-
-        Returns
-        -------
-        Surface or list of Surface
-            Selected compiled surface or surfaces.
-
-        """
+        """Return one or more compiled surfaces by index."""
         return self.to_surfaces()[item]
 
     # -- optimizer surface --
@@ -1217,16 +891,7 @@ class LensData:
 
     # -- variable selection (category x surface-range) --
     def vary(self, category, surfaces='all'):
-        """Mark a category of DOFs free over a range of surfaces.
-
-        category is one of 'curvature', 'radius', 'conic', 'coefs',
-        'thickness', 'tilt', 'decenter'.  surfaces selects rows: int,
-        list of ints, slice, or 'all' (default).  Applying a category to a row
-        that lacks it is a silent no-op.  Varying the image-distance solved
-        thickness clears that solve first; pickup-driven dependencies remain
-        frozen.
-
-        """
+        """Mark a category of DOFs free over a range of surfaces."""
         slots = self._category_slots(category, surfaces)
         if category == 'thickness':
             self._clear_image_distance_solve_if_selected(slots)
@@ -1257,21 +922,8 @@ class LensData:
                   surfaces='all'):
         """Set box bounds on a category of DOFs over a range of surfaces.
 
-        Bounds are expressed in the NAMED quantity and converted to the stored
-        DOF.  'radius' bounds are radii (converted to curvature); 'curvature',
-        'conic', 'coefs', 'thickness', 'tilt', 'decenter' bound the DOF
-        directly.
-
-        Two modes:
-
-        - absolute: constrain('thickness', lo=0.0, hi=50.0) -- an open
-          side (lo or hi None) is left unbounded (-/+ inf).
-        - relative: constrain('radius', relative=0.1) -- bounds are the
-          nominal value +/- 10%, anchored at call time, ordered for negative
-          nominals.  A zero nominal makes a relative bound degenerate: the DOF
-          is left unbounded and a warning is issued.
-
-        Applying a category to a surface that lacks it is a silent no-op.
+        Radius bounds are in radius and converted to curvature.  Relative
+        bounds are anchored at the current nominal value.
 
         """
         if relative is None and lo is None and hi is None:
@@ -1289,15 +941,7 @@ class LensData:
     # -- pickups and solves (dependent DOFs, resolved on compile) --
     def pickup(self, category, surface, *, from_surface, from_category=None,
                scale=1.0, offset=0.0):
-        """Make a DOF a pickup of another: dependent = scale*source + offset.
-
-        Example: ld.pickup('curvature', 1, from_surface=0, scale=-1.0)
-        couples surface 1's curvature to the negative of surface 0's (a
-        symmetric element).  The dependent DOF is frozen (removed from the free
-        vector) and recomputed whenever the system is compiled, so it never
-        drifts from its source.  Pure arithmetic, fully differentiable.
-
-        """
+        """Make a DOF a pickup of another: dependent = scale*source + offset."""
         from_category = from_category or category
         targets = self._category_slots(category, surface)
         sources = self._category_slots(from_category, from_surface)
@@ -1321,15 +965,8 @@ class LensData:
     def solve_image_distance(self, surface=None, *, wavelength=None):
         """Solve a gap so the image plane sits at the paraxial image.
 
-        The thickness of surface (default: the powered surface just before
-        the trailing eval plane) is set to the paraxial image distance of the
-        powered surfaces every time the system is compiled.  The solved
-        thickness is frozen.  Backend-pure, so it is differentiable.
-
-        wavelength is a concrete wavelength in microns (or None to use the
-        kernel default); name resolution lives on OpticalSystem, whose
-        solve_image_distance resolves a reference-wavelength name before seeding
-        this lens-level solve.
+        The solved thickness is frozen until clear_image_distance_solve() or
+        vary('thickness', ...) selects it.
 
         """
         if surface is None:
@@ -1356,14 +993,7 @@ class LensData:
         return self
 
     def clear_image_distance_solve(self):
-        """Disable the active paraxial image-distance solve, if any.
-
-        The solved thickness becomes an ordinary fixed DOF again.  Call
-        ``vary('thickness', surfaces=...)`` afterward to make it an optimizer
-        variable.  If another dependency such as a pickup targets the same
-        slot, that dependency remains in force.
-
-        """
+        """Disable the active paraxial image-distance solve, if any."""
         if self._image_solve is None:
             return self
         surface, _ = self._image_solve
@@ -1390,19 +1020,7 @@ class LensData:
             self.clear_image_distance_solve()
 
     def _select_rows(self, surfaces):
-        """Resolve a row selector to concrete row indices.
-
-        Parameters
-        ----------
-        surfaces : {'all', None, int, slice, sequence of int}
-            Surface-row selector.
-
-        Returns
-        -------
-        list of int
-            Normalized row indices.
-
-        """
+        """Resolve a row selector to concrete row indices."""
         n = len(self.rows)
         if surfaces == 'all' or surfaces is None:
             return list(range(n))
@@ -1413,21 +1031,7 @@ class LensData:
         return [int(s) % n for s in surfaces]
 
     def _category_slots(self, category, surfaces):
-        """Return all slots selected by a category and row selector.
-
-        Parameters
-        ----------
-        category : str
-            DOF category name.
-        surfaces : {'all', None, int, slice, sequence of int}
-            Surface-row selector.
-
-        Returns
-        -------
-        list of tuple
-            Slot tuples matching the requested category.
-
-        """
+        """Return all slots selected by a category and row selector."""
         slots = []
         for r in self._select_rows(surfaces):
             row = self.rows[r]
@@ -1461,7 +1065,7 @@ class LensData:
 
     # -- copy --
     def copy(self):
-        """Return a deep-ish copy: rows cloned, DOF selection (free flags + bounds) preserved."""
+        """Return a copy with cloned rows and preserved DOF selections."""
         new = LensData()
         new.rows = _RowList(new, [row.copy() for row in self.rows])
         new.spec._free = dict(self.spec._free)
@@ -1473,14 +1077,7 @@ class LensData:
         return new
 
     def __repr__(self):
-        """Return a compact representation of the lens.
-
-        Returns
-        -------
-        str
-            Summary including row count and free DOF count.
-
-        """
+        """Return a compact representation of the lens."""
         return (f'LensData(n_rows={len(self.rows)}, '
                 f'n_free={len(self.spec.free_slots())})')
 

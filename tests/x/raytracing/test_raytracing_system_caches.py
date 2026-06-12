@@ -52,7 +52,7 @@ def test_first_order_cached_per_version_and_wavelength(monkeypatch):
     assert fo2 is fo1
     sys.first_order(0.486)
     assert calls['n'] == 2
-    # a lens edit bumps the version -> recompute
+    # Lens edit -> recompute.
     sys.lens.rows[2].thickness = 2.6
     sys.lens._invalidate()
     fo3 = sys.first_order(0.587)
@@ -79,14 +79,12 @@ def test_launch_consults_system_entrance_pupil_cache(monkeypatch):
     calls = _count_calls(monkeypatch, paraxial, 'entrance_pupil_z')
     for f in sys.fields:
         launch(sys, f, 0.587, Sampling.hex(3))
-    # one paraxial pupil solve across the whole field grid, not one per bundle
+    # One paraxial pupil solve across the field grid.
     assert calls['n'] == 1
 
 
 def test_launch_on_bare_lensdata_unchanged():
-    # a bare LensData has no stop metadata: no entrance-pupil slide, module
-    # paraxial path only.  Directions match the system launch (collimated
-    # bundles share the field direction); positions stay at the launch plane.
+    # Bare LensData has no stop metadata.
     sys = _doublet()
     P_sys, S_sys = launch(sys, Field(0, 0.7), 0.587, Sampling.hex(3))
     P_ld, S_ld = launch(sys.lens, Field(0, 0.7), 0.587, Sampling.hex(3),
@@ -97,8 +95,7 @@ def test_launch_on_bare_lensdata_unchanged():
 
 
 def test_dependency_resolution_does_not_bump_version():
-    # solves/pickups write derived DOFs during compile; that must not look
-    # like a user edit or every version-keyed cache misses once per compile.
+    # Solves/pickups during compile do not bump the edit version.
     sys = _doublet()
     ld = sys.lens
     ld._invalidate()  # force a cold compile with the image solve active
@@ -116,7 +113,7 @@ def test_entrance_pupil_diameter_cached_and_aperture_keyed(monkeypatch):
     d2 = sys.epd
     assert calls['n'] == 1
     assert d1 == d2
-    # reassigning the aperture cannot return a stale diameter
+    # Aperture assignment changes the cache key.
     sys.aperture = ApertureSpec.fno(10.0)
     d3 = sys.epd
     assert calls['n'] == 2

@@ -4,12 +4,7 @@ from .spencer_and_murty import STYPE_EVAL
 
 
 def system_wavelength(prescription, wvl):
-    """Resolve a wavelength against a system's metadata.
-
-    When prescription is an OpticalSystem, defers to its wavelength resolver
-    (None -> reference wavelength, a scalar -> float microns).  For a bare lens
-    / surface sequence, None resolves to the kernel default of 0.6328 microns.
-    """
+    """Resolve a wavelength against a system, or the kernel default."""
     resolver = getattr(prescription, 'wavelength', None)
     if callable(resolver):
         return float(resolver(wvl))
@@ -19,18 +14,11 @@ def system_wavelength(prescription, wvl):
 
 
 def system_epd(prescription, epd, wvl=None):
-    """Entrance-pupil diameter, defaulting from a system's aperture spec.
-
-    An explicit epd wins.  Otherwise, when prescription is an OpticalSystem
-    carrying an ApertureSpec, the spec's first-order entrance-pupil diameter at
-    wvl is used to size the pupil-sampling pattern.  Returns None when neither
-    is available; callers decide whether that is an error.
-    """
+    """Entrance-pupil diameter, explicit first then system aperture."""
     if epd is not None:
         return float(epd)
     f = getattr(prescription, 'entrance_pupil_diameter', None)
     if callable(f):
-        # OpticalSystem: version-stamped cache over the aperture readout
         return f(wvl)
     aperture = getattr(prescription, 'aperture', None)
     if aperture is not None:
@@ -39,13 +27,7 @@ def system_epd(prescription, epd, wvl=None):
 
 
 def system_first_order(prescription, wvl=None, epd=None, stop_index=None):
-    """Paraxial first-order properties, via a system's cache when it has one.
-
-    When prescription is an OpticalSystem its version-stamped first_order memo
-    is consulted, so repeated paraxial solves inside grid analyses and
-    optimizer iterations collapse to one per unique configuration.  A bare
-    surface sequence pays the direct solve.
-    """
+    """Paraxial first-order properties, using a system cache when present."""
     f = getattr(prescription, 'first_order', None)
     if callable(f):
         return f(wvl=wvl, epd=epd, stop_index=stop_index)

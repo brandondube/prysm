@@ -159,19 +159,14 @@ def d_transform_global(Reff, Q, Q_loc, Sprime, dPj, dSprime, Qdot, Rdot):
 
 
 def d_opl_segment(n_pre, n_pre_dot, seg, dseg, S=None):
-    """Differential of an OPL segment L = n_pre sign ||seg||.
+    """Differential of signed OPL segment L = n_pre s.
 
-    dL = n_pre_dot sign ||seg|| + n_pre sign (seg . dseg) / ||seg||.
-
-    S, when given, is the nominal propagation direction along the segment;
-    sign(seg . S) matches the signed segment of Surface.interact (a virtual
-    backward segment subtracts path).  S=None assumes forward propagation.
+    s = sign(seg . S) ||seg||, or ||seg|| when S is None.
     """
     seg_len = np.sqrt(row_dot(seg, seg))
     if S is not None:
         seg_len = np.sign(row_dot(seg, S)) * seg_len
-    # zero-length segment (launch on the surface): numerator seg . dseg is
-    # zero too; guard the denominator so the tangent is 0, not 0/0.
+    # Launch-on-surface segment: numerator is zero too.
     safe_len = np.where(seg_len == 0.0, 1.0, seg_len)
     return (n_pre_dot[None, :] * seg_len[:, None]
             + n_pre * _dot_nt(seg, dseg) / safe_len[:, None])

@@ -28,9 +28,7 @@ def _singlet(c1=1 / 50.0, c2=-1 / 50.0, gap=5.0, back=100.0, shape=Conic):
 
 
 def _two_bundle_problem(sys_, **prob_kwargs):
-    # two recipes (fan + hex) over an on-axis field: a collimated on-axis
-    # launch is invariant to the design DOFs, so FD-through-the-launch and
-    # the frozen-bundle adjoint agree to FD truncation error
+    # On-axis launch is invariant to these DOFs.
     f = Field(0., 0.)
     fan = Sampling.fan(n=9)
     ops = [RmsSpotRadius(f, 0.55, fan, weight=2.0),
@@ -74,7 +72,7 @@ def test_residual_jacobian_declines_on_unseedable_operand():
            RayHeightAt(f, 0.55, fan, surface_index=-1, axis=1)]
     prob = Problem(sys_, ops)
     assert prob.residual_jacobian(prob.x0()) is None
-    # the DLS seam falls back to FD and still solves
+    # DLS falls back to FD and still solves.
     result = prob.solve(maxiter=5)
     assert result.x.size == 1
 
@@ -125,5 +123,5 @@ def test_solve_with_adjoint_routing_matches_fd_and_cuts_nfev():
 
     assert res_a.success and res_f.success
     np.testing.assert_allclose(res_a.x, res_f.x, rtol=1e-6)
-    # adjoint linearization skips the 2 * n FD stencil per iteration
+    # Adjoint path skips the 2*n FD stencil per iteration.
     assert res_a.nfev < res_f.nfev

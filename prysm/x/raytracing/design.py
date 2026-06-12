@@ -47,17 +47,7 @@ class _TraceCache:
         self._n_traces = 0
 
     def launch(self, field, wavelength, sampling, *, epd=None):
-        """Launch bundle (P, S) for a recipe, memoized for this merit call.
-
-        field=None and sampling=None resolve to the on-axis Field() and
-        Sampling.hex(nrings=4) defaults.  The key uses object identity, so
-        operands sharing one Field / Sampling object share one launch (and
-        downstream one trace).  The cache lives only for one residuals /
-        equalities / inequalities call, so every optimizer iteration
-        re-launches against the current lens -- bundles re-aim as the pupil
-        moves with the design.
-
-        """
+        """Launch bundle (P, S) for a recipe, memoized for this merit call."""
         key = (None if field is None else id(field),
                None if sampling is None else id(sampling),
                float(wavelength), epd)
@@ -80,13 +70,7 @@ class _TraceCache:
 
     def exit_pupil(self, P, S, wavelength, *, P_xp=None, chief_index=None,
                    stop_index=None, epd=None, axis_point=None, axis_dir=None):
-        """Exit-pupil reference point for an operand bundle, resolved once.
-
-        Honors an explicit P_xp; otherwise resolves via analysis.resolve_exit_pupil
-        and memoizes per (bundle, wavelength, stop) for the merit call.  When no
-        stop is resolvable the geometric route reuses this bundle's own cached
-        chief ray, matching the differential trace (wavefront_with_tangents).
-        """
+        """Exit-pupil reference point for an operand bundle, resolved once."""
         if P_xp is not None:
             return np.asarray(P_xp)
         key = (id(P), id(S), float(wavelength), stop_index)
@@ -115,13 +99,7 @@ class _TraceCache:
 # ---------- Operands ---------------------------------------------------------
 
 def _resolve_wavelength(prescription, wavelength):
-    """Resolve an operand wavelength, deferring None to the prescription.
-
-    None asks the prescription for its reference wavelength (an OpticalSystem
-    resolves it through .wavelength); a bare surface sequence has none, which
-    raises informatively.
-
-    """
+    """Resolve an operand wavelength, deferring None to the prescription."""
     if wavelength is not None:
         return float(wavelength)
     resolve = getattr(prescription, 'wavelength', None)
@@ -144,23 +122,7 @@ def _class_accepts_kw(cls, name):
 
 
 class Merit:
-    """Shared target/weight plumbing and adjoint contract for merit terms.
-
-    Subclasses call super().__init__(target, weight) and then set their own
-    task-specific attributes.  Object-space media come from the prescription's
-    object surface material, resolved per merit call.
-
-    Used as a constraint (Problem constraints=), target= makes an equality and
-    min= / max= make inequalities; mixing target with min/max raises in the
-    constraint router.  In the objective path min/max carry no behavior.
-
-    Ray-based merits store a launch recipe (field, wavelength, sampling)
-    rather than a frozen bundle; the bundle is launched lazily per merit call,
-    so finite-difference jacobians differentiate through the launch.  The
-    adjoint seed path treats the bundle launched at the current x as a frozen
-    ray set -- it does not differentiate through bundle re-aiming.
-
-    """
+    """Target/weight plumbing and adjoint contract for merit terms."""
 
     name = 'merit'
 
@@ -747,38 +709,17 @@ def _is_lensdata(model):
 
 
 class Problem:
-    """A design-optimization problem over a LensData's free vector.
+    """Design optimization over a LensData free vector.
 
-    `Problem(lensdata, operands, constraints=None)`.  The free vector is the
-    LensData's packed DOFs (mark them with `lensdata.vary(...)`); `x` is
-    scattered back with `lensdata.update`, the system recompiled, and the
-    operands evaluated against the compiled surfaces.
-
-    Objective operands are weighted residual terms.  `constraints` is one
-    list of operands routed by their bounds, ignoring `weight`: `target=`
-    makes an equality (`value - target == 0`); `min=` / `max=` make
-    inequalities in the optym convention g(x) >= 0 (`value - min` and
-    `max - value`; both at once gives two rows).  Mixing target with min/max
-    on one constraint raises.
-
-    gradient='auto' (the default) lets the solver take the residual Jacobian
-    from the adjoint backward sweep whenever every objective operand supports
-    it (overrides seed) -- one forward trace plus one reverse sweep per
-    operand instead of 2 * n_params re-traces of finite differences, and
-    exact to machine precision.  gradient='fd' opts out.  The adjoint treats
-    each operand's bundle, launched at the current x, as a frozen ray set
-    (it does not differentiate through bundle re-aiming).
-
-    Methods: x0, residuals, equalities,
-    inequalities, solve, merit, jacobian, residual_jacobian.
+    Operands produce weighted residuals.  Constraints are operands with
+    target/min/max bounds.  gradient='auto' uses adjoint residual Jacobians
+    when available; gradient='fd' forces finite differences.
 
     """
 
     def __init__(self, lensdata, operands=None, *,
                  constraints=None, gradient='auto'):
-        # accept either a LensData (the free-vector owner) or an OpticalSystem
-        # wrapping one; the system is used as the prescription so operands see
-        # its aperture / object medium, while pack/update act on the lens.
+        # OpticalSystem supplies metadata; LensData owns the free vector.
         prescription = lensdata
         if not _is_lensdata(lensdata) and _is_lensdata(getattr(lensdata,
                                                               'lens', None)):
@@ -803,7 +744,7 @@ class Problem:
         self.gradient = gradient
 
     def x0(self):
-        """Initial parameter vector — the LensData's packed free vector."""
+        """Initial free vector from LensData.pack()."""
         return self.lensdata.pack()
 
     def _set_x(self, x):
@@ -821,16 +762,7 @@ class Problem:
         return out, cache
 
     def residuals(self, x, return_cache=False):
-        """Per-operand weighted residual vector [w_i * (op_i - target_i)].
-
-        This is the least-squares objective vector.  Hard constraints live in
-        equalities() and inequalities(), so use solve() or
-        damped_least_squares(..., equality_constraints=prob.equalities) for
-        exact constraint solves.  When return_cache=True also returns the
-        _TraceCache used (for introspection — e.g., counting trace calls in
-        tests).
-
-        """
+        """Per-operand weighted residual vector [w_i * (op_i - target_i)]."""
         self._set_x(x)
         out, cache = self._operand_vector(self.operands, weighted=True)
         if return_cache:
@@ -868,14 +800,8 @@ class Problem:
     def solve(self, x0=None, **kwargs):
         """Run constrained damped least squares and update LensData to result.
 
-        Keyword arguments are forwarded to damped_least_squares.  Explicit
-        equality_constraints or inequality_constraints keywords are combined
-        with the hard operands stored on this Problem.
-
-        The LensData is updated to the returned iterate even when the solver
-        reports failure (constraints violated, line search exhausted); a
-        UserWarning is emitted in that case so a non-converged design is never
-        silently accepted -- inspect result.success and result.message.
+        Extra equality/inequality kwargs are combined with stored constraints.
+        A failed solver result still updates the lens and emits a warning.
 
         """
         eq = _combine_constraints(
@@ -903,13 +829,7 @@ class Problem:
         return result
 
     def _eval_merit(self, prescription):
-        """Sum of squared weighted residuals on the given prescription.
-
-        Does not set parameters; callers responsible for that.  Shared
-        by merit() (which sets x first) and jacobian() (which delegates
-        parameter setting to merit_jacobian_free).
-
-        """
+        """Sum of squared weighted residuals on the given prescription."""
         cache = _TraceCache(prescription)
         total = 0.0
         for op in self.operands:
@@ -919,24 +839,12 @@ class Problem:
         return total
 
     def merit(self, x):
-        """Scalar sum of squared weighted residuals.
-
-        Suitable for scipy.optimize.minimize.
-
-        """
+        """Scalar sum of squared weighted residuals."""
         self._set_x(x)
         return float(self._eval_merit(self.prescription))
 
     def _free_slot_seeds(self):
-        """One DiffSeed per free DOF slot, built at the current lens state.
-
-        Shape DOFs carry an analytic tangent; thickness/decenter/tilt enter
-        through layout-FD pose tangents (seed_from_perturbation).  Raises
-        NotImplementedError for DOFs the differential engine does not map
-        (vector shape coefficients) -- callers fall back to finite
-        differences.
-
-        """
+        """DiffSeed objects for current free DOFs."""
         from .tolerance import Perturbation
         from ._diff_raytrace import seeds_from_perturbations
 
@@ -952,18 +860,8 @@ class Problem:
     def residual_jacobian(self, x):
         """Adjoint Jacobian of the weighted residual vector at x, or None.
 
-        Returns the (n_operands, n_free) matrix d residuals / d x from one
-        forward trace per launch bundle plus one reverse sweep per operand.
-        Returns None -- declining in favor of the caller's finite-difference
-        fallback -- when gradient='fd', there are no operands or free DOFs,
-        any objective operand does not support adjoint seeding or carry a
-        launch recipe, or a free DOF has no differential-seed mapping.
-        damped_least_squares consults this method automatically through its
-        problem protocol.
-
-        Each operand's recipe is launched once at x; the adjoint then
-        differentiates that bundle as a frozen ray set -- it does not
-        differentiate through bundle re-aiming.
+        Operand launch recipes are evaluated at x, then differentiated as fixed
+        ray bundles.
 
         """
         if self.gradient != 'auto':
@@ -984,9 +882,7 @@ class Problem:
         # local import: design stays import-light, mirroring the seed path
         from .adjoint.tolerance_analysis import multi_objective_sensitivity
 
-        # one launch per unique recipe at the current x; identity keying in
-        # the cache folds operands sharing a Field/Sampling into one bundle,
-        # hence one forward trace + reverse-sweep group.
+        # Group operands that share the same launch bundle.
         cache = _TraceCache(self.prescription)
         bundles = []
         groups = {}
@@ -1008,14 +904,7 @@ class Problem:
         return J
 
     def jacobian(self, x, method='auto', step=1e-6):
-        """Gradient of the scalar merit w.r.t. x (length n_params).
-
-        method='auto' (default) uses the adjoint residual Jacobian when every
-        operand supports it (grad = 2 J^T r) and falls back to central finite
-        differences otherwise; method='fd' forces finite differences;
-        method='autograd' requires the prysm backend to be torch.
-
-        """
+        """Gradient of scalar merit with respect to x."""
         if method == 'auto':
             J = self.residual_jacobian(x)
             if J is not None:
@@ -1083,43 +972,7 @@ _GOAL_OPERANDS = {
 
 def build_problem(system, goal='spot', *, sampling=None, fields=None,
                   wavelengths=None, constraints=None):
-    """Assemble a Problem from goal items fanned out over fields x wavelengths.
-
-    The recipe-operand analogue of a Code V AUT block: each fanned-out goal
-    item becomes one objective operand per (field, wavelength) pair, weighted
-    by the system's spectral weight (fields weighted uniformly).
-
-    Parameters
-    ----------
-    system : OpticalSystem or LensData
-        the design; an OpticalSystem supplies the default fields, wavelengths,
-        and spectral weights.
-    goal : str, Merit subclass, Merit instance, callable, or list of these
-        what to optimize.  Strings name boxed operands (spot ->
-        RmsSpotRadius, wavefront -> WavefrontRMS) and fan out over fields x
-        wavelengths; a Merit subclass (the class itself) fans out
-        identically via cls(field=..., wavelength=..., sampling=...,
-        weight=...); a Merit instance passes through as a single operand; a
-        bare callable f(prescription, cache) -> float is wrapped as a single
-        operand.  A list mixes any of these.
-    sampling : Sampling, optional
-        pupil sampling for fanned-out operands; None defers to the operand
-        default (Sampling.hex(nrings=4)).
-    fields : iterable, optional
-        field points for the fan-out; None uses the system fields (or the
-        on-axis default when it has none).
-    wavelengths : iterable of float, optional
-        wavelengths in microns for the fan-out; None uses the system
-        wavelengths and their weights (explicit wavelengths weight uniformly).
-    constraints : list of Merit, optional
-        constraint operands routed by their bounds; see Problem.
-
-    Returns
-    -------
-    Problem
-        ready to inspect, extend, or solve.
-
-    """
+    """Assemble a Problem from goal items fanned over fields and wavelengths."""
     items = list(goal) if isinstance(goal, (list, tuple)) else [goal]
 
     resolve_field = getattr(system, 'field', None)

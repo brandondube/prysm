@@ -220,7 +220,7 @@ def test_damped_least_squares_runs_raytracing_problem_with_constraint():
 
 
 def test_solve_warns_when_solver_reports_failure(monkeypatch):
-    """A failed solve still updates the lens but is never silent."""
+    """A failed solve warns after updating the lens."""
     from prysm.x.raytracing import design as design_mod
 
     ld = _refractive_singlet()
@@ -272,8 +272,7 @@ def test_zernike_coefficient_operand_returns_known_term():
                             P_xp=(0, 0, 0),
                             normalization_radius=5.0, norm=False)
     val = op(ld, _TraceCache(ld))
-    # parabola is aberration-free for the on-axis collimated beam,
-    # so all higher-order Zernikes are tiny
+    # On-axis parabola: higher-order Zernikes are tiny.
     assert abs(val) < 1e-9
 
 
@@ -293,8 +292,7 @@ def test_distortion_operand_runs_off_axis():
     ld = _refractive_singlet()
     op = Distortion(Field(0., 1., unit='deg'), 0.55, epd=4.0)
     value = op(ld, _TraceCache(ld))
-    # distortion is now signed (pincushion +, barrel -); off-axis it is a
-    # finite, nonzero value rather than an unconditionally positive magnitude
+    # Signed distortion: pincushion +, barrel -.
     assert np.isfinite(value)
     assert value != 0.0
 
