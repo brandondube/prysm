@@ -401,6 +401,29 @@ def test_pupil_field_finite_conjugate_apodization_does_not_collapse():
     assert float(np.max(amp)) > 0.0
 
 
+def test_pupil_field_uses_vignetted_pupil_coordinates_for_opd_tilt():
+    from prysm.x.raytracing.analysis import wavefront
+    from prysm.x.raytracing.opt import _pupil_center_chief_index
+    presc = _flat_refractor()
+    wvl = 0.5
+    epd = 4.0
+    npupil = 21
+    fld = Field(0.0, 8.0, kind='angle', vignetting={'vuy': 0.5})
+    sampling = Sampling.rect(n=npupil)
+    P, S = launch(presc, fld, wvl, sampling, epd=epd, pupil_z=-5.0)
+    opd_ref, _, _ = wavefront(presc, P, S, wvl, P_xp=(0, 0, 0),
+                              field=fld)
+    nominal = sampling.build(0.5 * epd)
+    chief = _pupil_center_chief_index(P)
+    circ = (np.hypot(nominal[:, 0] - nominal[chief, 0],
+                     nominal[:, 1] - nominal[chief, 1])
+            <= 0.5 * epd * (1 + 1e-9))
+
+    pf = field.pupil_field(presc, fld, wvl, epd=epd, npupil=npupil,
+                           P_xp=(0, 0, 0), pupil_z=-5.0)
+    np.testing.assert_allclose(pf.opd, opd_ref[circ], atol=1e-10)
+
+
 # ---------- Phase 3: polarization ray tracing ------------------------------
 
 def test_prt_matrix_matches_fresnel_diattenuation():

@@ -19,6 +19,7 @@ from prysm.x.raytracing.spencer_and_murty import raytrace
 from prysm.x.raytracing.opt import (
     hopkins_eic_closing, reference_sphere_curvature, eic_distance,
 )
+from prysm.x.raytracing.design import WavefrontRMS, _TraceCache
 from prysm.x.raytracing.paraxial import (
     paraxial_image_distance, first_order,
 )
@@ -130,6 +131,17 @@ def test_closing_is_finite_and_signed_at_telecentric_kappa_zero():
     assert float(opd.max() - opd.min()) > 0.0
 
 
+def test_wavefront_rms_accepts_telecentric_paraxial_exit_pupil():
+    ld = _telecentric()
+    wvl = ld.wavelength()
+    assert first_order(ld, wvl, stop_index=0).xp_z is None
+    op = WavefrontRMS(field=Field(3.0, 0.0, kind='angle'),
+                      wavelength=wvl, sampling=Sampling.fan(n=31, axis='y'))
+    rms = op(ld, _TraceCache(ld))
+    assert np.isfinite(rms)
+    assert rms > 0.0
+
+
 def test_closing_kappa_zero_is_limit_of_small_curvature():
     """kappa=0 (telecentric) is the continuous limit of a tiny finite curvature,
     not a separate branch."""
@@ -145,6 +157,17 @@ def test_closing_kappa_zero_is_limit_of_small_curvature():
     opd_eps = hopkins_eic_closing(trace.P, trace.S, trace.OPL, center=C,
                                   curvature=1e-9, n_image=1.0, chief_index=chief)
     np.testing.assert_allclose(opd_eps, opd0, rtol=0.0, atol=1e-9)
+
+
+def test_closing_rejects_rays_that_miss_finite_reference_sphere():
+    P = np.asarray([[[0.0, 0.0, 0.0],
+                     [2.0, 0.0, 0.0]]])
+    S = np.asarray([[[0.0, 0.0, 1.0],
+                     [0.0, 0.0, 1.0]]])
+    OPL = np.zeros((1, 2))
+    with pytest.raises(ValueError, match='reference sphere'):
+        hopkins_eic_closing(P, S, OPL, center=np.zeros(3), curvature=1.0,
+                            chief_index=0)
 
 
 def test_reference_sphere_curvature():

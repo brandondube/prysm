@@ -1361,7 +1361,11 @@ class Surface:
         P_out, S_out = transform_to_global_coords(Q_loc, self.P, Sprime, Rt)
 
         seg = P_out - P_in
-        opl = n_pre * np.sqrt(np.sum(seg * seg, axis=-1))
+        # signed segment length: a launch plane lying past the surface along
+        # the ray makes a virtual (backward) first segment, which must
+        # subtract path rather than add it for the OPD to be plane-invariant
+        opl = n_pre * np.sign(np.sum(seg * S_in, axis=-1)) \
+            * np.sqrt(np.sum(seg * seg, axis=-1))
         if opl_grating is not None:
             opl = opl + opl_grating
 

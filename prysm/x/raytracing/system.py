@@ -29,6 +29,35 @@ _POWER_EPS = 1e-30
 _DERIVED_MISS = object()
 
 
+def _tuple_or_none(value):
+    if value is None:
+        return None
+    arr = np.asarray(value, dtype=config.precision).ravel()
+    return tuple(float(v) for v in arr)
+
+
+def _field_key(field):
+    if field is None:
+        return None
+    vignetting = getattr(field, 'vignetting', None)
+    vignetting = (None if vignetting is None
+                  else tuple((k, float(v)) for k, v in sorted(vignetting.items())))
+    return (
+        getattr(field, 'hx', None),
+        getattr(field, 'hy', None),
+        getattr(field, 'kind', None),
+        getattr(field, 'unit', None),
+        getattr(field, 'object_z', None),
+        vignetting,
+    )
+
+
+def _aperture_key(aperture):
+    if aperture is None:
+        return None
+    return (aperture.mode, float(aperture.value))
+
+
 class ApertureSpec:
     """The aperture of an optical system: a mode plus a value.
 
@@ -517,12 +546,13 @@ class OpticalSystem:
         from .analysis import resolve_exit_pupil
         wvl = self.wavelength(wvl)
         resolved_stop = stop_index if stop_index is not None else self.stop_index
-        # field enters the key only via the geometric route; identify it by a
-        # hashable surrogate (its angle/height tuple) so equal fields share.
-        field_key = None if field is None else (
-            getattr(field, 'hx', None), getattr(field, 'hy', None),
-            getattr(field, 'kind', None))
-        key = (self.lens._version, float(wvl), field_key, resolved_stop)
+        field_key = _field_key(field)
+        key = (
+            'exit_pupil', self.lens._version, float(wvl), field_key,
+            resolved_stop, None if epd is None else float(epd),
+            _tuple_or_none(axis_point), _tuple_or_none(axis_dir),
+            _aperture_key(self.aperture), self.ray_aiming,
+        )
         cached = self._derived.get(key, _DERIVED_MISS)
         if cached is _DERIVED_MISS:
             cached = resolve_exit_pupil(
@@ -542,6 +572,56 @@ class OpticalSystem:
         self.lens.clear_image_distance_solve()
         return self
 
+    def reset_raytrace_cache(self):
+        """Clear cached raytrace data and reset the lens edit version."""
+        self._trace_cache.clear()
+        self._derived.clear()
+        self.lens._surfaces_cache = None
+        self.lens._version = 0
+        return self
+
+    def set_vignetting(self, fields=None, wavelength=None, *, tol=1e-3):
+        """Solve vignetting factors against the real apertures and store them.
+
+        Runs launch.solve_vignetting per field -- a real-ray bisection of one
+        edge ray per pupil side through this system's own apertures and ray
+        aiming -- and writes the factors onto each Field.  With the factors
+        set, every consumer (layouts, fans, spots) launches its bundles
+        compressed onto the transmitted pupil through the ordinary vignetting
+        path; the trace itself stays deterministic.
+
+        Factors are referenced to the nominal pupil: pre-existing factors on a
+        field (hand-typed or imported) are overwritten, not composed with.
+        Sides whose nominal rim ray already transmits get a factor of exactly
+        0, and an entirely unvignetted field collapses to no stored factors.
+
+        Parameters
+        ----------
+        fields : iterable of Field or int, optional
+            fields to solve; an int indexes the system field list.  Defaults
+            to all system fields.  Field objects are mutated in place.
+        wavelength : float, optional
+            wavelength in microns; defaults to the reference wavelength.
+        tol : float, optional
+            bisection tolerance on the normalized pupil scale.
+
+        Returns
+        -------
+        OpticalSystem
+            self, for chaining.
+
+        """
+        from .launch import solve_vignetting, _normalize_vignetting
+        wvl = self.wavelength(wavelength)
+        if fields is None:
+            fields = self.fields
+        for field in fields:
+            if isinstance(field, int):
+                field = self.fields[field]
+            factors = solve_vignetting(self, field, wvl, tol=tol)
+            field.vignetting = _normalize_vignetting(factors)
+        return self
+
     # -- convenience plotting (lazy plotting import; cached grids) --
     def _fingerprint(self):
         """Hashable snapshot of the live metadata that drives a grid trace.
@@ -552,8 +632,11 @@ class OpticalSystem:
         """
         aperture = self.aperture
         ap = None if aperture is None else (aperture.mode, aperture.value)
-        fields = tuple((f.kind, f.hx, f.hy, f.unit, f.object_z)
-                       for f in self.fields)
+        fields = tuple(
+            (f.kind, f.hx, f.hy, f.unit, f.object_z,
+             None if f.vignetting is None
+             else tuple(sorted(f.vignetting.items())))
+            for f in self.fields)
         return (self.lens._version, ap, fields,
                 tuple(float(w) for w in self.wavelengths),
                 tuple(float(w) for w in self.weights),
@@ -655,12 +738,14 @@ class OpticalSystem:
         return plotting.plot_opd_fans(grid, **plot_kwargs)
 
     def plot_field_curvature(self, *, fields=None, wavelength=None, epd=None,
-                             marginal_fraction=1e-3, **plot_kwargs):
+                             marginal_fraction=1e-3, samples=101,
+                             **plot_kwargs):
         """Field-curvature (x/y fan focus shift) curves for the system.
 
         Runs analysis.field_curvature (cached on the system fingerprint) and
         draws it with plotting.plot_field_curvature; data keywords size the
-        evaluation, the rest forward to the plotter.
+        evaluation, the rest forward to the plotter.  When fields is omitted
+        the curves sweep the system field span with samples points.
 
         Returns
         -------
@@ -671,17 +756,19 @@ class OpticalSystem:
         from .analysis import field_curvature
         grid = self._cached_grid('field_curvature', field_curvature, dict(
             fields=fields, wavelength=wavelength, epd=epd,
-            marginal_fraction=marginal_fraction))
+            marginal_fraction=marginal_fraction, samples=samples))
         return plotting.plot_field_curvature(
-            self, fields, result=grid, **plot_kwargs)
+            self, fields, result=grid, samples=samples, **plot_kwargs)
 
     def plot_distortion(self, *, fields=None, wavelength=None, epd=None,
-                        distortion_type='f-tan', pupil_z=None, **plot_kwargs):
+                        distortion_type='f-tan', pupil_z=None, samples=101,
+                        **plot_kwargs):
         """Percent-distortion curve for the system.
 
         Runs analysis.distortion (cached) and draws it with
         plotting.plot_distortion; data keywords size the evaluation, the rest
-        forward to the plotter.
+        forward to the plotter.  When fields is omitted the curve sweeps the
+        system field span with samples points.
 
         Returns
         -------
@@ -692,9 +779,10 @@ class OpticalSystem:
         from .analysis import distortion
         grid = self._cached_grid('distortion', distortion, dict(
             fields=fields, wavelength=wavelength, epd=epd,
-            distortion_type=distortion_type, pupil_z=pupil_z))
+            distortion_type=distortion_type, pupil_z=pupil_z,
+            samples=samples))
         return plotting.plot_distortion(
-            self, fields, result=grid, **plot_kwargs)
+            self, fields, result=grid, samples=samples, **plot_kwargs)
 
     def plot_chromatic_focal_shift(self, *, wavelengths=None,
                                    reference_wavelength=None, focus='best',
@@ -743,12 +831,14 @@ class OpticalSystem:
             self, wavelengths, result=data, **plot_kwargs)
 
     def plot_lateral_color(self, *, fields=None, wavelengths=None, epd=None,
-                           **plot_kwargs):
+                           samples=101, **plot_kwargs):
         """Lateral-color curves for the system, one per non-reference wavelength.
 
         Runs analysis.lateral_color (cached) and draws it with
         plotting.plot_lateral_color; data keywords size the chief-ray grid, the
-        rest (including reference_wavelength) forward to the plotter.
+        rest (including reference_wavelength) forward to the plotter.  When
+        fields is omitted the curves sweep the system field span with samples
+        points.
 
         Returns
         -------
@@ -758,9 +848,75 @@ class OpticalSystem:
         from . import plotting
         from .analysis import lateral_color
         data = self._cached_grid('lateral_color', lateral_color, dict(
-            fields=fields, wavelengths=wavelengths, epd=epd))
+            fields=fields, wavelengths=wavelengths, epd=epd, samples=samples))
         return plotting.plot_lateral_color(
-            self, fields, wavelengths, result=data, **plot_kwargs)
+            self, fields, wavelengths, result=data, samples=samples,
+            **plot_kwargs)
+
+    def plot_full_field(self, *, metric='rms spot', samples=15,
+                        max_field=None, wavelengths=None, sampling=None,
+                        epd=None, stop_index=None, **plot_kwargs):
+        """Full-field display: a 2D metric map over the system field disc.
+
+        Runs analysis.full_field (cached) and draws it with
+        plotting.plot_full_field; data keywords size the field grid and the
+        per-point evaluation, the rest forward to the plotter.  See
+        analysis.full_field for the available metrics ('rms spot', 'rms wfe',
+        'distortion', 'lateral color').
+
+        Returns
+        -------
+        (matplotlib.figure.Figure, matplotlib.axes.Axis)
+
+        """
+        from . import plotting
+        from .analysis import full_field
+        grid = self._cached_grid('full_field', full_field, dict(
+            metric=metric, samples=samples, max_field=max_field,
+            wavelengths=wavelengths, sampling=sampling, epd=epd,
+            stop_index=stop_index))
+        return plotting.plot_full_field(grid, **plot_kwargs)
+
+    # -- optimization sugar (lazy design import, mirroring the plotting
+    #    delegates; the free vector itself stays a LensData concern) --
+    def problem(self, goal='spot', *, sampling=None, fields=None,
+                wavelengths=None, constraints=None):
+        """Assemble a design.Problem over this system's free vector.
+
+        A thin delegate to design.build_problem (see it for parameters): goal
+        items fan out over the system fields x wavelengths with the system
+        spectral weights, and constraints route by their bounds (target= for
+        an equality, min=/max= for inequalities).  Mark DOFs first with
+        self.lens.vary(...).  Returns a real Problem -- inspect or extend its
+        operands before solving.
+
+        Returns
+        -------
+        design.Problem
+
+        """
+        from .design import build_problem
+        return build_problem(self, goal, sampling=sampling, fields=fields,
+                             wavelengths=wavelengths, constraints=constraints)
+
+    def optimize(self, goal='spot', *, sampling=None, fields=None,
+                 wavelengths=None, constraints=None, **solve_kwargs):
+        """Build and solve an optimization problem in one shot.
+
+        The Code V aut; ...; go analogue: optimize('spot',
+        constraints=[EFL(target=100), TotalTrack(max=100)]).  Data keywords
+        size the problem (see problem); the rest forward to Problem.solve
+        (maxiter, damping, ...).  The solve scatters the result into the lens,
+        so the system is updated in place.
+
+        Returns
+        -------
+        DampedLeastSquaresResult
+
+        """
+        prob = self.problem(goal, sampling=sampling, fields=fields,
+                            wavelengths=wavelengths, constraints=constraints)
+        return prob.solve(**solve_kwargs)
 
     # -- listings delegate to the lens --
     def list_surfaces(self, *, unit=None):

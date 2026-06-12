@@ -141,9 +141,8 @@ def test_monte_carlo_merits_dtype_follows_config_precision(precision):
 
 def test_problem_residuals_dtype_follows_config_precision(precision):
     ld = _parabola_ld()
-    P, S = launch(ld, Field(0., 0.), 0.55e-3,
-                  Sampling.fan(n=5), epd=4.0, pupil_z=-10.0)
-    op = RmsSpotRadius(P=P, S=S, wavelength=0.55e-3, target=0.0, weight=1.0)
+    op = RmsSpotRadius(Field(0., 0.), 0.55e-3, Sampling.fan(n=5),
+                       target=0.0, weight=1.0)
     ld.lens.vary('curvature', surfaces=0)
     prob = Problem(ld, [op])
     out = prob.residuals(prob.x0())

@@ -81,6 +81,30 @@ def test_adj_opl_segment(rng):
     assert np.isclose(lhs, rhs, rtol=RTOL)
 
 
+def test_adj_opl_segment_signed(rng):
+    # a mix of forward and backward (virtual) segments along S; the signed
+    # forms must stay a transpose pair and flip sign vs the unsigned forms
+    t = rng.standard_normal(N)
+    S = rng.standard_normal((N, 3))
+    S = S / np.linalg.norm(S, axis=1, keepdims=True)
+    seg = t[:, None] * S
+    n_pre = 1.37
+    n_pre_dot = rng.standard_normal(1)
+    dseg = rng.standard_normal((N, 3, 1))
+    L_bar = rng.standard_normal(N)
+
+    dL = d_opl_segment(n_pre, n_pre_dot, seg, dseg, S)[:, 0]
+    n_bar, dseg_bar = adj_opl_segment(n_pre, seg, L_bar, S)
+
+    lhs = _vdot(L_bar, dL)
+    rhs = float(n_bar) * float(n_pre_dot[0]) + _vdot(dseg_bar, dseg[..., 0])
+    assert np.isclose(lhs, rhs, rtol=RTOL)
+
+    sign = np.sign(t)
+    dL_unsigned = d_opl_segment(n_pre, n_pre_dot, seg, dseg)[:, 0]
+    np.testing.assert_allclose(dL, sign * dL_unsigned, rtol=RTOL)
+
+
 # ---------- 1.2 -------------------------------------------------------------
 
 def test_adj_transform_global(rng):

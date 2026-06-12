@@ -56,7 +56,8 @@ def test_ray_fans_shape_and_indexing():
     nf, nw, npup = grid.x.shape
     assert nf == len(grid.fields) == 2
     assert nw == len(grid.wavelengths) == 3
-    assert npup == grid.pupil.shape[0] == 21
+    assert npup == grid.pupil_x.shape[-1] == 21
+    assert grid.pupil_x.shape == grid.pupil_y.shape == (nf, npup)
     assert grid.y.shape == grid.x.shape
 
 
@@ -69,21 +70,39 @@ def test_ray_fans_default_metadata_from_system():
                                sorted([0.4861, 0.5876, 0.6563]))
 
 
-def test_ray_fans_pupil_is_shared_and_normalized():
+def test_ray_fans_pupil_is_per_field_and_normalized():
     sys = _singlet_system()
     grid = ray_aberration_fans(sys, nrays=21)
-    # the fan spans the normalized pupil rim to rim
-    assert grid.pupil.min() == pytest.approx(-1.0)
-    assert grid.pupil.max() == pytest.approx(1.0)
-    # one pupil axis serves every (field, wavelength)
-    assert grid.pupil.ndim == 1
+    # without vignetting the fans span the normalized pupil rim to rim
+    assert grid.pupil_x.min() == pytest.approx(-1.0)
+    assert grid.pupil_x.max() == pytest.approx(1.0)
+    assert grid.pupil_y.min() == pytest.approx(-1.0)
+    assert grid.pupil_y.max() == pytest.approx(1.0)
+    # one pupil axis per field (vignetting factors are per-field)
+    assert grid.pupil_x.shape == (len(grid.fields), 21)
+
+
+def test_ray_fans_vignetted_field_spans_less_than_unit_pupil():
+    # vignetting factors compress the launched fan onto the transmitted pupil;
+    # the abscissa shows the truncation (it is never stretched back to +/-1)
+    fields = [Field(0, 0),
+              Field(0, 3, vignetting={'vuy': 0.3, 'vly': 0.1})]
+    sys = _singlet_system(fields=fields)
+    grid = ray_aberration_fans(sys, nrays=21)
+    np.testing.assert_allclose(grid.pupil_y[0].max(), 1.0)
+    np.testing.assert_allclose(grid.pupil_y[1].max(), 0.7)
+    np.testing.assert_allclose(grid.pupil_y[1].min(), -0.9)
+    # x is unvignetted for this field
+    np.testing.assert_allclose(grid.pupil_x[1].max(), 1.0)
+    # the bundle stays full length: every fan value is finite
+    assert np.isfinite(grid.y[1]).all()
 
 
 def test_ray_fans_chief_reference_is_zero():
     """The pupil-center ray's error is exactly zero under chief referencing."""
     sys = _singlet_system()
     grid = ray_aberration_fans(sys, nrays=21, reference='chief')
-    ci = int(np.argmin(np.abs(grid.pupil)))
+    ci = int(np.argmin(np.abs(grid.pupil_x[0])))
     assert np.nanmax(np.abs(grid.x[:, :, ci])) == 0.0
     assert np.nanmax(np.abs(grid.y[:, :, ci])) == 0.0
 
@@ -112,7 +131,7 @@ def test_opd_fans_shape_and_chief_zero():
     assert isinstance(grid, OPDFanGrid)
     assert grid.x.shape == (2, 3, 21)
     # OPD is chief-referenced: the central ray is ~0 in every panel
-    ci = int(np.argmin(np.abs(grid.pupil)))
+    ci = int(np.argmin(np.abs(grid.pupil_x[0])))
     assert np.nanmax(np.abs(grid.x[:, :, ci])) < 1e-9
     assert np.nanmax(np.abs(grid.y[:, :, ci])) < 1e-9
 

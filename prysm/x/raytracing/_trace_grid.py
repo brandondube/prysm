@@ -1,5 +1,7 @@
 """Shared field/wavelength trace-grid helpers."""
 
+import math
+
 from .spencer_and_murty import raytrace, valid_mask
 from .launch import Field, launch
 from ._meta import system_wavelength, system_epd
@@ -13,6 +15,73 @@ def _resolve_fields(prescription, fields):
     if sys_fields is not None and len(sys_fields) > 0:
         return list(sys_fields)
     return [Field(0.0, 0.0)]
+
+
+def field_sweep(prescription, fields=None, samples=101):
+    """Dense field samples spanning the system field set.
+
+    A drop-in upgrade of _resolve_fields for analyses that are smooth
+    functions of field (field curvature, distortion, lateral color):
+    explicitly given fields pass through verbatim, but when fields is None
+    the defaulted system FieldSet is replaced by samples points spaced
+    linearly from the smallest to the largest field magnitude, along the
+    direction of the largest field.  The dense points carry no per-field
+    vignetting; the chief-ray analyses this serves launch at the pupil
+    center, which vignetting factors do not move.
+
+    Falls back to the discrete _resolve_fields result whenever a sweep is
+    not well defined: a heterogeneous field set (mixed kind, angular unit,
+    or object plane) or an all-on-axis one.  A field set with a single
+    distinct magnitude sweeps from on axis out to it.
+
+    Parameters
+    ----------
+    prescription : sequence of Surface or OpticalSystem
+        the optical system.
+    fields : iterable of Field, optional
+        explicit field points, returned verbatim; None triggers the sweep.
+    samples : int, optional
+        number of sweep points when fields is None.
+
+    Returns
+    -------
+    list of Field
+        the fields to evaluate.
+
+    """
+    base = _resolve_fields(prescription, fields)
+    if fields is not None or len(base) == 0:
+        return base
+    kinds = {f.kind for f in base}
+    if len(kinds) != 1:
+        return base
+    kind = kinds.pop()
+    if kind == 'angle':
+        if len({f.unit for f in base}) != 1:
+            return base
+        object_z = None
+    else:
+        if len({f.object_z for f in base}) != 1:
+            return base
+        object_z = base[0].object_z
+    unit = base[0].unit
+    mags = [math.hypot(f.hx, f.hy) for f in base]
+    mmax = max(mags)
+    if mmax <= 0.0:
+        return base
+    outer = base[mags.index(mmax)]
+    ux = outer.hx / mmax
+    uy = outer.hy / mmax
+    mmin = min(mags)
+    if mmin >= mmax:
+        mmin = 0.0
+    samples = max(int(samples), 2)
+    step = (mmax - mmin) / (samples - 1)
+    return [
+        Field(ux * (mmin + step * i), uy * (mmin + step * i),
+              kind=kind, unit=unit, object_z=object_z)
+        for i in range(samples)
+    ]
 
 
 def _resolve_wavelengths(prescription, wavelengths):

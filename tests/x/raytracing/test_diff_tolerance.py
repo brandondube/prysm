@@ -20,11 +20,11 @@ from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.surfaces import Conic, Plane
-from prysm.x.raytracing.spencer_and_murty import STYPE_EVAL
+from prysm.x.raytracing.spencer_and_murty import STYPE_EVAL, raytrace
 from prysm.x.raytracing.paraxial import paraxial_image_distance
 from prysm.x.raytracing.design import WavefrontRMS
 from prysm.x.raytracing.tolerance import (
-    Perturbation, sensitivity_table, operand_as_merit,
+    Perturbation, sensitivity_table,
 )
 from prysm.x.raytracing._diff_raytrace import (
     seed_from_perturbation, seeds_from_perturbations, wavefront_with_tangents,
@@ -107,8 +107,17 @@ def wd_rms_sensitivities(ld, P, S, perturbations):
 
 
 def fd_rms_sensitivities(ld, P, S, perturbations):
-    """FD sensitivity_table of the WavefrontRMS merit (the validation gate)."""
-    merit = operand_as_merit(WavefrontRMS(P, S, WVL))
+    """FD sensitivity_table of the WavefrontRMS merit (the validation gate).
+
+    Built on the operand's value over the exact hand bundle, frozen across
+    the FD re-traces -- the tangent bundle differentiates these rays too.
+    """
+    op = WavefrontRMS()
+
+    def merit(prescription):
+        return float(op.value(raytrace(prescription, P, S, WVL),
+                              prescription, WVL))
+
     table = sensitivity_table(ld, perturbations, merit)
     return table.sensitivities(), table.merit_nominal
 

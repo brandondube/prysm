@@ -1,12 +1,12 @@
 """Field, Sampling, launch, and stop-aim ergonomics."""
 
 from prysm.conf import config
-from prysm.mathops import np
+from prysm.mathops import np, array_to_true_numpy
 
 from . import raygen
 from .opt import aim_rays
 from .paraxial import entrance_pupil_z
-from .spencer_and_murty import raytrace
+from .spencer_and_murty import raytrace, valid_mask
 from ._meta import system_epd, object_space_index, system_stop_index
 
 
@@ -46,8 +46,11 @@ class Field:
         object_z : float, optional
             absolute z of the object plane; required for kind='height'.
         vignetting : mapping, optional
-            per-field Code V side-vignetting factors vux, vlx, vuy, vly, each
-            in 0..1; an all-zero mapping is treated as no vignetting.
+            per-field Code V side-vignetting factors vux, vlx, vuy, vly.  Each
+            scales its half of the launched pupil by (1 - factor): positive
+            factors compress that side, negative factors (pupil expansion)
+            grow it, and a factor of 1 or more is degenerate (rejected).  An
+            all-zero mapping is treated as no vignetting.
 
         """
         if kind not in ('angle', 'height'):
@@ -91,17 +94,25 @@ class Field:
 
 
 def _normalize_vignetting(vignetting):
-    """Normalize per-field Code V vignetting factors."""
+    """Normalize per-field Code V vignetting factors.
+
+    Factors are stored verbatim: each scales its side of the launched pupil
+    by (1 - factor), so negative values (Code V pupil expansion, common after
+    real-ray VUY optimization) are meaningful and tiny optimizer-noise values
+    are harmless.  A factor of 1 or more collapses or flips its side of the
+    pupil and is rejected.
+
+    """
     if vignetting is None:
         return None
     keys = ('vux', 'vlx', 'vuy', 'vly')
     out = {}
     for key in keys:
         value = float(vignetting.get(key, 0.0))
-        if value < 0.0 or value > 1.0:
+        if value >= 1.0:
             raise ValueError(
-                f'vignetting factor {key.upper()}={value:g} must satisfy '
-                '0 <= value <= 1'
+                f'vignetting factor {key.upper()}={value:g} collapses its '
+                'side of the pupil; factors must be < 1'
             )
         out[key] = value
     if not any(out.values()):
@@ -122,13 +133,13 @@ class Sampling:
     def __init__(self, kind, **opts):
         """Initialize a pupil sampling pattern.
 
-        Prefer the classmethod factories (chief, fan, cross, rect, hex, spiral)
+        Prefer the classmethod factories (chief, points, fan, cross, rect, hex, spiral)
         over calling this directly; they name the per-pattern options.
 
         Parameters
         ----------
         kind : str
-            pattern name: 'chief', 'fan', 'cross', 'rect', 'hex', or 'spiral'.
+            pattern name: 'chief', 'points', 'fan', 'cross', 'rect', 'hex', or 'spiral'.
         **opts
             pattern-specific options (e.g. n, nrings, distribution,
             obscuration) consumed by build.
@@ -155,6 +166,8 @@ class Sampling:
         kind = self.kind
         if kind == 'chief':
             return np.zeros((1, 2), dtype=config.precision)
+        elif kind == 'points':
+            xy = np.asarray(self.opts['xy'], dtype=config.precision) * extent
         elif kind == 'fan':
             P, _ = raygen.generate_collimated_ray_fan(
                 self.opts['n'], maxr=extent,
@@ -206,6 +219,18 @@ class Sampling:
     def chief(cls):
         """A single chief ray at the pupil origin."""
         return cls('chief')
+
+    @classmethod
+    def points(cls, xy):
+        """Explicit pupil samples.
+
+        xy is a shape (N, 2) array of normalized pupil coordinates (rim at
+        radius 1); build scales them by the pupil extent like any other
+        pattern.  Useful for custom sampling layouts and for re-launching a
+        pattern with per-sample adjustments.
+
+        """
+        return cls('points', xy=xy)
 
     @classmethod
     def fan(cls, n=11, axis='y', distribution='uniform', obscuration=None):
@@ -358,7 +383,7 @@ def _object_space_cone_PS(prescription, field, wavelength, sampling, na):
             f'{sinU:g}, which is not a physical cone half-angle')
 
     pupil_xy = sampling.build(1.0)  # normalized: rim at radius 1
-    pupil_xy = _apply_vignetting(pupil_xy, 1.0, field)
+    pupil_xy = _apply_vignetting(pupil_xy, field)
     if pupil_xy.dtype != config.precision:
         pupil_xy = pupil_xy.astype(config.precision)
     n_rays = pupil_xy.shape[0]
@@ -385,25 +410,30 @@ def _object_space_cone_PS(prescription, field, wavelength, sampling, na):
     return P, S, rho
 
 
-def _apply_vignetting(pupil_xy, extent, field):
-    """Clip pupil samples by per-field normalized side vignetting."""
-    vignetting = getattr(field, 'vignetting', None)
-    if not vignetting or float(extent) <= 0.0:
-        return pupil_xy
+def _apply_vignetting(pupil_xy, field):
+    """Compress pupil samples onto the field's vignetted pupil.
 
+    Code V side-vignetting factors shrink (or, when negative, grow) each half
+    of the transmitted pupil: the upper x half-extent becomes (1 - vux) of
+    nominal, the lower (1 - vlx), and likewise in y.  Each sample is scaled
+    onto that span per side rather than clipped, so the bundle keeps its full
+    length, the marginal samples ride the vignetted pupil edge, and the
+    center sample stays the chief ray.  The map is proportional, so it applies
+    identically to normalized and physical pupil coordinates.
+
+    """
+    vignetting = getattr(field, 'vignetting', None)
+    if not vignetting:
+        return pupil_xy
     x = pupil_xy[:, 0]
     y = pupil_xy[:, 1]
-    extent = float(extent)
-    keep = (
-        (x <= extent * (1.0 - vignetting.get('vux', 0.0))) &
-        (x >= -extent * (1.0 - vignetting.get('vlx', 0.0))) &
-        (y <= extent * (1.0 - vignetting.get('vuy', 0.0))) &
-        (y >= -extent * (1.0 - vignetting.get('vly', 0.0)))
-    )
-    pupil_xy = pupil_xy[keep]
-    if pupil_xy.shape[0] == 0:
-        raise ValueError('vignetting factors clipped every pupil sample')
-    return pupil_xy
+    x = x * np.where(x >= 0.0,
+                     1.0 - vignetting.get('vux', 0.0),
+                     1.0 - vignetting.get('vlx', 0.0))
+    y = y * np.where(y >= 0.0,
+                     1.0 - vignetting.get('vuy', 0.0),
+                     1.0 - vignetting.get('vly', 0.0))
+    return np.stack([x, y], axis=1)
 
 
 def _real_aim_to_stop(P, S, rho, prescription, stop_index, wavelength, finite):
@@ -515,7 +545,7 @@ def launch(prescription, field, wavelength, sampling, *,
         else:
             extent = 0.0
         pupil_xy = sampling.build(extent)
-        pupil_xy = _apply_vignetting(pupil_xy, extent, field)
+        pupil_xy = _apply_vignetting(pupil_xy, field)
         if pupil_xy.dtype != config.precision:
             pupil_xy = pupil_xy.astype(config.precision)
 
@@ -563,3 +593,96 @@ def launch(prescription, field, wavelength, sampling, *,
                                  wavelength, finite)
 
     return P, S
+
+
+def solve_vignetting(prescription, field, wavelength, *, tol=1e-3, maxiter=20):
+    """Solve real-ray vignetting factors for one field.
+
+    Bisects the radial scale of one edge ray per pupil side (+x, -x, +y, -y)
+    against transmission through the system apertures, launching each probe
+    bundle through the same aiming path as any analysis bundle.  The largest
+    transmitted edge e of a side gives its Code V factor 1 - e, referenced to
+    the nominal pupil: any factors already on the field are ignored, and the
+    result is meant to overwrite them, not compose with them.  Each factor is
+    the last passing bisection scale, so the factor edge ray transmits
+    strictly inside the limiting aperture rather than riding tangent to it.
+
+    Factors are floored at 0: a side whose edge ray transmits at the nominal
+    rim is reported unvignetted, and scales beyond the nominal pupil (Code V
+    pupil expansion, negative factors) are not probed.
+
+    Parameters
+    ----------
+    prescription : OpticalSystem or sequence of Surface
+        the system traced; its apertures, aperture spec, and ray aiming define
+        transmission.
+    field : Field
+        the field point to solve.  Not mutated.
+    wavelength : float
+        wavelength in microns.
+    tol : float, optional
+        bisection tolerance on the normalized radial scale.
+    maxiter : int, optional
+        maximum bisection iterations.
+
+    Returns
+    -------
+    dict
+        Code V factors vux, vlx, vuy, vly, each in [0, 1).
+
+    Raises
+    ------
+    ValueError
+        if the chief ray does not transmit (factors are referenced to it), or
+        if a side's edge ray fails at every probed scale.
+
+    """
+    # solve in the absolute normalized pupil: a clone without the field's
+    # current factors launches the canonical samples uncompressed.
+    bare = Field(field.hx, field.hy, kind=field.kind, unit=field.unit,
+                 object_z=field.object_z)
+    # row 0 is the chief; rows 1-4 are the per-side edge rays, ordered to
+    # match keys below.
+    edges = np.asarray([
+        [0.0, 0.0],
+        [1.0, 0.0],
+        [-1.0, 0.0],
+        [0.0, 1.0],
+        [0.0, -1.0],
+    ], dtype=config.precision)
+    keys = ('vux', 'vlx', 'vuy', 'vly')
+
+    def transmits(scales):
+        s = np.asarray([1.0, *scales], dtype=config.precision)
+        xy = edges * s[:, np.newaxis]
+        P, S = launch(prescription, bare, wavelength, Sampling.points(xy))
+        result = raytrace(prescription, P, S, wavelength)
+        return array_to_true_numpy(valid_mask(result.status))
+
+    valid = transmits([1.0] * 4)
+    if not bool(valid[0]):
+        raise ValueError(
+            'solve_vignetting: the chief ray does not transmit; vignetting '
+            'factors are referenced to it')
+    lo = [1.0 if bool(v) else 0.0 for v in valid[1:]]
+    hi = [1.0] * 4
+    active = [not bool(v) for v in valid[1:]]
+    for _ in range(maxiter):
+        gaps = [h - l for h, l, a in zip(hi, lo, active) if a]
+        if not gaps or max(gaps) <= tol:
+            break
+        mid = [(l + h) / 2.0 if a else 1.0
+               for l, h, a in zip(lo, hi, active)]
+        vm = transmits(mid)
+        for i in range(4):
+            if active[i]:
+                if bool(vm[i + 1]):
+                    lo[i] = mid[i]
+                else:
+                    hi[i] = mid[i]
+    for key, l, a in zip(keys, lo, active):
+        if a and l == 0.0:
+            raise ValueError(
+                f'solve_vignetting: the {key} edge ray fails at every probed '
+                'pupil scale; the side appears fully vignetted')
+    return {key: 1.0 - l for key, l in zip(keys, lo)}

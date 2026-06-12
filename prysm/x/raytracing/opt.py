@@ -433,7 +433,14 @@ def hopkins_eic_closing(P_hist, S_hist, OPL_hist, *, center, curvature,
     disc = 1.0 + k * k * m
     # the same domain as the explicit root: disc = (b^2 - |r|^2 + R^2)/R^2 >= 0
     # exactly when the ray meets the sphere.  Clamp FP noise on grazing rays.
-    disc[disc < 0] = 0.0
+    min_disc = float(np.min(array_to_true_numpy(disc)))
+    tol = 64.0 * np.finfo(np.asarray(disc).dtype).eps
+    if min_disc < -tol:
+        raise ValueError(
+            'ray does not intersect the reference sphere; check P_xp/center '
+            'or use the telecentric curvature=0 limit'
+        )
+    disc = np.where(disc < 0.0, 0.0, disc)
     s = -b - k * m / (1.0 + np.sqrt(disc))
     OPL_total = OPL_through + n_image * s
     return OPL_total - OPL_total[chief_index]

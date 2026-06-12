@@ -100,7 +100,7 @@ def _seeds():
 def test_spot_size_vs_fd():
     P, S = ray_bundle()
     grad_adj = adjoint_gradient(make_system(), P, S, WVL, _seeds(),
-                                RmsSpotRadius(P, S, WVL))
+                                RmsSpotRadius())
     grad_fd = _fd_grad(_merit_spot, P, S)
     np.testing.assert_allclose(grad_adj, grad_fd, rtol=2e-5, atol=1e-8)
 
@@ -118,14 +118,14 @@ def test_wfe_vs_forward_mode():
     grad_fwd = np.einsum('v,vp->p', opd_bar, dW)
 
     grad_adj = adjoint_gradient(make_system(), P, S, WVL, seeds,
-                                WavefrontRMS(P, S, WVL))
+                                WavefrontRMS())
     np.testing.assert_allclose(grad_adj, grad_fwd, rtol=1e-8, atol=1e-11)
 
 
 def test_wfe_vs_fd():
     P, S = ray_bundle()
     grad_adj = adjoint_gradient(make_system(), P, S, WVL, _seeds(),
-                                WavefrontRMS(P, S, WVL))
+                                WavefrontRMS())
     grad_fd = _fd_grad(_merit_wfe, P, S)
     np.testing.assert_allclose(grad_adj, grad_fd, rtol=2e-5, atol=1e-9)
 
@@ -134,7 +134,7 @@ def test_wfe_vs_fd():
 
 def test_seeded_merits_are_merits():
     P, S = ray_bundle()
-    for merit in (RmsSpotRadius(P, S, WVL), WavefrontRMS(P, S, WVL)):
+    for merit in (RmsSpotRadius(), WavefrontRMS()):
         assert isinstance(merit, Merit)
         assert merit.has_value
         assert merit.seedable
@@ -177,6 +177,6 @@ def test_spot_value_matches_rms_spot_radius():
     P, S = ray_bundle()
     sys = make_system()
     tr = raytrace(sys, P, S, WVL)
-    val = RmsSpotRadius(P, S, WVL).value(tr, sys, WVL)
+    val = RmsSpotRadius().value(tr, sys, WVL)
     assert np.isclose(val, float(rms_spot_radius(tr.P[-1], status=tr.status)))
     assert np.isclose(val, _merit_spot(sys, P, S))

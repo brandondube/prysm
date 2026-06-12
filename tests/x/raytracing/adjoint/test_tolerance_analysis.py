@@ -31,7 +31,7 @@ def _seeds():
 
 def _heads(P, S):
     # the seedable unified merits; Distortion is value-only (no adjoint seed).
-    return [WavefrontRMS(P, S, WVL), RmsSpotRadius(P, S, WVL)]
+    return [WavefrontRMS(), RmsSpotRadius()]
 
 
 def test_jacobian_matches_per_head_sweeps():

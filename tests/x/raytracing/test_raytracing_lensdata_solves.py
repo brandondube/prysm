@@ -174,7 +174,7 @@ def test_solve_and_pickup_compose_in_optimization():
     ld.solve_image_distance()
     ld.lens.vary('curvature', surfaces=0)
     wvl = ld.wavelength()
-    prob = Problem(ld, equality_constraints=[EFL(wvl, target=120.0)])
+    prob = Problem(ld, constraints=[EFL(wvl, target=120.0)])
     res = prob.solve(damping=1e-8, maxiter=10)
     assert res.success
     s = ld.surfaces

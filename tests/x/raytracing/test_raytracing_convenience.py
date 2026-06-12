@@ -102,22 +102,35 @@ def test_convenience_grid_equals_explicit_two_step():
 
 # ---------- curve plot methods ----------------------------------------------
 
-def test_plot_field_curvature_defaults_from_system():
+def test_plot_field_curvature_defaults_to_dense_field_sweep():
     sys = _doublet()
-    fig, ax = sys.plot_field_curvature()
+    fig, ax = sys.plot_field_curvature(samples=33)
     try:
         assert len(ax.lines) == 2  # x and y fans
+        y = ax.lines[0].get_ydata()
+        assert len(y) == 33
+        # the sweep spans the system field magnitudes
+        assert y[0] == pytest.approx(0.0)
+        assert y[-1] == pytest.approx(1.0)
+    finally:
+        plt.close(fig)
+
+
+def test_plot_field_curvature_explicit_fields_verbatim():
+    sys = _doublet()
+    fig, ax = sys.plot_field_curvature(fields=list(sys.fields))
+    try:
         assert len(ax.lines[0].get_ydata()) == len(sys.fields)
     finally:
         plt.close(fig)
 
 
-def test_plot_distortion_defaults_from_system():
+def test_plot_distortion_defaults_to_dense_field_sweep():
     sys = _doublet()
-    fig, ax = sys.plot_distortion()
+    fig, ax = sys.plot_distortion(samples=33)
     try:
         assert len(ax.lines) == 1
-        assert len(ax.lines[0].get_xdata()) == len(sys.fields)
+        assert len(ax.lines[0].get_xdata()) == 33
     finally:
         plt.close(fig)
 
@@ -155,9 +168,10 @@ def test_plot_lateral_color_one_curve_per_nonreference_wavelength():
     fig, ax = sys.plot_lateral_color()
     try:
         assert len(ax.lines) == len(sys.wavelengths) - 1
-        assert len(ax.lines[0].get_ydata()) == len(sys.fields)
-        # pure +y fields: the signed projection is the chief-ray y difference
+        # default dense field sweep, matching the analysis default
         landing = lateral_color(sys)
+        assert len(ax.lines[0].get_ydata()) == landing.shape[0]
+        # pure +y fields: the signed projection is the chief-ray y difference
         expected = landing[:, 0, 1] - landing[:, sys.reference, 1]
         np.testing.assert_allclose(ax.lines[0].get_xdata(), expected,
                                    atol=1e-12)
@@ -170,7 +184,8 @@ def test_plot_lateral_color_one_curve_per_nonreference_wavelength():
 def test_curve_convenience_data_cached_and_matches_explicit():
     sys = _doublet()
     explicit = field_curvature(sys)
-    kw = dict(fields=None, wavelength=None, epd=None, marginal_fraction=1e-3)
+    kw = dict(fields=None, wavelength=None, epd=None, marginal_fraction=1e-3,
+              samples=101)
     cached = sys._cached_grid('field_curvature', field_curvature, kw)
     np.testing.assert_allclose(cached.x_fan_z, explicit.x_fan_z)
     np.testing.assert_allclose(cached.y_fan_z, explicit.y_fan_z)
@@ -178,6 +193,33 @@ def test_curve_convenience_data_cached_and_matches_explicit():
 
 
 # ---------- the fingerprint trace cache -------------------------------------
+
+def test_reset_raytrace_cache_clears_caches_and_resets_version():
+    sys = _doublet()
+    wvl = sys.wavelength()
+    grid_kw = dict(fields=None, wavelengths=None, nrays=11, epd=None,
+                   distribution='uniform', reference='chief')
+
+    P_xp = sys.exit_pupil(wvl)
+    grid = sys._cached_grid('ray_fans', ray_aberration_fans, grid_kw)
+    sys.lens.to_surfaces()
+    assert sys._derived
+    assert sys._trace_cache
+    assert sys.lens._surfaces_cache is not None
+
+    sys.lens.rows[1].thickness = 6.5
+    assert sys.lens._version > 0
+
+    out = sys.reset_raytrace_cache()
+    assert out is sys
+    assert sys.lens._version == 0
+    assert sys.lens._surfaces_cache is None
+    assert sys._derived == {}
+    assert sys._trace_cache == {}
+
+    assert sys.exit_pupil(wvl) is not P_xp
+    assert sys._cached_grid('ray_fans', ray_aberration_fans, grid_kw) is not grid
+
 
 def test_trace_cache_hits_then_invalidates_on_every_change():
     sys = _doublet()
@@ -210,6 +252,12 @@ def test_trace_cache_hits_then_invalidates_on_every_change():
     g7 = sys._cached_grid('ray_fans', ray_aberration_fans, kw)
     assert g7 is not g6
 
+    # an in-place field vignetting mutation (set_vignetting) -> miss
+    sys.fields.fields[0].vignetting = {'vux': 0.0, 'vlx': 0.0,
+                                       'vuy': 0.1, 'vly': 0.1}
+    g8 = sys._cached_grid('ray_fans', ray_aberration_fans, kw)
+    assert g8 is not g7
+
 
 def test_trace_cache_distinguishes_call_arguments():
     sys = _doublet()
@@ -217,3 +265,22 @@ def test_trace_cache_distinguishes_call_arguments():
     b = sys._cached_grid('ray_fans', ray_aberration_fans, dict(nrays=21))
     assert a is not b
     assert a.x.shape[-1] == 11 and b.x.shape[-1] == 21
+
+
+def test_plot_full_field_draws_metric_map():
+    sys = _doublet()
+    fig, ax = sys.plot_full_field(samples=5)
+    try:
+        assert len(ax.collections) == 1  # the pcolormesh
+        data = ax.collections[0].get_array()
+        assert np.isfinite(np.asarray(data)).any()
+        assert ax.get_xlabel() == 'field x [deg]'
+        # the grid is cached on the system fingerprint
+        from prysm.x.raytracing.analysis import full_field
+        kw = dict(metric='rms spot', samples=5, max_field=None,
+                  wavelengths=None, sampling=None, epd=None, stop_index=None)
+        g1 = sys._cached_grid('full_field', full_field, kw)
+        g2 = sys._cached_grid('full_field', full_field, kw)
+        assert g1 is g2
+    finally:
+        plt.close(fig)

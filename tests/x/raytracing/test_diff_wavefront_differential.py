@@ -21,11 +21,11 @@ from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.surfaces import Conic, Plane
-from prysm.x.raytracing.spencer_and_murty import STYPE_EVAL
+from prysm.x.raytracing.spencer_and_murty import STYPE_EVAL, raytrace
 from prysm.x.raytracing.paraxial import paraxial_image_distance
 from prysm.x.raytracing.design import WavefrontRMS
 from prysm.x.raytracing.tolerance import (
-    Perturbation, sensitivity_table, monte_carlo, operand_as_merit,
+    Perturbation, sensitivity_table, monte_carlo,
 )
 from prysm.x.raytracing.wavefront_differential import (
     wavefront_differential, WavefrontDifferential, cumulative_probability,
@@ -84,7 +84,15 @@ def basic_perts(ld):
 
 
 def merit_of(ld, P, S):
-    return operand_as_merit(WavefrontRMS(P, S, WVL))
+    # frozen-bundle merit over the exact hand bundle: the differential trace
+    # being validated differentiates these rays, not a re-launched recipe
+    op = WavefrontRMS()
+
+    def merit(prescription):
+        return float(op.value(raytrace(prescription, P, S, WVL),
+                              prescription, WVL))
+
+    return merit
 
 
 # ---------- the model reproduces the gate ----------------------------------

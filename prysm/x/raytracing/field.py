@@ -11,7 +11,7 @@ from . import spencer_and_murty as sm
 from .spencer_and_murty import (
     STYPE_REFLECT, STYPE_REFRACT, raytrace,
 )
-from .launch import Sampling
+from .launch import Sampling, _apply_vignetting
 from .paraxial import first_order, effective_focal_length
 from .opt import (
     _pupil_center_chief_index,
@@ -603,8 +603,11 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
         coating_amp = result.amplitude
         P_matrix_all = None
 
-    # Entrance-pupil coordinates are the pupil coordinates of the rays.
-    pupil_xy = sampling.build(0.5 * epd)
+    # Entrance-pupil coordinates are the pupil coordinates of the rays.  Keep
+    # the nominal grid for the circular mask; use the vignetted grid everywhere
+    # that must match the traced launch bundle.
+    nominal_pupil_xy = sampling.build(0.5 * epd)
+    pupil_xy = _apply_vignetting(nominal_pupil_xy, field)
 
     # Anchor the reference sphere before applying the circular pupil mask.
     mask = valid if reference == 'centroid' else None
@@ -625,8 +628,10 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
         )
 
     # Rect sampling fills a square; the entrance pupil is the inscribed circle.
-    r_entrance = np.hypot(pupil_xy[:, 0] - pupil_xy[chief_index, 0],
-                          pupil_xy[:, 1] - pupil_xy[chief_index, 1])
+    r_entrance = np.hypot(
+        nominal_pupil_xy[:, 0] - nominal_pupil_xy[chief_index, 0],
+        nominal_pupil_xy[:, 1] - nominal_pupil_xy[chief_index, 1],
+    )
     circ = r_entrance <= (0.5 * epd) * (1.0 + 1e-9)
     valid = valid & circ
 

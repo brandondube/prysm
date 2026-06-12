@@ -7,7 +7,7 @@ import pytest
 from prysm.x import materials
 from prysm.x.raytracing import LensData, OpticalSystem
 from prysm.x.raytracing.surfaces import Conic, Plane, EvenAsphere
-from prysm.x.raytracing.launch import Field, Sampling, launch
+from prysm.x.raytracing.launch import Field, Sampling
 from prysm.x.raytracing.design import (
     Problem, RmsSpotRadius, WavefrontRMS, RayHeightAt,
 )
@@ -28,11 +28,14 @@ def _singlet(c1=1 / 50.0, c2=-1 / 50.0, gap=5.0, back=100.0, shape=Conic):
 
 
 def _two_bundle_problem(sys_, **prob_kwargs):
-    P1, S1 = launch(sys_, Field(0., 0.), 0.55, Sampling.fan(n=9), epd=4.0)
-    P2, S2 = launch(sys_, Field(0., 0.5), 0.55, Sampling.hex(3), epd=4.0)
-    ops = [RmsSpotRadius(P1, S1, wavelength=0.55, weight=2.0),
-           RmsSpotRadius(P2, S2, wavelength=0.55),
-           WavefrontRMS(P1, S1, wavelength=0.55, P_xp=(0., 0., 80.0))]
+    # two recipes (fan + hex) over an on-axis field: a collimated on-axis
+    # launch is invariant to the design DOFs, so FD-through-the-launch and
+    # the frozen-bundle adjoint agree to FD truncation error
+    f = Field(0., 0.)
+    fan = Sampling.fan(n=9)
+    ops = [RmsSpotRadius(f, 0.55, fan, weight=2.0),
+           RmsSpotRadius(f, 0.55, Sampling.hex(3)),
+           WavefrontRMS(f, 0.55, fan, P_xp=(0., 0., 80.0))]
     return Problem(sys_, ops, **prob_kwargs)
 
 
@@ -65,9 +68,10 @@ def test_residual_jacobian_matches_fd_mixed_dofs_and_bundles():
 def test_residual_jacobian_declines_on_unseedable_operand():
     sys_ = _singlet()
     sys_.lens.vary('curvature', surfaces=0)
-    P, S = launch(sys_, Field(0., 0.), 0.55, Sampling.fan(n=5), epd=4.0)
-    ops = [RmsSpotRadius(P, S, wavelength=0.55),
-           RayHeightAt(P, S, 0.55, surface_index=-1, axis=1)]
+    f = Field(0., 0.)
+    fan = Sampling.fan(n=5)
+    ops = [RmsSpotRadius(f, 0.55, fan),
+           RayHeightAt(f, 0.55, fan, surface_index=-1, axis=1)]
     prob = Problem(sys_, ops)
     assert prob.residual_jacobian(prob.x0()) is None
     # the DLS seam falls back to FD and still solves
@@ -109,8 +113,7 @@ def test_solve_with_adjoint_routing_matches_fd_and_cuts_nfev():
     def build():
         sys_ = _singlet(back=90.0)
         sys_.lens.vary('thickness', surfaces=1)
-        P, S = launch(sys_, Field(0., 0.), 0.55, Sampling.fan(n=11), epd=4.0)
-        return sys_, [RmsSpotRadius(P, S, wavelength=0.55)]
+        return sys_, [RmsSpotRadius(Field(0., 0.), 0.55, Sampling.fan(n=11))]
 
     sys_a, ops_a = build()
     prob_a = Problem(sys_a, ops_a)

@@ -10,6 +10,7 @@ from tests.x.raytracing.surface_helpers import (
 
 from prysm.x.raytracing.surfaces import (
     Plane, Surface, circular_aperture, annular_aperture,
+    Sphere as SphereShape,
 )
 from prysm.x.raytracing import LensData, OpticalSystem, ApertureSpec
 from prysm.x.raytracing.spencer_and_murty import STATUS_CLIP
@@ -22,6 +23,8 @@ from prysm.x.raytracing.analysis import (
     wavefront_zernike_fit,
     distortion,
     field_curvature,
+    field_sweep,
+    full_field,
     axial_color,
     chromatic_focal_shift,
     lateral_color,
@@ -526,3 +529,131 @@ def test_wavefront_centroid_matches_chief_when_chief_valid():
                                P_xp=(0, 0, 0), reference='centroid')
     np.testing.assert_allclose(np.asarray(opd_chief, dtype=float),
                                np.asarray(opd_cent, dtype=float), atol=1e-12)
+
+
+# ---------- field_sweep ------------------------------------------------------
+
+def _doublet_system():
+    ld = (LensData()
+          .add(Plane(), typ='eval', thickness=10.0)
+          .add(SphereShape(1 / 61.47), thickness=6.0,
+               material=materials.ConstantMaterial(1.5168), semidiameter=12.0)
+          .add(SphereShape(-1 / 44.64), thickness=2.5,
+               material=materials.ConstantMaterial(1.673), semidiameter=12.0)
+          .add(SphereShape(-1 / 129.94), thickness=0.0,
+               material=materials.air, semidiameter=12.0)
+          .add(Plane(), typ='eval'))
+    sys = OpticalSystem(ld, aperture=ApertureSpec.epd(22.0),
+                        fields=[Field(0, 0), Field(0, 0.7), Field(0, 1.0)],
+                        wavelengths=[0.486, 0.587, 0.656], reference=1,
+                        stop_index=1)
+    sys.solve_image_distance()
+    return sys
+
+
+def test_field_sweep_densifies_system_default():
+    sys = _doublet_system()
+    fields = field_sweep(sys, samples=21)
+    assert len(fields) == 21
+    mags = [np.hypot(f.hx, f.hy) for f in fields]
+    assert mags[0] == pytest.approx(0.0)
+    assert mags[-1] == pytest.approx(1.0)
+    # spacing is uniform and along the +y meridian of the largest field
+    np.testing.assert_allclose(np.diff(mags), 0.05, atol=1e-12)
+    assert all(f.hx == 0.0 for f in fields)
+
+
+def test_field_sweep_explicit_fields_pass_through():
+    sys = _doublet_system()
+    explicit = [Field(0, 0.3), Field(0, 0.9)]
+    out = field_sweep(sys, explicit, samples=21)
+    assert out == explicit
+
+
+def test_field_sweep_on_axis_only_falls_back():
+    presc = _spherical_singlet()
+    fields = field_sweep(presc, samples=21)
+    assert len(fields) == 1
+    assert fields[0].hx == fields[0].hy == 0.0
+
+
+def test_field_sweep_single_field_sweeps_from_axis():
+    sys = _doublet_system()
+    sys.fields.fields = [Field(0.6, 0.8)]
+    fields = field_sweep(sys, samples=5)
+    mags = [np.hypot(f.hx, f.hy) for f in fields]
+    assert mags[0] == pytest.approx(0.0)
+    assert mags[-1] == pytest.approx(1.0)
+    # the sweep follows the field's own direction
+    assert fields[-1].hx == pytest.approx(0.6)
+    assert fields[-1].hy == pytest.approx(0.8)
+
+
+def test_curve_analyses_default_to_dense_sweep():
+    sys = _doublet_system()
+    fc = field_curvature(sys, samples=9)
+    assert fc.x_fan_z.shape == (9,)
+    dist = distortion(sys, samples=9)
+    assert dist.percent.shape == (9,)
+    landing = lateral_color(sys, samples=9)
+    assert landing.shape == (9, 3, 2)
+
+
+# ---------- full_field -------------------------------------------------------
+
+def test_full_field_rms_spot_grid_geometry():
+    sys = _doublet_system()
+    g = full_field(sys, 'rms spot', samples=7)
+    assert g.metric == 'rms spot'
+    assert g.kind == 'angle' and g.unit == 'deg'
+    assert g.hx.shape == g.hy.shape == g.data.shape == (7, 7)
+    assert float(np.max(np.asarray(g.hx))) == pytest.approx(1.0)
+    data = np.asarray(g.data)
+    r = np.hypot(np.asarray(g.hx), np.asarray(g.hy))
+    # NaN outside the field disc, finite positive inside
+    assert np.isnan(data[r > 1.0 + 1e-9]).all()
+    inside = data[r <= 1.0 + 1e-9]
+    assert np.isfinite(inside).all()
+    assert (inside > 0).all()
+    # axisymmetric system: the four edge midpoints agree
+    edge = [data[0, 3], data[6, 3], data[3, 0], data[3, 6]]
+    np.testing.assert_allclose(edge, edge[0], rtol=1e-9)
+
+
+def test_full_field_rms_wfe_positive_and_axisymmetric():
+    sys = _doublet_system()
+    g = full_field(sys, 'rms wfe', samples=5)
+    data = np.asarray(g.data)
+    center = data[2, 2]
+    assert np.isfinite(center) and center > 0
+    np.testing.assert_allclose(data[0, 2], data[2, 0], rtol=1e-9)
+
+
+def test_full_field_distortion_zero_on_axis():
+    sys = _doublet_system()
+    g = full_field(sys, 'distortion', samples=5)
+    data = np.asarray(g.data)
+    assert data[2, 2] == pytest.approx(0.0)
+    assert np.isfinite(data[0, 2])
+
+
+def test_full_field_lateral_color_achromat_is_zero():
+    sys = _doublet_system()
+    g = full_field(sys, 'lateral color', samples=5)
+    data = np.asarray(g.data)
+    inside = data[np.isfinite(data)]
+    np.testing.assert_allclose(inside, 0.0, atol=1e-10)
+
+
+def test_full_field_max_field_override_and_bad_metric():
+    sys = _doublet_system()
+    g = full_field(sys, 'rms spot', samples=5, max_field=0.5)
+    assert float(np.max(np.asarray(g.hx))) == pytest.approx(0.5)
+    with pytest.raises(ValueError):
+        full_field(sys, 'sharpness', samples=5)
+
+
+def test_full_field_requires_field_extent():
+    presc = _spherical_singlet()
+    with pytest.raises(ValueError):
+        full_field(presc, 'rms spot', samples=5, epd=4.0)

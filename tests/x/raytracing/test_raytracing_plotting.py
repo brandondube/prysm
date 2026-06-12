@@ -216,6 +216,34 @@ def test_plot_ray_paths_uses_raytrace_result_positions():
         plt.close(fig)
 
 
+def test_plot_ray_paths_truncates_failed_rays_at_failure_surface():
+    # the kernel keeps marching a failed ray's position history past the
+    # surface that killed it; the drawn path must stop where the ray did.
+    # ray 0: valid through both surfaces.  ray 1: clipped at surface 1 (1-based,
+    # imag=+2) -- reached it, so its intersection there is drawn, but nothing
+    # after.  ray 2: missed surface 1 (imag=-1) -- never arrived, draw only the
+    # launch point.
+    P = np.asarray([
+        [[0., 0., 0.], [0., 1., 0.], [0., 2., 0.]],
+        [[0., 0., 1.], [0., 1., 1.], [0., 2., 1.]],
+        [[0., 0., 2.], [0., 1., 2.], [0., 2., 2.]],
+    ])
+    status = np.asarray([2 + 0j, 1 + 2j, 1 - 1j])
+    result = RayTraceResult(P, np.zeros_like(P), np.zeros(P.shape[:-1]), status)
+
+    fig, ax = plot_ray_paths(result)
+    try:
+        valid, clipped, missed = (np.asarray(line.get_ydata())
+                                  for line in ax.lines)
+        np.testing.assert_allclose(valid, [0., 0., 0.])
+        np.testing.assert_allclose(clipped[:2], [1., 1.])
+        assert np.isnan(clipped[2])
+        np.testing.assert_allclose(missed[:1], [2.])
+        assert np.isnan(missed[1:]).all()
+    finally:
+        plt.close(fig)
+
+
 def test_plot_transverse_ray_aberration_plots_chief_relative_fan():
     P = np.asarray([
         [[0., -1., 0.], [0., 0., 0.], [0., 1., 0.]],
@@ -335,6 +363,90 @@ def test_lens_groups_from_surfaces_splits_air_spaced_doublet():
     assert lens_groups_from_surfaces(prescription) == [(0, 1), (2, 3)]
 
 
+def test_lens_groups_from_surfaces_skips_lone_dummy_plane():
+    # an air-to-air surface between elements (e.g. a standalone aperture stop,
+    # as Code V decks express it) is not a lens element and must not error
+    prescription = [_refracting_plane(0, n=1.5),
+                    _refracting_plane(1, n=1.0),
+                    _refracting_plane(2, n=1.0),
+                    _refracting_plane(3, n=1.6),
+                    _refracting_plane(4, n=1.0)]
+
+    assert lens_groups_from_surfaces(prescription) == [(0, 1), (3, 4)]
+
+
+def test_plot_optics_skips_lone_dummy_plane():
+    prescription = [_refracting_plane(0, n=1.5),
+                    _refracting_plane(1, n=1.0),
+                    _refracting_plane(2, n=1.0),
+                    _refracting_plane(3, n=1.6),
+                    _refracting_plane(4, n=1.0)]
+
+    fig, ax = plot_optics(prescription, _trace_result(prescription),
+                          points=5, wvl=0.55)
+    plt.close(fig)
+
+
+def test_plot_optics_draws_stop_marker_on_dummy_plane():
+    prescription = [_refracting_plane(0, n=1.5),
+                    _refracting_plane(1, n=1.0),
+                    _refracting_plane(2, n=1.0),
+                    _refracting_plane(3, n=1.6),
+                    _refracting_plane(4, n=1.0)]
+
+    fig, ax = plot_optics(prescription, _trace_result(prescription),
+                          points=5, wvl=0.55, stop_index=2)
+    try:
+        # two lens groups plus the stop marker, drawn in surface order
+        assert len(ax.lines) == 3
+        marker = ax.lines[1]
+        xd = np.asarray(marker.get_xdata(), dtype=float)
+        yd = np.asarray(marker.get_ydata(), dtype=float)
+        # rays span y=+/-1 at the stop -> semidiameter 1, stem 0.2, bar 0.1;
+        # the synthetic trace has no directions, so the local optical axis
+        # falls back to the surface axis (+z).  Bottom edge first: crossbar
+        # along z through (2, -1), then the stem outward to (2, -1.2)
+        assert xd[0] == pytest.approx(1.95)
+        assert xd[1] == pytest.approx(2.05)
+        assert yd[0] == -1 and yd[1] == -1
+        assert xd[3] == 2 and yd[3] == -1
+        assert xd[4] == 2 and yd[4] == pytest.approx(-1.2)
+        # top edge mirrors it, stem pointing up and out
+        assert xd[9] == 2 and yd[9] == 1
+        assert xd[10] == 2 and yd[10] == pytest.approx(1.2)
+    finally:
+        plt.close(fig)
+
+
+def test_plot_optics_marks_stop_from_system_metadata():
+    # a standalone stop ahead of a singlet; stop_index lives on the system and
+    # plot_optics picks it up without an explicit kwarg
+    n15 = materials.ConstantMaterial(1.5)
+    air = materials.air
+    lens = LensData()
+    (lens.add(Plane(), thickness=5.0, material=air, semidiameter=5.0)
+         .add(Conic(1 / 60.0, 0.0), thickness=4.0, material=n15,
+              semidiameter=8.0)
+         .add(Conic(-1 / 60.0, 0.0), thickness=95.0, material=air,
+              semidiameter=8.0)
+         .add(Plane(), typ='eval', material=air, semidiameter=20.0))
+    sys = OpticalSystem(lens, aperture=8.0, fields=[0.0],
+                        wavelengths=[0.5876], reference=0, stop_index=0)
+
+    fig, ax = sys.layout_2d()
+    try:
+        markers = [ln for ln in ax.lines if len(ln.get_xdata()) == 12]
+        assert len(markers) == 1
+        xd = np.asarray(markers[0].get_xdata(), dtype=float)
+        yd = np.asarray(markers[0].get_ydata(), dtype=float)
+        # the marks cluster around the stop plane at z=0, at +/- the stop
+        # semidiameter (EPD/2 = 4, the stop is the entrance pupil here)
+        assert np.nanmax(np.abs(xd)) < 1.0
+        assert np.nanmax(np.abs(yd)) == pytest.approx(4 * 1.2, rel=1e-6)
+    finally:
+        plt.close(fig)
+
+
 def test_lens_groups_from_surfaces_rejects_terminal_group():
     with pytest.raises(ValueError, match='terminates'):
         lens_groups_from_surfaces([_refracting_plane(0, n=1.5),
@@ -422,6 +534,26 @@ def test_plot_optics_draws_clear_aperture_land_to_od_silently():
     land = np.isclose(x, rim_sag) & (np.abs(y) > 1.0 + 1e-9)
     assert land.sum() >= 2
     np.testing.assert_allclose(np.max(np.abs(y[land])), 3.0)
+
+
+def test_plot_optics_steep_surface_capped_by_own_aperture_is_silent():
+    # a steep surface whose sag cannot reach the element OD must not warn when
+    # its own clear aperture already caps the drawn zone at or below the
+    # equator -- the short draw is intentional, not a layout surprise
+    gentle = Surface(shape=Conic(1 / 5.0, 0.0), interaction='refr',
+                     P=np.asarray([0., 0., 0.]), material=materials.ConstantMaterial(1.5),
+                     bounding={'outer_radius': 1.0})
+    steep = Surface(shape=Conic(1 / 0.5, 0.0), interaction='refr',
+                    P=np.asarray([0., 0., 1.0]), material=materials.air,
+                    bounding={'outer_radius': 0.4})
+    prescription = [gentle, steep]
+
+    import warnings as _warnings
+    with _warnings.catch_warnings():
+        _warnings.simplefilter('error')
+        fig, ax = plot_optics(prescription, _trace_result(prescription),
+                              points=41, wvl=0.55)
+    plt.close(fig)
 
 
 def test_plot_optics_reads_edge_geometry_from_surface_when_unset():

@@ -46,6 +46,50 @@ def test_field_rejects_bad_unit():
         Field(unit='furlongs')
 
 
+def test_field_vignetting_stored_verbatim():
+    # negative factors are Code V pupil expansion and tiny values are
+    # harmless optimizer noise; both are kept as-is (the compression map
+    # scales each side by 1 - factor)
+    f = Field(0.0, 0.0, vignetting={'vuy': 0.3, 'vly': -0.25})
+    assert f.vignetting == {'vux': 0.0, 'vlx': 0.0, 'vuy': 0.3, 'vly': -0.25}
+
+    f = Field(0.0, 0.0, vignetting={'vux': 0.0, 'vuy': 0.0})
+    assert f.vignetting is None  # all-zero -> no vignetting
+
+
+def test_field_vignetting_rejects_degenerate_factor():
+    with pytest.raises(ValueError):
+        Field(0.0, 0.0, vignetting={'vuy': 1.0})
+
+
+def test_vignetting_compresses_pupil_samples_per_side():
+    from prysm.x.raytracing.launch import _apply_vignetting
+
+    f = Field(0.0, 0.0, vignetting={'vux': 0.5, 'vlx': -0.5,
+                                    'vuy': 0.3, 'vly': 0.1})
+    xy = np.asarray([
+        [1.0, 0.0],
+        [-1.0, 0.0],
+        [0.0, 1.0],
+        [0.0, -1.0],
+        [0.0, 0.0],
+    ])
+    out = _apply_vignetting(xy, f)
+    # full length, each side scaled by 1 - factor, center (chief) untouched
+    assert out.shape == xy.shape
+    np.testing.assert_allclose(out[0], [0.5, 0.0])    # upper x compressed
+    np.testing.assert_allclose(out[1], [-1.5, 0.0])   # lower x expanded
+    np.testing.assert_allclose(out[2], [0.0, 0.7])
+    np.testing.assert_allclose(out[3], [0.0, -0.9])
+    np.testing.assert_allclose(out[4], [0.0, 0.0])
+
+
+def test_sampling_points_scales_normalized_coordinates():
+    xy = np.asarray([[0.0, 1.0], [0.5, -0.5], [0.0, 0.0]])
+    s = Sampling.points(xy)
+    np.testing.assert_allclose(s.build(4.0), xy * 4.0)
+
+
 # ---------- Sampling --------------------------------------------------------
 
 def test_sampling_chief():

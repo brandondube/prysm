@@ -9,7 +9,9 @@ import pytest
 
 from prysm.x import materials
 from prysm.x.materials import MaterialRangeError, RefractiveIndexCatalog
-from prysm.x.raytracing.io import read_zmx, read_seq, SurfaceSpec, build_surface
+from prysm.x.raytracing.io import (
+    read_zmx, read_seq, write_seq, SurfaceSpec, build_surface,
+)
 from prysm.x.raytracing.surfaces import (
     Conic, EvenAsphere, Plane, Toroid, Biconic,
     Zernike, XY,
@@ -681,15 +683,45 @@ GO
 """
 
 
-def test_seq_vignetting_factors_clip_launched_pupil():
+def test_seq_vignetting_factors_compress_launched_pupil():
     pf = read_seq(_SEQ_CODEV_VIGNETTING, _is_text=True)
     assert pf.fields[0].vignetting == {
         'vux': 0.0, 'vlx': 0.0, 'vuy': 0.5, 'vly': 0.0,
     }
 
     P, _ = launch(pf, pf.field(0), pf.wavelength(), Sampling.fan(n=5, axis='y'))
-    assert float(np.max(P[:, 1])) <= 2.5
+    # the fan keeps its full length; the upper half is compressed onto the
+    # vignetted pupil (VUY 0.5 of EPD/2 = 5) and the lower half untouched
+    assert P.shape[0] == 5
+    assert float(np.max(P[:, 1])) == 2.5
     assert float(np.min(P[:, 1])) == -5.0
+
+
+# ---- CIR (circular clear aperture) -----------------------------------------
+
+_SEQ_CIR_APERTURE = """\
+LEN
+RDM
+DIM M
+WL 550.0
+EPD 10.0
+SO ; THI 1E10
+S ; RDY 50.0 ; THI 5.0
+CIR 8.0
+S ; RDY -50.0 ; THI 95.0
+SI
+GO
+"""
+
+
+def test_seq_cir_sets_clear_aperture():
+    pf = read_seq(_SEQ_CIR_APERTURE, _is_text=True)
+    s0 = pf.surfaces[0]
+    assert s0.bounding == {'outer_radius': 8.0}
+    assert s0.aperture is not None
+    s1 = pf.surfaces[1]
+    assert s1.bounding is None
+    assert s1.aperture is None
 
 
 # ---- STO (aperture stop) ---------------------------------------------------
@@ -796,6 +828,14 @@ def test_seq_header_wavelengths_and_reference(refractiveindex_database):
     # Code V WL is nanometers; the reader converts to microns.
     np.testing.assert_allclose(pf.wavelengths,
                                [0.48613, 0.58756, 0.65627])
+
+
+def test_seq_header_wavelength_weights_round_trip(refractiveindex_database):
+    txt = _SEQ_HEADER.replace('REF 2\n', 'REF 2\nWTW 1 2 3\n')
+    pf = read_seq(txt, _is_text=True, database=refractiveindex_database)
+    np.testing.assert_allclose(pf.weights, [1.0, 2.0, 3.0])
+    out = write_seq(pf)
+    assert 'WTW 1 2 3' in out
 
 
 def test_seq_yan_becomes_field_list(refractiveindex_database):

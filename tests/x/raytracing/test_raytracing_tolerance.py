@@ -5,7 +5,7 @@ import pytest
 from prysm.x import materials
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
-from prysm.x.raytracing.launch import Field, Sampling, launch
+from prysm.x.raytracing.launch import Sampling
 from prysm.x.raytracing.design import RmsSpotRadius
 from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing.tolerance import (
@@ -100,9 +100,7 @@ def test_perturbation_target_must_be_single_dof():
 
 def test_operand_as_merit_runs():
     ld = _concave_parabola()
-    P, S = launch(ld, Field(0., 0.), 0.55e-3,
-                  Sampling.fan(n=11), epd=10.0, pupil_z=-50.0)
-    op = RmsSpotRadius(P, S, wavelength=0.55e-3)
+    op = RmsSpotRadius(wavelength=0.55e-3, sampling=Sampling.fan(n=11))
     merit = operand_as_merit(op)
     val = merit(ld)
     assert val >= 0.0
@@ -263,9 +261,7 @@ def test_monte_carlo_record_samples_shape():
 
 def test_monte_carlo_on_spherical_aberration_recovery():
     ld = _concave_parabola()
-    P, S = launch(ld, Field(0., 0.), 0.55e-3,
-                  Sampling.fan(n=11), epd=10.0, pupil_z=-50.0)
-    op = RmsSpotRadius(P, S, wavelength=0.55e-3)
+    op = RmsSpotRadius(wavelength=0.55e-3, sampling=Sampling.fan(n=11))
     merit = operand_as_merit(op)
     pert = Perturbation.normal(ld, 'conic', 0, sigma=0.05, name='k')
     result = monte_carlo(ld, [pert], merit, n_trials=200, seed=7)

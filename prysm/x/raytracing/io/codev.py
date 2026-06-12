@@ -258,7 +258,7 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
             current['kx'] = parse_float(args[0])
         elif current is not None and verb == 'GLA':
             current['gla'] = args[0] if args else None
-        elif current is not None and verb in ('CAO', 'CA'):
+        elif current is not None and verb in ('CAO', 'CA', 'CIR'):
             if args:
                 current['semidiameter'] = parse_float(args[0])
         elif current is not None and verb == 'CAI':
@@ -347,6 +347,7 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
         ld,
         aperture=aperture,
         fields=fields, wavelengths=wavelengths,
+        weights=header['wavelength_weights'] or None,
         reference=reference, unit='mm',
         title=header['title'],
         source_path=path_for_meta, source_format='codev',
@@ -672,6 +673,10 @@ def write_seq(system):
     wvls = [] if wvls is None else [float(w) for w in wvls]
     if wvls:
         lines.append('WL ' + ' '.join(f'{w * 1000.0:g}' for w in wvls))
+    weights = getattr(system, 'weights', None)
+    weights = [] if weights is None else [float(w) for w in weights]
+    if weights and len(weights) == len(wvls) and any(w != 1.0 for w in weights):
+        lines.append('WTW ' + ' '.join(f'{w:g}' for w in weights))
     epd = getattr(system, 'epd', None)
     if epd is not None:
         lines.append(f'EPD {epd:g}')

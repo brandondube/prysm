@@ -25,8 +25,8 @@ from .analysis import (
 )
 from .launch import launch, Sampling
 from .surfaces import STYPE_REFLECT, STYPE_REFRACT
-from ._meta import system_wavelength
-from ._trace_grid import _resolve_fields, _resolve_wavelengths
+from ._meta import system_wavelength, system_stop_index
+from ._trace_grid import _resolve_fields, _resolve_wavelengths, field_sweep
 
 import numpy as np  # see module docstring; do not "fix" to mathops np
 
@@ -77,6 +77,22 @@ def plot_ray_paths(result, *, x='z', y='y', lw=1, ls='-', c='r', alpha=1,
     fig, ax = share_fig_ax(fig, ax)
 
     ph = _to_np(result.P)
+    status = getattr(result, 'status', None)
+    if status is not None:
+        # a failed ray's history keeps marching past the surface that killed
+        # it; blank everything after the failure so the drawn path ends where
+        # the ray did.  imag > 0 (clip / no convergence) means the ray reached
+        # surface status.real (1-based), so its intersection there is real;
+        # imag < 0 (miss / TIR / evanescent) means it never made it.
+        status = _to_np(status)
+        real = status.real.astype(int)
+        imag = status.imag.astype(int)
+        nhist = ph.shape[0]
+        last = np.where(imag == 0, nhist - 1, np.where(imag > 0, real, real - 1))
+        dead = np.arange(nhist)[:, None] > last[None, :]
+        if dead.any():
+            ph = ph.copy()
+            ph[dead] = np.nan
     xs = ph[..., 0]
     ys = ph[..., 1]
     zs = ph[..., 2]
@@ -195,6 +211,75 @@ def _surface_drawable_radius(surf, radius, axis, center=0.0, samples=512):
         return radius
     first = int(np.argmax(bad))
     return float(probe[first - 1]) if first > 0 else 0.0
+
+
+def _stop_marker_outline(surf, phist, shist, j, x, y, stem_fraction=0.2):
+    """Aperture-stop T marks in global plot coordinates.
+
+    The stop is drawn as one small T per clear-aperture edge on the drawn
+    meridian: a stem from the aperture edge pointing radially outward, normal
+    to the local optical axis, and a shorter crossbar through the edge
+    parallel to the local optical axis.  The local optical axis is the chief
+    ray direction at the stop -- the traced ray closest to the stop center --
+    falling back to the surface local z axis when the trace carries no usable
+    directions.  The clear radius is read from the traced ray extent at the
+    stop, since the marginal rays graze the stop edge by definition, and the
+    mark size scales with it through stem_fraction.
+
+    Returns (xx, yy) plot coordinates with NaN separators, or None when the
+    trace has no finite ray data at the stop surface.
+
+    """
+    p = phist[j + 1].reshape(-1, 3)
+    dirs = np.zeros_like(p)
+    p_loc, _ = transform_to_local_coords(p, surf.P, dirs, surf.R)
+    coord = p_loc[..., _axis_index(y)]
+    if not np.isfinite(coord).any():
+        return None
+    a = max(abs(np.nanmin(coord)), abs(np.nanmax(coord)))
+    if not (np.isfinite(a) and a > 0):
+        return None
+
+    ix = _axis_index(x)
+    iy = _axis_index(y)
+    rsq = p_loc[..., 0] * p_loc[..., 0] + p_loc[..., 1] * p_loc[..., 1]
+    rsq = np.where(np.isfinite(rsq), rsq, np.inf)
+    chief = int(np.argmin(rsq))
+    s = shist[j + 1].reshape(-1, 3)[chief]
+    t = np.asarray([s[ix], s[iy]], dtype=float)
+    norm = np.hypot(t[0], t[1])
+    if norm == 0 or not np.isfinite(norm):
+        # no usable chief direction (synthetic or dead trace); the surface
+        # local z axis stands in.  local = R @ (global - P), so the local z
+        # axis expressed globally is the third row of R
+        axis = np.asarray([0.0, 0.0, 1.0]) if surf.R is None else _to_np(surf.R)[2]
+        t = np.asarray([axis[ix], axis[iy]], dtype=float)
+        norm = np.hypot(t[0], t[1])
+        if norm == 0:
+            return None
+    t = t / norm
+    outward = np.asarray([-t[1], t[0]])
+
+    ploty = np.asarray([-a, a])
+    xpt, ypt = _axis_pair(ploty, y)
+    sag = np.asarray(surf.sag(xpt, ypt)) + surf.P[2]
+    ex, ey = _global_plot_coordinates(surf, sag, ploty, x, y)
+    cx = float(np.mean(ex))
+    cy = float(np.mean(ey))
+
+    stem = stem_fraction * a
+    bar = 0.5 * stem
+    xx, yy = [], []
+    for k in range(2):
+        e0 = float(ex[k])
+        e1 = float(ey[k])
+        sign = 1.0 if outward[0] * (e0 - cx) + outward[1] * (e1 - cy) >= 0 else -1.0
+        out = sign * outward
+        xx += [e0 - 0.5 * bar * t[0], e0 + 0.5 * bar * t[0], np.nan,
+               e0, e0 + stem * out[0], np.nan]
+        yy += [e1 - 0.5 * bar * t[1], e1 + 0.5 * bar * t[1], np.nan,
+               e1, e1 + stem * out[1], np.nan]
+    return xx, yy
 
 
 def _lens_edge_for(lens_edges, surface_index, pair_index):
@@ -570,9 +655,10 @@ def lens_groups_from_surfaces(prescription, *, wvl=0.587,
 
         active.append(j)
         if np.isclose(n_post, ambient_index, rtol=0, atol=index_atol):
-            if len(active) < 2:
-                raise ValueError('lens groups require at least two refracting surfaces')
-            groups.append(tuple(active))
+            if len(active) >= 2:
+                groups.append(tuple(active))
+            # else: a lone ambient-to-ambient surface (a dummy plane, e.g. a
+            # standalone aperture stop) is not a lens element; skip it
             active = []
 
     if active:
@@ -668,7 +754,8 @@ def _wall_path(x0, x1, outer_y, features, side, endpoint_names):
 def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
                 index_atol=1e-9, mirror_backing=None, points=100,
                 lw=1, ls='-', c='k', alpha=1, zorder=3,
-                x='z', y='y', fig=None, ax=None, lens_edges=None):
+                x='z', y='y', fig=None, ax=None, lens_edges=None,
+                stop_index=None):
     """Draw the optics of a prescription.
 
     Parameters
@@ -723,6 +810,14 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
         to the rim walls.  To cap a face's optical zone with a closed flat
         land out to the OD, set bounding outer_radius on that surface
         instead of clear_radius.
+    stop_index : int, optional
+        index of the aperture stop surface; defaults from the system
+        (OpticalSystem / LensData stop_index).  A stop that draws nothing
+        otherwise (a standalone dummy plane or eval surface) is marked with a
+        small T at each clear-aperture edge: the crossbar parallel to the
+        local optical axis (the chief ray direction there) and the stem
+        pointing radially outward.  A stop on a lens or mirror surface draws
+        no extra mark.
 
     Returns
     -------
@@ -738,6 +833,12 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
     fig, ax = share_fig_ax(fig, ax)
     ax.set(aspect='equal')
     phist = _to_np(result.P)
+    stop_index = system_stop_index(prescription, stop_index)
+
+    def draw_stop_marker(j, surf):
+        marks = _stop_marker_outline(surf, phist, _to_np(result.S), j, x, y)
+        if marks is not None:
+            ax.plot(*marks, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
 
     lens_groups = lens_groups_from_surfaces(
         prescription, wvl=wvl, ambient_index=ambient_index,
@@ -802,6 +903,14 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
             mirror_index += 1
             j += 1
         elif surf.typ == STYPE_REFRACT:
+            if j not in groups_by_start:
+                # an ambient-to-ambient dummy plane; it belongs to no lens
+                # element.  When it is the aperture stop it draws the stop
+                # marks; otherwise nothing
+                if j == stop_index:
+                    draw_stop_marker(j, surf)
+                j += 1
+                continue
             group_index, group = groups_by_start[j]
             lens_edge = _lens_edge_for(lens_edges, j, group_index)
 
@@ -839,7 +948,18 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
                     )
                 surf_obj = prescription[surface_index]
                 sag_radius = _surface_drawable_radius(surf_obj, od_radius, y)
-                if sag_radius < od_radius * (1.0 - 1e-9):
+                # the surface's own clear aperture also caps its optical zone;
+                # beyond it the element is drawn as a flat land (normal to the
+                # OD) out to the element outer radius.  This is an intentional
+                # aperture, not a surface that cannot reach the OD, so it is
+                # silent
+                cap = None
+                bound = surf_obj.bounding
+                if bound is not None and 'outer_radius' in bound:
+                    cap = float(bound['outer_radius'])
+                draw_radius = sag_radius if cap is None else min(sag_radius, cap)
+                if (sag_radius < od_radius * (1.0 - 1e-9)
+                        and (cap is None or sag_radius < cap)):
                     # a surface that physically cannot reach the OD (its sag is
                     # undefined past the equator) is a layout surprise -- warn
                     warnings.warn(
@@ -849,15 +969,6 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
                         f'rim out to the OD',
                         stacklevel=2,
                     )
-                draw_radius = sag_radius
-                bound = surf_obj.bounding
-                if bound is not None and 'outer_radius' in bound:
-                    # the surface's own clear aperture also caps its optical
-                    # zone; beyond it the element is drawn as a flat land
-                    # (normal to the OD) out to the element outer radius.  This
-                    # is an intentional aperture, not a surface that cannot
-                    # reach the OD, so it is silent
-                    draw_radius = min(draw_radius, float(bound['outer_radius']))
                 profiles.append(_surface_profile(
                     surf_obj, phist, surface_index, points,
                     y, radius=od_radius, clear_radius=clear_radius,
@@ -891,6 +1002,10 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
             ax.plot(xx, yy, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
             j = group[-1] + 1
         else:
+            # eval surfaces draw nothing, except the stop marks when one is
+            # the aperture stop
+            if j == stop_index:
+                draw_stop_marker(j, surf)
             j += 1
 
     return fig, ax
@@ -1190,7 +1305,8 @@ def _field_axis_values(fields):
 
 
 def plot_field_curvature(prescription, fields=None, wavelength=None, *,
-                         epd=None, marginal_fraction=1e-3, result=None,
+                         epd=None, marginal_fraction=1e-3, samples=101,
+                         result=None,
                          reference='image', c='r', lw=1, alpha=1, zorder=4,
                          label=None, fig=None, ax=None):
     """Plot field-curvature x/y fan curves.
@@ -1200,14 +1316,16 @@ def plot_field_curvature(prescription, fields=None, wavelength=None, *,
     prescription : sequence of Surface or LensData
         the optical system.
     fields : iterable of Field, optional
-        field points to evaluate, all kind='angle'; defaults to the system
-        FieldSet.
+        field points to evaluate, all kind='angle'; defaults to a dense
+        sweep over the system FieldSet span (see field_sweep).
     wavelength : float, optional
         in microns; defaults from a LensData reference wavelength.
     epd : float, optional
         entrance pupil diameter; defaults from a system aperture spec.
     marginal_fraction : float, optional
         pupil zone for the marginal ray, as a fraction of EPD/2.
+    samples : int, optional
+        number of sweep points when fields is None.
     result : FieldCurvatureResult, optional
         precomputed analysis.field_curvature output for fields; when given no
         rays are traced here and wavelength, epd, and marginal_fraction are
@@ -1234,7 +1352,7 @@ def plot_field_curvature(prescription, fields=None, wavelength=None, *,
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    fields = _resolve_fields(prescription, fields)
+    fields = field_sweep(prescription, fields, samples)
     if result is None:
         result = field_curvature(
             prescription, fields, wavelength, epd=epd,
@@ -1391,7 +1509,8 @@ def plot_axial_color(prescription, wavelengths=None, *,
 
 
 def plot_distortion(prescription, fields=None, wavelength=None, *, epd=None,
-                    distortion_type='f-tan', pupil_z=None, result=None,
+                    distortion_type='f-tan', pupil_z=None, samples=101,
+                    result=None,
                     c='r', lw=1, alpha=1, zorder=4, label=None,
                     fig=None, ax=None):
     """Plot percent distortion against field magnitude.
@@ -1401,8 +1520,8 @@ def plot_distortion(prescription, fields=None, wavelength=None, *, epd=None,
     prescription : sequence of Surface or LensData
         the optical system.
     fields : iterable of Field, optional
-        field points to evaluate, all kind='angle'; defaults to the system
-        FieldSet.
+        field points to evaluate, all kind='angle'; defaults to a dense
+        sweep over the system FieldSet span (see field_sweep).
     wavelength : float, optional
         in microns; defaults from a LensData reference wavelength.
     epd : float, optional
@@ -1411,6 +1530,8 @@ def plot_distortion(prescription, fields=None, wavelength=None, *, epd=None,
         'f-tan' (default) or 'linear-angle'; see analysis.distortion.
     pupil_z : float, optional
         z of the entrance pupil used for the chief-ray launch.
+    samples : int, optional
+        number of sweep points when fields is None.
     result : DistortionResult, optional
         precomputed analysis.distortion output for fields; when given no rays
         are traced here and wavelength, epd, distortion_type, and pupil_z are
@@ -1435,7 +1556,7 @@ def plot_distortion(prescription, fields=None, wavelength=None, *, epd=None,
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    fields = _resolve_fields(prescription, fields)
+    fields = field_sweep(prescription, fields, samples)
     if result is None:
         result = distortion(
             prescription, fields, wavelength, epd=epd,
@@ -1451,7 +1572,8 @@ def plot_distortion(prescription, fields=None, wavelength=None, *, epd=None,
 
 
 def plot_lateral_color(prescription, fields=None, wavelengths=None, *,
-                       epd=None, reference_wavelength=None, result=None,
+                       epd=None, reference_wavelength=None, samples=101,
+                       result=None,
                        colors=None, lw=1, alpha=1, zorder=4, legend=True,
                        fig=None, ax=None):
     """Plot lateral color (chief-ray height error vs reference) against field.
@@ -1466,8 +1588,8 @@ def plot_lateral_color(prescription, fields=None, wavelengths=None, *,
     prescription : sequence of Surface or LensData
         the optical system.
     fields : iterable of Field, optional
-        field points to evaluate, all kind='angle'; defaults to the system
-        FieldSet.
+        field points to evaluate, all kind='angle'; defaults to a dense
+        sweep over the system FieldSet span (see field_sweep).
     wavelengths : iterable of float, optional
         wavelengths in microns; defaults to the system wavelength set.
     epd : float, optional
@@ -1475,6 +1597,8 @@ def plot_lateral_color(prescription, fields=None, wavelengths=None, *,
     reference_wavelength : float, optional
         wavelength whose chief-ray landing is the zero; the nearest grid
         wavelength is used.  Defaults to the system reference wavelength.
+    samples : int, optional
+        number of sweep points when fields is None.
     result : ndarray, optional
         precomputed analysis.lateral_color landing grid for fields and
         wavelengths; when given no rays are traced here and epd is unused.
@@ -1498,7 +1622,7 @@ def plot_lateral_color(prescription, fields=None, wavelengths=None, *,
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    fields = _resolve_fields(prescription, fields)
+    fields = field_sweep(prescription, fields, samples)
     wavelengths = _resolve_wavelengths(prescription, wavelengths)
     if result is None:
         result = lateral_color(prescription, fields, wavelengths, epd=epd)
@@ -1524,6 +1648,55 @@ def plot_lateral_color(prescription, fields=None, wavelengths=None, *,
     _wavelength_legend(ax, len(wavelengths), legend)
     ax.set_xlabel('lateral color')
     ax.set_ylabel('field')
+    return fig, ax
+
+
+_FULL_FIELD_LABELS = {
+    'rms spot': 'RMS spot radius',
+    'rms wfe': 'RMS wavefront error [waves]',
+    'distortion': 'distortion [%]',
+    'lateral color': 'lateral color',
+}
+
+
+def plot_full_field(grid, *, cmap='viridis', clim=None, colorbar=True,
+                    fig=None, ax=None):
+    """Plot a full-field display (a 2D metric map over the field disc).
+
+    Parameters
+    ----------
+    grid : FullFieldGrid
+        analysis.full_field output; data is NaN outside the field disc and
+        those cells are left blank.
+    cmap : str or matplotlib colormap, optional
+        color map.
+    clim : tuple of float, optional
+        explicit (lo, hi) color limits; default scales to the data.
+    colorbar : bool, optional
+        draw a colorbar labeled with the metric.
+    fig : matplotlib.figure.Figure
+    ax : matplotlib.axes.Axis
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    matplotlib.axes.Axis
+
+    """
+    fig, ax = share_fig_ax(fig, ax)
+    hx = _to_np(grid.hx)
+    hy = _to_np(grid.hy)
+    data = _to_np(grid.data)
+    im = ax.pcolormesh(hx, hy, data, cmap=cmap, shading='nearest')
+    if clim is not None:
+        im.set_clim(*clim)
+    ax.set_aspect('equal')
+    unit = grid.unit if grid.kind == 'angle' else 'length'
+    ax.set_xlabel(f'field x [{unit}]')
+    ax.set_ylabel(f'field y [{unit}]')
+    if colorbar:
+        fig.colorbar(im, ax=ax,
+                     label=_FULL_FIELD_LABELS.get(grid.metric, grid.metric))
     return fig, ax
 
 
@@ -1563,26 +1736,27 @@ def _plot_fan_grid(grid, value_label, *, axes, colors, sharey, figsize,
     """Shared layout for ray-aberration and OPD fan grids.
 
     Rows are fields; columns are the tangential (Y) and/or sagittal (X) fans;
-    each subplot overlays one curve per wavelength against the shared normalized
-    pupil coordinate.
+    each subplot overlays one curve per wavelength against that field's
+    normalized pupil coordinate (vignetted fans span less than +/-1).
     """
     import matplotlib.pyplot as plt
 
     fields = grid.fields
     wavelengths = _to_np(grid.wavelengths)
-    pupil = _to_np(grid.pupil)
+    pupil_x = _to_np(grid.pupil_x)
+    pupil_y = _to_np(grid.pupil_y)
     grid_x = _to_np(grid.x)
     grid_y = _to_np(grid.y)
     nf = len(fields)
     nw = len(wavelengths)
 
     if axes == 'both':
-        columns = [('y', 'tangential (Y)', grid_y),
-                   ('x', 'sagittal (X)', grid_x)]
+        columns = [('y', 'tangential (Y)', pupil_y, grid_y),
+                   ('x', 'sagittal (X)', pupil_x, grid_x)]
     elif axes == 'y':
-        columns = [('y', 'tangential (Y)', grid_y)]
+        columns = [('y', 'tangential (Y)', pupil_y, grid_y)]
     elif axes == 'x':
-        columns = [('x', 'sagittal (X)', grid_x)]
+        columns = [('x', 'sagittal (X)', pupil_x, grid_x)]
     else:
         raise ValueError(f"axes must be 'both', 'x', or 'y', got {axes!r}")
     ncol = len(columns)
@@ -1595,11 +1769,14 @@ def _plot_fan_grid(grid, value_label, *, axes, colors, sharey, figsize,
     wl_colors = _wavelength_colors(wavelengths, colors)
 
     for i in range(nf):
-        for ci, (axis, title, data) in enumerate(columns):
+        for ci, (axis, title, pupil, data) in enumerate(columns):
             ax = axs[i][ci]
+            # per-field abscissa: a vignetted fan spans only its transmitted
+            # extent of the nominal pupil; it is never stretched back to +/-1
+            abscissa = pupil[i] if pupil.ndim == 2 else pupil
             for j in range(nw):
                 first = i == 0 and ci == 0
-                ax.plot(pupil, data[i, j], c=wl_colors[j], lw=1,
+                ax.plot(abscissa, data[i, j], c=wl_colors[j], lw=1,
                         label=_wavelength_label(wavelengths[j]) if first else None)
             ax.axhline(0.0, c='k', lw=0.5, alpha=0.4)
             ax.axvline(0.0, c='k', lw=0.5, alpha=0.4)

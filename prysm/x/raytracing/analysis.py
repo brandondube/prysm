@@ -19,14 +19,14 @@ from .opt import (
 )
 from ._line_math import line_intersection_params
 from .paraxial import paraxial_image_distance
-from .launch import Field, Sampling, launch
+from .launch import Field, Sampling, launch, _apply_vignetting
 from ._meta import (
     system_wavelength, system_epd, object_space_index, image_space_index,
     system_first_order,
 )
 from ._trace_grid import (
     TraceRecord, iter_trace_grid, trace_cell, _resolve_fields,
-    _resolve_wavelengths, _require_epd,
+    _resolve_wavelengths, _require_epd, field_sweep,
 )
 from .surfaces import Conic, EvenAsphere, Plane, Sphere
 
@@ -48,9 +48,10 @@ class FieldCurvatureResult:
     y_fan_z: object
 
 
-RayFanGrid = namedtuple('RayFanGrid', ['fields', 'wavelengths', 'pupil', 'x', 'y'])
-OPDFanGrid = namedtuple('OPDFanGrid', ['fields', 'wavelengths', 'pupil', 'x', 'y'])
+RayFanGrid = namedtuple('RayFanGrid', ['fields', 'wavelengths', 'pupil_x', 'pupil_y', 'x', 'y'])
+OPDFanGrid = namedtuple('OPDFanGrid', ['fields', 'wavelengths', 'pupil_x', 'pupil_y', 'x', 'y'])
 SpotGrid = namedtuple('SpotGrid', ['fields', 'wavelengths', 'x', 'y', 'valid', 'reference'])
+FullFieldGrid = namedtuple('FullFieldGrid', ['hx', 'hy', 'data', 'metric', 'kind', 'unit'])
 
 
 def _axis_index(axis):
@@ -413,15 +414,15 @@ def wavefront_zernike_fit(opd, x_pupil, y_pupil, nms, *,
 
 def distortion(prescription, fields=None, wavelength=None, *, epd=None,
                paraxial_fraction=1e-4, distortion_type='f-tan',
-               pupil_z=None):
+               pupil_z=None, samples=101):
     """Per-field image-plane error of the chief ray vs a paraxial proxy.
 
     Parameters
     ----------
     prescription : sequence of Surface
     fields : iterable of Field, optional
-        field points to evaluate.  Must all be kind='angle'.  None defaults
-        to the system FieldSet, else the on-axis field.
+        field points to evaluate.  Must all be kind='angle'.  None sweeps
+        the span of the system FieldSet densely; see field_sweep.
     wavelength : float
         in microns.
     epd : float
@@ -433,6 +434,8 @@ def distortion(prescription, fields=None, wavelength=None, *, epd=None,
     pupil_z : float, optional
         z position of the entrance pupil used for chief-ray launch.  If
         omitted, launch() defaults to the first surface vertex.
+    samples : int, optional
+        number of sweep points when fields is None.
 
     Returns
     -------
@@ -449,7 +452,7 @@ def distortion(prescription, fields=None, wavelength=None, *, epd=None,
     """
     wavelength = system_wavelength(prescription, wavelength)
     epd = _require_epd(prescription, epd, wavelength)
-    fields = _resolve_fields(prescription, fields)
+    fields = field_sweep(prescription, fields, samples)
     n = len(fields)
     real_xy = np.zeros((n, 2), dtype=config.precision)
     paraxial_xy = np.zeros((n, 2), dtype=config.precision)
@@ -553,21 +556,23 @@ def _line_intersection_z(P0, S0, P1, S1):
 
 
 def field_curvature(prescription, fields=None, wavelength=None, *, epd=None,
-                    marginal_fraction=1e-3):
+                    marginal_fraction=1e-3, samples=101):
     """X- and y-fan focus shifts per field point.
 
     Parameters
     ----------
     prescription : sequence of Surface
     fields : iterable of Field, optional
-        field points to evaluate.  Must all be kind='angle'.  None defaults
-        to the system FieldSet, else the on-axis field.
+        field points to evaluate.  Must all be kind='angle'.  None sweeps
+        the span of the system FieldSet densely; see field_sweep.
     wavelength : float
         in microns.
     epd : float
         entrance pupil diameter.
     marginal_fraction : float
         marginal-ray radius as a fraction of EPD/2.
+    samples : int, optional
+        number of sweep points when fields is None.
 
     Returns
     -------
@@ -582,7 +587,7 @@ def field_curvature(prescription, fields=None, wavelength=None, *, epd=None,
     """
     wavelength = system_wavelength(prescription, wavelength)
     epd = _require_epd(prescription, epd, wavelength)
-    fields = _resolve_fields(prescription, fields)
+    fields = field_sweep(prescription, fields, samples)
     n = len(fields)
     x_fan_z = np.zeros(n, dtype=config.precision)
     y_fan_z = np.zeros(n, dtype=config.precision)
@@ -761,7 +766,8 @@ def chromatic_focal_shift(prescription, wavelengths=None, *,
     return wavelengths, foci - ref
 
 
-def lateral_color(prescription, fields=None, wavelengths=None, *, epd=None):
+def lateral_color(prescription, fields=None, wavelengths=None, *, epd=None,
+                  samples=101):
     """Chief-ray image-plane landing at every (field, wavelength) pair.
 
     The lateral chromatic aberration at field i is the difference between
@@ -772,13 +778,15 @@ def lateral_color(prescription, fields=None, wavelengths=None, *, epd=None):
     ----------
     prescription : sequence of Surface
     fields : iterable of Field, optional
-        field points (kind='angle').  None defaults to the system FieldSet,
-        else the on-axis field.
+        field points (kind='angle').  None sweeps the span of the system
+        FieldSet densely; see field_sweep.
     wavelengths : iterable of float, optional
         wavelengths in microns.  None defaults to the system set, else the
         reference wavelength.
     epd : float
         entrance pupil diameter.
+    samples : int, optional
+        number of sweep points when fields is None.
 
     Returns
     -------
@@ -788,7 +796,7 @@ def lateral_color(prescription, fields=None, wavelengths=None, *, epd=None):
     """
     # Use one pupil size for all wavelengths.
     epd = _require_epd(prescription, epd)
-    fields = _resolve_fields(prescription, fields)
+    fields = field_sweep(prescription, fields, samples)
     wavelengths = _resolve_wavelengths(prescription, wavelengths)
     out = np.zeros((len(fields), len(wavelengths), 2), dtype=config.precision)
     for r in iter_trace_grid(prescription, fields, wavelengths,
@@ -805,11 +813,22 @@ def _fan_grid_setup(prescription, fields, wavelengths, nrays, distribution):
     wavelengths = _resolve_wavelengths(prescription, wavelengths)
     x_fan = Sampling.fan(n=nrays, axis='x', distribution=distribution)
     y_fan = Sampling.fan(n=nrays, axis='y', distribution=distribution)
-    pupil = np.asarray(x_fan.build(1.0)[:, 0], dtype=config.precision)
-    shape = (len(fields), len(wavelengths), pupil.shape[0])
+    # per-field abscissas: the canonical fan coordinates compressed onto each
+    # field's vignetted pupil by the same map launch applies to the samples,
+    # still normalized to the nominal (unvignetted) pupil.  A vignetted fan
+    # therefore spans less than [-1, 1] -- it is never stretched back out.
+    xy_x = x_fan.build(1.0)
+    xy_y = y_fan.build(1.0)
+    nrays = xy_x.shape[0]
+    pupil_x = np.empty((len(fields), nrays), dtype=config.precision)
+    pupil_y = np.empty((len(fields), nrays), dtype=config.precision)
+    for i, field in enumerate(fields):
+        pupil_x[i] = _apply_vignetting(xy_x, field)[:, 0]
+        pupil_y[i] = _apply_vignetting(xy_y, field)[:, 1]
+    shape = (len(fields), len(wavelengths), nrays)
     x = np.full(shape, np.nan, dtype=config.precision)
     y = np.full(shape, np.nan, dtype=config.precision)
-    return fields, wavelengths, x_fan, y_fan, pupil, x, y
+    return fields, wavelengths, x_fan, y_fan, pupil_x, pupil_y, x, y
 
 
 def _fan_image_error(record, axis, reference):
@@ -854,10 +873,12 @@ def ray_aberration_fans(prescription, fields=None, wavelengths=None, *,
     Returns
     -------
     RayFanGrid
-        namedtuple (fields, wavelengths, pupil, x, y).
+        namedtuple (fields, wavelengths, pupil_x, pupil_y, x, y); the pupil
+        abscissas are per-field, normalized to the nominal pupil, and span
+        only the vignetted extent for a field with vignetting factors.
 
     """
-    fields, wavelengths, x_fan, y_fan, pupil, x, y = _fan_grid_setup(
+    fields, wavelengths, x_fan, y_fan, pupil_x, pupil_y, x, y = _fan_grid_setup(
         prescription, fields, wavelengths, nrays, distribution,
     )
     # x/y fan iterators have matching cell order.
@@ -868,7 +889,7 @@ def ray_aberration_fans(prescription, fields=None, wavelengths=None, *,
         y[yr.i, yr.j] = _fan_image_error(yr, 'y', reference)
     return RayFanGrid(tuple(fields),
                       np.asarray(wavelengths, dtype=config.precision),
-                      pupil, x, y)
+                      pupil_x, pupil_y, x, y)
 
 
 def _exit_pupil_for(prescription, wavelength, *, field=None, stop_index=None,
@@ -923,13 +944,14 @@ def opd_fans(prescription, fields=None, wavelengths=None, *, nrays=21,
     Returns
     -------
     OPDFanGrid
-        namedtuple (fields, wavelengths, pupil, x, y).
+        namedtuple (fields, wavelengths, pupil_x, pupil_y, x, y); see
+        ray_aberration_fans for the pupil abscissa convention.
 
     """
-    fields, wavelengths, x_fan, y_fan, pupil, x, y = _fan_grid_setup(
+    fields, wavelengths, x_fan, y_fan, pupil_x, pupil_y, x, y = _fan_grid_setup(
         prescription, fields, wavelengths, nrays, distribution,
     )
-    n_pupil = pupil.shape[0]
+    n_pupil = pupil_x.shape[-1]
     # x/y fan iterators have matching cell order.
     for xr, yr in zip(
             iter_trace_grid(prescription, fields, wavelengths, x_fan, epd=epd),
@@ -946,7 +968,7 @@ def opd_fans(prescription, fields=None, wavelengths=None, *, nrays=21,
                                  n_pupil)
     return OPDFanGrid(tuple(fields),
                       np.asarray(wavelengths, dtype=config.precision),
-                      pupil, x, y)
+                      pupil_x, pupil_y, x, y)
 
 
 def spot_diagrams(prescription, fields=None, wavelengths=None, *,
@@ -1045,3 +1067,207 @@ def spot_geometric_radius(spot_grid):
     """
     xc, yc = _spot_centered(spot_grid)
     return np.sqrt(np.nanmax(xc * xc + yc * yc, axis=2))
+
+
+# ---------- full-field displays ----------------------------------------------
+# A 2D map of a scalar image-quality metric over the field disc, in the spirit
+# of Code V FMA / full-field displays.
+
+def _full_field_template(prescription, max_field):
+    """Field kind/unit/object_z and the field-disc radius for full_field."""
+    base = _resolve_fields(prescription, None)
+    kinds = {f.kind for f in base}
+    if len(kinds) != 1:
+        raise ValueError('full_field requires system fields of a single kind')
+    kind = kinds.pop()
+    if kind == 'angle':
+        if len({f.unit for f in base}) != 1:
+            raise ValueError(
+                'full_field requires system fields with a single angular unit'
+            )
+        object_z = None
+    else:
+        if len({f.object_z for f in base}) != 1:
+            raise ValueError(
+                'full_field requires system fields with a single object plane'
+            )
+        object_z = base[0].object_z
+    unit = base[0].unit
+    if max_field is None:
+        max_field = max(float(np.hypot(f.hx, f.hy)) for f in base)
+    max_field = float(max_field)
+    if max_field <= 0.0:
+        raise ValueError(
+            'full_field needs a nonzero field extent; define off-axis system '
+            'fields or pass max_field'
+        )
+    return kind, unit, object_z, max_field
+
+
+def _as_wavelength_list(wavelengths):
+    """None passes through; a scalar becomes a one-element list."""
+    if wavelengths is None:
+        return None
+    if np.ndim(wavelengths) == 0:
+        return [float(wavelengths)]
+    return [float(w) for w in wavelengths]
+
+
+def _spectral_weights(prescription, wavelengths, resolved):
+    """System spectral weights when the wavelength set defaulted, else ones."""
+    if wavelengths is None:
+        w = getattr(prescription, 'weights', None)
+        if w is not None and len(w) == len(resolved):
+            return [float(x) for x in w]
+    return [1.0] * len(resolved)
+
+
+def _full_field_rms_spot(prescription, fields, wavelengths, sampling, epd):
+    """Polychromatic centroid-referenced RMS spot radius per field.
+
+    Rays from all wavelengths pool into one weighted bundle per field, so the
+    result includes lateral color blur, not just the per-wavelength average.
+    """
+    wvls = _resolve_wavelengths(prescription, wavelengths)
+    weights = _spectral_weights(prescription, wavelengths, wvls)
+    if sampling is None:
+        sampling = Sampling.hex(nrings=6)
+    n_samples = sampling.build(1.0).shape[0]
+    shape = (len(fields), len(wvls), n_samples)
+    x = np.full(shape, np.nan, dtype=config.precision)
+    y = np.full(shape, np.nan, dtype=config.precision)
+    for r in iter_trace_grid(prescription, fields, wvls, sampling, epd=epd):
+        v = r.valid
+        xi = np.full(n_samples, np.nan, dtype=config.precision)
+        yi = np.full(n_samples, np.nan, dtype=config.precision)
+        xi[v] = r.trace.P[-1, v, 0]
+        yi[v] = r.trace.P[-1, v, 1]
+        x[r.i, r.j] = xi
+        y[r.i, r.j] = yi
+    w = np.asarray(weights, dtype=config.precision)[None, :, None]
+    m = np.isfinite(x)
+    wm = np.where(m, w, 0.0)
+    xw = np.where(m, x, 0.0)
+    yw = np.where(m, y, 0.0)
+    wsum = wm.sum(axis=(1, 2))
+    safe = np.where(wsum > 0.0, wsum, 1.0)
+    cx = (wm * xw).sum(axis=(1, 2)) / safe
+    cy = (wm * yw).sum(axis=(1, 2)) / safe
+    r2 = (xw - cx[:, None, None])**2 + (yw - cy[:, None, None])**2
+    rms = np.sqrt((wm * r2).sum(axis=(1, 2)) / safe)
+    rms[wsum == 0.0] = np.nan
+    return rms
+
+
+def _full_field_rms_wfe(prescription, fields, wavelength, sampling, epd,
+                        stop_index):
+    """Piston-removed RMS wavefront error in waves per field."""
+    if sampling is None:
+        sampling = Sampling.hex(nrings=6)
+    out = np.full(len(fields), np.nan, dtype=config.precision)
+    for i, field in enumerate(fields):
+        r = trace_cell(prescription, field, wavelength, sampling, epd=epd)
+        tilt_field = field if field.kind == 'angle' else None
+        P_xp = _exit_pupil_for(prescription, wavelength, field=field,
+                               stop_index=stop_index, epd=r.epd)
+        try:
+            opd, _, _, _ = _wavefront_from_trace(
+                prescription, r.P, wavelength, r.trace, P_xp=P_xp,
+                field=tilt_field, output='waves')
+        except ValueError:
+            # the chief ray was clipped; this field is a hole in the map
+            continue
+        if opd.size:
+            resid = opd - np.mean(opd)
+            out[i] = float(np.sqrt(np.mean(resid * resid)))
+    return out
+
+
+def full_field(prescription, metric='rms spot', *, samples=15, max_field=None,
+               wavelengths=None, sampling=None, epd=None, stop_index=None):
+    """Scalar image-quality metric over a 2D grid of field points.
+
+    The full-field analog of Code V FMA / full-field displays: a samples x
+    samples Cartesian grid spans the field square, and points inside the
+    field disc (radius max_field) are evaluated; points outside are NaN.
+
+    Parameters
+    ----------
+    prescription : sequence of Surface or OpticalSystem
+        the optical system.
+    metric : str, optional
+        which scalar to evaluate per field point:
+
+        - 'rms spot': polychromatic centroid-referenced RMS spot radius, in
+          prescription length units.  Rays from every wavelength pool into
+          one spectrally-weighted bundle.
+        - 'rms wfe': piston-removed RMS wavefront error in waves, at the
+          first given wavelength (default the reference wavelength).
+        - 'distortion': signed percent distortion of the chief ray vs the
+          paraxial proxy, at the first given wavelength.
+        - 'lateral color': magnitude of the chief-ray landing separation
+          between the shortest and longest wavelengths, in length units.
+
+    samples : int, optional
+        grid points per axis.
+    max_field : float, optional
+        field-disc radius, in the system field units; defaults to the
+        largest system field magnitude.
+    wavelengths : float or iterable of float, optional
+        wavelengths in microns; defaults to the system set.  The
+        monochromatic metrics use the first entry.
+    sampling : Sampling, optional
+        pupil sampling for the bundle metrics ('rms spot', 'rms wfe');
+        defaults to a 6-ring hexapolar grid.
+    epd : float, optional
+        entrance pupil diameter; defaults from a system aperture spec.
+    stop_index : int, optional
+        aperture-stop index for exit-pupil resolution ('rms wfe' only).
+
+    Returns
+    -------
+    FullFieldGrid
+        namedtuple (hx, hy, data, metric, kind, unit); hx, hy, and data are
+        (samples, samples) arrays, with data NaN outside the field disc.
+
+    """
+    kind, unit, object_z, radius = _full_field_template(prescription, max_field)
+    wavelengths = _as_wavelength_list(wavelengths)
+    coords = np.linspace(-radius, radius, int(samples))
+    hx, hy = np.meshgrid(coords, coords)
+    inside = np.hypot(hx, hy) <= radius * (1.0 + 1e-9)
+    idx = np.nonzero(inside.ravel())[0]
+    flat_fields = [
+        Field(float(fx), float(fy), kind=kind, unit=unit, object_z=object_z)
+        for fx, fy in zip(hx.ravel()[idx], hy.ravel()[idx])
+    ]
+    key = metric.lower().replace('-', ' ').replace('_', ' ')
+    if key == 'rms spot':
+        values = _full_field_rms_spot(prescription, flat_fields, wavelengths,
+                                      sampling, epd)
+    elif key == 'rms wfe':
+        wvl = system_wavelength(
+            prescription, None if wavelengths is None else wavelengths[0])
+        values = _full_field_rms_wfe(prescription, flat_fields, wvl, sampling,
+                                     epd, stop_index)
+    elif key == 'distortion':
+        wvl = None if wavelengths is None else wavelengths[0]
+        values = distortion(prescription, flat_fields, wvl, epd=epd).percent
+    elif key == 'lateral color':
+        wvls = _resolve_wavelengths(prescription, wavelengths)
+        if len(wvls) < 2:
+            raise ValueError(
+                "metric 'lateral color' needs at least two wavelengths"
+            )
+        landing = lateral_color(prescription, flat_fields, wvls, epd=epd)
+        d = (landing[:, int(np.argmax(wvls))]
+             - landing[:, int(np.argmin(wvls))])
+        values = np.hypot(d[:, 0], d[:, 1])
+    else:
+        raise ValueError(
+            "metric must be 'rms spot', 'rms wfe', 'distortion', or "
+            f"'lateral color', got {metric!r}"
+        )
+    data = np.full(hx.size, np.nan, dtype=config.precision)
+    data[idx] = np.asarray(values, dtype=config.precision)
+    return FullFieldGrid(hx, hy, data.reshape(hx.shape), key, kind, unit)

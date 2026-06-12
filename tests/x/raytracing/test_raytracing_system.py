@@ -318,6 +318,25 @@ def test_exit_pupil_cache_keyed_by_stop_index():
     assert xp1 is not xp0
 
 
+def test_exit_pupil_cache_key_includes_geometric_field_metadata():
+    from prysm.x.raytracing.analysis import resolve_exit_pupil
+    sys = _singlet()
+    sys.stop_index = None
+    wvl = sys.wavelength()
+    fdeg = Field(0.1, 0.0, unit='deg')
+    frad = Field(0.1, 0.0, unit='rad')
+
+    direct_deg = resolve_exit_pupil(sys, wvl, field=fdeg)
+    direct_rad = resolve_exit_pupil(sys, wvl, field=frad)
+    assert not np.allclose(direct_deg, direct_rad)
+
+    cached_deg = sys.exit_pupil(wvl, field=fdeg)
+    cached_rad = sys.exit_pupil(wvl, field=frad)
+    np.testing.assert_allclose(cached_deg, direct_deg)
+    np.testing.assert_allclose(cached_rad, direct_rad)
+    assert cached_rad is not cached_deg
+
+
 def test_resolve_exit_pupil_paraxial_branch_field_independent():
     from prysm.x.raytracing.analysis import resolve_exit_pupil
     sys = _singlet()
@@ -395,3 +414,70 @@ def test_solve_image_distance_lands_d_line_paraxial_image():
     expected = (float(surfaces[-2].P[2])
                 + float(paraxial_image_distance(surfaces[:-1], wvl=wvl)))
     assert float(surfaces[-1].P[2]) == pytest.approx(expected, abs=1e-9)
+
+
+# ---------- set_vignetting / solve_vignetting -------------------------------
+
+def _vignetted_singlet(rear_semidiameter=4.0, field=0.0):
+    # the rear aperture clips the nominal marginal rays (which arrive at
+    # r ~ 4.8 for the default semidiameter of 4); the front surface and the
+    # image plane are oversized so the rear surface is the limiting aperture
+    n15 = materials.ConstantMaterial(1.5)
+    ld = LensData()
+    (ld.add(Conic(1 / 30.0, 0.0), thickness=4.0, material=n15,
+            semidiameter=6.0)
+       .add(Plane(), thickness=50.0, material=materials.air,
+            semidiameter=rear_semidiameter)
+       .add(Plane(), typ='eval', material=materials.air, semidiameter=20.0))
+    sys = OpticalSystem(ld, aperture=10.0, fields=[field],
+                        wavelengths=[0.5876], reference=0)
+    sys.solve_image_distance()
+    return sys
+
+
+def test_solve_vignetting_factors_are_symmetric_on_axis():
+    from prysm.x.raytracing.launch import solve_vignetting
+
+    sys = _vignetted_singlet()
+    factors = solve_vignetting(sys, sys.field(0), sys.wavelength())
+    vals = [factors[k] for k in ('vux', 'vlx', 'vuy', 'vly')]
+    # rotationally symmetric system, on-axis field: all four sides agree
+    assert max(vals) - min(vals) < 1e-9
+    assert 0.05 < vals[0] < 0.5
+
+
+def test_set_vignetting_rim_rays_transmit_inside_limiting_aperture():
+    from prysm.x.raytracing.spencer_and_murty import valid_mask
+
+    sys = _vignetted_singlet()
+    out = sys.set_vignetting()
+    assert out is sys
+    assert sys.field(0).vignetting is not None
+
+    # with the factors stored, an ordinary rim-sampled launch transmits in
+    # full and its marginal rays ride just inside the limiting aperture
+    P, S = launch(sys, sys.field(0), sys.wavelength(), Sampling.cross(n=11))
+    tr = raytrace(sys, P, S, sys.wavelength())
+    assert valid_mask(tr.status).all()
+    r_rear = np.hypot(tr.P[2, :, 0], tr.P[2, :, 1])
+    assert float(r_rear.max()) <= 4.0
+    assert float(r_rear.max()) > 4.0 * 0.98
+
+
+def test_set_vignetting_overwrites_and_collapses_unvignetted_to_none():
+    sys = _vignetted_singlet(rear_semidiameter=8.0)
+    # stale hand-typed factors are referenced to the nominal pupil and
+    # overwritten, not composed with; an unvignetted field stores None
+    sys.field(0).vignetting = {'vux': 0.1, 'vlx': 0.1, 'vuy': 0.1, 'vly': 0.1}
+    sys.set_vignetting()
+    assert sys.field(0).vignetting is None
+
+
+def test_solve_vignetting_blocked_chief_raises():
+    from prysm.x.raytracing.launch import solve_vignetting
+
+    # at 10 degrees the chief crosses the rear surface at y ~ 0.47, outside
+    # the 0.3 semidiameter; factors are chief-referenced, so this must raise
+    sys = _vignetted_singlet(rear_semidiameter=0.3, field=10.0)
+    with pytest.raises(ValueError, match='chief'):
+        solve_vignetting(sys, sys.field(0), sys.wavelength())

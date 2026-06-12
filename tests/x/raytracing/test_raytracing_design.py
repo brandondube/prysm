@@ -15,7 +15,6 @@ from prysm.x.raytracing import LensData
 from prysm.x import materials
 from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing.spencer_and_murty import raytrace
-from prysm.x.raytracing.raygen import generate_collimated_ray_fan
 from prysm.x.raytracing.opt import rms_spot_radius
 from prysm.x.raytracing.paraxial import effective_focal_length
 from prysm.x.raytracing.launch import Field, Sampling, launch
@@ -41,14 +40,6 @@ def _parabola_mirror(kappa=-1.0):
     return OpticalSystem(lens, aperture=10.0, wavelengths=[0.55e-3])
 
 
-def _collimated_fan(n=15, maxr=5.0):
-    """Collimated ray fan launched from z=-50 toward the mirror at z=0."""
-    P, S = generate_collimated_ray_fan(n, maxr=maxr)
-    P = P.copy()
-    P[:, 2] = -50.0
-    return P, S
-
-
 def _refractive_singlet(c1=1 / 50.0, c2=-1 / 50.0, gap=5.0, n=1.5):
     """Sphere/sphere singlet (index n) with an image plane 100 past the rear
     vertex."""
@@ -64,22 +55,21 @@ def _refractive_singlet(c1=1 / 50.0, c2=-1 / 50.0, gap=5.0, n=1.5):
 # ---------- Trace cache ------------------------------------------------------
 
 def test_trace_cache_reuses_identical_launch():
-    """Two operands at the same (P, S, wavelength) share a single trace."""
+    """Two operands sharing one launch recipe share a single trace."""
     ld = _parabola_mirror()
-    P, S = _collimated_fan(7, maxr=2.0)
-    op1 = RmsSpotRadius(P, S, wavelength=0.55e-3)
-    op2 = RmsSpotRadius(P, S, wavelength=0.55e-3, target=1e-3)
-    op3 = RmsSpotRadius(P, S, wavelength=0.65e-3)  # different wvl ⇒ separate
+    samp = Sampling.fan(n=7)
+    op1 = RmsSpotRadius(wavelength=0.55e-3, sampling=samp)
+    op2 = RmsSpotRadius(wavelength=0.55e-3, sampling=samp, target=1e-3)
+    op3 = RmsSpotRadius(wavelength=0.65e-3, sampling=samp)  # ⇒ separate
     prob = Problem(ld, [op1, op2, op3])
     _, cache = prob.residuals(prob.x0(), return_cache=True)
-    assert cache.n_traces == 2  # two unique (P, S, wvl) keys
+    assert cache.n_traces == 2  # two unique (recipe, wvl) keys
 
 
 def test_trace_cache_independent_per_call():
     """Cache is per merit/residuals call, not global."""
     ld = _parabola_mirror()
-    P, S = _collimated_fan(7, maxr=2.0)
-    op = RmsSpotRadius(P, S, wavelength=0.55e-3)
+    op = RmsSpotRadius(wavelength=0.55e-3, sampling=Sampling.fan(n=7))
     prob = Problem(ld, [op])
     _, c1 = prob.residuals(prob.x0(), return_cache=True)
     _, c2 = prob.residuals(prob.x0(), return_cache=True)
@@ -100,8 +90,9 @@ def test_efl_operand_matches_paraxial():
 def test_rms_spot_operand_matches_direct():
     """RmsSpotRadius matches the direct opt.rms_spot_radius computation."""
     ld = _parabola_mirror()
-    P, S = _collimated_fan(11, maxr=3.0)
-    op = RmsSpotRadius(P, S, wavelength=0.55e-3)
+    samp = Sampling.fan(n=11)
+    op = RmsSpotRadius(wavelength=0.55e-3, sampling=samp, epd=6.0)
+    P, S = launch(ld, Field(), 0.55e-3, samp, epd=6.0)
     direct = raytrace(ld, P, S, 0.55e-3)
     np.testing.assert_allclose(
         op(ld, _TraceCache(ld)),
@@ -118,8 +109,8 @@ def test_recover_parabola_kappa_via_minimize():
     """
     ld = _parabola_mirror(kappa=0.0)
     ld.lens.vary('conic', surfaces=0)
-    P, S = _collimated_fan(15, maxr=5.0)
-    op = RmsSpotRadius(P, S, wavelength=0.55e-3, target=0.0, weight=1.0)
+    op = RmsSpotRadius(wavelength=0.55e-3, sampling=Sampling.fan(n=15),
+                       target=0.0, weight=1.0)
     prob = Problem(ld, [op])
     res = optimize.minimize(prob.merit, prob.x0(),
                             jac=prob.jacobian, method='L-BFGS-B',
@@ -148,8 +139,7 @@ def test_residuals_least_squares_path():
     """The residual vector from Problem feeds least_squares cleanly."""
     ld = _parabola_mirror(kappa=0.0)
     ld.lens.vary('conic', surfaces=0)
-    P, S = _collimated_fan(15, maxr=5.0)
-    op = RmsSpotRadius(P, S, wavelength=0.55e-3)
+    op = RmsSpotRadius(wavelength=0.55e-3, sampling=Sampling.fan(n=15))
     prob = Problem(ld, [op])
     res = optimize.least_squares(prob.residuals, prob.x0(), jac='3-point',
                                  bounds=([-3.0], [3.0]),
@@ -218,7 +208,7 @@ def test_damped_least_squares_runs_raytracing_problem_with_constraint():
     target_efl = 75.0
     problem = Problem(
         ld,
-        equality_constraints=[EFL(wavelength=0.55, target=target_efl)],
+        constraints=[EFL(wavelength=0.55, target=target_efl)],
     )
     result = problem.solve(damping=1e-8, maxiter=10, constraint_tol=1e-10)
     assert result.success
@@ -236,8 +226,7 @@ def test_solve_warns_when_solver_reports_failure(monkeypatch):
     ld = _refractive_singlet()
     ld.lens.vary('curvature', surfaces=0)
     problem = Problem(ld, [RmsSpotRadius(
-        *launch(ld, Field(0., 0.), 0.55, Sampling.fan(n=5), epd=4.0),
-        wavelength=0.55)])
+        Field(0., 0.), 0.55, Sampling.fan(n=5))])
     x0 = problem.x0()
 
     def fake_dls(prob, x0=None, **kwargs):
@@ -260,18 +249,16 @@ def test_solve_warns_when_solver_reports_failure(monkeypatch):
 def test_wavefront_rms_operand_evaluates():
     """WavefrontRMS on a perfect parabola is ~0."""
     ld = _parabola_mirror(-1.0)
-    P, S = launch(ld, Field(0., 0.), 0.55e-3,
-                  Sampling.fan(n=11), epd=10.0, pupil_z=-50.0)
-    op = WavefrontRMS(P, S, wavelength=0.55e-3, P_xp=(0, 0, 0))
+    op = WavefrontRMS(wavelength=0.55e-3, sampling=Sampling.fan(n=11),
+                      P_xp=(0, 0, 0))
     assert op(ld, _TraceCache(ld)) < 1e-9
 
 
 def test_wavefront_rms_operand_in_problem():
     """WavefrontRMS plugs into Problem.merit cleanly (no free DOFs)."""
     ld = _parabola_mirror(-1.0)
-    P, S = launch(ld, Field(0., 0.), 0.55e-3,
-                  Sampling.fan(n=11), epd=10.0, pupil_z=-50.0)
-    op = WavefrontRMS(P, S, wavelength=0.55e-3, P_xp=(0, 0, 0))
+    op = WavefrontRMS(wavelength=0.55e-3, sampling=Sampling.fan(n=11),
+                      P_xp=(0, 0, 0))
     prob = Problem(ld, [op])
     assert prob.merit(prob.x0()) < 1e-18
 
@@ -279,11 +266,9 @@ def test_wavefront_rms_operand_in_problem():
 def test_zernike_coefficient_operand_returns_known_term():
     """When OPD is dominated by a single Zernike term, the operand returns it."""
     ld = _parabola_mirror(-1.0)
-    P, S = launch(ld, Field(0., 0.), 0.55e-3,
-                  Sampling.hex(nrings=4), epd=10.0, pupil_z=-50.0)
     nms = [(0, 0), (2, 0), (4, 0)]
-    op = ZernikeCoefficient(P, S, wavelength=0.55e-3, n=4, m=0,
-                            nms_basis=nms,
+    op = ZernikeCoefficient(wavelength=0.55e-3, sampling=Sampling.hex(nrings=4),
+                            n=4, m=0, nms_basis=nms,
                             P_xp=(0, 0, 0),
                             normalization_radius=5.0, norm=False)
     val = op(ld, _TraceCache(ld))
@@ -293,11 +278,8 @@ def test_zernike_coefficient_operand_returns_known_term():
 
 
 def test_zernike_coefficient_rejects_missing_basis_term():
-    ld = _parabola_mirror(-1.0)
-    P, S = launch(ld, Field(0., 0.), 0.55e-3,
-                  Sampling.fan(n=5), epd=4.0, pupil_z=-10.0)
     with pytest.raises(ValueError):
-        ZernikeCoefficient(P, S, wavelength=0.55e-3, n=4, m=0,
+        ZernikeCoefficient(wavelength=0.55e-3, n=4, m=0,
                            nms_basis=[(0, 0), (2, 0)])
 
 

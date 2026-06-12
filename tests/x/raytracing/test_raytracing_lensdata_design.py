@@ -10,7 +10,7 @@ from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import FRAUNHOFER_LINES_UM, LensData
 from prysm.x import materials
 from prysm.x.raytracing.design import EFL, Problem, RmsSpotRadius
-from prysm.x.raytracing.launch import Sampling, launch
+from prysm.x.raytracing.launch import Sampling
 from prysm.x.raytracing.paraxial import effective_focal_length
 from prysm.x.raytracing.surfaces import Conic, Plane
 
@@ -55,7 +55,7 @@ def test_lensdata_efl_optimization_converges():
     ld.lens.vary('curvature', surfaces=1)  # one DOF, one operand -> well posed
     wvl = ld.wavelength()
     target = 80.0
-    prob = Problem(ld, equality_constraints=[EFL(wvl, target=target)])
+    prob = Problem(ld, constraints=[EFL(wvl, target=target)])
     res = prob.solve(damping=1e-8, xtol=1e-12, ftol=1e-12,
                      constraint_tol=1e-12)
     assert res.success
@@ -68,7 +68,7 @@ def test_lensdata_thickness_and_curvature_jointly_varied():
     ld = make_singlet(with_image=False)
     ld.lens.vary('curvature', surfaces=1).vary('thickness', surfaces=0)
     wvl = ld.wavelength()
-    prob = Problem(ld, equality_constraints=[EFL(wvl, target=90.0)])
+    prob = Problem(ld, constraints=[EFL(wvl, target=90.0)])
     x0 = prob.x0()
     assert len(x0) == 2
     res = prob.solve(x0, damping=1e-8, maxiter=10)
@@ -80,7 +80,7 @@ def test_focal_length_constraint_is_not_an_objective_residual():
     ld = make_singlet(with_image=False)
     ld.lens.vary('curvature', surfaces=1)
     wvl = ld.wavelength()
-    prob = Problem(ld, equality_constraints=[EFL(wvl, target=90.0)])
+    prob = Problem(ld, constraints=[EFL(wvl, target=90.0)])
     assert prob.residuals(prob.x0()).size == 0
     assert prob.equalities(prob.x0()).shape == (1,)
 
@@ -116,8 +116,7 @@ def test_jacobian_restores_free_vector():
 def test_rms_spot_operand_decreases_under_optimization():
     ld = make_singlet(image_gap=96.0)
     wvl = ld.wavelength()
-    P, S = launch(ld, ld.field(0), wvl, Sampling.hex(nrings=3), epd=ld.epd)
-    op = RmsSpotRadius(P, S, wvl)
+    op = RmsSpotRadius(ld.field(0), wvl, Sampling.hex(nrings=3))
     ld.lens.vary('curvature', surfaces=[0, 1])
     prob = Problem(ld, [op])
     spot0 = op(ld, _fresh_cache(prob))
