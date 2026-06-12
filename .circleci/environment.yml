@@ -12,7 +12,10 @@ dependencies:
   - imageio
   - pandas
   - h5py
+  - pyyaml
   - pytest
   - pytest-cov
   - coverage
   - coveralls
+  - pip:
+      - refractiveindex

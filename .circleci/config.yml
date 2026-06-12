@@ -54,6 +54,20 @@ jobs:
           command: |
             "$HOME/miniforge3/bin/conda" run --name prysm-ci \
               python -m pip install --no-build-isolation --no-deps --editable .
+      - restore_cache:
+          keys:
+            - v1-riidb
+      - run:
+          name: Download refractiveindex.info database
+          command: |
+            if [ ! -f "$HOME/.refractiveindex.info-database/catalog-nk.yml" ]; then
+              "$HOME/miniforge3/bin/conda" run --name prysm-ci \
+                python -c "from prysm.x.materials.rii import default_db_path, _ensure_database_downloaded; _ensure_database_downloaded(default_db_path())"
+            fi
+      - save_cache:
+          key: v1-riidb
+          paths:
+            - ~/.refractiveindex.info-database
       - run:
           name: Run tests
           command: |
