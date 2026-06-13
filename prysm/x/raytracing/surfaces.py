@@ -1,5 +1,7 @@
 """Surface containers, shape objects, and calculus for raytracing."""
 
+import warnings
+
 from prysm.conf import config
 from prysm.coordinates import (
     apply_tilt_decenter,
@@ -34,6 +36,7 @@ from .spencer_and_murty import (
     transform_to_global_coords,
 )
 from .intersections import (
+    MARCH_RADIUS_MARGIN,
     SURFACE_INTERSECTION_DEFAULT_MAXITER,
     ConicSeedMixin,
     newton_intersect,
@@ -41,7 +44,7 @@ from .intersections import (
     ray_plane_intersect,
     ray_sphere_intersect,
 )
-from ._line_math import normalize_vector
+from .phase import as_phase_function
 from .sags import (
     Q2d_and_der,
     Q2d_sag,
@@ -57,6 +60,7 @@ from .sags import (
     der_direction_cosine_conic,
     even_asphere_sag,
     even_asphere_sag_der_xy,
+    fd_step,
     gradient_to_unit_normal,
     plane_sag_and_normal,
     phi_conic,
@@ -133,6 +137,27 @@ def annular_aperture(inner_radius, outer_radius, x0=0.0, y0=0.0):
         return (rsq >= ri_sq) & (rsq <= ro_sq)
 
     return aperture
+
+
+# Sample count per axis for the departure-band precompute (Surface
+# departure_band); the max-departure estimate is padded to absorb the
+# grid resolution.
+DEPARTURE_BAND_SAMPLES = 64
+# Max |grad(sag - seed conic sag)| above which the acceptance band can admit
+# multiple surface crossings: the crossing spacing scale is ~D/G, the band
+# width is ~2D, so G >= 0.5 makes the first-root selection ambiguous.
+DEPARTURE_GRADIENT_WARN = 0.5
+
+
+def _grid_grad_mag(field, h):
+    """Central-difference gradient magnitude on the interior of a square grid.
+
+    Returns the (n-2, n-2) array of sqrt((df/dx)^2 + (df/dy)^2); the two
+    one-sided edge rings are dropped so dx and dy align on a common interior.
+    """
+    gx = (field[:, 2:] - field[:, :-2]) / (2.0 * h)
+    gy = (field[2:, :] - field[:-2, :]) / (2.0 * h)
+    return np.hypot(gx[1:-1, :], gy[:, 1:-1])
 
 
 def _map_stype(typ):
@@ -245,13 +270,7 @@ class Shape:
 
     def _fd_step(self, *arrs):
         """Central-difference step, scaled to the coordinate magnitude."""
-        if self.finite_difference_step is not None:
-            return np.asarray(self.finite_difference_step, dtype=config.precision)
-        eps = np.sqrt(np.finfo(config.precision).eps)
-        mag = 1.0
-        for a in arrs:
-            mag = np.maximum(mag, np.abs(a))
-        return eps * mag
+        return fd_step(self.finite_difference_step, *arrs)
 
     def sag_hessian(self, x, y):
         """Sag Hessian (sag_xx, sag_xy, sag_yy) at x, y.
@@ -1123,19 +1142,13 @@ class Biconic(ConicSeedMixin, Shape):
 
 
 class Interaction:
-    """Result of one Surface.interact: the outgoing ray plus per-surface locals.
-
-    The kernel reads P / S / n_post / opl / code to march and record status;
-    the local-frame fields (P0, S_loc, Q_loc, n_hat, Sprime) are the nominal
-    intermediates the AD stacks would otherwise recompute (re-running the
-    Newton intersect), captured here when raytrace is asked to keep them.
-    """
+    """Result of one Surface.interact, including optional local intermediates."""
 
     __slots__ = ('P', 'S', 'n_post', 'opl', 'code',
-                 'P0', 'S_loc', 'Q_loc', 'n_hat', 'Sprime')
+                 'P0', 'S_loc', 'Q_loc', 'n_hat', 'Sprime', 'S_specular')
 
     def __init__(self, P, S, n_post, opl, code,
-                 P0, S_loc, Q_loc, n_hat, Sprime):
+                 P0, S_loc, Q_loc, n_hat, Sprime, S_specular):
         self.P = P              # global outgoing position
         self.S = S              # global outgoing direction
         self.n_post = n_post    # index following the surface
@@ -1146,6 +1159,8 @@ class Interaction:
         self.Q_loc = Q_loc      # local intersection point
         self.n_hat = n_hat      # local surface normal at Q_loc
         self.Sprime = Sprime    # local post-bend direction (pre global xform)
+        # Local direction before the diffractive bend.
+        self.S_specular = S_specular
 
 
 class Surface:
@@ -1174,8 +1189,9 @@ class Surface:
             None for reflective / eval surfaces.
         aperture : callable, optional
             Aperture predicate evaluated in local surface coordinates.
-        grating : tuple, optional
-            Diffraction grating data as (period, grating_vector, order).
+        grating : PhaseFunction or tuple, optional
+            Diffractive phase function on the surface; None for a plain surface.
+            Legacy (period, grating_vector, order) tuples are accepted.
         P : array_like, optional
             Surface vertex position.
         R : array_like, optional
@@ -1228,42 +1244,124 @@ class Surface:
         self.sag = shape.sag
         self.sag_and_normal = shape.sag_and_normal
         self._analytic_intersect = bool(getattr(shape, 'analytic_intersect', False))
+        # (D, domain_radius) for the first-root acceptance band.
+        self._departure_band = None
+        # G = max |grad departure|; L = max |grad sag| over the domain.
+        self._departure_gradient = None
+        self._sag_lipschitz = None
 
-    def diffract(self, S_specular, r, n_post, wvl):
-        """Apply diffraction from the surface grating.
+    @property
+    def grating(self):
+        """Diffractive phase function on this surface (None for a plain surface)."""
+        return self._grating
+
+    @grating.setter
+    def grating(self, value):
+        # Everything downstream sees a PhaseFunction or None.
+        self._grating = as_phase_function(value)
+
+    def departure_band(self):
+        """Max departure from the conic seed over the characterized domain.
+
+        Returns (D, domain_radius), or (None, None) when no conic seed/domain is
+        available.  Also fills the departure-gradient and sag-Lipschitz bounds.
+
+        """
+        if self._departure_band is None:
+            self._departure_band = self._compute_departure_band()
+        return self._departure_band
+
+    def _compute_departure_band(self):
+        shape = self.shape
+        if not hasattr(shape, 'seed_conic'):
+            return None, None
+        c, k, dx, dy = shape.seed_conic()
+        R = None
+        if self.bounding is not None:
+            R = self.bounding.get('outer_radius')
+        if R is None:
+            p = shape.params or {}
+            R = p.get('normalization_radius')
+            if R is None and 'x_norm' in p:
+                R = max(p['x_norm'], p['y_norm'])
+        if R is None:
+            ckk = (1.0 + k) * c * c
+            if ckk > 0.0:
+                # Stay just inside the seed conic's finite sag domain.
+                R = 0.999 / np.sqrt(ckk)
+        if R is None or not np.isfinite(R) or R <= 0:
+            return None, None
+        R = float(R)
+        n = DEPARTURE_BAND_SAMPLES
+        xs = np.linspace(-R, R, n, dtype=config.precision)
+        h = xs[1] - xs[0]
+        X, Y = np.meshgrid(xs, xs)
+        outside = X * X + Y * Y > R * R
+        with np.errstate(divide='ignore', invalid='ignore'):
+            Xs = X + dx
+            Ys = Y + dy
+            dep = shape.sag(X, Y) - conic_sag(c, k, Xs * Xs + Ys * Ys)
+        dep[outside] = np.nan
+        if not np.isfinite(dep).any():
+            return None, None
+        D = float(np.nanmax(np.abs(dep)))
+        # Departure slope bound for the monotonicity certificate.
+        G = float(np.nanmax(_grid_grad_mag(dep, h)))
+        # Sag slope bound for the Lipschitz rescue, over the enlarged disk.
+        R_march = MARCH_RADIUS_MARGIN * R
+        xm = np.linspace(-R_march, R_march, n, dtype=config.precision)
+        Xm, Ym = np.meshgrid(xm, xm)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            _, nrm = shape.sag_and_normal(Xm, Ym)
+            gmag = np.hypot(nrm[..., 0], nrm[..., 1]) / np.abs(nrm[..., 2])
+        gmag[Xm * Xm + Ym * Ym > R_march * R_march] = np.nan
+        L = float(np.nanmax(gmag))
+        self._departure_gradient = 1.1 * G
+        self._sag_lipschitz = 1.1 * L
+        if G >= DEPARTURE_GRADIENT_WARN:
+            warnings.warn(
+                f'surface departs from its conic seed with slope up to {G:.3g}'
+                f' inside radius {R:.6g}; the intersection acceptance band can'
+                ' admit multiple ray crossings, so the traced intersection on'
+                ' this surface may be ambiguous.'
+            )
+        return 1.1 * D, R
+
+    def diffract(self, S_specular, n_hat, n_post, wvl, Q_loc):
+        """Apply the diffractive bend from the surface phase function.
 
         Parameters
         ----------
         S_specular : ndarray
             Specular outgoing direction cosines.
-        r : ndarray
-            Local surface point or normal-defining vector used to determine
-            the grating plane normal.
+        n_hat : ndarray
+            Unit surface normals at the intersection.
         n_post : float or ndarray
             Refractive index after the surface.
         wvl : float
-            Wavelength in the same units as the grating period.
+            Wavelength in the same units as the phase coordinates.
+        Q_loc : ndarray
+            Local intersection points, last axis xyz; where the phase gradient
+            is evaluated.
 
         Returns
         -------
         S_out : ndarray
             Diffracted direction cosines, or S_specular where diffraction is
-            invalid or no grating is present.
+            invalid or no phase function is present.
         valid : ndarray
             Boolean mask indicating valid diffracted rays.
 
         """
         if self.grating is None:
             return S_specular, np.ones(S_specular.shape[:-1], dtype=bool)
-        period, g_vec, order = self.grating
-        g_vec = np.asarray(g_vec, dtype=S_specular.dtype)
-        n_hat = normalize_vector(r, axis=-1)
-        q = g_vec / period
-        q_dot_n = (q * n_hat).sum(-1, keepdims=True)
-        q_tan = q - q_dot_n * n_hat
+        _, gx, gy = self.grating.phase_and_gradient(Q_loc[..., 0], Q_loc[..., 1])
+        G = np.stack([gx, gy, np.zeros_like(gx)], axis=-1)
+        G_dot_n = (G * n_hat).sum(-1, keepdims=True)
+        G_tan = G - G_dot_n * n_hat
         s_dot_n = (S_specular * n_hat).sum(-1, keepdims=True)
         s_specular_tan = S_specular - s_dot_n * n_hat
-        s_diff_tan = s_specular_tan + (order * wvl / n_post) * q_tan
+        s_diff_tan = s_specular_tan + (wvl / n_post) * G_tan
         tan_sq = (s_diff_tan * s_diff_tan).sum(-1)
         valid = tan_sq <= 1.0
         normal_mag = np.sqrt(np.where(valid, 1.0 - tan_sq, 0.0))
@@ -1272,43 +1370,27 @@ class Surface:
         S_diff[~valid] = S_specular[~valid]
         return S_diff, valid
 
-    def grating_phase(self, P_local, wvl):
-        """OPL added by the grating phase at local intersection points.
-
-        The diffractive contribution is order*wvl*(q . r), with q = g_vec/period
-        -- the same q diffract adds to the transverse direction.  Its in-plane
-        gradient equals the transverse optical momentum order*wvl*q that diffract
-        imparts, so the bent ray and this term describe one self-consistent
-        wavefront (Fermat).  Without it, OPD/wavefront through the grating omits
-        the grating phase entirely.
+    def grating_phase(self, Q_loc, wvl):
+        """OPL added by the diffractive phase at local intersection points.
 
         Parameters
         ----------
-        P_local : ndarray
+        Q_loc : ndarray
             intersection points in the surface local frame, last axis xyz.
         wvl : float
-            wavelength, same length units as the grating period.
+            wavelength, same length units as the phase coordinates.
 
         Returns
         -------
         ndarray
-            per-ray OPL contribution, shape P_local.shape[:-1].
+            per-ray OPL contribution, shape Q_loc.shape[:-1].
 
         """
-        period, g_vec, order = self.grating
-        g_vec = np.asarray(g_vec, dtype=P_local.dtype)
-        q = g_vec / period
-        return order * wvl * (q * P_local).sum(-1)
+        return wvl * self.grating.phase(Q_loc[..., 0], Q_loc[..., 1])
 
-    def interact(self, P_in, S_in, n_pre, wvl, tol_sag=None):
+    def interact(self, P_in, S_in, n_pre, wvl, tol_sag=None,
+                 first_segment=False):
         """March one bundle through this surface: intersect, clip, bend, diffract.
-
-        The single forward-physics seam for the kernel.  Composes the Spencer &
-        Murty primitives in order -- to-local, intersect, aperture, reflect /
-        refract, grating direction + phase, to-global, segment OPL -- and folds
-        the per-ray outcome into one STATUS_* code with first-failure precedence
-        (a clipped ray is never re-judged for TIR, etc.).  The kernel owns only
-        the active-set bookkeeping and the NaN presentation.
 
         Parameters
         ----------
@@ -1320,6 +1402,8 @@ class Surface:
             wavelength, microns.
         tol_sag : float, optional
             Newton convergence tolerance, resolved at the leaf.
+        first_segment : bool, optional
+            True when this is the first surface the bundle meets.
 
         Returns
         -------
@@ -1329,7 +1413,10 @@ class Surface:
 
         """
         P0, S_loc = transform_to_local_coords(P_in, self.P, S_in, self.R)
-        Q_loc, n_hat, converged = self.intersect(P0, S_loc, tol_sag=tol_sag)
+        # Later reflect/refract surfaces reject roots behind the incoming ray.
+        forward_only = self.typ != STYPE_EVAL and not first_segment
+        Q_loc, n_hat, converged = self.intersect(P0, S_loc, tol_sag=tol_sag,
+                                                 forward_only=forward_only)
 
         miss = STATUS_MISS if self._analytic_intersect else STATUS_NEWTON
         code = np.where(converged, STATUS_OK, miss)
@@ -1351,9 +1438,11 @@ class Surface:
             Sprime = S_loc
             n_post = n_pre
 
+        # Preserve the pre-diffraction direction for AD.
+        S_specular = Sprime
         opl_grating = None
         if self.grating is not None and self.typ in (STYPE_REFLECT, STYPE_REFRACT):
-            Sprime, valid_diff = self.diffract(Sprime, n_hat, n_post, wvl)
+            Sprime, valid_diff = self.diffract(Sprime, n_hat, n_post, wvl, Q_loc)
             code[(code == STATUS_OK) & ~valid_diff] = STATUS_EVANESCENT
             opl_grating = self.grating_phase(Q_loc, wvl)
 
@@ -1361,18 +1450,16 @@ class Surface:
         P_out, S_out = transform_to_global_coords(Q_loc, self.P, Sprime, Rt)
 
         seg = P_out - P_in
-        # signed segment length: a launch plane lying past the surface along
-        # the ray makes a virtual (backward) first segment, which must
-        # subtract path rather than add it for the OPD to be plane-invariant
+        # Signed segment length supports virtual first segments.
         opl = n_pre * np.sign(np.sum(seg * S_in, axis=-1)) \
             * np.sqrt(np.sum(seg * seg, axis=-1))
         if opl_grating is not None:
             opl = opl + opl_grating
 
         return Interaction(P_out, S_out, n_post, opl, code,
-                           P0, S_loc, Q_loc, n_hat, Sprime)
+                           P0, S_loc, Q_loc, n_hat, Sprime, S_specular)
 
-    def intersect(self, P, S, tol_sag=None, maxiter=None):
+    def intersect(self, P, S, tol_sag=None, maxiter=None, forward_only=False):
         """Intersect rays with the surface shape.
 
         Parameters
@@ -1385,6 +1472,8 @@ class Surface:
             Absolute convergence tolerance on the surface residual.
         maxiter : int, optional
             Maximum Newton iterations for non-analytic shapes.
+        forward_only : bool, optional
+            Reject Newton roots behind the ray origin for conic-seeded shapes.
 
         Returns
         -------
@@ -1395,6 +1484,16 @@ class Surface:
         """
         # tol_sag stays None here so it resolves at newton_raphson_solve_s,
         # where the working dtype (float32/float64) is known.
+        if hasattr(self.shape, 'seed_conic'):
+            departure, domain_radius = self.departure_band()
+            return self.shape.intersect(P, S, self.sag_and_normal,
+                                        tol_sag=tol_sag,
+                                        maxiter=maxiter,
+                                        departure=departure,
+                                        domain_radius=domain_radius,
+                                        departure_gradient=self._departure_gradient,
+                                        sag_lipschitz=self._sag_lipschitz,
+                                        forward_only=forward_only)
         if hasattr(self.shape, 'intersect'):
             return self.shape.intersect(P, S, self.sag_and_normal,
                                         tol_sag=tol_sag,

@@ -21,7 +21,7 @@ from prysm.x.raytracing.opt import (
 )
 from prysm.x.raytracing.design import WavefrontRMS, _TraceCache
 from prysm.x.raytracing.paraxial import (
-    paraxial_image_distance, first_order,
+    paraxial_image_distance, ynu_first_order,
 )
 
 
@@ -47,9 +47,7 @@ def _singlet(epd=8.0):
 
 
 def _telecentric(epd=6.0):
-    """Image-space-telecentric build: stop one front-focal-distance ahead of a
-    lens, so the chief exits parallel to the axis and the exit pupil is at
-    infinity (first_order().xp_z is None)."""
+    """Image-space-telecentric build with xp_z at infinity."""
     mat = materials.ConstantMaterial(1.5168)
     c = 1.0 / 40.0
     probe = LensData()
@@ -59,7 +57,7 @@ def _telecentric(epd=6.0):
     sp = OpticalSystem(probe, aperture=epd, fields=[Field(3, 0.0, kind='angle')],
                        wavelengths=[0.5875618], reference=0,
                        stop_index=0, unit='mm')
-    ffl = first_order(sp, stop_index=0).ffl
+    ffl = ynu_first_order(sp, stop_index=0).ffl
     lens = LensData()
     (lens.add(Plane(), typ='eval', material=materials.air, semidiameter=epd / 2)
          .add(Conic(c, 0.0), thickness=3.0, material=mat, semidiameter=20.0)
@@ -113,7 +111,7 @@ def test_closing_matches_reference_sphere_root_to_machine_precision():
 def test_closing_is_finite_and_signed_at_telecentric_kappa_zero():
     ld = _telecentric()
     wvl = ld.wavelength()
-    fo = first_order(ld, wvl, stop_index=0)
+    fo = ynu_first_order(ld, wvl, stop_index=0)
     assert fo.xp_z is None  # exit pupil genuinely at infinity
     kappa = reference_sphere_curvature(None, np.zeros(3))
     assert kappa == 0.0
@@ -134,7 +132,7 @@ def test_closing_is_finite_and_signed_at_telecentric_kappa_zero():
 def test_wavefront_rms_accepts_telecentric_paraxial_exit_pupil():
     ld = _telecentric()
     wvl = ld.wavelength()
-    assert first_order(ld, wvl, stop_index=0).xp_z is None
+    assert ynu_first_order(ld, wvl, stop_index=0).xp_z is None
     op = WavefrontRMS(field=Field(3.0, 0.0, kind='angle'),
                       wavelength=wvl, sampling=Sampling.fan(n=31, axis='y'))
     rms = op(ld, _TraceCache(ld))

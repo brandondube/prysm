@@ -141,6 +141,97 @@ def adj_reflect(S_loc, n_hat, dSprime_bar):
     return S_locdot_bar, dn_hat_bar
 
 
+# ---------- 1.4b diffract ---------------------------------------------------
+
+def adj_diffract(S_specular, n_hat, n_post, wvl, grad, hess, dSprime_bar):
+    """Adjoint of the diffractive bend.
+
+    Returns cotangents for the specular direction, normal, intersection point,
+    and post-surface index.
+
+    Parameters
+    ----------
+    S_specular, n_hat : ndarray, (N, 3)
+        nominal specular direction and unit normal.
+    n_post : float
+        following index (the bend kick divides by it).
+    wvl : float
+        wavelength.
+    grad : tuple of ndarray
+        (gx, gy) nominal in-plane phase gradient at the intersection, each (N,).
+    hess : tuple of ndarray
+        (gxx, gxy, gyy) nominal phase Hessian, each (N,).
+    dSprime_bar : ndarray, (N, 3)
+        cotangent of the diffracted direction.
+
+    Returns
+    -------
+    S_specular_bar, n_hat_bar, Q_bar : ndarray, (N, 3)
+        cotangents of the specular direction, the normal, and the local
+        intersection point (Q_bar z-component is zero).
+    n_post_bar : float
+        cotangent of the following-index tangent (summed over rays).
+
+    """
+    gx, gy = grad
+    gxx, gxy, gyy = hess
+    G = np.stack([gx, gy, np.zeros_like(gx)], axis=1)           # (N, 3)
+    a = wvl / n_post
+
+    # --- nominal forward intermediates
+    s_dot_n = row_dot(S_specular, n_hat)
+    s_specular_tan = S_specular - s_dot_n[:, None] * n_hat
+    G_dot_n = row_dot(G, n_hat)
+    G_tan = G - G_dot_n[:, None] * n_hat
+    s_diff_tan = s_specular_tan + a * G_tan
+    tan_sq = row_dot(s_diff_tan, s_diff_tan)
+    nm = np.sqrt(1.0 - tan_sq)
+    nmsafe = np.where(nm == 0.0, 1.0, nm)
+    sign = np.sign(s_dot_n)
+
+    # --- back through S_diff = s_diff_tan + sign*nm*n_hat
+    s_diff_tan_bar = dSprime_bar.copy()
+    nm_bar = sign * row_dot(n_hat, dSprime_bar)
+    n_hat_bar = (sign * nm)[:, None] * dSprime_bar
+
+    # --- nm = sqrt(1 - tan_sq)
+    tan_sq_bar = -nm_bar / (2.0 * nmsafe)
+    tan_sq_bar = np.where(np.isfinite(tan_sq_bar), tan_sq_bar, 0.0)
+    # --- tan_sq = s_diff_tan . s_diff_tan
+    s_diff_tan_bar = s_diff_tan_bar + 2.0 * tan_sq_bar[:, None] * s_diff_tan
+
+    # --- s_diff_tan = s_specular_tan + a G_tan, a = wvl/n_post
+    s_specular_tan_bar = s_diff_tan_bar
+    G_tan_bar = a * s_diff_tan_bar
+    da_bar = row_dot(G_tan, s_diff_tan_bar)
+    n_post_bar = float(np.sum(da_bar * (-wvl / (n_post * n_post))))
+
+    # --- G_tan = G - G_dot_n n_hat
+    dG_bar = G_tan_bar.copy()
+    G_dot_n_bar = -row_dot(G_tan_bar, n_hat)
+    n_hat_bar = n_hat_bar + (-G_dot_n)[:, None] * G_tan_bar
+    # --- G_dot_n = G . n_hat
+    dG_bar = dG_bar + G_dot_n_bar[:, None] * n_hat
+    n_hat_bar = n_hat_bar + G_dot_n_bar[:, None] * G
+
+    # --- s_specular_tan = S_specular - s_dot_n n_hat
+    S_specular_bar = s_specular_tan_bar.copy()
+    s_dot_n_bar = -row_dot(s_specular_tan_bar, n_hat)
+    n_hat_bar = n_hat_bar + (-s_dot_n)[:, None] * s_specular_tan_bar
+    # --- s_dot_n = S_specular . n_hat
+    S_specular_bar = S_specular_bar + s_dot_n_bar[:, None] * n_hat
+    n_hat_bar = n_hat_bar + s_dot_n_bar[:, None] * S_specular
+
+    # --- G = [gx, gy, 0], with intersection dependence from the Hessian
+    dgx_bar = dG_bar[:, 0]
+    dgy_bar = dG_bar[:, 1]
+    X_bar = gxx * dgx_bar + gxy * dgy_bar
+    Y_bar = gxy * dgx_bar + gyy * dgy_bar
+    Q_bar = np.stack([X_bar, Y_bar, np.zeros_like(X_bar)], axis=1)
+
+    return S_specular_bar, n_hat_bar, Q_bar, n_post_bar
+
+
 # ---------- 1.5 intersect ---------------------------------------------------
 
 def adj_intersect(P0, S_loc, Q_loc, n_hat, hessian, dPj_bar, dn_hat_bar):
@@ -397,6 +488,7 @@ __all__ = [
     'adj_transform_global',
     'adj_refract',
     'adj_reflect',
+    'adj_diffract',
     'adj_intersect',
     'adj_transform_local',
     'adj_eic_closing',

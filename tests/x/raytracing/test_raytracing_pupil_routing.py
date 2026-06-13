@@ -15,7 +15,7 @@ from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData, launch, raytrace, Sampling, Field
 from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x import materials as pmat
-from prysm.x.raytracing.paraxial import first_order, entrance_pupil_z
+from prysm.x.raytracing.paraxial import ynu_first_order, entrance_pupil_z
 from prysm.x.raytracing import analysis as pa
 
 # constant indices @ 0.55 um for a compact Cooke-style routing fixture
@@ -63,7 +63,7 @@ def biconvex_stop_first():
 def test_entrance_pupil_z_matches_first_order():
     ld = cooke()
     ep = entrance_pupil_z(ld)
-    assert ep == pytest.approx(first_order(ld).ep_z)
+    assert ep == pytest.approx(ynu_first_order(ld).ep_z)
 
 
 def test_entrance_pupil_z_none_without_stop():
@@ -153,7 +153,7 @@ def test_wavefront_default_chief_is_hex_center():
     default must match the index-0 chief and differ markedly from N//2.
     """
     ld = cooke()
-    xp_z = first_order(ld).xp_z
+    xp_z = ynu_first_order(ld).xp_z
     P, S = launch(ld, Field(0.0, 0.0, unit='deg'), WVL, Sampling.hex(nrings=6))
     n = P.shape[0]
 

@@ -58,14 +58,17 @@ from .surfaces import (
     circular_aperture,
 )
 from .paraxial import (
-    FirstOrderProperties,
     back_focal_length,
     effective_focal_length,
     entrance_pupil_z,
-    first_order,
     front_focal_length,
     paraxial_image_distance,
     system_matrix,
+)
+from .parabasal import (
+    ParabasalFirstOrder,
+    first_order,
+    parabasal_foci,
 )
 from .analysis import (
     TraceRecord,
@@ -165,7 +168,8 @@ __all__ = [
     'back_focal_length',
     'front_focal_length',
     'first_order',
-    'FirstOrderProperties',
+    'parabasal_foci',
+    'ParabasalFirstOrder',
     'TraceRecord',
     'iter_trace_grid',
     'transverse_ray_aberration',

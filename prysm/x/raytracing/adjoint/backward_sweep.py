@@ -1,13 +1,4 @@
-"""Forward-with-intermediates pass + reverse-mode (adjoint) sweep.
-
-The forward pass re-runs the nominal Spencer & Murty trace surface by surface,
-saving the per-surface nominal quantities the adjoint primitives need (local
-origin / direction / intersection / normal, post-bend direction, the sag
-Hessian, indices).  The backward sweep then walks the surfaces in reverse,
-propagating a single merit cotangent (P_bar, S_bar, L_bar) and contracting the
-pose / shape / index cotangents with the assembled seed arrays to build the
-gradient w.r.t. every tolerance parameter at once.
-"""
+"""Forward intermediates and reverse-mode raytrace sweeps."""
 
 from prysm.conf import config
 from prysm.mathops import np
@@ -21,7 +12,6 @@ from prysm.x.raytracing.spencer_and_murty import (
 from prysm.x.raytracing._diff_raytrace import (
     _assemble_seeds,
     _eye3,
-    _reject_gratings,
 )
 from prysm.x.raytracing._meta import object_space_index
 
@@ -30,12 +20,12 @@ from .primitives import (
     adj_transform_global,
     adj_refract,
     adj_reflect,
+    adj_diffract,
     adj_intersect,
     adj_transform_local,
 )
 
-# safe dummy nominals substituted for clipped/failed rays so that their (zero)
-# cotangents propagate as exact zeros instead of 0 * NaN.
+# Finite dummy nominals keep zero cotangents from multiplying NaNs.
 _DUMMY_DIR = np.array([0.0, 0.0, 1.0], dtype=config.precision)
 
 
@@ -44,10 +34,12 @@ class SurfaceIntermediate:
 
     __slots__ = ('Reff', 'Q', 'P_in', 'S_in', 'P0', 'S_loc', 'Q_loc',
                  'n_hat', 'Sprime', 'hessian', 'seg', 'typ', 'n_pre',
-                 'nprime', 'index_source')
+                 'nprime', 'index_source',
+                 'S_specular', 'grad', 'hess')
 
     def __init__(self, Reff, Q, P_in, S_in, P0, S_loc, Q_loc, n_hat, Sprime,
-                 hessian, seg, typ, n_pre, nprime, index_source):
+                 hessian, seg, typ, n_pre, nprime, index_source,
+                 S_specular, grad, hess):
         self.Reff = Reff
         self.Q = Q
         self.P_in = P_in        # global incoming position (trace.P[j])
@@ -63,16 +55,21 @@ class SurfaceIntermediate:
         self.n_pre = n_pre      # index of the medium preceding the surface
         self.nprime = nprime    # following index (refract only; else None)
         self.index_source = index_source  # surface that set n_pre, or -1
+        # Diffractive surfaces only; grad is None on plain surfaces.
+        self.S_specular = S_specular    # pre-diffraction local direction
+        self.grad = grad                # (gx, gy) phase gradient, each (N,)
+        self.hess = hess                # (gxx, gxy, gyy) phase Hessian
 
 
 class TraceIntermediates:
-    """Per-surface intermediates plus the global valid mask."""
+    """Per-surface intermediates plus the global valid mask and wavelength."""
 
-    __slots__ = ('surfaces', 'valid')
+    __slots__ = ('surfaces', 'valid', 'wvl')
 
-    def __init__(self, surfaces, valid):
+    def __init__(self, surfaces, valid, wvl):
         self.surfaces = surfaces
         self.valid = valid
+        self.wvl = wvl
 
 
 def _sanitize_vec(arr, valid, dummy):
@@ -93,7 +90,6 @@ def _forward_with_intermediates(surfaces, P, S, wvl, tol_sag=None):
 
     Returns (RayTraceResult, TraceIntermediates).
     """
-    _reject_gratings(surfaces)
     P = np.asarray(P)
     S = np.asarray(S)
     if P.ndim == 1:
@@ -102,10 +98,7 @@ def _forward_with_intermediates(surfaces, P, S, wvl, tol_sag=None):
     P = P.astype(config.precision)
     S = S.astype(config.precision)
 
-    # keep_intermediates hands back the per-surface Interaction objects, so the
-    # nominal local intersection / normal / bent direction come straight off the
-    # forward trace -- the adjoint no longer re-runs the Newton intersect or
-    # re-derives the bend.
+    # Reuse the nominal local fields saved by raytrace(keep_intermediates=True).
     trace = raytrace(surfaces, P, S, wvl, tol_sag=tol_sag, keep_intermediates=True)
     valid = valid_mask(trace.status, trace.P[-1])
 
@@ -124,6 +117,7 @@ def _forward_with_intermediates(surfaces, P, S, wvl, tol_sag=None):
         Q_loc = step.Q_loc
         n_hat = step.n_hat
         Sprime = step.Sprime
+        S_specular = step.S_specular
         Xj = Q_loc[..., 0]
         Yj = Q_loc[..., 1]
         hessian = surf.shape.sag_hessian(Xj, Yj)
@@ -137,18 +131,30 @@ def _forward_with_intermediates(surfaces, P, S, wvl, tol_sag=None):
         Q_loc = _sanitize_vec(Q_loc, valid, np.zeros(3, dtype=config.precision))
         n_hat = _sanitize_vec(n_hat, valid, _DUMMY_DIR)
         Sprime = _sanitize_vec(Sprime, valid, _DUMMY_DIR)
+        S_specular = _sanitize_vec(S_specular, valid, _DUMMY_DIR)
         seg = _sanitize_vec(seg, valid, _DUMMY_DIR)
         hessian = tuple(_sanitize_scalar(h, valid) for h in hessian)
 
+        # Phase gradient/Hessian at the sanitized intersection.
+        grad = hess = None
+        if surf.grating is not None and surf.typ in (STYPE_REFRACT, STYPE_REFLECT):
+            _, gx, gy = surf.grating.phase_and_gradient(Q_loc[..., 0],
+                                                        Q_loc[..., 1])
+            grad = (_sanitize_scalar(gx, valid), _sanitize_scalar(gy, valid))
+            hess = tuple(_sanitize_scalar(h, valid)
+                         for h in surf.grating.phase_hessian(Q_loc[..., 0],
+                                                             Q_loc[..., 1]))
+
         inters.append(SurfaceIntermediate(
             Reff, Q, P_in, S_in, P0, S_loc, Q_loc, n_hat, Sprime, hessian,
-            seg, surf.typ, nj, nprime, index_source))
+            seg, surf.typ, nj, nprime, index_source,
+            S_specular, grad, hess))
 
         if surf.typ == STYPE_REFRACT:
             nj = nprime
             index_source = j
 
-    return trace, TraceIntermediates(inters, valid)
+    return trace, TraceIntermediates(inters, valid, float(wvl))
 
 
 def _precompute_shape_partials(surfaces, intermediates, shape_params,
@@ -226,6 +232,22 @@ def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
         dPj_bar, dSprime_bar, Qdot_bar_g, Rdot_bar_g = adj_transform_global(
             si.Reff, si.Q_loc, si.Sprime, P_bar_out, S_bar)
 
+        # --- Step III.5 adjoint: diffractive bend.
+        dn_hat_bar_diff = None
+        grating_n_post_bar = 0.0
+        if si.grad is not None:
+            gx, gy = si.grad
+            # Refract gratings use nprime; reflection gratings use n_pre.
+            n_post_diff = si.nprime if si.typ == STYPE_REFRACT else si.n_pre
+            (dSprime_bar, dn_hat_bar_diff, Q_bar_diff,
+             grating_n_post_bar) = adj_diffract(
+                si.S_specular, si.n_hat, n_post_diff, intermediates.wvl,
+                si.grad, si.hess, dSprime_bar)
+            # Phase Hessian and phase OPL both land on Q_loc.
+            dPj_bar = dPj_bar + Q_bar_diff
+            dPj_bar[:, 0] = dPj_bar[:, 0] + L_bar * intermediates.wvl * gx
+            dPj_bar[:, 1] = dPj_bar[:, 1] + L_bar * intermediates.wvl * gy
+
         # --- Step III adjoint: bend
         ndot_pre_bar = 0.0
         ndot_post_bar = 0.0
@@ -239,6 +261,14 @@ def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
         else:  # eval: Sprime = S_loc, no normal interaction
             S_locdot_bar_b = dSprime_bar
             dn_hat_bar = np.zeros_like(dSprime_bar)
+
+        if dn_hat_bar_diff is not None:
+            dn_hat_bar = dn_hat_bar + dn_hat_bar_diff
+            # Cotangent of the index used by the diffractive kick.
+            if si.typ == STYPE_REFRACT:
+                ndot_post_bar = ndot_post_bar + grating_n_post_bar
+            else:
+                ndot_pre_bar = ndot_pre_bar + grating_n_post_bar
 
         # --- Step II adjoint: intersect
         (P0dot_bar, S_locdot_bar_i, dsag_bar, dgx_bar,
@@ -276,9 +306,7 @@ def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
                 grad[p] = grad[p] + np.sum(dsag_bar * sag_t + dgx_bar * gx_t
                                            + dgy_bar * gy_t)
 
-        # index DOFs.  The medium preceding the first refraction is the launch
-        # medium (object material or air); no seed perturbs it, so its
-        # cotangent npre_bar has nowhere to accumulate when index_source < 0.
+        # The launch medium has no index seed to accumulate into.
         npre_bar = n_bar + ndot_pre_bar
         if si.index_source >= 0:
             grad = grad + npre_bar * nprimedot_s[si.index_source]

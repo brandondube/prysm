@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from prysm.x import materials
-from prysm.x.raytracing.spencer_and_murty import raytrace
+from prysm.x.raytracing.spencer_and_murty import raytrace, valid_mask
 from prysm.x.raytracing._diff_raytrace import (
     raytrace_with_tangents,
     seed_curvature,
@@ -21,6 +21,8 @@ from prysm.x.raytracing._diff_raytrace import (
     seed_tilt,
     seed_index,
 )
+from prysm.x.raytracing.phase import PhaseFunction, LinearGrating
+from prysm.x.raytracing.adjoint.backward_sweep import adjoint_gradient
 from tests.x.raytracing.surface_helpers import conic, plane, even_asphere
 
 
@@ -201,22 +203,115 @@ def test_all_seeds_simultaneously():
         np.testing.assert_allclose(dP, dP_fd, rtol=1e-6, atol=1e-7)
 
 
-def test_ad_stacks_reject_gratings():
-    """Both AD stacks have no grating primitive; a grating surface must raise,
-    not silently trace as a plain surface and return wrong derivatives."""
-    from prysm.x.raytracing.adjoint.backward_sweep import (
-        _forward_with_intermediates,
-    )
-    n_glass = materials.ConstantMaterial(1.6)
-    s0 = conic(c=1 / 50.0, k=0.0, interaction='refr', P=[0, 0, 0.0],
-               material=n_glass)
-    s0.grating = (1e-3, [1.0, 0.0, 0.0], 1)
-    img = plane(interaction='eval', P=[0, 0, 40.0])
-    surfaces = [s0, img]
-    P = np.array([[0.0, 1.0, -5.0]])
-    S = np.array([[0.0, 0.0, 1.0]])
-    seeds = [seed_curvature(s0)]
-    with pytest.raises(NotImplementedError, match='grating'):
-        raytrace_with_tangents(surfaces, P, S, 0.55, seeds)
-    with pytest.raises(NotImplementedError, match='grating'):
-        _forward_with_intermediates(surfaces, P, S, 0.55)
+# ---------- diffractive (grating) surfaces in the AD stacks -----------------
+
+
+class _RadialPhase(PhaseFunction):
+    """Nonlinear diffractive phase with nonzero Hessian."""
+
+    def __init__(self, a, bx=0.0):
+        self.a = a
+        self.bx = bx
+
+    def phase(self, x, y):
+        return 0.5 * self.a * (x * x + y * y) + self.bx * x
+
+    def phase_and_gradient(self, x, y):
+        x = np.asarray(x, float)
+        y = np.asarray(y, float)
+        return self.phase(x, y), self.a * x + self.bx, self.a * y
+
+    def phase_hessian(self, x, y):
+        x = np.asarray(x, float)
+        o = np.full(x.shape, self.a)
+        z = np.zeros_like(x)
+        return o, z, o
+
+
+def grating_system(phase, *, interaction='refr', **over):
+    """make_system with a phase function on surface 0."""
+    p = dict(BASE, **over)
+    n_glass = materials.ConstantMaterial(p['ng'])
+    mat = n_glass if interaction == 'refr' else None
+    s0 = conic(c=p['c0'], k=p['k0'], interaction=interaction,
+               P=[0, 0, p['z0']], material=mat)
+    s0.grating = phase
+    s1 = conic(c=p['c1'], k=p['k1'], interaction='refr',
+               P=[p['x1'], p['y1'], p['z1']], material=materials.air)
+    img = plane(interaction='eval', P=[0, 0, p['zimg']])
+    return [s0, s1, img]
+
+
+def grating_fd(phase, over_plus, over_minus, P, S, h, **mk):
+    def state(over):
+        tr = raytrace(grating_system(phase, **mk, **over), P, S, WVL)
+        return tr.P[-1], tr.S[-1], tr.OPL.sum(axis=0)
+    Pp, Sp, Lp = state(over_plus)
+    Pm, Sm, Lm = state(over_minus)
+    return (Pp - Pm) / (2 * h), (Sp - Sm) / (2 * h), (Lp - Lm) / (2 * h)
+
+
+# linear and radial phase fixtures
+_LINEAR = LinearGrating(5.0, [1.0, 0.0], 1)
+_RADIAL = _RadialPhase(2e-4, bx=3e-4)
+
+
+@pytest.mark.parametrize('phase', [_LINEAR, _RADIAL])
+@pytest.mark.parametrize('interaction', ['refr', 'refl'])
+def test_grating_forward_tangents_match_fd(phase, interaction):
+    """Diffractive forward tangents match central finite differences."""
+    P, S = ray_bundle()
+    h = 1e-6
+    cases = [
+        (seed_curvature(0), dict(c0=BASE['c0'] + h), dict(c0=BASE['c0'] - h)),
+        (seed_decenter(1, 'y'), dict(y1=h), dict(y1=-h)),
+        (seed_index(0), dict(ng=NG + h), dict(ng=NG - h)),
+    ]
+    for seed, op, om in cases:
+        res = raytrace_with_tangents(
+            grating_system(phase, interaction=interaction), P, S, WVL, [seed])
+        dP = res.Pdot[-1][:, :, 0]
+        dS = res.Sdot[-1][:, :, 0]
+        dL = res.Ldot.sum(axis=0)[:, 0]
+        dPf, dSf, dLf = grating_fd(phase, op, om, P, S, h,
+                                   interaction=interaction)
+        np.testing.assert_allclose(dP, dPf, rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(dS, dSf, rtol=1e-6, atol=1e-8)
+        np.testing.assert_allclose(dL, dLf, rtol=1e-6, atol=1e-6)
+
+
+class _SumComponentHead:
+    """Scalar merit summing one final ray quantity over valid rays."""
+
+    def __init__(self, component):
+        self.component = component
+        self.name = component
+
+    def seed(self, trace, prescription, wavelength):
+        v = valid_mask(trace.status, trace.P[-1])
+        P_bar = np.zeros_like(trace.P[-1])
+        S_bar = np.zeros_like(trace.S[-1])
+        L_bar = np.zeros(trace.P[-1].shape[0], dtype=trace.P[-1].dtype)
+        if self.component == 'Py':
+            P_bar[v, 1] = 1.0
+        else:
+            L_bar[v] = 1.0
+        return P_bar, S_bar, L_bar
+
+
+@pytest.mark.parametrize('component', ['Py', 'OPL'])
+def test_grating_adjoint_matches_forward(component):
+    """Diffractive adjoint gradients match the forward JVP."""
+    P, S = ray_bundle()
+    seeds = [seed_curvature(0), seed_conic(1), seed_decenter(1, 'y'),
+             seed_index(0), seed_despace([(1, +1), (2, +1)])]
+    res = raytrace_with_tangents(grating_system(_RADIAL), P, S, WVL, seeds)
+    tr = raytrace(grating_system(_RADIAL), P, S, WVL)
+    v = valid_mask(tr.status, tr.P[-1])
+    if component == 'Py':
+        fwd = np.nansum(np.where(v[:, None], res.Pdot[-1][:, 1, :], 0.0), axis=0)
+    else:
+        fwd = np.nansum(np.where(v[:, None], res.Ldot.sum(axis=0), 0.0), axis=0)
+    g = adjoint_gradient(grating_system(_RADIAL), P, S, WVL, seeds,
+                         _SumComponentHead(component))
+    np.testing.assert_allclose(g, fwd, rtol=1e-9, atol=1e-10)

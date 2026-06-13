@@ -299,12 +299,12 @@ def test_distortion_operand_runs_off_axis():
 
 def test_field_curvature_operand_zero_for_on_axis():
     ld = _refractive_singlet()
-    op = FieldCurvature(Field(0., 0., unit='deg'), 0.55, epd=4.0)
+    op = FieldCurvature(Field(0., 0., unit='deg'), 0.55)
     np.testing.assert_allclose(op(ld, _TraceCache(ld)), 0.0, atol=1e-9)
 
 
 def test_field_curvature_operand_in_problem():
     ld = _refractive_singlet()
-    op = FieldCurvature(Field(0., 1., unit='deg'), 0.55, epd=4.0)
+    op = FieldCurvature(Field(0., 1., unit='deg'), 0.55)
     prob = Problem(ld, [op])
     assert prob.merit(prob.x0()) >= 0.0

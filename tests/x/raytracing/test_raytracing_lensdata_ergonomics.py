@@ -10,7 +10,7 @@ from prysm.x.raytracing import (
 )
 from prysm.x import materials
 from prysm.x.raytracing.surfaces import Conic, Plane
-from prysm.x.raytracing.paraxial import effective_focal_length, first_order
+from prysm.x.raytracing.paraxial import effective_focal_length, ynu_first_order
 from prysm.x.raytracing.analysis import distortion, field_curvature
 from prysm.x.raytracing._meta import (
     system_wavelength, system_epd, system_stop_index,
@@ -81,7 +81,7 @@ def test_efl_resolves_wavelength_with_dispersion():
 
 def test_first_order_defaults_wavelength_epd_stop():
     sys = _singlet()
-    fo = first_order(sys)
+    fo = ynu_first_order(sys)
     assert fo.wavelength == pytest.approx(sys.wavelength())
     assert fo.epd == pytest.approx(20.0)   # epd defaulted -> fno computed
     assert fo.fno is not None
@@ -117,11 +117,11 @@ def test_distortion_defaults_epd_and_wavelength():
     np.testing.assert_allclose(a.percent, b.percent)
 
 
-def test_field_curvature_defaults_epd_and_wavelength():
+def test_field_curvature_defaults_wavelength():
     sys = _singlet()
     fields = [Field(0, 0), Field(0, 1.0)]
     a = field_curvature(sys, fields)
-    b = field_curvature(sys, fields, sys.wavelength(), epd=sys.epd)
+    b = field_curvature(sys, fields, sys.wavelength())
     np.testing.assert_allclose(a.x_fan_z, b.x_fan_z)
     np.testing.assert_allclose(a.y_fan_z, b.y_fan_z)
 

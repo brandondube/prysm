@@ -250,7 +250,7 @@ def _telecentric_slow(epd=3.0):
     ahead of the lens, so the exit pupil is at infinity (xp_z is None)."""
     from prysm.x.raytracing import OpticalSystem, LensData
     from prysm.x.raytracing.surfaces import Conic, Plane
-    from prysm.x.raytracing.paraxial import first_order, paraxial_image_distance
+    from prysm.x.raytracing.paraxial import ynu_first_order, paraxial_image_distance
     mat = materials.ConstantMaterial(1.5168)
     c = 1.0 / 120.0
     probe = LensData()
@@ -260,7 +260,7 @@ def _telecentric_slow(epd=3.0):
     sp = OpticalSystem(probe, aperture=epd, fields=[Field(0, 0, kind='angle')],
                        wavelengths=[0.5875618], reference=0,
                        stop_index=0)
-    ffl = first_order(sp, stop_index=0).ffl
+    ffl = ynu_first_order(sp, stop_index=0).ffl
     lens = LensData()
     (lens.add(Plane(), typ='eval', material=materials.air, semidiameter=epd / 2)
          .add(Conic(c, 0.0), thickness=2.0, material=mat, semidiameter=10.0)
@@ -282,9 +282,9 @@ def test_pupil_field_telecentric_exit_pupil_at_infinity_is_airy():
     position-on-the-sphere coordinate would diverge; the sine-space (direction
     cosine) coordinate scaled by |EFL| stays finite, so the F-number EFL/EPD is
     bounded and the well-corrected on-axis PSF is a clean, centered Airy."""
-    from prysm.x.raytracing.paraxial import first_order
+    from prysm.x.raytracing.paraxial import ynu_first_order
     sysT, wvl = _telecentric_slow(epd=3.0)
-    assert first_order(sysT, wvl, stop_index=0).xp_z is None
+    assert ynu_first_order(sysT, wvl, stop_index=0).xp_z is None
     pf = field.pupil_field(sysT, Field(0., 0.), wvl, npupil=96, stop_index=0)
     assert np.all(np.isfinite(pf.X)) and np.all(np.isfinite(pf.Y))
     assert np.isfinite(pf.efl) and pf.efl > 0

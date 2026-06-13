@@ -1305,8 +1305,7 @@ def _field_axis_values(fields):
 
 
 def plot_field_curvature(prescription, fields=None, wavelength=None, *,
-                         epd=None, marginal_fraction=1e-3, samples=101,
-                         result=None,
+                         samples=101, result=None,
                          reference='image', c='r', lw=1, alpha=1, zorder=4,
                          label=None, fig=None, ax=None):
     """Plot field-curvature x/y fan curves.
@@ -1316,20 +1315,15 @@ def plot_field_curvature(prescription, fields=None, wavelength=None, *,
     prescription : sequence of Surface or LensData
         the optical system.
     fields : iterable of Field, optional
-        field points to evaluate, all kind='angle'; defaults to a dense
-        sweep over the system FieldSet span (see field_sweep).
+        field points to evaluate; defaults to a dense sweep over the system
+        FieldSet span (see field_sweep).
     wavelength : float, optional
         in microns; defaults from a LensData reference wavelength.
-    epd : float, optional
-        entrance pupil diameter; defaults from a system aperture spec.
-    marginal_fraction : float, optional
-        pupil zone for the marginal ray, as a fraction of EPD/2.
     samples : int, optional
         number of sweep points when fields is None.
     result : FieldCurvatureResult, optional
         precomputed analysis.field_curvature output for fields; when given no
-        rays are traced here and wavelength, epd, and marginal_fraction are
-        unused.
+        rays are traced here and wavelength is unused.
     reference : str or float, optional
         zero of the focus-shift axis.
     c : color, optional
@@ -1354,10 +1348,7 @@ def plot_field_curvature(prescription, fields=None, wavelength=None, *,
     fig, ax = share_fig_ax(fig, ax)
     fields = field_sweep(prescription, fields, samples)
     if result is None:
-        result = field_curvature(
-            prescription, fields, wavelength, epd=epd,
-            marginal_fraction=marginal_fraction,
-        )
+        result = field_curvature(prescription, fields, wavelength)
     x_fan_z = _to_np(result.x_fan_z)
     y_fan_z = _to_np(result.y_fan_z)
     if reference is None:

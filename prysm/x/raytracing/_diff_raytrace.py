@@ -118,10 +118,7 @@ def d_refract(n, nprime, S_loc, n_hat, S_locdot, dn_hat, ndot_pre, ndot_post):
         cosT = np.sqrt(1.0 - sinT2)
     dsinT2 = (2.0 * mu * mu_dot[None, :] * one_minus[:, None]
               - 2.0 * mu * mu * cosI[:, None] * dcosI)
-    # near the critical angle cosT -> 0 and dcosT = -dsinT2 / (2 cosT) blows up;
-    # an exact-TIR ray already carries cosT = NaN (and a NaN forward Sprime that
-    # the analysis layer filters out).  Zero the non-finite derivative rather
-    # than let inf/NaN silently poison an otherwise-valid sensitivity column.
+    # TIR rays already carry invalid directions; keep their derivatives finite.
     with np.errstate(divide='ignore', invalid='ignore'):
         dcosT = -dsinT2 / (2.0 * cosT[:, None])
     dcosT[~np.isfinite(dcosT)] = 0.0
@@ -144,6 +141,84 @@ def d_reflect(S_loc, n_hat, S_locdot, dn_hat):
     dSprime = S_locdot - 2.0 * (n_hat[:, :, None] * dcosI[:, None, :]
                                 + cosI[:, None, None] * dn_hat)
     return Sprime, dSprime
+
+
+def d_diffract(S_specular, n_hat, n_post, wvl, grad, hess,
+               dPj, dS_specular, dn_hat, n_post_dot):
+    """Differential of the diffractive bend.
+
+    Includes phase-gradient motion through the supplied Hessian.
+
+    Parameters
+    ----------
+    S_specular, n_hat : ndarray, (N, 3)
+        nominal specular direction and unit normal.
+    n_post : float
+        following index (the kick divides by it).
+    wvl : float
+        wavelength.
+    grad : tuple of ndarray
+        (gx, gy) nominal in-plane phase gradient at the intersection, each (N,).
+    hess : tuple of ndarray
+        (gxx, gxy, gyy) nominal phase Hessian, each (N,).
+    dPj : ndarray, (N, 3, P)
+        tangent of the local intersection point (supplies dX, dY).
+    dS_specular, dn_hat : ndarray, (N, 3, P)
+        tangents of the specular direction and normal.
+    n_post_dot : ndarray, (P,)
+        tangent of the following index.
+
+    Returns
+    -------
+    S_diff : ndarray, (N, 3)
+        nominal diffracted direction.
+    dS_diff : ndarray, (N, 3, P)
+        its tangent.
+
+    """
+    gx, gy = grad
+    gxx, gxy, gyy = hess
+    G = np.stack([gx, gy, np.zeros_like(gx)], axis=1)            # (N, 3)
+    dX = dPj[:, 0, :]                                            # (N, P)
+    dY = dPj[:, 1, :]
+    dgx = gxx[:, None] * dX + gxy[:, None] * dY                  # (N, P)
+    dgy = gxy[:, None] * dX + gyy[:, None] * dY
+    dG = np.stack([dgx, dgy, np.zeros_like(dgx)], axis=1)        # (N, 3, P)
+
+    a = wvl / n_post
+    da = (-wvl / (n_post * n_post)) * n_post_dot                 # (P,)
+
+    s_dot_n = row_dot(S_specular, n_hat)                         # (N,)
+    s_specular_tan = S_specular - s_dot_n[:, None] * n_hat
+    d_s_dot_n = _dot_nt(n_hat, dS_specular) + _dot_nt(S_specular, dn_hat)
+    d_s_spec_tan = (dS_specular - n_hat[:, :, None] * d_s_dot_n[:, None, :]
+                    - s_dot_n[:, None, None] * dn_hat)
+
+    G_dot_n = row_dot(G, n_hat)                                  # (N,)
+    G_tan = G - G_dot_n[:, None] * n_hat
+    d_G_dot_n = _dot_nt(n_hat, dG) + _dot_nt(G, dn_hat)
+    d_G_tan = (dG - n_hat[:, :, None] * d_G_dot_n[:, None, :]
+               - G_dot_n[:, None, None] * dn_hat)
+
+    s_diff_tan = s_specular_tan + a * G_tan
+    d_s_diff_tan = (d_s_spec_tan + a * d_G_tan
+                    + G_tan[:, :, None] * da[None, None, :])
+
+    tan_sq = row_dot(s_diff_tan, s_diff_tan)                     # (N,)
+    d_tan_sq = 2.0 * _dot_nt(s_diff_tan, d_s_diff_tan)          # (N, P)
+    with np.errstate(invalid='ignore'):
+        nm = np.sqrt(1.0 - tan_sq)
+    # Evanescent rays already carry invalid directions; keep derivatives finite.
+    with np.errstate(divide='ignore', invalid='ignore'):
+        d_nm = -d_tan_sq / (2.0 * nm[:, None])
+    d_nm[~np.isfinite(d_nm)] = 0.0
+    sign = np.sign(s_dot_n)
+
+    S_diff = s_diff_tan + (sign * nm)[:, None] * n_hat
+    dS_diff = (d_s_diff_tan
+               + sign[:, None, None] * (n_hat[:, :, None] * d_nm[:, None, :]
+                                        + nm[:, None, None] * dn_hat))
+    return S_diff, dS_diff
 
 
 def d_transform_global(Reff, Q, Q_loc, Sprime, dPj, dSprime, Qdot, Rdot):
@@ -471,7 +546,7 @@ def _paraxial_walk_matrix_tangent(surfaces, wvl, n_start, n_start_dot,
 
 def paraxial_exit_pupil_z_tangents(prescription, wvl, seeds, *,
                                    stop_index=None):
-    """Derivative of first_order(...).xp_z with respect to DiffSeed entries."""
+    """Derivative of ynu_first_order(...).xp_z with respect to DiffSeed entries."""
     from .paraxial import _first_order_surfaces
 
     seeds = list(seeds)
@@ -573,22 +648,8 @@ def _eye3():
     return np.eye(3, dtype=config.precision)
 
 
-def _reject_gratings(surfaces):
-    """Refuse to differentiate a prescription containing a grating surface.
-
-    The forward (d_*) and reverse (adj_*) Spencer & Murty primitives have no
-    grating term -- a grating surface traces as a plain mirror/lens in the AD
-    stacks, silently yielding wrong derivatives.  Fail loudly until a grating
-    diffraction primitive is added on both sides.
-    """
-    if any(getattr(s, 'grating', None) is not None for s in surfaces):
-        raise NotImplementedError(
-            'differential/adjoint raytrace does not model grating diffraction; '
-            'remove the grating or add a grating AD primitive before tracing '
-            'tangents/cotangents through it.')
-
-
-def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None):
+def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None,
+                           Pdot0=None, Sdot0=None):
     """Trace (P, S) and propagate the tangent bundle for every seed.
 
     Parameters
@@ -603,13 +664,15 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None):
         one per perturbation parameter; defines the trailing parameter axis.
     tol_sag : float, optional
         Newton convergence tolerance, forwarded to the nominal trace.
+    Pdot0, Sdot0 : ndarray, (N, 3, P), optional
+        launch-ray tangents per parameter; defaults to zero.  Direction
+        tangents should satisfy Sdot0 . S = 0.
 
     Returns
     -------
     DiffTraceResult
 
     """
-    _reject_gratings(surfaces)
     seeds = list(seeds)
     n_params = len(seeds)
     P = np.asarray(P)
@@ -632,6 +695,18 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None):
     Pdot_hist = np.zeros((jj + 1, n_rays, 3, n_params), dtype=config.precision)
     Sdot_hist = np.zeros((jj + 1, n_rays, 3, n_params), dtype=config.precision)
     Ldot_hist = np.zeros((jj + 1, n_rays, n_params), dtype=config.precision)
+
+    expected = (n_rays, 3, n_params)
+    for name, dot0, hist in (('Pdot0', Pdot0, Pdot_hist),
+                             ('Sdot0', Sdot0, Sdot_hist)):
+        if dot0 is None:
+            continue
+        dot0 = np.asarray(dot0, dtype=config.precision)
+        if dot0.shape != expected:
+            raise ValueError(
+                f'{name} must have shape (n_rays, 3, n_params) = {expected}, '
+                f'got {dot0.shape}')
+        hist[0] = dot0
 
     Pdot = Pdot_hist[0]
     Sdot = Sdot_hist[0]
@@ -694,6 +769,17 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None):
             Sprime, dSprime = S_loc, S_locdot
             n_post, n_post_dot = nj, nj_dot
 
+        # Step III.5: diffractive bend and phase OPL.
+        grating_Ldot = None
+        if surf.grating is not None and surf.typ in (STYPE_REFLECT, STYPE_REFRACT):
+            _, gx, gy = surf.grating.phase_and_gradient(Xj, Yj)
+            hess = surf.grating.phase_hessian(Xj, Yj)
+            Sprime, dSprime = d_diffract(Sprime, n_hat, n_post, wvl,
+                                         (gx, gy), hess, dPj, dSprime, dn_hat,
+                                         n_post_dot)
+            grating_Ldot = wvl * (gx[:, None] * dPj[:, 0, :]
+                                  + gy[:, None] * dPj[:, 1, :])
+
         # Step IV: to global
         dPjp1, dSjp1 = d_transform_global(Reff, Q, Q_loc, Sprime,
                                           dPj, dSprime, Qdot_j, Rdot_j)
@@ -702,6 +788,8 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None):
         seg = Pj_cur - Pj_prev
         dseg = dPjp1 - Pdot_prev
         Ldot_hist[j + 1] = d_opl_segment(nj, nj_dot, seg, dseg, trace.S[j])
+        if grating_Ldot is not None:
+            Ldot_hist[j + 1] = Ldot_hist[j + 1] + grating_Ldot
 
         Pdot_hist[j + 1] = dPjp1
         Sdot_hist[j + 1] = dSjp1

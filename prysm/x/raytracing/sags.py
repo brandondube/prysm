@@ -1,9 +1,25 @@
 """Sag and derivative kernels for sequential raytracing surfaces."""
 
+from prysm.conf import config
 from prysm.mathops import np
 from prysm.coordinates import cart_to_polar
 from prysm.polynomials import zernike_nm, zernike_nm_der_xy
 from prysm.polynomials.qpoly import compute_z_Q2d, compute_z_zprime_Q2d
+
+
+def fd_step(finite_difference_step, *arrs):
+    """Central-difference step, scaled to the coordinate magnitude.
+
+    Uses finite_difference_step when provided.
+    """
+    if finite_difference_step is not None:
+        return np.asarray(finite_difference_step, dtype=config.precision)
+    eps = np.sqrt(np.finfo(config.precision).eps)
+    mag = 1.0
+    for a in arrs:
+        mag = np.maximum(mag, np.abs(a))
+    return eps * mag
+
 
 def product_rule(u, v, du, dv):
     """The product rule of calculus, d/dx uv = u dv + v du."""

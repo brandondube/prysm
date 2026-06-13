@@ -1,4 +1,4 @@
-"""Version-stamped paraxial caches on OpticalSystem (first_order,
+"""Version-stamped first-order caches on OpticalSystem (first_order,
 entrance_pupil_z, entrance_pupil_diameter) and their launch/merit consults."""
 import numpy as np
 
@@ -9,6 +9,7 @@ from prysm.x.raytracing import (
     OpticalSystem, ApertureSpec, LensData, Sphere, Plane, Field, Sampling,
 )
 from prysm.x.raytracing import paraxial
+from prysm.x.raytracing import parabasal
 from prysm.x.raytracing.launch import launch
 from prysm.x.raytracing.system import ApertureSpec as _ApertureSpec
 
@@ -45,17 +46,17 @@ def _count_calls(monkeypatch, module, name):
 
 def test_first_order_cached_per_version_and_wavelength(monkeypatch):
     sys = _doublet()
-    calls = _count_calls(monkeypatch, paraxial, 'first_order')
-    fo1 = sys.first_order(0.587)
-    fo2 = sys.first_order(0.587)
+    calls = _count_calls(monkeypatch, parabasal, 'first_order')
+    fo1 = sys.first_order(wavelength=0.587)
+    fo2 = sys.first_order(wavelength=0.587)
     assert calls['n'] == 1
     assert fo2 is fo1
-    sys.first_order(0.486)
+    sys.first_order(wavelength=0.486)
     assert calls['n'] == 2
     # Lens edit -> recompute.
     sys.lens.rows[2].thickness = 2.6
     sys.lens._invalidate()
-    fo3 = sys.first_order(0.587)
+    fo3 = sys.first_order(wavelength=0.587)
     assert calls['n'] == 3
     assert fo3 is not fo1
 
@@ -124,7 +125,7 @@ def test_resolve_exit_pupil_consults_system_first_order(monkeypatch):
     from prysm.x.raytracing.analysis import resolve_exit_pupil
 
     sys = _doublet()
-    calls = _count_calls(monkeypatch, paraxial, 'first_order')
+    calls = _count_calls(monkeypatch, paraxial, 'ynu_first_order')
     p1 = resolve_exit_pupil(sys, 0.587)
     p2 = resolve_exit_pupil(sys, 0.587)
     assert calls['n'] == 1

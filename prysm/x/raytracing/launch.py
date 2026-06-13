@@ -1,5 +1,7 @@
 """Field, Sampling, launch, and stop-aim ergonomics."""
 
+import warnings
+
 from prysm.conf import config
 from prysm.mathops import np, array_to_true_numpy
 
@@ -13,9 +15,16 @@ from ._meta import system_epd, object_space_index, system_stop_index
 def _entrance_pupil_z(prescription, wavelength):
     """Entrance-pupil z, using a prescription cache when present."""
     f = getattr(prescription, 'entrance_pupil_z', None)
-    if callable(f):
+    if not callable(f):
+        f = lambda wvl: entrance_pupil_z(prescription, wvl)  # noqa: E731
+    try:
         return f(wavelength)
-    return entrance_pupil_z(prescription, wavelength)
+    except ValueError as exc:
+        msg = str(exc)
+        if ('centered axial geometry' in msg
+                or 'vertex normal to be axial' in msg):
+            return None
+        raise
 
 
 class Field:
@@ -275,12 +284,15 @@ def _finite_PS(pupil_xy, pupil_z, field):
 
 
 def _perp_basis(w):
-    """Two orthonormal vectors spanning the plane perpendicular to unit w."""
-    helper = np.array([1.0, 0.0, 0.0], dtype=w.dtype)
-    if abs(float(w[0])) > 0.9:
-        helper = np.array([0.0, 1.0, 0.0], dtype=w.dtype)
-    e1 = helper - float(np.dot(helper, w)) * w
-    e1 = e1 / np.sqrt(np.sum(e1 * e1))
+    """Meridional T/S basis perpendicular to unit vector w."""
+    st = float(np.sqrt(w[0] * w[0] + w[1] * w[1]))
+    if st < 1e-12:
+        e1 = np.array([1.0, 0.0, 0.0], dtype=w.dtype)
+        e2 = np.array([0.0, float(np.sign(w[2])), 0.0], dtype=w.dtype)
+        return e1, e2
+    e1 = np.array([float(w[1]), -float(w[0]), 0.0], dtype=w.dtype) / st
+    if float(e1[0]) < 0.0 or (float(e1[0]) == 0.0 and float(e1[1]) < 0.0):
+        e1 = -e1
     e2 = np.cross(w, e1)
     return e1, e2
 
@@ -340,6 +352,32 @@ def _apply_vignetting(pupil_xy, field):
                      1.0 - vignetting.get('vuy', 0.0),
                      1.0 - vignetting.get('vly', 0.0))
     return np.stack([x, y], axis=1)
+
+
+def _has_decentered_geometry(prescription):
+    """True when any surface carries a decentered vertex or a rotation."""
+    for surf in prescription:
+        P = np.asarray(getattr(surf, 'P', (0.0, 0.0, 0.0)))
+        if P.shape[0] >= 2 and bool(np.any(np.abs(P[:2]) > 1e-12)):
+            return True
+        R = getattr(surf, 'R', None)
+        if R is not None and bool(np.any(np.abs(np.asarray(R) - np.eye(3)) > 1e-12)):
+            return True
+    return False
+
+
+def _warn_paraxial_aiming(prescription, ray_aiming):
+    """Warn when paraxial aiming is used with decentered geometry."""
+    if ray_aiming != 'paraxial':
+        return
+    if _has_decentered_geometry(prescription):
+        warnings.warn(
+            'launch: the prescription carries tilts/decenters but '
+            "ray_aiming is 'paraxial'; the paraxial entrance pupil ignores "
+            "them and bundles may miss the stop.  Consider ray_aiming='real' "
+            'or an explicit aim_to=stop.',
+            stacklevel=3,
+        )
 
 
 def _real_aim_to_stop(P, S, rho, prescription, stop_index, wavelength, finite):
@@ -407,6 +445,8 @@ def launch(prescription, field, wavelength, sampling, *,
     real_aiming = (ray_aiming == 'real' and aim_to is None
                    and sampling.kind != 'chief')
     stop_index = system_stop_index(prescription, None)
+    if aim_to is None:
+        _warn_paraxial_aiming(prescription, ray_aiming)
 
     # Object-space aperture modes launch from an object-space cone.
     object_mode = False

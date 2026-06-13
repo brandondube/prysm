@@ -671,33 +671,26 @@ class Distortion(Merit):
 
 
 class FieldCurvature(Merit):
-    """X/y fan focus separation at one off-axis field.
+    """X/y section focus separation at one off-axis field.
 
-    Returns abs(x_fan_z - y_fan_z) at the requested field.  For pure-y fields
-    on an axisymmetric system this is the classical sagittal-tangential focus
-    separation; otherwise it is the local x/y fan separation.  For a full
-    Petzval-flat optimization, sum these across multiple fields.
+    Returns abs(x_fan_z - y_fan_z) at the requested field.
 
     """
 
     name = 'field_curvature'
 
-    def __init__(self, field, wavelength=None, *, epd, target=None,
-                 weight=1.0, min=None, max=None, marginal_fraction=0.7):
+    def __init__(self, field, wavelength=None, *, target=None,
+                 weight=1.0, min=None, max=None):
         super().__init__(target=target, weight=weight, min=min, max=max)
         self.field = field
         self.wavelength = None if wavelength is None else float(wavelength)
-        self.epd = float(epd)
-        self.marginal_fraction = float(marginal_fraction)
 
     def __call__(self, prescription, cache):
+        from .parabasal import parabasal_foci  # local: avoid a circular import
+
         wvl = _resolve_wavelength(prescription, self.wavelength)
-        result = _analysis.field_curvature(
-            prescription, [self.field], wvl,
-            epd=self.epd,
-            marginal_fraction=self.marginal_fraction,
-        )
-        return float(abs(result.x_fan_z[0] - result.y_fan_z[0]))
+        x_z, y_z = parabasal_foci(prescription, self.field, wvl)
+        return float(abs(x_z - y_z))
 
 
 # ---------- Problem ----------------------------------------------------------

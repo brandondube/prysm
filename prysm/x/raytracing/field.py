@@ -12,7 +12,7 @@ from .spencer_and_murty import (
     STYPE_REFLECT, STYPE_REFRACT, raytrace,
 )
 from .launch import Sampling, _apply_vignetting
-from .paraxial import first_order, effective_focal_length
+from .paraxial import effective_focal_length
 from .opt import (
     _pupil_center_chief_index,
     hopkins_eic_closing, reference_sphere_curvature, xp_reference_sphere,
@@ -20,7 +20,8 @@ from .opt import (
 from .analysis import _apply_field_and_output, _filtered_chief_index
 from ._trace_grid import trace_cell
 from ._meta import (
-    system_epd, system_wavelength, object_space_index, image_space_index,
+    system_epd, system_wavelength, system_first_order,
+    object_space_index, image_space_index,
 )
 
 
@@ -481,8 +482,8 @@ def _resolve_exit_pupil(prescription, field, wavelength, epd,
 
     if stop_index is not None:
         try:
-            fo = first_order(prescription, wvl=wavelength,
-                             epd=epd, stop_index=stop_index)
+            fo = system_first_order(prescription, wvl=wavelength,
+                                    epd=epd, stop_index=stop_index)
         except ValueError as exc:
             if axis_dir is None or not _first_order_geometry_failure(exc):
                 raise

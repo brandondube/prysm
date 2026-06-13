@@ -184,8 +184,7 @@ def test_plot_lateral_color_one_curve_per_nonreference_wavelength():
 def test_curve_convenience_data_cached_and_matches_explicit():
     sys = _doublet()
     explicit = field_curvature(sys)
-    kw = dict(fields=None, wavelength=None, epd=None, marginal_fraction=1e-3,
-              samples=101)
+    kw = dict(fields=None, wavelength=None, samples=101)
     cached = sys._cached_grid('field_curvature', field_curvature, kw)
     np.testing.assert_allclose(cached.x_fan_z, explicit.x_fan_z)
     np.testing.assert_allclose(cached.y_fan_z, explicit.y_fan_z)

@@ -27,12 +27,13 @@ def system_epd(prescription, epd, wvl=None):
 
 
 def system_first_order(prescription, wvl=None, epd=None, stop_index=None):
-    """Paraxial first-order properties, using a system cache when present."""
-    f = getattr(prescription, 'first_order', None)
+    """Internal scalar YNU first-order properties, cached when possible."""
+    f = getattr(prescription, '_ynu_first_order', None)
     if callable(f):
         return f(wvl=wvl, epd=epd, stop_index=stop_index)
-    from .paraxial import first_order  # local: avoid a circular import
-    return first_order(prescription, wvl=wvl, epd=epd, stop_index=stop_index)
+    from .paraxial import ynu_first_order  # local: avoid a circular import
+    return ynu_first_order(prescription, wvl=wvl, epd=epd,
+                           stop_index=stop_index)
 
 
 def system_stop_index(prescription, stop_index):

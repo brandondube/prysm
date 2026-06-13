@@ -387,16 +387,31 @@ class OpticalSystem:
         return not math.isfinite(float(thi))
 
     # -- first-order + solves --
-    def first_order(self, wvl=None, *, epd=None, stop_index=None):
-        """Paraxial first-order properties, cached on the system."""
-        from .paraxial import first_order
-        wvl = self.wavelength(wvl)
+    def first_order(self, field=0, wavelength=None, *, epd=None,
+                    stop_index=None, force_sym=False):
+        """Cached parabasal first-order properties about a chief ray."""
+        from .parabasal import first_order, _resolve_field
+        wvl = self.wavelength(wavelength)
         resolved_stop = stop_index if stop_index is not None else self.stop_index
-        key = ('fo', self.lens._version, float(wvl), epd, resolved_stop)
+        key = ('fo', self.lens._version, _field_key(_resolve_field(self, field)),
+               float(wvl), epd, resolved_stop, bool(force_sym))
         cached = self._derived.get(key, _DERIVED_MISS)
         if cached is _DERIVED_MISS:
-            cached = first_order(self, wvl=wvl, epd=epd,
-                                 stop_index=stop_index)
+            cached = first_order(self, field=field, wavelength=wvl, epd=epd,
+                                 stop_index=stop_index, force_sym=force_sym)
+            self._derived[key] = cached
+        return cached
+
+    def _ynu_first_order(self, wvl=None, *, epd=None, stop_index=None):
+        """Internal YNU first-order properties, cached on the system."""
+        from .paraxial import ynu_first_order
+        wvl = self.wavelength(wvl)
+        resolved_stop = stop_index if stop_index is not None else self.stop_index
+        key = ('ynu_fo', self.lens._version, float(wvl), epd, resolved_stop)
+        cached = self._derived.get(key, _DERIVED_MISS)
+        if cached is _DERIVED_MISS:
+            cached = ynu_first_order(self, wvl=wvl, epd=epd,
+                                     stop_index=stop_index)
             self._derived[key] = cached
         return cached
 
@@ -527,15 +542,13 @@ class OpticalSystem:
             distribution=distribution, stop_index=stop_index, output=output))
         return plotting.plot_opd_fans(grid, **plot_kwargs)
 
-    def plot_field_curvature(self, *, fields=None, wavelength=None, epd=None,
-                             marginal_fraction=1e-3, samples=101,
-                             **plot_kwargs):
+    def plot_field_curvature(self, *, fields=None, wavelength=None,
+                             samples=101, **plot_kwargs):
         """Field-curvature curves for the system."""
         from . import plotting
         from .analysis import field_curvature
         grid = self._cached_grid('field_curvature', field_curvature, dict(
-            fields=fields, wavelength=wavelength, epd=epd,
-            marginal_fraction=marginal_fraction, samples=samples))
+            fields=fields, wavelength=wavelength, samples=samples))
         return plotting.plot_field_curvature(
             self, fields, result=grid, samples=samples, **plot_kwargs)
 

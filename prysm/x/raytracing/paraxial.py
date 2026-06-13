@@ -129,12 +129,12 @@ def _first_order_surfaces(prescription):
 
 
 def _translation_matrix(t, n):
-    """ABCD translation by signed lab-frame distance t in medium of signed index n, acting on (y, u = n*theta)."""
+    """ABCD translation in (y, u = n*theta)."""
     return np.array([[1.0, t / n], [0.0, 1.0]], dtype=config.precision)
 
 
 def _refraction_matrix(c, n, n_prime):
-    """ABCD refraction at a surface of curvature c going from index n to n_prime, acting on (y, u = n*theta).  A mirror is the n_prime = -n special case."""
+    """ABCD refraction at curvature c from index n to n_prime."""
     P_pwr = (n_prime - n) * c
     return np.array([[1.0, 0.0], [-P_pwr, 1.0]], dtype=config.precision)
 
@@ -445,8 +445,10 @@ class FirstOrderProperties:
         return '\n'.join(line for line in lines if line is not None)
 
 
-def first_order(prescription, wvl=None, *, epd=None, stop_index=None):
-    """Compute paraxial first-order properties of a prescription.
+def ynu_first_order(prescription, wvl=None, *, epd=None, stop_index=None):
+    """Paraxial first-order properties from the scalar YNU/ABCD matrix walk.
+
+    Requires centered axial geometry.
 
     Parameters
     ----------
@@ -493,21 +495,29 @@ def first_order(prescription, wvl=None, *, epd=None, stop_index=None):
     has_power = abs(C) >= 1e-30
     if has_power:
         out.efl = -float(n_object) / C
-        out.paraxial_image_distance = -A * out.n_image / C
-        out.paraxial_image_z = (float(surfaces[-1].P[2])
-                                + out.paraxial_image_distance)
+        dist_from_end = -A * out.n_image / C
+        out.paraxial_image_z = float(surfaces[-1].P[2]) + dist_from_end
         first_powered = None
         last_powered = None
+        last_interacting = None
         for surf in surfaces:
-            if (_paraxial_curvature(surf) != 0.0
-                    and surf.typ in (STYPE_REFLECT, STYPE_REFRACT)):
+            if surf.typ not in (STYPE_REFLECT, STYPE_REFRACT):
+                continue
+            last_interacting = surf
+            if _paraxial_curvature(surf) != 0.0:
                 if first_powered is None:
                     first_powered = surf
                 last_powered = surf
+        # measured from the last reflecting/refracting surface, not from
+        # surfaces[-1]: a prescription whose last entry is an image plane at
+        # paraxial focus would otherwise always report ~0
+        if last_interacting is not None:
+            out.paraxial_image_distance = (
+                out.paraxial_image_z - float(last_interacting.P[2]))
+        else:
+            out.paraxial_image_distance = dist_from_end
         if last_powered is not None:
-            out.bfl = (out.paraxial_image_distance
-                       + float(surfaces[-1].P[2])
-                       - float(last_powered.P[2]))
+            out.bfl = out.paraxial_image_z - float(last_powered.P[2])
         if first_powered is not None:
             ffl_from_first = -D * float(n_object) / C
             out.ffl = (ffl_from_first

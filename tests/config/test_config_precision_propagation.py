@@ -1,13 +1,4 @@
-"""Guard: config.precision must reach allocations inside raytracing flows.
-
-The mathops backend sweep landed config.precision-aware dtype= kwargs across
-analysis / tolerance / launch / paraxial / sensitivity / design.  This test
-exercises a handful of representative flows at both precisions and asserts
-the dtype of the returned arrays matches `config.precision`.
-
-The fixture restores config.precision=64 on teardown so the rest of the test
-suite runs at the package default.
-"""
+"""config.precision propagation through raytracing allocations."""
 import numpy as np
 import pytest
 
@@ -42,7 +33,7 @@ def _parabola():
 
 
 def _parabola_ld():
-    """LensData twin of _parabola — concave mirror, image folded to z=-40."""
+    """LensData twin of _parabola."""
     c = -1 / 80.0
     f = abs(1.0 / (2.0 * c))
     lens = LensData()
@@ -82,7 +73,7 @@ def test_distortion_dtype_follows_config_precision(precision):
 def test_field_curvature_dtype_follows_config_precision(precision):
     presc = _parabola()
     fields = [Field(0.0, 0.0), Field(0.1, 0.0)]
-    result = field_curvature(presc, fields, 0.55e-3, epd=10.0)
+    result = field_curvature(presc, fields, 0.55e-3)
     expected = _expected_dtype(precision)
     assert result.x_fan_z.dtype == expected
     assert result.y_fan_z.dtype == expected

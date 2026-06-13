@@ -17,7 +17,6 @@ from .opt import (
     centroid_referenced_rms,
     _pupil_center_chief_index,
 )
-from ._line_math import line_intersection_params
 from .paraxial import paraxial_image_distance
 from .launch import Field, Sampling, launch, _apply_vignetting
 from ._meta import (
@@ -541,36 +540,18 @@ def _field_curvature_labels(prescription, fields):
         return ('S', 'T'), ('sagittal', 'tangential')
     return ('X', 'Y'), ('x fan', 'y fan')
 
-def _line_intersection_z(P0, S0, P1, S1):
-    """Closest-approach z between two skew rays (P0, S0) and (P1, S1).
-
-    Used for field-curvature focus location: with a chief-marginal pair, the
-    common-perpendicular midpoint z is a good surrogate for the marginal
-    ray's focus along the chief.
-
-    """
-    s = line_intersection_params(P0, S0, P1, S1)
-    Q0 = P0 + s[0] * S0
-    Q1 = P1 + s[1] * S1
-    return 0.5 * (float(Q0[2]) + float(Q1[2]))
-
-
-def field_curvature(prescription, fields=None, wavelength=None, *, epd=None,
-                    marginal_fraction=1e-3, samples=101):
-    """X- and y-fan focus shifts per field point.
+def field_curvature(prescription, fields=None, wavelength=None, *,
+                    samples=101):
+    """X- and y-section parabasal focus z per field point.
 
     Parameters
     ----------
     prescription : sequence of Surface
     fields : iterable of Field, optional
-        field points to evaluate.  Must all be kind='angle'.  None sweeps
-        the span of the system FieldSet densely; see field_sweep.
+        field points to evaluate.  None sweeps the span of the system
+        FieldSet densely; see field_sweep.
     wavelength : float
         in microns.
-    epd : float
-        entrance pupil diameter.
-    marginal_fraction : float
-        marginal-ray radius as a fraction of EPD/2.
     samples : int, optional
         number of sweep points when fields is None.
 
@@ -580,33 +561,21 @@ def field_curvature(prescription, fields=None, wavelength=None, *, epd=None,
         Object with x_fan_z and y_fan_z attributes; element i of each array
         corresponds to fields[i].
     x_fan_z : ndarray, shape (n_fields,)
-        z position where the x-fan marginal converges with the chief.
+        z where the x-section pencil focuses.
     y_fan_z : ndarray, shape (n_fields,)
-        z position where the y-fan marginal converges with the chief.
+        z where the y-section pencil focuses.
 
     """
+    from .parabasal import parabasal_foci  # local: avoid a circular import
+
     wavelength = system_wavelength(prescription, wavelength)
-    epd = _require_epd(prescription, epd, wavelength)
     fields = field_sweep(prescription, fields, samples)
     n = len(fields)
     x_fan_z = np.zeros(n, dtype=config.precision)
     y_fan_z = np.zeros(n, dtype=config.precision)
-    chief = Sampling.chief()
-    r_marg = float(marginal_fraction) * float(epd) / 2.0
-    # Use fixed lab-frame marginal offsets, not a Sampling launch.
     for i, field in enumerate(fields):
-        P0, S0 = launch(prescription, field, wavelength, chief, epd=epd)
-        P = np.repeat(P0, 3, axis=0)
-        S = np.repeat(S0, 3, axis=0)
-        P[1, 0] = P[1, 0] + r_marg
-        P[2, 1] = P[2, 1] + r_marg
-        tr = raytrace(prescription, P, S, wavelength)
-        P_final = tr.P[-1]
-        S_final = tr.S[-1]
-        x_fan_z[i] = _line_intersection_z(P_final[0], S_final[0],
-                                          P_final[1], S_final[1])
-        y_fan_z[i] = _line_intersection_z(P_final[0], S_final[0],
-                                          P_final[2], S_final[2])
+        x_fan_z[i], y_fan_z[i] = parabasal_foci(prescription, field,
+                                                wavelength)
     return FieldCurvatureResult(x_fan_z, y_fan_z)
 
 

@@ -3,7 +3,6 @@
 # Obsolete numpy-only fast path, kept as a note for archaeology.
 # from numpy.core.umath_tests import inner1d
 
-from prysm.conf import config
 from prysm.mathops import np, row_dot
 
 SURFACE_INTERSECTION_DEFAULT_MAXITER = 100
@@ -525,9 +524,10 @@ def raytrace(surfaces, P, S, wvl, tol_sag=None, keep_intermediates=False):
     intermediates = [] if keep_intermediates else None
     for j, surf in enumerate(surfaces):
         surf_idx = j + 1  # 1-based index recorded in status.real
-        # the surface owns its physics; the kernel owns the active set, the
-        # OPL/status histories, and the NaN presentation of failed rays.
-        step = surf.interact(Pj, Sj, nj, wvl, tol_sag=tol_sag)
+        # Surface physics live in Surface.interact; the kernel tracks history.
+        # The first segment may be signed when the launch plane sits past S1.
+        step = surf.interact(Pj, Sj, nj, wvl, tol_sag=tol_sag,
+                             first_segment=(j == 0))
 
         active = valid_mask(status)
         failed = active & (step.code != STATUS_OK)

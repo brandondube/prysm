@@ -17,7 +17,7 @@ from prysm.x.raytracing.paraxial import (
     effective_focal_length,
     back_focal_length,
     front_focal_length,
-    first_order,
+    ynu_first_order,
     FirstOrderProperties,
     local_x_vertex_curvature,
     local_y_vertex_curvature,
@@ -329,7 +329,7 @@ def _thin_lens_prescription(R1=100.0, R2=-100.0, n_glass=1.5, z0=0.0):
 
 def test_first_order_returns_carrier_with_basics():
     rx = _thin_lens_prescription()
-    fo = first_order(rx, wvl=0.55)
+    fo = ynu_first_order(rx, wvl=0.55)
     assert isinstance(fo, FirstOrderProperties)
     assert fo.n_surfaces == 2
     assert fo.n_refractive == 2
@@ -352,10 +352,23 @@ def test_first_order_returns_carrier_with_basics():
     assert fo.stop_diameter is None
 
 
+def test_first_order_image_distance_measured_from_last_lens_surface():
+    # trailing image planes should not zero the reported image distance
+    rx = _thin_lens_prescription()
+    pid = float(paraxial_image_distance(rx, wvl=0.55))
+    z_img = float(rx[-1].P[2]) + pid
+    rx_with_image = rx + [plane(interaction='eval',
+                                P=np.array([0., 0., z_img]))]
+    fo = ynu_first_order(rx_with_image, wvl=0.55)
+    np.testing.assert_allclose(
+        fo.paraxial_image_distance, z_img - float(rx[-1].P[2]), rtol=1e-9)
+    np.testing.assert_allclose(fo.paraxial_image_z, z_img, atol=1e-9)
+
+
 def test_first_order_fno_and_na():
     rx = _thin_lens_prescription()
     epd = 25.0
-    fo = first_order(rx, wvl=0.55, epd=epd)
+    fo = ynu_first_order(rx, wvl=0.55, epd=epd)
     assert fo.epd == pytest.approx(epd)
     assert fo.fno == pytest.approx(abs(fo.efl) / epd)
     # NA = sin(theta) ~ (epd/2) / |bfl| for a thin lens with object at infinity
@@ -365,7 +378,7 @@ def test_first_order_fno_and_na():
 
 def test_first_order_stop_at_thin_lens_places_pupils_at_lens():
     rx = _thin_lens_prescription()
-    fo = first_order(rx, wvl=0.55, epd=20.0, stop_index=0)
+    fo = ynu_first_order(rx, wvl=0.55, epd=20.0, stop_index=0)
     # stop coincident with the first (and effectively only) lens vertex,
     # so the EP and XP are both at the lens.
     assert fo.ep_z == pytest.approx(0.0, abs=1e-9)
@@ -391,7 +404,7 @@ def test_first_order_stop_behind_single_lens_places_ep_in_front():
     # at the stop plane; A_b for this geometry = 1 - t/f.
     A_b = 1.0 - t / f
     epd = stop_diameter / abs(A_b)
-    fo = first_order(rx, wvl=0.55, epd=epd, stop_index=2)
+    fo = ynu_first_order(rx, wvl=0.55, epd=epd, stop_index=2)
     # M_to_stop = T(t) @ thin_lens(P=1/f) → EP at z = +t/(1 - t/f) measured
     # from S1. For t = f/4: EP at z = (f/4)/(3/4) = f/3 (downstream of S1).
     np.testing.assert_allclose(fo.ep_z, f / 3.0, rtol=1e-4)
@@ -400,7 +413,7 @@ def test_first_order_stop_behind_single_lens_places_ep_in_front():
 
 def test_first_order_repr_lists_populated_rows_only():
     rx = _thin_lens_prescription()
-    fo = first_order(rx, wvl=0.55)
+    fo = ynu_first_order(rx, wvl=0.55)
     s = repr(fo)
     assert 'EFL' in s
     assert 'BFL' in s
@@ -413,7 +426,7 @@ def test_first_order_repr_lists_populated_rows_only():
 def test_first_order_afocal_returns_none_for_power_dependent_fields():
     rx = [plane(interaction='eval', P=np.array([0., 0., 0.])),
           plane(interaction='eval', P=np.array([0., 0., 10.]))]
-    fo = first_order(rx, wvl=0.55)
+    fo = ynu_first_order(rx, wvl=0.55)
     assert fo.efl is None
     assert fo.bfl is None
     assert fo.ffl is None
@@ -424,4 +437,4 @@ def test_first_order_afocal_returns_none_for_power_dependent_fields():
 def test_first_order_stop_index_out_of_range_raises():
     rx = _thin_lens_prescription()
     with pytest.raises(IndexError):
-        first_order(rx, wvl=0.55, stop_index=5)
+        ynu_first_order(rx, wvl=0.55, stop_index=5)

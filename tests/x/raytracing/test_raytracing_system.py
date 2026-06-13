@@ -71,7 +71,7 @@ def test_aperture_fno_and_na_image_round_trip_against_first_order():
     # read an EPD, read back F/# and NA via first_order, re-derive the EPD via
     # the first-order readout: identity.
     sys = _singlet(ApertureSpec.epd(20.0))
-    fo = sys.first_order()
+    fo = sys.first_order(force_sym=True)
     epd_from_fno = ApertureSpec.fno(fo.fno).entrance_pupil_diameter(sys)
     epd_from_na = ApertureSpec.na(fo.na_image).entrance_pupil_diameter(sys)
     np.testing.assert_allclose(epd_from_fno, 20.0, rtol=1e-9)
@@ -289,7 +289,8 @@ def test_exit_pupil_matches_first_order_and_caches():
     sys = _singlet()
     wvl = sys.wavelength()
     P_xp = sys.exit_pupil(wvl)
-    np.testing.assert_allclose(P_xp[2], sys.first_order(wvl).xp_z)
+    np.testing.assert_allclose(
+        P_xp[2], sys.first_order(wavelength=wvl, force_sym=True).xp_z)
     np.testing.assert_allclose(np.asarray(P_xp[:2], dtype=float), 0.0)
     # repeat call is a cache hit -> the very same array object
     assert sys.exit_pupil(wvl) is P_xp

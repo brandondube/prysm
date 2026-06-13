@@ -385,38 +385,49 @@ def test_field_curvature_on_axis_sag_equals_tan():
     """For an on-axis field of an axisymmetric system, sag and tan focus
     coincide (within FP)."""
     presc = _spherical_singlet()
-    result = field_curvature(presc, [Field(0., 0., unit='deg')],
-                             0.55, epd=4.0)
+    result = field_curvature(presc, [Field(0., 0., unit='deg')], 0.55)
     np.testing.assert_allclose(result.x_fan_z, result.y_fan_z, atol=1e-9)
 
 
 def test_field_curvature_returns_arrays_of_correct_shape():
     presc = _spherical_singlet()
     fields = [Field(0., h, unit='deg') for h in (0., 1., 2.)]
-    result = field_curvature(presc, fields, 0.55, epd=4.0)
+    result = field_curvature(presc, fields, 0.55)
     assert result.x_fan_z.shape == (3,)
     assert result.y_fan_z.shape == (3,)
 
 
-def test_field_curvature_default_is_differential():
-    """The default reports the differential (Coddington) foci.
+def test_field_curvature_matches_real_ray_differential_oracle():
+    """The parabasal foci match the real-ray differential oracle."""
+    from prysm.x.raytracing import Sampling, launch, raytrace
+    from prysm.x.raytracing._line_math import line_intersection_params
 
-    The default marginal_fraction must sample near the chief, so the result
-    matches the marginal_fraction -> 0 limit and is distinct from a finite
-    zonal focus (which folds in coma / oblique spherical aberration).
-    """
+    def oracle_foci(presc, field, wavelength, epd, marginal_fraction=1e-3):
+        def closest_z(P0, S0, P1, S1):
+            s = line_intersection_params(P0, S0, P1, S1)
+            Q0 = P0 + s[0] * S0
+            Q1 = P1 + s[1] * S1
+            return 0.5 * (float(Q0[2]) + float(Q1[2]))
+
+        r = marginal_fraction * epd / 2.0
+        P0, S0 = launch(presc, field, wavelength, Sampling.chief(), epd=epd)
+        P = np.repeat(P0, 3, axis=0)
+        S = np.repeat(S0, 3, axis=0)
+        P[1, 0] = P[1, 0] + r
+        P[2, 1] = P[2, 1] + r
+        tr = raytrace(presc, P, S, wavelength)
+        Pf, Sf = tr.P[-1], tr.S[-1]
+        return (closest_z(Pf[0], Sf[0], Pf[1], Sf[1]),
+                closest_z(Pf[0], Sf[0], Pf[2], Sf[2]))
+
     presc = _spherical_singlet()
-    fields = [Field(0., 8., unit='deg')]
-    differential = field_curvature(presc, fields, 0.55, epd=4.0)
-    limit = field_curvature(presc, fields, 0.55, epd=4.0,
-                            marginal_fraction=1e-4)
-    zonal = field_curvature(presc, fields, 0.55, epd=4.0,
-                            marginal_fraction=0.7)
-    # default agrees with the differential limit ...
-    np.testing.assert_allclose(differential.x_fan_z, limit.x_fan_z, atol=5e-3)
-    np.testing.assert_allclose(differential.y_fan_z, limit.y_fan_z, atol=5e-3)
-    # ... and is meaningfully distinct from the 0.7-zone focus
-    assert abs(float(differential.y_fan_z[0] - zonal.y_fan_z[0])) > 0.1
+    fields = [Field(0., h, unit='deg') for h in (0., 3., 6., 8.)]
+    result = field_curvature(presc, fields, 0.55)
+    for i, field in enumerate(fields):
+        x_z, y_z = oracle_foci(presc, field, 0.55, epd=4.0)
+        # the oracle carries its own finite-difference truncation error
+        np.testing.assert_allclose(float(result.x_fan_z[i]), x_z, atol=5e-3)
+        np.testing.assert_allclose(float(result.y_fan_z[i]), y_z, atol=5e-3)
 
 
 # ---------- axial / lateral color ------------------------------------------
