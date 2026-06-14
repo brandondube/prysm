@@ -549,11 +549,12 @@ Refractive
 eXperimental Modules
 ====================
 
-A total of seven new x/ modules have been introduced in this release.  The
+A total of nine new x/ modules have been introduced in this release.  The
 most substantial is the new optimization module, as well as upgrades to
 raytracing.  Additional modules include polarization, fibers, several types
-of interferometers and the shack-hartmann wavefront sensor, as well as
-deformable mirrors.
+of interferometers and the shack-hartmann wavefront sensor, deformable
+mirrors, a module for user-defined optical materials and glass catalogs, and
+a module for thin-film coating design.
 
 x/optym
 -------
@@ -896,6 +897,63 @@ The new paraxial solver reports system matrix quantities, image distance,
 effective focal length, front/back focal length, and a
 :code:`FirstOrderProperties` bundle.
 
+The user-facing first-order backend is now parabasal (firABCD-style):
+:code:`first_order(system, field=0, wavelength=None)` traces the field's
+chief ray with four launch tangents (dx, dy, du, dv) in its transverse
+sagittal/tangential frame via the forward-mode differential raytrace, and
+derives every first-order quantity from the resulting 4x4 parabasal ABCD —
+exact derivatives, not finite differences.  Quantities are natively x/y
+section separated (:code:`force_sym=True` collapses each pair to a scalar),
+and the report carries the raw 4x4 map on :code:`abcd`.  On the axial chief
+of a centered system it reproduces the scalar matrix walk to machine
+precision; off-axis it reports generalized-Coddington section quantities,
+finite-conjugate prescriptions get a conjugate-correct paraxial image
+(the matrix walk always reported the collimated-input rear focus), and
+tilted/decentered geometry — which the scalar walk rejects outright — is
+handled natively.  When the chief itself cannot trace, the report falls
+back to the YNU matrix walk and flags it via :code:`backend='ynu'`.  The
+scalar walk survives as internal machinery
+(:code:`paraxial.ynu_first_order`) for pupil resolution, lensdata solves,
+the paraxial tangent path, and that fallback.  :code:`field_curvature` and
+the :code:`FieldCurvature` design operand route through the same parabasal
+seam (their :code:`epd` / :code:`marginal_fraction` knobs are gone — the
+old real-ray zonal pair survives only as a regression oracle in the test
+suite), and :code:`launch` now warns, instead of failing, when a
+prescription carrying tilts/decenters is launched with paraxial ray aiming.
+
+Newton surface intersections now carry a first-root guarantee on strong
+aspheres.  Each conic-seeded surface precomputes the max departure D of its
+sag from the seed conic over its characterized domain (bounding outer
+radius, else normalization radius, else the conic's own domain limit); a
+Newton root is accepted only within |s - s_conic| <= D/\|cos theta_inc\| of
+the conic root and inside the domain, so convergence onto the wrong sheet of
+a gull-wing asphere — which previously traced silently — is caught.  Rays
+failing the band (and rays whose seed conic misses while the real surface
+still intersects, banded about the ray's closest approach to the seed) get
+one deterministic rescue: the band is scanned for its first sign-changing
+segment and solved with a safeguarded bisection-Newton, refined leftward if
+an earlier crossing is certified, before being statused out.  Roots behind
+the ray are rejected at reflect/refract surfaces (eval surfaces and the
+signed launch segment are exempt), and surfaces whose departure slope is
+steep enough to admit multiple crossings inside the acceptance band warn at
+setup.  An exact companion-matrix polynomial root oracle pins the production
+stack on folded aspheres, rim grazers, and seed-missing rays in the test
+suite.
+
+Diffractive surfaces are now described by a phase-function protocol that
+mirrors the sag protocol of a Shape: a provider returns the diffractive phase
+in waves over the local surface coordinates, and the surface multiplies it by
+the wavelength to recover both the optical path it adds and the tangential
+optical-momentum kick it imparts, so the bent ray and the added OPL stay one
+self-consistent wavefront.  The classical ruled grating becomes
+:code:`LinearGrating`, the constant-gradient instance, and the legacy
+:code:`grating=(period, g_vec, order)` tuple still works (it coerces into one);
+polynomial and holographic phases are additive providers.  Forward
+(:code:`d_diffract`) and reverse (:code:`adj_diffract`) diffraction primitives
+differentiate the bend through the phase gradient and Hessian, so diffractive
+surfaces now participate fully in the differential and adjoint stacks
+(parabasal first order, sensitivity, optimization) instead of being refused.
+
 Analysis, design, and tolerancing tools have been added around the tracer.
 Analysis routines now cover transverse ray aberration, wavefront OPD and
 Zernike fitting, distortion, field curvature, axial color, and lateral color.
@@ -907,12 +965,61 @@ problem wrapper compatible with x/optym least-squares solvers.  The tolerance
 layer adds perturbation distributions, finite-difference sensitivity tables,
 and Monte Carlo tolerance runs.
 
+Optimization gradients now route through the adjoint differential raytrace
+automatically: when every objective operand of a :code:`Problem` supports
+adjoint seeding (RMS spot radius, wavefront RMS), the residual Jacobian comes
+from one forward trace plus one reverse sweep per operand instead of
+:code:`2 * n_params` finite-difference re-traces per iteration, and is exact
+to machine precision.  :code:`damped_least_squares` consults an optional
+:code:`residual_jacobian` method through its problem protocol, so any user
+problem can supply an analytic Jacobian; finite differences remain the
+fallback, and :code:`Problem(..., gradient='fd')` opts out.  A solve that
+terminates without convergence (violated constraints, exhausted line search)
+now emits a warning instead of silently updating the lens.
+
+Design operands now bind intent instead of rays: the ray-based operands
+(:code:`RmsSpotRadius`, :code:`WavefrontRMS`, :code:`RayHeightAt`,
+:code:`Boresight`, :code:`ZernikeCoefficient`) take a launch recipe
+:code:`(field, wavelength, sampling)` in place of the previous frozen
+:code:`(P, S)` bundle, with None defaults for the on-axis field, the system
+reference wavelength, and a hex(4) pupil sampling.  The bundle is launched
+lazily on every merit evaluation, so ray bundles re-aim through the moving
+pupil as the design changes during optimization (the adjoint Jacobian path
+treats the bundle launched at the current iterate as frozen).  This is a
+breaking change: operands no longer accept positional :code:`P, S` arrays.
+:code:`Problem` likewise replaces its :code:`equality_constraints=` /
+:code:`inequality_constraints=` keywords with a single :code:`constraints=`
+list whose operands route by their bounds: :code:`target=` makes an equality,
+:code:`min=` / :code:`max=` make inequalities.  New geometry operands
+:code:`TotalTrack` (Code V TTL) and :code:`Thickness` cover the common layout
+constraints.
+
+A high-level optimization API now mirrors the plotting sugar:
+:code:`OpticalSystem.problem(goal, ...)` assembles a :code:`Problem` by
+fanning goal items out over the system fields and wavelengths (with the
+system spectral weights), and :code:`OpticalSystem.optimize(...)` solves it
+in one shot, updating the lens in place.  Goals mix freely: strings name
+boxed operands (:code:`'spot'`, :code:`'wavefront'`), a Merit subclass fans
+out like the strings, a Merit instance passes through, and a bare callable
+:code:`f(prescription, cache) -> float` is wrapped.  The Code V
+:code:`aut; efl=100; ttl<100; go` becomes
+:code:`sys.optimize('spot', constraints=[EFL(target=100), TotalTrack(max=100)])`.
+
+:code:`OpticalSystem` caches its paraxial common-mode work (first-order
+properties, entrance pupil location, equivalent entrance pupil diameter) in
+the same version-stamped store as the exit pupil, and the launch, analysis,
+and design layers consult those caches through the prescription seam; grid
+analyses and optimizer iterations no longer re-run a paraxial solve per ray
+bundle.  Pickup and solve resolution during compilation no longer bumps the
+lens edit version, so derived caches are not spuriously invalidated.
+
 Zemax :code:`.zmx` and Code V :code:`.seq` readers can now construct prysm
 surface prescriptions, including support code for glass-name lookup through
-the optional refractiveindex.info SQLite database.  The materials module also
-provides :code:`air`, :code:`vacuum`, :code:`glass`, :code:`lookup`, and
-:code:`load_material_db` helpers, and parsing recognizes mirror/ambient special
-cases.
+the refractiveindex.info database (read directly from its YAML files, with the
+optional :code:`refractiveindex` package used only to download the database on
+first use).  The materials module also provides :code:`air`, :code:`vacuum`,
+:code:`glass`, and :code:`lookup` helpers, and parsing recognizes
+mirror/ambient special cases.
 
 Plotting has been expanded from simple ray-path views to prescription-aware
 optical layout plots, transverse ray aberration plots, wave-aberration fan
@@ -920,6 +1027,262 @@ plots, spot diagrams, and lens-outline construction for refractive groups.
 Geometric helpers for ray-plane, ray-sphere, ray-conic, line-intersection, and
 closest-approach calculations have been factored into small modules so surface
 intersection and analysis code share the same math.
+
+Per-field vignetting factors (Code V VUX / VLX / VUY / VLY, carried on
+:code:`Field`) now compress the launched pupil instead of masking it: each
+factor scales its side of every pupil sampling pattern by (1 - factor), so
+the bundle keeps its full length, the marginal rays ride the vignetted beam
+edge in layouts, and the center sample stays the chief ray.  Negative
+factors (pupil expansion) are honored rather than rejected.  Ray and OPD
+fan grids carry per-field pupil abscissas (:code:`RayFanGrid` /
+:code:`OPDFanGrid` replace :code:`pupil` with :code:`pupil_x` /
+:code:`pupil_y`): a vignetted fan spans only the transmitted part of the
+nominal pupil -- truncated, never renormalized to full width -- matching
+the presentation of commercial codes.  Previously the mask could change the
+bundle length, which broke the fan analyses outright for any vignetted
+field.
+
+Field-dependent curve analyses (field curvature, distortion, lateral color)
+no longer evaluate only the handful of explicitly defined system fields: when
+fields are omitted, :code:`field_sweep` generates a dense sweep (101 points by
+default, tunable with :code:`samples=`) from the smallest to the largest
+system field magnitude along the meridian of the largest field, so the curves
+plot smoothly.  Explicitly passed fields are honored verbatim.  A new
+full-field display, in the spirit of Code V FMA, complements the meridional
+curves with a 2D map over the whole field disc:
+:code:`analysis.full_field` evaluates a scalar metric (polychromatic,
+spectrally-weighted RMS spot radius; piston-removed RMS wavefront error in
+waves; percent distortion; or lateral color) on a Cartesian grid of field
+points spanning the field disc, and :code:`plotting.plot_full_field` /
+:code:`OpticalSystem.plot_full_field` draw the resulting
+:code:`FullFieldGrid` as a color map.
+
+Several robustness fixes for real-world prescription files: the Code V reader
+parses :code:`CIR` clear-aperture records onto their surfaces.  Layout drawing
+skips a standalone stop or dummy plane (an ambient-to-ambient surface belongs
+to no lens element), truncates drawn ray paths at the surface where a ray was
+clipped or otherwise terminated, and no longer warns about a steep surface
+that cannot reach the element OD when that surface's own clear aperture
+intentionally caps the drawn zone.  A new :code:`OpticalSystem.set_vignetting`
+solves the vignetting factors against the system's own apertures and ray
+aiming: per field and per pupil side, an edge ray is bisected radially toward
+the chief until it transmits (:code:`Sampling.points` carries the per-sample
+scale through the launch machinery), and the resulting Code V factors are
+written onto the fields.  Every consumer -- layouts, fans, spots -- then
+launches through the ordinary vignetting compression with no special-casing,
+so layout rim rays ride just inside the limiting apertures and every drawn ray
+reaches the image plane, while the trace itself stays deterministic.
+
+
+x/materials
+-----------
+
+New module for user-defined optical materials and glass catalogs.  The core
+library has always carried a handful of index models in
+:mod:`prysm.refractive`; this module is the home for everything else: real
+catalog glasses, measured dispersion data, models fit to your own samples, and
+the temperature, stress, and process variants of a material that tolerancing
+and as-built modeling need.  Everything in the module satisfies one small
+duck-typed contract, :class:`~prysm.x.materials.MaterialProtocol`: a material
+is a callable that returns the real index :code:`n(wvl_um)`, and carries
+:code:`nk(wvl_um)` for the complex index when absorption matters.  Because the
+contract is so small, the raytracing module consumes these materials directly —
+anything here can be dropped onto a surface, and the readers populate surfaces
+with them when they resolve a glass name.
+
+Material models
+^^^^^^^^^^^^^^^
+
+* :class:`~prysm.x.materials.ConstantMaterial`; a fixed index, used for air,
+  vacuum, and ideal media
+
+* :class:`~prysm.x.materials.FormulaMaterial`; evaluates a named dispersion
+  formula (Sellmeier and the other refractiveindex.info / Zemax forms)
+
+* :class:`~prysm.x.materials.TabulatedMaterial` and
+  :class:`~prysm.x.materials.MaterialData`; interpolate measured n (and k) vs
+  wavelength
+
+* :class:`~prysm.x.materials.CHARMSCoefficientMaterial`,
+  :class:`~prysm.x.materials.CHARMSTableMaterial`, and
+  :class:`~prysm.x.materials.TemperatureSellmeierMaterial`; thermo-optic
+  (temperature-dependent) dispersion
+
+Catalogs
+^^^^^^^^
+
+* :class:`~prysm.x.materials.Catalog` and
+  :class:`~prysm.x.materials.CatalogChain` look glasses up by name, the chain
+  searching several catalogs in priority order
+
+* :func:`~prysm.x.materials.load_agf_catalog` and
+  :class:`~prysm.x.materials.AGFCatalog` read Zemax :code:`.agf` glass catalogs
+
+* :class:`~prysm.x.materials.RefractiveIndexCatalog` reads the
+  refractiveindex.info database directly from its YAML files (the optional
+  :code:`refractiveindex` package is used only to download the database on
+  first use); :func:`~prysm.x.materials.default_db_path` locates it
+
+* :class:`~prysm.x.materials.MaterialRegistry` for registering and recalling
+  your own named materials
+
+Fitting your own data
+^^^^^^^^^^^^^^^^^^^^^^
+
+* :func:`~prysm.x.materials.fit_material`; fit a dispersion model to measured
+  wavelength/index samples
+
+* :func:`~prysm.x.materials.from_samples`; build a tabulated material or fit a
+  model from samples, whichever is appropriate
+
+* :class:`~prysm.x.materials.FittedMaterial` and
+  :class:`~prysm.x.materials.FitReport` carry the fit and its quality
+
+Transforms
+^^^^^^^^^^
+
+These wrap any material to express an as-built or environmental variation,
+and compose freely:
+
+* :class:`~prysm.x.materials.TemperatureShiftedMaterial`
+
+* :class:`~prysm.x.materials.StressOpticMaterial`
+
+* :class:`~prysm.x.materials.ProcessVariantMaterial`
+
+* :class:`~prysm.x.materials.IndexOffsetMaterial`
+
+* :class:`~prysm.x.materials.ThicknessDependentMaterial`
+
+Convenience helpers
+^^^^^^^^^^^^^^^^^^^^
+
+* :func:`~prysm.x.materials.air` and :func:`~prysm.x.materials.vacuum`; the
+  ambient media as materials
+
+* :func:`~prysm.x.materials.glass`; resolve a glass name through a catalog or
+  the default database
+
+* :func:`~prysm.x.materials.lookup`; resolve a token to a callable material,
+  air, or the :code:`MIRROR` sentinel
+
+
+x/coatings
+----------
+
+New module for thin-film coating analysis and synthesis.  Where
+:mod:`prysm.thinfilm` computes the reflectance and transmittance of a fixed
+stack, this module adds the differentiable field engine, merit functions, and
+optimizers needed to *design* a coating — antireflection stacks, dichroics,
+bandpass and edge filters, and continuous-index rugates — and to plan its
+deposition.  It is built on the core TMM and is differentiated end to end, so a
+coating problem drops straight into :mod:`prysm.x.optym`.
+
+Field engine
+^^^^^^^^^^^^
+
+A Macleod admittance / characteristic-matrix transfer matrix method that
+returns not only the stack reflectance and transmittance but the internal
+field at any depth, which the field-constrained merits and the monitoring
+simulation are built on:
+
+* :class:`~prysm.x.coatings.Stack`
+
+* :func:`~prysm.x.coatings.stack_characteristic_matrices`,
+  :func:`~prysm.x.coatings.forward_products`,
+  :func:`~prysm.x.coatings.backward_products`
+
+* :func:`~prysm.x.coatings.internal_fields`,
+  :func:`~prysm.x.coatings.field_at_depth`
+
+* :func:`~prysm.x.coatings.RTA` and :func:`~prysm.x.coatings.stack_rt`
+
+Differentiable engine
+^^^^^^^^^^^^^^^^^^^^^^
+
+An O(N) reverse-mode adjoint through the stack; the thickness and index
+gradients are exact to finite-difference precision:
+
+* :func:`~prysm.x.coatings.forward_eval`
+
+* :func:`~prysm.x.coatings.thickness_gradient`
+
+* :func:`~prysm.x.coatings.index_gradient`
+
+Merit functions
+^^^^^^^^^^^^^^^
+
+Spectral and field-constrained targets, the latter using the internal field
+so you can, e.g., keep the peak field off a delicate interface:
+
+* :class:`~prysm.x.coatings.Reflectance`,
+  :class:`~prysm.x.coatings.Transmittance`,
+  :class:`~prysm.x.coatings.LayerAbsorptance`
+
+* :class:`~prysm.x.coatings.FieldIntensityAtBoundary`,
+  :class:`~prysm.x.coatings.PeakFieldAtInterfaces`,
+  :class:`~prysm.x.coatings.FieldInLayer`
+
+* :class:`~prysm.x.coatings.MeritFunction` and
+  :func:`~prysm.x.coatings.as_merit` compose them
+
+Problem and refinement
+^^^^^^^^^^^^^^^^^^^^^^^
+
+* :class:`~prysm.x.coatings.CoatingProblem`; wraps a stack and its merits for
+  the x/optym optimizers
+
+* :func:`~prysm.x.coatings.refine`; refine layer thicknesses against a target,
+  returning a :class:`~prysm.x.coatings.CoatingResult`
+
+Needle synthesis
+^^^^^^^^^^^^^^^^
+
+Automatic design from scratch by inserting and growing thin "needle" layers:
+
+* :func:`~prysm.x.coatings.needle_function`,
+  :func:`~prysm.x.coatings.insert_needle`
+
+* :func:`~prysm.x.coatings.cleanup`; remove vanished layers
+
+* :func:`~prysm.x.coatings.synthesize`; the full needle loop, returning a
+  :class:`~prysm.x.coatings.NeedleResult`
+
+Deposition monitoring
+^^^^^^^^^^^^^^^^^^^^^^
+
+Forward modeling of optical-monitoring deposition control, including the error
+sensitivity that drives monitor-wavelength choice:
+
+* :func:`~prysm.x.coatings.monitoring_trace`,
+  :func:`~prysm.x.coatings.turning_points`
+
+* :func:`~prysm.x.coatings.level_cut`,
+  :func:`~prysm.x.coatings.cutoff_levels`
+
+* :func:`~prysm.x.coatings.simulate_run`
+
+* :func:`~prysm.x.coatings.monitoring_error_sensitivity`,
+  :func:`~prysm.x.coatings.choose_monitor_wavelength`
+
+Rugate / inhomogeneous-index synthesis
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Continuous index-vs-depth profiles, including inverse design of a profile from
+a target spectrum:
+
+* :func:`~prysm.x.coatings.sinusoidal_rugate`,
+  :func:`~prysm.x.coatings.rugate_period`,
+  :func:`~prysm.x.coatings.notch_wavelength`
+
+* :func:`~prysm.x.coatings.quintic_taper`,
+  :func:`~prysm.x.coatings.apodize`
+
+* :func:`~prysm.x.coatings.discretize_profile`; approximate a continuous
+  profile with discrete layers
+
+* :func:`~prysm.x.coatings.rugate_from_target`; inverse-design a profile from a
+  desired spectrum
 
 
 Performance Optimizations

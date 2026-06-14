@@ -15,3 +15,6 @@ Experimental modules, not subject to stability or compatiblity guarantees
    shack_hartmann
    polarization
    optym/index.rst
+   raytracing/index.rst
+   coatings/index.rst
+   materials/index.rst

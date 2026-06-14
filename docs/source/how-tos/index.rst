@@ -13,4 +13,3 @@ How-Tos
     Differentiable Optical Models.ipynb
     Advanced Optimization with Problem and Governors.ipynb
     Polarized Propagation.ipynb
-    Modeling Phase Shifting Interferometers.ipynb
