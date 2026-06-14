@@ -29,12 +29,16 @@ def _default_catalog():
     return _DEFAULT_CATALOG
 
 
-def glass(name, database=None):
-    """Resolve a glass name through a material catalog or the default database."""
+def glass(name, database=None, **qualifiers):
+    """Resolve a glass name through a material catalog or the default database.
+
+    Qualifiers (e.g. page for the refractiveindex.info catalog) are forwarded
+    to the catalog's material_for_name.
+    """
     if database is None:
         database = _default_catalog()
     if hasattr(database, 'material_for_name'):
-        return database.material_for_name(name)
+        return database.material_for_name(name, **qualifiers)
     raise TypeError(
         'database must be a material catalog exposing material_for_name(name)'
     )

@@ -43,6 +43,7 @@ from .monitoring import (
     monitoring_error_sensitivity,
     choose_monitor_wavelength,
 )
+from . import common_materials
 from .rugate import (
     quintic_taper,
     discretize_profile,
@@ -100,4 +101,6 @@ __all__ = [
     'sinusoidal_rugate',
     'apodize',
     'rugate_from_target',
+    # common materials by band and application
+    'common_materials',
 ]

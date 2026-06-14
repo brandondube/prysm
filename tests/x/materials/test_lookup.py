@@ -2,7 +2,7 @@
 
 import pytest
 
-from prysm.x.materials import MIRROR, air, vacuum, lookup, resolve_index
+from prysm.x.materials import MIRROR, air, vacuum, glass, lookup, resolve_index
 from prysm.x.materials import Catalog, ConstantMaterial
 
 
