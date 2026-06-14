@@ -138,6 +138,15 @@ def as_phase_function(value):
         raise TypeError(
             'grating must be a PhaseFunction, a (period, g_vec, order) tuple, '
             f'or None; got {value!r}')
+    # Disambiguate the legacy tuple from a bare 3-vector grating direction: in
+    # the tuple form the middle element is the g_vec sequence, so a scalar there
+    # means a (3,) vector was passed whole and silently mis-unpacked.
+    g = np.atleast_1d(np.asarray(g_vec, dtype=float))
+    if g.ndim != 1 or g.size < 2:
+        raise TypeError(
+            'grating tuple form is (period, g_vec, order) with g_vec a length-2 '
+            f'(x, y) vector; got a scalar g_vec from {value!r} (a bare 3-vector '
+            'is not a valid grating spec -- wrap it as (period, g_vec, order))')
     return LinearGrating(period, g_vec, order)
 
 

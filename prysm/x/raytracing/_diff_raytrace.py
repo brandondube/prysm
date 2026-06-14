@@ -772,7 +772,9 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None,
         # Step III.5: diffractive bend and phase OPL.
         grating_Ldot = None
         if surf.grating is not None and surf.typ in (STYPE_REFLECT, STYPE_REFRACT):
-            _, gx, gy = surf.grating.phase_and_gradient(Xj, Yj)
+            # the forward trace already evaluated the gradient (captured on the
+            # interaction); only the Hessian is new here.
+            gx, gy = inter.grating_grad
             hess = surf.grating.phase_hessian(Xj, Yj)
             Sprime, dSprime = d_diffract(Sprime, n_hat, n_post, wvl,
                                          (gx, gy), hess, dPj, dSprime, dn_hat,

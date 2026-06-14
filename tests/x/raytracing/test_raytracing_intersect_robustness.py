@@ -144,18 +144,33 @@ def test_mild_asphere_roots_unchanged_by_guard():
 
 def test_bracketed_newton_finds_first_root_in_band():
     """Direct unit test: several crossings inside the band resolve to the first."""
-    shape = EvenAsphere(c=GULL_C, k=-1.0, coefs=GULL_COEFS)
+    surf = gull_wing_surface()
+    shape = surf.shape
     a = np.radians(-60)
     P1 = np.array([[0.0, -17.32050808, 0.0]])  # vertex-plane point of the h=0 ray
     S = np.array([[0.0, np.sin(a), np.cos(a)]])
-    # band straddling both crossings of this ray (s ~ 6.7 and ~141.7 from P1)
+    # band straddling both crossings of this ray (s ~ 6.7 and ~141.7 from P1);
+    # the domain corridor clips the far crossing, the Lipschitz march finds the
+    # near one.
     lo = np.array([-30.0])
     hi = np.array([160.0])
-    Q, n, v = bracketed_newton_solve_s(P1, S, shape.sag_and_normal, lo, hi)
+    Q, n, v = bracketed_newton_solve_s(P1, S, shape.sag_and_normal, lo, hi,
+                                       lipschitz=surf._sag_lipschitz,
+                                       domain_radius=30.0)
     assert v[0]
     s_found = float(np.sum((Q[0] - P1[0]) * S[0]))
     roots = polynomial_first_root(P1[0], S[0], GULL_C, GULL_COEFS)
     assert s_found == pytest.approx(roots[0], abs=1e-6)
+
+
+def test_bracketed_newton_requires_lipschitz():
+    """The march needs its first-root-guaranteeing bound; None is an error."""
+    shape = Sphere(c=1 / 100.0)
+    P1 = np.array([[0.0, 0.0, -5.0]])
+    S = np.array([[0.0, 0.0, 1.0]])
+    with pytest.raises(ValueError):
+        bracketed_newton_solve_s(P1, S, shape.sag_and_normal,
+                                 np.array([0.0]), np.array([2.0]))
 
 
 def test_bracketed_newton_rejects_no_sign_change():
@@ -166,7 +181,8 @@ def test_bracketed_newton_rejects_no_sign_change():
     # band entirely before the surface: residual sign never changes
     lo = np.array([0.0])
     hi = np.array([2.0])
-    Q, n, v = bracketed_newton_solve_s(P1, S, shape.sag_and_normal, lo, hi)
+    Q, n, v = bracketed_newton_solve_s(P1, S, shape.sag_and_normal, lo, hi,
+                                       lipschitz=1.0)
     assert not v[0]
     assert np.isnan(Q[0]).all()
 

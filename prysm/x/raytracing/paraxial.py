@@ -15,6 +15,15 @@ from ._meta import (
 _AXIAL_GEOMETRY_TOL = 1e-12
 
 
+class NonAxialSystemError(ValueError):
+    """A prescription is outside the centered-axial first-order ABCD contract.
+
+    Subclasses ValueError so existing broad handlers keep working; callers that
+    can degrade gracefully (e.g. entrance-pupil resolution on a tilted system)
+    catch this type instead of matching on the message text.
+    """
+
+
 def _as_surface_list(prescription):
     """Compiled Surface list for a LensData, or the supplied sequence."""
     if hasattr(prescription, 'to_surfaces'):
@@ -89,7 +98,7 @@ def _assert_first_order_geometry(surfaces):
         P = np.asarray(getattr(surf, 'P', (0.0, 0.0, 0.0)))
         if P.shape[0] >= 2 and not np.allclose(
                 P[:2], 0.0, atol=_AXIAL_GEOMETRY_TOL, rtol=0.0):
-            raise ValueError(
+            raise NonAxialSystemError(
                 'paraxial first-order calculations require centered axial '
                 f'geometry; surface {idx} has a decentered vertex.'
             )
@@ -97,7 +106,7 @@ def _assert_first_order_geometry(surfaces):
         R = getattr(surf, 'R', None)
         if R is not None and not np.allclose(
                 np.asarray(R), np.eye(3), atol=_AXIAL_GEOMETRY_TOL, rtol=0.0):
-            raise ValueError(
+            raise NonAxialSystemError(
                 'paraxial first-order calculations require centered axial '
                 f'geometry; surface {idx} is tilted or rotated.'
             )
@@ -110,12 +119,12 @@ def _assert_first_order_geometry(surfaces):
                 gx, gy = gradient(zero, zero)
                 if (abs(_as_float_scalar(gx)) > _AXIAL_GEOMETRY_TOL
                         or abs(_as_float_scalar(gy)) > _AXIAL_GEOMETRY_TOL):
-                    raise ValueError(
+                    raise NonAxialSystemError(
                         'paraxial first-order calculations require the local '
                         f'vertex normal to be axial; surface {idx} has a '
                         'nonzero vertex slope.'
                     )
-            except ValueError:
+            except NonAxialSystemError:
                 raise
             except NotImplementedError:
                 pass

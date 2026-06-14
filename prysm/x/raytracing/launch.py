@@ -7,7 +7,7 @@ from prysm.mathops import np, array_to_true_numpy
 
 from . import raygen
 from .opt import aim_rays
-from .paraxial import entrance_pupil_z
+from .paraxial import entrance_pupil_z, NonAxialSystemError
 from .spencer_and_murty import raytrace, valid_mask
 from ._meta import system_epd, object_space_index, system_stop_index
 
@@ -19,12 +19,10 @@ def _entrance_pupil_z(prescription, wavelength):
         f = lambda wvl: entrance_pupil_z(prescription, wvl)  # noqa: E731
     try:
         return f(wavelength)
-    except ValueError as exc:
-        msg = str(exc)
-        if ('centered axial geometry' in msg
-                or 'vertex normal to be axial' in msg):
-            return None
-        raise
+    except NonAxialSystemError:
+        # Decentered/tilted geometry has no paraxial entrance pupil; the caller
+        # launches (warned) instead of failing.
+        return None
 
 
 class Field:

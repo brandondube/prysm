@@ -47,12 +47,12 @@ def ray_plane_intersect(P, S):
     return Q, n, (Sz != 0)
 
 
-def _conic_quadratic_t(c, kappa, P1, S, dx, dy):
-    """Solve the conic-intersection quadratic for the vertex-side root.
+def _conic_quadratic_coeffs(c, kappa, P1, S, dx, dy):
+    """Coefficients (A, B, C) of the conic-intersection quadratic A t^2 + 2 B t + C.
 
-    Uses Welford's rationalized form to reduce cancellation and select the
-    root in the ray's propagation direction.  P1 is on the vertex tangent
-    plane.  Returns (t, disc_nonneg).
+    P1 is on the vertex tangent plane; dx, dy shift the surface off the parent
+    conic vertex.  The vertex-side root is C / (-B +/- sqrt(B^2 - A C)) and the
+    ray's closest approach to the axis is at t = -B / A.
 
     """
     Sx = S[..., 0]
@@ -63,6 +63,19 @@ def _conic_quadratic_t(c, kappa, P1, S, dx, dy):
     A_ = 1.0 + kappa * Sz * Sz
     B_ = Xp * Sx + Yp * Sy - Sz / c
     C_ = Xp * Xp + Yp * Yp
+    return A_, B_, C_
+
+
+def _conic_quadratic_t(c, kappa, P1, S, dx, dy):
+    """Solve the conic-intersection quadratic for the vertex-side root.
+
+    Uses Welford's rationalized form to reduce cancellation and select the
+    root in the ray's propagation direction.  P1 is on the vertex tangent
+    plane.  Returns (t, disc_nonneg).
+
+    """
+    Sz = S[..., 2]
+    A_, B_, C_ = _conic_quadratic_coeffs(c, kappa, P1, S, dx, dy)
     disc = B_ * B_ - A_ * C_
     disc_nonneg = (disc >= 0)
     disc = np.where(disc_nonneg, disc, 0.0)
@@ -158,75 +171,12 @@ def ray_sphere_intersect(P, S, c):
     return ray_conic_intersect(P, S, c, 0.0)
 
 
-# Leftmost-root refinements after a bracketed solve.
-LEFTMOST_REFINE_ROUNDS = 4
-# Search-band segments scanned before the safeguarded solve.
-BRACKET_SCAN_SEGMENTS = 16
 # Cap on Lipschitz-march steps before a ray is rejected.
 LIPSCHITZ_MARCH_MAXSTEPS = 256
 # Switch from Lipschitz descent to local Newton near the first root.
 NEWTON_SWITCH_FRACTION = 1e-2
 # Radial margin applied to the characterized domain during the march.
 MARCH_RADIUS_MARGIN = 1.1
-
-
-def _rtsafe(P1, S, sag_and_normal, lo, hi, flo_neg, tol_sag, maxiter):
-    """Safeguarded Newton/bisection core on certified brackets.
-
-    All rays must arrive with a sign change across [lo, hi].
-
-    """
-    dtype = P1.dtype
-    nrays = P1.shape[0]
-    s_out = np.full(nrays, np.nan, dtype=dtype)
-    Pj_out = np.full((nrays, 3), np.nan, dtype=dtype)
-    n_out = np.full((nrays, 3), np.nan, dtype=dtype)
-    valid = np.zeros(nrays, dtype=bool)
-
-    # mask maps working-buffer index -> original-ray index.
-    mask = np.arange(nrays)
-    P1_work = P1
-    S_work = S
-    lo = np.array(lo, dtype=dtype)
-    hi = np.array(hi, dtype=dtype)
-    flo_neg = np.array(flo_neg, dtype=bool)
-    sj = 0.5 * (lo + hi)
-    for _ in range(maxiter):
-        Pj = P1_work + sj[:, np.newaxis] * S_work
-        with np.errstate(divide='ignore', invalid='ignore'):
-            sagj, n_hat = sag_and_normal(Pj[..., 0], Pj[..., 1])
-        Fj = Pj[..., 2] - sagj
-        converged = np.abs(Fj) < tol_sag
-        if converged.any():
-            insert_idx = mask[converged]
-            s_out[insert_idx] = sj[converged]
-            Pj_out[insert_idx] = Pj[converged]
-            n_out[insert_idx] = n_hat[converged]
-            valid[insert_idx] = True
-            survive = ~converged
-            mask = mask[survive]
-            if mask.size == 0:
-                break
-            P1_work = P1_work[survive]
-            S_work = S_work[survive]
-            lo = lo[survive]
-            hi = hi[survive]
-            flo_neg = flo_neg[survive]
-            sj = sj[survive]
-            Fj = Fj[survive]
-            n_hat = n_hat[survive]
-        # rebracket: the iterate replaces whichever endpoint shares its sign.
-        same_side = (Fj < 0) == flo_neg
-        lo[same_side] = sj[same_side]
-        hi[~same_side] = sj[~same_side]
-        # Take the Newton step only when it stays inside the bracket.
-        with np.errstate(divide='ignore', invalid='ignore'):
-            Fpj = row_dot(S_work, n_hat) / n_hat[..., 2]
-            s_newton = sj - Fj / Fpj
-        inside = (s_newton > np.minimum(lo, hi)) & (s_newton < np.maximum(lo, hi))
-        sj = 0.5 * (lo + hi)
-        sj[inside] = s_newton[inside]
-    return s_out, Pj_out, n_out, valid
 
 
 def _domain_corridor(P1, S, s_lo, s_hi, domain_radius, dtype):
@@ -340,11 +290,10 @@ def bracketed_newton_solve_s(P1, S, sag_and_normal, s_lo, s_hi,
                              tol_sag=None,
                              maxiter=SURFACE_INTERSECTION_DEFAULT_MAXITER,
                              lipschitz=None, domain_radius=None):
-    """Safeguarded (rtsafe-style) Newton solve for the first root in a band.
+    """First-root solve in a band by Lipschitz (sphere-tracing) descent.
 
-    When lipschitz is supplied, uses Lipschitz descent; otherwise scans for
-    the first sign-changing segment and solves it with safeguarded Newton.
-    Tangent even-multiplicity crossings are not detectable.
+    The Lipschitz bound makes the march provably unable to step over the first
+    root, so it needs no segment scan or bracket-refinement heuristics.
 
     Parameters
     ----------
@@ -360,12 +309,12 @@ def bracketed_newton_solve_s(P1, S, sag_and_normal, s_lo, s_hi,
         absolute convergence tolerance on the surface residual Z - sag.
     maxiter : int, optional
         maximum number of iterations per solve.
-    lipschitz : float, optional
-        max |grad sag| over the domain; switches the bracket search to the
-        guaranteed-first-root Lipschitz march.  None keeps the scan path.
+    lipschitz : float
+        max |grad sag| over the domain; required -- it is what guarantees the
+        march finds the first root.
     domain_radius : float, optional
-        radius of the characterized disk; clips the Lipschitz march to where
-        the bound holds (ignored on the scan path).
+        radius of the characterized disk; clips the march to where the bound
+        holds.
 
     Returns
     -------
@@ -374,70 +323,18 @@ def bracketed_newton_solve_s(P1, S, sag_and_normal, s_lo, s_hi,
         convergence mask.  Failed rays are NaN.
 
     """
+    if lipschitz is None:
+        raise ValueError(
+            'bracketed_newton_solve_s requires a lipschitz bound (max |grad '
+            'sag| over the domain); it guarantees the first-root march.')
     dtype = P1.dtype
     tol_sag = resolve_tol_sag(tol_sag, dtype)
     s_lo = np.asarray(s_lo, dtype=dtype)
     s_hi = np.asarray(s_hi, dtype=dtype)
-    if lipschitz is not None:
-        steps = max(maxiter, LIPSCHITZ_MARCH_MAXSTEPS)
-        return _lipschitz_march_solve_s(sag_and_normal, P1, S, s_lo, s_hi,
-                                        lipschitz, tol_sag, steps,
-                                        domain_radius=domain_radius)
-    nrays = P1.shape[0]
-    Pj_out = np.full((nrays, 3), np.nan, dtype=dtype)
-    n_out = np.full((nrays, 3), np.nan, dtype=dtype)
-    valid = np.zeros(nrays, dtype=bool)
-
-    def residual(s, P1_, S_):
-        Pj = P1_ + s[..., np.newaxis] * S_
-        sag, _ = sag_and_normal(Pj[..., 0], Pj[..., 1])
-        return Pj[..., 2] - sag
-
-    # The first finite sign-changing segment per ray becomes its bracket.
-    K = BRACKET_SCAN_SEGMENTS
-    fracs = np.linspace(0.0, 1.0, K + 1).astype(dtype)
-    svals = s_lo + fracs[:, np.newaxis] * (s_hi - s_lo)
-    with np.errstate(divide='ignore', invalid='ignore'):
-        Fs = residual(svals, P1, S)
-        seg_change = (np.isfinite(Fs[:-1]) & np.isfinite(Fs[1:])
-                      & (Fs[:-1] * Fs[1:] <= 0))
-    bracketed = seg_change.any(axis=0)
-    if not bracketed.any():
-        return Pj_out, n_out, valid
-    first_seg = seg_change.argmax(axis=0)
-
-    idx = np.flatnonzero(bracketed)
-    P1_b = P1[idx]
-    S_b = S[idx]
-    lo_b = svals[first_seg[idx], idx]
-    hi_b = svals[first_seg[idx] + 1, idx]
-    flo_neg = Fs[first_seg[idx], idx] < 0
-    s_b, Pj_b, n_b, v_b = _rtsafe(P1_b, S_b, sag_and_normal,
-                                  lo_b, hi_b, flo_neg, tol_sag, maxiter)
-    for _ in range(LEFTMOST_REFINE_ROUNDS):
-        # Re-solve a left sub-bracket when it certifies an earlier crossing.
-        delta = 1e-8 * (1.0 + np.abs(s_b))
-        probe = s_b - delta
-        with np.errstate(divide='ignore', invalid='ignore'):
-            F_probe = residual(probe, P1_b, S_b)
-            earlier = (v_b & np.isfinite(F_probe)
-                       & (probe > lo_b + delta)
-                       & ((F_probe < 0) != flo_neg))
-        if not earlier.any():
-            break
-        s_r, Pj_r, n_r, v_r = _rtsafe(
-            P1_b[earlier], S_b[earlier], sag_and_normal,
-            lo_b[earlier], probe[earlier], flo_neg[earlier],
-            tol_sag, maxiter)
-        # If refinement fails, keep the root already in hand.
-        upd = np.flatnonzero(earlier)[v_r]
-        s_b[upd] = s_r[v_r]
-        Pj_b[upd] = Pj_r[v_r]
-        n_b[upd] = n_r[v_r]
-    Pj_out[idx] = Pj_b
-    n_out[idx] = n_b
-    valid[idx] = v_b
-    return Pj_out, n_out, valid
+    steps = max(maxiter, LIPSCHITZ_MARCH_MAXSTEPS)
+    return _lipschitz_march_solve_s(sag_and_normal, P1, S, s_lo, s_hi,
+                                    lipschitz, tol_sag, steps,
+                                    domain_radius=domain_radius)
 
 
 class ConicSeedMixin:
@@ -483,7 +380,10 @@ class ConicSeedMixin:
         sag_lipschitz : float, optional
             max |grad sag| over the domain; enables the Lipschitz rescue.
         forward_only : bool, optional
-            when True, reject roots behind the ray origin.
+            when True, reject roots behind the ray origin.  Only sound for the
+            forward-propagating (non-folded) configurations the conic seed
+            covers; mirror folds legitimately produce behind-origin local roots,
+            so Surface.intersect does not pass this for analytic mirror shapes.
 
         Returns
         -------
@@ -548,14 +448,9 @@ class ConicSeedMixin:
             lo = s1 - band
             hi = s1 + band
             if (~seed_ok).any() and c_seed != 0.0:
-                # Build a closest-approach band for rays whose seed conic misses.
-                Sx = S[..., 0]
-                Sy = S[..., 1]
-                Xp = P1[..., 0] + dx_seed
-                Yp = P1[..., 1] + dy_seed
-                A_ = 1.0 + k_seed * Sz * Sz
-                B_ = Xp * Sx + Yp * Sy - Sz / c_seed
-                C_ = Xp * Xp + Yp * Yp
+                # Closest-approach band for rays whose seed conic misses.
+                A_, B_, C_ = _conic_quadratic_coeffs(c_seed, k_seed, P1, S,
+                                                     dx_seed, dy_seed)
                 z_max = abs(c_seed) * domain_radius * domain_radius / 2.0 \
                     + departure
                 scale = 2.0 / abs(c_seed) + 2.0 * abs(1.0 + k_seed) * z_max

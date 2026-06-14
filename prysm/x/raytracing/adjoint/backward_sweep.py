@@ -135,11 +135,11 @@ def _forward_with_intermediates(surfaces, P, S, wvl, tol_sag=None):
         seg = _sanitize_vec(seg, valid, _DUMMY_DIR)
         hessian = tuple(_sanitize_scalar(h, valid) for h in hessian)
 
-        # Phase gradient/Hessian at the sanitized intersection.
+        # Phase gradient (reused from the forward interaction) and Hessian at
+        # the sanitized intersection.
         grad = hess = None
         if surf.grating is not None and surf.typ in (STYPE_REFRACT, STYPE_REFLECT):
-            _, gx, gy = surf.grating.phase_and_gradient(Q_loc[..., 0],
-                                                        Q_loc[..., 1])
+            gx, gy = step.grating_grad
             grad = (_sanitize_scalar(gx, valid), _sanitize_scalar(gy, valid))
             hess = tuple(_sanitize_scalar(h, valid)
                          for h in surf.grating.phase_hessian(Q_loc[..., 0],

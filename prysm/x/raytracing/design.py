@@ -690,6 +690,14 @@ class FieldCurvature(Merit):
 
         wvl = _resolve_wavelength(prescription, self.wavelength)
         x_z, y_z = parabasal_foci(prescription, self.field, wvl)
+        # parabasal_foci returns nan when the chief ray fails to trace; surface
+        # that as a clear error (as WavefrontRMS does) rather than feeding a nan
+        # residual into the optimizer, where it silently stalls the solve.
+        if not (math.isfinite(x_z) and math.isfinite(y_z)):
+            raise ValueError(
+                'field_curvature operand: the chief ray failed to trace at '
+                f'field {self.field!r}; cannot evaluate field curvature (check '
+                'the starting geometry or constrain the variables).')
         return float(abs(x_z - y_z))
 
 

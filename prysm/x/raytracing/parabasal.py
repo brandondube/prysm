@@ -4,7 +4,7 @@ from prysm.conf import config
 from prysm.mathops import np
 
 from .launch import Field, Sampling, launch, _perp_basis
-from .spencer_and_murty import STYPE_REFLECT, STYPE_REFRACT, valid_mask
+from .spencer_and_murty import STYPE_REFLECT, STYPE_REFRACT, reflect, valid_mask
 from ._diff_raytrace import DiffSeed, raytrace_with_tangents
 from ._meta import (
     system_wavelength,
@@ -104,8 +104,10 @@ def _section_parity(trace, surfaces, e1, e2, exit_basis):
             n_hat = trace.intermediates[j].n_hat[0]
             if surf.R is not None:
                 n_hat = np.asarray(surf.R, dtype=config.precision).T @ n_hat
-            b1 = b1 - 2.0 * float(b1 @ n_hat) * n_hat
-            b2 = b2 - 2.0 * float(b2 @ n_hat) * n_hat
+            # Householder transport of the frame across the mirror = the same
+            # reflection the ray undergoes (S - 2 (S.n) n).
+            b1 = reflect(b1, n_hat)[0]
+            b2 = reflect(b2, n_hat)[0]
         S = trace.S[j + 1, 0]
         for k, b in enumerate((b1, b2)):
             b = b - float(b @ S) * S
@@ -123,13 +125,43 @@ def _section_parity(trace, surfaces, e1, e2, exit_basis):
 
 
 def _collapse(pair):
-    """Mean of an (x, y) section pair; None when either section is None."""
+    """Mean of an (x, y) section pair; the lone section when one is degenerate.
+
+    Only None when BOTH sections are undefined -- a single afocal/degenerate
+    meridian must not mask the well-defined orthogonal section.
+    """
     if pair is None:
         return None
     a, b = pair
-    if a is None or b is None:
+    if a is None and b is None:
         return None
+    if a is None:
+        return b
+    if b is None:
+        return a
     return 0.5 * (a + b)
+
+
+def _section_image_foci(res, at_inf):
+    """Per-section paraxial image z (x_z, y_z) from a chief-tangent trace.
+
+    The collimated (position-seed) column at infinite conjugates, the
+    point-source (angle-seed) column at finite conjugates.  Either element is
+    None when that section has no axis crossing.  Shared by first_order and
+    parabasal_foci so the foci and the reported image plane never drift.
+    """
+    trace = res.trace
+    P_img = trace.P[-1, 0]
+    S_img = trace.S[-1, 0]
+    z_img = float(P_img[2])
+    simz = float(S_img[2])
+    M_li = _raw_matrix(res, -1, -1, _perp_basis(S_img))
+    foci = []
+    for i in (0, 1):
+        A, B, C, D = _section(M_li, i)
+        t = _axis_crossing(A, C) if at_inf else _axis_crossing(B, D)
+        foci.append(None if t is None else z_img + t * simz)
+    return M_li, tuple(foci)
 
 
 class ParabasalFirstOrder:
@@ -307,7 +339,7 @@ def first_order(prescription, field=0, wavelength=None, *, epd=None,
     at_inf = fld.kind == 'angle'
 
     basis_img = _perp_basis(S_img)
-    M_li = _raw_matrix(res, -1, -1, basis_img)
+    M_li, image_foci = _section_image_foci(res, at_inf)
     out.abcd = M_li
     sigma = _section_parity(trace, surfaces, *_perp_basis(S0),
                             exit_basis=basis_img)
@@ -351,15 +383,13 @@ def first_order(prescription, field=0, wavelength=None, *, epd=None,
                     front_focal_z = z0 + t_ffp * s0z
                     pairs['ffl'][i] = (float(first_powered.P[2])
                                        - front_focal_z)
-        # paraxial image: collimated column at infinite conjugates, the
-        # point-source (angle-seed) column at finite conjugates
-        t_img = _axis_crossing(A, C) if at_inf else _axis_crossing(B, D)
-        if t_img is not None:
-            pairs['paraxial_image_z'][i] = z_img + t_img * simz
+        # paraxial image foci shared with parabasal_foci (so the foci and the
+        # reported image plane never drift).
+        if image_foci[i] is not None:
+            pairs['paraxial_image_z'][i] = image_foci[i]
             if last_interacting is not None:
                 pairs['paraxial_image_distance'][i] = (
-                    pairs['paraxial_image_z'][i]
-                    - float(last_interacting.P[2]))
+                    image_foci[i] - float(last_interacting.P[2]))
 
         if M_ls is None:
             continue
@@ -437,19 +467,8 @@ def parabasal_foci(prescription, field, wavelength=None):
     valid = valid_mask(trace.status, trace.P[-1])
     if not bool(valid[0]):
         return float('nan'), float('nan')
-    P_img = trace.P[-1, 0]
-    S_img = trace.S[-1, 0]
-    M_li = _raw_matrix(res, -1, -1, _perp_basis(S_img))
-    at_inf = fld.kind == 'angle'
-    out = []
-    for i in (0, 1):
-        A, B, C, D = _section(M_li, i)
-        t = _axis_crossing(A, C) if at_inf else _axis_crossing(B, D)
-        if t is None:
-            out.append(float('nan'))
-        else:
-            out.append(float(P_img[2]) + t * float(S_img[2]))
-    return tuple(out)
+    _, foci = _section_image_foci(res, fld.kind == 'angle')
+    return tuple(float('nan') if z is None else float(z) for z in foci)
 
 
 __all__ = [
