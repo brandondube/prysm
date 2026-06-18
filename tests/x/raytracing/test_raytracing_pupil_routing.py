@@ -119,6 +119,129 @@ def test_real_ray_aiming_linearizes_pupil_to_stop_map():
                                rtol=1e-6)
 
 
+# ---------- Phase 5: real-aiming field-continuation ladder ------------------
+
+from prysm.x.raytracing.launch import (
+    _collimated_PS, _apply_vignetting, _entrance_pupil_z, _real_aim_to_stop,
+    _scaled_field, _parabasal_ep_z,
+)
+
+_FISHEYE_STOP = 2
+
+
+def fisheye(epd, ray_aiming='real'):
+    """Wide-angle retrofocus with a strong negative front group.
+
+    The negative front element walks the entrance pupil far with field, so the
+    field-independent paraxial pupil is a poor wide-field aiming seed -- the
+    regime the parabasal field-dependent EP + continuation ladder targets.
+    """
+    NG = pmat.ConstantMaterial(1.6)
+    ld = LensData()
+    ld.add(Conic(1 / 40.0, 0.0), thickness=3.0, material=NG, semidiameter=14.0)
+    ld.add(Conic(1 / 9.0, 0.0), thickness=22.0, material=pmat.air,
+           semidiameter=9.0)
+    ld.add(Conic(1 / 16.0, 0.0), thickness=4.0, material=NG, semidiameter=6.0)
+    ld.add(Conic(-1 / 16.0, 0.0), thickness=45.0, material=pmat.air,
+           semidiameter=6.0)
+    ld.add(Plane(), typ='eval', material=pmat.air, semidiameter=1e4)
+    sys = OpticalSystem(ld, aperture=epd, fields=[0.0], wavelengths=[WVL],
+                        reference=0, stop_index=_FISHEYE_STOP)
+    sys.ray_aiming = ray_aiming
+    return sys
+
+
+def _primary_only(sys, angle, epd, n=15):
+    """Real aiming WITHOUT the ladder: the paraxial-EP-seeded primary aim."""
+    ep = _entrance_pupil_z(sys, WVL)
+    pupil_z = float(list(sys.to_surfaces())[0].P[2])
+    fld = Field(0.0, float(angle), unit='deg')
+    pupil_xy = _apply_vignetting(
+        Sampling.fan(n=n, axis='y').build(epd / 2), fld).astype(float)
+    P, S = _collimated_PS(pupil_xy, pupil_z, fld)
+    S0 = S[0]
+    shift = (pupil_z - ep) / S0[2]
+    P = P + np.stack([shift * S0[0], shift * S0[1], np.zeros_like(shift)])
+    return _real_aim_to_stop(P, S, pupil_xy / (epd / 2), sys, _FISHEYE_STOP,
+                             WVL, False)
+
+
+def test_ladder_rescues_wide_field_marginal_rays():
+    """At a wide field the ladder converges strictly more rays than the bare
+    primary aim, by re-seeding from the parabasal field-dependent pupil."""
+    epd, ang, n = 6.0, 50.0, 15
+    sys = fisheye(epd)
+    _, _, conv_primary = _primary_only(sys, ang, epd, n=n)
+    P, S = launch(sys, Field(0.0, ang, unit='deg'), WVL,
+                  Sampling.fan(n=n, axis='y'))
+    finite_ladder = np.isfinite(
+        raytrace(sys, P, S, WVL).P[_FISHEYE_STOP + 1, :, 1]).sum()
+    assert int(conv_primary.sum()) < 13          # paraxial seed leaves rays out
+    assert int(finite_ladder) > int(conv_primary.sum())  # ladder rescues them
+
+
+def test_ladder_holds_chief_on_stop_center_at_wide_field():
+    """The ladder keeps the chief on the stop center while rescuing marginals."""
+    sys = fisheye(6.0)
+    P, S = launch(sys, Field(0.0, 50.0, unit='deg'), WVL,
+                  Sampling.fan(n=15, axis='y'))
+    y = raytrace(sys, P, S, WVL).P[_FISHEYE_STOP + 1, :, 1]
+    assert abs(y[7]) < 1e-9                       # center sample == chief (n=15)
+
+
+def test_ladder_is_dormant_when_primary_converges():
+    """When the primary aim already converges, the ladder returns it unchanged
+    (bit-identical), so converging-field behavior is untouched."""
+    epd, ang, n = 4.0, 20.0, 15
+    sys = fisheye(epd)
+    Pp, Sp, conv = _primary_only(sys, ang, epd, n=n)
+    assert bool(np.all(conv))                     # primary fully converges here
+    P, S = launch(sys, Field(0.0, ang, unit='deg'), WVL,
+                  Sampling.fan(n=n, axis='y'))
+    np.testing.assert_array_equal(P, Pp)
+    np.testing.assert_array_equal(S, Sp)
+
+
+def test_ladder_is_best_effort_and_never_raises():
+    """An inaccessible (TIR/vignetted) field returns best-effort, never raises,
+    so launch stays predictable -- failed rays are dropped downstream, exactly
+    as paraxial aiming drops them."""
+    sys = fisheye(6.0)
+    # 70 deg is past the real aperture: the bundle cannot be aimed onto the stop.
+    P, S = launch(sys, Field(0.0, 70.0, unit='deg'), WVL,
+                  Sampling.fan(n=15, axis='y'))   # must not raise
+    assert P.shape == (15, 3) and S.shape == (15, 3)
+
+
+def test_ladder_never_worse_than_primary_across_fields():
+    """The per-ray merge guarantees the ladder is never worse than the primary."""
+    epd, n = 7.0, 15
+    for ang in (44.0, 48.0, 52.0):
+        sys = fisheye(epd)
+        _, _, conv_primary = _primary_only(sys, ang, epd, n=n)
+        P, S = launch(sys, Field(0.0, ang, unit='deg'), WVL,
+                      Sampling.fan(n=n, axis='y'))
+        finite_ladder = np.isfinite(
+            raytrace(sys, P, S, WVL).P[_FISHEYE_STOP + 1, :, 1]).sum()
+        assert int(finite_ladder) >= int(conv_primary.sum())
+
+
+def test_scaled_field_scales_field_coordinates():
+    f = Field(3.0, -4.0, unit='deg')
+    h = _scaled_field(f, 0.25)
+    assert (h.hx, h.hy) == pytest.approx((0.75, -1.0))
+    assert h.kind == 'angle' and h.unit == 'deg'
+
+
+def test_parabasal_ep_z_is_field_dependent():
+    """The parabasal EP walks with field; it differs from the paraxial pupil."""
+    sys = fisheye(6.0)
+    ep_paraxial = _entrance_pupil_z(sys, WVL)
+    ep_wide = _parabasal_ep_z(sys, Field(0.0, 50.0, unit='deg'), WVL)
+    assert isinstance(ep_wide, float)
+    assert abs(ep_wide - ep_paraxial) > 0.5      # genuine field-dependent walk
+
+
 def test_ray_aiming_paraxial_is_the_default():
     assert cooke().ray_aiming == 'paraxial'
 

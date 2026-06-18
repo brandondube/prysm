@@ -30,6 +30,7 @@ class SurfaceSpec:
     decenter: object = None
     tilt_radians: bool = False
     grating: object = None
+    coating: object = None
 
 
 def build_shape(spec):
@@ -66,6 +67,7 @@ def build_surface(spec):
         bounding=spec.bounding, aperture=spec.aperture,
         tilt=spec.tilt, decenter=spec.decenter,
         tilt_radians=spec.tilt_radians, grating=spec.grating,
+        coating=spec.coating,
     )
 
 

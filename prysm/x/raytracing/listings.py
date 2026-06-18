@@ -93,16 +93,18 @@ class SurfaceTable:
         unit = f' [{self.unit}]' if self.unit else ''
         header = (f'  {"#":>3s} {"":>1s} {"type":>6s} {"radius":>12s} '
                   f'{"conic":>10s} {"thickness":>12s} {"material":>10s} '
-                  f'{"semidia":>10s}')
+                  f'{"semidia":>10s} {"coat":>5s}')
         lines = [f'SurfaceTable{unit}', header,
                  '  ' + '-' * (len(header) - 2)]
         for r in self.records:
             mark = '*' if r['stop'] else ' '
             sd = '' if r['semidiameter'] is None else f'{r["semidiameter"]:.6g}'
+            coat = 'Y' if r.get('coating') else ''
             lines.append(
                 f'  {r["index"]:>3d} {mark:>1s} {r["type"]:>6s} '
                 f'{r["radius"]:>12s} {r["conic"]:>10s} '
-                f'{r["thickness"]:>12.6g} {r["material"]:>10s} {sd:>10s}')
+                f'{r["thickness"]:>12.6g} {r["material"]:>10s} {sd:>10s} '
+                f'{coat:>5s}')
         return '\n'.join(lines)
 
 
@@ -162,7 +164,7 @@ def surface_table(lensdata, *, stop_index=None, unit=None):
             records.append({
                 'index': i, 'type': f'CB:{row.kind}', 'radius': '',
                 'conic': '', 'thickness': float(row.thickness),
-                'material': '', 'semidiameter': None,
+                'material': '', 'semidiameter': None, 'coating': False,
                 'surface_index': surface_index, 'stop': is_stop,
             })
             continue
@@ -183,6 +185,7 @@ def surface_table(lensdata, *, stop_index=None, unit=None):
             'material': material_str(row.material, row.typ),
             'semidiameter': (None if row.semidiameter is None
                              else float(row.semidiameter)),
+            'coating': getattr(row, 'coating', None) is not None,
             'surface_index': surface_index, 'stop': is_stop,
         })
     return SurfaceTable(records, unit=unit, stop_index=stop_index)

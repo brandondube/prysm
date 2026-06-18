@@ -295,8 +295,14 @@ def _perp_basis(w):
     return e1, e2
 
 
-def _object_space_cone_PS(prescription, field, wavelength, sampling, na):
-    """Sine-condition object cone for an object-space NA / F-number aperture."""
+def _object_space_cone_PS(prescription, field, wavelength, sampling, na,
+                          ep_z='paraxial'):
+    """Sine-condition object cone for an object-space NA / F-number aperture.
+
+    ep_z selects the chief-ray pivot: 'paraxial' (default) reads the paraxial
+    entrance pupil, a float overrides it (the field-continuation ladder feeds
+    the parabasal field-dependent EP here), and None pivots straight ahead.
+    """
     if field.kind != 'height':
         raise ValueError(
             'an object-space NA / F-number aperture requires a finite-'
@@ -316,7 +322,8 @@ def _object_space_cone_PS(prescription, field, wavelength, sampling, na):
 
     obj = np.array([field.hx, field.hy, field.object_z], dtype=config.precision)
 
-    ep_z = _entrance_pupil_z(prescription, wavelength)
+    if ep_z == 'paraxial':
+        ep_z = _entrance_pupil_z(prescription, wavelength)
     if ep_z is not None:
         axis_pt = np.array([0.0, 0.0, float(ep_z)], dtype=config.precision)
         chief = axis_pt - obj
@@ -379,7 +386,10 @@ def _warn_paraxial_aiming(prescription, ray_aiming):
 
 
 def _real_aim_to_stop(P, S, rho, prescription, stop_index, wavelength, finite):
-    """Aim a normalized pupil grid linearly onto the real stop."""
+    """Aim a normalized pupil grid linearly onto the real stop.
+
+    Returns (P, S, converged); converged is the per-ray aim_rays mask.
+    """
     trace_path = prescription[:stop_index + 1]
     tr = raytrace(trace_path, P, S, wavelength)
     L = tr.P[-1, :, :2]
@@ -400,8 +410,93 @@ def _real_aim_to_stop(P, S, rho, prescription, stop_index, wavelength, finite):
     sy = _scale(rho[:, 1], L[:, 1])
     target = np.stack([rho[:, 0] * sx, rho[:, 1] * sy], axis=1)
     vary = 'direction' if finite else 'position'
-    P, S, _ = aim_rays(P, S, prescription, stop_index, target, wavelength,
-                       vary=vary, strict=False)
+    P, S, converged = aim_rays(P, S, prescription, stop_index, target,
+                               wavelength, vary=vary, strict=False)
+    return P, S, converged
+
+
+_LADDER_SCHEDULE = (0.25, 0.5, 0.75, 1.0)
+
+
+def _scaled_field(field, frac):
+    """Field with hx, hy scaled by frac (the continuation homotopy parameter)."""
+    return Field(hx=field.hx * frac, hy=field.hy * frac, kind=field.kind,
+                 unit=field.unit, object_z=field.object_z,
+                 vignetting=field.vignetting)
+
+
+def _parabasal_ep_z(prescription, field, wavelength):
+    """Field-dependent entrance-pupil z from the parabasal first order.
+
+    The parabasal EP walks with field (pupil aberration); it is a far better
+    aiming seed at wide field than the field-independent paraxial pupil.  Falls
+    back to the paraxial EP whenever the parabasal chief is unavailable.
+    """
+    from .parabasal import first_order  # lazy: parabasal imports this module
+    try:
+        ep = first_order(prescription, field, wavelength).ep_z
+    except Exception:
+        ep = None
+    if ep is None:
+        return _entrance_pupil_z(prescription, wavelength)
+    if hasattr(ep, '__len__'):
+        ep = float(np.mean(ep))
+    return float(ep)
+
+
+def _warm_start_bundle(P, S, seedP, seedS, finite):
+    """Seed the varied transverse component from the previous ladder rung."""
+    if finite:
+        # direction-varied: seed the transverse direction cosines, then
+        # renormalize so the trace that sets the secant scale stays unit-length.
+        S[:, 0] = seedS[:, 0]
+        S[:, 1] = seedS[:, 1]
+        S /= np.sqrt(np.sum(S * S, axis=1, keepdims=True))
+    else:
+        # position-varied: seed the transverse launch positions.
+        P[:, 0] = seedP[:, 0]
+        P[:, 1] = seedP[:, 1]
+
+
+def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, prescription,
+                             stop_index, wavelength, finite):
+    """Real aiming with a field-continuation fallback for fisheye-class fields.
+
+    The primary damped-Newton aim runs from the paraxial-EP-seeded bundle the
+    caller already built.  If any rays stay unconverged, walk the field up a
+    fixed fractional schedule, seeding each rung from the parabasal
+    field-dependent entrance pupil (a far better wide-field seed than the
+    field-independent paraxial pupil) and warm-starting it from the previous
+    rung.  Only rays the primary missed are adopted from the ladder (per-ray
+    merge), so the result is never worse than the primary, and rays that no
+    aiming can reach (vignetted / beyond the real aperture) return best-effort
+    exactly as the primary did -- the ladder writes no state and never raises,
+    keeping launch predictable.
+    """
+    P, S, conv = _real_aim_to_stop(P, S, rho, prescription, stop_index,
+                                   wavelength, finite)
+    if bool(np.all(conv)):
+        return P, S
+
+    seedP = seedS = None
+    Pk = Sk = convk = None
+    for frac in _LADDER_SCHEDULE:
+        fld_k = _scaled_field(field, frac)
+        ep_k = _parabasal_ep_z(prescription, fld_k, wavelength)
+        Pk, Sk, rho_k = build_bundle(fld_k, ep_k)
+        if seedP is not None:
+            _warm_start_bundle(Pk, Sk, seedP, seedS, finite)
+        Pk, Sk, convk = _real_aim_to_stop(Pk, Sk, rho_k, prescription,
+                                          stop_index, wavelength, finite)
+        seedP, seedS = Pk, Sk
+
+    # adopt only the full-field rays the primary could not converge
+    rescued = convk & ~conv
+    if bool(np.any(rescued)):
+        P = P.copy()
+        S = S.copy()
+        P[rescued] = Pk[rescued]
+        S[rescued] = Sk[rescued]
     return P, S
 
 
@@ -431,7 +526,8 @@ def launch(prescription, field, wavelength, sampling, *,
     aim_target : (float, float), optional
         target xy at the aimed surface.  Default (0, 0) (chief-ray aim).
     aim_strict : bool, optional
-        forwarded to aim_rays when aim_to is set.
+        forwarded to aim_rays when aim_to is set, and to the real-aiming
+        field-continuation ladder (exhaustion then raises).
 
     Returns
     -------
@@ -448,17 +544,17 @@ def launch(prescription, field, wavelength, sampling, *,
 
     # Object-space aperture modes launch from an object-space cone.
     object_mode = False
+    na = None
     if epd is None and pupil_extent is None:
         aperture = getattr(prescription, 'aperture', None)
         bc = aperture.resolve(prescription, wavelength) if aperture is not None else None
         object_mode = bc is not None and bc[0] in ('NA_OBJECT', 'FNO_OBJECT')
+        if object_mode:
+            na = bc[1] if bc[0] == 'NA_OBJECT' else 1.0 / (2.0 * bc[1])
 
-    if object_mode:
-        na = bc[1] if bc[0] == 'NA_OBJECT' else 1.0 / (2.0 * bc[1])
-        P, S, rho = _object_space_cone_PS(prescription, field, wavelength,
-                                          sampling, na)
-        finite = True
-    else:
+    finite = object_mode or field.kind != 'angle'
+
+    if not object_mode:
         if epd is None and pupil_extent is None:
             # default from the system aperture spec if any
             epd = system_epd(prescription, None, wavelength)
@@ -467,42 +563,47 @@ def launch(prescription, field, wavelength, sampling, *,
                 f'sampling kind {sampling.kind!r} needs an entrance pupil '
                 'size; pass epd=... or pupil_extent=...'
             )
-
         if pupil_extent is not None:
             extent = float(pupil_extent)
         elif epd is not None:
             extent = float(epd) / 2.0
         else:
             extent = 0.0
-        pupil_xy = sampling.build(extent)
-        pupil_xy = _apply_vignetting(pupil_xy, field)
-        if pupil_xy.dtype != config.precision:
-            pupil_xy = pupil_xy.astype(config.precision)
-
         if pupil_z is None:
             pupil_z = float(prescription[0].P[2])
         pupil_z = float(pupil_z)
 
-        # Paraxial EP routing seeds the bundle before optional real aiming.
-        ep_z = None
-        if aim_to is None:
-            ep_z = _entrance_pupil_z(prescription, wavelength)
+    def _build(fld, ep_z):
+        """Bundle (P, S, rho) for one field, seeded onto entrance pupil ep_z.
 
-        if field.kind == 'angle':
-            P, S = _collimated_PS(pupil_xy, pupil_z, field)
-            if ep_z is not None:
+        ep_z = 'paraxial' reads the paraxial pupil, a float overrides it (the
+        ladder feeds the parabasal field-dependent EP), and None means no seed.
+        """
+        if object_mode:
+            return _object_space_cone_PS(prescription, fld, wavelength,
+                                         sampling, na, ep_z=ep_z)
+        e = (_entrance_pupil_z(prescription, wavelength)
+             if ep_z == 'paraxial' else ep_z)
+        pupil_xy = sampling.build(extent)
+        pupil_xy = _apply_vignetting(pupil_xy, fld)
+        if pupil_xy.dtype != config.precision:
+            pupil_xy = pupil_xy.astype(config.precision)
+        if fld.kind == 'angle':
+            P, S = _collimated_PS(pupil_xy, pupil_z, fld)
+            if e is not None:
                 # Slide the collimated bundle to the entrance-pupil plane.
                 S0 = S[0]
-                shift = (pupil_z - ep_z) / S0[2]
-                offset = np.stack([shift * S0[0], shift * S0[1],
-                                   np.zeros_like(shift)])
-                P = P + offset
-            finite = False
+                shift = (pupil_z - e) / S0[2]
+                P = P + np.stack([shift * S0[0], shift * S0[1],
+                                  np.zeros_like(shift)])
         else:
-            target_z = float(ep_z) if ep_z is not None else pupil_z
-            P, S = _finite_PS(pupil_xy, target_z, field)
-            finite = True
+            target_z = float(e) if e is not None else pupil_z
+            P, S = _finite_PS(pupil_xy, target_z, fld)
         rho = pupil_xy / extent if extent > 0.0 else np.zeros_like(pupil_xy)
+        return P, S, rho
+
+    # Primary bundle: paraxial-EP seed (no seed when explicitly aiming).
+    P, S, rho = _build(field, None if aim_to is not None else 'paraxial')
 
     # position the bundle relative to the stop
     if aim_to is not None:
@@ -512,8 +613,9 @@ def launch(prescription, field, wavelength, sampling, *,
             strict=aim_strict, vary=vary,
         )
     elif real_aiming and stop_index is not None:
-        P, S = _real_aim_to_stop(P, S, rho, prescription, stop_index,
-                                 wavelength, finite)
+        P, S = _aim_to_stop_with_ladder(
+            P, S, rho, _build, field, prescription, stop_index, wavelength,
+            finite)
 
     return P, S
 

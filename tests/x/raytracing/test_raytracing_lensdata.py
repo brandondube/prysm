@@ -314,6 +314,23 @@ def test_even_asphere_round_trips_through_lensdata():
     np.testing.assert_allclose(np.asarray(rebuilt.params['coefs']), coefs)
 
 
+def test_coating_round_trips_onto_compiled_surface_and_listing():
+    from prysm.x.coatings.stack import Stack
+    from prysm.x.raytracing import surface_table
+    ar = Stack([1.38], [0.1], substrate_index=1.5, ambient_index=1.0)
+    ld = (LensData()
+          .add(Conic(1 / 100.0, 0.0), thickness=5.0, material=n_bk7,
+               semidiameter=8.0, coating=ar)
+          .add(Plane(), typ='eval'))
+    assert ld.rows[0].coating is ar
+    assert ld.surfaces[0].coating is ar              # compiles onto the Surface
+    assert ld.surfaces[1].coating is None            # bare image plane
+    assert ld.copy().rows[0].coating is ar           # survives copy
+    records = surface_table(ld).records
+    assert records[0]['coating'] is True
+    assert records[1]['coating'] is False
+
+
 def test_zernike_round_trips_with_static_metadata():
     nms = [(2, 0), (4, 0)]
     coefs = (0.3, -0.1)

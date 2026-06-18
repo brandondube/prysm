@@ -374,7 +374,7 @@ class SurfaceRow:
 
     _INVALIDATING_ATTRS = {
         'params', 'meta', 'thickness', 'material', 'typ', 'semidiameter',
-        'aperture', 'bounding', 'grating', 'edge',
+        'aperture', 'bounding', 'grating', 'edge', 'coating',
     }
 
     def __setattr__(self, name, value):
@@ -388,7 +388,7 @@ class SurfaceRow:
 
     def __init__(self, shape, *, thickness=0.0, material=None, typ='refr',
                  semidiameter=None, aperture=None, bounding=None, grating=None,
-                 edge=None):
+                 edge=None, coating=None):
         """Initialize a surface row from a shape."""
         object.__setattr__(self, '_owner', None)
         adapter = _adapter_for(shape)
@@ -431,6 +431,7 @@ class SurfaceRow:
         self.bounding = bounding
         self.grating = grating
         self.edge = edge
+        self.coating = coating
 
     @property
     def is_reflective(self):
@@ -474,6 +475,7 @@ class SurfaceRow:
         new.bounding = self.bounding
         new.grating = self.grating
         new.edge = self.edge
+        new.coating = self.coating
         return new
 
 
@@ -654,12 +656,12 @@ class LensData:
     # -- construction --
     def add(self, shape, *, thickness=0.0, material=None, typ='refr',
             semidiameter=None, aperture=None, bounding=None, grating=None,
-            edge=None):
+            edge=None, coating=None):
         """Append a surface row and return self."""
         self.rows.append(SurfaceRow(
             shape, thickness=thickness, material=material, typ=typ,
             semidiameter=semidiameter, aperture=aperture, bounding=bounding,
-            grating=grating, edge=edge,
+            grating=grating, edge=edge, coating=coating,
         ))
         self._invalidate()
         return self
@@ -744,6 +746,7 @@ class LensData:
             material=None if row.material is MIRROR else row.material,
             bounding=row.bounding, aperture=row.aperture, grating=row.grating,
             edge=getattr(row, 'edge', None),
+            coating=getattr(row, 'coating', None),
         )
 
     def _to_surfaces_axial(self):

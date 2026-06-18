@@ -511,3 +511,130 @@ def test_pupil_field_to_wavefront_polarized_needs_input():
     comps = field.pupil_field_to_wavefront(pf, npix=64,
                                            input_polarization=(1, 0, 0))
     assert isinstance(comps, list) and len(comps) == 2
+
+
+# ---------- Phase 4: coatings + polarization unification -------------------
+
+from prysm.x.raytracing.spencer_and_murty import STYPE_REFRACT, STYPE_REFLECT
+from prysm.x.coatings.stack import Stack
+
+
+def test_interface_coefficients_zero_layer_matches_bare_fresnel():
+    """A zero-layer TMM stack reduces to the bare Fresnel interface."""
+    cosI = np.cos(np.radians(np.array([0.0, 15.0, 35.0, 55.0, 75.0])))
+    wvl = 0.55
+    bare_s, bare_p = field.interface_coefficients(1.0, 1.5, cosI, STYPE_REFRACT)
+    stack = Stack([], [], substrate_index=1.5, ambient_index=1.0)
+    cs, cp = field.interface_coefficients(1.0, 1.5, cosI, STYPE_REFRACT,
+                                          coating=stack, wavelength=wvl)
+    np.testing.assert_allclose(cs, bare_s, atol=1e-12)
+    np.testing.assert_allclose(cp, bare_p, atol=1e-12)
+
+
+def test_interface_coefficients_power_is_unit_for_bare_dielectric():
+    """Bare-interface transmittance + reflectance conserve energy (R + T = 1)."""
+    cosI = np.cos(np.radians(np.array([0.0, 30.0, 60.0])))
+    a_s, a_p = field.interface_coefficients(1.0, 1.5, cosI, STYPE_REFRACT)
+    stack = Stack([], [], substrate_index=1.5, ambient_index=1.0)
+    r_s, r_p = field.interface_coefficients(1.0, 1.5, cosI, STYPE_REFLECT,
+                                            coating=stack, wavelength=0.55)
+    # s and p separately: |t|^2 (energy-normalized) + |r|^2 == 1
+    np.testing.assert_allclose(np.abs(a_s) ** 2 + np.abs(r_s) ** 2, 1.0,
+                               atol=1e-12)
+    np.testing.assert_allclose(np.abs(a_p) ** 2 + np.abs(r_p) ** 2, 1.0,
+                               atol=1e-12)
+
+
+def test_quarter_wave_ar_coating_reduces_reflection():
+    """A single MgF2 quarter-wave AR drops normal-incidence R from 4% to ~1.4%."""
+    wvl = 0.55
+    nl = 1.38
+    ar = Stack([nl], [wvl / (4 * nl)], substrate_index=1.5, ambient_index=1.0)
+    cosI = np.array([1.0])
+    a_s, a_p = field.interface_coefficients(1.0, 1.5, cosI, STYPE_REFRACT,
+                                            coating=ar, wavelength=wvl)
+    T = 0.5 * (np.abs(a_s) ** 2 + np.abs(a_p) ** 2)
+    # textbook single-layer AR: R = ((n0*ns - nl^2)/(n0*ns + nl^2))^2
+    R_expected = ((1.0 * 1.5 - nl ** 2) / (1.0 * 1.5 + nl ** 2)) ** 2
+    assert float(1.0 - T[0]) == pytest.approx(R_expected, abs=1e-9)
+    assert float(1.0 - T[0]) < 0.04  # better than the bare interface
+
+
+def test_metal_mirror_reduces_to_ideal_mirror():
+    """A perfect-conductor coating reproduces the bare ideal mirror diag(1, -1)."""
+    cosI = np.cos(np.radians(np.array([0.0, 20.0, 45.0, 70.0])))
+    pec = Stack([], [], substrate_index=1.0 + 1e7j, ambient_index=1.0)
+    a_s, a_p = field.interface_coefficients(1.0, 1.0, cosI, STYPE_REFLECT,
+                                            coating=pec, wavelength=0.55)
+    np.testing.assert_allclose(a_s, 1.0, atol=1e-5)
+    np.testing.assert_allclose(a_p, -1.0, atol=1e-5)
+
+
+def test_metal_mirror_has_diattenuation_and_retardance():
+    """A real metal (complex nk) gives Rs > Rp obliquely and oblique retardance."""
+    cosI = np.cos(np.radians(np.array([0.0, 45.0, 70.0])))
+    al = Stack([], [], substrate_index=0.96 + 6.7j, ambient_index=1.0)
+    a_s, a_p = field.interface_coefficients(1.0, 1.0, cosI, STYPE_REFLECT,
+                                            coating=al, wavelength=0.55)
+    Rs = np.abs(a_s) ** 2
+    Rp = np.abs(a_p) ** 2
+    # near-unit reflectance, with diattenuation growing toward grazing
+    assert np.all(Rs > 0.8) and np.all(Rp > 0.8)
+    assert Rs[0] == pytest.approx(Rp[0], rel=1e-9)        # equal at normal
+    assert Rs[2] > Rp[2]                                   # Rs > Rp obliquely
+    # s-p retardance: 180 deg at normal (the ideal-mirror sign), departing
+    # obliquely -- the polarization aberration a scalar mirror cannot show
+    retardance = np.degrees(np.angle(a_s) - np.angle(a_p)) % 360.0
+    assert retardance[0] == pytest.approx(180.0, abs=1e-6)
+    assert abs(retardance[2] - 180.0) > 5.0
+
+
+def test_surface_coating_raises_text_for_obsolete_kwarg():
+    """The coatings= parallel-list kwarg is gone; coatings live on surfaces."""
+    presc = _flat_refractor()
+    P, S = launch(presc, Field(0., 0.), 0.55, Sampling.chief(),
+                  epd=4.0, pupil_z=-5.0)
+    with pytest.raises(TypeError):
+        field.raytrace_field(presc, P, S, 0.55, coatings=[None, None])
+
+
+def test_surface_coating_unpolarized_amplitude_beats_bare():
+    """An AR coating on a Surface raises its transmitted amplitude vs bare."""
+    wvl = 0.55
+    nl = 1.38
+    ar = Stack([nl], [wvl / (4 * nl)], substrate_index=1.5, ambient_index=1.0)
+    bare = _flat_refractor()
+    coated = [plane(interaction='refr', P=[0, 0, 0],
+                    material=materials.ConstantMaterial(1.5), coating=ar),
+              plane(interaction='eval', P=[0, 0, 10.0])]
+    P, S = launch(bare, Field(0., 0.), wvl, Sampling.chief(),
+                  epd=4.0, pupil_z=-5.0)
+    amp_bare = field.raytrace_field(bare, P, S, wvl).amplitude[0]
+    amp_coat = field.raytrace_field(coated, P, S, wvl).amplitude[0]
+    assert amp_coat > amp_bare
+    assert amp_coat == pytest.approx(np.sqrt(1.0 - 0.0141), abs=1e-3)
+
+
+def test_prt_metal_mirror_matches_provider_reflectance():
+    """A metal-coated fold mirror's PRT matrix carries the s/p reflectances."""
+    al = Stack([], [], substrate_index=0.96 + 6.7j, ambient_index=1.0)
+    # flat mirror at the origin; reflected bundle travels back toward -z.
+    presc = [plane(interaction='refl', P=[0, 0, 0], coating=al),
+             plane(interaction='eval', P=[0, 0, -10.0])]
+    wvl = 0.55
+    # 40 deg collimated, tilt about x -> plane of incidence is y-z, s = x
+    P, S = launch(presc, Field(0., 40., kind='angle'), wvl, Sampling.chief(),
+                  epd=1.0, pupil_z=-5.0)
+    pr = field.raytrace_prt(presc, P, S, wvl)
+    Pmat = pr.P_matrix[0]
+    cosI = np.cos(np.radians(np.array([40.0])))
+    a_s, a_p = field.interface_coefficients(1.0, 1.0, cosI, STYPE_REFLECT,
+                                            coating=al, wavelength=wvl)
+    s_hat = np.array([1.0, 0.0, 0.0])
+    k_in = S[0] / np.linalg.norm(S[0])
+    p_in = np.cross(k_in, s_hat)
+    assert np.linalg.norm(Pmat @ s_hat) == pytest.approx(abs(a_s[0]), rel=1e-9)
+    assert np.linalg.norm(Pmat @ p_in) == pytest.approx(abs(a_p[0]), rel=1e-9)
+    # the metal mirror is diattenuating: the s and p responses differ
+    assert abs(np.linalg.norm(Pmat @ s_hat)
+               - np.linalg.norm(Pmat @ p_in)) > 1e-3

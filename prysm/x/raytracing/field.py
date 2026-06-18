@@ -6,6 +6,7 @@ from prysm.coordinates import make_xy_grid
 from prysm.propagation import Wavefront, phase_prefix
 
 from prysm import thinfilm
+from prysm.x.coatings.stack import Stack, stack_rt
 
 from . import spencer_and_murty as sm
 from .spencer_and_murty import (
@@ -125,94 +126,157 @@ def surface_normals_from_trace(prescription, trace, wavelength):
     return cosI, n0, n1, typ
 
 
-def interface_coefficients(n0, n1, cosI, *, coating=None, wavelength=None):
-    """Complex s- and p-amplitude coefficients at one interface.
+def _transmission_energy_norm(n0, n1, theta0, pol):
+    """sqrt(Re(eta_sub / eta_0)): admittance-amplitude -> sqrt(power) factor.
+
+    The thin-film TMM returns the tangential-field (admittance-convention)
+    amplitude transmission t; the energy-normalized amplitude a = t * this
+    factor has |a|**2 equal to the true power transmittance.  Real and positive
+    for a non-evanescent substrate, so it carries no phase of its own.
+    """
+    cost0 = np.cos(theta0)
+    cost1 = _complex_sqrt(1.0 - ((n0 / n1) * np.sin(theta0)) ** 2)
+    if pol == 's':
+        ratio = (n1 * cost1) / (n0 * cost0)
+    else:
+        ratio = (n1 * cost0) / (n0 * cost1)
+    return _complex_sqrt(np.real(ratio))
+
+
+def _coating_coefficients(coating, n0, n1, cosI, theta0, typ, wavelength):
+    """Energy-normalized (a_s, a_p) from a thin-film stack at per-ray incidence.
+
+    The stack supplies the layer recipe; the surrounding media come from the
+    trace.  A refracting interface immerses the stack between the incidence
+    medium n0 (ambient) and the glass n1 (substrate) and returns the
+    transmission; a reflecting interface keeps the stack's own substrate (the
+    metal/back medium of a mirror coating) and returns the reflection, signed
+    so a perfect-conductor coating reduces to the bare ideal mirror (1, -1).
+    """
+    if wavelength is None:
+        raise TypeError('a coated surface requires a wavelength')
+    if typ == STYPE_REFRACT:
+        stack = Stack(coating.indices, coating.thicknesses,
+                      substrate_index=n1, ambient_index=n0)
+        _, t_s = stack_rt(stack, wavelength, theta0, 's')
+        _, t_p = stack_rt(stack, wavelength, theta0, 'p')
+        a_s = (t_s * _transmission_energy_norm(n0, n1, theta0, 's')).astype(
+            config.precision_complex)
+        a_p = (t_p * _transmission_energy_norm(n0, n1, theta0, 'p')).astype(
+            config.precision_complex)
+        # evanescent substrate (TIR through the stack): no transmitted power.
+        cost1 = _complex_sqrt(1.0 - ((n0 / n1) * np.sin(theta0)) ** 2)
+        tir = np.imag(cost1) != 0
+        a_s[tir] = 0.0
+        a_p[tir] = 0.0
+        return a_s, a_p
+    if typ == STYPE_REFLECT:
+        stack = Stack(coating.indices, coating.thicknesses,
+                      substrate_index=coating.substrate_index, ambient_index=n0)
+        r_s, _ = stack_rt(stack, wavelength, theta0, 's')
+        r_p, _ = stack_rt(stack, wavelength, theta0, 'p')
+        # s-p-k basis: the ideal-mirror p flips sign, so a_s = -r_s, a_p = +r_p
+        # reduces to diag(1, -1) at the perfect-conductor limit (r -> -1).
+        return ((-r_s).astype(config.precision_complex),
+                r_p.astype(config.precision_complex))
+    ones = np.ones_like(cosI, dtype=config.precision_complex)
+    return ones, ones
+
+
+def interface_coefficients(n0, n1, cosI, typ, *, coating=None, wavelength=None):
+    """Energy-normalized s/p amplitude coefficients (a_s, a_p) for one interface.
+
+    The single interface-coefficient provider for both the scalar unpolarized
+    path and polarization ray tracing.  Returns complex amplitude coefficients
+    whose squared magnitude is the s/p power coefficient -- transmittance at a
+    refracting interface, reflectance at a reflecting one -- and whose phase is
+    the physical interface phase shift.  The scalar path takes
+    (|a_s|**2 + |a_p|**2) / 2; the PRT path uses them as the s/p Jones diagonal.
 
     Parameters
     ----------
     n0 : float
-        index preceding the interface.
+        index preceding the interface (the incidence medium).
     n1 : float
-        index following the interface.  For a reflection at a bare mirror pass
-        n1 == n0; the reflection coefficients are then +/-1 and the s/p
-        transmission is zero.
+        index following the interface.  Equal to n0 at a reflection.
     cosI : ndarray
-        cosine of the angle of incidence (may be signed); abs is used.
-    coating : object, optional
-        thin-film stack specification.  None gives the bare Fresnel interface.
+        cosine of the angle of incidence (may be signed); its abs is used.
+    typ : int
+        surface interaction code (STYPE_REFRACT, STYPE_REFLECT, or eval).
+    coating : coatings.Stack, optional
+        thin-film stack.  None (default) gives the bare Fresnel interface and,
+        on reflection, the lossless ideal mirror.
     wavelength : float, optional
-        wavelength in microns; required for a multilayer coating.
+        wavelength in microns; required when a coating is present.
 
     Returns
     -------
-    r_s, r_p, t_s, t_p : ndarray
-        complex amplitude reflection and transmission coefficients for s- and
-        p-polarized light.  Shapes match cosI.
+    a_s, a_p : ndarray
+        complex s- and p-amplitude coefficients, shaped like cosI.
+
+    Notes
+    -----
+    A refracting interface beyond the critical angle returns zero: TIR is fatal
+    to the ray, which the trace has already dropped.  A bare reflection is the
+    azimuth-independent ideal mirror diag(a_s, a_p) = (1, -1): the p sign flips
+    in the s-p-k basis so the system matrix is diag(1, 1, -1) with no
+    diattenuation or retardance.  A coated or metal mirror supplies the TMM s/p
+    reflectances instead (its complex nk substrate carries metal absorption).
 
     """
+    cosI = np.abs(np.asarray(cosI))
+    theta0 = np.arccos(np.clip(cosI, 0.0, 1.0))
     if coating is not None:
-        raise NotImplementedError(
-            'multilayer coatings are not wired up yet; pass coating=None for '
-            'the bare Fresnel interface'
-        )
-    cosI = np.abs(np.asarray(cosI))
-    theta0 = np.arccos(np.clip(cosI, 0.0, 1.0))
-    # Snell, with a complex sqrt so total internal reflection produces an
-    # imaginary cos(theta1); the resulting |r| == 1 and |t| handling fall out.
-    sint1 = (n0 / n1) * np.sin(theta0)
-    cost1 = _complex_sqrt(1.0 - sint1 * sint1)
-    theta1 = np.arccos(cost1)
-    r_s = thinfilm.fresnel_rs(n0, n1, theta0, theta1)
-    r_p = thinfilm.fresnel_rp(n0, n1, theta0, theta1)
-    t_s = thinfilm.fresnel_ts(n0, n1, theta0, theta1)
-    t_p = thinfilm.fresnel_tp(n0, n1, theta0, theta1)
-    return r_s, r_p, t_s, t_p
+        return _coating_coefficients(coating, n0, n1, cosI, theta0, typ,
+                                     wavelength)
+    if typ == STYPE_REFRACT:
+        # Snell, with a complex sqrt so TIR produces an imaginary cos(theta1).
+        sint1 = (n0 / n1) * np.sin(theta0)
+        cost1 = _complex_sqrt(1.0 - sint1 * sint1)
+        theta1 = np.arccos(cost1)
+        t_s = thinfilm.fresnel_ts(n0, n1, theta0, theta1)
+        t_p = thinfilm.fresnel_tp(n0, n1, theta0, theta1)
+        # power transmittance carries (n1 cos theta1) / (n0 cos theta0) for both
+        # polarizations (the ratio of the normal Poynting flux).
+        oblique = _complex_sqrt((n1 * cost1) / (n0 * np.cos(theta0)))
+        a_s = (t_s * oblique).astype(config.precision_complex)
+        a_p = (t_p * oblique).astype(config.precision_complex)
+        tir = np.imag(cost1) != 0
+        a_s[tir] = 0.0
+        a_p[tir] = 0.0
+        return a_s, a_p
+    ones = np.ones_like(cosI, dtype=config.precision_complex)
+    if typ == STYPE_REFLECT:
+        # bare reflection: lossless ideal mirror, p flips sign in the s-p-k basis
+        return ones, -ones
+    # eval / non-interacting surface: the ray passes straight through
+    return ones, ones
 
 
-def _power_transmittance(n0, n1, cosI):
-    """Unpolarized intensity transmittance (T_s + T_p) / 2 at an interface.
-
-    Uses the energy-correct obliquity factor so the returned value is a true
-    power transmittance, not |t|**2 alone.
-    """
-    cosI = np.abs(np.asarray(cosI))
-    theta0 = np.arccos(np.clip(cosI, 0.0, 1.0))
-    sint1 = (n0 / n1) * np.sin(theta0)
-    cost1 = _complex_sqrt(1.0 - sint1 * sint1)
-    theta1 = np.arccos(cost1)
-    t_s = thinfilm.fresnel_ts(n0, n1, theta0, theta1)
-    t_p = thinfilm.fresnel_tp(n0, n1, theta0, theta1)
-    # power transmittance carries (n1 cos theta1) / (n0 cos theta0)
-    oblique = np.real((n1 * cost1) / (n0 * np.cos(theta0)))
-    T_s = oblique * np.abs(t_s) ** 2
-    T_p = oblique * np.abs(t_p) ** 2
-    # beyond the critical angle cost1 is imaginary -> no transmitted power
-    tir = np.imag(cost1) != 0
-    T = 0.5 * (T_s + T_p)
-    T[tir] = 0.0
-    return T
+def _power_coefficient(a_s, a_p):
+    """Unpolarized power coefficient (|a_s|**2 + |a_p|**2) / 2."""
+    return 0.5 * (np.abs(a_s) ** 2 + np.abs(a_p) ** 2)
 
 
-def unpolarized_amplitude(prescription, trace, wavelength, *,
-                          coatings=None):
+def unpolarized_amplitude(prescription, trace, wavelength):
     """Per-ray scalar amplitude transmittance through the system.
 
-    Accumulates sqrt of the unpolarized power transmittance (T_s + T_p)/2 at
-    each refracting interface; reflecting surfaces are treated as lossless
-    (bare-mirror amplitude 1) unless a coating is supplied.  This is the
-    amplitude-only, unpolarized coating factor -- the wavefront phase is left
-    to the geometric optical path difference.
+    Accumulates sqrt of the unpolarized power coefficient
+    (|a_s|**2 + |a_p|**2) / 2 at every surface, drawing the s/p coefficients
+    from the shared interface_coefficients provider.  Bare refracting surfaces
+    contribute the Fresnel transmittance, bare mirrors are lossless, and a
+    Surface.coating contributes its thin-film transmittance (refract) or
+    reflectance (reflect).  This is the amplitude-only coating factor -- the
+    wavefront phase is left to the geometric optical path difference.
 
     Parameters
     ----------
     prescription : sequence of Surface
-        the traced system.
+        the traced system; each surface's coating attribute is consulted.
     trace : RayTraceResult
         result of raytrace through prescription.
     wavelength : float
         wavelength in microns.
-    coatings : sequence, optional
-        per-surface coating specs; None (default) gives bare interfaces.
 
     Returns
     -------
@@ -222,28 +286,29 @@ def unpolarized_amplitude(prescription, trace, wavelength, *,
     """
     cosI, n0, n1, typ = surface_normals_from_trace(
         prescription, trace, wavelength)
+    surfaces = list(prescription)
     jj, n_rays = cosI.shape
     amp = np.ones(n_rays, dtype=config.precision)
     for j in range(jj):
-        coating = None if coatings is None else coatings[j]
-        if coating is not None:
-            raise NotImplementedError(
-                'multilayer coatings are not wired up yet')
-        if typ[j] == STYPE_REFRACT:
-            T = _power_transmittance(n0[j], n1[j], cosI[j])
-            amp = amp * np.sqrt(np.clip(T, 0.0, None))
-        # bare reflection: lossless, amplitude unchanged
+        coating = surfaces[j].coating
+        if coating is None and typ[j] != STYPE_REFRACT:
+            # bare reflection / eval: lossless, amplitude unchanged
+            continue
+        a_s, a_p = interface_coefficients(
+            n0[j], n1[j], cosI[j], typ[j], coating=coating,
+            wavelength=wavelength)
+        amp = amp * np.sqrt(np.clip(_power_coefficient(a_s, a_p), 0.0, None))
     return amp
 
 
-def raytrace_field(prescription, P, S, wavelength, *,
-                   coatings=None):
+def raytrace_field(prescription, P, S, wavelength):
     """Intensity-aware trace: geometry plus a scalar amplitude.
 
     Wraps spencer_and_murty.raytrace and accumulates the unpolarized,
     amplitude-only coating factor (the wavefront phase comes from the optical
-    path difference, computed downstream).  The kernel is not modified; this is
-    the separate, intensity-aware entry point.
+    path difference, computed downstream).  Per-surface coatings are read from
+    each Surface.coating attribute.  The kernel is not modified; this is the
+    separate, intensity-aware entry point.
 
     Parameters
     ----------
@@ -253,9 +318,6 @@ def raytrace_field(prescription, P, S, wavelength, *,
         launch positions and direction cosines.
     wavelength : float
         wavelength in microns.
-    coatings : sequence, optional
-        per-surface coating specs; None (default) gives bare Fresnel interfaces
-        and lossless mirrors.
 
     Returns
     -------
@@ -264,8 +326,7 @@ def raytrace_field(prescription, P, S, wavelength, *,
 
     """
     trace = raytrace(prescription, P, S, wavelength)
-    amplitude = unpolarized_amplitude(prescription, trace, wavelength,
-                                      coatings=coatings)
+    amplitude = unpolarized_amplitude(prescription, trace, wavelength)
     return FieldTraceResult(trace, amplitude)
 
 
@@ -535,7 +596,7 @@ def _pupil_coordinate_scale(prescription, wavelength, P_xp, center):
 
 def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
                 stop_index=None, P_xp=None, P_img=None, axis_dir=None,
-                pupil_z=None, coatings=None,
+                pupil_z=None,
                 output='length', reference='chief', polarized=False):
     """Realize the complex pupil field on the exit-pupil reference sphere.
 
@@ -559,9 +620,8 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
     axis_dir : iterable, optional
         optical-axis direction; default +z.
     pupil_z : float, optional
-        launch-plane z; passed to launch().
-    coatings : sequence, optional
-        per-surface coating specs; None gives bare interfaces.
+        launch-plane z; passed to launch().  Per-surface coatings are read from
+        each Surface.coating attribute.
     output : str
         'length' (default) or 'waves' for the returned opd units.
     reference : str
@@ -588,8 +648,8 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
 
     def _trace_fn(presc, P, S, w):
         if polarized:
-            return raytrace_prt(presc, P, S, w, coatings=coatings)
-        return raytrace_field(presc, P, S, w, coatings=coatings)
+            return raytrace_prt(presc, P, S, w)
+        return raytrace_field(presc, P, S, w)
 
     record = trace_cell(prescription, field, wavelength, sampling,
                         epd=epd, pupil_z=pupil_z, trace_fn=_trace_fn)
@@ -902,53 +962,13 @@ def _unit(v):
     return v / n
 
 
-def _interface_jones(n0, n1, cosI, typ, *, coating=None):
-    """Energy-normalized s/p amplitude pair (a_s, a_p) for one interface.
-
-    For refraction the transmission coefficients carry the sqrt of the index/
-    obliquity factor, so |a|**2 is the power transmittance.  A bare reflection
-    is modelled as a lossless ideal mirror with a_s = 1, a_p = -1.  The opposite
-    sign is required by the s-p-k basis convention (p_out = k_out x s flips
-    relative to p_in on reflection): it makes s(x)s + p(x)p collapse to the
-    transverse projector, so the reflection is the azimuth-independent
-    diag(1, 1, -1) and introduces no diattenuation or retardance.  A real metal
-    or coated mirror would supply complex s/p coefficients via coating.
-    """
-    if coating is not None:
-        raise NotImplementedError('multilayer coatings are not wired up yet')
-    cosI = np.abs(np.asarray(cosI))
-    theta0 = np.arccos(np.clip(cosI, 0.0, 1.0))
-    if typ == STYPE_REFRACT:
-        sint1 = (n0 / n1) * np.sin(theta0)
-        cost1 = _complex_sqrt(1.0 - sint1 * sint1)
-        theta1 = np.arccos(cost1)
-        t_s = thinfilm.fresnel_ts(n0, n1, theta0, theta1)
-        t_p = thinfilm.fresnel_tp(n0, n1, theta0, theta1)
-        oblique = _complex_sqrt((n1 * cost1) / (n0 * np.cos(theta0)))
-        a_s = t_s * oblique
-        a_p = t_p * oblique
-        # beyond the critical angle no power is transmitted
-        tir = np.imag(cost1) != 0
-        a_s[tir] = 0.0
-        a_p[tir] = 0.0
-        return (a_s.astype(config.precision_complex),
-                a_p.astype(config.precision_complex))
-    ones = np.ones_like(cosI, dtype=config.precision_complex)
-    if typ == STYPE_REFLECT:
-        # bare reflection: lossless ideal mirror, p flips sign in s-p-k basis
-        return ones, -ones
-    # eval / non-interacting surface: identity (the ray passes straight
-    # through, k_out == k_in, so the per-surface matrix is the identity)
-    return ones, ones
-
-
-def raytrace_prt(prescription, P, S, wavelength, *,
-                 coatings=None):
+def raytrace_prt(prescription, P, S, wavelength):
     """Polarization ray trace: geometry plus a per-ray 3x3 P matrix.
 
     Wraps spencer_and_murty.raytrace and accumulates the Yun/Chipman
-    polarization ray-tracing matrix for each ray.  The hot kernel is not
-    modified.
+    polarization ray-tracing matrix for each ray.  Per-surface coatings are read
+    from each Surface.coating attribute and supply the s/p Jones diagonal via
+    the shared interface_coefficients provider.  The hot kernel is not modified.
 
     Parameters
     ----------
@@ -957,8 +977,6 @@ def raytrace_prt(prescription, P, S, wavelength, *,
         launch positions and direction cosines.
     wavelength : float
         wavelength in microns.
-    coatings : sequence, optional
-        per-surface coating specs; None gives bare interfaces.
 
     Returns
     -------
@@ -976,7 +994,7 @@ def raytrace_prt(prescription, P, S, wavelength, *,
 
     nj = object_space_index(prescription, wavelength)
     for j, surf in enumerate(surfaces):
-        coating = None if coatings is None else coatings[j]
+        coating = surf.coating
         k_in = _unit(S_hist[j])
         k_out = _unit(S_hist[j + 1])
         n_g, cosI = _global_normal_and_cosI(surf, P_hist[j + 1], S_hist[j])
@@ -1004,7 +1022,8 @@ def raytrace_prt(prescription, P, S, wavelength, *,
             n1 = float(surf.material.n(wavelength))
         else:
             n1 = nj
-        a_s, a_p = _interface_jones(nj, n1, cosI, surf.typ, coating=coating)
+        a_s, a_p = interface_coefficients(nj, n1, cosI, surf.typ,
+                                          coating=coating, wavelength=wavelength)
         if surf.typ == STYPE_REFRACT:
             nj = n1
 

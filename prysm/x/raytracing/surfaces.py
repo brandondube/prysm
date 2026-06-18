@@ -1166,7 +1166,7 @@ class Surface:
     def __init__(self, shape=None, interaction=None, pose=None, material=None,
                  aperture=None, grating=None, *, P=None, R=None,
                  bounding=None, tilt=None, decenter=None, tilt_radians=False,
-                 edge=None):
+                 edge=None, coating=None):
         """Initialize a posed optical surface.
 
         Parameters
@@ -1201,6 +1201,11 @@ class Surface:
             Mechanical edge geometry (outer diameter, chamfers, seats, ...)
             carried for layout drawing.  Consumed by plotting.plot_optics; see
             its lens_edges parameter for the schema.
+        coating : coatings.Stack, optional
+            Thin-film stack on this surface; None (default) gives the bare
+            Fresnel interface (and, on reflection, the lossless ideal mirror).
+            Consumed by the field / polarization paths via
+            field.interface_coefficients.
 
         """
         if shape is None:
@@ -1236,6 +1241,7 @@ class Surface:
         self.aperture = aperture
         self.grating = grating
         self.edge = edge
+        self.coating = coating
         self.sag = shape.sag
         self.sag_and_normal = shape.sag_and_normal
         self._analytic_intersect = bool(getattr(shape, 'analytic_intersect', False))
