@@ -459,7 +459,7 @@ def _warm_start_bundle(P, S, seedP, seedS, finite):
 
 
 def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, prescription,
-                             stop_index, wavelength, finite):
+                             stop_index, wavelength, finite, drop_unaimed=False):
     """Real aiming with a field-continuation fallback for fisheye-class fields.
 
     The primary damped-Newton aim runs from the paraxial-EP-seeded bundle the
@@ -472,6 +472,16 @@ def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, prescription,
     aiming can reach (vignetted / beyond the real aperture) return best-effort
     exactly as the primary did -- the ladder writes no state and never raises,
     keeping launch predictable.
+
+    With drop_unaimed, rays that neither the primary nor the ladder could aim
+    onto the stop are set to NaN rather than returned at their un-aimed seed
+    position: a best-effort seed ray transmits through the (vignetting-
+    compressed) apertures but does not pass through the pupil coordinate it is
+    sampled at, so plotting it draws a discontinuity (a kink) at the vignetted
+    edge.  NaN launches trace as failures and truncate fans/spots cleanly at the
+    last genuinely-aimed ray.  The vignetting solve keeps the default best-
+    effort, since it tests rough transmission across a scale bisection, not exact
+    pupil registration.
     """
     P, S, conv = _real_aim_to_stop(P, S, rho, prescription, stop_index,
                                    wavelength, finite)
@@ -497,12 +507,22 @@ def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, prescription,
         S = S.copy()
         P[rescued] = Pk[rescued]
         S[rescued] = Sk[rescued]
+
+    if drop_unaimed:
+        aimed = conv | convk
+        if not bool(np.all(aimed)):
+            # NaN only the direction so the ray traces as a failure; the launch
+            # position stays finite, leaving the pupil-centroid chief detection
+            # (_pupil_center_chief_index) untouched.
+            S = np.array(S, copy=True)
+            S[~aimed] = np.nan
     return P, S
 
 
 def launch(prescription, field, wavelength, sampling, *,
            epd=None, pupil_extent=None, pupil_z=None,
-           aim_to=None, aim_target=(0.0, 0.0), aim_strict=True):
+           aim_to=None, aim_target=(0.0, 0.0), aim_strict=True,
+           drop_unaimed=False):
     """Build (P, S) for one field, wavelength, and pupil sampling.
 
     Parameters
@@ -528,6 +548,12 @@ def launch(prescription, field, wavelength, sampling, *,
     aim_strict : bool, optional
         forwarded to aim_rays when aim_to is set, and to the real-aiming
         field-continuation ladder (exhaustion then raises).
+    drop_unaimed : bool, optional
+        under real aiming, set rays that no aiming pass could converge onto the
+        stop to NaN instead of returning their un-aimed best-effort seed.  The
+        analysis/plot paths enable this so vignetted fans/spots truncate cleanly
+        rather than kinking at a pupil coordinate the ray never passed through;
+        the default off preserves best-effort for the vignetting solve.
 
     Returns
     -------
@@ -615,7 +641,7 @@ def launch(prescription, field, wavelength, sampling, *,
     elif real_aiming and stop_index is not None:
         P, S = _aim_to_stop_with_ladder(
             P, S, rho, _build, field, prescription, stop_index, wavelength,
-            finite)
+            finite, drop_unaimed=drop_unaimed)
 
     return P, S
 

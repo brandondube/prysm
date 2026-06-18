@@ -1064,7 +1064,9 @@ def layout(system, *, fields=None, wavelength=None, sampling=None, axis='y',
     if colors is None:
         colors = [f'C{i % 10}' for i in range(len(fields))]
 
-    results = [raytrace(system, *launch(system, field, wvl, sampling), wvl)
+    results = [raytrace(system,
+                        *launch(system, field, wvl, sampling, drop_unaimed=True),
+                        wvl)
                for field in fields]
 
     fig, ax = plot_optics(system, results[0], wvl=wvl, x=x, y=y,

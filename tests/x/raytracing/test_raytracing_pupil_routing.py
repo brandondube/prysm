@@ -226,6 +226,53 @@ def test_ladder_never_worse_than_primary_across_fields():
         assert int(finite_ladder) >= int(conv_primary.sum())
 
 
+def test_drop_unaimed_nans_unaimable_ray_directions():
+    """Regression: a rim ray no aiming pass can register on the stop is a best-
+    effort seed ray -- it still transmits to the image, but does not pass through
+    the pupil coordinate it samples.  Returned as-is it draws a discontinuity (a
+    kink) in the fan at the rim.
+
+    drop_unaimed NaNs that ray's direction only: the trace then fails it, while
+    the launch position is kept so pupil-centroid chief detection is unchanged,
+    and every genuinely-aimed ray (the default best-effort solution) is bit-
+    identical.  The default keeps best-effort, so the vignetting solve is intact.
+    """
+    sys = fisheye(6.0)
+    fld = Field(0.0, 30.0, unit='deg')             # the +y rim is unaimable here
+    samp = Sampling.fan(n=15, axis='y')
+    P_be, S_be = launch(sys, fld, WVL, samp)                      # best-effort
+    P_dr, S_dr = launch(sys, fld, WVL, samp, drop_unaimed=True)   # dropped
+
+    unaimable = ~np.isfinite(S_dr).all(axis=1)
+    assert unaimable.any() and not unaimable.all()   # partial: chief/core aim
+    assert np.isfinite(S_be).all()                   # default keeps them finite
+    np.testing.assert_array_equal(P_be, P_dr)        # positions untouched
+    np.testing.assert_array_equal(S_dr[~unaimable], S_be[~unaimable])
+    # the dropped rim ray transmits to the image best-effort -- exactly why it
+    # used to kink the fan (finite, at a pupil coordinate it never passed) rather
+    # than truncate it.
+    img_be = raytrace(sys, P_be, S_be, WVL).P[-1]
+    assert np.isfinite(img_be[unaimable]).all()
+
+
+def test_ray_fans_truncate_unaimable_rim_without_kink():
+    """The fan analysis enables drop_unaimed, so a wide-field fan NaN-truncates
+    an unaimable rim ray instead of stranding it on a wrong branch.  On the
+    best-effort path that ray was finite (no NaN at all); here it is dropped, the
+    surviving samples stay contiguous, and the chief survives."""
+    sys = fisheye(6.0)
+    grid = pa.ray_aberration_fans(sys, fields=[Field(0.0, 30.0, unit='deg')],
+                                  wavelengths=[WVL], nrays=15)
+    yfan = grid.y[0, 0]
+    assert np.isnan(yfan).any()                      # unaimable rim truncated
+    finite_idx = np.flatnonzero(np.isfinite(yfan))
+    assert finite_idx.size >= 12 and 7 in finite_idx  # chief (center) survives
+    # the survivors form one contiguous run -- the curve truncates cleanly with
+    # no finite best-effort ray stranded across a NaN gap (the old kink).
+    assert np.array_equal(finite_idx,
+                          np.arange(finite_idx[0], finite_idx[-1] + 1))
+
+
 def test_scaled_field_scales_field_coordinates():
     f = Field(3.0, -4.0, unit='deg')
     h = _scaled_field(f, 0.25)
