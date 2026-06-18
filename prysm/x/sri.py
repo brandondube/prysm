@@ -5,7 +5,6 @@ import warnings
 from prysm.mathops import np
 from prysm.propagation import (
     Wavefront,
-    focus_dft,
     unfocus_dft,
     prepare_executor,
 )
@@ -24,35 +23,39 @@ def overlap_integral(E1, E2, sumI1, sumI2):
 
 
 def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, executor=None, shift=(0, 0), phase_shift=0, return_more=False):
-    """Propagate to a focal plane mask, apply it, and return.
+    """Focus onto a single-mode fiber, couple into its mode, and re-emit to the pupil.
 
-    This routine handles normalization properly for the user.
-
-    To invoke babinet's principle, simply use to_fpm_and_back(fpm=1 - fpm).
+    The pupil field is focused to the fiber facet, the overlap integral with
+    the fiber mode Efib gives the coupling efficiency, and the fiber re-emits
+    that fraction of the power as the (clean) mode, which is propagated back to
+    a pupil.  Normalization is handled for the user.
 
     Parameters
     ----------
     efl : float
-        focal length for the propagation
-    fpm : Wavefront or ndarray
-        the focal plane mask
+        focal length for the propagation, used only to build the executor when
+        one is not supplied
+    Efib : ndarray
+        the fiber mode field at the facet, sampled on a fib_dx grid
     fib_dx : float
-        sampling increment in the focal plane,  microns;
-        do not need to pass if fpm is a Wavefront
+        sampling increment at the fiber facet, microns
+    Ifibsum : float
+        sum of the fiber mode intensity, the denominator term of the mode
+        overlap integral
     executor : MDFT, optional
-        precomputed bidirectional transform operator. If None, defaults are
-        built per call.
+        precomputed bidirectional transform operator from prepare_executor.
+        If None, one is built per call.
     shift : tuple of float, optional
-        shift in the image plane to go to the FPM
-        appropriate shift will be computed returning to the pupil
+        shift of the fiber facet relative to the focus; the inverse is applied
+        automatically returning to the pupil (baked into the executor)
     return_more : bool, optional
-        if True, return (new_wavefront, field_at_fpm, field_after_fpm)
+        if True, return (new_wavefront, field_at_fiber, emitted_field, coupling)
         else return new_wavefront
 
     Returns
     -------
-    Wavefront, Wavefront, Wavefront
-        new wavefront, [field at fpm, field after fpm]
+    Wavefront, [Wavefront, Wavefront, float]
+        next pupil; optionally also field at the fiber, emitted field, coupling
 
     """
     fib_samples = Efib.shape
@@ -64,8 +67,6 @@ def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, executor=None, 
             focal_dx=fib_dx, focal_samples=fib_samples,
             wavelength=self.wavelength, efl=efl, focal_shift=shift,
         )
-
-    field_at_fpm = focus_dft(self.data, executor)
 
     at_fpm = self.focus_dft(executor)
     I_at_fpm = at_fpm.intensity
@@ -84,13 +85,11 @@ def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, executor=None, 
     if input_samples[0] != input_samples[1]:
         warnings.warn(f'Forward propagation had input shape {input_samples} which was not uniform between axes, scaling is off')
     if fib_samples[0] != fib_samples[1]:
-        warnings.warn(f'Forward propagation had fpm shape {fib_samples} which was not uniform between axes, scaling is off')
+        warnings.warn(f'Forward propagation had fiber shape {fib_samples} which was not uniform between axes, scaling is off')
 
     out = Wavefront(field_at_next_pupil, self.wavelength, self.dx, self.space)
     if return_more:
-        if not isinstance(field_at_fpm, Wavefront):
-            field_at_fpm = Wavefront(field_at_fpm, out.wavelength, fib_dx, 'psf')
-        return out, field_at_fpm, Wavefront(Eout, self.wavelength, fib_dx, 'psf'), coupling_loss
+        return out, at_fpm, Wavefront(Eout, self.wavelength, fib_dx, 'psf'), coupling_loss
 
     return out
 

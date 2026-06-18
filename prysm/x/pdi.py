@@ -4,7 +4,7 @@ from functools import partial
 
 from prysm.mathops import np
 from prysm.coordinates import make_xy_grid
-from prysm.propagation import Wavefront as WF
+from prysm.propagation import Wavefront as WF, prepare_executor
 from prysm.geometry import circle
 
 
@@ -179,6 +179,20 @@ class PSPDI:
         self.test_mask = circle(self.test_arm_mask_rsq, rtsq)
         del xph, yph, rphsq, xt, yt, rtsq
 
+        # reusable pupil <-> focal operators for the two arms; the test arm's
+        # facet shift is baked into its executor (inverse applied on the return)
+        pupil_samples = self.x.shape
+        self.pinhole_executor = prepare_executor(
+            pupil_dx=self.dx, pupil_samples=pupil_samples,
+            focal_dx=self.dx_pinhole, focal_samples=self.pinhole.shape,
+            wavelength=self.wavelength, efl=self.efl,
+        )
+        self.test_executor = prepare_executor(
+            pupil_dx=self.dx, pupil_samples=pupil_samples,
+            focal_dx=self.dx_test_arm, focal_samples=self.test_mask.shape,
+            wavelength=self.wavelength, efl=self.efl, focal_shift=self.test_arm_shift,
+        )
+
     def forward_model(self, wave_in, phase_shift=0, debug=False):
         """Perform a forward model, returning the intensity at the detector plane.
 
@@ -210,15 +224,14 @@ class PSPDI:
         if not isinstance(i, WF):
             i = WF(i, self.wavelength, self.dx)
 
-        efl = self.efl
         if debug:
             ref_beam, ref_at_fpm, ref_after_fpm = \
-                i.to_fpm_and_back(efl, self.pinhole, self.dx_pinhole, return_more=True)
+                i.to_fpm_and_back(self.pinhole, self.pinhole_executor, return_more=True)
             test_beam, test_at_fpm, test_after_fpm = \
-                i.to_fpm_and_back(efl, self.test_mask, self.dx_test_arm, shift=self.test_arm_shift, return_more=True)
+                i.to_fpm_and_back(self.test_mask, self.test_executor, return_more=True)
         else:
-            ref_beam = i.to_fpm_and_back(efl, self.pinhole, self.dx_pinhole)
-            test_beam = i.to_fpm_and_back(efl, self.test_mask, self.dx_test_arm, shift=self.test_arm_shift)
+            ref_beam = i.to_fpm_and_back(self.pinhole, self.pinhole_executor)
+            test_beam = i.to_fpm_and_back(self.test_mask, self.test_executor)
 
         if self.test_arm_transmissivity != 1:
             test_beam *= self.test_arm_transmissivity
