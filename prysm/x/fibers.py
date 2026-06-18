@@ -113,16 +113,17 @@ def _ghatak_eq_8_40(b, V, l):  # NOQA
     """
     U = V * np.sqrt(1-b)
     W = V * np.sqrt(b)
-    if l >= 1:  # noqa
-        # right looks like it may be a typo in Ghatak?  -W in 8.40, not in 8.41
-        # however, fig 8.1 only replicates for -W, and the same for fig 8.4
-        left = U * special.jv(l - 1, U) / special.jv(l, U)
-        right = -W * special.kve(l - 1, W) / special.kve(l, W)
-    else:
-        # left = U * J_{l-1}(U) / J_l(U)
-        # right = -W * K_{l-1}(W) / K_l(W)
-        left = U * special.j1(U) / special.j0(U)
-        right = W * special.k1(W) / special.k0(W)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        if l >= 1:  # noqa
+            # right looks like it may be a typo in Ghatak?  -W in 8.40, not in 8.41
+            # however, fig 8.1 only replicates for -W, and the same for fig 8.4
+            left = U * special.jv(l - 1, U) / special.jv(l, U)
+            right = -W * special.kve(l - 1, W) / special.kve(l, W)
+        else:
+            # left = U * J_{l-1}(U) / J_l(U)
+            # right = -W * K_{l-1}(W) / K_l(W)
+            left = U * special.j1(U) / special.j0(U)
+            right = W * special.k1(W) / special.k0(W)
     return left-right
 
 
@@ -161,16 +162,17 @@ def _ghatak_u_with_derivative(U, V, ell):
     of the ratios r_J, r_K, yielding closed forms with no higher-order Bessels.
     """
     W = np.sqrt(V * V - U * U)
-    if ell == 0:
-        r_J = special.j1(U) / special.j0(U)
-        r_K = special.k1(W) / special.k0(W)
-        f = U * r_J - W * r_K
-        df = U * (r_J * r_J + r_K * r_K)
-    else:
-        r_J = special.jv(ell - 1, U) / special.jv(ell, U)
-        r_K = special.kve(ell - 1, W) / special.kve(ell, W)
-        f = U * r_J + W * r_K
-        df = 2 * ell * (r_J - U * r_K / W) - U * (r_J * r_J + r_K * r_K)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        if ell == 0:
+            r_J = special.j1(U) / special.j0(U)
+            r_K = special.k1(W) / special.k0(W)
+            f = U * r_J - W * r_K
+            df = U * (r_J * r_J + r_K * r_K)
+        else:
+            r_J = special.jv(ell - 1, U) / special.jv(ell, U)
+            r_K = special.kve(ell - 1, W) / special.kve(ell, W)
+            f = U * r_J + W * r_K
+            df = 2 * ell * (r_J - U * r_K / W) - U * (r_J * r_J + r_K * r_K)
     return f, df
 
 
@@ -402,8 +404,9 @@ def compute_LP_modes(V, mode_dict, a, r, t):
                 num_clad = special.kv(l, W*rnorm[within_clad])
                 den_clad = special.kv(l, W)
 
-            tmp[within_core] = num_core/den_core
-            tmp[within_clad] = num_clad/den_clad
+            with np.errstate(divide='ignore', invalid='ignore'):
+                tmp[within_core] = num_core/den_core
+                tmp[within_clad] = num_clad/den_clad
 
             if l != 0:  # noqa
                 if l < 0:
@@ -443,15 +446,16 @@ def smf_mode_field(V, a, b, r):
     # inside core
     rnorm = r*(1/a)  # faster to divide on scalar, mul on vector
     rinterior = rnorm < 1
-    num = special.j0(U*rnorm[rinterior])
-    den = special.j1(U)
     out = np.empty_like(r)
-    out[rinterior] = num*(1/den)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        num = special.j0(U*rnorm[rinterior])
+        den = special.j1(U)
+        out[rinterior] = num*(1/den)
 
-    rexterior = ~rinterior
-    num = special.k0(W*rnorm[rexterior])
-    den = special.k1(W)
-    out[rexterior] = num*(1/den)
+        rexterior = ~rinterior
+        num = special.k0(W*rnorm[rexterior])
+        den = special.k1(W)
+        out[rexterior] = num*(1/den)
     return out
 
 

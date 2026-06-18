@@ -256,7 +256,8 @@ def jinc(r):
             return _besselj1(r) / r
     else:
         mask = (r < 1e-8) & (r > -1e-8)
-        out = _besselj1(r) / r
+        with np.errstate(divide='ignore', invalid='ignore'):
+            out = _besselj1(r) / r
         out[mask] = 0.5
         return out
 
