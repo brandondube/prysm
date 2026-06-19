@@ -66,6 +66,38 @@ def test_truecircle_correct_area():
     assert mask.sum() == pytest.approx(expected_area_of_circle, abs=1.5)
 
 
+def test_truecircle_physical_grid_area_and_registration():
+    # on a physical (non-normalized) grid the historical 2/samples pitch is
+    # wrong; passing dx anti-aliases the edge correctly. area is right to a
+    # fraction of an edge pixel and the mask stays centered (no half-pixel shift)
+    import numpy as np
+    dx = 0.05
+    x, y = coordinates.make_xy_grid(256, dx=dx)
+    r = np.hypot(x, y)
+    r_samples = 80
+    mask = geometry.truecircle(dx * r_samples, r, dx=dx)
+    assert mask.sum() == pytest.approx(r_samples * r_samples * math.pi, abs=1.5)
+    # centered: first moment is zero to machine precision
+    assert abs((mask * x).sum() / mask.sum()) < 1e-12
+    assert abs((mask * y).sum() / mask.sum()) < 1e-12
+    # the default (dx=None) infers 2/samples and is wrong here: a tiny pitch
+    # makes the transition collapse toward a hard edge, so the areas differ
+    hard_like = geometry.truecircle(dx * r_samples, r)
+    assert abs(hard_like.sum() - mask.sum()) > 1
+
+
+def test_truecircle_normalized_grid_matches_legacy():
+    # dx=None reproduces the historical normalized-grid behavior bit-for-bit
+    import numpy as np
+    x, y = coordinates.make_xy_grid(256, diameter=2)
+    r = np.hypot(x, y)
+    radius = 100 * (2 / 256)
+    new = geometry.truecircle(radius, r)
+    one_pixel = 2 / 256
+    legacy = np.minimum(np.maximum((radius + one_pixel / 2 - r) * (256 / 2), 0), 1)
+    np.testing.assert_array_equal(new, legacy)
+
+
 def test_rectangle_correct_area():
     # really this test should be done for a rectangle that is less than the
     # entire array

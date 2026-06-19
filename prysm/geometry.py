@@ -141,17 +141,17 @@ def square(x, y):
     return np.ones_like(x)
 
 
-def truecircle(radius, r):
+def truecircle(radius, r, dx=None):
     """Create a "true" circular mask with anti-aliasing.
 
     Parameters
     ----------
-    samples : int, optional
-        number of samples in the square output array
-    radius : float, optional
-        radius of the shape in the square output array.  radius=1 will fill the
+    radius : float
+        radius of the circle, same units as r
     r : ndarray
         radial coordinate, 2D
+    dx : float, optional
+        cartesian sample spacing.  Must be given if r is not a normalized grid
 
     Returns
     -------
@@ -165,12 +165,11 @@ def truecircle(radius, r):
     """
     if radius == 0:
         return np.zeros_like(r)
-    else:
-        samples = r.shape[0]
-        one_pixel = 2 / samples
-        radius_plus = radius + (one_pixel / 2)
-        intermediate = (radius_plus - r) * (samples / 2)
-        return np.minimum(np.maximum(intermediate, 0), 1)
+    if dx is None:
+        dx = 2 / r.shape[0]
+    # partial-pixel coverage: 0.5 where r == radius, +-0.5 per sample either side
+    coverage = (radius - r) / dx + 0.5
+    return np.minimum(np.maximum(coverage, 0), 1)
 
 
 def circle(radius, r):
