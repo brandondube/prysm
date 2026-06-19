@@ -45,7 +45,8 @@ dependencies = [
 plotting = ["matplotlib"]
 img = ["imageio"]
 datx = ["h5py"]
-all = ["matplotlib", "imageio", "h5py"]
+glass = ["refractiveindex", "pyyaml"]
+all = ["matplotlib", "imageio", "h5py", "refractiveindex", "pyyaml"]
 
 [project.urls]
 Homepage = "https://github.com/brandondube/prysm"
