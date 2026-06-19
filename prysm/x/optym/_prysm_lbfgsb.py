@@ -326,6 +326,21 @@ class PrysmLBFGSB:
             return arr
         return arr[tuple(slice(0, n) for n in shape)]
 
+    def _masked_divide(self, num, denom, out, mask, scratch_name):
+        """out[mask] = num[mask] / denom[mask], backend-agnostic.
+
+        numpy ufuncs honor ``where=`` but cupy's reject it, so emulate the
+        masked divide by guarding the denominator: lanes outside ``mask`` are
+        set to 1 so the unmasked ufunc cannot divide by zero (callers consume
+        only the masked lanes, where the denominator is nonzero by
+        construction).  ``copyto`` accepts ``where=`` on both backends, so it
+        is used for the guard.
+        """
+        safe = self._scratch_array(scratch_name, denom.shape, denom.dtype)
+        safe.fill(1.0)
+        np.copyto(safe, denom, where=mask)
+        np.divide(num, safe, out=out)
+
     # ---------------- compact L-BFGS representation ----------------
     #
     # After k history pairs (s_0, y_0), ..., (s_{k-1}, y_{k-1}), the
@@ -505,13 +520,13 @@ class PrysmLBFGSB:
         np.isfinite(l, out=hit)
         np.logical_and(hit, pos_g, out=hit)
         np.subtract(x, l, out=work)
-        np.divide(work, g, out=work, where=hit)
+        self._masked_divide(work, g, work, hit, '_break_safe_denom')
         np.copyto(t, work, where=hit)
 
         np.isfinite(u, out=hit)
         np.logical_and(hit, neg_g, out=hit)
         np.subtract(x, u, out=work)
-        np.divide(work, g, out=work, where=hit)
+        self._masked_divide(work, g, work, hit, '_break_safe_denom')
         np.copyto(t, work, where=hit)
 
         sorted_indices = np.argsort(t)
@@ -668,7 +683,8 @@ class PrysmLBFGSB:
                 MinvWT = linalg.lu_solve(M_lu, W.T)            # (2k, n)
                 wMw_diag = self._scratch_array('_cauchy_wMw_diag',
                                                (n,), dtype)
-                np.einsum('ij,ji->i', W, MinvWT, out=wMw_diag)  # (n,)
+                # cupy's einsum has no out= kwarg; copy into the scratch.
+                wMw_diag[:] = np.einsum('ij,ji->i', W, MinvWT)  # (n,)
 
                 W_a = self._scratch_array('_cauchy_W_a',
                                           (n_active, 2 * k), dtype)
@@ -713,8 +729,8 @@ class PrysmLBFGSB:
                                                 (n_active,), dtype)
                 wb_Mc_arr = self._scratch_array('_cauchy_wb_Mc',
                                                 (n_active,), dtype)
-                np.einsum('ij,ij->i', W_a, Mp_array, out=wb_Mp_arr)
-                np.einsum('ij,ij->i', W_a, Mc_array, out=wb_Mc_arr)
+                wb_Mp_arr[:] = np.einsum('ij,ij->i', W_a, Mp_array)
+                wb_Mc_arr[:] = np.einsum('ij,ij->i', W_a, Mc_array)
                 wMw_b_arr = self._scratch_array('_cauchy_wMw_b',
                                                 (n_active,), dtype)
                 np.take(wMw_diag, idx_a, out=wMw_b_arr)           # (n_a,)
@@ -1002,11 +1018,11 @@ class PrysmLBFGSB:
         np.less(p, 0, out=neg)
 
         np.subtract(self.u, x, out=work)
-        np.divide(work, p, out=work, where=pos)
+        self._masked_divide(work, p, work, pos, '_bound_safe_denom')
         np.copyto(bound_alpha, work, where=pos)
 
         np.subtract(self.l, x, out=work)
-        np.divide(work, p, out=work, where=neg)
+        self._masked_divide(work, p, work, neg, '_bound_safe_denom')
         np.copyto(bound_alpha, work, where=neg)
 
         alpha_max = float(np.min(bound_alpha))
