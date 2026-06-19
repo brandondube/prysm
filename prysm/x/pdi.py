@@ -179,8 +179,7 @@ class PSPDI:
         self.test_mask = circle(self.test_arm_mask_rsq, rtsq)
         del xph, yph, rphsq, xt, yt, rtsq
 
-        # reusable pupil <-> focal operators for the two arms; the test arm's
-        # facet shift is baked into its executor (inverse applied on the return)
+        # reusable pupil <-> focal operators for each arm
         pupil_samples = self.x.shape
         self.pinhole_executor = prepare_executor(
             pupil_dx=self.dx, pupil_samples=pupil_samples,

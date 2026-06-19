@@ -23,31 +23,22 @@ def overlap_integral(E1, E2, sumI1, sumI2):
 
 
 def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, executor=None, shift=(0, 0), phase_shift=0, return_more=False):
-    """Focus onto a single-mode fiber, couple into its mode, and re-emit to the pupil.
-
-    The pupil field is focused to the fiber facet, the overlap integral with
-    the fiber mode Efib gives the coupling efficiency, and the fiber re-emits
-    that fraction of the power as the (clean) mode, which is propagated back to
-    a pupil.  Normalization is handled for the user.
+    """Focus onto a single-mode fiber and return to the pupil.
 
     Parameters
     ----------
     efl : float
-        focal length for the propagation, used only to build the executor when
-        one is not supplied
+        focal length for building the executor.
     Efib : ndarray
-        the fiber mode field at the facet, sampled on a fib_dx grid
+        fiber mode field at the facet.
     fib_dx : float
-        sampling increment at the fiber facet, microns
+        sampling increment at the fiber facet, microns.
     Ifibsum : float
-        sum of the fiber mode intensity, the denominator term of the mode
-        overlap integral
+        sum of the fiber mode intensity.
     executor : MDFT, optional
-        precomputed bidirectional transform operator from prepare_executor.
-        If None, one is built per call.
+        precomputed bidirectional transform operator.
     shift : tuple of float, optional
-        shift of the fiber facet relative to the focus; the inverse is applied
-        automatically returning to the pupil (baked into the executor)
+        shift of the fiber facet relative to the focus.
     return_more : bool, optional
         if True, return (new_wavefront, field_at_fiber, emitted_field, coupling)
         else return new_wavefront
@@ -55,7 +46,7 @@ def to_photonic_fiber_and_back(self, efl, Efib, fib_dx, Ifibsum, executor=None, 
     Returns
     -------
     Wavefront, [Wavefront, Wavefront, float]
-        next pupil; optionally also field at the fiber, emitted field, coupling
+        next pupil, optionally with intermediate fields and coupling.
 
     """
     fib_samples = Efib.shape
