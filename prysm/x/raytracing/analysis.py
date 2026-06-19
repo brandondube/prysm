@@ -97,11 +97,12 @@ def _first_order_geometry_failure(exc):
 
 
 def resolve_exit_pupil(prescription, wavelength, *, stop_index=None, epd=None,
-                       field=None, chief=None, axis_point=None, axis_dir=None):
+                       field=None, chief=None, axis_point=None, axis_dir=None,
+                       min_perp=1e-6, return_mode=False):
     """Locate the exit-pupil reference point P_xp for a wavefront evaluation.
 
-    Uses the paraxial exit pupil when a stop is resolvable.  Otherwise, uses
-    the closest approach of a chief ray to the optical axis.
+    Uses a paraxial stop when available, otherwise the chief-axis closest
+    approach.
 
     Parameters
     ----------
@@ -111,27 +112,27 @@ def resolve_exit_pupil(prescription, wavelength, *, stop_index=None, epd=None,
     stop_index : int, optional
         aperture-stop surface index; defaults to the prescription stop_index.
     epd : float, optional
-        entrance-pupil diameter for the paraxial solve; defaults from a system.
+        entrance-pupil diameter for the paraxial solve.
     field : Field, optional
-        field whose chief ray seeds the geometric route.  Defaults to on-axis.
-        Ignored when chief is given.
+        field for the geometric-route chief ray.
     chief : tuple of ndarray, optional
-        (P_chief_final, S_chief_final) -- the post-trace chief position and
-        direction for the geometric route, supplied by a caller that already
-        traced the bundle (avoids re-launching and keeps the exit pupil
-        consistent with that bundle's own chief).
+        post-trace chief position and direction for the geometric route.
     axis_point, axis_dir : iterable, optional
-        point on, and direction of, the optical axis for the geometric route.
-        Defaults: origin and +z.
+        point on, and direction of, the optical axis.
+    min_perp : float, optional
+        minimum chief slope to the axis for the geometric route.
+    return_mode : bool, optional
+        if True, return (P_xp, 'paraxial' or 'geometric').
 
     Returns
     -------
     P_xp : ndarray, shape (3,), or None
-        exit-pupil reference point, ready to pass to wavefront(P_xp=...).  None
-        when the exit pupil is at infinity (image-space telecentric); the EIC
-        closing reads that as its curvature kappa = 0 limit.
+        exit-pupil reference point, or None for image-space telecentric.
 
     """
+    def _ret(P_xp, mode):
+        return (P_xp, mode) if return_mode else P_xp
+
     resolved_stop = (stop_index if stop_index is not None
                      else getattr(prescription, 'stop_index', None))
     if resolved_stop is not None:
@@ -139,19 +140,16 @@ def resolve_exit_pupil(prescription, wavelength, *, stop_index=None, epd=None,
             fo = system_first_order(prescription, wvl=wavelength, epd=epd,
                                     stop_index=resolved_stop)
         except ValueError as exc:
-            # a centered-ABCD geometry failure is only recoverable via the
-            # geometric route when an explicit axis was supplied; otherwise
-            # surface the first_order error.
+            # Only explicit-axis calls can fall back from centered ABCD errors.
             if ((axis_point is None and axis_dir is None)
                     or not _first_order_geometry_failure(exc)):
                 raise
         else:
             if fo.xp_z is None:
-                # exit pupil at infinity (image-space telecentric): the EIC
-                # closing takes this as its curvature kappa = 0 limit, so there
-                # is nothing to anchor -- signal it with None.
-                return None
-            return np.array([0.0, 0.0, float(fo.xp_z)], dtype=config.precision)
+                # Image-space telecentric: kappa = 0, no finite anchor.
+                return _ret(None, 'paraxial')
+            P_xp = np.array([0.0, 0.0, float(fo.xp_z)], dtype=config.precision)
+            return _ret(P_xp, 'paraxial')
 
     # geometric route: take the chief ray's axis closest-approach.
     if chief is not None:
@@ -166,8 +164,9 @@ def resolve_exit_pupil(prescription, wavelength, *, stop_index=None, epd=None,
                         epd=epd_geo).trace
         P_chief_final, S_chief_final = tr.P[-1, 0], tr.S[-1, 0]
     _, _, P_xp = xp_reference_sphere(P_chief_final, S_chief_final,
-                                     axis_point=axis_point, axis_dir=axis_dir)
-    return np.asarray(P_xp, dtype=config.precision)
+                                     axis_point=axis_point, axis_dir=axis_dir,
+                                     min_perp=min_perp)
+    return _ret(np.asarray(P_xp, dtype=config.precision), 'geometric')
 
 
 # ---------- transverse ray aberration --------------------------------------
@@ -235,17 +234,45 @@ def _resolve_chief_index(P, valid, reference, chief_index):
     return _pupil_center_chief_index(P, mask)
 
 
+class ReferenceSphereClosing:
+    """Chief-zeroed OPD and reusable reference-sphere geometry."""
+
+    __slots__ = ('opd', 'curvature', 'filtered_chief', 'R', 'delta')
+
+    def __init__(self, opd, curvature, filtered_chief, R, delta):
+        self.opd = opd
+        self.curvature = curvature
+        self.filtered_chief = filtered_chief
+        self.R = R
+        self.delta = delta
+
+
+def close_on_reference_sphere(trace, valid, chief_index, *, center, P_xp,
+                              n_image):
+    """Close a traced bundle onto the chief-image reference sphere.
+
+    P_xp may be None for the telecentric kappa = 0 limit.
+    """
+    center = np.asarray(center)
+    curvature = reference_sphere_curvature(P_xp, center)
+    if P_xp is None:
+        delta = None
+        R = np.inf
+    else:
+        delta = np.asarray(P_xp, dtype=center.dtype) - center
+        R = float(np.sqrt(np.sum(delta * delta)))
+    filtered_chief = _filtered_chief_index(valid, chief_index)
+    opd = hopkins_eic_closing(trace.P[:, valid], trace.S[:, valid],
+                              trace.OPL[:, valid], center=center,
+                              curvature=curvature, n_image=n_image,
+                              chief_index=filtered_chief)
+    return ReferenceSphereClosing(opd, curvature, filtered_chief, R, delta)
+
+
 def _wavefront_from_trace(prescription, P, wavelength, trace, *, P_xp=None,
                           chief_index=None, pupil_coords=None, field=None,
                           output='length', reference='chief'):
-    """Wavefront kernel for callers that already have the raytrace result.
-
-    P_xp anchors the reference sphere through the exit-pupil point; pass None
-    (the default) to resolve it from the prescription -- a resolvable stop gives
-    the paraxial exit pupil, an off-axis chief its axis closest-approach, and an
-    image-space-telecentric system the curvature kappa = 0 (exit pupil at
-    infinity) the closing handles natively.
-    """
+    """Wavefront kernel for callers that already have the raytrace result."""
     valid = valid_mask(trace.status, trace.P[-1])
     chief_index = _resolve_chief_index(P, valid, reference, chief_index)
     if not bool(valid[chief_index]):
@@ -264,19 +291,15 @@ def _wavefront_from_trace(prescription, P, wavelength, trace, *, P_xp=None,
     n_image = image_space_index(prescription, wavelength, fallback=n_object)
     P_chief_final = trace.P[-1, chief_index]
     if P_xp is None:
-        # resolve from the prescription; None back means the exit pupil is at
-        # infinity (telecentric) -> curvature 0, handled below.
+        # None back means telecentric image space: curvature 0.
         P_xp = resolve_exit_pupil(
             prescription, wavelength, field=field,
             chief=(P_chief_final, trace.S[-1, chief_index]))
     if P_xp is not None:
         P_xp = np.asarray(P_xp, dtype=P.dtype)
-    curvature = reference_sphere_curvature(P_xp, P_chief_final)
-    filtered_chief = _filtered_chief_index(valid, chief_index)
-    opd = hopkins_eic_closing(trace.P[:, valid], trace.S[:, valid],
-                              trace.OPL[:, valid],
-                              center=P_chief_final, curvature=curvature,
-                              n_image=n_image, chief_index=filtered_chief)
+    opd = close_on_reference_sphere(trace, valid, chief_index,
+                                    center=P_chief_final, P_xp=P_xp,
+                                    n_image=n_image).opd
     if pupil_coords is None:
         x_pupil = P[valid, 0] - P[chief_index, 0]
         y_pupil = P[valid, 1] - P[chief_index, 1]

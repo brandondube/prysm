@@ -426,16 +426,12 @@ def _scaled_field(field, frac):
 
 
 def _parabasal_ep_z(prescription, field, wavelength):
-    """Field-dependent entrance-pupil z from the parabasal first order.
-
-    The parabasal EP walks with field (pupil aberration); it is a far better
-    aiming seed at wide field than the field-independent paraxial pupil.  Falls
-    back to the paraxial EP whenever the parabasal chief is unavailable.
-    """
+    """Field-dependent entrance-pupil z, with paraxial fallback."""
     from .parabasal import first_order  # lazy: parabasal imports this module
     try:
         ep = first_order(prescription, field, wavelength).ep_z
-    except Exception:
+    except (ValueError, IndexError, ArithmeticError, np.linalg.LinAlgError):
+        # Degenerate parabasal chiefs fall back to the paraxial pupil.
         ep = None
     if ep is None:
         return _entrance_pupil_z(prescription, wavelength)
@@ -460,29 +456,7 @@ def _warm_start_bundle(P, S, seedP, seedS, finite):
 
 def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, prescription,
                              stop_index, wavelength, finite, drop_unaimed=False):
-    """Real aiming with a field-continuation fallback for fisheye-class fields.
-
-    The primary damped-Newton aim runs from the paraxial-EP-seeded bundle the
-    caller already built.  If any rays stay unconverged, walk the field up a
-    fixed fractional schedule, seeding each rung from the parabasal
-    field-dependent entrance pupil (a far better wide-field seed than the
-    field-independent paraxial pupil) and warm-starting it from the previous
-    rung.  Only rays the primary missed are adopted from the ladder (per-ray
-    merge), so the result is never worse than the primary, and rays that no
-    aiming can reach (vignetted / beyond the real aperture) return best-effort
-    exactly as the primary did -- the ladder writes no state and never raises,
-    keeping launch predictable.
-
-    With drop_unaimed, rays that neither the primary nor the ladder could aim
-    onto the stop are set to NaN rather than returned at their un-aimed seed
-    position: a best-effort seed ray transmits through the (vignetting-
-    compressed) apertures but does not pass through the pupil coordinate it is
-    sampled at, so plotting it draws a discontinuity (a kink) at the vignetted
-    edge.  NaN launches trace as failures and truncate fans/spots cleanly at the
-    last genuinely-aimed ray.  The vignetting solve keeps the default best-
-    effort, since it tests rough transmission across a scale bisection, not exact
-    pupil registration.
-    """
+    """Real aiming with a field-continuation fallback."""
     P, S, conv = _real_aim_to_stop(P, S, rho, prescription, stop_index,
                                    wavelength, finite)
     if bool(np.all(conv)):
@@ -500,7 +474,7 @@ def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, prescription,
                                           stop_index, wavelength, finite)
         seedP, seedS = Pk, Sk
 
-    # adopt only the full-field rays the primary could not converge
+    # Adopt only rays the primary missed.
     rescued = convk & ~conv
     if bool(np.any(rescued)):
         P = P.copy()
@@ -511,9 +485,7 @@ def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, prescription,
     if drop_unaimed:
         aimed = conv | convk
         if not bool(np.all(aimed)):
-            # NaN only the direction so the ray traces as a failure; the launch
-            # position stays finite, leaving the pupil-centroid chief detection
-            # (_pupil_center_chief_index) untouched.
+            # Keep launch positions finite for chief selection.
             S = np.array(S, copy=True)
             S[~aimed] = np.nan
     return P, S
@@ -546,14 +518,9 @@ def launch(prescription, field, wavelength, sampling, *,
     aim_target : (float, float), optional
         target xy at the aimed surface.  Default (0, 0) (chief-ray aim).
     aim_strict : bool, optional
-        forwarded to aim_rays when aim_to is set, and to the real-aiming
-        field-continuation ladder (exhaustion then raises).
+        forwarded to aim_rays on the explicit aim_to path.
     drop_unaimed : bool, optional
-        under real aiming, set rays that no aiming pass could converge onto the
-        stop to NaN instead of returning their un-aimed best-effort seed.  The
-        analysis/plot paths enable this so vignetted fans/spots truncate cleanly
-        rather than kinking at a pupil coordinate the ray never passed through;
-        the default off preserves best-effort for the vignetting solve.
+        under real aiming, NaN rays that cannot be aimed onto the stop.
 
     Returns
     -------

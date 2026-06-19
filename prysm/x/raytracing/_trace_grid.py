@@ -145,9 +145,7 @@ def _launch_trace(prescription, field, wvl, sampling, *, epd, pupil_z, aim_to,
                   trace_fn):
     """Resolve epd, launch one sampling, trace it, and mask the invalid rays."""
     epd = _require_epd(prescription, epd, wvl)
-    # drop_unaimed: analyses register rays at their pupil coordinate, so a
-    # best-effort ray that could not be aimed onto the stop is not a valid
-    # sample -- NaN it so vignetted fans/spots truncate cleanly (no kink).
+    # NaN unaimed real-aiming rays so fans/spots truncate at vignetting.
     P, S = launch(prescription, field, wvl, sampling, epd=epd, pupil_z=pupil_z,
                   aim_to=aim_to, drop_unaimed=True)
     trace = trace_fn(prescription, P, S, wvl)

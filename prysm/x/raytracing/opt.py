@@ -235,19 +235,13 @@ def locate_ep(P_chief, S_chief, P_obj, P_s1):
     return _pupil_on_axis(P_chief, S_chief, P_obj, P_s1)
 
 
-def xp_reference_sphere(P_chief, S_chief, axis_point=None, axis_dir=None):
+def xp_reference_sphere(P_chief, S_chief, axis_point=None, axis_dir=None,
+                        min_perp=1e-6):
     """Compute the exit-pupil reference sphere for a single chief ray.
 
     The reference sphere is centered on the chief ray's image point (P_chief)
     and has radius |P_xp - P_chief|, where P_xp is the chief ray's closest
-    approach to the optical axis (the line through axis_point parallel to
-    axis_dir).  For a centered coaxial system, the optical axis is the
-    z-axis through the origin (the defaults).
-
-    For tilted/decentered systems, supply axis_point and axis_dir explicitly,
-    or compute P_xp via independent means (e.g., from a bundle of chief rays
-    from different fields) and convert it to a reference-sphere curvature with
-    reference_sphere_curvature for hopkins_eic_closing.
+    approach to the optical axis.
 
     Parameters
     ----------
@@ -260,6 +254,8 @@ def xp_reference_sphere(P_chief, S_chief, axis_point=None, axis_dir=None):
         a point on the optical axis (default: origin)
     axis_dir : iterable, optional
         direction of the optical axis (default: +z)
+    min_perp : float, optional
+        minimum chief slope perpendicular to the axis.
 
     Returns
     -------
@@ -271,7 +267,7 @@ def xp_reference_sphere(P_chief, S_chief, axis_point=None, axis_dir=None):
         axis_point = np.zeros(3, dtype=np.asarray(P_chief).dtype)
     if axis_dir is None:
         axis_dir = np.array([0., 0., 1.], dtype=np.asarray(P_chief).dtype)
-    if _chief_axis_perp_norm(S_chief, axis_dir) < 1e-6:
+    if _chief_axis_perp_norm(S_chief, axis_dir) < min_perp:
         raise ValueError(
             'cannot locate the exit pupil from a near-axial chief ray; pass '
             'P_xp or a resolvable stop/pupil route to anchor the reference '

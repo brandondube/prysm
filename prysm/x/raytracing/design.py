@@ -18,7 +18,6 @@ from .surfaces import _map_stype
 from .sensitivity import merit_jacobian_free as _merit_jacobian_free
 from .opt import (
     rms_spot_radius, _pupil_center_chief_index,
-    hopkins_eic_closing, reference_sphere_curvature,
 )
 from .paraxial import (
     effective_focal_length,
@@ -26,24 +25,23 @@ from .paraxial import (
     paraxial_image_distance,
 )
 from . import analysis as _analysis
-from ._meta import object_space_index, image_space_index, system_first_order
-
-_CACHE_MISS = object()
+from ._meta import object_space_index, image_space_index
+from ._cache import StateCache
 
 
 # ---------- Trace cache ------------------------------------------------------
 
 class _TraceCache:
-    """Per-merit-call raytrace cache keyed by `(id(P), id(S), wvl)`."""
+    """Per-merit-call raytrace cache keyed by array identity."""
 
     __slots__ = ('_prescription', '_cache', '_n_traces', '_xp_cache',
                  '_launch_cache')
 
     def __init__(self, prescription):
         self._prescription = prescription
-        self._cache = {}
-        self._xp_cache = {}
-        self._launch_cache = {}
+        self._cache = StateCache()
+        self._xp_cache = StateCache()
+        self._launch_cache = StateCache()
         self._n_traces = 0
 
     def launch(self, field, wavelength, sampling, *, epd=None):
@@ -51,22 +49,22 @@ class _TraceCache:
         key = (None if field is None else id(field),
                None if sampling is None else id(sampling),
                float(wavelength), epd)
-        cached = self._launch_cache.get(key)
-        if cached is None:
+
+        def _compute():
             f = Field() if field is None else field
             s = Sampling.hex(nrings=4) if sampling is None else sampling
-            cached = _launch(self._prescription, f, wavelength, s, epd=epd)
-            self._launch_cache[key] = cached
-        return cached
+            return _launch(self._prescription, f, wavelength, s, epd=epd)
+
+        return self._launch_cache.get_or_compute(key, _compute)
 
     def trace(self, P, S, wavelength):
         key = (id(P), id(S), float(wavelength))
-        cached = self._cache.get(key)
-        if cached is None:
-            cached = raytrace(self._prescription, P, S, wavelength)
-            self._cache[key] = cached
+
+        def _compute():
             self._n_traces += 1
-        return cached
+            return raytrace(self._prescription, P, S, wavelength)
+
+        return self._cache.get_or_compute(key, _compute)
 
     def exit_pupil(self, P, S, wavelength, *, P_xp=None, chief_index=None,
                    stop_index=None, epd=None, axis_point=None, axis_dir=None):
@@ -74,8 +72,8 @@ class _TraceCache:
         if P_xp is not None:
             return np.asarray(P_xp)
         key = (id(P), id(S), float(wavelength), stop_index)
-        cached = self._xp_cache.get(key, _CACHE_MISS)
-        if cached is _CACHE_MISS:
+
+        def _compute():
             resolved_stop = (stop_index if stop_index is not None
                              else getattr(self._prescription, 'stop_index', None))
             chief = None
@@ -84,11 +82,11 @@ class _TraceCache:
                 ci = (chief_index if chief_index is not None
                       else _pupil_center_chief_index(P))
                 chief = (tr.P[-1, ci], tr.S[-1, ci])
-            cached = _analysis.resolve_exit_pupil(
+            return _analysis.resolve_exit_pupil(
                 self._prescription, wavelength, stop_index=stop_index, epd=epd,
                 chief=chief, axis_point=axis_point, axis_dir=axis_dir)
-            self._xp_cache[key] = cached
-        return cached
+
+        return self._xp_cache.get_or_compute(key, _compute)
 
     @property
     def n_traces(self):
@@ -436,55 +434,33 @@ class WavefrontRMS(_RayMerit):
             P_xp = np.asarray(self.P_xp, dtype=config.precision)
             xp_mode = 'fixed'
         else:
-            resolved_stop = (self.stop_index if self.stop_index is not None
-                             else getattr(prescription, 'stop_index', None))
-            if resolved_stop is not None:
-                try:
-                    fo = system_first_order(
-                        prescription, wvl=wavelength, epd=self.epd,
-                        stop_index=resolved_stop)
-                except ValueError as exc:
-                    if ((self.axis_point is None and self.axis_dir is None)
-                            or not _analysis._first_order_geometry_failure(exc)):
-                        raise
-                    P_xp = _analysis.resolve_exit_pupil(
-                        prescription, wavelength, stop_index=self.stop_index,
-                        epd=self.epd, chief=(C, S_last[chief]),
-                        axis_point=self.axis_point, axis_dir=self.axis_dir)
-                    xp_mode = 'geometric'
-                else:
-                    if fo.xp_z is None:
-                        P_xp = None
-                    else:
-                        P_xp = np.array([0.0, 0.0, float(fo.xp_z)],
-                                        dtype=config.precision)
-                    xp_mode = 'paraxial'
-            else:
-                P_xp = _analysis.resolve_exit_pupil(
-                    prescription, wavelength, stop_index=self.stop_index,
-                    epd=self.epd, chief=(C, S_last[chief]),
-                    axis_point=self.axis_point, axis_dir=self.axis_dir)
-                xp_mode = 'geometric'
+            # the single exit-pupil owner reports its route; the adjoint needs
+            # it to know whether P_xp is differentiably tied to the chief ray.
+            P_xp, xp_mode = _analysis.resolve_exit_pupil(
+                prescription, wavelength, stop_index=self.stop_index,
+                epd=self.epd, chief=(C, S_last[chief]),
+                axis_point=self.axis_point, axis_dir=self.axis_dir,
+                return_mode=True)
             if P_xp is not None:
                 P_xp = np.asarray(P_xp, dtype=config.precision)
 
-        curvature = reference_sphere_curvature(P_xp, C)
-        if P_xp is None:
-            delta = None
-            R = np.inf
-        else:
-            delta = P_xp - C
-            R = float(np.sqrt(np.sum(delta * delta)))
-        chief_v = _analysis._filtered_chief_index(valid, chief)
-        opd = hopkins_eic_closing(
-            trace.P[:, valid], trace.S[:, valid], trace.OPL[:, valid],
-            center=C, curvature=curvature, n_image=n_image,
-            chief_index=chief_v)
+        closing = _analysis.close_on_reference_sphere(
+            trace, valid, chief, center=C, P_xp=P_xp, n_image=n_image)
+        opd = closing.opd
+        # Match analysis._apply_field_and_output for angular fields.
+        # This ramp depends only on the fixed launch positions.
+        if self.field is not None:
+            ax, ay = self.field.angle_radians()
+            P_pupil = trace.P[0]
+            x_pupil = P_pupil[valid, 0] - P_pupil[chief, 0]
+            y_pupil = P_pupil[valid, 1] - P_pupil[chief, 1]
+            opd = opd + (np.sin(ax) * x_pupil + np.sin(ay) * y_pupil)
         rms = float(np.sqrt(np.mean(opd * opd)))
-        return dict(valid=valid, chief=chief, chief_v=chief_v, C=C, R=R,
-                    curvature=curvature, delta=delta, P_xp=P_xp,
-                    xp_mode=xp_mode, opd=opd, rms=rms,
-                    n_image=n_image, P_last=P_last, S_last=S_last)
+        return dict(valid=valid, chief=chief, chief_v=closing.filtered_chief,
+                    C=C, R=closing.R, curvature=closing.curvature,
+                    delta=closing.delta, P_xp=P_xp, xp_mode=xp_mode,
+                    opd=opd, rms=rms, n_image=n_image,
+                    P_last=P_last, S_last=S_last)
 
     def __call__(self, prescription, cache, *, return_seed=False):
         P, S, wvl = self._bundle(prescription, cache)
@@ -492,8 +468,7 @@ class WavefrontRMS(_RayMerit):
         if return_seed:
             g = self._geometry(trace, prescription, wvl)
             return g['rms'], self._seed_from_geometry(trace, g)
-        # reuse the cache's memoized exit pupil for the value path; the geometry
-        # helper resolves the identical point on the adjoint path.
+        # Reuse the memoized exit pupil on the value path.
         P_xp = cache.exit_pupil(
             P, S, wvl, P_xp=self.P_xp,
             chief_index=self.chief_index, stop_index=self.stop_index,

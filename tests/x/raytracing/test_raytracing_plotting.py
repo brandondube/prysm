@@ -10,7 +10,6 @@ matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
 from prysm.x.raytracing.plotting import (
-    lens_groups_from_surfaces,
     mirror_substrate_outline,
     mirror_surface_outline,
     plot_chromatic_focal_shift,
@@ -22,7 +21,7 @@ from prysm.x.raytracing.plotting import (
     plot_transverse_ray_aberration,
     plot_wave_aberration_fan,
 )
-from prysm.x.raytracing.lensdata import LensData
+from prysm.x.raytracing.lensdata import LensData, lens_element_groups
 from prysm.x.raytracing.launch import Field
 from prysm.x.raytracing.spencer_and_murty import RayTraceResult
 from prysm.x.raytracing.surfaces import Conic, OffAxisConic, Plane, Surface
@@ -330,49 +329,54 @@ def test_plot_wave_aberration_fan_can_keep_linear_fit():
         plt.close(fig)
 
 
-def test_lens_groups_from_surfaces_groups_singlet():
+def test_lens_element_groups_groups_singlet():
     prescription = [_refracting_plane(0, n=1.5),
                     _refracting_plane(2, n=1.0)]
 
-    assert lens_groups_from_surfaces(prescription) == [(0, 1)]
+    assert lens_element_groups(prescription) == [(0, 1)]
 
 
-def test_lens_groups_from_surfaces_groups_cemented_doublet():
+def test_lensdata_element_groups_method_queries_the_spine():
+    # two refractors form one singlet; the eval plane is not an element
+    sys_ = _singlet_lensdata()
+    assert sys_.lens.element_groups(wvl=0.5876) == [(0, 1)]
+
+
+def test_lens_element_groups_groups_cemented_doublet():
     prescription = [_refracting_plane(0, n=1.5),
                     _refracting_plane(1, n=1.6),
                     _refracting_plane(2, n=1.0)]
 
-    assert lens_groups_from_surfaces(prescription) == [(0, 1, 2)]
+    assert lens_element_groups(prescription) == [(0, 1, 2)]
 
 
-def test_lens_groups_from_surfaces_groups_cemented_triplet():
+def test_lens_element_groups_groups_cemented_triplet():
     prescription = [_refracting_plane(0, n=1.5),
                     _refracting_plane(1, n=1.6),
                     _refracting_plane(2, n=1.7),
                     _refracting_plane(3, n=1.0)]
 
-    assert lens_groups_from_surfaces(prescription) == [(0, 1, 2, 3)]
+    assert lens_element_groups(prescription) == [(0, 1, 2, 3)]
 
 
-def test_lens_groups_from_surfaces_splits_air_spaced_doublet():
+def test_lens_element_groups_splits_air_spaced_doublet():
     prescription = [_refracting_plane(0, n=1.5),
                     _refracting_plane(1, n=1.0),
                     _refracting_plane(3, n=1.6),
                     _refracting_plane(4, n=1.0)]
 
-    assert lens_groups_from_surfaces(prescription) == [(0, 1), (2, 3)]
+    assert lens_element_groups(prescription) == [(0, 1), (2, 3)]
 
 
-def test_lens_groups_from_surfaces_skips_lone_dummy_plane():
-    # an air-to-air surface between elements (e.g. a standalone aperture stop,
-    # as Code V decks express it) is not a lens element and must not error
+def test_lens_element_groups_skips_lone_dummy_plane():
+    # air-to-air dummy planes are not lens elements
     prescription = [_refracting_plane(0, n=1.5),
                     _refracting_plane(1, n=1.0),
                     _refracting_plane(2, n=1.0),
                     _refracting_plane(3, n=1.6),
                     _refracting_plane(4, n=1.0)]
 
-    assert lens_groups_from_surfaces(prescription) == [(0, 1), (3, 4)]
+    assert lens_element_groups(prescription) == [(0, 1), (3, 4)]
 
 
 def test_plot_optics_skips_lone_dummy_plane():
@@ -447,9 +451,9 @@ def test_plot_optics_marks_stop_from_system_metadata():
         plt.close(fig)
 
 
-def test_lens_groups_from_surfaces_rejects_terminal_group():
+def test_lens_element_groups_rejects_terminal_group():
     with pytest.raises(ValueError, match='terminates'):
-        lens_groups_from_surfaces([_refracting_plane(0, n=1.5),
+        lens_element_groups([_refracting_plane(0, n=1.5),
                                    _refracting_plane(1, n=1.6)])
 
 
@@ -465,13 +469,7 @@ def test_plot_optics_group_od_uses_largest_aperture_in_group():
 
 
 def test_plot_optics_bridges_steep_surface_to_od_with_normal_segment():
-    # A group whose outer radius (here the traced footprint, 1.0) exceeds a
-    # steeply curved member surface's sphere radius (R = 0.5) used to evaluate
-    # that surface's profile past its equator, leaving NaN in the edge wall so
-    # the lens outline broke open.  Now the surface is drawn out to its equator
-    # and bridged to the element OD with a constant-z (normal-to-OD) segment:
-    # the element keeps its full diameter, the outline stays finite, and a
-    # warning is emitted.
+    # steep surfaces stop at the equator and bridge to the element OD
     gentle = Surface(shape=Conic(1 / 5.0, 0.0), interaction='refr',
                      P=np.asarray([0., 0., 0.]), material=materials.ConstantMaterial(1.5))
     steep = Surface(shape=Conic(1 / 0.5, 0.0), interaction='refr',
@@ -489,11 +487,9 @@ def test_plot_optics_bridges_steep_surface_to_od_with_normal_segment():
 
     assert np.isfinite(x).all()
     assert np.isfinite(y).all()
-    # the element keeps its full outer radius -- not shrunk to the steep R=0.5
+    # element OD is preserved
     np.testing.assert_allclose(np.max(np.abs(y)), 1.0)
-    # the steep surface is bridged to the OD by a constant-z segment normal to
-    # the (axial) OD edge, sitting just inside its equator (z ~ 1.46, the
-    # largest z in the outline); the bridge runs from ~the equator out to the OD
+    # constant-z bridge reaches the OD
     ridge = np.isclose(x, np.max(x))
     assert ridge.sum() >= 2
     np.testing.assert_allclose(np.max(np.abs(y[ridge])), 1.0)
@@ -501,10 +497,7 @@ def test_plot_optics_bridges_steep_surface_to_od_with_normal_segment():
 
 
 def test_plot_optics_draws_clear_aperture_land_to_od_silently():
-    # a surface whose own clear aperture (outer_radius) is smaller than the
-    # element OD is drawn out to its aperture, then bridged with a flat land
-    # (normal to the OD).  Unlike a surface that physically cannot reach the OD,
-    # an intentional smaller aperture is silent -- no warning.
+    # intentional smaller apertures bridge silently
     front = Surface(shape=Conic(1 / 50.0, 0.0), interaction='refr',
                     P=np.asarray([0., 0., 0.]), material=materials.ConstantMaterial(1.5),
                     bounding={'outer_radius': 1.0})
@@ -528,8 +521,7 @@ def test_plot_optics_draws_clear_aperture_land_to_od_silently():
     assert np.isfinite(y).all()
     # the element OD is the larger surface's clear aperture
     np.testing.assert_allclose(np.max(np.abs(y)), 3.0)
-    # the small front surface is bridged: its sag is held flat beyond its
-    # aperture (r = 1) out to the OD, a constant-z land at the rim sag
+    # small front surface bridges to the larger OD
     rim_sag = float(front.sag(np.asarray([0.]), np.asarray([1.0]))[0])
     land = np.isclose(x, rim_sag) & (np.abs(y) > 1.0 + 1e-9)
     assert land.sum() >= 2
@@ -537,9 +529,7 @@ def test_plot_optics_draws_clear_aperture_land_to_od_silently():
 
 
 def test_plot_optics_steep_surface_capped_by_own_aperture_is_silent():
-    # a steep surface whose sag cannot reach the element OD must not warn when
-    # its own clear aperture already caps the drawn zone at or below the
-    # equator -- the short draw is intentional, not a layout surprise
+    # aperture-limited steep surfaces do not warn
     gentle = Surface(shape=Conic(1 / 5.0, 0.0), interaction='refr',
                      P=np.asarray([0., 0., 0.]), material=materials.ConstantMaterial(1.5),
                      bounding={'outer_radius': 1.0})
@@ -649,9 +639,7 @@ def test_mirror_substrate_outline_applies_surface_decenter():
 
 
 def test_mirror_substrate_outline_bores_a_through_hole():
-    # a holed primary (bounding inner_radius) must be drawn as two disjoint
-    # closed loops with the bore open through both faces, not one outline
-    # bridged across a solid back
+    # inner_radius draws two loops with an open bore
     surf = Surface(
         shape=Conic(1 / 200.0, 0.0),
         interaction='refl',
@@ -666,19 +654,17 @@ def test_mirror_substrate_outline_bores_a_through_hole():
     )
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
-    # exactly one NaN separator between the two annular loops (plus a trailing
-    # one ending the second loop)
+    # one separator between loops, plus the trailing separator
     assert np.isnan(x).sum() == 2
-    # the bore is open: no drawn point (front or back) lands inside |y| < inner
+    # the bore is open
     finite = np.isfinite(x) & np.isfinite(y)
     assert np.all(np.abs(y[finite]) >= 3.0 - 1e-9)
-    # both faces are present out at the rim: front (z=sag~0) and flat back z=5
+    # both faces are present out at the rim
     assert np.isclose(x[finite].max(), 5.0)
 
 
 def test_mirror_clear_radius_is_an_outer_zone_limit_not_a_hole():
-    # clear_radius caps the drawn optical face toward the rim; it must NOT
-    # punch a central hole (that is bounding inner_radius, see the test above)
+    # clear_radius clips only the outer optical zone
     surf = _reflecting_surface(Conic(1 / 200.0, 0.0), outer_radius=10.0)
     result = _trace_result([surf])
     x, y = mirror_surface_outline(

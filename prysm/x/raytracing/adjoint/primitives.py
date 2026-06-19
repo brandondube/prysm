@@ -2,6 +2,8 @@
 
 from prysm.mathops import np, row_dot
 
+from .._diff_nominal import refract_nominal, eic_nominal
+
 
 # ---------- 1.1 OPL segment -------------------------------------------------
 
@@ -79,17 +81,11 @@ def adj_refract(n, nprime, S_loc, n_hat, dSprime_bar):
         cotangents of the preceding / following index tangents.
 
     """
-    cosI = row_dot(n_hat, S_loc)
-    mu = n / nprime
-    one_minus = 1.0 - cosI * cosI
-    sinT2 = mu * mu * one_minus
-    cosT = np.sqrt(1.0 - sinT2)
-    sign = np.sign(cosI)
+    cosI, mu, one_minus, cosT, sign, factor = refract_nominal(
+        n, nprime, S_loc, n_hat)
 
-    # nominal factor not needed; only its derivative structure transposes.
     # --- back through dSprime = S_loc*mu_dot + mu*S_locdot
     #                            + n_hat*dfactor + factor*dn_hat
-    factor = sign * cosT - mu * cosI
     S_locdot_bar = mu * dSprime_bar
     dn_hat_bar = factor[:, None] * dSprime_bar
     mu_dot_bar = np.sum(row_dot(S_loc, dSprime_bar))
@@ -367,17 +363,7 @@ def adj_eic_closing_full(P, S, C, kappa, s_bar):
     kappa_bar : float
 
     """
-    r = P - C[None, :]
-    b = row_dot(S, r)
-    rr = row_dot(r, r)
-    m = b * b - rr
-    k = float(kappa)
-    disc = 1.0 + k * k * m
-    disc[disc < 0] = 0.0
-    w = np.sqrt(disc)
-    wsafe = np.where(w == 0, 1.0, w)
-    g = k * m
-    h = 1.0 + w
+    r, b, m, k, wsafe, g, h = eic_nominal(P, S, C, kappa)
 
     # forward: s = -b - g / h
     b_bar = -s_bar

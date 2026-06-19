@@ -323,9 +323,9 @@ def test_coating_round_trips_onto_compiled_surface_and_listing():
                semidiameter=8.0, coating=ar)
           .add(Plane(), typ='eval'))
     assert ld.rows[0].coating is ar
-    assert ld.surfaces[0].coating is ar              # compiles onto the Surface
+    assert ld.surfaces[0].coating is ar
     assert ld.surfaces[1].coating is None            # bare image plane
-    assert ld.copy().rows[0].coating is ar           # survives copy
+    assert ld.copy().rows[0].coating is ar
     records = surface_table(ld).records
     assert records[0]['coating'] is True
     assert records[1]['coating'] is False

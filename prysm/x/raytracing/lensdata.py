@@ -4,7 +4,7 @@ import math
 import warnings
 
 from prysm.conf import config
-from prysm.mathops import np
+from prysm.mathops import np, array_to_true_numpy
 
 from ..materials import MIRROR
 from .surfaces import (
@@ -25,7 +25,7 @@ from .surfaces import (
     _map_stype,
 )
 from .paraxial import paraxial_image_distance
-from .spencer_and_murty import STYPE_EVAL, STYPE_REFLECT
+from .spencer_and_murty import STYPE_EVAL, STYPE_REFLECT, STYPE_REFRACT
 
 
 _DEG2RAD = math.pi / 180.0
@@ -639,6 +639,66 @@ class ParamSpec:
 # LensData
 # ---------------------------------------------------------------------------
 
+def lens_element_groups(surfaces, *, wvl=0.587, ambient_index=1.0,
+                        index_atol=1e-9):
+    """Group consecutive refracting surfaces into physical lens elements.
+
+    Parameters
+    ----------
+    surfaces : iterable of Surface
+        a compiled prescription, e.g. LensData.to_surfaces().
+    wvl : float, optional
+        wavelength in microns for evaluating post-surface material indices.
+    ambient_index : float, optional
+        refractive index that closes a physical lens group.
+    index_atol : float, optional
+        absolute tolerance for comparing a material index to ambient_index.
+
+    Returns
+    -------
+    list of tuple
+        surface indices of singlets and cemented groups.
+
+    """
+    groups = []
+    active = []
+
+    for j, surf in enumerate(surfaces):
+        if surf.typ != STYPE_REFRACT:
+            if active:
+                raise ValueError(
+                    'refracting lens group is interrupted before returning '
+                    'to ambient material'
+                )
+            continue
+
+        if surf.material is None:
+            raise ValueError('refracting surfaces must define a material')
+        n_post = surf.material.n(wvl)
+        if np.isscalar(n_post):
+            n_post = float(n_post)
+        else:
+            n_post = array_to_true_numpy(n_post)
+            if n_post.size != 1:
+                raise ValueError('material evaluation must produce a scalar index')
+            n_post = float(n_post.reshape(-1)[0])
+
+        active.append(j)
+        if np.isclose(n_post, ambient_index, rtol=0, atol=index_atol):
+            if len(active) >= 2:
+                groups.append(tuple(active))
+            # lone ambient-to-ambient surfaces are not lens elements
+            active = []
+
+    if active:
+        raise ValueError(
+            'a refracting lens group terminates before returning to ambient '
+            'material'
+        )
+
+    return groups
+
+
 class LensData:
     """Editable sequential optical system."""
 
@@ -693,6 +753,12 @@ class LensData:
         surfaces = self._compile_surfaces()
         self._surfaces_cache = surfaces
         return surfaces
+
+    def element_groups(self, *, wvl=0.587, ambient_index=1.0, index_atol=1e-9):
+        """Physical lens-element groups of the compiled surfaces."""
+        return lens_element_groups(self.to_surfaces(), wvl=wvl,
+                                   ambient_index=ambient_index,
+                                   index_atol=index_atol)
 
     def _compile_surfaces(self):
         """Compile rows -> surfaces with no caching or dependency resolution."""

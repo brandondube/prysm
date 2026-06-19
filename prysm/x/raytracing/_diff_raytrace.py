@@ -10,11 +10,12 @@ from .spencer_and_murty import (
     valid_mask,
 )
 from ._line_math import normalize_vector
-from .opt import hopkins_eic_closing, _chief_axis_perp_norm
+from .opt import _chief_axis_perp_norm
+from ._diff_nominal import refract_nominal, eic_nominal
 from .analysis import (
     _pupil_center_chief_index,
-    _filtered_chief_index,
     _apply_field_and_output,
+    close_on_reference_sphere,
 )
 from ._meta import object_space_index, image_space_index, system_stop_index
 
@@ -108,22 +109,16 @@ def d_refract(n, nprime, S_loc, n_hat, S_locdot, dn_hat, ndot_pre, ndot_post):
     S' = mu S + (sign(cosI) cosT - mu cosI) n_hat,  mu = n / n'.
     Index tangents enter via mu_dot = (ndot n' - n ndot') / n'^2.
     """
-    cosI = row_dot(n_hat, S_loc)
+    cosI, mu, one_minus, cosT, sign, factor = refract_nominal(
+        n, nprime, S_loc, n_hat)
     dcosI = _dot_nt(S_loc, dn_hat) + _dot_nt(n_hat, S_locdot)
-    mu = n / nprime
     mu_dot = (ndot_pre * nprime - n * ndot_post) / (nprime * nprime)  # (P,)
-    one_minus = 1.0 - cosI * cosI
-    sinT2 = mu * mu * one_minus
-    with np.errstate(invalid='ignore'):
-        cosT = np.sqrt(1.0 - sinT2)
     dsinT2 = (2.0 * mu * mu_dot[None, :] * one_minus[:, None]
               - 2.0 * mu * mu * cosI[:, None] * dcosI)
     # TIR rays already carry invalid directions; keep their derivatives finite.
     with np.errstate(divide='ignore', invalid='ignore'):
         dcosT = -dsinT2 / (2.0 * cosT[:, None])
     dcosT[~np.isfinite(dcosT)] = 0.0
-    sign = np.sign(cosI)
-    factor = sign * cosT - mu * cosI
     dfactor = (sign[:, None] * dcosT - mu * dcosI
                - mu_dot[None, :] * cosI[:, None])
     Sprime = mu * S_loc + factor[:, None] * n_hat
@@ -857,24 +852,14 @@ def d_eic_closing(P, S, Pdot, Sdot, C, Cdot, kappa, kappa_dot):
         per-ray, per-parameter tangent of the closing segment.
 
     """
-    r = P - C[None, :]
+    r, b, m, k, wsafe, g, h = eic_nominal(P, S, C, kappa)
     rdot = Pdot - Cdot[None, :, :]
-    b = row_dot(S, r)
     bdot = _dot_nt(r, Sdot) + _dot_nt(S, rdot)
-    rr = row_dot(r, r)
     rrdot = 2.0 * _dot_nt(r, rdot)
-    m = b * b - rr
     mdot = 2.0 * b[:, None] * bdot - rrdot
-    k = float(kappa)
-    disc = 1.0 + k * k * m
-    disc[disc < 0] = 0.0
     discdot = 2.0 * k * kappa_dot[None, :] * m[:, None] + k * k * mdot
-    w = np.sqrt(disc)
-    wsafe = np.where(w == 0, 1.0, w)
     wdot = discdot / (2.0 * wsafe[:, None])
-    g = k * m
     gdot = kappa_dot[None, :] * m[:, None] + k * mdot
-    h = 1.0 + w
     # s = -b - g / h;  h_dot = w_dot
     sdot = -bdot - (gdot * h[:, None] - g[:, None] * wdot) / (h[:, None] ** 2)
     return sdot
@@ -943,15 +928,12 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
     kappa = 1.0 / R
     kappa_dot = -Rdot / (R * R)
 
-    filtered_chief = _filtered_chief_index(valid, chief_index)
-
     n_image = image_space_index(surfaces, wavelength, fallback=n_object)
-    # nominal value via the determinate EIC closing -- identical to
-    # analysis.wavefront, so the nominal cannot drift between the two paths.
-    opd = hopkins_eic_closing(trace.P[:, valid], trace.S[:, valid],
-                              trace.OPL[:, valid],
-                              center=P_chief_final, curvature=kappa,
-                              n_image=n_image, chief_index=filtered_chief)
+    # Same closing kernel as analysis.wavefront; tangent carries kappa_dot.
+    closing = close_on_reference_sphere(trace, valid, chief_index,
+                                        center=C, P_xp=P_xp, n_image=n_image)
+    opd = closing.opd
+    filtered_chief = closing.filtered_chief
 
     P_last_f = trace.P[-1, valid]
     S_last_f = trace.S[-1, valid]
@@ -968,9 +950,7 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
     x_pupil = P[valid, 0] - P[chief_index, 0]
     y_pupil = P[valid, 1] - P[chief_index, 1]
 
-    # field tilt and length/waves scaling are tau-independent factors, so the
-    # same scale that converts opd converts the tangent maps (shared with
-    # analysis.wavefront so the nominal opd cannot drift between the two).
+    # Field tilt and unit scaling are tau-independent.
     opd, scale = _apply_field_and_output(opd, x_pupil, y_pupil, field, output,
                                          wavelength)
     dW = opd_dot * scale

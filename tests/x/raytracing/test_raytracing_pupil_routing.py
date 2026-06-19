@@ -130,12 +130,7 @@ _FISHEYE_STOP = 2
 
 
 def fisheye(epd, ray_aiming='real'):
-    """Wide-angle retrofocus with a strong negative front group.
-
-    The negative front element walks the entrance pupil far with field, so the
-    field-independent paraxial pupil is a poor wide-field aiming seed -- the
-    regime the parabasal field-dependent EP + continuation ladder targets.
-    """
+    """Wide-angle retrofocus with a strong negative front group."""
     NG = pmat.ConstantMaterial(1.6)
     ld = LensData()
     ld.add(Conic(1 / 40.0, 0.0), thickness=3.0, material=NG, semidiameter=14.0)
@@ -152,7 +147,7 @@ def fisheye(epd, ray_aiming='real'):
 
 
 def _primary_only(sys, angle, epd, n=15):
-    """Real aiming WITHOUT the ladder: the paraxial-EP-seeded primary aim."""
+    """Real aiming without the continuation ladder."""
     ep = _entrance_pupil_z(sys, WVL)
     pupil_z = float(list(sys.to_surfaces())[0].P[2])
     fld = Field(0.0, float(angle), unit='deg')
@@ -167,8 +162,7 @@ def _primary_only(sys, angle, epd, n=15):
 
 
 def test_ladder_rescues_wide_field_marginal_rays():
-    """At a wide field the ladder converges strictly more rays than the bare
-    primary aim, by re-seeding from the parabasal field-dependent pupil."""
+    """At wide field the ladder converges more rays than primary aiming."""
     epd, ang, n = 6.0, 50.0, 15
     sys = fisheye(epd)
     _, _, conv_primary = _primary_only(sys, ang, epd, n=n)
@@ -190,8 +184,7 @@ def test_ladder_holds_chief_on_stop_center_at_wide_field():
 
 
 def test_ladder_is_dormant_when_primary_converges():
-    """When the primary aim already converges, the ladder returns it unchanged
-    (bit-identical), so converging-field behavior is untouched."""
+    """When primary aiming converges, the ladder returns it unchanged."""
     epd, ang, n = 4.0, 20.0, 15
     sys = fisheye(epd)
     Pp, Sp, conv = _primary_only(sys, ang, epd, n=n)
@@ -203,11 +196,9 @@ def test_ladder_is_dormant_when_primary_converges():
 
 
 def test_ladder_is_best_effort_and_never_raises():
-    """An inaccessible (TIR/vignetted) field returns best-effort, never raises,
-    so launch stays predictable -- failed rays are dropped downstream, exactly
-    as paraxial aiming drops them."""
+    """Inaccessible fields return best-effort without raising."""
     sys = fisheye(6.0)
-    # 70 deg is past the real aperture: the bundle cannot be aimed onto the stop.
+    # 70 deg is past the real aperture.
     P, S = launch(sys, Field(0.0, 70.0, unit='deg'), WVL,
                   Sampling.fan(n=15, axis='y'))   # must not raise
     assert P.shape == (15, 3) and S.shape == (15, 3)
@@ -227,16 +218,7 @@ def test_ladder_never_worse_than_primary_across_fields():
 
 
 def test_drop_unaimed_nans_unaimable_ray_directions():
-    """Regression: a rim ray no aiming pass can register on the stop is a best-
-    effort seed ray -- it still transmits to the image, but does not pass through
-    the pupil coordinate it samples.  Returned as-is it draws a discontinuity (a
-    kink) in the fan at the rim.
-
-    drop_unaimed NaNs that ray's direction only: the trace then fails it, while
-    the launch position is kept so pupil-centroid chief detection is unchanged,
-    and every genuinely-aimed ray (the default best-effort solution) is bit-
-    identical.  The default keeps best-effort, so the vignetting solve is intact.
-    """
+    """drop_unaimed NaNs only unaimable ray directions."""
     sys = fisheye(6.0)
     fld = Field(0.0, 30.0, unit='deg')             # the +y rim is unaimable here
     samp = Sampling.fan(n=15, axis='y')
@@ -248,18 +230,13 @@ def test_drop_unaimed_nans_unaimable_ray_directions():
     assert np.isfinite(S_be).all()                   # default keeps them finite
     np.testing.assert_array_equal(P_be, P_dr)        # positions untouched
     np.testing.assert_array_equal(S_dr[~unaimable], S_be[~unaimable])
-    # the dropped rim ray transmits to the image best-effort -- exactly why it
-    # used to kink the fan (finite, at a pupil coordinate it never passed) rather
-    # than truncate it.
+    # Best-effort launch would still trace the dropped ray.
     img_be = raytrace(sys, P_be, S_be, WVL).P[-1]
     assert np.isfinite(img_be[unaimable]).all()
 
 
 def test_ray_fans_truncate_unaimable_rim_without_kink():
-    """The fan analysis enables drop_unaimed, so a wide-field fan NaN-truncates
-    an unaimable rim ray instead of stranding it on a wrong branch.  On the
-    best-effort path that ray was finite (no NaN at all); here it is dropped, the
-    surviving samples stay contiguous, and the chief survives."""
+    """Wide-field fans NaN-truncate unaimable rim rays."""
     sys = fisheye(6.0)
     grid = pa.ray_aberration_fans(sys, fields=[Field(0.0, 30.0, unit='deg')],
                                   wavelengths=[WVL], nrays=15)
@@ -267,8 +244,7 @@ def test_ray_fans_truncate_unaimable_rim_without_kink():
     assert np.isnan(yfan).any()                      # unaimable rim truncated
     finite_idx = np.flatnonzero(np.isfinite(yfan))
     assert finite_idx.size >= 12 and 7 in finite_idx  # chief (center) survives
-    # the survivors form one contiguous run -- the curve truncates cleanly with
-    # no finite best-effort ray stranded across a NaN gap (the old kink).
+    # surviving samples remain contiguous
     assert np.array_equal(finite_idx,
                           np.arange(finite_idx[0], finite_idx[-1] + 1))
 

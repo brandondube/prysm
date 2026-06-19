@@ -1,9 +1,4 @@
-"""Tests for the complex pupil field bridge (field.py), Phase 0.
-
-Covers the shared Fresnel seam, per-surface normal/incidence recovery, the
-unpolarized scalar amplitude, and the geometric (sine-space) apodization that
-is Hopkins' a(X', Y').
-"""
+"""Tests for the complex pupil field bridge."""
 import numpy as np
 import pytest
 
@@ -150,12 +145,7 @@ def test_apodization_masks_invalid_rays():
 
 
 def test_apodization_nan_neighbor_does_not_zero_valid_rays():
-    """A NaN (missed/clipped) sphere sample must not zero its valid neighbors.
-
-    np.gradient's central difference spreads a single NaN onto adjacent grid
-    points; without the inpaint that zeroes legitimately-transmitted rays just
-    inside a vignetting boundary.
-    """
+    """A NaN sphere sample must not zero its valid neighbors."""
     x = np.linspace(-1, 1, 11)
     a, b = np.meshgrid(x, x)
     entrance = np.stack([a, b], axis=-1)
@@ -187,10 +177,7 @@ def test_raytrace_field_carries_trace_and_amplitude():
 
 def test_raytrace_field_tir_gives_zero_amplitude():
     """Rays beyond the critical angle carry zero transmitted amplitude."""
-    # bundle inside glass onto a flat glass->air interface at 50 deg; critical
-    # angle is ~41.8 deg, so all rays totally internally reflect and transmit
-    # no power.  The launch medium (n=1.5) is carried by a leading eval object
-    # surface -- the convention for an immersed launch.
+    # leading eval surface sets the immersed launch medium
     presc = [plane(interaction='eval', P=[0, 0, -5.0], material=materials.ConstantMaterial(1.5)),
              plane(interaction='refr', P=[0, 0, 0], material=materials.air),
              plane(interaction='eval', P=[0, 0, 10.0])]
@@ -204,9 +191,7 @@ def test_raytrace_field_tir_gives_zero_amplitude():
 # ---------- sine-space pupil coordinates -----------------------------------
 
 def test_sine_space_coords_scale_with_sin_theta():
-    """The direction-cosine pupil coordinate scales with sin(theta) (sine
-    space), not tan(theta) -- the parameterization that makes the PSF a plain
-    Fourier transform.  Determinate for every conjugate (no exit pupil needed)."""
+    """The direction-cosine pupil coordinate scales with sin(theta)."""
     scale = 50.0
     thetas = np.radians(np.array([0.0, 10.0, 20.0, 30.0]))
     S_chief = np.array([0.0, 0.0, 1.0])
@@ -246,8 +231,7 @@ def test_pupil_field_low_na_matches_airy():
 
 
 def _telecentric_slow(epd=3.0):
-    """Image-space-telecentric slow singlet: stop one front-focal-distance
-    ahead of the lens, so the exit pupil is at infinity (xp_z is None)."""
+    """Image-space-telecentric slow singlet."""
     from prysm.x.raytracing import OpticalSystem, LensData
     from prysm.x.raytracing.surfaces import Conic, Plane
     from prysm.x.raytracing.paraxial import ynu_first_order, paraxial_image_distance
@@ -278,10 +262,7 @@ def _telecentric_slow(epd=3.0):
 
 
 def test_pupil_field_telecentric_exit_pupil_at_infinity_is_airy():
-    """An image-space-telecentric system has its exit pupil at infinity, where a
-    position-on-the-sphere coordinate would diverge; the sine-space (direction
-    cosine) coordinate scaled by |EFL| stays finite, so the F-number EFL/EPD is
-    bounded and the well-corrected on-axis PSF is a clean, centered Airy."""
+    """Telecentric image space keeps finite sine-space coordinates."""
     from prysm.x.raytracing.paraxial import ynu_first_order
     sysT, wvl = _telecentric_slow(epd=3.0)
     assert ynu_first_order(sysT, wvl, stop_index=0).xp_z is None
@@ -316,28 +297,21 @@ def test_pupil_field_to_wavefront_is_pupil_space():
 
 
 def test_pupil_field_coating_is_amplitude_only():
-    """Fresnel loss attenuates amplitude but leaves the wavefront unchanged.
-
-    The bare-interface Fresnel factor is part of the scalar amplitude; the OPD
-    must be identical to the phase-only wavefront() result on the same rays.
-    """
+    """Fresnel loss attenuates amplitude but leaves OPD unchanged."""
     from prysm.x.raytracing.analysis import wavefront
     presc = _fast_singlet()
     wvl = 0.5
     P, S = launch(presc, Field(0., 0.), wvl, Sampling.rect(n=64),
                   epd=8.0, pupil_z=-20.0)
-    # phase-only wavefront on the same launch bundle, masked to the inscribed
-    # circular entrance pupil so it covers the same rays pupil_field keeps
+    # phase-only wavefront over the same inscribed circular pupil
     opd_ref, xr, yr = wavefront(presc, P, S, wvl, P_xp=(0, 0, 0))
     circ = np.hypot(xr, yr) <= 4.0 * (1.0 + 1e-9)
     pf = field.pupil_field(presc, Field(0., 0.), wvl, epd=8.0, npupil=64,
                            P_xp=(0, 0, 0), pupil_z=-20.0)
-    # amplitude carries Fresnel loss: strictly below the lossless geometric
-    # value (< 1 after two glass interfaces), and not all equal
+    # amplitude carries Fresnel loss
     assert float(np.max(pf.amplitude)) < 1.0
     assert float(np.ptp(pf.amplitude)) > 0.0
-    # OPD agrees with the phase-only wavefront (amplitude-only coating), in
-    # length units, over the matched circular pupil
+    # OPD agrees with the phase-only wavefront
     assert np.nanmax(np.abs(opd_ref[circ])) == pytest.approx(
         np.nanmax(np.abs(pf.opd)), rel=1e-6)
 
@@ -361,12 +335,7 @@ def test_pupil_field_on_axis_requires_pupil_anchor():
 
 
 def test_pupil_field_obscured_chief_needs_centroid_reference():
-    """A central obstruction clips the chief; reference='centroid' recovers it.
-
-    Mirrors analysis.wavefront: reference='chief' raises a clear error (not a
-    bare IndexError out of the chief-index lookup), and reference='centroid'
-    anchors on the surviving ray nearest the pupil center.
-    """
+    """A clipped chief needs reference='centroid'."""
     presc, f = _slow_parabola()
     presc[0].aperture = annular_aperture(0.5, 4.0)    # block the pupil center
     wvl = 0.5
@@ -380,13 +349,7 @@ def test_pupil_field_obscured_chief_needs_centroid_reference():
 
 
 def test_pupil_field_finite_conjugate_apodization_does_not_collapse():
-    """A finite-conjugate (object-height) field must keep a real apodization.
-
-    Regression: the apodization used the launch positions, which coincide at
-    the object point for a finite conjugate, so np.gradient divided by zero
-    spacing and the amplitude collapsed to zero.  Using the pupil-sample grid
-    fixes it -- the amplitude must be finite and nonzero.
-    """
+    """A finite-conjugate field keeps finite apodization."""
     ng = materials.ConstantMaterial(1.5)
     presc = [conic(c=1 / 30., k=0, interaction='refr', P=[0, 0, 0],
                    material=ng),
@@ -578,12 +541,11 @@ def test_metal_mirror_has_diattenuation_and_retardance():
                                             coating=al, wavelength=0.55)
     Rs = np.abs(a_s) ** 2
     Rp = np.abs(a_p) ** 2
-    # near-unit reflectance, with diattenuation growing toward grazing
+    # near-unit reflectance, diattenuating off-axis
     assert np.all(Rs > 0.8) and np.all(Rp > 0.8)
     assert Rs[0] == pytest.approx(Rp[0], rel=1e-9)        # equal at normal
     assert Rs[2] > Rp[2]                                   # Rs > Rp obliquely
-    # s-p retardance: 180 deg at normal (the ideal-mirror sign), departing
-    # obliquely -- the polarization aberration a scalar mirror cannot show
+    # s-p retardance departs from the ideal-mirror sign obliquely
     retardance = np.degrees(np.angle(a_s) - np.angle(a_p)) % 360.0
     assert retardance[0] == pytest.approx(180.0, abs=1e-6)
     assert abs(retardance[2] - 180.0) > 5.0

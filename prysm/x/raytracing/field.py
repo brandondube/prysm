@@ -16,12 +16,13 @@ from .launch import Sampling, _apply_vignetting
 from .paraxial import effective_focal_length
 from .opt import (
     _pupil_center_chief_index,
-    hopkins_eic_closing, reference_sphere_curvature, xp_reference_sphere,
 )
-from .analysis import _apply_field_and_output, _filtered_chief_index
+from .analysis import (
+    _apply_field_and_output, resolve_exit_pupil, close_on_reference_sphere,
+)
 from ._trace_grid import trace_cell
 from ._meta import (
-    system_epd, system_wavelength, system_first_order,
+    system_epd, system_wavelength,
     object_space_index, image_space_index,
 )
 
@@ -127,32 +128,20 @@ def surface_normals_from_trace(prescription, trace, wavelength):
 
 
 def _transmission_energy_norm(n0, n1, theta0, pol):
-    """sqrt(Re(eta_sub / eta_0)): admittance-amplitude -> sqrt(power) factor.
-
-    The thin-film TMM returns the tangential-field (admittance-convention)
-    amplitude transmission t; the energy-normalized amplitude a = t * this
-    factor has |a|**2 equal to the true power transmittance.  Real and positive
-    for a non-evanescent substrate, so it carries no phase of its own.
-    """
+    """Obliquity factor from field transmission to sqrt(power)."""
     cost0 = np.cos(theta0)
     cost1 = _complex_sqrt(1.0 - ((n0 / n1) * np.sin(theta0)) ** 2)
-    if pol == 's':
-        ratio = (n1 * cost1) / (n0 * cost0)
-    else:
-        ratio = (n1 * cost0) / (n0 * cost1)
+    # The caller zeroes grazing and critical-angle rays.
+    with np.errstate(divide='ignore', invalid='ignore'):
+        if pol == 's':
+            ratio = (n1 * cost1) / (n0 * cost0)
+        else:
+            ratio = (n1 * cost0) / (n0 * cost1)
     return _complex_sqrt(np.real(ratio))
 
 
 def _coating_coefficients(coating, n0, n1, cosI, theta0, typ, wavelength):
-    """Energy-normalized (a_s, a_p) from a thin-film stack at per-ray incidence.
-
-    The stack supplies the layer recipe; the surrounding media come from the
-    trace.  A refracting interface immerses the stack between the incidence
-    medium n0 (ambient) and the glass n1 (substrate) and returns the
-    transmission; a reflecting interface keeps the stack's own substrate (the
-    metal/back medium of a mirror coating) and returns the reflection, signed
-    so a perfect-conductor coating reduces to the bare ideal mirror (1, -1).
-    """
+    """Thin-film stack s/p amplitudes for one traced interface."""
     if wavelength is None:
         raise TypeError('a coated surface requires a wavelength')
     if typ == STYPE_REFRACT:
@@ -164,19 +153,18 @@ def _coating_coefficients(coating, n0, n1, cosI, theta0, typ, wavelength):
             config.precision_complex)
         a_p = (t_p * _transmission_energy_norm(n0, n1, theta0, 'p')).astype(
             config.precision_complex)
-        # evanescent substrate (TIR through the stack): no transmitted power.
+        # TIR and grazing incidence transmit no power.
         cost1 = _complex_sqrt(1.0 - ((n0 / n1) * np.sin(theta0)) ** 2)
-        tir = np.imag(cost1) != 0
-        a_s[tir] = 0.0
-        a_p[tir] = 0.0
+        dead = (np.imag(cost1) != 0) | ~np.isfinite(a_s) | ~np.isfinite(a_p)
+        a_s[dead] = 0.0
+        a_p[dead] = 0.0
         return a_s, a_p
     if typ == STYPE_REFLECT:
         stack = Stack(coating.indices, coating.thicknesses,
                       substrate_index=coating.substrate_index, ambient_index=n0)
         r_s, _ = stack_rt(stack, wavelength, theta0, 's')
         r_p, _ = stack_rt(stack, wavelength, theta0, 'p')
-        # s-p-k basis: the ideal-mirror p flips sign, so a_s = -r_s, a_p = +r_p
-        # reduces to diag(1, -1) at the perfect-conductor limit (r -> -1).
+        # s-p-k basis signs match the bare ideal mirror limit: (1, -1).
         return ((-r_s).astype(config.precision_complex),
                 r_p.astype(config.precision_complex))
     ones = np.ones_like(cosI, dtype=config.precision_complex)
@@ -185,13 +173,6 @@ def _coating_coefficients(coating, n0, n1, cosI, theta0, typ, wavelength):
 
 def interface_coefficients(n0, n1, cosI, typ, *, coating=None, wavelength=None):
     """Energy-normalized s/p amplitude coefficients (a_s, a_p) for one interface.
-
-    The single interface-coefficient provider for both the scalar unpolarized
-    path and polarization ray tracing.  Returns complex amplitude coefficients
-    whose squared magnitude is the s/p power coefficient -- transmittance at a
-    refracting interface, reflectance at a reflecting one -- and whose phase is
-    the physical interface phase shift.  The scalar path takes
-    (|a_s|**2 + |a_p|**2) / 2; the PRT path uses them as the s/p Jones diagonal.
 
     Parameters
     ----------
@@ -204,8 +185,7 @@ def interface_coefficients(n0, n1, cosI, typ, *, coating=None, wavelength=None):
     typ : int
         surface interaction code (STYPE_REFRACT, STYPE_REFLECT, or eval).
     coating : coatings.Stack, optional
-        thin-film stack.  None (default) gives the bare Fresnel interface and,
-        on reflection, the lossless ideal mirror.
+        thin-film stack; None gives a bare interface.
     wavelength : float, optional
         wavelength in microns; required when a coating is present.
 
@@ -216,12 +196,7 @@ def interface_coefficients(n0, n1, cosI, typ, *, coating=None, wavelength=None):
 
     Notes
     -----
-    A refracting interface beyond the critical angle returns zero: TIR is fatal
-    to the ray, which the trace has already dropped.  A bare reflection is the
-    azimuth-independent ideal mirror diag(a_s, a_p) = (1, -1): the p sign flips
-    in the s-p-k basis so the system matrix is diag(1, 1, -1) with no
-    diattenuation or retardance.  A coated or metal mirror supplies the TMM s/p
-    reflectances instead (its complex nk substrate carries metal absorption).
+    TIR returns zero.  Bare reflection returns the ideal mirror (1, -1).
 
     """
     cosI = np.abs(np.asarray(cosI))
@@ -230,26 +205,24 @@ def interface_coefficients(n0, n1, cosI, typ, *, coating=None, wavelength=None):
         return _coating_coefficients(coating, n0, n1, cosI, theta0, typ,
                                      wavelength)
     if typ == STYPE_REFRACT:
-        # Snell, with a complex sqrt so TIR produces an imaginary cos(theta1).
+        # Complex cos(theta1) carries TIR.
         sint1 = (n0 / n1) * np.sin(theta0)
         cost1 = _complex_sqrt(1.0 - sint1 * sint1)
-        theta1 = np.arccos(cost1)
-        t_s = thinfilm.fresnel_ts(n0, n1, theta0, theta1)
-        t_p = thinfilm.fresnel_tp(n0, n1, theta0, theta1)
-        # power transmittance carries (n1 cos theta1) / (n0 cos theta0) for both
-        # polarizations (the ratio of the normal Poynting flux).
-        oblique = _complex_sqrt((n1 * cost1) / (n0 * np.cos(theta0)))
-        a_s = (t_s * oblique).astype(config.precision_complex)
-        a_p = (t_p * oblique).astype(config.precision_complex)
-        tir = np.imag(cost1) != 0
-        a_s[tir] = 0.0
-        a_p[tir] = 0.0
+        # Zero non-transmitting rays after the divisions.
+        with np.errstate(divide='ignore', invalid='ignore'):
+            theta1 = np.arccos(cost1)
+            t_s = thinfilm.fresnel_ts(n0, n1, theta0, theta1)
+            t_p = thinfilm.fresnel_tp(n0, n1, theta0, theta1)
+            oblique = _complex_sqrt((n1 * cost1) / (n0 * np.cos(theta0)))
+            a_s = (t_s * oblique).astype(config.precision_complex)
+            a_p = (t_p * oblique).astype(config.precision_complex)
+        dead = (np.imag(cost1) != 0) | ~np.isfinite(a_s) | ~np.isfinite(a_p)
+        a_s[dead] = 0.0
+        a_p[dead] = 0.0
         return a_s, a_p
     ones = np.ones_like(cosI, dtype=config.precision_complex)
     if typ == STYPE_REFLECT:
-        # bare reflection: lossless ideal mirror, p flips sign in the s-p-k basis
         return ones, -ones
-    # eval / non-interacting surface: the ray passes straight through
     return ones, ones
 
 
@@ -261,18 +234,12 @@ def _power_coefficient(a_s, a_p):
 def unpolarized_amplitude(prescription, trace, wavelength):
     """Per-ray scalar amplitude transmittance through the system.
 
-    Accumulates sqrt of the unpolarized power coefficient
-    (|a_s|**2 + |a_p|**2) / 2 at every surface, drawing the s/p coefficients
-    from the shared interface_coefficients provider.  Bare refracting surfaces
-    contribute the Fresnel transmittance, bare mirrors are lossless, and a
-    Surface.coating contributes its thin-film transmittance (refract) or
-    reflectance (reflect).  This is the amplitude-only coating factor -- the
-    wavefront phase is left to the geometric optical path difference.
+    Uses sqrt((|a_s|**2 + |a_p|**2) / 2) at each surface.
 
     Parameters
     ----------
     prescription : sequence of Surface
-        the traced system; each surface's coating attribute is consulted.
+        the traced system.
     trace : RayTraceResult
         result of raytrace through prescription.
     wavelength : float
@@ -292,7 +259,6 @@ def unpolarized_amplitude(prescription, trace, wavelength):
     for j in range(jj):
         coating = surfaces[j].coating
         if coating is None and typ[j] != STYPE_REFRACT:
-            # bare reflection / eval: lossless, amplitude unchanged
             continue
         a_s, a_p = interface_coefficients(
             n0[j], n1[j], cosI[j], typ[j], coating=coating,
@@ -303,12 +269,6 @@ def unpolarized_amplitude(prescription, trace, wavelength):
 
 def raytrace_field(prescription, P, S, wavelength):
     """Intensity-aware trace: geometry plus a scalar amplitude.
-
-    Wraps spencer_and_murty.raytrace and accumulates the unpolarized,
-    amplitude-only coating factor (the wavefront phase comes from the optical
-    path difference, computed downstream).  Per-surface coatings are read from
-    each Surface.coating attribute.  The kernel is not modified; this is the
-    separate, intensity-aware entry point.
 
     Parameters
     ----------
@@ -349,16 +309,7 @@ def _axis_perp_basis(axis_dir, dtype):
 def sine_space_coords(S_last, S_chief, scale, axis_dir=None):
     """Sine-space (direction-cosine) pupil coordinates of a ray bundle.
 
-    Hopkins' (X', Y') pupil coordinates are proportional to the transverse ray
-    direction cosines -- the only parameterization for which the diffraction
-    PSF is the plain Fourier transform of the pupil function.  Here they are
-    taken directly from the direction cosines (chief-relative), so they stay
-    finite and well-defined for every conjugate, including an exit pupil at
-    infinity (image-space telecentric) where a position-on-the-sphere
-    coordinate would diverge.  scale carries the length units: |EFL| maps the
-    dimensionless direction-cosine difference to the equivalent physical pupil
-    height, paired with focus(efl = scale / n_image) so the F-number
-    scale = |EFL| / EPD is correct and bounded for all focusing systems.
+    The scale maps direction-cosine differences to length units.
 
     Parameters
     ----------
@@ -383,28 +334,19 @@ def sine_space_coords(S_last, S_chief, scale, axis_dir=None):
     S_chief = np.asarray(S_chief, dtype=S_last.dtype)
     u, v = _axis_perp_basis(axis_dir, S_last.dtype)
     # chief minus ray (not ray minus chief): the reference-sphere landing sits
-    # downstream of the exit-pupil plane, so this sign matches the legacy
-    # position-on-sphere coordinate's orientation.
+    # downstream of the exit-pupil plane.
     d = float(scale) * (S_chief[None, :] - S_last)
     return d @ u, d @ v
 
 
 def _inpaint_nan(arr):
-    """Fill non-finite samples from finite neighbors (Jacobi/harmonic fill).
-
-    amplitude_apodization differentiates the reference-sphere coordinates with
-    np.gradient; a single missed or clipped ray (NaN) would otherwise have its
-    central difference spread the NaN onto its valid grid neighbors and zero
-    their amplitude.  A few neighbor-averaging passes give the holes a smooth
-    finite fill so the surviving rim rays keep a sensible Jacobian.  The holes
-    themselves are masked out of the returned amplitude regardless.
-    """
+    """Fill non-finite samples from finite neighbors."""
     arr = np.asarray(arr, dtype=config.precision).copy()
     hole = ~np.isfinite(arr)
     if not np.any(hole):
         return arr
     arr[hole] = 0.0
-    # neighbor count depends only on the grid shape; build it once
+    # neighbor count depends only on grid shape
     cnt = np.zeros_like(arr)
     cnt[1:] += 1.0
     cnt[:-1] += 1.0
@@ -424,14 +366,7 @@ def amplitude_apodization(entrance_xy, sphere_xy, *, valid=None):
     """Energy-conservation amplitude over the reference sphere.
 
     Computes sqrt(dA_entrance / dA_sphere), the square root of the local areal
-    magnification of the ray bundle as it maps from the (uniform) entrance
-    pupil to its transverse footprint on the reference sphere.  This is the
-    real amplitude a(X', Y') of Hopkins' pupil function for a uniformly
-    illuminated input: rays that crowd together on the sphere carry higher
-    irradiance.
-
-    Both inputs are structured grids so the areal Jacobian is a clean finite
-    difference; flatten afterwards for the scattered-to-regular resample.
+    magnification of the ray bundle.
 
     Parameters
     ----------
@@ -455,10 +390,7 @@ def amplitude_apodization(entrance_xy, sphere_xy, *, valid=None):
     b = entrance_xy[..., 1]
     X = sphere_xy[..., 0]
     Y = sphere_xy[..., 1]
-    # a missed/clipped ray lands NaN on the reference sphere; np.gradient's
-    # central difference would otherwise spread that NaN onto its valid
-    # neighbors and zero their amplitude.  Fill the holes from finite neighbors
-    # so the surviving rim keeps a sensible Jacobian (holes are masked below).
+    # Fill holes before np.gradient spreads them to valid neighbors.
     X = _inpaint_nan(X)
     Y = _inpaint_nan(Y)
     # 1D entrance axes (the rect grid is separable in a, b)
@@ -484,12 +416,7 @@ def amplitude_apodization(entrance_xy, sphere_xy, *, valid=None):
 class PupilField:
     """Complex pupil field samples on the exit-pupil reference sphere.
 
-    Scattered, sine-space samples ready to be resampled onto a regular grid
-    (pupil_field_to_wavefront).  X, Y are Hopkins' (X', Y') -- transverse
-    coordinates of the ray landings on the reference sphere, proportional to
-    the ray direction cosines.  amplitude is the real pupil amplitude
-    a(X', Y') (geometric apodization times any coating factor); opd is the
-    wavefront error referred to the chief, in prescription length units.
+    Scattered sine-space samples ready for pupil_field_to_wavefront.
     """
 
     __slots__ = ('X', 'Y', 'amplitude', 'opd', 'wavelength', 'efl',
@@ -499,9 +426,6 @@ class PupilField:
                  P_xp, P_img, P_matrix=None):
         self.X = X
         self.Y = Y
-        # for a scalar field, amplitude is the geometric apodization times the
-        # unpolarized coating factor.  For a polarized field, amplitude is the
-        # geometric apodization only and P_matrix carries the (vector) coating.
         self.amplitude = amplitude
         self.opd = opd
         self.wavelength = wavelength
@@ -517,73 +441,10 @@ class PupilField:
         return self.P_matrix is not None
 
 
-def _first_order_geometry_failure(exc):
-    """True when first_order failed because scalar ABCD geometry is invalid."""
-    msg = str(exc)
-    return ('centered axial geometry' in msg
-            or 'vertex normal to be axial' in msg)
-
-
-def _resolve_exit_pupil(prescription, field, wavelength, epd,
-                        stop_index, P_xp, P_img, chief_P, chief_S,
-                        axis_dir=None):
-    """Resolve the reference-sphere center (P_img) and exit-pupil point (P_xp).
-
-    P_img defaults to the real chief-ray image landing.  P_xp is taken from an
-    explicit argument, else the paraxial exit pupil (needs stop_index), else
-    the chief-ray closest approach to the axis (off-axis fields only).
-    """
-    if P_img is None:
-        P_img = np.asarray(chief_P)
-    else:
-        P_img = np.asarray(P_img)
-
-    if P_xp is not None:
-        return np.asarray(P_xp), P_img
-
-    if stop_index is not None:
-        try:
-            fo = system_first_order(prescription, wvl=wavelength,
-                                    epd=epd, stop_index=stop_index)
-        except ValueError as exc:
-            if axis_dir is None or not _first_order_geometry_failure(exc):
-                raise
-        else:
-            if fo.xp_z is None:
-                # exit pupil at infinity (telecentric): curvature kappa = 0.
-                return None, P_img
-            P_xp = np.array([0.0, 0.0, float(fo.xp_z)], dtype=P_img.dtype)
-            return P_xp, P_img
-
-    # last resort: chief-ray geometric estimate.  This triangulates the exit
-    # pupil from where the chief ray crosses the axis, which is ill-conditioned
-    # when the chief is (nearly) parallel to and on the axis -- the on-axis
-    # field, and also an even npupil grid whose center sample is half a step
-    # off axis.  Guard on the chief's perpendicular slope to the axis.
-    chief_S = np.asarray(chief_S)
-    if axis_dir is None:
-        w = np.array([0.0, 0.0, 1.0], dtype=chief_S.dtype)
-    else:
-        w = np.asarray(axis_dir, dtype=chief_S.dtype)
-        w = w / np.sqrt(np.sum(w * w))
-    s_perp = chief_S - np.sum(chief_S * w) * w
-    if float(np.sqrt(np.sum(s_perp * s_perp))) < 1e-3:
-        raise ValueError(
-            'cannot locate the exit pupil from a near-axial chief ray; pass '
-            'stop_index=... or P_xp=... to anchor the reference sphere'
-        )
-    _, R, P_xp = xp_reference_sphere(chief_P, chief_S, axis_dir=w)
-    return P_xp, P_img
-
-
 def _pupil_coordinate_scale(prescription, wavelength, P_xp, center):
     """Length scale for the sine-space pupil coordinate.
 
-    |EFL| for a centered system -- finite and well-defined through the
-    telecentric limit, and the natural pairing with the F-number |EFL|/EPD.
-    Falls back to the geometric reference-sphere radius for a tilted/decentered
-    system whose paraxial EFL is undefined (that case then requires a finite
-    exit pupil to anchor the radius).
+    Uses |EFL| when available, otherwise the reference-sphere radius.
     """
     try:
         return abs(float(effective_focal_length(prescription, wvl=wavelength)))
@@ -664,9 +525,7 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
         coating_amp = result.amplitude
         P_matrix_all = None
 
-    # Entrance-pupil coordinates are the pupil coordinates of the rays.  Keep
-    # the nominal grid for the circular mask; use the vignetted grid everywhere
-    # that must match the traced launch bundle.
+    # Nominal coordinates define the circle; vignetted coordinates match rays.
     nominal_pupil_xy = sampling.build(0.5 * epd)
     pupil_xy = _apply_vignetting(nominal_pupil_xy, field)
 
@@ -696,24 +555,24 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
     circ = r_entrance <= (0.5 * epd) * (1.0 + 1e-9)
     valid = valid & circ
 
-    P_xp, P_img = _resolve_exit_pupil(
-        prescription, field, wavelength, epd, stop_index,
-        P_xp, P_img, trace.P[-1, chief_index], trace.S[-1, chief_index],
-        axis_dir=axis_dir)
-    curvature = reference_sphere_curvature(P_xp, P_img)
+    # Default center is the real chief-ray landing.
+    chief_P = trace.P[-1, chief_index]
+    P_img = chief_P if P_img is None else np.asarray(P_img)
+    if P_xp is None:
+        # Even rect grids put the auto-chief half a step off axis.
+        P_xp = resolve_exit_pupil(
+            prescription, wavelength, stop_index=stop_index, epd=epd,
+            chief=(chief_P, trace.S[-1, chief_index]), axis_dir=axis_dir,
+            min_perp=1e-3)
 
-    # OPD on the chief-image reference sphere (valid rays), mirroring
-    # analysis.wavefront.  Determinate through the telecentric kappa = 0 limit.
-    filtered_chief = _filtered_chief_index(valid, chief_index)
+    # OPD on the chief-image reference sphere, valid rays only.
     n_image = image_space_index(prescription, wavelength, fallback=n_object)
-    opd = hopkins_eic_closing(trace.P[:, valid], trace.S[:, valid],
-                              trace.OPL[:, valid],
-                              center=P_img, curvature=curvature,
-                              n_image=n_image, chief_index=filtered_chief)
+    closing = close_on_reference_sphere(trace, valid, chief_index,
+                                        center=P_img, P_xp=P_xp,
+                                        n_image=n_image)
+    opd = closing.opd
 
-    # sine-space pupil coordinates from the ray direction cosines (all rays,
-    # then mask).  The |EFL| length scale keeps the F-number |EFL|/EPD correct
-    # while staying finite when the exit pupil is at infinity (telecentric).
+    # Sine-space pupil coordinates from ray direction cosines.
     scale = _pupil_coordinate_scale(prescription, wavelength, P_xp, P_img)
     X_all, Y_all = sine_space_coords(trace.S[-1], trace.S[-1, chief_index],
                                      scale, axis_dir)
@@ -724,17 +583,13 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
     valid_grid = valid.reshape(npupil, npupil)
     amp_geo = amplitude_apodization(entrance_xy, sphere_xy,
                                     valid=valid_grid).reshape(-1)
-    # scalar field folds the unpolarized coating loss into the amplitude;
-    # the polarized field keeps amplitude geometric and lets P_matrix carry it
+    # Scalar fields fold coating loss into amplitude; PRT carries it in P_matrix.
     if coating_amp is None:
         amplitude_all = amp_geo
     else:
         amplitude_all = amp_geo * coating_amp
 
-    # field-tilt removal + output scaling on the OPD, using the entrance-pupil
-    # coordinate referred to the chief (matches analysis.wavefront's
-    # convention).  The launch-plane tilt is an angular-field concept; a
-    # finite-conjugate (height) field has no such tilt to remove.
+    # Match analysis.wavefront's chief-relative tilt removal.
     x_pupil = pupil_xy[valid, 0] - pupil_xy[chief_index, 0]
     y_pupil = pupil_xy[valid, 1] - pupil_xy[chief_index, 1]
     tilt_field = field if field.kind == 'angle' else None
@@ -753,9 +608,7 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
 def _resample_grid(pf, npix, margin):
     """Shared scatter-to-regular-grid setup for the wavefront bridge.
 
-    Returns the regular-grid scattered-data interpolation points, the grid
-    sample spacing, and the resampled wavefront phase (nm), zeroed outside the
-    traced support.
+    Returns interpolation points, grid spacing, and phase in nm.
     """
     x = np.asarray(pf.X)
     y = np.asarray(pf.Y)
@@ -778,9 +631,7 @@ def _resample_grid(pf, npix, margin):
 def _griddata_complex(pts, values, grid_pts):
     """Cubic griddata for complex values (real and imaginary parts), zero-fill.
 
-    Suitable only for slowly varying complex fields (e.g. geometric amplitude
-    times the polarization Jones weight) -- never wrapped phase, which is
-    carried separately as the wavefront term.
+    Phase is carried separately as the wavefront term.
     """
     re = interpolate.griddata(pts, np.real(values), grid_pts, method='cubic',
                               fill_value=0.0)
@@ -795,15 +646,7 @@ def pupil_field_to_wavefront(pf, *, npix=256, margin=1.05,
                              input_polarization=None):
     """Resample scattered pupil-field samples onto a regular grid wavefront.
 
-    Cubic-interpolates the smooth amplitude and OPD fields (real, low-order --
-    never wrapped phase) from the scattered sine-space samples onto a regular
-    cartesian grid, zeroing outside the traced support, and builds a
-    prysm.propagation.Wavefront ready for .focus(efl=pf.efl).
-
-    For a polarized PupilField, the transverse field components (Ex, Ey) of
-    P_matrix @ input_polarization are each resampled and returned as a list of
-    component Wavefronts; the longitudinal Ez is neglected (the one
-    approximation -- valid except at extreme numerical aperture).
+    Polarized fields return the transverse Ex and Ey component wavefronts.
 
     Parameters
     ----------
@@ -913,13 +756,7 @@ def pupil_field_psf(pf, *, npix=256, margin=1.05, Q=2,
 class PRTResult:
     """A geometric trace plus a per-ray 3x3 polarization ray-trace matrix.
 
-    P_matrix maps an incident 3D electric field vector to the exitant 3D field
-    after the whole system (Yun/Chipman polarization ray tracing).  It composes
-    the per-interface Jones matrices in their local s-p-k bases, carried in the
-    global frame, so the geometric rotation of the polarization basis between
-    surfaces is included.  The transmission coefficients are energy-normalized,
-    so the unpolarized intensity (mean over two orthogonal inputs) reduces to
-    the scalar (T_s + T_p) / 2 of the coating-aware path.
+    P_matrix maps incident 3D electric field to exitant field.
     """
 
     __slots__ = ('trace', 'P_matrix')
@@ -964,11 +801,6 @@ def _unit(v):
 
 def raytrace_prt(prescription, P, S, wavelength):
     """Polarization ray trace: geometry plus a per-ray 3x3 P matrix.
-
-    Wraps spencer_and_murty.raytrace and accumulates the Yun/Chipman
-    polarization ray-tracing matrix for each ray.  Per-surface coatings are read
-    from each Surface.coating attribute and supply the s/p Jones diagonal via
-    the shared interface_coefficients provider.  The hot kernel is not modified.
 
     Parameters
     ----------

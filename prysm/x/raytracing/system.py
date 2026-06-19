@@ -11,6 +11,7 @@ from .paraxial import (
     entrance_pupil_z,
     system_matrix,
 )
+from ._cache import StateCache
 
 
 # aperture modes
@@ -23,9 +24,6 @@ NA_OBJECT = 'NA_OBJECT'
 _APERTURE_MODES = (EPD, FNO_IMAGE, FNO_OBJECT, NA_IMAGE, NA_OBJECT)
 _OBJECT_SPACE_MODES = (FNO_OBJECT, NA_OBJECT)
 _POWER_EPS = 1e-30
-
-# cache miss sentinel; cached None is a valid telecentric exit-pupil result.
-_DERIVED_MISS = object()
 
 
 def _tuple_or_none(value):
@@ -294,9 +292,9 @@ class OpticalSystem:
         self.source_format = source_format
         self.extras = dict(extras) if extras else {}
         # Version-keyed derived quantities.
-        self._derived = {}
+        self._derived = StateCache()
         # Analysis grids for convenience plot methods.
-        self._trace_cache = {}
+        self._trace_cache = StateCache()
 
     # -- surface-sequence delegation (duck-type as the compiled surfaces) --
     def to_surfaces(self):
@@ -363,11 +361,8 @@ class OpticalSystem:
         wvl = self.wavelength(wvl)
         key = ('epd', self.lens._version, float(wvl),
                self.aperture.mode, self.aperture.value)
-        cached = self._derived.get(key, _DERIVED_MISS)
-        if cached is _DERIVED_MISS:
-            cached = float(self.aperture.entrance_pupil_diameter(self, wvl))
-            self._derived[key] = cached
-        return cached
+        return self._derived.get_or_compute(
+            key, lambda: float(self.aperture.entrance_pupil_diameter(self, wvl)))
 
     @property
     def object_at_infinity(self):
@@ -395,12 +390,10 @@ class OpticalSystem:
         resolved_stop = stop_index if stop_index is not None else self.stop_index
         key = ('fo', self.lens._version, _field_key(_resolve_field(self, field)),
                float(wvl), epd, resolved_stop, bool(force_sym))
-        cached = self._derived.get(key, _DERIVED_MISS)
-        if cached is _DERIVED_MISS:
-            cached = first_order(self, field=field, wavelength=wvl, epd=epd,
-                                 stop_index=stop_index, force_sym=force_sym)
-            self._derived[key] = cached
-        return cached
+        return self._derived.get_or_compute(
+            key, lambda: first_order(self, field=field, wavelength=wvl,
+                                     epd=epd, stop_index=stop_index,
+                                     force_sym=force_sym))
 
     def _ynu_first_order(self, wvl=None, *, epd=None, stop_index=None):
         """Internal YNU first-order properties, cached on the system."""
@@ -408,12 +401,9 @@ class OpticalSystem:
         wvl = self.wavelength(wvl)
         resolved_stop = stop_index if stop_index is not None else self.stop_index
         key = ('ynu_fo', self.lens._version, float(wvl), epd, resolved_stop)
-        cached = self._derived.get(key, _DERIVED_MISS)
-        if cached is _DERIVED_MISS:
-            cached = ynu_first_order(self, wvl=wvl, epd=epd,
-                                     stop_index=stop_index)
-            self._derived[key] = cached
-        return cached
+        return self._derived.get_or_compute(
+            key, lambda: ynu_first_order(self, wvl=wvl, epd=epd,
+                                         stop_index=stop_index))
 
     def entrance_pupil_z(self, wvl=None, stop_index=None):
         """Lab-frame z of the paraxial entrance pupil, cached on the system."""
@@ -421,11 +411,8 @@ class OpticalSystem:
         wvl = self.wavelength(wvl)
         resolved_stop = stop_index if stop_index is not None else self.stop_index
         key = ('ep_z', self.lens._version, float(wvl), resolved_stop)
-        cached = self._derived.get(key, _DERIVED_MISS)
-        if cached is _DERIVED_MISS:
-            cached = entrance_pupil_z(self, wvl, stop_index=stop_index)
-            self._derived[key] = cached
-        return cached
+        return self._derived.get_or_compute(
+            key, lambda: entrance_pupil_z(self, wvl, stop_index=stop_index))
 
     def exit_pupil(self, wvl=None, field=None, *, stop_index=None, epd=None,
                    axis_point=None, axis_dir=None):
@@ -440,13 +427,10 @@ class OpticalSystem:
             _tuple_or_none(axis_point), _tuple_or_none(axis_dir),
             _aperture_key(self.aperture), self.ray_aiming,
         )
-        cached = self._derived.get(key, _DERIVED_MISS)
-        if cached is _DERIVED_MISS:
-            cached = resolve_exit_pupil(
+        return self._derived.get_or_compute(
+            key, lambda: resolve_exit_pupil(
                 self, wvl, stop_index=resolved_stop, epd=epd, field=field,
-                axis_point=axis_point, axis_dir=axis_dir)
-            self._derived[key] = cached
-        return cached
+                axis_point=axis_point, axis_dir=axis_dir))
 
     def solve_image_distance(self, surface=None, *, wavelength=None):
         """Seed the lens image-distance solve with a resolved wavelength."""
@@ -500,10 +484,7 @@ class OpticalSystem:
         # Settle lazy lens dependencies before fingerprinting.
         self.lens.to_surfaces()
         key = (self._fingerprint(), kind, repr(tuple(sorted(kwargs.items()))))
-        cache = self._trace_cache
-        if key not in cache:
-            cache[key] = fn(self, **kwargs)
-        return cache[key]
+        return self._trace_cache.get_or_compute(key, lambda: fn(self, **kwargs))
 
     def layout_2d(self, **kwargs):
         """Draw a 2D layout of the optics and rays."""

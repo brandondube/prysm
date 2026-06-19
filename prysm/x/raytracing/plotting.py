@@ -25,6 +25,7 @@ from .analysis import (
 )
 from .launch import launch, Sampling
 from .surfaces import STYPE_REFLECT, STYPE_REFRACT
+from .lensdata import lens_element_groups
 from ._meta import system_wavelength, system_stop_index
 from ._trace_grid import _resolve_fields, _resolve_wavelengths, field_sweep
 
@@ -619,57 +620,6 @@ def plot_mirror_substrate(surf, result, surface_index=0, *, backing,
     return fig, ax
 
 
-def lens_groups_from_surfaces(prescription, *, wvl=0.587,
-                              ambient_index=1.0, index_atol=1e-9):
-    """Group consecutive refracting surfaces into physical lens elements.
-
-    Returns
-    -------
-    list of tuple
-        Each tuple contains the prescription indices of one singlet, cemented
-        doublet, triplet, or longer cemented lens group.
-
-    """
-    groups = []
-    active = []
-
-    for j, surf in enumerate(prescription):
-        if surf.typ != STYPE_REFRACT:
-            if active:
-                raise ValueError(
-                    'refracting lens group is interrupted before returning '
-                    'to ambient material'
-                )
-            continue
-
-        if surf.material is None:
-            raise ValueError('refracting surfaces must define a material')
-        n_post = surf.material.n(wvl)
-        if np.isscalar(n_post):
-            n_post = float(n_post)
-        else:
-            n_post = _to_np(n_post)
-            if n_post.size != 1:
-                raise ValueError('material evaluation must produce a scalar index')
-            n_post = float(n_post.reshape(-1)[0])
-
-        active.append(j)
-        if np.isclose(n_post, ambient_index, rtol=0, atol=index_atol):
-            if len(active) >= 2:
-                groups.append(tuple(active))
-            # else: a lone ambient-to-ambient surface (a dummy plane, e.g. a
-            # standalone aperture stop) is not a lens element; skip it
-            active = []
-
-    if active:
-        raise ValueError(
-            'cant draw a prescription that terminates before returning to '
-            'ambient material'
-        )
-
-    return groups
-
-
 def _surface_clear_radius(lens_edge, which):
     if lens_edge is None:
         return None
@@ -840,7 +790,7 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
         if marks is not None:
             ax.plot(*marks, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
 
-    lens_groups = lens_groups_from_surfaces(
+    lens_groups = lens_element_groups(
         prescription, wvl=wvl, ambient_index=ambient_index,
         index_atol=index_atol,
     )
