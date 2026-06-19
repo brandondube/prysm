@@ -225,20 +225,40 @@ def newton_raphson_solve_s(P1, S, sag_and_normal, s1=0.0,
     # Single-alloc init: s1 may be a scalar (broadcasts to all rays) OR a
     # (nrays,) array of per-ray seeds (from the conic-seeded Newton path).
     # numpy assignment handles both in one writeable buffer at the right dtype.
-    sj_work = np.empty(nrays, dtype=dtype)
-    sj_work[...] = s1
-    # the Pj and n_hat to be returned; we keep these data structures around
-    # so they can be adjusted within the loop
-    Pj_out = np.empty_like(P1)
-    n_out = np.empty((nrays, 3), dtype=dtype)
+    sj_full = np.empty(nrays, dtype=dtype)
+    sj_full[...] = s1
+    # Pj/n outputs default to NaN/invalid: rays dropped below (non-finite
+    # input) and rays that never converge both keep these defaults.
+    Pj_out = np.full((nrays, 3), np.nan, dtype=dtype)
+    n_out = np.full((nrays, 3), np.nan, dtype=dtype)
+    valid = np.zeros(nrays, dtype=bool)
+    # Drop rays that arrive non-finite -- clipped/failed upstream and forwarded
+    # as NaN by the raytrace kernel, or a missed conic seed (NaN s1).  Newton
+    # cannot make progress from a non-finite state (the first residual is NaN,
+    # which never satisfies the convergence test), so left in the active set
+    # they would iterate all the way to maxiter on every surface.  Dropping
+    # them here yields the identical NaN / invalid result at no cost.
+    finite = (np.isfinite(P1).all(axis=-1)
+              & np.isfinite(S).all(axis=-1)
+              & np.isfinite(sj_full))
     # mask maps working-buffer-index -> original-ray-index, so converged rays
-    # scatter back to the right Pj_out/r_out slot.  sj_work / S_work / P1_work
+    # scatter back to the right Pj_out/n_out slot.  sj_work / S_work / P1_work
     # shrink in lock-step with mask each iteration, so subsequent iterations
     # operate on a buffer the size of the still-active set rather than
-    # fancy-indexing into the full inputs every time.
-    mask = np.arange(nrays)
-    S_work = S
-    P1_work = P1
+    # fancy-indexing into the full inputs every time.  The all-finite case (the
+    # common one) skips the slice entirely so the hot path makes no copies.
+    if finite.all():
+        mask = np.arange(nrays)
+        sj_work = sj_full
+        S_work = S
+        P1_work = P1
+    else:
+        mask = np.flatnonzero(finite)
+        if mask.size == 0:
+            return Pj_out, n_out, valid
+        sj_work = sj_full[mask]
+        S_work = S[mask]
+        P1_work = P1[mask]
     for _ in range(maxiter):
         Pj = P1_work + sj_work[:, np.newaxis] * S_work
         Xj = Pj[..., 0]
@@ -252,6 +272,7 @@ def newton_raphson_solve_s(P1, S, sag_and_normal, s1=0.0,
             insert_idx = mask[converged]
             Pj_out[insert_idx] = Pj[converged]
             n_out[insert_idx] = n_hat[converged]
+            valid[insert_idx] = True
             survive = ~converged
             mask = mask[survive]
             if mask.size == 0:
@@ -266,13 +287,7 @@ def newton_raphson_solve_s(P1, S, sag_and_normal, s1=0.0,
             Fpj = row_dot(S_work, n_hat) / n_hat[..., 2]
         sj_work = sj_work - Fj / Fpj
 
-    # NaN out rays which failed to converge (within maxiter)
-    if mask.size > 0:
-        Pj_out[mask] = np.nan
-        n_out[mask] = np.nan
-    valid = np.ones(nrays, dtype=bool)
-    if mask.size > 0:
-        valid[mask] = False
+    # Rays still in mask never converged: they keep the NaN / invalid defaults.
     return Pj_out, n_out, valid
 
 

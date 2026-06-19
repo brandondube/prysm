@@ -14,7 +14,11 @@ from prysm.x.raytracing.intersections import (
     newton_raphson_solve_s,
     ray_conic_intersect,
 )
-from prysm.x.raytracing.spencer_and_murty import raytrace, STATUS_OK
+from prysm.x.raytracing.spencer_and_murty import (
+    raytrace,
+    STATUS_OK,
+    SURFACE_INTERSECTION_DEFAULT_MAXITER,
+)
 
 
 # gull-wing even asphere with two forward crossings for many rays.
@@ -404,3 +408,78 @@ def test_lipschitz_march_first_root_with_far_in_domain_crossing():
     assert v[0]
     s_found = float(np.sum((Q[0] - P1[0]) * S[0]))
     assert s_found == pytest.approx(first_from_P1, abs=1e-6)
+
+
+def _converging_asphere_rays():
+    """A mild even asphere and a fan of rays that all converge from the seed."""
+    shape = EvenAsphere(c=1 / 50.0, k=0.0, coefs=(1e-7, 1e-10))
+    h = np.linspace(-12, 12, 25)
+    P = np.zeros((h.size, 3))
+    P[:, 1] = h
+    P[:, 2] = -5.0
+    S = np.zeros((h.size, 3))
+    S[:, 2] = 1.0
+    Sz = S[..., 2]
+    P1 = P + (-P[..., 2] / Sz)[..., np.newaxis] * S
+    Qc, _, _ = ray_conic_intersect(P1, S, 1 / 50.0, 0.0)
+    s1 = Qc[..., 2] / Sz
+    return shape, P1, S, s1
+
+
+def _sag_call_counter(shape):
+    """Wrap a shape's sag_and_normal to count calls (one per Newton iter)."""
+    calls = [0]
+
+    def wrapped(x, y):
+        calls[0] += 1
+        return shape.sag_and_normal(x, y)
+
+    return wrapped, calls
+
+
+def test_nonfinite_rays_dropped_at_entry_cost_no_iterations():
+    """Non-finite rays interleaved in a batch add zero Newton iterations.
+
+    The raytrace kernel forwards clipped/failed rays to later surfaces as NaN.
+    Newton cannot advance from a non-finite state, so left in the active set
+    those rays would iterate all the way to maxiter on every surface.  They are
+    dropped at entry instead, so a batch with NaN rays costs exactly what its
+    finite subset costs, and the finite rays trace identically.
+    """
+    shape, P1, S, s1 = _converging_asphere_rays()
+
+    sag_f, calls_f = _sag_call_counter(shape)
+    Qf, nf, vf = newton_raphson_solve_s(P1, S, sag_f, s1=s1)
+    assert vf.all()
+    assert calls_f[0] < SURFACE_INTERSECTION_DEFAULT_MAXITER  # converged early
+
+    # Interleave 40 NaN rays among the finite ones (P, S, and seed all NaN).
+    nan_rows = np.full((40, 3), np.nan)
+    nan_s = np.full(40, np.nan)
+    Pm = np.concatenate([P1[:5], nan_rows, P1[5:]], axis=0)
+    Sm = np.concatenate([S[:5], nan_rows, S[5:]], axis=0)
+    s1m = np.concatenate([s1[:5], nan_s, s1[5:]], axis=0)
+    fin = np.isfinite(Pm).all(axis=1)
+
+    sag_m, calls_m = _sag_call_counter(shape)
+    Qm, nm, vm = newton_raphson_solve_s(Pm, Sm, sag_m, s1=s1m)
+
+    # The NaN rays cost no extra iterations (the maxiter spin is gone).
+    assert calls_m[0] == calls_f[0]
+    # Finite rays are valid and unchanged; NaN rays come back invalid + NaN.
+    assert vm[fin].all()
+    assert not vm[~fin].any()
+    assert np.allclose(Qm[fin], Qf, atol=1e-12)
+    assert np.isnan(Qm[~fin]).all()
+
+
+def test_all_nonfinite_returns_without_iterating():
+    """An all-NaN batch returns immediately, invalid, with no sag evaluations."""
+    shape = EvenAsphere(c=1 / 50.0, k=0.0, coefs=(1e-7,))
+    P = np.full((16, 3), np.nan)
+    S = np.full((16, 3), np.nan)
+    sag, calls = _sag_call_counter(shape)
+    Q, n, v = newton_raphson_solve_s(P, S, sag, s1=0.0)
+    assert not v.any()
+    assert np.isnan(Q).all()
+    assert calls[0] == 0
