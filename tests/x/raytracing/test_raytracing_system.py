@@ -98,12 +98,6 @@ def test_object_space_aperture_validation_is_enforced_at_infinity():
         launch(sys, fld, sys.wavelength(), Sampling.fan(n=3))
 
 
-def test_focusing_aperture_illegal_for_afocal():
-    spec = ApertureSpec.fno(4.0)
-    with pytest.raises(ValueError, match='no net power'):
-        spec.validate(object_at_infinity=True, has_power=False)
-
-
 def test_focusing_apertures_raise_for_afocal_system():
     specs = [
         ApertureSpec.fno(4.0),

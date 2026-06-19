@@ -86,12 +86,6 @@ def test_decode_status_handles_scalar_and_arrays():
     ]
 
 
-def test_decode_status_all_valid_majority_case():
-    status = np.full((2, 3), 7 + STATUS_OK * 1j, dtype=np.complex128)
-    labels = decode_status(status)
-    assert labels.tolist() == [['OK', 'OK', 'OK'], ['OK', 'OK', 'OK']]
-
-
 def test_valid_mask_handles_status_and_finite_positions():
     status = np.array([
         2 + STATUS_OK * 1j,

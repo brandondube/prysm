@@ -11,18 +11,15 @@ from prysm.x.raytracing.launch import Field, Sampling, launch
 
 # ---------- Field -----------------------------------------------------------
 
-def test_field_angle_radians_deg():
-    f = Field(hx=10.0, hy=-5.0, kind='angle', unit='deg')
-    ax, ay = f.angle_radians()
-    np.testing.assert_allclose(ax, np.deg2rad(10.0))
-    np.testing.assert_allclose(ay, np.deg2rad(-5.0))
-
-
-def test_field_angle_radians_rad():
-    f = Field(hx=0.1, hy=-0.05, kind='angle', unit='rad')
-    ax, ay = f.angle_radians()
-    np.testing.assert_allclose(ax, 0.1)
-    np.testing.assert_allclose(ay, -0.05)
+@pytest.mark.parametrize('unit, hx, hy, ax, ay', [
+    ('deg', 10.0, -5.0, np.deg2rad(10.0), np.deg2rad(-5.0)),
+    ('rad', 0.1, -0.05, 0.1, -0.05),
+])
+def test_field_angle_radians(unit, hx, hy, ax, ay):
+    f = Field(hx=hx, hy=hy, kind='angle', unit=unit)
+    gx, gy = f.angle_radians()
+    np.testing.assert_allclose(gx, ax)
+    np.testing.assert_allclose(gy, ay)
 
 
 def test_field_height_rejects_angle_radians():
@@ -31,19 +28,14 @@ def test_field_height_rejects_angle_radians():
         f.angle_radians()
 
 
-def test_field_height_requires_object_z():
+@pytest.mark.parametrize('kwargs', [
+    dict(hx=2.0, hy=0.0, kind='height'),  # height needs object_z
+    dict(kind='bogus'),
+    dict(unit='furlongs'),
+])
+def test_field_constructor_rejects_bad_args(kwargs):
     with pytest.raises(ValueError):
-        Field(hx=2.0, hy=0.0, kind='height')
-
-
-def test_field_rejects_bad_kind():
-    with pytest.raises(ValueError):
-        Field(kind='bogus')
-
-
-def test_field_rejects_bad_unit():
-    with pytest.raises(ValueError):
-        Field(unit='furlongs')
+        Field(**kwargs)
 
 
 def test_field_vignetting_stored_verbatim():
@@ -99,21 +91,17 @@ def test_sampling_chief():
     np.testing.assert_array_equal(xy[0], [0., 0.])
 
 
-def test_sampling_fan_y_axis():
-    s = Sampling.fan(n=11, axis='y')
+@pytest.mark.parametrize('axis, zero_col, val_col', [
+    ('y', 0, 1),
+    ('x', 1, 0),
+])
+def test_sampling_fan_axis(axis, zero_col, val_col):
+    s = Sampling.fan(n=11, axis=axis)
     xy = s.build(extent=5.0)
     assert xy.shape == (11, 2)
-    np.testing.assert_allclose(xy[:, 0], 0.0, atol=1e-12)
-    assert xy[0, 1] == pytest.approx(-5.0)
-    assert xy[-1, 1] == pytest.approx(5.0)
-
-
-def test_sampling_fan_x_axis():
-    s = Sampling.fan(n=7, axis='x')
-    xy = s.build(extent=2.0)
-    np.testing.assert_allclose(xy[:, 1], 0.0, atol=1e-12)
-    assert xy[0, 0] == pytest.approx(-2.0)
-    assert xy[-1, 0] == pytest.approx(2.0)
+    np.testing.assert_allclose(xy[:, zero_col], 0.0, atol=1e-12)
+    assert xy[0, val_col] == pytest.approx(-5.0)
+    assert xy[-1, val_col] == pytest.approx(5.0)
 
 
 def test_sampling_fan_rejects_bad_axis():

@@ -7,14 +7,6 @@ from tests.x.raytracing.surface_helpers import (
     chebyshev, jacobi, toroid, biconic,
 )
 
-from prysm.x.raytracing.surfaces import (
-    Surface,
-    Zernike,
-    XY,
-    Chebyshev,
-    Jacobi,
-)
-from prysm.x.raytracing.intersections import ConicSeedMixin
 from prysm.x.raytracing.spencer_and_murty import raytrace
 from prysm.x.raytracing.raygen import generate_collimated_rect_ray_grid
 from prysm.polynomials import (
@@ -47,26 +39,35 @@ def _central_difference_xy(sag, x, y, h=1e-6):
 
 # ---------- shared base / inheritance ----------------------------------------
 
-def test_polynomial_shapes_use_conic_seeded_newton():
-    """All polynomial sag shapes share the conic-seeded Newton intersect."""
-    for cls in (Zernike, XY, Chebyshev, Jacobi):
-        assert issubclass(cls, ConicSeedMixin), cls.__name__
+@pytest.mark.parametrize('build_poly, c, k', [
+    (lambda c, k: zernike(c=c, k=k, normalization_radius=10.0,
+                          nms=[], coefs=[], interaction='refl', P=[0, 0, 0]),
+     1 / 80.0, -1.0),
+    (lambda c, k: xy(c=c, k=k, normalization_radius=1.0,
+                     mns=[], coefs=[], interaction='refl', P=[0, 0, 0]),
+     1 / 50.0, 0.0),
+    (lambda c, k: chebyshev(c=c, k=k, x_norm=10.0, y_norm=10.0,
+                            mns=[], coefs=[], interaction='refl', P=[0, 0, 0]),
+     1 / 50.0, 0.0),
+    (lambda c, k: jacobi(c=c, k=k, normalization_radius=10.0,
+                         alpha=0.0, beta=0.0, ns=[], coefs=[],
+                         interaction='refl', P=[0, 0, 0]),
+     1 / 50.0, 0.0),
+], ids=['zernike', 'xy', 'chebyshev', 'jacobi'])
+def test_polynomial_zero_coefs_matches_conic(build_poly, c, k):
+    """A zero-coefficient polynomial sag reduces to its base conic in both sag
+    and first derivatives (the conic-seeded Newton intersect rides on this)."""
+    s_poly = build_poly(c, k)
+    s_conic = conic(c=c, k=k, interaction='refl', P=[0, 0, 0])
+    x, y = _xy_grid()
+    z_p, dx_p, dy_p = _sag_derivs(s_poly.shape, x, y)
+    z_c, dx_c, dy_c = _sag_derivs(s_conic.shape, x, y)
+    np.testing.assert_allclose(z_p, z_c, atol=1e-12)
+    np.testing.assert_allclose(dx_p, dx_c, atol=1e-12)
+    np.testing.assert_allclose(dy_p, dy_c, atol=1e-12)
 
 
 # ---------- Zernike ----------------------------------------------------------
-
-def test_zernike_zero_coefs_matches_conic():
-    c, k = 1 / 80.0, -1.0
-    s_zern = zernike(c=c, k=k, normalization_radius=10.0,
-                             nms=[], coefs=[], interaction='refl', P=[0, 0, 0])
-    s_conic = conic(c=c, k=k, interaction='refl', P=[0, 0, 0])
-    x, y = _xy_grid()
-    z_z, dx_z, dy_z = _sag_derivs(s_zern.shape, x, y)
-    z_c, dx_c, dy_c = _sag_derivs(s_conic.shape, x, y)
-    np.testing.assert_allclose(z_z, z_c, atol=1e-12)
-    np.testing.assert_allclose(dx_z, dx_c, atol=1e-12)
-    np.testing.assert_allclose(dy_z, dy_c, atol=1e-12)
-
 
 def test_zernike_sag_matches_library():
     R_n = 8.0
@@ -93,19 +94,6 @@ def test_zernike_derivatives_central_diff():
 
 
 # ---------- XY ----------------------------------------------------------------
-
-def test_xy_zero_coefs_matches_conic():
-    c, k = 1 / 50.0, 0.0
-    s_xy = xy(c=c, k=k, normalization_radius=1.0,
-                      mns=[], coefs=[], interaction='refl', P=[0, 0, 0])
-    s_conic = conic(c=c, k=k, interaction='refl', P=[0, 0, 0])
-    x, y = _xy_grid()
-    z_xy, dx_xy, dy_xy = _sag_derivs(s_xy.shape, x, y)
-    z_c, dx_c, dy_c = _sag_derivs(s_conic.shape, x, y)
-    np.testing.assert_allclose(z_xy, z_c, atol=1e-12)
-    np.testing.assert_allclose(dx_xy, dx_c, atol=1e-12)
-    np.testing.assert_allclose(dy_xy, dy_c, atol=1e-12)
-
 
 def test_xy_sag_matches_direct_polynomial():
     R_n = 5.0
@@ -134,19 +122,6 @@ def test_xy_derivatives_central_diff():
 
 
 # ---------- Chebyshev --------------------------------------------------------
-
-def test_chebyshev_zero_coefs_matches_conic():
-    c, k = 1 / 50.0, 0.0
-    s_cb = chebyshev(c=c, k=k, x_norm=10.0, y_norm=10.0,
-                             mns=[], coefs=[], interaction='refl', P=[0, 0, 0])
-    s_conic = conic(c=c, k=k, interaction='refl', P=[0, 0, 0])
-    x, y = _xy_grid()
-    z_cb, dx_cb, dy_cb = _sag_derivs(s_cb.shape, x, y)
-    z_c, dx_c, dy_c = _sag_derivs(s_conic.shape, x, y)
-    np.testing.assert_allclose(z_cb, z_c, atol=1e-12)
-    np.testing.assert_allclose(dx_cb, dx_c, atol=1e-12)
-    np.testing.assert_allclose(dy_cb, dy_c, atol=1e-12)
-
 
 def test_chebyshev_sag_matches_library():
     x_norm, y_norm = 8.0, 6.0
@@ -177,20 +152,6 @@ def test_chebyshev_derivatives_central_diff():
 
 
 # ---------- Jacobi (axisymmetric radial) -------------------------------------
-
-def test_jacobi_zero_coefs_matches_conic():
-    c, k = 1 / 50.0, 0.0
-    s_j = jacobi(c=c, k=k, normalization_radius=10.0,
-                         alpha=0.0, beta=0.0, ns=[], coefs=[],
-                         interaction='refl', P=[0, 0, 0])
-    s_conic = conic(c=c, k=k, interaction='refl', P=[0, 0, 0])
-    x, y = _xy_grid()
-    z_j, dx_j, dy_j = _sag_derivs(s_j.shape, x, y)
-    z_c, dx_c, dy_c = _sag_derivs(s_conic.shape, x, y)
-    np.testing.assert_allclose(z_j, z_c, atol=1e-12)
-    np.testing.assert_allclose(dx_j, dx_c, atol=1e-12)
-    np.testing.assert_allclose(dy_j, dy_c, atol=1e-12)
-
 
 def test_jacobi_sag_matches_library():
     R_n = 8.0

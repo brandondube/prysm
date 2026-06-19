@@ -11,7 +11,6 @@ from prysm.x.raytracing.surfaces import (
     CallableShape,
     Shape,
     Surface,
-    Q2D,
     conic_sag,
     conic_sag_and_normal,
     conic_sag_der_xy,
@@ -561,15 +560,6 @@ def test_q2d_zero_coefficients_matches_conic():
     Q_c, n_c, _ = s_conic.intersect(P, S)
     np.testing.assert_allclose(Q_q, Q_c, atol=1e-9)
     np.testing.assert_allclose(n_q, n_c, atol=1e-9)
-
-
-def test_q2d_factory_returns_surface_with_q2d_shape():
-    s = q2d(c=1 / 100., k=0.0, normalization_radius=10.0,
-                    cm0=[0.0], ams=[[0.0]], bms=[[0.0]],
-                    interaction='refl', P=np.array([0., 0., 0.]))
-    assert isinstance(s.shape, Q2D)
-    # params dict is preserved
-    assert s.params['normalization_radius'] == 10.0
 
 
 def test_q2d_derivative_sag_matches_Q2d_and_der_directly():

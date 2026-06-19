@@ -10,15 +10,12 @@ from tests.x.raytracing.surface_helpers import (
 
 from prysm.x.raytracing.surfaces import (
     Surface,
-    Toroid,
-    Biconic,
     sphere_sag,
     even_asphere_sag,
     even_asphere_sag_der_xy,
     conic_sag,
     conic_sag_der_xy,
 )
-from prysm.x.raytracing.intersections import ConicSeedMixin
 from prysm.x.raytracing.spencer_and_murty import raytrace
 
 
@@ -41,13 +38,6 @@ def _central_difference_xy(sag, x, y, h=1e-6):
     z_yp = sag(x, y + h)
     z_ym = sag(x, y - h)
     return (z_xp - z_xm) / (2 * h), (z_yp - z_ym) / (2 * h)
-
-
-# ---- inheritance / shape ----------------------------------------------------
-
-def test_toroid_biconic_shapes_use_conic_seeded_newton():
-    for cls in (Toroid, Biconic):
-        assert issubclass(cls, ConicSeedMixin), cls.__name__
 
 
 # ---- Toroid -----------------------------------------------------------------

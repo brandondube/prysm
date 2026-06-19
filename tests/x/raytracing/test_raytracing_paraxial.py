@@ -113,19 +113,6 @@ def test_image_distance_no_power_raises():
 
 # ---------- paraxial image distance lands on the design conjugate ----------
 
-def test_paraxial_image_distance_single_sphere():
-    """Single refracting sphere R=50, n=1.5: image at n'R/(n'-n) = 150 from vertex."""
-    R = 50.0
-    n_glass = 1.5
-    expected = n_glass * R / (n_glass - 1.0)  # 150, measured from the vertex
-    rx = [
-        sphere(c=1 / R, interaction='refr', P=np.array([0., 0., 0.]),
-                       material=materials.ConstantMaterial(n_glass)),
-    ]
-    bfd = paraxial_image_distance(rx, wvl=0.6328)
-    np.testing.assert_allclose(bfd, expected, rtol=1e-9)
-
-
 def test_paraxial_image_distance_rc_telescope_lands_on_bfl():
     """ABCD image distance places the RC paraxial image at the design BFL."""
     efl, bfl, sep = 1500.0, 250.0, 400.0

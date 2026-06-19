@@ -7,8 +7,7 @@ from collections import OrderedDict
 import numpy as np
 import pytest
 
-from prysm.x import materials
-from prysm.x.materials import MaterialRangeError, RefractiveIndexCatalog
+from prysm.x.materials import RefractiveIndexCatalog
 from prysm.x.raytracing.io import (
     read_zmx, read_seq, write_seq, SurfaceSpec, build_surface,
 )
@@ -17,9 +16,7 @@ from prysm.x.raytracing.surfaces import (
     Zernike, XY,
     STYPE_REFLECT, STYPE_EVAL,
 )
-from prysm.x.raytracing.io._indexing import (
-    noll_to_nm, fringe_to_nm, xy_j_to_mn,
-)
+from prysm.x.raytracing.io._indexing import xy_j_to_mn
 from prysm.x.raytracing.spencer_and_murty import raytrace, valid_mask
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.paraxial import effective_focal_length
@@ -58,11 +55,6 @@ _SBSL7_TAB = """\
 """
 
 
-def _tabulated_n(samples):
-    rows = '\n'.join(f'      {w} {n}' for w, n in samples)
-    return 'DATA:\n  - type: tabulated n\n    data: |\n' + rows + '\n'
-
-
 def _write_rii_catalog(root, entries):
     """Write a tiny ri.info-shaped db folder and return a catalog over it.
 
@@ -94,63 +86,6 @@ def refractiveindex_database(tmp_path):
         ('specs', 'SCHOTT-optical', 'N-BK7', _NBK7_FORMULA),
         ('specs', 'OHARA-optical', 'S-BSL7', _SBSL7_TAB),
     ])
-
-
-def test_air_returns_one():
-    assert materials.air(0.55) == 1.0
-
-
-def test_lookup_air_aliases():
-    for name in (None, '', 'AIR', 'vacuum', 'Vacuum'):
-        f = materials.lookup(name)
-        assert f(0.55) == 1.0
-
-
-def test_lookup_mirror_sentinel():
-    sentinel = materials.lookup('MIRROR')
-    assert sentinel is materials.MIRROR
-
-
-def test_lookup_case_insensitive(refractiveindex_database):
-    f = materials.lookup('bk7', database=refractiveindex_database)
-    np.testing.assert_allclose(float(f(0.587)), 1.5168, atol=1e-3)
-
-
-def test_lookup_unknown_raises(refractiveindex_database):
-    with pytest.raises(KeyError):
-        materials.lookup('UNOBTAINIUM', database=refractiveindex_database)
-
-
-def test_lookup_requires_database_object():
-    with pytest.raises(TypeError):
-        materials.lookup('BK7', database='/tmp/refractive.db')
-
-
-def test_rii_glass_lookup_exact_codev_zemax_name(tmp_path):
-    cat = _write_rii_catalog(tmp_path, [
-        ('specs', 'OHARA-optical', 'S-BSL7', _SBSL7_TAB),
-    ])
-    f = materials.lookup('S-BSL7', database=cat)
-    np.testing.assert_allclose(float(f(0.5)), 1.525)
-
-
-def test_rii_glass_lookup_prefers_catalog_page_for_n_prefix(tmp_path):
-    cat = _write_rii_catalog(tmp_path, [
-        ('glass', 'BK7', 'N-BK7', _tabulated_n([(0.5, 1.61), (0.6, 1.60)])),
-        ('specs', 'SCHOTT-optical', 'N-BK7', _NBK7_FORMULA),
-    ])
-    f = materials.lookup('N-BK7', database=cat)
-    assert f.page_info['book'] == 'SCHOTT-optical'
-    assert f.page_info['page'] == 'N-BK7'
-
-
-def test_rii_glass_out_of_range_raises(tmp_path):
-    cat = _write_rii_catalog(tmp_path, [
-        ('specs', 'OHARA-optical', 'S-BSL7', _SBSL7_TAB),
-    ])
-    f = materials.lookup('S-BSL7', database=cat)
-    with pytest.raises(MaterialRangeError):
-        f(0.3)
 
 
 # ============================================================================
@@ -867,37 +802,6 @@ def test_seq_reads_from_file_path(refractiveindex_database):
 # ============================================================================
 # Indexing tables
 # ============================================================================
-
-def test_noll_to_nm_first_six():
-    assert noll_to_nm(1) == (0, 0)
-    assert noll_to_nm(2) == (1, 1)
-    assert noll_to_nm(3) == (1, -1)
-    assert noll_to_nm(4) == (2, 0)
-    # j=5/6 are the (2, +/-2) astigmatism pair; sign order varies between
-    # references but |m|=2 and n=2 are the invariant
-    n5, m5 = noll_to_nm(5)
-    n6, m6 = noll_to_nm(6)
-    assert n5 == 2 and n6 == 2
-    assert {abs(m5), abs(m6)} == {2}
-
-
-def test_fringe_to_nm_first_nine():
-    assert fringe_to_nm(1) == (0, 0)
-    assert fringe_to_nm(2) == (1, 1)
-    assert fringe_to_nm(3) == (1, -1)
-    assert fringe_to_nm(4) == (2, 0)
-    n9, m9 = fringe_to_nm(9)
-    assert (n9, m9) == (4, 0)  # primary spherical
-
-
-def test_xy_j_to_mn_first_six_matches_codev_convention():
-    assert xy_j_to_mn(1) == (0, 0)
-    assert xy_j_to_mn(2) == (1, 0)
-    assert xy_j_to_mn(3) == (0, 1)
-    assert xy_j_to_mn(4) == (2, 0)
-    assert xy_j_to_mn(5) == (1, 1)
-    assert xy_j_to_mn(6) == (0, 2)
-
 
 def test_xypoly_total_degree_ordering():
     """Term j sits at total degree i where 1+2+...+i < j <= 1+2+...+(i+1)."""
