@@ -20,20 +20,20 @@ from prysm.x.raytracing.analysis import (
 
 
 def _doublet():
+    # OBJECT/IMAGE endpoints are implicit (ADR-0006); the first powered surface
+    # is row 1, so the stop stays at index 1.
     ld = (LensData()
-          .add(Plane(), typ='eval', thickness=10.0)
           .add(Sphere(1 / 61.47), thickness=6.0,
                material=materials.ConstantMaterial(1.5168), semidiameter=12.0)
           .add(Sphere(-1 / 44.64), thickness=2.5,
                material=materials.ConstantMaterial(1.673), semidiameter=12.0)
           .add(Sphere(-1 / 129.94), thickness=0.0,
-               material=materials.air, semidiameter=12.0)
-          .add(Plane(), typ='eval'))
+               material=materials.air, semidiameter=12.0))
     sys = OpticalSystem(ld, aperture=ApertureSpec.epd(22.0),
                         fields=[Field(0, 0), Field(0, 0.7), Field(0, 1.0)],
                         wavelengths=[0.486, 0.587, 0.656], reference=1,
                         stop_index=1)
-    sys.solve_image_distance()
+    sys.solve.image_distance()
     return sys
 
 
@@ -41,7 +41,7 @@ def _doublet():
 
 def test_layout_2d_returns_fig_ax_and_draws_field_fans():
     sys = _doublet()
-    fig, ax = sys.layout_2d()
+    fig, ax = sys.plot.layout_2d()
     try:
         assert fig is not None and ax is not None
         # one optics outline plus a fan per field -> more lines than fields
@@ -52,7 +52,7 @@ def test_layout_2d_returns_fig_ax_and_draws_field_fans():
 
 def test_layout_2d_honors_overrides():
     sys = _doublet()
-    fig, ax = sys.layout_2d(fields=[Field(0, 0)], sampling=5, axis='y')
+    fig, ax = sys.plot.layout_2d(fields=[Field(0, 0)], sampling=5, axis='y')
     try:
         # a 5-ray single-field fan: 5 ray lines + 1 optics outline
         assert len(ax.lines) == 6
@@ -62,7 +62,7 @@ def test_layout_2d_honors_overrides():
 
 def test_layout_2d_accepts_explicit_sampling_object():
     sys = _doublet()
-    fig, ax = sys.layout_2d(sampling=Sampling.fan(n=3, axis='y'))
+    fig, ax = sys.plot.layout_2d(sampling=Sampling.fan(n=3, axis='y'))
     try:
         assert len(ax.lines) > 0
     finally:
@@ -73,7 +73,7 @@ def test_layout_2d_accepts_explicit_sampling_object():
 
 def test_plot_spots_returns_fig_axs():
     sys = _doublet()
-    fig, axs = sys.plot_spots()
+    fig, axs = sys.plot.spots()
     try:
         assert np.asarray(axs).size == len(sys.fields)
     finally:
@@ -82,7 +82,7 @@ def test_plot_spots_returns_fig_axs():
 
 def test_plot_ray_fans_and_opd_fans_return_fig_axs():
     sys = _doublet()
-    for method in (sys.plot_ray_fans, sys.plot_opd_fans):
+    for method in (sys.plot.ray_fans, sys.plot.opd_fans):
         fig, axs = method()
         try:
             assert np.asarray(axs).shape == (len(sys.fields), 2)
@@ -104,7 +104,7 @@ def test_convenience_grid_equals_explicit_two_step():
 
 def test_plot_field_curvature_defaults_to_dense_field_sweep():
     sys = _doublet()
-    fig, ax = sys.plot_field_curvature(samples=33)
+    fig, ax = sys.plot.field_curvature(samples=33)
     try:
         assert len(ax.lines) == 2  # x and y fans
         y = ax.lines[0].get_ydata()
@@ -118,7 +118,7 @@ def test_plot_field_curvature_defaults_to_dense_field_sweep():
 
 def test_plot_field_curvature_explicit_fields_verbatim():
     sys = _doublet()
-    fig, ax = sys.plot_field_curvature(fields=list(sys.fields))
+    fig, ax = sys.plot.field_curvature(fields=list(sys.fields))
     try:
         assert len(ax.lines[0].get_ydata()) == len(sys.fields)
     finally:
@@ -127,7 +127,7 @@ def test_plot_field_curvature_explicit_fields_verbatim():
 
 def test_plot_distortion_defaults_to_dense_field_sweep():
     sys = _doublet()
-    fig, ax = sys.plot_distortion(samples=33)
+    fig, ax = sys.plot.distortion(samples=33)
     try:
         assert len(ax.lines) == 1
         assert len(ax.lines[0].get_xdata()) == 33
@@ -137,7 +137,7 @@ def test_plot_distortion_defaults_to_dense_field_sweep():
 
 def test_plot_chromatic_focal_shift_spans_system_wavelengths():
     sys = _doublet()
-    fig, ax = sys.plot_chromatic_focal_shift(focus='paraxial', samples=7)
+    fig, ax = sys.plot.chromatic_focal_shift(focus='paraxial', samples=7)
     try:
         x = ax.lines[0].get_xdata()
         assert len(x) == 7
@@ -149,7 +149,7 @@ def test_plot_chromatic_focal_shift_spans_system_wavelengths():
 
 def test_plot_axial_color_zero_at_reference_wavelength():
     sys = _doublet()
-    fig, ax = sys.plot_axial_color()
+    fig, ax = sys.plot.axial_color()
     try:
         line = ax.lines[0]
         x = line.get_xdata()
@@ -165,7 +165,7 @@ def test_plot_axial_color_zero_at_reference_wavelength():
 
 def test_plot_lateral_color_one_curve_per_nonreference_wavelength():
     sys = _doublet()
-    fig, ax = sys.plot_lateral_color()
+    fig, ax = sys.plot.lateral_color()
     try:
         assert len(ax.lines) == len(sys.wavelengths) - 1
         # default dense field sweep, matching the analysis default
@@ -268,7 +268,7 @@ def test_trace_cache_distinguishes_call_arguments():
 
 def test_plot_full_field_draws_metric_map():
     sys = _doublet()
-    fig, ax = sys.plot_full_field(samples=5)
+    fig, ax = sys.plot.full_field(samples=5)
     try:
         assert len(ax.collections) == 1  # the pcolormesh
         data = ax.collections[0].get_array()

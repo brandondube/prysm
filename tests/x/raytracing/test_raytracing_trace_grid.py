@@ -91,14 +91,19 @@ def test_grid_defaults_epd_from_aperture_spec():
     assert r.epd == pytest.approx(10.0)
 
 
-def test_grid_bare_prescription_defaults_to_on_axis_and_reference_wvl():
+def test_grid_bare_prescription_defaults_fields_but_requires_wavelengths():
     presc = _bare_singlet()
-    records = list(iter_trace_grid(presc, None, None, Sampling.chief(),
+    # fields still default to on-axis for a bare surface sequence...
+    records = list(iter_trace_grid(presc, None, [0.6328], Sampling.chief(),
                                    epd=4.0))
     assert len(records) == 1
     r = records[0]
     assert (r.field.hx, r.field.hy) == (0.0, 0.0)
-    assert r.wvl == pytest.approx(0.6328)  # kernel default reference
+    assert r.wvl == pytest.approx(0.6328)
+    # ...but wavelength resolution lives on the system (ADR-0001): a bare
+    # sequence carrying no wavelengths must be given one explicitly.
+    with pytest.raises(TypeError, match='wavelengths is required'):
+        list(iter_trace_grid(presc, None, None, Sampling.chief(), epd=4.0))
 
 
 def test_require_epd_raises_without_epd_or_system():

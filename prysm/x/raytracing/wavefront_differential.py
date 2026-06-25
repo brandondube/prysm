@@ -4,8 +4,8 @@ from prysm.conf import config
 from prysm.mathops import np
 
 from ._diff_raytrace import seeds_from_perturbations, wavefront_with_tangents
-from ._meta import system_wavelength
 from .analysis import wavefront_zernike_fit
+from ._resolve import resolve_wavelength
 from .tolerance import MonteCarloResult
 
 
@@ -51,7 +51,7 @@ def wavefront_differential(lensdata, perturbations, P, S, wavelength, *,
     perturbations = list(perturbations)
     extra_seeds = list(extra_seeds) if extra_seeds else []
     compensators = list(compensators) if compensators else []
-    wavelength = system_wavelength(lensdata, wavelength)
+    wavelength = resolve_wavelength(lensdata, wavelength)
     n_tol = len(perturbations) + len(extra_seeds)
     # one trace carries the tolerance maps, extra seeds, and compensator maps
     seeds = (seeds_from_perturbations(perturbations, pose_step=pose_step)

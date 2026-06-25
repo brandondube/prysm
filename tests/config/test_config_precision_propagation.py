@@ -119,7 +119,8 @@ def test_monte_carlo_merits_dtype_follows_config_precision(precision):
         return 0.0
 
     # one trivial perturbation; sigma=0 so each trial reports nominal.
-    pert = Perturbation.normal(ld, 'curvature', 0, sigma=0.0, name='c0')
+    # surface 1 is the mirror (surface 0 is the OBJECT endpoint, ADR-0006).
+    pert = Perturbation.normal(ld, 'curvature', 1, sigma=0.0, name='c0')
     res = monte_carlo(ld, [pert], merit, n_trials=3,
                       seed=42, record_samples=True)
     expected = _expected_dtype(precision)
@@ -134,7 +135,7 @@ def test_problem_residuals_dtype_follows_config_precision(precision):
     ld = _parabola_ld()
     op = RmsSpotRadius(Field(0., 0.), 0.55e-3, Sampling.fan(n=5),
                        target=0.0, weight=1.0)
-    ld.lens.vary('curvature', surfaces=0)
+    ld.opt.vary('curvature', surfaces=1)  # surface 1 = mirror (0 = OBJECT)
     prob = Problem(ld, [op])
     out = prob.residuals(prob.x0())
     assert out.dtype == _expected_dtype(precision)

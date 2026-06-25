@@ -21,7 +21,7 @@ from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.surfaces import Conic, Plane
-from prysm.x.raytracing.spencer_and_murty import STYPE_EVAL, raytrace
+from prysm.x.raytracing.spencer_and_murty import _is_measurement_surf, raytrace
 from prysm.x.raytracing.paraxial import paraxial_image_distance
 from prysm.x.raytracing.design import WavefrontRMS
 from prysm.x.raytracing.tolerance import (
@@ -43,7 +43,7 @@ _air = materials.air
 
 
 def _place_image(ld, gap_row):
-    lens = [s for s in ld.to_surfaces() if s.typ != STYPE_EVAL]
+    lens = [s for s in ld.to_surfaces() if not _is_measurement_surf(s.typ)]
     bfd = float(paraxial_image_distance(lens, wvl=WVL))
     ld.rows[gap_row].thickness = bfd
     ld.lens._invalidate()
@@ -51,23 +51,23 @@ def _place_image(ld, gap_row):
 
 
 def singlet():
+    # OBJECT/IMAGE endpoints implicit (ADR-0006); conics are rows 1, 2.
     lens = LensData()
     (lens.add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
-         .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
-         .add(Plane(), typ='eval'))
+         .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air))
     ld = OpticalSystem(lens, aperture=10.0, wavelengths=[WVL])
-    return _place_image(ld, gap_row=1)
+    return _place_image(ld, gap_row=2)
 
 
 def singlet_cb():
+    # rows: OBJECT(0), conic1(1), coordbreak(2), conic2(3), IMAGE(4)
     lens = LensData()
     (lens.add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
          .add_coordbreak(decenter=(0., 0., 0.), tilt=(0., 0., 0.),
                          kind='basic', thickness=0.0)
-         .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
-         .add(Plane(), typ='eval'))
+         .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air))
     ld = OpticalSystem(lens, aperture=10.0, wavelengths=[WVL])
-    return _place_image(ld, gap_row=2)
+    return _place_image(ld, gap_row=3)
 
 
 def bundle(ld):
@@ -77,9 +77,9 @@ def bundle(ld):
 
 def basic_perts(ld):
     return [
-        Perturbation.normal(ld, 'curvature', 0, 1e-5, name='c1'),
-        Perturbation.normal(ld, 'conic', 0, 1e-4, name='k1'),
-        Perturbation.normal(ld, 'thickness', 0, 5e-4, name='t0'),
+        Perturbation.normal(ld, 'curvature', 1, 1e-5, name='c1'),
+        Perturbation.normal(ld, 'conic', 1, 1e-4, name='k1'),
+        Perturbation.normal(ld, 'thickness', 1, 5e-4, name='t0'),
     ]
 
 
@@ -113,13 +113,12 @@ def test_wavefront_differential_resolves_system_wavelength():
     (lens.add(Conic(1 / 40.0, 0.0), typ='refr', thickness=4.0,
               material=dispersive)
          .add(Conic(-1 / 40.0, 0.0), typ='refr', thickness=20.0,
-              material=_air)
-         .add(Plane(), typ='eval'))
+              material=_air))
     sys = OpticalSystem(lens, aperture=10.0, wavelengths=[0.55], reference=0)
-    sys.solve_image_distance()
+    sys.solve.image_distance()
     P, S = launch(sys, Field(0.0, 0.0), sys.wavelength(),
                   Sampling.rect(n=3), epd=10.0, pupil_z=-5.0)
-    perts = [Perturbation.normal(sys, 'curvature', 0, 1e-5, name='c1')]
+    perts = [Perturbation.normal(sys, 'curvature', 1, 1e-5, name='c1')]
     with pytest.raises(ValueError, match='near-axial chief ray'):
         wavefront_differential(sys, perts, P, S, None)
     # None resolves to the system reference wavelength; an explicit float agrees.
@@ -172,7 +171,7 @@ def test_rms_at_tracks_retrace_and_beats_linear():
     pure-linear extrapolation rms_nominal + T*sensitivity."""
     ld = singlet()
     P, S = bundle(ld)
-    pert = Perturbation.normal(ld, 'curvature', 0, 1e-5, name='c1')
+    pert = Perturbation.normal(ld, 'curvature', 1, 1e-5, name='c1')
     wd = wavefront_differential(ld, [pert], P, S, WVL)
     T = 2e-3  # well beyond the FD step, so curvature of RMS(T) matters
     true_rms = _retrace_rms(ld, P, S, pert, T)
@@ -187,9 +186,9 @@ def test_full_quadratic_form_matches_linearized_wavefront():
     ld = singlet_cb()
     P, S = bundle(ld)
     perts = [
-        Perturbation.normal(ld, 'curvature', 0, 1e-5, name='c1'),
-        Perturbation.normal(ld, 'curvature', 2, 1e-5, name='c2'),
-        Perturbation.normal(ld, 'thickness', 0, 5e-4, name='t0'),
+        Perturbation.normal(ld, 'curvature', 1, 1e-5, name='c1'),
+        Perturbation.normal(ld, 'curvature', 3, 1e-5, name='c2'),
+        Perturbation.normal(ld, 'thickness', 1, 5e-4, name='t0'),
     ]
     wd = wavefront_differential(ld, perts, P, S, WVL)
     rng = np.random.default_rng(0)

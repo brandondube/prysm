@@ -23,7 +23,7 @@ N_SK16 = 1.62260856
 N_F2 = 1.62365512
 WVL = 0.55
 EPD = 10.0
-STOP_INDEX = 3  # 4th optical surface
+STOP_INDEX = 4  # 4th optical surface (compiled index 1..6; index 0 is OBJECT)
 
 # (radius, thickness, index); stop on the 4th surface
 _COOKE = [
@@ -41,7 +41,6 @@ def cooke():
     for R, t, n in _COOKE:
         mat = pmat.ConstantMaterial(n) if n != 1.0 else pmat.air
         lens.add(Conic(1.0 / R, 0.0), thickness=t, material=mat)
-    lens.add(Plane(), typ='eval', material=pmat.air, semidiameter=1e3)
     return OpticalSystem(lens, aperture=EPD, fields=[0.0, 14.0, 20.0],
                          wavelengths=[WVL], reference=0,
                          stop_index=STOP_INDEX)
@@ -52,18 +51,19 @@ def biconvex_stop_first():
     lens = LensData()
     lens.add(Conic(1 / 50.0, 0.0), thickness=6.0, material=pmat.ConstantMaterial(1.5))
     lens.add(Conic(-1 / 50.0, 0.0), thickness=46.0, material=pmat.air)
-    lens.add(Plane(), typ='eval', material=pmat.air, semidiameter=1e3)
     return OpticalSystem(lens, aperture=20.0, fields=[0.0, 10.0],
                          wavelengths=[WVL], reference=0,
-                         stop_index=0)
+                         stop_index=1)   # first powered surface (index 0 is OBJECT)
 
 
 # ---------- entrance_pupil_z ------------------------------------------------
 
 def test_entrance_pupil_z_matches_first_order():
-    ld = cooke()
-    ep = entrance_pupil_z(ld)
-    assert ep == pytest.approx(ynu_first_order(ld).ep_z)
+    sys = cooke()
+    surfaces = sys.to_surfaces()
+    ep = entrance_pupil_z(surfaces, wvl=WVL, stop_index=sys.stop_index)
+    assert ep == pytest.approx(
+        ynu_first_order(surfaces, wvl=WVL, stop_index=sys.stop_index).ep_z)
 
 
 def test_entrance_pupil_z_none_without_stop():
@@ -73,8 +73,10 @@ def test_entrance_pupil_z_none_without_stop():
 
 
 def test_entrance_pupil_z_at_first_surface_when_stop_is_first():
-    ld = biconvex_stop_first()
-    assert entrance_pupil_z(ld) == pytest.approx(0.0, abs=1e-9)
+    sys = biconvex_stop_first()
+    assert entrance_pupil_z(sys.to_surfaces(), wvl=WVL,
+                            stop_index=sys.stop_index) == pytest.approx(
+                                0.0, abs=1e-9)
 
 
 # ---------- ray aiming mode (paraxial vs real) ------------------------------
@@ -126,7 +128,7 @@ from prysm.x.raytracing.launch import (
     _scaled_field, _parabasal_ep_z,
 )
 
-_FISHEYE_STOP = 2
+_FISHEYE_STOP = 3   # 3rd powered surface (compiled index 1..4; index 0 is OBJECT)
 
 
 def fisheye(epd, ray_aiming='real'):
@@ -139,7 +141,6 @@ def fisheye(epd, ray_aiming='real'):
     ld.add(Conic(1 / 16.0, 0.0), thickness=4.0, material=NG, semidiameter=6.0)
     ld.add(Conic(-1 / 16.0, 0.0), thickness=45.0, material=pmat.air,
            semidiameter=6.0)
-    ld.add(Plane(), typ='eval', material=pmat.air, semidiameter=1e4)
     sys = OpticalSystem(ld, aperture=epd, fields=[0.0], wavelengths=[WVL],
                         reference=0, stop_index=_FISHEYE_STOP)
     sys.ray_aiming = ray_aiming
@@ -222,8 +223,8 @@ def test_drop_unaimed_nans_unaimable_ray_directions():
     sys = fisheye(6.0)
     fld = Field(0.0, 30.0, unit='deg')             # the +y rim is unaimable here
     samp = Sampling.fan(n=15, axis='y')
-    P_be, S_be = launch(sys, fld, WVL, samp)                      # best-effort
-    P_dr, S_dr = launch(sys, fld, WVL, samp, drop_unaimed=True)   # dropped
+    P_be, S_be = launch(sys, fld, WVL, samp, drop_unaimed=False)  # best-effort
+    P_dr, S_dr = launch(sys, fld, WVL, samp)                      # dropped (default)
 
     unaimable = ~np.isfinite(S_dr).all(axis=1)
     assert unaimable.any() and not unaimable.all()   # partial: chief/core aim
@@ -299,7 +300,8 @@ def test_wavefront_default_chief_is_hex_center():
     default must match the index-0 chief and differ markedly from N//2.
     """
     ld = cooke()
-    xp_z = ynu_first_order(ld).xp_z
+    xp_z = ynu_first_order(ld.to_surfaces(), wvl=WVL,
+                           stop_index=ld.stop_index).xp_z
     P, S = launch(ld, Field(0.0, 0.0, unit='deg'), WVL, Sampling.hex(nrings=6))
     n = P.shape[0]
 

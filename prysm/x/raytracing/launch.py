@@ -9,14 +9,19 @@ from . import raygen
 from .opt import aim_rays
 from .paraxial import entrance_pupil_z, NonAxialSystemError
 from .spencer_and_murty import raytrace, valid_mask
-from ._meta import system_epd, object_space_index, system_stop_index
+from ._meta import object_space_index
+from ._resolve import compiled_surfaces
 
 
-def _entrance_pupil_z(prescription, wavelength):
-    """Entrance-pupil z, using a prescription cache when present."""
-    f = getattr(prescription, 'entrance_pupil_z', None)
+def _entrance_pupil_z(system, wavelength):
+    """Entrance-pupil z, using a system cache when present."""
+    f = getattr(system, 'entrance_pupil_z', None)
     if not callable(f):
-        f = lambda wvl: entrance_pupil_z(prescription, wvl)  # noqa: E731
+        surfaces = (system.to_surfaces()
+                    if hasattr(system, 'to_surfaces') else system)
+        stop_index = getattr(system, 'stop_index', None)
+        f = lambda wvl: entrance_pupil_z(  # noqa: E731
+            surfaces, wvl, stop_index=stop_index)
     try:
         return f(wavelength)
     except NonAxialSystemError:
@@ -295,7 +300,7 @@ def _perp_basis(w):
     return e1, e2
 
 
-def _object_space_cone_PS(prescription, field, wavelength, sampling, na,
+def _object_space_cone_PS(system, field, wavelength, sampling, na,
                           ep_z='paraxial'):
     """Sine-condition object cone for an object-space NA / F-number aperture.
 
@@ -307,7 +312,7 @@ def _object_space_cone_PS(prescription, field, wavelength, sampling, na,
         raise ValueError(
             'an object-space NA / F-number aperture requires a finite-'
             "conjugate (kind='height') field")
-    n_obj = object_space_index(prescription, wavelength)
+    n_obj = object_space_index(compiled_surfaces(system), wavelength)
     sinU = float(na) / float(n_obj)
     if not (0.0 < sinU < 1.0):
         raise ValueError(
@@ -323,7 +328,7 @@ def _object_space_cone_PS(prescription, field, wavelength, sampling, na,
     obj = np.array([field.hx, field.hy, field.object_z], dtype=config.precision)
 
     if ep_z == 'paraxial':
-        ep_z = _entrance_pupil_z(prescription, wavelength)
+        ep_z = _entrance_pupil_z(system, wavelength)
     if ep_z is not None:
         axis_pt = np.array([0.0, 0.0, float(ep_z)], dtype=config.precision)
         chief = axis_pt - obj
@@ -359,9 +364,9 @@ def _apply_vignetting(pupil_xy, field):
     return np.stack([x, y], axis=1)
 
 
-def _has_decentered_geometry(prescription):
+def _has_decentered_geometry(system):
     """True when any surface carries a decentered vertex or a rotation."""
-    for surf in prescription:
+    for surf in system:
         P = np.asarray(getattr(surf, 'P', (0.0, 0.0, 0.0)))
         if P.shape[0] >= 2 and bool(np.any(np.abs(P[:2]) > 1e-12)):
             return True
@@ -371,13 +376,13 @@ def _has_decentered_geometry(prescription):
     return False
 
 
-def _warn_paraxial_aiming(prescription, ray_aiming):
+def _warn_paraxial_aiming(system, ray_aiming):
     """Warn when paraxial aiming is used with decentered geometry."""
     if ray_aiming != 'paraxial':
         return
-    if _has_decentered_geometry(prescription):
+    if _has_decentered_geometry(system):
         warnings.warn(
-            'launch: the prescription carries tilts/decenters but '
+            'launch: the system carries tilts/decenters but '
             "ray_aiming is 'paraxial'; the paraxial entrance pupil ignores "
             "them and bundles may miss the stop.  Consider ray_aiming='real' "
             'or an explicit aim_to=stop.',
@@ -385,12 +390,12 @@ def _warn_paraxial_aiming(prescription, ray_aiming):
         )
 
 
-def _real_aim_to_stop(P, S, rho, prescription, stop_index, wavelength, finite):
+def _real_aim_to_stop(P, S, rho, system, stop_index, wavelength, finite):
     """Aim a normalized pupil grid linearly onto the real stop.
 
     Returns (P, S, converged); converged is the per-ray aim_rays mask.
     """
-    trace_path = prescription[:stop_index + 1]
+    trace_path = system[:stop_index + 1]
     tr = raytrace(trace_path, P, S, wavelength)
     L = tr.P[-1, :, :2]
     valid = np.isfinite(L).all(axis=1)
@@ -410,7 +415,7 @@ def _real_aim_to_stop(P, S, rho, prescription, stop_index, wavelength, finite):
     sy = _scale(rho[:, 1], L[:, 1])
     target = np.stack([rho[:, 0] * sx, rho[:, 1] * sy], axis=1)
     vary = 'direction' if finite else 'position'
-    P, S, converged = aim_rays(P, S, prescription, stop_index, target,
+    P, S, converged = aim_rays(P, S, system, stop_index, target,
                                wavelength, vary=vary, strict=False)
     return P, S, converged
 
@@ -425,16 +430,16 @@ def _scaled_field(field, frac):
                  vignetting=field.vignetting)
 
 
-def _parabasal_ep_z(prescription, field, wavelength):
+def _parabasal_ep_z(system, field, wavelength):
     """Field-dependent entrance-pupil z, with paraxial fallback."""
     from .parabasal import first_order  # lazy: parabasal imports this module
     try:
-        ep = first_order(prescription, field, wavelength).ep_z
+        ep = first_order(system, field, wavelength).ep_z
     except (ValueError, IndexError, ArithmeticError, np.linalg.LinAlgError):
         # Degenerate parabasal chiefs fall back to the paraxial pupil.
         ep = None
     if ep is None:
-        return _entrance_pupil_z(prescription, wavelength)
+        return _entrance_pupil_z(system, wavelength)
     if hasattr(ep, '__len__'):
         ep = float(np.mean(ep))
     return float(ep)
@@ -454,10 +459,10 @@ def _warm_start_bundle(P, S, seedP, seedS, finite):
         P[:, 1] = seedP[:, 1]
 
 
-def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, prescription,
+def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, system,
                              stop_index, wavelength, finite, drop_unaimed=False):
     """Real aiming with a field-continuation fallback."""
-    P, S, conv = _real_aim_to_stop(P, S, rho, prescription, stop_index,
+    P, S, conv = _real_aim_to_stop(P, S, rho, system, stop_index,
                                    wavelength, finite)
     if bool(np.all(conv)):
         return P, S
@@ -466,11 +471,11 @@ def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, prescription,
     Pk = Sk = convk = None
     for frac in _LADDER_SCHEDULE:
         fld_k = _scaled_field(field, frac)
-        ep_k = _parabasal_ep_z(prescription, fld_k, wavelength)
+        ep_k = _parabasal_ep_z(system, fld_k, wavelength)
         Pk, Sk, rho_k = build_bundle(fld_k, ep_k)
         if seedP is not None:
             _warm_start_bundle(Pk, Sk, seedP, seedS, finite)
-        Pk, Sk, convk = _real_aim_to_stop(Pk, Sk, rho_k, prescription,
+        Pk, Sk, convk = _real_aim_to_stop(Pk, Sk, rho_k, system,
                                           stop_index, wavelength, finite)
         seedP, seedS = Pk, Sk
 
@@ -491,15 +496,15 @@ def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, prescription,
     return P, S
 
 
-def launch(prescription, field, wavelength, sampling, *,
+def launch(system, field, wavelength, sampling, *,
            epd=None, pupil_extent=None, pupil_z=None,
            aim_to=None, aim_target=(0.0, 0.0), aim_strict=True,
-           drop_unaimed=False):
+           drop_unaimed=True):
     """Build (P, S) for one field, wavelength, and pupil sampling.
 
     Parameters
     ----------
-    prescription : sequence of Surface
+    system : sequence of Surface
         the system to launch into.
     field : Field
         the field point.  kind='angle' or kind='height'.
@@ -520,7 +525,9 @@ def launch(prescription, field, wavelength, sampling, *,
     aim_strict : bool, optional
         forwarded to aim_rays on the explicit aim_to path.
     drop_unaimed : bool, optional
-        under real aiming, NaN rays that cannot be aimed onto the stop.
+        under real aiming, NaN the S of rays that cannot be aimed onto the stop
+        so a vignetted ray cannot masquerade as a valid bundle sample.  Default
+        True (ADR-0009); solves that must probe the rim pass False.
 
     Returns
     -------
@@ -528,19 +535,19 @@ def launch(prescription, field, wavelength, sampling, *,
         shape (N, 3) launch positions and direction cosines.
 
     """
-    ray_aiming = str(getattr(prescription, 'ray_aiming', 'paraxial')).lower()
+    ray_aiming = str(getattr(system, 'ray_aiming', 'paraxial')).lower()
     real_aiming = (ray_aiming == 'real' and aim_to is None
                    and sampling.kind != 'chief')
-    stop_index = system_stop_index(prescription, None)
+    stop_index = getattr(system, 'stop_index', None)
     if aim_to is None:
-        _warn_paraxial_aiming(prescription, ray_aiming)
+        _warn_paraxial_aiming(system, ray_aiming)
 
     # Object-space aperture modes launch from an object-space cone.
     object_mode = False
     na = None
     if epd is None and pupil_extent is None:
-        aperture = getattr(prescription, 'aperture', None)
-        bc = aperture.resolve(prescription, wavelength) if aperture is not None else None
+        aperture = getattr(system, 'aperture', None)
+        bc = aperture.resolve(system, wavelength) if aperture is not None else None
         object_mode = bc is not None and bc[0] in ('NA_OBJECT', 'FNO_OBJECT')
         if object_mode:
             na = bc[1] if bc[0] == 'NA_OBJECT' else 1.0 / (2.0 * bc[1])
@@ -550,7 +557,9 @@ def launch(prescription, field, wavelength, sampling, *,
     if not object_mode:
         if epd is None and pupil_extent is None:
             # default from the system aperture spec if any
-            epd = system_epd(prescription, None, wavelength)
+            resolver = getattr(system, 'entrance_pupil_diameter', None)
+            if callable(resolver):
+                epd = resolver(wavelength)
         if sampling.kind != 'chief' and epd is None and pupil_extent is None:
             raise ValueError(
                 f'sampling kind {sampling.kind!r} needs an entrance pupil '
@@ -563,7 +572,7 @@ def launch(prescription, field, wavelength, sampling, *,
         else:
             extent = 0.0
         if pupil_z is None:
-            pupil_z = float(prescription[0].P[2])
+            pupil_z = float(system[0].P[2])
         pupil_z = float(pupil_z)
 
     def _build(fld, ep_z):
@@ -573,9 +582,9 @@ def launch(prescription, field, wavelength, sampling, *,
         ladder feeds the parabasal field-dependent EP), and None means no seed.
         """
         if object_mode:
-            return _object_space_cone_PS(prescription, fld, wavelength,
+            return _object_space_cone_PS(system, fld, wavelength,
                                          sampling, na, ep_z=ep_z)
-        e = (_entrance_pupil_z(prescription, wavelength)
+        e = (_entrance_pupil_z(system, wavelength)
              if ep_z == 'paraxial' else ep_z)
         pupil_xy = sampling.build(extent)
         pupil_xy = _apply_vignetting(pupil_xy, fld)
@@ -602,18 +611,18 @@ def launch(prescription, field, wavelength, sampling, *,
     if aim_to is not None:
         vary = 'direction' if finite else 'position'
         P, S, _ = aim_rays(
-            P, S, prescription, aim_to, aim_target, wavelength,
+            P, S, system, aim_to, aim_target, wavelength,
             strict=aim_strict, vary=vary,
         )
     elif real_aiming and stop_index is not None:
         P, S = _aim_to_stop_with_ladder(
-            P, S, rho, _build, field, prescription, stop_index, wavelength,
+            P, S, rho, _build, field, system, stop_index, wavelength,
             finite, drop_unaimed=drop_unaimed)
 
     return P, S
 
 
-def solve_vignetting(prescription, field, wavelength, *, tol=1e-3, maxiter=20):
+def solve_vignetting(system, field, wavelength, *, tol=1e-3, maxiter=20):
     """Solve Code V-style real-ray vignetting factors for one field."""
     # Solve on an unvignetted clone.
     bare = Field(field.hx, field.hy, kind=field.kind, unit=field.unit,
@@ -631,8 +640,11 @@ def solve_vignetting(prescription, field, wavelength, *, tol=1e-3, maxiter=20):
     def transmits(scales):
         s = np.asarray([1.0, *scales], dtype=config.precision)
         xy = edges * s[:, np.newaxis]
-        P, S = launch(prescription, bare, wavelength, Sampling.points(xy))
-        result = raytrace(prescription, P, S, wavelength)
+        # Probe the rim to find where vignetting begins -- keep best-effort
+        # un-aimed rays rather than NaN-ing them (ADR-0009).
+        P, S = launch(system, bare, wavelength, Sampling.points(xy),
+                      drop_unaimed=False)
+        result = raytrace(system, P, S, wavelength)
         return array_to_true_numpy(valid_mask(result.status))
 
     valid = transmits([1.0] * 4)

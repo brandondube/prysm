@@ -20,7 +20,7 @@ from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.surfaces import Conic, Plane
-from prysm.x.raytracing.spencer_and_murty import STYPE_EVAL
+from prysm.x.raytracing.spencer_and_murty import _is_measurement_surf
 from prysm.x.raytracing.paraxial import paraxial_image_distance
 from prysm.x.raytracing.analysis import wavefront_zernike_fit
 from prysm.x.raytracing.sags import zernike_irregularity_partials
@@ -161,14 +161,15 @@ _air = materials.air
 
 
 def singlet():
+    # rows: OBJECT(0), conic1(1), conic2(2), IMAGE(3); compiled surfaces are the
+    # same index sequence (ADR-0006).
     ld_data = LensData()
     (ld_data.add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
-            .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air)
-            .add(Plane(), typ='eval'))
+            .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air))
     ld = OpticalSystem(ld_data, aperture=10.0, wavelengths=[0.5])
-    lens = [s for s in ld.to_surfaces() if s.typ != STYPE_EVAL]
+    lens = [s for s in ld.to_surfaces() if not _is_measurement_surf(s.typ)]
     bfd = float(paraxial_image_distance(lens, wvl=0.5))
-    ld.rows[1].thickness = bfd
+    ld.rows[2].thickness = bfd        # the image gap (conic2 row)
     ld.lens._invalidate()
     return ld
 
@@ -180,9 +181,9 @@ def _bundle(ld):
 
 def _perts(ld):
     return [
-        Perturbation.normal(ld, 'curvature', 0, 1e-5, name='c1'),
-        Perturbation.normal(ld, 'conic', 0, 1e-4, name='k1'),
-        Perturbation.normal(ld, 'thickness', 0, 5e-4, name='t0'),
+        Perturbation.normal(ld, 'curvature', 1, 1e-5, name='c1'),
+        Perturbation.normal(ld, 'conic', 1, 1e-4, name='k1'),
+        Perturbation.normal(ld, 'thickness', 1, 5e-4, name='t0'),
     ]
 
 
@@ -237,9 +238,10 @@ def test_zernike_sensitivity_requires_pupil_coords():
 def test_extra_seeds_irregularity_is_a_tolerance_column():
     ld = singlet()
     P, S = _bundle(ld)
-    perts = [Perturbation.normal(ld, 'curvature', 0, 1e-5, name='c1')]
-    irr = [seed_irregularity(0, 2, 2, 5.0, name='CYN'),
-           seed_irregularity(1, 2, -2, 5.0, name='CYD')]
+    perts = [Perturbation.normal(ld, 'curvature', 1, 1e-5, name='c1')]
+    # compiled surfaces: OBJECT(0), conic1(1), conic2(2), IMAGE(3)
+    irr = [seed_irregularity(1, 2, 2, 5.0, name='CYN'),
+           seed_irregularity(2, 2, -2, 5.0, name='CYD')]
     wd = wavefront_differential(ld, perts, P, S, 0.5, extra_seeds=irr,
                                 extra_steps=[0.1, 0.1])
     assert wd.n_params == 3
@@ -255,8 +257,8 @@ def test_extra_seeds_column_equals_standalone_seed():
     yields -- so it inherits the kernel-level FD validation above."""
     ld = singlet()
     P, S = _bundle(ld)
-    perts = [Perturbation.normal(ld, 'curvature', 0, 1e-5, name='c1')]
-    irr = seed_irregularity(0, 2, 2, 5.0, name='CYN')
+    perts = [Perturbation.normal(ld, 'curvature', 1, 1e-5, name='c1')]
+    irr = seed_irregularity(1, 2, 2, 5.0, name='CYN')   # on conic1 (compiled 1)
     wd = wavefront_differential(ld, perts, P, S, 0.5, extra_seeds=[irr])
     _, _, _, dW = wavefront_with_tangents(ld.to_surfaces(), P, S, 0.5, [irr])
     np.testing.assert_allclose(wd.dW[:, 1], dW[:, 0], rtol=1e-10, atol=1e-12)
@@ -265,9 +267,9 @@ def test_extra_seeds_column_equals_standalone_seed():
 def test_extra_seeds_compose_with_compensators():
     ld = singlet()
     P, S = _bundle(ld)
-    perts = [Perturbation.normal(ld, 'curvature', 0, 1e-5, name='c1')]
-    irr = [seed_irregularity(0, 2, 2, 5.0, name='CYN')]
-    comp = [Perturbation.normal(ld, 'thickness', 1, 1e-3, name='focus')]
+    perts = [Perturbation.normal(ld, 'curvature', 1, 1e-5, name='c1')]
+    irr = [seed_irregularity(1, 2, 2, 5.0, name='CYN')]   # on conic1 (compiled 1)
+    comp = [Perturbation.normal(ld, 'thickness', 2, 1e-3, name='focus')]
     wd = wavefront_differential(ld, perts, P, S, 0.5, extra_seeds=irr,
                                 compensators=comp)
     assert wd.is_compensated

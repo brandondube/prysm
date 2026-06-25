@@ -172,7 +172,7 @@ def test_launch_tangent_seeds_shape_validated():
 
 def test_parabasal_matches_ynu_singlet():
     sys = _singlet_system()
-    fo_y = ynu_first_order(sys, wvl=0.55, epd=20, stop_index=1)
+    fo_y = ynu_first_order(sys.to_surfaces(), wvl=0.55, epd=20, stop_index=1)
     fo_p = first_order(sys, wavelength=0.55, epd=20, stop_index=1)
     assert isinstance(fo_p, ParabasalFirstOrder)
     _assert_pairs_match_ynu(fo_p, fo_y)
@@ -183,7 +183,7 @@ def test_parabasal_matches_ynu_singlet():
 
 def test_parabasal_matches_ynu_single_mirror_signs():
     sys = _parabola_system()
-    fo_y = ynu_first_order(sys, wvl=0.55, epd=50, stop_index=0)
+    fo_y = ynu_first_order(sys.to_surfaces(), wvl=0.55, epd=50, stop_index=0)
     fo_p = first_order(sys, wavelength=0.55, epd=50, stop_index=0)
     # signs included: efl positive for the converging mirror in both sections
     _assert_pairs_match_ynu(fo_p, fo_y)
@@ -193,7 +193,7 @@ def test_parabasal_matches_ynu_single_mirror_signs():
 
 def test_parabasal_matches_ynu_two_mirror():
     sys = _two_mirror_system()
-    fo_y = ynu_first_order(sys, wvl=0.55, epd=50, stop_index=0)
+    fo_y = ynu_first_order(sys.to_surfaces(), wvl=0.55, epd=50, stop_index=0)
     fo_p = first_order(sys, wavelength=0.55, epd=50, stop_index=0)
     _assert_pairs_match_ynu(fo_p, fo_y)
 
@@ -202,7 +202,7 @@ def test_parabasal_finite_conjugate_image_is_conjugate_correct():
     # the YNU walk always reports the collimated-input (rear focal) image;
     # the parabasal reports the image of the actual finite object
     sys = _finite_conjugate_system()
-    fo_y = ynu_first_order(sys, wvl=0.55, epd=20, stop_index=2)
+    fo_y = ynu_first_order(sys.to_surfaces(), wvl=0.55, epd=20, stop_index=2)
     fo_p = first_order(sys, wavelength=0.55, epd=20, stop_index=2)
     _assert_pairs_match_ynu(
         fo_p, fo_y, skip=('paraxial_image_z', 'paraxial_image_distance'))
@@ -218,7 +218,7 @@ def test_parabasal_finite_conjugate_image_is_conjugate_correct():
 def test_parabasal_force_sym_scalars():
     sys = _singlet_system()
     fo = first_order(sys, wavelength=0.55, epd=20, force_sym=True)
-    fo_y = ynu_first_order(sys, wvl=0.55, epd=20, stop_index=1)
+    fo_y = ynu_first_order(sys.to_surfaces(), wvl=0.55, epd=20, stop_index=1)
     assert isinstance(fo.efl, float)
     np.testing.assert_allclose(fo.efl, fo_y.efl, rtol=1e-9)
     np.testing.assert_allclose(fo.xp_z, fo_y.xp_z, rtol=1e-9)
@@ -230,6 +230,19 @@ def test_parabasal_stop_index_out_of_range_raises():
         first_order(sys, wavelength=0.55, stop_index=7)
 
 
+def test_first_order_bare_surfaces_defaults_to_on_axis():
+    # The documented power-user path: a bare compiled surface list with no
+    # explicit field must default to on-axis rather than raising (the field=0
+    # default would hit ADR-0009's bare-scalar rejection).
+    sys = _singlet_system()
+    surfs = sys.to_surfaces()
+    fo = first_order(surfs, wavelength=0.55, epd=20, stop_index=1)
+    assert fo.field.hx == pytest.approx(0.0)
+    assert fo.field.hy == pytest.approx(0.0)
+    fo_y = ynu_first_order(surfs, wvl=0.55, epd=20, stop_index=1)
+    _assert_pairs_match_ynu(fo, fo_y)
+
+
 def test_system_field_indices_are_authoritative():
     sys = _singlet_system()
     sys.fields.fields = [Field(0, 0), Field(0, 7.0)]
@@ -238,8 +251,12 @@ def test_system_field_indices_are_authoritative():
     assert fo_index.field is sys.field(1)
     assert fo_index.field.hy == pytest.approx(7.0)
 
-    fo_literal = first_order(sys, field=1.0, wavelength=0.55, epd=20)
+    fo_literal = first_order(sys, field=(0.0, 1.0), wavelength=0.55, epd=20)
     assert fo_literal.field.hy == pytest.approx(1.0)
+
+    # ADR-0009: a bare float is neither an index nor a literal field.
+    with pytest.raises(TypeError):
+        first_order(sys, field=1.0, wavelength=0.55, epd=20)
 
     with pytest.raises(IndexError):
         first_order(sys, field=7, wavelength=0.55, epd=20)
@@ -266,7 +283,7 @@ def test_raw_prescription_accepts_tuple_field_literals():
 def test_parabasal_handles_decentered_geometry():
     sys = _decentered_singlet_system()
     with pytest.raises(ValueError, match='centered axial geometry'):
-        ynu_first_order(sys, wvl=0.55, epd=20, stop_index=1)
+        ynu_first_order(sys.to_surfaces(), wvl=0.55, epd=20, stop_index=1)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')  # paraxial-aiming launch warning
         fo = first_order(sys, wavelength=0.55, epd=20, stop_index=1)
@@ -291,7 +308,7 @@ def test_parabasal_off_axis_field_splits_ts_foci():
 def test_parabasal_falls_back_to_ynu_when_chief_clipped():
     sys = _singlet_system(aperture_radius=2.0)
     fo = first_order(sys, field=Field(0, 60.0), wavelength=0.55, epd=20)
-    fo_y = ynu_first_order(sys, wvl=0.55, epd=20, stop_index=1)
+    fo_y = ynu_first_order(sys.to_surfaces(), wvl=0.55, epd=20, stop_index=1)
     assert fo.backend == 'ynu'
     assert fo.efl == (fo_y.efl, fo_y.efl)
     assert fo.abcd is None
@@ -310,7 +327,7 @@ def test_90_degree_field_corridor_known_limitation():
 
 def test_parabasal_foci_on_axis_match_paraxial_image():
     sys = _singlet_system()
-    fo_y = ynu_first_order(sys, wvl=0.55, epd=20, stop_index=1)
+    fo_y = ynu_first_order(sys.to_surfaces(), wvl=0.55, epd=20, stop_index=1)
     x_z, y_z = parabasal_foci(sys, Field(0, 0), 0.55)
     np.testing.assert_allclose(x_z, fo_y.paraxial_image_z, rtol=1e-9)
     np.testing.assert_allclose(y_z, fo_y.paraxial_image_z, rtol=1e-9)

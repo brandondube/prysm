@@ -1,8 +1,9 @@
 """Zemax .zmx prescription reader."""
 
+import math
+
 from prysm.mathops import np
 
-from ..surfaces import Plane
 from ... import materials as _materials
 from ._indexing import noll_to_nm, xy_j_to_mn
 from ._common import (
@@ -365,6 +366,16 @@ class _CoordinateBreak:
 
 # ---------- top-level reader ------------------------------------------------
 
+def _glas_line(material):
+    """'  GLAS <page>' line for a nameable non-air material, else None."""
+    if material is _materials.air or material is _materials.vacuum:
+        return None
+    page = getattr(material, 'page_info', None)
+    if page and page.get('page'):
+        return f'  GLAS {page["page"]}'
+    return None
+
+
 def write_zmx(system):
     """Serialize an OpticalSystem to Zemax .zmx text (rotationally symmetric subset).
 
@@ -379,7 +390,8 @@ def write_zmx(system):
     """
     from ..lensdata import CoordBreak
     from ..listings import surface_row_mappings
-    from ..spencer_and_murty import STYPE_EVAL, STYPE_REFLECT
+    from ..spencer_and_murty import (
+        STYPE_OBJ, STYPE_REFLECT, _is_measurement_surf)
     from ..surfaces import _map_stype
 
     lines = ['VERS 100000 0', 'MODE SEQ']
@@ -406,11 +418,24 @@ def write_zmx(system):
     for w in ([] if wvls is None else wvls):
         lines.append(f'WAVL {float(w):g}')
 
-    lines += ['SURF 0', '  TYPE STANDARD', '  CURV 0.0', '  DISZ INFINITY']
+    obj_row = next((r for r in system.rows
+                    if not isinstance(r, CoordBreak)
+                    and _map_stype(r.typ) == STYPE_OBJ), None)
+    obj_thi = float(obj_row.thickness) if obj_row is not None else float('inf')
+    disz = 'INFINITY' if not math.isfinite(obj_thi) else f'{obj_thi:g}'
+    surf0 = ['SURF 0', '  TYPE STANDARD', '  CURV 0.0', f'  DISZ {disz}']
+    if obj_row is not None:
+        glas = _glas_line(obj_row.material)
+        if glas:
+            surf0.append(glas)
+    lines += surf0
 
     surf_no = 0
     n_refl = 0
     for row in system.rows:
+        if not isinstance(row, CoordBreak) \
+                and _map_stype(row.typ) == STYPE_OBJ:
+            continue  # OBJECT distance/medium emitted on SURF 0 above
         surf_no += 1
         if isinstance(row, CoordBreak):
             dx, dy, _ = (float(v) for v in row.decenter)
@@ -422,7 +447,7 @@ def write_zmx(system):
                       f'  PARM 3 {rx:g}', f'  PARM 4 {ry:g}',
                       f'  PARM 5 {rz:g}']
             continue
-        is_eval = _map_stype(row.typ) == STYPE_EVAL
+        is_eval = _is_measurement_surf(_map_stype(row.typ))
         writable_shape_or_raise(row.shape_kind, is_eval, 'write_zmx')
         shape = row.build_shape()
         params = shape.params or {}
@@ -438,11 +463,10 @@ def write_zmx(system):
         block.append(f'  DISZ {disz:g}')
         if is_refl:
             block.append('  GLAS MIRROR')
-        elif not is_eval and row.material is not _materials.air \
-                and row.material is not _materials.vacuum:
-            page = getattr(row.material, 'page_info', None)
-            if page and page.get('page'):
-                block.append(f'  GLAS {page["page"]}')
+        elif not is_eval:
+            glas = _glas_line(row.material)
+            if glas:
+                block.append(glas)
         lines += block
     return '\n'.join(lines) + '\n'
 
@@ -518,7 +542,7 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
                                                      unit_scale))
                   if header['epd'] is not None else None),
         fields=fields,
-        wavelengths=header['wavelengths'], unit='mm',
+        wavelengths=header['wavelengths'],
         source_path=path_for_meta, source_format='zemax',
         extras=header['extras'],
     )
@@ -529,14 +553,21 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
                     and blk.get('type', 'STANDARD') != 'COORDBRK']
     image_block_i = real_indices[-1] if real_indices else None
 
-    surface_origin_idx = []  # parallel to compiled surfaces -> Zemax SURF idx
     # Zemax encodes post-mirror gaps as negative thicknesses on an unfolded
     # axis; LensData folds the frame at each reflection and keeps thickness
     # positive.  Convert by negating the gap once per preceding reflection.
     n_refl = 0
     for i, blk in enumerate(parsed):
         if i == 0 and blk.get('idx', i) == 0:
-            continue  # OBJECT surface
+            # Set the auto OBJECT endpoint: object distance + object-space medium
+            # (infinite conjugate keeps the default inf thickness).
+            obj_spec = _make_spec(blk, database, unit_scale)
+            obj_thi = _gap(blk)
+            if math.isfinite(obj_thi) and obj_thi != 0.0:
+                ld.object_row.thickness = obj_thi
+            if obj_spec.n is not None:
+                ld.object_row.material = obj_spec.n
+            continue
         surf_type = blk.get('type', 'STANDARD')
         if surf_type == 'COORDBRK':
             cb = _CoordinateBreak(blk)
@@ -551,24 +582,28 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
         sign = fold_sign(n_refl)
         thickness = sign * _gap(blk)
         aperture_kwargs = _semidiameter(blk)
-        # the image surface, if flat, becomes an eval plane
+        # the image surface, if flat, sets the auto IMAGE endpoint
         if i == image_block_i and spec.kind == 'conic' \
                 and spec.params.get('c', 0.0) == 0.0 \
                 and spec.params.get('k', 0.0) == 0.0:
-            ld.add(Plane(), typ='eval', thickness=thickness,
-                   **aperture_kwargs)
-        else:
-            ld.add(build_shape(spec), thickness=thickness,
-                   material=spec.n, typ=spec.typ, **aperture_kwargs)
-        surface_origin_idx.append(blk.get('idx', i))
+            ld.image_row.thickness = thickness
+            for key, val in aperture_kwargs.items():
+                setattr(ld.image_row, key, val)
+            continue
+        ld.add(build_shape(spec), thickness=thickness,
+               material=spec.n, typ=spec.typ, **aperture_kwargs)
 
-    # translate Zemax stop index (1-based SURF idx) to the compiled-surface idx
+    # translate the Zemax stop SURF number to the compiled-surface index via the
+    # row<->compiled-index owner, so the OBJECT-at-0 layout isn't baked in here.
+    from ..listings import surface_row_mappings
     stop_origin = header.get('stop_index_zemax')
     if stop_origin is not None:
-        try:
-            sys.stop_index = surface_origin_idx.index(stop_origin)
-        except ValueError:
-            sys.stop_index = None
+        sys.stop_index = None
+        for mapping in surface_row_mappings(sys):
+            if (mapping['surface_index'] is not None
+                    and mapping['zemax_surface_number'] == stop_origin):
+                sys.stop_index = mapping['surface_index']
+                break
 
     _warn_vignetting_ignored(text, 'Zemax')
     return sys

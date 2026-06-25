@@ -2,7 +2,6 @@
 
 import math
 
-from ..surfaces import Plane
 from ... import materials as _materials
 from ._indexing import fringe_to_nm, xy_j_to_mn
 from ._common import (
@@ -20,6 +19,12 @@ from ..lensdata import LensData
 from ..system import OpticalSystem, ApertureSpec, FieldSet
 from ..paraxial import effective_focal_length
 from ._surface_spec import SurfaceSpec, build_shape
+
+
+# Code V represents an infinite object conjugate with a large finite thickness
+# stand-in (the writer emits THI 1E10); object distances at least this large in
+# mm are read back as the infinite conjugate.
+_INFINITE_OBJECT_THI_MM = 1e9
 
 
 # ---------- tokenizer -------------------------------------------------------
@@ -348,7 +353,7 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
         aperture=aperture,
         fields=fields, wavelengths=wavelengths,
         weights=header['wavelength_weights'] or None,
-        reference=reference, unit='mm',
+        reference=reference,
         title=header['title'],
         source_path=path_for_meta, source_format='codev',
         extras=header['extras'],
@@ -363,9 +368,18 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
     # axis; LensData folds the frame at each reflection and keeps thickness
     # positive.  Convert by negating the gap once per preceding reflection.
     n_refl = 0
-    compiled_idx = 0  # index of the next surface among compiled surfaces
+    stop_row = None  # the LensData surface row the STO marks
     for sd in surfaces:
         if sd.get('_is_object'):
+            # OBJECT endpoint: object distance + medium.  The 1E10 stand-in (or
+            # non-finite) is the infinite conjugate; keep the default inf thickness.
+            obj_thi = scale_length_to_mm(sd.get('thi', 0.0), unit_scale)
+            if (math.isfinite(obj_thi) and obj_thi != 0.0
+                    and abs(obj_thi) < _INFINITE_OBJECT_THI_MM):
+                ld.object_row.thickness = obj_thi
+            obj_spec = _build_spec(sd, radius_mode, database, unit_scale)
+            if obj_spec.n is not None:
+                ld.object_row.material = obj_spec.n
             continue
         tilt, decenter, kind = _pose_from_dict(sd, unit_scale)
         if tilt is not None or decenter is not None:
@@ -376,11 +390,13 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
             sd.get('semidiameter'), unit_scale,
             inner_radius=sd.get('inner_semidiameter'))
         if sd.get('_is_image'):
+            # Place the auto IMAGE endpoint; its own gap is usually zero.
             sign = fold_sign(n_refl)
-            ld.add(Plane(), typ='eval',
-                   thickness=sign * scale_length_to_mm(sd.get('thi', 0.0),
-                                                       unit_scale),
-                   **aperture_kwargs)
+            ld.image_row.thickness = sign * scale_length_to_mm(
+                sd.get('thi', 0.0), unit_scale)
+            for key, val in aperture_kwargs.items():
+                setattr(ld.image_row, key, val)
+            continue
         else:
             spec = _build_spec(sd, radius_mode, database, unit_scale)
             if spec.typ == 'refl':
@@ -391,8 +407,17 @@ def read_seq(path_or_text, *, _is_text=False, database=None):
                                                        unit_scale),
                    material=spec.n, typ=spec.typ, **aperture_kwargs)
         if sd is stop_surface:
-            sys.stop_index = compiled_idx
-        compiled_idx += 1
+            stop_row = ld.rows[-2]  # the surface just inserted before IMAGE
+
+    # translate the stop row to its compiled-surface index via the row<->
+    # compiled-index owner, so the OBJECT-at-0 layout isn't baked in here.
+    if stop_row is not None:
+        from ..listings import surface_row_mappings
+        for mapping in surface_row_mappings(sys):
+            if (mapping['surface_index'] is not None
+                    and ld.rows[mapping['row_index']] is stop_row):
+                sys.stop_index = mapping['surface_index']
+                break
 
     if not fields and (header['xim'] or header['yim']):
         sys.fields = FieldSet(_image_height_fields_from_header(
@@ -455,7 +480,8 @@ def _image_height_fields_from_header(header, system, unit_scale):
         return []
 
     wavelength = system.wavelength(None)
-    efl = abs(float(effective_focal_length(system, wvl=wavelength)))
+    efl = abs(float(effective_focal_length(system.to_surfaces(),
+                                           wvl=wavelength)))
     if not math.isfinite(efl) or efl <= 0.0:
         raise ValueError(
             'Code V image-height fields (XIM/YIM) require a finite, nonzero '
@@ -683,7 +709,21 @@ def write_seq(system):
     fields = getattr(system, 'fields', None) or []
     if fields:
         lines.append('YAN ' + ' '.join(f'{f.hy:g}' for f in fields))
-    lines.append('SO ; THI 1E10')
+
+    from ..spencer_and_murty import STYPE_OBJ, _is_measurement_surf
+    from ..surfaces import _map_stype
+    # 1E10 stand-in for an infinite object; else the real distance + medium
+    obj_row = next((r for r in system.rows
+                    if not isinstance(r, CoordBreak)
+                    and _map_stype(r.typ) == STYPE_OBJ), None)
+    obj_thi = float(obj_row.thickness) if obj_row is not None else float('inf')
+    thi = '1E10' if not math.isfinite(obj_thi) else f'{obj_thi:g}'
+    so_line = f'SO ; THI {thi}'
+    if obj_row is not None:
+        glass = _glass_name(obj_row.material, obj_row.typ)
+        if glass:
+            so_line += f' ; GLA {glass}'
+    lines.append(so_line)
 
     n_refl = 0
     pending_coordbreak = None
@@ -696,9 +736,11 @@ def write_seq(system):
                 )
             pending_coordbreak = row
             continue
-        from ..spencer_and_murty import STYPE_EVAL
-        from ..surfaces import _map_stype
-        is_eval = _map_stype(row.typ) == STYPE_EVAL
+        stype = _map_stype(row.typ)
+        if stype == STYPE_OBJ:
+            # OBJECT distance/medium ride in the deck header, not as a surface.
+            continue
+        is_eval = _is_measurement_surf(stype)
         writable_shape_or_raise(row.shape_kind, is_eval, 'write_seq')
         shape = row.build_shape()
         params = shape.params or {}

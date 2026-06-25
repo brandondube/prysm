@@ -22,8 +22,7 @@ def _singlet(c1=1 / 50.0, c2=-1 / 50.0, gap=5.0, back=100.0, shape=Conic):
     (lens.add(front, typ='refr', material=materials.ConstantMaterial(1.5),
               thickness=gap)
          .add(Conic(c2, 0.0), typ='refr', material=materials.air,
-              thickness=back)
-         .add(Plane(), typ='eval'))
+              thickness=back))
     return OpticalSystem(lens, aperture=4.0, wavelengths=[0.55])
 
 
@@ -52,8 +51,8 @@ def _fd_jacobian(prob, x, step=1e-7):
 
 def test_residual_jacobian_matches_fd_mixed_dofs_and_bundles():
     sys_ = _singlet()
-    sys_.lens.vary('curvature', surfaces=[0, 1])
-    sys_.lens.vary('thickness', surfaces=1)
+    sys_.opt.vary('curvature', surfaces=[1, 2])
+    sys_.opt.vary('thickness', surfaces=2)
     prob = _two_bundle_problem(sys_)
     x = prob.x0()
     J = prob.residual_jacobian(x)
@@ -65,7 +64,7 @@ def test_residual_jacobian_matches_fd_mixed_dofs_and_bundles():
 
 def test_residual_jacobian_declines_on_unseedable_operand():
     sys_ = _singlet()
-    sys_.lens.vary('curvature', surfaces=0)
+    sys_.opt.vary('curvature', surfaces=1)
     f = Field(0., 0.)
     fan = Sampling.fan(n=5)
     ops = [RmsSpotRadius(f, 0.55, fan),
@@ -79,14 +78,14 @@ def test_residual_jacobian_declines_on_unseedable_operand():
 
 def test_residual_jacobian_declines_on_vector_shape_dof():
     sys_ = _singlet(shape=EvenAsphere)
-    sys_.lens.vary('coefs', surfaces=0)
+    sys_.opt.vary('coefs', surfaces=1)
     prob = _two_bundle_problem(sys_)
     assert prob.residual_jacobian(prob.x0()) is None
 
 
 def test_residual_jacobian_declines_when_gradient_fd():
     sys_ = _singlet()
-    sys_.lens.vary('curvature', surfaces=0)
+    sys_.opt.vary('curvature', surfaces=1)
     prob = _two_bundle_problem(sys_, gradient='fd')
     assert prob.residual_jacobian(prob.x0()) is None
 
@@ -99,7 +98,7 @@ def test_gradient_kwarg_validated():
 
 def test_merit_jacobian_auto_matches_fd():
     sys_ = _singlet()
-    sys_.lens.vary('curvature', surfaces=[0, 1])
+    sys_.opt.vary('curvature', surfaces=[1, 2])
     prob = _two_bundle_problem(sys_)
     x = prob.x0()
     g_auto = prob.jacobian(x, method='auto')
@@ -110,7 +109,7 @@ def test_merit_jacobian_auto_matches_fd():
 def test_solve_with_adjoint_routing_matches_fd_and_cuts_nfev():
     def build():
         sys_ = _singlet(back=90.0)
-        sys_.lens.vary('thickness', surfaces=1)
+        sys_.opt.vary('thickness', surfaces=2)
         return sys_, [RmsSpotRadius(Field(0., 0.), 0.55, Sampling.fan(n=11))]
 
     sys_a, ops_a = build()

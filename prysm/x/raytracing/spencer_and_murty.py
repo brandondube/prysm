@@ -9,9 +9,25 @@ SURFACE_INTERSECTION_DEFAULT_MAXITER = 100
 DEFAULT_TOL_SAG = 1e-12
 
 # Surface-type constants live here to avoid an import cycle with surfaces.py.
+# The bending types are REFLECT/REFRACT; the measurement types (EVAL/OBJ/IMG)
+# do not bend a ray (they record state on whatever shape they carry, flat or
+# curved) and are exempt from the forward_only behind-origin rejection -- test
+# them with _is_measurement_surf, never a bare == STYPE_EVAL (ADR-0006).
 STYPE_REFLECT = -1
 STYPE_REFRACT = -2
-STYPE_EVAL = -3  # NOQA
+STYPE_EVAL = -3  # NOQA  intermediate measurement surface (neither object nor image)
+STYPE_OBJ = -4   # object endpoint (row 0): object distance + object-space medium
+STYPE_IMG = -5   # image endpoint (last row): measurement surface (often flat)
+
+
+def _is_measurement_surf(typ):
+    """True for a non-bending measurement surface (EVAL, OBJECT, or IMAGE).
+
+    Keys off the interaction type, not the shape: an EVAL/OBJECT/IMAGE surface
+    can carry any geometry (a curved measurement surface is valid); it simply
+    records the ray's state without refracting or reflecting it.
+    """
+    return typ in (STYPE_EVAL, STYPE_OBJ, STYPE_IMG)
 
 # Per-ray status encoding for raytrace().  status is a complex array of shape
 # (N_rays,); the imaginary part picks the failure mode (0 = ok), the real
@@ -478,7 +494,7 @@ def _launch_medium_index(surfaces, wvl):
     """
     if len(surfaces) > 0:
         first = surfaces[0]
-        if getattr(first, 'typ', None) == STYPE_EVAL:
+        if _is_measurement_surf(getattr(first, 'typ', None)):
             material = getattr(first, 'material', None)
             if material is not None:
                 return material.n(wvl)

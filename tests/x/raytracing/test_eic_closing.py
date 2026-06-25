@@ -33,17 +33,17 @@ def _singlet(epd=8.0):
                semidiameter=10.0))
     sysp = OpticalSystem(probe, aperture=epd, fields=[Field(0, 0.0, kind='angle')],
                          wavelengths=[0.5875618], reference=0,
-                         stop_index=0, unit='mm')
+                         stop_index=1)   # first powered surface (index 0 is OBJECT)
     wvl = sysp.wavelength()
-    foc = paraxial_image_distance(sysp, wvl)
+    # measure from the last powered surface (exclude the IMAGE endpoint plane)
+    foc = paraxial_image_distance(sysp.surfaces[:-1], wvl)
     lens = LensData()
     (lens.add(Conic(1 / 61.0, 0.0), thickness=6.0, material=mat, semidiameter=10.0)
          .add(Conic(-1 / 61.0, 0.0), thickness=foc, material=materials.air,
-              semidiameter=10.0)
-         .add(Plane(), typ='eval', material=materials.air, semidiameter=12.0))
+              semidiameter=10.0))
     return OpticalSystem(lens, aperture=epd, fields=[Field(0, 0.0, kind='angle')],
                          wavelengths=[0.5875618], reference=0,
-                         stop_index=0, unit='mm')
+                         stop_index=1)
 
 
 def _telecentric(epd=6.0):
@@ -56,19 +56,22 @@ def _telecentric(epd=6.0):
                semidiameter=14.0))
     sp = OpticalSystem(probe, aperture=epd, fields=[Field(3, 0.0, kind='angle')],
                        wavelengths=[0.5875618], reference=0,
-                       stop_index=0, unit='mm')
-    ffl = ynu_first_order(sp, stop_index=0).ffl
+                       stop_index=1)   # first powered surface (index 0 is OBJECT)
+    ffl = ynu_first_order(sp.to_surfaces(), wvl=sp.wavelength(),
+                          stop_index=1).ffl
+    # rows: OBJECT(0), front stop plane(1), conic1(2), conic2(3), IMAGE(4).
+    # The stop sits a front-focal-length ahead of the lens -> image-space
+    # telecentric (exit pupil at infinity).
     lens = LensData()
     (lens.add(Plane(), typ='eval', material=materials.air, semidiameter=epd / 2)
          .add(Conic(c, 0.0), thickness=3.0, material=mat, semidiameter=20.0)
-         .add(Conic(-c, 0.0), thickness=60.0, material=materials.air, semidiameter=20.0)
-         .add(Plane(), typ='eval', material=materials.air, semidiameter=30.0))
-    lens.rows[0].thickness = abs(ffl)
+         .add(Conic(-c, 0.0), thickness=60.0, material=materials.air, semidiameter=20.0))
+    lens.rows[1].thickness = abs(ffl)
     sysT = OpticalSystem(lens, aperture=epd, fields=[Field(3, 0.0, kind='angle')],
                          wavelengths=[0.5875618], reference=0,
-                         stop_index=0, unit='mm')
+                         stop_index=1)
     wvl = sysT.wavelength()
-    lens.rows[2].thickness = paraxial_image_distance(sysT, wvl)
+    lens.rows[3].thickness = paraxial_image_distance(sysT.surfaces[:-1], wvl)
     return sysT
 
 
@@ -111,7 +114,7 @@ def test_closing_matches_reference_sphere_root_to_machine_precision():
 def test_closing_is_finite_and_signed_at_telecentric_kappa_zero():
     ld = _telecentric()
     wvl = ld.wavelength()
-    fo = ynu_first_order(ld, wvl, stop_index=0)
+    fo = ynu_first_order(ld.to_surfaces(), wvl, stop_index=1)
     assert fo.xp_z is None  # exit pupil genuinely at infinity
     kappa = reference_sphere_curvature(None, np.zeros(3))
     assert kappa == 0.0
@@ -132,7 +135,7 @@ def test_closing_is_finite_and_signed_at_telecentric_kappa_zero():
 def test_wavefront_rms_accepts_telecentric_paraxial_exit_pupil():
     ld = _telecentric()
     wvl = ld.wavelength()
-    assert ynu_first_order(ld, wvl, stop_index=0).xp_z is None
+    assert ynu_first_order(ld.to_surfaces(), wvl, stop_index=1).xp_z is None
     op = WavefrontRMS(field=Field(3.0, 0.0, kind='angle'),
                       wavelength=wvl, sampling=Sampling.fan(n=31, axis='y'))
     rms = op(ld, _TraceCache(ld))

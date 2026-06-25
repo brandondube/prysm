@@ -35,11 +35,10 @@ def _singlet_lensdata():
     (lens.add(Conic(1 / 60.0, 0.0), thickness=4.0, material=n15,
               semidiameter=8.0)
          .add(Conic(-1 / 60.0, 0.0), thickness=95.0, material=air,
-              semidiameter=8.0)
-         .add(Plane(), typ='eval', material=air, semidiameter=20.0))
+              semidiameter=8.0))
     ld = OpticalSystem(lens, aperture=10.0, fields=[0.0, 3.0, 5.0],
                        wavelengths=[0.5876], reference=0)
-    ld.solve_image_distance()
+    ld.solve.image_distance()
     return ld
 
 
@@ -337,9 +336,9 @@ def test_lens_element_groups_groups_singlet():
 
 
 def test_lensdata_element_groups_method_queries_the_spine():
-    # two refractors form one singlet; the eval plane is not an element
+    # two refractors form one singlet (compiled indices 1, 2; index 0 is OBJECT)
     sys_ = _singlet_lensdata()
-    assert sys_.lens.element_groups(wvl=0.5876) == [(0, 1)]
+    assert sys_.lens.element_groups(wvl=0.5876) == [(1, 2)]
 
 
 def test_lens_element_groups_groups_cemented_doublet():
@@ -437,7 +436,7 @@ def test_plot_optics_marks_stop_from_system_metadata():
     sys = OpticalSystem(lens, aperture=8.0, fields=[0.0],
                         wavelengths=[0.5876], reference=0, stop_index=0)
 
-    fig, ax = sys.layout_2d()
+    fig, ax = sys.plot.layout_2d()
     try:
         markers = [ln for ln in ax.lines if len(ln.get_xdata()) == 12]
         assert len(markers) == 1
@@ -583,10 +582,10 @@ def test_lensdata_add_edge_propagates_to_compiled_surface():
                        reference=0)
 
     surfaces = ld.to_surfaces()
-    assert surfaces[0].edge is edge
-    assert surfaces[1].edge is None
+    assert surfaces[1].edge is edge        # surfaces[0] is the OBJECT plane
+    assert surfaces[2].edge is None
     # the edge survives a copy of the LensData
-    assert ld.copy().to_surfaces()[0].edge is edge
+    assert ld.copy().to_surfaces()[1].edge is edge
 
 
 def test_plot_optics_draws_mirror_optical_surface_by_default():

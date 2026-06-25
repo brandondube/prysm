@@ -10,7 +10,8 @@ to the surface table.
 No plotting and no matplotlib here -- these are text tables for inspection.
 """
 
-from .spencer_and_murty import STYPE_EVAL, STYPE_REFLECT, STYPE_REFRACT
+from .spencer_and_murty import (
+    STYPE_EVAL, STYPE_OBJ, STYPE_IMG, STYPE_REFLECT, STYPE_REFRACT)
 from .surfaces import _map_stype
 from ..materials import MIRROR, air, vacuum
 from .lensdata import CoordBreak, SurfaceRow
@@ -25,7 +26,7 @@ def _radius_str(c):
 
 
 def _type_str(typ):
-    """Short refr/refl/eval label for a surface interaction type."""
+    """Short refr/refl/eval/object/image label for a surface interaction type."""
     s = _map_stype(typ)
     if s == STYPE_REFRACT:
         return 'refr'
@@ -33,15 +34,18 @@ def _type_str(typ):
         return 'refl'
     if s == STYPE_EVAL:
         return 'eval'
+    if s == STYPE_OBJ:
+        return 'object'
+    if s == STYPE_IMG:
+        return 'image'
     return str(typ)
 
 
 def material_str(material, typ):
     """Display string for a row material.
 
-    MIRROR (or a reflective surface) shows as MIRROR; a constant index shows as
-    its numeric value; a named glass callable shows its name; air / None is
-    blank.
+    MIRROR (or a reflective surface) shows as MIRROR; a named material shows its
+    name; air / None is blank.
     """
     if _map_stype(typ) == STYPE_REFLECT or material is MIRROR \
             or material == MIRROR:
@@ -51,19 +55,17 @@ def material_str(material, typ):
     name = getattr(material, 'name', None)
     if name:
         return str(name)
-    if callable(material):
-        return 'n(wvl)'
-    try:
-        return f'{float(material):.5g}'
-    except (TypeError, ValueError):
-        return str(material)
+    return str(material)
 
 
 def surface_row_mappings(lensdata):
-    """Map raw rows to compiled surface and exported Zemax surface indices."""
+    """Map raw rows to compiled surface and exported Zemax surface indices.
+
+    OBJECT is row 0, matching Zemax's SURF 0 numbering.
+    """
     records = []
     surface_index = 0
-    zemax_surface_number = 1
+    zemax_surface_number = 0
     for row_index, row in enumerate(lensdata.rows):
         if isinstance(row, SurfaceRow):
             compiled = surface_index

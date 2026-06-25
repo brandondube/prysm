@@ -44,22 +44,21 @@ def _singlet(epd=8.0, c1=1 / 61.0, gap=None, material=None, dispersive=False):
     ld_probe = OpticalSystem(
         probe_lens, aperture=epd, fields=[Field(0, 0.0, kind='angle')],
         wavelengths=list(FRAUNHOFER_LINES_UM.values()), reference=1,
-        stop_index=0, unit='mm')
+        stop_index=1)   # first powered surface (index 0 is OBJECT)
     wvl = ld_probe.wavelength()
     if gap is None:
-        gap = paraxial_image_distance(ld_probe, wvl)
+        # measure from the last powered surface (exclude the IMAGE plane)
+        gap = paraxial_image_distance(ld_probe.surfaces[:-1], wvl)
     lens = LensData()
     (lens.add(Conic(c1, 0.0), thickness=6.0, material=mat,
               semidiameter=10.0)
          .add(Conic(-c1, 0.0), thickness=gap, material=materials.air,
-              semidiameter=10.0)
-         .add(Plane(), typ='eval', material=materials.air,
-              semidiameter=12.0))
+              semidiameter=10.0))
     ld = OpticalSystem(
         lens, aperture=epd, fields=[Field(0, 0.0, kind='angle')],
         wavelengths=(list(FRAUNHOFER_LINES_UM.values()) if dispersive
                      else [0.5875618]),
-        reference=(1 if dispersive else 0), stop_index=0, unit='mm')
+        reference=(1 if dispersive else 0), stop_index=1)
     return ld
 
 
@@ -69,7 +68,7 @@ def test_optical_invariant_constant_across_surfaces():
     wvl = ld.wavelength()
     field = Field(0.0, 2.0, kind='angle')
     (y0m, u0m), (y0c, u0c) = _marginal_chief_launch(
-        ld, field, wvl, 1.0, epd=ld.epd, stop_index=0)
+        ld, field, wvl, 1.0, epd=ld.epd, stop_index=1)
     marg = paraxial_trace(ld, y0m, u0m, wvl, 1.0)
     chief = paraxial_trace(ld, y0c, u0c, wvl, 1.0)
     # H = n (u y_bar - u_bar y); using before-surface quantities at each surface
@@ -85,7 +84,7 @@ def test_petzval_matches_analytic_sum():
     res = seidel_aberrations(ld, field=field)
     wvl = ld.wavelength()
     (y0m, u0m), _ = _marginal_chief_launch(
-        ld, field, wvl, 1.0, epd=ld.epd, stop_index=0)
+        ld, field, wvl, 1.0, epd=ld.epd, stop_index=1)
     marg = paraxial_trace(ld, y0m, u0m, wvl, 1.0)
     P_petz = sum(m.c * (1.0 / m.n_a - 1.0 / m.n_b) for m in marg)
     expected = -res.optical_invariant ** 2 * P_petz

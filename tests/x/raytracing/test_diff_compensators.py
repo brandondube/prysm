@@ -23,7 +23,7 @@ from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.surfaces import Conic, Plane
-from prysm.x.raytracing.spencer_and_murty import STYPE_EVAL
+from prysm.x.raytracing.spencer_and_murty import _is_measurement_surf
 from prysm.x.raytracing.paraxial import paraxial_image_distance
 from prysm.x.raytracing.tolerance import Perturbation
 from prysm.x.raytracing.wavefront_differential import (
@@ -45,14 +45,14 @@ _air = materials.air
 
 
 def singlet():
+    # rows: OBJECT(0), conic1(1), conic2(2), IMAGE(3) (ADR-0006)
     ld_data = LensData()
     (ld_data.add(Conic(1 / 24.0, 0.0), typ='refr', thickness=5.0, material=_glass)
-            .add(Conic(-1 / 80.0, 0.0), typ='refr', thickness=20.0, material=_air)
-            .add(Plane(), typ='eval'))
+            .add(Conic(-1 / 80.0, 0.0), typ='refr', thickness=20.0, material=_air))
     ld = OpticalSystem(ld_data, aperture=EPD, wavelengths=[WVL])
-    lens = [s for s in ld.to_surfaces() if s.typ != STYPE_EVAL]
+    lens = [s for s in ld.to_surfaces() if not _is_measurement_surf(s.typ)]
     bfd = float(paraxial_image_distance(lens, wvl=WVL))
-    ld.rows[1].thickness = bfd + DEFOCUS
+    ld.rows[2].thickness = bfd + DEFOCUS   # the image gap (conic2 row)
     ld.lens._invalidate()
     return ld
 
@@ -63,8 +63,8 @@ def bundle(ld):
 
 
 def focus_compensator(ld):
-    """The image-gap despace (row 1 thickness) -- moves the image plane."""
-    return Perturbation.normal(ld, 'thickness', 1, 1e-3, name='focus')
+    """The image-gap despace (row 2 thickness) -- moves the image plane."""
+    return Perturbation.normal(ld, 'thickness', 2, 1e-3, name='focus')
 
 
 def wd(ld, tols, P, S, comps=None):
@@ -127,8 +127,8 @@ def fd_compensated_sensitivity(ld, tol, comps, P, S):
 def test_projected_maps_are_orthogonal_to_compensators():
     ld = singlet()
     P, S = bundle(ld)
-    tols = [Perturbation.normal(ld, 'curvature', 0, 1e-5, name='c1'),
-            Perturbation.normal(ld, 'conic', 0, 1e-4, name='k1')]
+    tols = [Perturbation.normal(ld, 'curvature', 1, 1e-5, name='c1'),
+            Perturbation.normal(ld, 'conic', 1, 1e-4, name='k1')]
     m = wd(ld, tols, P, S, comps=[focus_compensator(ld)])
     assert m.is_compensated
     M = m.comp_maps                        # (N, 1)
@@ -151,7 +151,7 @@ def test_compensate_helper_matches_manual_projection():
 def test_empty_compensators_matches_uncompensated_model():
     ld = singlet()
     P, S = bundle(ld)
-    tols = [Perturbation.normal(ld, 'curvature', 0, 1e-5, name='c1')]
+    tols = [Perturbation.normal(ld, 'curvature', 1, 1e-5, name='c1')]
     m0 = wd(ld, tols, P, S)
     m1 = wd(ld, tols, P, S, comps=[])
     assert not m0.is_compensated and not m1.is_compensated
@@ -164,7 +164,7 @@ def test_empty_compensators_matches_uncompensated_model():
 def test_compensated_nominal_rms_matches_reoptimized_focus():
     ld = singlet()
     P, S = bundle(ld)
-    tols = [Perturbation.normal(ld, 'curvature', 0, 1e-5, name='c1')]
+    tols = [Perturbation.normal(ld, 'curvature', 1, 1e-5, name='c1')]
     comp = focus_compensator(ld)
     m = wd(ld, tols, P, S, comps=[comp])
     rms_fd, _ = reoptimize_rms(ld, [comp], P, S)
@@ -174,7 +174,7 @@ def test_compensated_nominal_rms_matches_reoptimized_focus():
 def test_compensation_substantially_lowers_nominal_rms():
     ld = singlet()
     P, S = bundle(ld)
-    tols = [Perturbation.normal(ld, 'curvature', 0, 1e-5, name='c1')]
+    tols = [Perturbation.normal(ld, 'curvature', 1, 1e-5, name='c1')]
     m_un = wd(ld, tols, P, S)
     m_co = wd(ld, tols, P, S, comps=[focus_compensator(ld)])
     # projecting out a subspace removes energy -> RMS cannot increase
@@ -186,7 +186,7 @@ def test_compensation_substantially_lowers_nominal_rms():
 def test_compensated_sensitivity_matches_fd_reoptimization():
     ld = singlet()
     P, S = bundle(ld)
-    tol = Perturbation.normal(ld, 'curvature', 0, 1e-6, name='c1')
+    tol = Perturbation.normal(ld, 'curvature', 1, 1e-6, name='c1')
     comp = focus_compensator(ld)
     m = wd(ld, [tol], P, S, comps=[comp])
     fd_sens, _ = fd_compensated_sensitivity(ld, tol, [comp], P, S)
@@ -197,7 +197,7 @@ def test_compensated_sensitivity_matches_fd_reoptimization():
 def test_compensator_motions_match_fd():
     ld = singlet()
     P, S = bundle(ld)
-    tol = Perturbation.normal(ld, 'curvature', 0, 1e-6, name='c1')
+    tol = Perturbation.normal(ld, 'curvature', 1, 1e-6, name='c1')
     comp = focus_compensator(ld)
     m = wd(ld, [tol], P, S, comps=[comp])
     motions = m.compensator_motions()
@@ -210,7 +210,7 @@ def test_compensator_motions_match_fd():
 def test_compensator_motions_without_compensators_raises():
     ld = singlet()
     P, S = bundle(ld)
-    m = wd(ld, [Perturbation.normal(ld, 'curvature', 0, 1e-6, name='c1')], P, S)
+    m = wd(ld, [Perturbation.normal(ld, 'curvature', 1, 1e-6, name='c1')], P, S)
     with pytest.raises(ValueError, match='no compensators'):
         m.compensator_motions()
 
@@ -221,7 +221,7 @@ def test_compensated_sensitivity_below_uncompensated_for_focus_like_tol():
     uncompensated one and tracks the FD re-optimization."""
     ld = singlet()
     P, S = bundle(ld)
-    tol = Perturbation.normal(ld, 'thickness', 0, 1e-4, name='t0')
+    tol = Perturbation.normal(ld, 'thickness', 1, 1e-4, name='t0')
     comp = focus_compensator(ld)
     m_un = wd(ld, [tol], P, S)
     m_co = wd(ld, [tol], P, S, comps=[comp])

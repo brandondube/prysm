@@ -159,7 +159,7 @@ def test_bracketed_newton_finds_first_root_in_band():
     lo = np.array([-30.0])
     hi = np.array([160.0])
     Q, n, v = bracketed_newton_solve_s(P1, S, shape.sag_and_normal, lo, hi,
-                                       lipschitz=surf._sag_lipschitz,
+                                       lipschitz=surf.departure_band().lipschitz,
                                        domain_radius=30.0)
     assert v[0]
     s_found = float(np.sum((Q[0] - P1[0]) * S[0]))
@@ -241,31 +241,29 @@ def test_departure_band_domain_resolution():
     asph = EvenAsphere(c=1 / 50.0, k=0.0, coefs=(1e-7,))
     s = Surface(shape=asph, interaction='refl', P=[0, 0, 0],
                 bounding={'outer_radius': 9.0})
-    D, R = s.departure_band()
-    assert R == 9.0
-    assert D > 0
+    band = s.departure_band()
+    assert band.bounded
+    assert band.domain_radius == 9.0
+    assert band.max_departure > 0
 
     zern = Zernike(c=1 / 50.0, k=0.0, normalization_radius=7.0,
                    nms=[(4, 0)], coefs=[1e-4])
     s = Surface(shape=zern, interaction='refl', P=[0, 0, 0])
-    D, R = s.departure_band()
-    assert R == 7.0
+    assert s.departure_band().domain_radius == 7.0
 
     # spherical base, no bounding, no normalization radius: the conic's own
     # domain limit 1/(|c| sqrt(1+k))
     s = Surface(shape=asph, interaction='refl', P=[0, 0, 0])
-    D, R = s.departure_band()
-    assert R == pytest.approx(0.999 * 50.0, rel=1e-12)
+    assert s.departure_band().domain_radius == pytest.approx(0.999 * 50.0, rel=1e-12)
 
     # parabolic base is unbounded: no resolvable domain, guard disabled
     para = EvenAsphere(c=1 / 50.0, k=-1.0, coefs=(1e-7,))
     s = Surface(shape=para, interaction='refl', P=[0, 0, 0])
-    D, R = s.departure_band()
-    assert D is None and R is None
+    assert not s.departure_band().bounded
 
     # analytic shapes carry no conic seed and no band
     s = Surface(shape=Sphere(c=1 / 50.0), interaction='refl', P=[0, 0, 0])
-    assert s.departure_band() == (None, None)
+    assert not s.departure_band().bounded
 
 
 def test_multiple_crossing_setup_warning():
@@ -390,7 +388,7 @@ def test_in_domain_fold_oracle_sweep():
 def test_lipschitz_march_first_root_with_far_in_domain_crossing():
     """The Lipschitz march returns the first in-domain crossing."""
     surf = in_domain_fold_surface()
-    L = surf._sag_lipschitz
+    L = surf.departure_band().lipschitz
     a = np.radians(72.0)
     P = np.array([[0.0, -18.0, -3.0]])
     S = np.array([[0.0, np.sin(a), np.cos(a)]])

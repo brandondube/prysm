@@ -312,10 +312,11 @@ def test_rc_prescription_paraxial_image_at_bfl():
         conic(c2, k2, 'refl', P_sm),
         plane('eval', P_img),
     ]
-    # image distance measured from the trailing eval plane; it should land
-    # the paraxial image right on the design BFL location.
+    # image distance is referenced to the last powered vertex (the trailing
+    # eval plane is stripped); it should land the paraxial image right on the
+    # design BFL location.
     bfd = paraxial_image_distance(prescription, wvl=0.6328)
-    img_z = float(prescription[-1].P[2]) + bfd
+    img_z = float(P_sm[2]) + bfd
     np.testing.assert_allclose(img_z, P_img[2], rtol=5e-3)
 
 

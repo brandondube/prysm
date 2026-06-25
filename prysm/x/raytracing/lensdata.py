@@ -6,7 +6,7 @@ import warnings
 from prysm.conf import config
 from prysm.mathops import np, array_to_true_numpy
 
-from ..materials import MIRROR
+from ..materials import MIRROR, air
 from .surfaces import (
     Biconic,
     Chebyshev,
@@ -25,7 +25,9 @@ from .surfaces import (
     _map_stype,
 )
 from .paraxial import paraxial_image_distance
-from .spencer_and_murty import STYPE_EVAL, STYPE_REFLECT, STYPE_REFRACT
+from .spencer_and_murty import (
+    STYPE_IMG, STYPE_REFLECT, STYPE_REFRACT,
+    _is_measurement_surf)
 
 
 _DEG2RAD = math.pi / 180.0
@@ -216,6 +218,37 @@ def _invalidate_row_owner(row):
         owner._invalidate()
 
 
+def _layout_thickness(row):
+    """Axial gap a row contributes to the running layout.
+
+    An infinite OBJECT distance (infinite conjugate) lays out as zero so the
+    OBJECT plane sits coincident with the first powered surface and the powered
+    surfaces keep their coordinates (ADR-0006); the infinity survives as object
+    metadata, not geometry.
+    """
+    thi = float(row.thickness)
+    if not math.isfinite(thi):
+        return 0.0
+    return thi
+
+
+def _validate_material(material):
+    """Validate a row material is a MaterialProtocol object (ADR-0002).
+
+    Accepts None (air), the MIRROR sentinel, or any object exposing a callable
+    .n(wvl_um).  Bare numbers/strings/lambdas raise immediately rather than
+    detonating mid-trace.
+    """
+    if material is None or material is MIRROR:
+        return material
+    if not callable(getattr(material, 'n', None)):
+        raise TypeError(
+            'material must be a MaterialProtocol object with a callable .n(wvl_um) '
+            "(e.g. ConstantMaterial(1.5) or a catalog glass), None for air, or "
+            f'MIRROR; got {material!r}')
+    return material
+
+
 class _InvalidatingArray(np.ndarray):
     """ndarray view that clears a row owner's surface cache when edited."""
 
@@ -382,6 +415,8 @@ class SurfaceRow:
             value = _invalidating_array(value, self, dtype=config.precision)
         elif name in ('meta', 'bounding'):
             value = _invalidating_dict(value, self)
+        elif name == 'material':
+            value = _validate_material(value)
         object.__setattr__(self, name, value)
         if name in self._INVALIDATING_ATTRS:
             _invalidate_row_owner(self)
@@ -527,114 +562,6 @@ class CoordBreak:
 # Parameter specification: named slots <-> dense free vector
 # ---------------------------------------------------------------------------
 
-class ParamSpec:
-    """Free-vector slots, flags, and bounds for LensData rows."""
-
-    def __init__(self, lensdata):
-        self._ld = lensdata
-        self._free = {}     # slot -> True
-        self._bounds = {}   # slot -> (lo, hi)
-
-    # -- slot enumeration --
-    def slots(self):
-        """Ordered list of every scalar DOF slot, row by row."""
-        out = []
-        for r, row in enumerate(self._ld.rows):
-            out.extend(row.dof_slots(r))
-        return out
-
-    def free_slots(self):
-        """Ordered list of the slots currently marked free."""
-        return [s for s in self.slots() if self._free.get(s, False)]
-
-    # -- value access --
-    def get_value(self, slot):
-        """Return the scalar value addressed by a slot."""
-        group, r, off = slot
-        row = self._ld.rows[r]
-        if group == 'shape':
-            return row.params[off]
-        if group == 'thickness':
-            return row.thickness
-        if group == 'decenter':
-            return row.decenter[off]
-        if group == 'tilt':
-            return row.tilt[off]
-        raise KeyError(group)
-
-    def set_value(self, slot, value):
-        """Set the scalar value addressed by a slot."""
-        group, r, off = slot
-        row = self._ld.rows[r]
-        if group == 'shape':
-            row.params[off] = value
-        elif group == 'thickness':
-            row.thickness = value
-        elif group == 'decenter':
-            row.decenter[off] = value
-        elif group == 'tilt':
-            row.tilt[off] = value
-        else:
-            raise KeyError(group)
-
-    # -- optimizer surface --
-    def pack(self):
-        """Gather the free DOFs into a dense contiguous vector."""
-        free = self.free_slots()
-        out = np.empty(len(free), dtype=config.precision)
-        for i, slot in enumerate(free):
-            out[i] = self.get_value(slot)
-        return out
-
-    def scatter(self, x):
-        """Write a dense free vector back into the rows."""
-        free = self.free_slots()
-        if len(x) != len(free):
-            raise ValueError(
-                f'expected {len(free)} free DOFs, got {len(x)}'
-            )
-        if np.__name__ == 'numpy':
-            for slot, value in zip(free, x):
-                self.set_value(slot, value)
-            return
-
-        # tensor backend: functional per-row reconstruction
-        by_row_group = {}
-        for i, slot in enumerate(free):
-            group, r, off = slot
-            by_row_group.setdefault((r, group), []).append((off, x[i]))
-        for (r, group), items in by_row_group.items():
-            row = self._ld.rows[r]
-            if group == 'thickness':
-                row.thickness = items[0][1]
-            elif group == 'shape':
-                vals = [row.params[j] for j in range(len(row.params))]
-                for off, v in items:
-                    vals[off] = v
-                row.params = np.stack(vals)
-            elif group == 'decenter':
-                vals = [row.decenter[j] for j in range(3)]
-                for off, v in items:
-                    vals[off] = v
-                row.decenter = np.stack(vals)
-            elif group == 'tilt':
-                vals = [row.tilt[j] for j in range(3)]
-                for off, v in items:
-                    vals[off] = v
-                row.tilt = np.stack(vals)
-
-    def bounds(self):
-        """Return (lo, hi) arrays parallel to the free vector."""
-        free = self.free_slots()
-        lo = np.empty(len(free), dtype=config.precision)
-        hi = np.empty(len(free), dtype=config.precision)
-        for i, slot in enumerate(free):
-            blo, bhi = self._bounds.get(slot, (-np.inf, np.inf))
-            lo[i] = blo
-            hi[i] = bhi
-        return lo, hi
-
-
 # ---------------------------------------------------------------------------
 # LensData
 # ---------------------------------------------------------------------------
@@ -646,7 +573,7 @@ def lens_element_groups(surfaces, *, wvl=0.587, ambient_index=1.0,
     Parameters
     ----------
     surfaces : iterable of Surface
-        a compiled prescription, e.g. LensData.to_surfaces().
+        a compiled surface list, e.g. LensData.to_surfaces().
     wvl : float, optional
         wavelength in microns for evaluating post-surface material indices.
     ambient_index : float, optional
@@ -703,22 +630,40 @@ class LensData:
     """Editable sequential optical system."""
 
     def __init__(self):
-        """Initialize an empty lens."""
+        """Initialize a lens as the [OBJECT, IMAGE] endpoint invariant (ADR-0006).
+
+        OBJECT (row 0) carries the object distance (inf for infinite conjugate)
+        and the object-space medium; IMAGE (last row) is a flat measurement plane.
+        add() inserts powered surfaces between them.
+        """
         self.rows = _RowList(self)
-        self.spec = ParamSpec(self)
-        self._pickups = []      # (target_slots, source_slots, scale, offset)
-        self._image_solve = None  # (surface_row_index, wavelength)
-        self._dependent = set()  # slots driven by a pickup/solve (never free)
         self._surfaces_cache = None
         self._version = 0  # bumped on every edit; keys system-side derived caches
         self._resolving = False  # True while solves/pickups write derived DOFs
+        # the owning system's DesignState (ADR-0004) installs this hook to apply
+        # dependent DOFs at compile time; a bare LensData has none.
+        self._resolve_hook = None
+        # Seed the OBJECT...IMAGE endpoints (infinite conjugate by default).
+        self.rows.append(SurfaceRow(
+            Plane(), thickness=float('inf'), material=air, typ='object'))
+        self.rows.append(SurfaceRow(Plane(), thickness=0.0, typ='image'))
 
     # -- construction --
+    @property
+    def object_row(self):
+        """The OBJECT endpoint row (row 0)."""
+        return self.rows[0]
+
+    @property
+    def image_row(self):
+        """The IMAGE endpoint row (last row)."""
+        return self.rows[-1]
+
     def add(self, shape, *, thickness=0.0, material=None, typ='refr',
             semidiameter=None, aperture=None, bounding=None, grating=None,
             edge=None, coating=None):
-        """Append a surface row and return self."""
-        self.rows.append(SurfaceRow(
+        """Insert a surface row before the IMAGE endpoint and return self."""
+        self.rows.insert(len(self.rows) - 1, SurfaceRow(
             shape, thickness=thickness, material=material, typ=typ,
             semidiameter=semidiameter, aperture=aperture, bounding=bounding,
             grating=grating, edge=edge, coating=coating,
@@ -728,8 +673,8 @@ class LensData:
 
     def add_coordbreak(self, *, decenter=(0.0, 0.0, 0.0), tilt=(0.0, 0.0, 0.0),
                        kind='basic', ret_target=None, thickness=0.0):
-        """Append a coordinate break."""
-        self.rows.append(CoordBreak(
+        """Insert a coordinate break before the IMAGE endpoint."""
+        self.rows.insert(len(self.rows) - 1, CoordBreak(
             decenter=decenter, tilt=tilt, kind=kind, ret_target=ret_target,
             thickness=thickness,
         ))
@@ -749,7 +694,8 @@ class LensData:
         if self._surfaces_cache is not None:
             return self._surfaces_cache
 
-        self._resolve_dependencies()
+        if self._resolve_hook is not None:
+            self._resolve_hook()
         surfaces = self._compile_surfaces()
         self._surfaces_cache = surfaces
         return surfaces
@@ -765,45 +711,6 @@ class LensData:
         if any(isinstance(row, CoordBreak) for row in self.rows):
             return self._to_surfaces_general()
         return self._to_surfaces_axial()
-
-    def _resolve_dependencies(self):
-        """Apply pickups then solves before compilation."""
-        self._resolving = True
-        try:
-            for targets, sources, scale, offset in self._pickups:
-                for t, s in zip(targets, sources):
-                    self.spec.set_value(
-                        t, scale * self.spec.get_value(s) + offset)
-            if self._image_solve is not None:
-                surf_idx, wvl = self._image_solve
-                surfaces = self._compile_surfaces()
-                surface_rows = [i for i, row in enumerate(self.rows)
-                                if isinstance(row, SurfaceRow)]
-                try:
-                    solved_surface = surface_rows.index(surf_idx)
-                except ValueError as e:
-                    raise ValueError(
-                        'image-distance solve target must be a surface row'
-                    ) from e
-                image_surface = solved_surface + 1
-                if image_surface >= len(surface_rows):
-                    raise ValueError(
-                        'image-distance solve target must be the gap before a '
-                        'trailing eval image plane'
-                    )
-                image_row_idx = surface_rows[image_surface]
-                image_row = self.rows[image_row_idx]
-                if (image_surface != len(surface_rows) - 1
-                        or _map_stype(image_row.typ) != STYPE_EVAL):
-                    raise ValueError(
-                        'image-distance solve target must be the gap before a '
-                        'trailing eval image plane'
-                    )
-                lens = surfaces[:image_surface]
-                pid = paraxial_image_distance(lens, wvl=wvl)
-                self.rows[surf_idx].thickness = pid
-        finally:
-            self._resolving = False
 
     def _build_surface(self, row, P, R=None):
         """Build a posed Surface from a LensData row."""
@@ -824,7 +731,7 @@ class LensData:
             surfaces.append(self._build_surface(row, P=[0.0, 0.0, z]))
             if row.is_reflective:
                 sign = -sign
-            z = z + sign * row.thickness
+            z = z + sign * _layout_thickness(row)
         return surfaces
 
     def _to_surfaces_general(self):
@@ -863,7 +770,7 @@ class LensData:
             # advance the gap along the (folded) local +z
             state.o = (state.o
                        + _local_to_global(state.Rgl)
-                       @ _axial_step(row.thickness))
+                       @ _axial_step(_layout_thickness(row)))
 
         return surfaces
 
@@ -942,151 +849,45 @@ class LensData:
         """Return one or more compiled surfaces by index."""
         return self.to_surfaces()[item]
 
-    # -- optimizer surface --
-    def pack(self):
-        """Dense contiguous vector of the free DOFs."""
-        return self.spec.pack()
-
-    def update(self, x):
-        """Scatter a free vector into the rows, resolve dependents, invalidate."""
-        self.spec.scatter(x)
-        self._resolve_dependencies()
-        self._invalidate()
-        return self
-
-    def bounds(self):
-        """(lo, hi) arrays parallel to the free vector."""
-        return self.spec.bounds()
-
-    # -- variable selection (category x surface-range) --
-    def vary(self, category, surfaces='all'):
-        """Mark a category of DOFs free over a range of surfaces."""
-        slots = self._category_slots(category, surfaces)
-        if category == 'thickness':
-            self._clear_image_distance_solve_if_selected(slots)
-        for slot in slots:
-            if slot not in self._dependent:
-                self.spec._free[slot] = True
-        return self
-
-    def freeze(self, category, surfaces='all'):
-        """Inverse of vary."""
-        for slot in self._category_slots(category, surfaces):
-            self.spec._free.pop(slot, None)
-        return self
-
-    def vary_all(self):
-        """Mark every scalar DOF free (except pickup/solve dependents)."""
-        for slot in self.spec.slots():
-            if slot not in self._dependent:
-                self.spec._free[slot] = True
-        return self
-
-    def freeze_all(self):
-        """Mark every scalar DOF fixed."""
-        self.spec._free.clear()
-        return self
-
-    def constrain(self, category, *, lo=None, hi=None, relative=None,
-                  surfaces='all'):
-        """Set box bounds on a category of DOFs over a range of surfaces.
-
-        Radius bounds are in radius and converted to curvature.  Relative
-        bounds are anchored at the current nominal value.
-
-        """
-        if relative is None and lo is None and hi is None:
-            raise ValueError('constrain needs lo/hi (absolute) or relative')
-        is_radius = category == 'radius'
-        for slot in self._category_slots(category, surfaces):
-            nominal = float(self.spec.get_value(slot))
-            bounds = _bounds_for_dof(nominal, lo, hi, relative, is_radius)
-            if bounds is None:
-                self.spec._bounds.pop(slot, None)
-            else:
-                self.spec._bounds[slot] = bounds
-        return self
-
-    # -- pickups and solves (dependent DOFs, resolved on compile) --
-    def pickup(self, category, surface, *, from_surface, from_category=None,
-               scale=1.0, offset=0.0):
-        """Make a DOF a pickup of another: dependent = scale*source + offset."""
-        from_category = from_category or category
-        targets = self._category_slots(category, surface)
-        sources = self._category_slots(from_category, from_surface)
-        if not targets or not sources:
-            raise ValueError(
-                f'pickup found no {category!r}/{from_category!r} DOFs on the '
-                'requested surfaces'
-            )
-        if len(targets) != len(sources):
-            raise ValueError(
-                f'pickup target ({len(targets)} DOFs) and source '
-                f'({len(sources)} DOFs) must have equal length'
-            )
-        for t in targets:
-            self.spec._free.pop(t, None)
-            self._dependent.add(t)
-        self._pickups.append((targets, sources, float(scale), float(offset)))
-        self._invalidate()
-        return self
-
-    def solve_image_distance(self, surface=None, *, wavelength=None):
-        """Solve a gap so the image plane sits at the paraxial image.
-
-        The solved thickness is frozen until clear_image_distance_solve() or
-        vary('thickness', ...) selects it.
-
-        """
-        if surface is None:
-            evals = [i for i, r in enumerate(self.rows)
-                     if isinstance(r, SurfaceRow)
-                     and _map_stype(r.typ) == STYPE_EVAL]
-            if not evals:
-                raise ValueError(
-                    'solve_image_distance needs an eval (image) plane to place'
-                )
-            eval_idx = max(evals)
-            lens_rows = [i for i in range(eval_idx)
-                         if isinstance(self.rows[i], SurfaceRow)]
-            if not lens_rows:
-                raise ValueError('no powered surface precedes the image plane')
-            surface = max(lens_rows)
-        else:
-            surface = surface % len(self.rows)
-        self._image_solve = (surface, wavelength)
-        slot = ('thickness', surface, 0)
-        self.spec._free.pop(slot, None)
-        self._dependent.add(slot)
-        self._invalidate()
-        return self
-
-    def clear_image_distance_solve(self):
-        """Disable the active paraxial image-distance solve, if any."""
-        if self._image_solve is None:
-            return self
-        surface, _ = self._image_solve
-        slot = ('thickness', surface, 0)
-        self._image_solve = None
-        if slot not in self._pickup_target_slots():
-            self._dependent.discard(slot)
-        self._invalidate()
-        return self
-
-    def _pickup_target_slots(self):
-        """Return slots currently driven by pickup dependencies."""
-        out = set()
-        for targets, _, _, _ in self._pickups:
-            out.update(targets)
+    # -- slot addressing (structural; the DOF registry lives on DesignState) --
+    # A "slot" is a (group, row_index, offset) tuple naming one scalar in a
+    # row.  These helpers let DesignState (and tolerancing) read/write row
+    # scalars by slot without LensData holding any design state of its own.
+    def _all_slots(self):
+        """Ordered list of every scalar DOF slot, row by row."""
+        out = []
+        for r, row in enumerate(self.rows):
+            out.extend(row.dof_slots(r))
         return out
 
-    def _clear_image_distance_solve_if_selected(self, slots):
-        """Clear the image-distance solve when its thickness is selected."""
-        if self._image_solve is None:
-            return
-        surface, _ = self._image_solve
-        if ('thickness', surface, 0) in slots:
-            self.clear_image_distance_solve()
+    def _slot_value(self, slot):
+        """Return the scalar value addressed by a slot."""
+        group, r, off = slot
+        row = self.rows[r]
+        if group == 'shape':
+            return row.params[off]
+        if group == 'thickness':
+            return row.thickness
+        if group == 'decenter':
+            return row.decenter[off]
+        if group == 'tilt':
+            return row.tilt[off]
+        raise KeyError(group)
+
+    def _set_slot_value(self, slot, value):
+        """Set the scalar value addressed by a slot."""
+        group, r, off = slot
+        row = self.rows[r]
+        if group == 'shape':
+            row.params[off] = value
+        elif group == 'thickness':
+            row.thickness = value
+        elif group == 'decenter':
+            row.decenter[off] = value
+        elif group == 'tilt':
+            row.tilt[off] = value
+        else:
+            raise KeyError(group)
 
     def _select_rows(self, surfaces):
         """Resolve a row selector to concrete row indices."""
@@ -1134,21 +935,287 @@ class LensData:
 
     # -- copy --
     def copy(self):
-        """Return a copy with cloned rows and preserved DOF selections."""
+        """Return a structural copy with cloned rows (no design state).
+
+        Design state (DOFs, pickups, solves) lives on a DesignState owned by
+        the system, which copies it separately (OpticalSystem.copy).
+        """
         new = LensData()
         new.rows = _RowList(new, [row.copy() for row in self.rows])
-        new.spec._free = dict(self.spec._free)
-        new.spec._bounds = dict(self.spec._bounds)
+        return new
+
+    def __repr__(self):
+        """Return a compact representation of the lens."""
+        return f'LensData(n_rows={len(self.rows)})'
+
+
+class DesignState:
+    """The DOF registry, pickups, and solves for a LensData (ADR-0004).
+
+    Owned by an OpticalSystem (as system._design), it holds everything you
+    *do* to a lens for design and optimization: which row scalars are free,
+    their box bounds, pickup couplings, and an image-distance solve.  It
+    addresses row scalars through the LensData's slot helpers and installs a
+    resolve hook so dependent DOFs (pickups, solves) are applied whenever the
+    lens compiles.  A bare LensData carries no DesignState and compiles its
+    rows verbatim.
+
+    The public verbs are exposed on the system through sys.opt (vary, freeze,
+    constrain, pickup, update, pack, bounds) and sys.solve (image_distance).
+    """
+
+    def __init__(self, lens):
+        self.lens = lens
+        self._free = {}     # slot -> True
+        self._bounds = {}   # slot -> (lo, hi)
+        self._pickups = []  # (target_slots, source_slots, scale, offset)
+        self._image_solve = None  # (surface_row_index, wavelength)
+        self._dependent = set()   # slots driven by a pickup/solve (never free)
+        lens._resolve_hook = self._resolve_dependencies
+
+    # -- free vector --
+    def free_slots(self):
+        """Ordered list of the slots currently marked free."""
+        return [s for s in self.lens._all_slots() if self._free.get(s, False)]
+
+    def pack(self):
+        """Gather the free DOFs into a dense contiguous vector."""
+        free = self.free_slots()
+        out = np.empty(len(free), dtype=config.precision)
+        for i, slot in enumerate(free):
+            out[i] = self.lens._slot_value(slot)
+        return out
+
+    def scatter(self, x):
+        """Write a dense free vector back into the rows."""
+        free = self.free_slots()
+        if len(x) != len(free):
+            raise ValueError(
+                f'expected {len(free)} free DOFs, got {len(x)}'
+            )
+        if np.__name__ == 'numpy':
+            for slot, value in zip(free, x):
+                self.lens._set_slot_value(slot, value)
+            return
+
+        # tensor backend: functional per-row reconstruction
+        by_row_group = {}
+        for i, slot in enumerate(free):
+            group, r, off = slot
+            by_row_group.setdefault((r, group), []).append((off, x[i]))
+        for (r, group), items in by_row_group.items():
+            row = self.lens.rows[r]
+            if group == 'thickness':
+                row.thickness = items[0][1]
+            elif group == 'shape':
+                vals = [row.params[j] for j in range(len(row.params))]
+                for off, v in items:
+                    vals[off] = v
+                row.params = np.stack(vals)
+            elif group == 'decenter':
+                vals = [row.decenter[j] for j in range(3)]
+                for off, v in items:
+                    vals[off] = v
+                row.decenter = np.stack(vals)
+            elif group == 'tilt':
+                vals = [row.tilt[j] for j in range(3)]
+                for off, v in items:
+                    vals[off] = v
+                row.tilt = np.stack(vals)
+
+    def bounds(self):
+        """Return (lo, hi) arrays parallel to the free vector."""
+        free = self.free_slots()
+        lo = np.empty(len(free), dtype=config.precision)
+        hi = np.empty(len(free), dtype=config.precision)
+        for i, slot in enumerate(free):
+            blo, bhi = self._bounds.get(slot, (-np.inf, np.inf))
+            lo[i] = blo
+            hi[i] = bhi
+        return lo, hi
+
+    def update(self, x):
+        """Scatter a free vector into the rows, resolve dependents, invalidate."""
+        self.scatter(x)
+        self._resolve_dependencies()
+        self.lens._invalidate()
+        return self
+
+    # -- variable selection (category x surface-range) --
+    def vary(self, category, surfaces='all'):
+        """Mark a category of DOFs free over a range of surfaces."""
+        slots = self.lens._category_slots(category, surfaces)
+        if category == 'thickness':
+            self._clear_image_distance_solve_if_selected(slots)
+        for slot in slots:
+            if slot not in self._dependent:
+                self._free[slot] = True
+        return self
+
+    def freeze(self, category, surfaces='all'):
+        """Inverse of vary."""
+        for slot in self.lens._category_slots(category, surfaces):
+            self._free.pop(slot, None)
+        return self
+
+    def vary_all(self):
+        """Mark every scalar DOF free (except pickup/solve dependents)."""
+        for slot in self.lens._all_slots():
+            if slot not in self._dependent:
+                self._free[slot] = True
+        return self
+
+    def freeze_all(self):
+        """Mark every scalar DOF fixed."""
+        self._free.clear()
+        return self
+
+    def constrain(self, category, *, lo=None, hi=None, relative=None,
+                  surfaces='all'):
+        """Set box bounds on a category of DOFs over a range of surfaces.
+
+        Radius bounds are in radius and converted to curvature.  Relative
+        bounds are anchored at the current nominal value.
+
+        """
+        if relative is None and lo is None and hi is None:
+            raise ValueError('constrain needs lo/hi (absolute) or relative')
+        is_radius = category == 'radius'
+        for slot in self.lens._category_slots(category, surfaces):
+            nominal = float(self.lens._slot_value(slot))
+            bounds = _bounds_for_dof(nominal, lo, hi, relative, is_radius)
+            if bounds is None:
+                self._bounds.pop(slot, None)
+            else:
+                self._bounds[slot] = bounds
+        return self
+
+    # -- pickups and solves (dependent DOFs, resolved on compile) --
+    def pickup(self, category, surface, *, from_surface, from_category=None,
+               scale=1.0, offset=0.0):
+        """Make a DOF a pickup of another: dependent = scale*source + offset."""
+        from_category = from_category or category
+        targets = self.lens._category_slots(category, surface)
+        sources = self.lens._category_slots(from_category, from_surface)
+        if not targets or not sources:
+            raise ValueError(
+                f'pickup found no {category!r}/{from_category!r} DOFs on the '
+                'requested surfaces'
+            )
+        if len(targets) != len(sources):
+            raise ValueError(
+                f'pickup target ({len(targets)} DOFs) and source '
+                f'({len(sources)} DOFs) must have equal length'
+            )
+        for t in targets:
+            self._free.pop(t, None)
+            self._dependent.add(t)
+        self._pickups.append((targets, sources, float(scale), float(offset)))
+        self.lens._invalidate()
+        return self
+
+    def solve_image_distance(self, surface=None, *, wavelength=None):
+        """Solve a gap so the image plane sits at the paraxial image.
+
+        The solved thickness is frozen until clear_image_distance_solve() or
+        vary('thickness', ...) selects it.
+
+        """
+        lens = self.lens
+        if surface is None:
+            # the gap to solve is the last powered surface before the IMAGE plane
+            powered = [i for i, r in enumerate(lens.rows)
+                       if isinstance(r, SurfaceRow)
+                       and not _is_measurement_surf(_map_stype(r.typ))]
+            if not powered:
+                raise ValueError('no powered surface precedes the image plane')
+            surface = max(powered)
+        else:
+            surface = surface % len(lens.rows)
+        self._image_solve = (surface, wavelength)
+        slot = ('thickness', surface, 0)
+        self._free.pop(slot, None)
+        self._dependent.add(slot)
+        lens._invalidate()
+        return self
+
+    def clear_image_distance_solve(self):
+        """Disable the active paraxial image-distance solve, if any."""
+        if self._image_solve is None:
+            return self
+        surface, _ = self._image_solve
+        slot = ('thickness', surface, 0)
+        self._image_solve = None
+        if slot not in self._pickup_target_slots():
+            self._dependent.discard(slot)
+        self.lens._invalidate()
+        return self
+
+    def _pickup_target_slots(self):
+        """Return slots currently driven by pickup dependencies."""
+        out = set()
+        for targets, _, _, _ in self._pickups:
+            out.update(targets)
+        return out
+
+    def _clear_image_distance_solve_if_selected(self, slots):
+        """Clear the image-distance solve when its thickness is selected."""
+        if self._image_solve is None:
+            return
+        surface, _ = self._image_solve
+        if ('thickness', surface, 0) in slots:
+            self.clear_image_distance_solve()
+
+    def _resolve_dependencies(self):
+        """Apply pickups then solves before compilation (the lens resolve hook)."""
+        lens = self.lens
+        lens._resolving = True
+        try:
+            for targets, sources, scale, offset in self._pickups:
+                for t, s in zip(targets, sources):
+                    lens._set_slot_value(
+                        t, scale * lens._slot_value(s) + offset)
+            if self._image_solve is not None:
+                surf_idx, wvl = self._image_solve
+                surfaces = lens._compile_surfaces()
+                surface_rows = [i for i, row in enumerate(lens.rows)
+                                if isinstance(row, SurfaceRow)]
+                try:
+                    solved_surface = surface_rows.index(surf_idx)
+                except ValueError as e:
+                    raise ValueError(
+                        'image-distance solve target must be a surface row'
+                    ) from e
+                image_surface = solved_surface + 1
+                if image_surface >= len(surface_rows):
+                    raise ValueError(
+                        'image-distance solve target must be the gap before the '
+                        'IMAGE plane'
+                    )
+                image_row_idx = surface_rows[image_surface]
+                image_row = lens.rows[image_row_idx]
+                if (image_surface != len(surface_rows) - 1
+                        or _map_stype(image_row.typ) != STYPE_IMG):
+                    raise ValueError(
+                        'image-distance solve target must be the gap before the '
+                        'IMAGE plane'
+                    )
+                powered = surfaces[:image_surface]
+                pid = paraxial_image_distance(powered, wvl=wvl)
+                lens.rows[surf_idx].thickness = pid
+        finally:
+            lens._resolving = False
+
+    def copy(self, new_lens):
+        """Return a DesignState over new_lens with this registry copied."""
+        new = DesignState(new_lens)
+        new._free = dict(self._free)
+        new._bounds = dict(self._bounds)
         new._pickups = [(list(t), list(s), sc, off)
                         for t, s, sc, off in self._pickups]
         new._image_solve = self._image_solve
         new._dependent = set(self._dependent)
         return new
 
-    def __repr__(self):
-        """Return a compact representation of the lens."""
-        return (f'LensData(n_rows={len(self.rows)}, '
-                f'n_free={len(self.spec.free_slots())})')
 
-
-__all__ = ['LensData', 'SurfaceRow', 'CoordBreak', 'ParamSpec', 'R_rh']
+__all__ = ['LensData', 'SurfaceRow', 'CoordBreak', 'DesignState', 'R_rh']

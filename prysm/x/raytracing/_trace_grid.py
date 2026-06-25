@@ -4,20 +4,19 @@ import math
 
 from .spencer_and_murty import raytrace, valid_mask
 from .launch import Field, launch
-from ._meta import system_wavelength, system_epd
 
 
-def _resolve_fields(prescription, fields):
+def _resolve_fields(system, fields):
     """Fields to evaluate, defaulting to the system's FieldSet, else on-axis."""
     if fields is not None:
         return list(fields)
-    sys_fields = getattr(prescription, 'fields', None)
+    sys_fields = getattr(system, 'fields', None)
     if sys_fields is not None and len(sys_fields) > 0:
         return list(sys_fields)
     return [Field(0.0, 0.0)]
 
 
-def field_sweep(prescription, fields=None, samples=101):
+def field_sweep(system, fields=None, samples=101):
     """Dense field samples spanning the system field set.
 
     A drop-in upgrade of _resolve_fields for analyses that are smooth
@@ -36,7 +35,7 @@ def field_sweep(prescription, fields=None, samples=101):
 
     Parameters
     ----------
-    prescription : sequence of Surface or OpticalSystem
+    system : sequence of Surface or OpticalSystem
         the optical system.
     fields : iterable of Field, optional
         explicit field points, returned verbatim; None triggers the sweep.
@@ -49,7 +48,7 @@ def field_sweep(prescription, fields=None, samples=101):
         the fields to evaluate.
 
     """
-    base = _resolve_fields(prescription, fields)
+    base = _resolve_fields(system, fields)
     if fields is not None or len(base) == 0:
         return base
     kinds = {f.kind for f in base}
@@ -84,25 +83,34 @@ def field_sweep(prescription, fields=None, samples=101):
     ]
 
 
-def _resolve_wavelengths(prescription, wavelengths):
+def _resolve_wavelengths(system, wavelengths):
     """Wavelengths (microns) to evaluate, defaulting to the system's set."""
     if wavelengths is not None:
         return [float(w) for w in wavelengths]
-    wv = getattr(prescription, 'wavelengths', None)
+    wv = getattr(system, 'wavelengths', None)
     if wv is not None and len(wv):
         return [float(w) for w in wv]
-    return [system_wavelength(prescription, None)]
+    resolver = getattr(system, 'wavelength', None)
+    if callable(resolver):
+        return [float(resolver(None))]
+    raise TypeError(
+        'wavelengths is required for a bare surface sequence; only an '
+        'OpticalSystem defaults the wavelength set.'
+    )
 
 
-def _require_epd(prescription, epd, wvl=None):
+def _require_epd(system, epd, wvl=None):
     """Resolve epd from an explicit value or the system; error if neither."""
-    epd = system_epd(prescription, epd, wvl)
+    if epd is None:
+        resolver = getattr(system, 'entrance_pupil_diameter', None)
+        if callable(resolver):
+            epd = resolver(wvl)
     if epd is None:
         raise TypeError(
             'epd is required; pass epd=... or supply an OpticalSystem whose '
             'aperture spec resolves it.'
         )
-    return epd
+    return float(epd)
 
 
 class TraceRecord:
@@ -141,19 +149,19 @@ class TraceRecord:
         self.valid = valid
 
 
-def _launch_trace(prescription, field, wvl, sampling, *, epd, pupil_z, aim_to,
+def _launch_trace(system, field, wvl, sampling, *, epd, pupil_z, aim_to,
                   trace_fn):
     """Resolve epd, launch one sampling, trace it, and mask the invalid rays."""
-    epd = _require_epd(prescription, epd, wvl)
+    epd = _require_epd(system, epd, wvl)
     # NaN unaimed real-aiming rays so fans/spots truncate at vignetting.
-    P, S = launch(prescription, field, wvl, sampling, epd=epd, pupil_z=pupil_z,
+    P, S = launch(system, field, wvl, sampling, epd=epd, pupil_z=pupil_z,
                   aim_to=aim_to, drop_unaimed=True)
-    trace = trace_fn(prescription, P, S, wvl)
+    trace = trace_fn(system, P, S, wvl)
     valid = valid_mask(trace.status, trace.P[-1])
     return epd, P, S, trace, valid
 
 
-def trace_cell(prescription, field, wvl, sampling, *, epd=None, pupil_z=None,
+def trace_cell(system, field, wvl, sampling, *, epd=None, pupil_z=None,
                aim_to=None, trace_fn=raytrace):
     """Launch and trace one (field, wavelength) bundle.
 
@@ -164,18 +172,18 @@ def trace_cell(prescription, field, wvl, sampling, *, epd=None, pupil_z=None,
 
     """
     epd, P, S, trace, valid = _launch_trace(
-        prescription, field, wvl, sampling, epd=epd, pupil_z=pupil_z,
+        system, field, wvl, sampling, epd=epd, pupil_z=pupil_z,
         aim_to=aim_to, trace_fn=trace_fn)
     return TraceRecord(0, 0, field, wvl, epd, P, S, trace, valid)
 
 
-def iter_trace_grid(prescription, fields, wavelengths, sampling, *,
+def iter_trace_grid(system, fields, wavelengths, sampling, *,
                     epd=None, pupil_z=None, aim_to=None, trace_fn=raytrace):
     """Trace one pupil sampling over every field and wavelength.
 
     Parameters
     ----------
-    prescription : sequence of Surface or OpticalSystem
+    system : sequence of Surface or OpticalSystem
         the optical system.
     fields : iterable of Field or None
         evaluated fields; None defaults to the system FieldSet, else on-axis.
@@ -199,11 +207,11 @@ def iter_trace_grid(prescription, fields, wavelengths, sampling, *,
         one per cell, in row-major order.
 
     """
-    fields = _resolve_fields(prescription, fields)
-    wavelengths = _resolve_wavelengths(prescription, wavelengths)
+    fields = _resolve_fields(system, fields)
+    wavelengths = _resolve_wavelengths(system, wavelengths)
     for i, field in enumerate(fields):
         for j, wvl in enumerate(wavelengths):
             epd_w, P, S, trace, valid = _launch_trace(
-                prescription, field, wvl, sampling, epd=epd, pupil_z=pupil_z,
+                system, field, wvl, sampling, epd=epd, pupil_z=pupil_z,
                 aim_to=aim_to, trace_fn=trace_fn)
             yield TraceRecord(i, j, field, wvl, epd_w, P, S, trace, valid)

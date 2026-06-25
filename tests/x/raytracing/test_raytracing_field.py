@@ -243,20 +243,21 @@ def _telecentric_slow(epd=3.0):
                semidiameter=8.0))
     sp = OpticalSystem(probe, aperture=epd, fields=[Field(0, 0, kind='angle')],
                        wavelengths=[0.5875618], reference=0,
-                       stop_index=0)
-    ffl = ynu_first_order(sp, stop_index=0).ffl
+                       stop_index=1)   # first powered surface (index 0 is OBJECT)
+    ffl = ynu_first_order(sp.to_surfaces(), wvl=sp.wavelength(),
+                          stop_index=1).ffl
+    # rows: OBJECT(0), front stop plane(1), conic1(2), conic2(3), IMAGE(4)
     lens = LensData()
     (lens.add(Plane(), typ='eval', material=materials.air, semidiameter=epd / 2)
          .add(Conic(c, 0.0), thickness=2.0, material=mat, semidiameter=10.0)
-         .add(Conic(-c, 0.0), thickness=120.0, material=materials.air, semidiameter=10.0)
-         .add(Plane(), typ='eval', material=materials.air, semidiameter=15.0))
-    lens.rows[0].thickness = abs(ffl)
+         .add(Conic(-c, 0.0), thickness=120.0, material=materials.air, semidiameter=10.0))
+    lens.rows[1].thickness = abs(ffl)
     sysT = OpticalSystem(lens, aperture=epd, fields=[Field(0, 0, kind='angle')],
                          wavelengths=[0.5875618], reference=0,
-                         stop_index=0)
+                         stop_index=1)
     wvl = sysT.wavelength()
     # focus distance from the last lens surface (exclude the image plane row)
-    lens.rows[2].thickness = paraxial_image_distance(
+    lens.rows[3].thickness = paraxial_image_distance(
         sysT.to_surfaces()[:-1], wvl)
     return sysT, wvl
 
@@ -265,8 +266,8 @@ def test_pupil_field_telecentric_exit_pupil_at_infinity_is_airy():
     """Telecentric image space keeps finite sine-space coordinates."""
     from prysm.x.raytracing.paraxial import ynu_first_order
     sysT, wvl = _telecentric_slow(epd=3.0)
-    assert ynu_first_order(sysT, wvl, stop_index=0).xp_z is None
-    pf = field.pupil_field(sysT, Field(0., 0.), wvl, npupil=96, stop_index=0)
+    assert ynu_first_order(sysT.to_surfaces(), wvl, stop_index=1).xp_z is None
+    pf = field.pupil_field(sysT, Field(0., 0.), wvl, npupil=96, stop_index=1)
     assert np.all(np.isfinite(pf.X)) and np.all(np.isfinite(pf.Y))
     assert np.isfinite(pf.efl) and pf.efl > 0
     assert pf.P_xp is None  # exit pupil at infinity, recorded as such

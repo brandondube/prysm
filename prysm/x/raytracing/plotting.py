@@ -23,10 +23,10 @@ from .analysis import (
     lateral_color,
     _field_curvature_labels,
 )
+from ._resolve import resolve_wavelength
 from .launch import launch, Sampling
 from .surfaces import STYPE_REFLECT, STYPE_REFRACT
 from .lensdata import lens_element_groups
-from ._meta import system_wavelength, system_stop_index
 from ._trace_grid import _resolve_fields, _resolve_wavelengths, field_sweep
 
 import numpy as np  # see module docstring; do not "fix" to mathops np
@@ -469,7 +469,7 @@ def mirror_surface_outline(surf, result, surface_index=0, *, points=100,
         a trace whose ray positions bound the drawn extent when radius and
         the surface bounding geometry are both unset.
     surface_index : int, optional
-        index of surf within the traced prescription, used to read the ray
+        index of surf within the traced system, used to read the ray
         positions at that surface.
     points : int, optional
         number of points sampled along the surface profile.
@@ -518,7 +518,7 @@ def mirror_substrate_outline(surf, result, surface_index=0, *, backing,
         a trace whose ray positions bound the drawn extent when radius and
         the backing outer radius are both unset.
     surface_index : int, optional
-        index of surf within the traced prescription, used to read the ray
+        index of surf within the traced system, used to read the ray
         positions at that surface.
     backing : mapping or str
         substrate geometry.  A string is shorthand for a mapping with only
@@ -701,17 +701,17 @@ def _wall_path(x0, x1, outer_y, features, side, endpoint_names):
     return xs, ys
 
 
-def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
+def plot_optics(system, result, *, wvl=None, ambient_index=1.0,
                 index_atol=1e-9, mirror_backing=None, points=100,
                 lw=1, ls='-', c='k', alpha=1, zorder=3,
                 x='z', y='y', fig=None, ax=None, lens_edges=None,
                 stop_index=None):
-    """Draw the optics of a prescription.
+    """Draw the optics of a system.
 
     Parameters
     ----------
-    prescription : iterable of Surface
-        a prescription for an optical layout
+    system : iterable of Surface
+        a system for an optical layout
     result : RayTraceResult
         Trace result returned by spencer_and_murty.raytrace.
     wvl : float, optional
@@ -777,13 +777,14 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
         An axis object
 
     """
-    wvl = system_wavelength(prescription, wvl)
+    wvl = resolve_wavelength(system, wvl)
     x = x.lower()
     y = y.lower()
     fig, ax = share_fig_ax(fig, ax)
     ax.set(aspect='equal')
     phist = _to_np(result.P)
-    stop_index = system_stop_index(prescription, stop_index)
+    if stop_index is None:
+        stop_index = getattr(system, 'stop_index', None)
 
     def draw_stop_marker(j, surf):
         marks = _stop_marker_outline(surf, phist, _to_np(result.S), j, x, y)
@@ -791,7 +792,7 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
             ax.plot(*marks, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
 
     lens_groups = lens_element_groups(
-        prescription, wvl=wvl, ambient_index=ambient_index,
+        system, wvl=wvl, ambient_index=ambient_index,
         index_atol=index_atol,
     )
     groups_by_start = {group[0]: (group_index, group)
@@ -803,16 +804,16 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
     if lens_edges is None:
         derived = {}
         for group in lens_groups:
-            edge = getattr(prescription[group[0]], 'edge', None)
+            edge = getattr(system[group[0]], 'edge', None)
             if edge is not None:
                 derived[group[0]] = edge
         lens_edges = derived or None
 
     j = 0
     mirror_index = 0
-    jj = len(prescription)
+    jj = len(system)
     while j < jj:
-        surf = prescription[j]
+        surf = system[j]
         if surf.typ == STYPE_REFLECT:
             if isinstance(mirror_backing, Mapping):
                 config_keys = {
@@ -873,7 +874,7 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
             if od_radius is None:
                 radii = []
                 for surface_index in group:
-                    group_surface = prescription[surface_index]
+                    group_surface = system[surface_index]
                     if (group_surface.bounding is not None and
                             'outer_radius' in group_surface.bounding):
                         radii.append(group_surface.bounding['outer_radius'])
@@ -896,7 +897,7 @@ def plot_optics(prescription, result, *, wvl=None, ambient_index=1.0,
                     clear_radius = _surface_clear_radius(
                         lens_edge, f'surface_{surface_number}',
                     )
-                surf_obj = prescription[surface_index]
+                surf_obj = system[surface_index]
                 sag_radius = _surface_drawable_radius(surf_obj, od_radius, y)
                 # the surface's own clear aperture also caps its optical zone;
                 # beyond it the element is drawn as a flat land (normal to the
@@ -1005,7 +1006,7 @@ def layout(system, *, fields=None, wavelength=None, sampling=None, axis='y',
         An axis object
 
     """
-    wvl = system_wavelength(system, wavelength)
+    wvl = resolve_wavelength(system, wavelength)
     fields = _resolve_fields(system, fields)
     if sampling is None:
         sampling = Sampling.fan(n=3, axis=axis)
@@ -1244,7 +1245,7 @@ def _field_axis_values(fields):
     """Per-field scalar magnitude for a field-curve y-axis.
 
     Angle fields report degrees; height fields report the radial object
-    height in prescription length units.
+    height in system length units.
     """
     values = []
     for field in fields:
@@ -1256,7 +1257,7 @@ def _field_axis_values(fields):
     return np.asarray(values)
 
 
-def plot_field_curvature(prescription, fields=None, wavelength=None, *,
+def plot_field_curvature(system, fields=None, wavelength=None, *,
                          samples=101, result=None,
                          reference='image', c='r', lw=1, alpha=1, zorder=4,
                          label=None, fig=None, ax=None):
@@ -1264,7 +1265,7 @@ def plot_field_curvature(prescription, fields=None, wavelength=None, *,
 
     Parameters
     ----------
-    prescription : sequence of Surface or LensData
+    system : sequence of Surface or LensData
         the optical system.
     fields : iterable of Field, optional
         field points to evaluate; defaults to a dense sweep over the system
@@ -1298,22 +1299,22 @@ def plot_field_curvature(prescription, fields=None, wavelength=None, *,
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    fields = field_sweep(prescription, fields, samples)
+    fields = field_sweep(system, fields, samples)
     if result is None:
-        result = field_curvature(prescription, fields, wavelength)
+        result = field_curvature(system, fields, wavelength)
     x_fan_z = _to_np(result.x_fan_z)
     y_fan_z = _to_np(result.y_fan_z)
     if reference is None:
         ref = 0.0
     elif isinstance(reference, str):
         if reference.lower() == 'image':
-            ref = float(prescription[-1].P[2])
+            ref = float(system[-1].P[2])
         else:
             raise ValueError("reference string must be 'image'")
     else:
         ref = float(reference)
     field_values = _field_axis_values(fields)
-    suffixes, _ = _field_curvature_labels(prescription, fields)
+    suffixes, _ = _field_curvature_labels(system, fields)
     x_label = suffixes[0] if label is None else f'{label} {suffixes[0]}'
     y_label = suffixes[1] if label is None else f'{label} {suffixes[1]}'
     ax.plot(x_fan_z - ref, field_values, c=c, ls='-', lw=lw, alpha=alpha,
@@ -1325,7 +1326,7 @@ def plot_field_curvature(prescription, fields=None, wavelength=None, *,
     return fig, ax
 
 
-def plot_chromatic_focal_shift(prescription, wavelengths=None, *,
+def plot_chromatic_focal_shift(system, wavelengths=None, *,
                                reference_wavelength=None,
                                focus='best', epd=None, field=None,
                                sampling=None, samples=101, result=None,
@@ -1335,7 +1336,7 @@ def plot_chromatic_focal_shift(prescription, wavelengths=None, *,
 
     Parameters
     ----------
-    prescription : sequence of Surface or LensData
+    system : sequence of Surface or LensData
         the optical system.
     wavelengths : iterable of float, optional
         wavelengths in microns.
@@ -1378,7 +1379,7 @@ def plot_chromatic_focal_shift(prescription, wavelengths=None, *,
     fig, ax = share_fig_ax(fig, ax)
     if result is None:
         result = chromatic_focal_shift(
-            prescription, wavelengths,
+            system, wavelengths,
             reference_wavelength=reference_wavelength,
             focus=focus, epd=epd, field=field, sampling=sampling,
             samples=samples,
@@ -1393,7 +1394,7 @@ def plot_chromatic_focal_shift(prescription, wavelengths=None, *,
     return fig, ax
 
 
-def plot_axial_color(prescription, wavelengths=None, *,
+def plot_axial_color(system, wavelengths=None, *,
                      reference_wavelength=None, result=None,
                      c='r', marker='o', lw=1, alpha=1, zorder=4,
                      label=None, fig=None, ax=None):
@@ -1404,7 +1405,7 @@ def plot_axial_color(prescription, wavelengths=None, *,
 
     Parameters
     ----------
-    prescription : sequence of Surface or LensData
+    system : sequence of Surface or LensData
         the optical system.
     wavelengths : iterable of float, optional
         wavelengths in microns; defaults to the system wavelength set.
@@ -1436,13 +1437,13 @@ def plot_axial_color(prescription, wavelengths=None, *,
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    wavelengths = _resolve_wavelengths(prescription, wavelengths)
+    wavelengths = _resolve_wavelengths(system, wavelengths)
     if result is None:
-        result = axial_color(prescription, wavelengths)
+        result = axial_color(system, wavelengths)
     bfd = _to_np(result)
     wavelengths = np.asarray(wavelengths, dtype=float)
     if reference_wavelength is None:
-        reference_wavelength = system_wavelength(prescription, None)
+        reference_wavelength = resolve_wavelength(system, None)
     j_ref = int(np.argmin(np.abs(wavelengths - float(reference_wavelength))))
     ax.plot(wavelengths, bfd - bfd[j_ref], c=c, marker=marker, lw=lw,
             alpha=alpha, zorder=zorder, label=label)
@@ -1451,7 +1452,7 @@ def plot_axial_color(prescription, wavelengths=None, *,
     return fig, ax
 
 
-def plot_distortion(prescription, fields=None, wavelength=None, *, epd=None,
+def plot_distortion(system, fields=None, wavelength=None, *, epd=None,
                     distortion_type='f-tan', pupil_z=None, samples=101,
                     result=None,
                     c='r', lw=1, alpha=1, zorder=4, label=None,
@@ -1460,7 +1461,7 @@ def plot_distortion(prescription, fields=None, wavelength=None, *, epd=None,
 
     Parameters
     ----------
-    prescription : sequence of Surface or LensData
+    system : sequence of Surface or LensData
         the optical system.
     fields : iterable of Field, optional
         field points to evaluate, all kind='angle'; defaults to a dense
@@ -1499,10 +1500,10 @@ def plot_distortion(prescription, fields=None, wavelength=None, *, epd=None,
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    fields = field_sweep(prescription, fields, samples)
+    fields = field_sweep(system, fields, samples)
     if result is None:
         result = distortion(
-            prescription, fields, wavelength, epd=epd,
+            system, fields, wavelength, epd=epd,
             distortion_type=distortion_type, pupil_z=pupil_z,
         )
     percent = _to_np(result.percent)
@@ -1514,7 +1515,7 @@ def plot_distortion(prescription, fields=None, wavelength=None, *, epd=None,
     return fig, ax
 
 
-def plot_lateral_color(prescription, fields=None, wavelengths=None, *,
+def plot_lateral_color(system, fields=None, wavelengths=None, *,
                        epd=None, reference_wavelength=None, samples=101,
                        result=None,
                        colors=None, lw=1, alpha=1, zorder=4, legend=True,
@@ -1528,7 +1529,7 @@ def plot_lateral_color(prescription, fields=None, wavelengths=None, *,
 
     Parameters
     ----------
-    prescription : sequence of Surface or LensData
+    system : sequence of Surface or LensData
         the optical system.
     fields : iterable of Field, optional
         field points to evaluate, all kind='angle'; defaults to a dense
@@ -1565,14 +1566,14 @@ def plot_lateral_color(prescription, fields=None, wavelengths=None, *,
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    fields = field_sweep(prescription, fields, samples)
-    wavelengths = _resolve_wavelengths(prescription, wavelengths)
+    fields = field_sweep(system, fields, samples)
+    wavelengths = _resolve_wavelengths(system, wavelengths)
     if result is None:
-        result = lateral_color(prescription, fields, wavelengths, epd=epd)
+        result = lateral_color(system, fields, wavelengths, epd=epd)
     landing = _to_np(result)
     wavelengths = np.asarray(wavelengths, dtype=float)
     if reference_wavelength is None:
-        reference_wavelength = system_wavelength(prescription, None)
+        reference_wavelength = resolve_wavelength(system, None)
     j_ref = int(np.argmin(np.abs(wavelengths - float(reference_wavelength))))
 
     ref = landing[:, j_ref, :]

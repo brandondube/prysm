@@ -6,13 +6,8 @@ from prysm.mathops import np
 from .launch import Field, Sampling, launch, _perp_basis
 from .spencer_and_murty import STYPE_REFLECT, STYPE_REFRACT, reflect, valid_mask
 from ._diff_raytrace import DiffSeed, raytrace_with_tangents
-from ._meta import (
-    system_wavelength,
-    system_epd,
-    system_stop_index,
-    system_first_order,
-    object_space_index,
-)
+from ._meta import object_space_index
+from ._resolve import resolve_chief_metadata
 
 
 _SEED_NAMES = ('dx', 'dy', 'du', 'dv')
@@ -27,14 +22,14 @@ _PAIR_SLOTS = (
 )
 
 
-def _resolve_field(prescription, field):
+def _resolve_field(system, field):
     """Resolve the chief-ray field: system resolver first, then literals."""
-    resolver = getattr(prescription, 'field', None)
+    resolver = getattr(system, 'field', None)
     if callable(resolver):
         try:
             return resolver(field)
         except IndexError:
-            fields = getattr(prescription, 'fields', None)
+            fields = getattr(system, 'fields', None)
             if (np.isscalar(field) and float(field) == 0.0
                     and fields is not None and len(fields) == 0):
                 return Field(0.0, 0.0)
@@ -43,15 +38,17 @@ def _resolve_field(prescription, field):
         return Field(0.0, 0.0)
     if isinstance(field, Field):
         return field
-    # scalar = y field angle in degrees; sequences provide x and y.
+    # ADR-0009: a literal field is a (hx, hy) pair; a bare scalar is rejected.
     if np.isscalar(field):
-        return Field(0.0, float(field))
+        raise TypeError(
+            'a literal field must be a (hx, hy) pair or a Field, not a bare '
+            f'scalar; got {field!r}')
     return Field(float(field[0]), float(field[1]))
 
 
-def _chief_tangent_trace(prescription, surfaces, fld, wvl):
+def _chief_tangent_trace(system, surfaces, fld, wvl):
     """Trace the chief with dx/dy/du/dv launch tangents in its T/S frame."""
-    P0, S0 = launch(prescription, fld, wvl, Sampling.chief())
+    P0, S0 = launch(system, fld, wvl, Sampling.chief())
     e1, e2 = _perp_basis(S0[0])
     zero = np.zeros(3, dtype=config.precision)
     Pdot0 = np.stack([e1, e2, zero, zero], axis=-1)[None, ...]
@@ -242,16 +239,20 @@ def _fill_metadata(out, surfaces, wvl, fld, epd, stop_index, force_sym):
         k = int(stop_index)
         if k < 0 or k >= n_surfaces:
             raise IndexError(
-                f'stop_index {k} out of range for prescription of length '
+                f'stop_index {k} out of range for surfaces of length '
                 f'{n_surfaces}'
             )
         out.stop_index = k
 
 
-def _fill_from_ynu(out, prescription, wvl, epd, stop_index):
+def _fill_from_ynu(out, system, surfaces, wvl, epd, stop_index):
     """Populate the section pairs from the scalar YNU walk (chief failed)."""
-    fo = system_first_order(prescription, wvl=wvl, epd=epd,
-                            stop_index=stop_index)
+    resolver = getattr(system, '_ynu_first_order', None)
+    if callable(resolver):
+        fo = resolver(wvl=wvl, epd=epd, stop_index=stop_index)
+    else:
+        from .paraxial import ynu_first_order  # local: avoid a circular import
+        fo = ynu_first_order(surfaces, wvl=wvl, epd=epd, stop_index=stop_index)
     out.backend = 'ynu'
     out.n_object = fo.n_object
     out.n_image = fo.n_image
@@ -260,25 +261,23 @@ def _fill_from_ynu(out, prescription, wvl, epd, stop_index):
         setattr(out, name, None if v is None else (float(v), float(v)))
 
 
-def first_order(prescription, field=0, wavelength=None, *, epd=None,
+def first_order(system, field=None, wavelength=None, *, epd=None,
                 stop_index=None, force_sym=False):
-    """Parabasal first-order properties of a prescription about a chief ray.
+    """Parabasal first-order properties of a system about a chief ray.
 
     Uses dx/dy/du/dv chief-ray launch tangents to form a 4x4 T/S ABCD map.
     If the chief ray fails, the scalar YNU walk supplies the fallback values.
 
     Parameters
     ----------
-    prescription : sequence of Surface or OpticalSystem
-    field : int, float, tuple, or Field, optional
-        chief-ray field.  When the prescription is a system, this resolves
-        through ``prescription.field``: an int indexes the system FieldSet,
-        a float is a y field angle in degrees, a tuple gives (hx, hy), and
-        None selects the first system field or on-axis.  For a raw surface
-        sequence, only literal Field/float/tuple values are available.
+    system : OpticalSystem or sequence of Surface
+        a system resolves wavelength/EPD/stop/field; a bare sequence needs them
+        passed explicitly.
+    field : int, tuple, or Field, optional
+        chief-ray field; None is the first field (or on-axis).  A bare float is
+        rejected.
     wavelength : float, optional
-        wavelength in microns.  None resolves to the system reference, else
-        0.6328.
+        wavelength in microns; None resolves to the system reference.
     epd : float, optional
         entrance pupil diameter; defaults from the system aperture.
     stop_index : int, optional
@@ -293,21 +292,16 @@ def first_order(prescription, field=0, wavelength=None, *, epd=None,
         computed properties; unavailable quantities are None.
 
     """
-    if hasattr(prescription, 'to_surfaces'):
-        surfaces = prescription.to_surfaces()
-    else:
-        surfaces = list(prescription)
+    surfaces, wvl, epd, stop_index = resolve_chief_metadata(
+        system, wavelength, epd, stop_index)
     if len(surfaces) == 0:
-        raise ValueError('prescription is empty')
-    wvl = system_wavelength(prescription, wavelength)
-    epd = system_epd(prescription, epd, wvl)
-    stop_index = system_stop_index(prescription, stop_index)
-    fld = _resolve_field(prescription, field)
+        raise ValueError('surfaces is empty')
+    fld = _resolve_field(system, field)
 
     out = ParabasalFirstOrder()
     _fill_metadata(out, surfaces, wvl, fld, epd, stop_index, force_sym)
 
-    res = _chief_tangent_trace(prescription, surfaces, fld, wvl)
+    res = _chief_tangent_trace(system, surfaces, fld, wvl)
     trace = res.trace
     valid = valid_mask(trace.status, trace.P[-1])
     chief_ok = (bool(valid[0])
@@ -315,7 +309,7 @@ def first_order(prescription, field=0, wavelength=None, *, epd=None,
                 and bool(np.all(np.isfinite(res.Sdot[-1]))))
 
     if not chief_ok:
-        _fill_from_ynu(out, prescription, wvl, epd, stop_index)
+        _fill_from_ynu(out, system, surfaces, wvl, epd, stop_index)
         if force_sym:
             for name in _PAIR_SLOTS:
                 setattr(out, name, _collapse(getattr(out, name)))
@@ -440,15 +434,17 @@ def first_order(prescription, field=0, wavelength=None, *, epd=None,
     return out
 
 
-def parabasal_foci(prescription, field, wavelength=None):
+def parabasal_foci(system, field, wavelength=None):
     """T/S focus z for one field point via the parabasal tangents.
 
     Parameters
     ----------
-    prescription : sequence of Surface or OpticalSystem
+    system : OpticalSystem or sequence of Surface
+        an OpticalSystem resolves the wavelength and field; a bare surface
+        sequence needs an explicit wavelength and a literal field.
     field : Field or resolvable field spec
     wavelength : float, optional
-        in microns; None resolves to the system reference.
+        in microns; None resolves to the system reference (OpticalSystem only).
 
     Returns
     -------
@@ -456,13 +452,10 @@ def parabasal_foci(prescription, field, wavelength=None):
         lab-frame z where the x and y section pencils focus.
 
     """
-    if hasattr(prescription, 'to_surfaces'):
-        surfaces = prescription.to_surfaces()
-    else:
-        surfaces = list(prescription)
-    wvl = system_wavelength(prescription, wavelength)
-    fld = _resolve_field(prescription, field)
-    res = _chief_tangent_trace(prescription, surfaces, fld, wvl)
+    surfaces, wvl, _, _ = resolve_chief_metadata(
+        system, wavelength, None, None)
+    fld = _resolve_field(system, field)
+    res = _chief_tangent_trace(system, surfaces, fld, wvl)
     trace = res.trace
     valid = valid_mask(trace.status, trace.P[-1])
     if not bool(valid[0]):

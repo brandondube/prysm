@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 
 from prysm.x import materials
+from prysm.x.raytracing.phase import LinearGrating
 from tests.x.raytracing.surface_helpers import (
     plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
     chebyshev, jacobi, toroid, biconic,
@@ -179,7 +180,7 @@ def test_biconic_principal_curvatures_drive_principal_directions():
 def test_grating_zeroth_order_matches_specular():
     """m=0 grating reproduces non-grating baseline."""
     g_surf = plane(interaction='refl', P=[0, 0, 0])
-    g_surf.grating = (1e-3, [1.0, 0.0, 0.0], 0)
+    g_surf.grating = LinearGrating(1e-3, [1.0, 0.0, 0.0], 0)
     base = plane(interaction='refl', P=[0, 0, 0])
     img = plane(interaction='eval', P=[0, 0, -10.0])
     P = np.array([[1.0, 0.0, -5.0], [0.0, 2.0, -5.0]])
@@ -196,7 +197,7 @@ def test_grating_equation_normal_incidence(order):
     d = 2e-3
     wvl = 0.5e-3  # so m*l/d in [0, 1] for orders -2..2
     g_surf = plane(interaction='refl', P=[0, 0, 0])
-    g_surf.grating = (d, [1.0, 0.0, 0.0], order)
+    g_surf.grating = LinearGrating(d, [1.0, 0.0, 0.0], order)
     img = plane(interaction='eval', P=[0, 0, -10.0])
     P = np.array([[0.0, 0.0, -5.0]])
     S = np.array([[0.0, 0.0, 1.0]])
@@ -215,7 +216,7 @@ def test_grating_evanescent_flagged_as_evanescent():
     """
     from prysm.x.raytracing.spencer_and_murty import STATUS_EVANESCENT
     g_surf = plane(interaction='refl', P=[0, 0, 0])
-    g_surf.grating = (0.5e-3, [1.0, 0.0, 0.0], 2)  # m*l/d = 2*0.55e-3/0.5e-3 = 2.2
+    g_surf.grating = LinearGrating(0.5e-3, [1.0, 0.0, 0.0], 2)  # m*l/d = 2*0.55e-3/0.5e-3 = 2.2
     img = plane(interaction='eval', P=[0, 0, -10.0])
     P = np.array([[0.0, 0.0, -5.0]])
     S = np.array([[0.0, 0.0, 1.0]])
@@ -231,7 +232,7 @@ def test_refraction_grating_equation():
     wvl = 0.55e-3
     n_glass = 1.5
     g_surf = plane(interaction='refr', P=[0, 0, 0], material=materials.ConstantMaterial(n_glass))
-    g_surf.grating = (d, [1.0, 0.0, 0.0], 1)
+    g_surf.grating = LinearGrating(d, [1.0, 0.0, 0.0], 1)
     img = plane(interaction='eval', P=[0, 0, 10.0])
     P = np.array([[0.0, 0.0, -5.0]])
     S = np.array([[0.0, 0.0, 1.0]])
@@ -259,13 +260,13 @@ def test_grating_phase_enters_opl():
     S = np.array([[0.0, 0.0, 1.0]])
 
     g1 = plane(interaction='refl', P=[0, 0, 0])
-    g1.grating = (d, [1.0, 0.0, 0.0], 1)
+    g1.grating = LinearGrating(d, [1.0, 0.0, 0.0], 1)
     r1 = raytrace([g1, img], P, S, wvl=wvl)
     np.testing.assert_allclose(r1.OPL[1].item(), 5.0 + wvl * x0 / d, rtol=0, atol=1e-12)
 
     # zeroth order adds no phase: OPL stays the bare geometric length
     g0 = plane(interaction='refl', P=[0, 0, 0])
-    g0.grating = (d, [1.0, 0.0, 0.0], 0)
+    g0.grating = LinearGrating(d, [1.0, 0.0, 0.0], 0)
     r0 = raytrace([g0, img], P, S, wvl=wvl)
     np.testing.assert_allclose(r0.OPL[1].item(), 5.0, rtol=0, atol=1e-12)
 
@@ -283,7 +284,7 @@ def test_grating_off_curved_surface():
     into the per-ray tangent plane, so the effective tangential shift
     decreases as rays move off-axis (cosine of the surface tilt angle)."""
     s = conic(c=1 / 100.0, k=0.0, interaction='refl', P=[0, 0, 0])
-    s.grating = (1e-3, [1.0, 0.0, 0.0], 1)
+    s.grating = LinearGrating(1e-3, [1.0, 0.0, 0.0], 1)
     # axial ray (vertex hit) vs off-axis (y=10, surface normal tilted from z-axis)
     P = np.array([[0.0, 0.0, -50.0],
                   [0.0, 10.0, -50.0]])

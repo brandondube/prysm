@@ -90,7 +90,8 @@ def test_image_distance_single_refracting_sphere():
 
 
 def test_image_distance_unchanged_by_eval_plane_after_last_surface():
-    """Inserting a downstream eval plane must not move the image position."""
+    """A trailing eval/measurement plane is stripped, so the image distance
+    stays referenced to the last refracting vertex and the value is unchanged."""
     R = 50.0
     n_glass = 1.5
     rx_base = [
@@ -100,9 +101,26 @@ def test_image_distance_unchanged_by_eval_plane_after_last_surface():
     rx_with_eval = rx_base + [
         plane(interaction='eval', P=np.array([0., 0., 100.])),
     ]
-    img_z_base = 0.0 + paraxial_image_distance(rx_base, wvl=0.55)
-    img_z_eval = 100.0 + paraxial_image_distance(rx_with_eval, wvl=0.55)
-    np.testing.assert_allclose(img_z_eval, img_z_base, rtol=1e-12)
+    np.testing.assert_allclose(
+        paraxial_image_distance(rx_with_eval, wvl=0.55),
+        paraxial_image_distance(rx_base, wvl=0.55), rtol=1e-12)
+
+
+def test_image_distance_strips_trailing_image_plane():
+    """A compiled list ends in an IMAGE measurement plane; the BFD must stay
+    referenced to the last powered vertex (agreeing with the image-plane-
+    stripped list the solve path passes), not the trailing plane."""
+    from prysm.x.raytracing.spencer_and_murty import _is_measurement_surf
+    ld = LensData()
+    ld.add(Conic(1 / 50.0, 0.0), thickness=5.0,
+           material=materials.ConstantMaterial(1.5))
+    ld.add(Conic(-1 / 50.0, 0.0), thickness=95.0, material=materials.air)
+    full = ld.to_surfaces()              # [OBJECT, S1, S2, IMAGE]
+    assert _is_measurement_surf(full[-1].typ)
+    stripped = full[:-1]                 # the solve path's powered list
+    np.testing.assert_allclose(
+        paraxial_image_distance(full, wvl=0.55),
+        paraxial_image_distance(stripped, wvl=0.55), rtol=1e-12)
 
 
 def test_image_distance_no_power_raises():
@@ -144,10 +162,24 @@ def test_efl_thin_lens_matches_lensmakers():
     np.testing.assert_allclose(efl, f_lens, rtol=1e-6)
 
 
-def test_lensdata_without_wavelengths_uses_default_wavelength():
+def test_paraxial_primitive_requires_resolved_wavelength():
+    # ADR-0001: wavelength resolution lives on OpticalSystem; the free function
+    # is a pure primitive that raises on a None wavelength rather than
+    # silently defaulting.
     ld = LensData().add(Conic(1 / 50.0, 0.0),
                         typ='refr', material=materials.ConstantMaterial(1.5))
-    np.testing.assert_allclose(effective_focal_length(ld), 100.0)
+    with pytest.raises(ValueError, match='wavelength must be resolved'):
+        effective_focal_length(ld.to_surfaces())
+    np.testing.assert_allclose(
+        effective_focal_length(ld.to_surfaces(), wvl=0.6328), 100.0)
+
+
+def test_paraxial_primitive_rejects_system_or_lensdata():
+    # The primitives take compiled surfaces, not a system/LensData.
+    ld = LensData().add(Conic(1 / 50.0, 0.0),
+                        typ='refr', material=materials.ConstantMaterial(1.5))
+    with pytest.raises(TypeError, match='compiled surface list'):
+        effective_focal_length(ld, wvl=0.6328)
 
 
 def test_object_index_comes_from_object_surface_material():
@@ -159,21 +191,23 @@ def test_object_index_comes_from_object_surface_material():
     c = 1 / 50.0
 
     def _lens(n_obj):
+        # the object-space medium lives on the OBJECT endpoint row (ADR-0006)
         ld = LensData()
-        ld.add(Plane(), typ='eval', material=materials.ConstantMaterial(n_obj), thickness=10.0)
+        ld.object_row.material = materials.ConstantMaterial(n_obj)
         ld.add(Conic(c, 0.0), typ='refr', material=materials.ConstantMaterial(1.5))
         return ld
 
     ld = _lens(1.33)
-    assert object_space_index(ld, 0.5) == pytest.approx(1.33)
+    assert object_space_index(ld.to_surfaces(), 0.5) == pytest.approx(1.33)
     # efl = -n_object / C with C = -(n_glass - n_object) * c
     expected = 1.33 / ((1.5 - 1.33) * c)
-    np.testing.assert_allclose(effective_focal_length(ld, wvl=0.5),
+    np.testing.assert_allclose(effective_focal_length(ld.to_surfaces(), wvl=0.5),
                                expected, rtol=1e-9)
     # the air object recovers the bare single-surface focal length
     expected_air = 1.0 / ((1.5 - 1.0) * c)
-    np.testing.assert_allclose(effective_focal_length(_lens(1.0), wvl=0.5),
-                               expected_air, rtol=1e-9)
+    np.testing.assert_allclose(
+        effective_focal_length(_lens(1.0).to_surfaces(), wvl=0.5),
+        expected_air, rtol=1e-9)
 
 
 def test_efl_rc_telescope_matches_design():
@@ -221,7 +255,7 @@ def test_paraxial_matrix_rejects_decentered_geometry():
     ld.add_coordbreak(decenter=(1.0, 0.0, 0.0))
     ld.add(Plane(), typ='eval')
     with pytest.raises(ValueError, match='centered axial'):
-        system_matrix(ld, wvl=0.55)
+        system_matrix(ld.to_surfaces(), wvl=0.55)
 
 
 def test_image_space_index_requires_explicit_image_surface():

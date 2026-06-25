@@ -72,11 +72,11 @@ def fd_jacobian(f, x, step=1e-6, mask=None):
     return J
 
 
-def merit_jacobian_free(lensdata, merit, method='fd', step=1e-6):
-    """Gradient of a scalar merit w.r.t. a LensData's dense free vector.
+def merit_jacobian_free(dofs, merit, method='fd', step=1e-6):
+    """Gradient of a scalar merit w.r.t. a system's dense free vector.
 
     The merit is a zero-argument callable returning the scalar figure of merit
-    of the LensData in its current state.  `method='fd'` perturbs each free
+    of the system in its current state.  `method='fd'` perturbs each free
     DOF with central differences (mutating the free vector in place and
     restoring it on return).  `method='autograd'` differentiates through
     `update` -> `to_surfaces` -> merit, and requires the prysm backend to
@@ -84,11 +84,11 @@ def merit_jacobian_free(lensdata, merit, method='fd', step=1e-6):
 
     Parameters
     ----------
-    lensdata : LensData
-        system whose free vector is differentiated.  Restored to its nominal
-        free vector before return.
+    dofs : DesignState
+        free-vector owner (pack/update) whose DOFs are differentiated.
+        Restored to its nominal free vector before return.
     merit : callable
-        `merit() -> scalar` evaluating the current LensData state.
+        `merit() -> scalar` evaluating the current system state.
     method : {'fd', 'autograd'}, optional
         differentiation backend.  Default `'fd'`.
     step : float, optional
@@ -100,16 +100,16 @@ def merit_jacobian_free(lensdata, merit, method='fd', step=1e-6):
         shape `(n_free,)` gradient of the merit w.r.t. the free vector.
 
     """
-    x0 = lensdata.pack()
+    x0 = dofs.pack()
     n = len(x0)
     if method == 'fd':
         def f(x):
-            lensdata.update(x)
+            dofs.update(x)
             return float(merit())
         try:
             return fd_jacobian(f, x0, step=step)
         finally:
-            lensdata.update(x0)
+            dofs.update(x0)
     if method == 'autograd':
         if np.__name__ != 'torch':
             raise RuntimeError(
@@ -118,13 +118,13 @@ def merit_jacobian_free(lensdata, merit, method='fd', step=1e-6):
             )
         leaf = np.tensor(np.array(x0, dtype=np.float64), requires_grad=True)
         try:
-            lensdata.update(leaf)
+            dofs.update(leaf)
             loss = merit()
             loss.backward()
             grad = leaf.grad
             J = (np.zeros(n, dtype=config.precision)
                  if grad is None else np.array(grad))
         finally:
-            lensdata.update(x0)
+            dofs.update(x0)
         return J
     raise ValueError(f"method must be 'fd' or 'autograd', got {method!r}")

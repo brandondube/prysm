@@ -10,14 +10,11 @@ from prysm.x.raytracing import (
 )
 from prysm.x import materials
 from prysm.x.raytracing.surfaces import Conic, Plane
-from prysm.x.raytracing.paraxial import effective_focal_length, ynu_first_order
+from prysm.x.raytracing.paraxial import effective_focal_length
 from prysm.x.raytracing.analysis import distortion, field_curvature
-from prysm.x.raytracing._meta import (
-    system_wavelength, system_epd, system_stop_index,
-)
 
 
-_n_bk7 = materials.ConstantMaterial('N-BK7', 1.5168)
+_n_bk7 = materials.ConstantMaterial(1.5168, name='N-BK7')
 
 
 # toy dispersion so wavelength selection actually moves the answer
@@ -37,51 +34,57 @@ def _singlet(material=_n_bk7):
                          reference=1, stop_index=0)
 
 
-# ---------- the _meta helpers ----------------------------------------------
+# ---------- system-level metadata resolution (ADR-0001) --------------------
 
 def test_system_wavelength_defaults_and_resolves():
+    # Wavelength resolution lives on OpticalSystem: None -> reference.
     sys = _singlet()
-    assert system_wavelength(sys, None) == pytest.approx(sys.reference_wavelength)
-    assert system_wavelength(sys, 0.5) == pytest.approx(0.5)
+    assert sys.wavelength(None) == pytest.approx(sys.reference_wavelength)
     assert sys.wavelength(0.5) == pytest.approx(0.5)
 
 
-def test_surface_list_defaults_wavelength_to_kernel_default():
-    surfs = list(_singlet().surfaces)
-    # a bare surface sequence carries no metadata: None -> kernel default
-    assert system_wavelength(surfs, None) == pytest.approx(0.6328)
-    assert system_wavelength(surfs, 0.5) == pytest.approx(0.5)
+def test_system_without_wavelengths_uses_kernel_default():
+    # A system carrying no wavelengths resolves None to the kernel default
+    # (0.6328); this default no longer lives in the free primitives.
+    lens = LensData().add(Conic(1 / 102.0, 0.0), thickness=6.0,
+                          material=_n_bk7, semidiameter=12.0)
+    sys = OpticalSystem(lens)
+    assert sys.wavelength(None) == pytest.approx(0.6328)
+    assert sys.wavelength(0.5) == pytest.approx(0.5)
 
 
 def test_system_epd_and_stop_defaults():
     sys = _singlet()
-    assert system_epd(sys, None) == pytest.approx(20.0)
-    assert system_epd(sys, 7.0) == pytest.approx(7.0)        # explicit wins
-    assert system_epd(list(sys.surfaces), None) is None       # no metadata
-    assert system_stop_index(sys, None) == 0
-    assert system_stop_index(sys, 2) == 2
+    assert sys.epd == pytest.approx(20.0)
+    assert sys.entrance_pupil_diameter(0.5) == pytest.approx(20.0)
+    assert sys.stop_index == 0
 
 
 # ---------- paraxial --------------------------------------------------------
 
 def test_efl_defaults_wavelength_to_reference():
+    # Default-wavelength resolution lives on OpticalSystem (ADR-0001); the
+    # system resolves None to the reference before calling the primitive.
     sys = _singlet()
-    assert effective_focal_length(sys) == pytest.approx(
-        effective_focal_length(sys, wvl=sys.wavelength()))
+    assert sys._ynu_first_order().efl == pytest.approx(
+        effective_focal_length(sys.to_surfaces(),
+                               wvl=sys.reference_wavelength))
 
 
 def test_efl_resolves_wavelength_with_dispersion():
     sys = _singlet(material=_dispersive)
+    surfaces = sys.to_surfaces()
     f_val = FRAUNHOFER_LINES_UM['F']
     c_val = FRAUNHOFER_LINES_UM['C']
     # dispersion makes F differ from C
-    assert (effective_focal_length(sys, wvl=f_val)
-            != pytest.approx(effective_focal_length(sys, wvl=c_val)))
+    assert (effective_focal_length(surfaces, wvl=f_val)
+            != pytest.approx(effective_focal_length(surfaces, wvl=c_val)))
 
 
 def test_first_order_defaults_wavelength_epd_stop():
+    # The system resolves wvl/epd/stop and hands the scalars to the primitive.
     sys = _singlet()
-    fo = ynu_first_order(sys)
+    fo = sys._ynu_first_order()
     assert fo.wavelength == pytest.approx(sys.wavelength())
     assert fo.epd == pytest.approx(20.0)   # epd defaulted -> fno computed
     assert fo.fno is not None

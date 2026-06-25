@@ -20,11 +20,9 @@ from .opt import (
 from .analysis import (
     _apply_field_and_output, resolve_exit_pupil, close_on_reference_sphere,
 )
+from ._resolve import resolve_wavelength, compiled_surfaces
 from ._trace_grid import trace_cell
-from ._meta import (
-    system_epd, system_wavelength,
-    object_space_index, image_space_index,
-)
+from ._meta import object_space_index, image_space_index
 
 
 def _complex_sqrt(x):
@@ -60,7 +58,7 @@ class FieldTraceResult:
         return self.trace.status
 
 
-def surface_normals_from_trace(prescription, trace, wavelength):
+def surface_normals_from_trace(system, trace, wavelength):
     """Recompute per-surface normals, incidence cosines, and indices.
 
     The kernel computes the surface normal and the incidence angle internally
@@ -71,10 +69,10 @@ def surface_normals_from_trace(prescription, trace, wavelength):
 
     Parameters
     ----------
-    prescription : sequence of Surface
+    system : sequence of Surface
         the traced system.
     trace : RayTraceResult
-        result of spencer_and_murty.raytrace through prescription.
+        result of spencer_and_murty.raytrace through system.
     wavelength : float
         wavelength in microns, used to evaluate surface indices.
 
@@ -96,7 +94,7 @@ def surface_normals_from_trace(prescription, trace, wavelength):
     """
     P_hist = np.asarray(trace.P)
     S_hist = np.asarray(trace.S)
-    surfaces = list(prescription)
+    surfaces = list(system)
     jj = len(surfaces)
     n_rays = P_hist.shape[1]
     cosI = np.empty((jj, n_rays), dtype=P_hist.dtype)
@@ -104,7 +102,7 @@ def surface_normals_from_trace(prescription, trace, wavelength):
     n1 = np.empty(jj, dtype=config.precision)
     typ = np.empty(jj, dtype=int)
 
-    nj = object_space_index(prescription, wavelength)
+    nj = object_space_index(surfaces, wavelength)
     for j, surf in enumerate(surfaces):
         # incident direction on surface j is S_hist[j]; the intersection is
         # P_hist[j+1].  Transform both into the surface's local frame.
@@ -231,17 +229,17 @@ def _power_coefficient(a_s, a_p):
     return 0.5 * (np.abs(a_s) ** 2 + np.abs(a_p) ** 2)
 
 
-def unpolarized_amplitude(prescription, trace, wavelength):
+def unpolarized_amplitude(system, trace, wavelength):
     """Per-ray scalar amplitude transmittance through the system.
 
     Uses sqrt((|a_s|**2 + |a_p|**2) / 2) at each surface.
 
     Parameters
     ----------
-    prescription : sequence of Surface
+    system : sequence of Surface
         the traced system.
     trace : RayTraceResult
-        result of raytrace through prescription.
+        result of raytrace through system.
     wavelength : float
         wavelength in microns.
 
@@ -252,8 +250,8 @@ def unpolarized_amplitude(prescription, trace, wavelength):
 
     """
     cosI, n0, n1, typ = surface_normals_from_trace(
-        prescription, trace, wavelength)
-    surfaces = list(prescription)
+        system, trace, wavelength)
+    surfaces = list(system)
     jj, n_rays = cosI.shape
     amp = np.ones(n_rays, dtype=config.precision)
     for j in range(jj):
@@ -267,12 +265,12 @@ def unpolarized_amplitude(prescription, trace, wavelength):
     return amp
 
 
-def raytrace_field(prescription, P, S, wavelength):
+def raytrace_field(system, P, S, wavelength):
     """Intensity-aware trace: geometry plus a scalar amplitude.
 
     Parameters
     ----------
-    prescription : sequence of Surface
+    system : sequence of Surface
         the system to trace.
     P, S : ndarray, shape (N, 3)
         launch positions and direction cosines.
@@ -285,8 +283,8 @@ def raytrace_field(prescription, P, S, wavelength):
         carrying the geometric trace and the per-ray amplitude.
 
     """
-    trace = raytrace(prescription, P, S, wavelength)
-    amplitude = unpolarized_amplitude(prescription, trace, wavelength)
+    trace = raytrace(system, P, S, wavelength)
+    amplitude = unpolarized_amplitude(system, trace, wavelength)
     return FieldTraceResult(trace, amplitude)
 
 
@@ -327,7 +325,7 @@ def sine_space_coords(S_last, S_chief, scale, axis_dir=None):
     -------
     X, Y : ndarray, shape (N,)
         sine-space pupil coordinates, referenced to the chief, in the same
-        length units as the prescription.
+        length units as the system.
 
     """
     S_last = np.asarray(S_last)
@@ -441,13 +439,14 @@ class PupilField:
         return self.P_matrix is not None
 
 
-def _pupil_coordinate_scale(prescription, wavelength, P_xp, center):
+def _pupil_coordinate_scale(system, wavelength, P_xp, center):
     """Length scale for the sine-space pupil coordinate.
 
     Uses |EFL| when available, otherwise the reference-sphere radius.
     """
+    surfaces = compiled_surfaces(system)
     try:
-        return abs(float(effective_focal_length(prescription, wvl=wavelength)))
+        return abs(float(effective_focal_length(surfaces, wvl=wavelength)))
     except ValueError:
         if P_xp is None:
             raise
@@ -455,7 +454,7 @@ def _pupil_coordinate_scale(prescription, wavelength, P_xp, center):
                                      - np.asarray(center)) ** 2)))
 
 
-def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
+def pupil_field(system, field, wavelength=None, *, epd=None, npupil=64,
                 stop_index=None, P_xp=None, P_img=None, axis_dir=None,
                 pupil_z=None,
                 output='length', reference='chief', polarized=False):
@@ -463,7 +462,7 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
 
     Parameters
     ----------
-    prescription : sequence of Surface or LensData
+    system : sequence of Surface or LensData
     field : Field
         the field point to evaluate.
     wavelength : float, optional
@@ -494,8 +493,11 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
         scattered sine-space samples.
 
     """
-    wavelength = system_wavelength(prescription, wavelength)
-    epd = system_epd(prescription, epd, wavelength)
+    wavelength = resolve_wavelength(system, wavelength)
+    if epd is None:
+        resolver = getattr(system, 'entrance_pupil_diameter', None)
+        if callable(resolver):
+            epd = resolver(wavelength)
     if epd is None:
         raise TypeError(
             'epd is required; pass epd=... or an OpticalSystem whose aperture '
@@ -503,7 +505,8 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
     if reference not in ('chief', 'centroid'):
         raise ValueError(
             f"reference must be 'chief' or 'centroid', got {reference!r}")
-    n_object = object_space_index(prescription, wavelength)
+    surfaces = compiled_surfaces(system)
+    n_object = object_space_index(surfaces, wavelength)
 
     sampling = Sampling.rect(n=npupil)
 
@@ -512,7 +515,7 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
             return raytrace_prt(presc, P, S, w)
         return raytrace_field(presc, P, S, w)
 
-    record = trace_cell(prescription, field, wavelength, sampling,
+    record = trace_cell(system, field, wavelength, sampling,
                         epd=epd, pupil_z=pupil_z, trace_fn=_trace_fn)
     valid = record.valid
     result = record.trace
@@ -561,19 +564,19 @@ def pupil_field(prescription, field, wavelength=None, *, epd=None, npupil=64,
     if P_xp is None:
         # Even rect grids put the auto-chief half a step off axis.
         P_xp = resolve_exit_pupil(
-            prescription, wavelength, stop_index=stop_index, epd=epd,
+            system, wavelength, stop_index=stop_index, epd=epd,
             chief=(chief_P, trace.S[-1, chief_index]), axis_dir=axis_dir,
             min_perp=1e-3)
 
     # OPD on the chief-image reference sphere, valid rays only.
-    n_image = image_space_index(prescription, wavelength, fallback=n_object)
+    n_image = image_space_index(surfaces, wavelength, fallback=n_object)
     closing = close_on_reference_sphere(trace, valid, chief_index,
                                         center=P_img, P_xp=P_xp,
                                         n_image=n_image)
     opd = closing.opd
 
     # Sine-space pupil coordinates from ray direction cosines.
-    scale = _pupil_coordinate_scale(prescription, wavelength, P_xp, P_img)
+    scale = _pupil_coordinate_scale(system, wavelength, P_xp, P_img)
     X_all, Y_all = sine_space_coords(trace.S[-1], trace.S[-1, chief_index],
                                      scale, axis_dir)
 
@@ -799,12 +802,12 @@ def _unit(v):
     return v / n
 
 
-def raytrace_prt(prescription, P, S, wavelength):
+def raytrace_prt(system, P, S, wavelength):
     """Polarization ray trace: geometry plus a per-ray 3x3 P matrix.
 
     Parameters
     ----------
-    prescription : sequence of Surface
+    system : sequence of Surface
     P, S : ndarray, shape (N, 3)
         launch positions and direction cosines.
     wavelength : float
@@ -816,15 +819,15 @@ def raytrace_prt(prescription, P, S, wavelength):
         the geometric trace and the per-ray (N, 3, 3) complex P matrix.
 
     """
-    trace = raytrace(prescription, P, S, wavelength)
-    surfaces = list(prescription)
+    trace = raytrace(system, P, S, wavelength)
+    surfaces = list(system)
     P_hist = trace.P
     S_hist = trace.S
     n_rays = P_hist.shape[1]
     Pmat = np.broadcast_to(np.eye(3, dtype=config.precision_complex),
                            (n_rays, 3, 3)).copy()
 
-    nj = object_space_index(prescription, wavelength)
+    nj = object_space_index(surfaces, wavelength)
     for j, surf in enumerate(surfaces):
         coating = surf.coating
         k_in = _unit(S_hist[j])

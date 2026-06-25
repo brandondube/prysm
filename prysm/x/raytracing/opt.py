@@ -11,7 +11,7 @@ from ._line_math import (
 )
 
 
-def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
+def aim_rays(P, S, surfaces, surface_index, target_xy, wvl,
              tol=1e-12, maxiter=20, strict=True, vary='position'):
     """Aim a bundle of rays so each lands at target_xy on a surface.
 
@@ -21,7 +21,7 @@ def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
         shape (N, 3), launch positions.
     S : ndarray
         shape (N, 3), launch direction cosines.
-    prescription : sequence of Surface
+    surfaces : sequence of Surface
         the system traced through during aiming.
     surface_index : int
         index of the aim surface; rays are driven to target_xy on it.
@@ -57,7 +57,7 @@ def aim_rays(P, S, prescription, surface_index, target_xy, wvl,
     target = np.asarray(target_xy, dtype=config.precision)
     if target.ndim == 1:
         target = target.reshape(1, 2)
-    trace_path = prescription[:surface_index + 1]
+    trace_path = surfaces[:surface_index + 1]
 
     if vary == 'direction':
         sz_sign = np.sign(S[:, 2])
@@ -413,7 +413,7 @@ def hopkins_eic_closing(P_hist, S_hist, OPL_hist, *, center, curvature,
     -------
     opd : ndarray, shape (N,)
         OPD relative to the chief (longer ray OPL -> positive), in the same
-        length units as the prescription.
+        length units as the surfaces.
 
     """
     C = np.asarray(center)

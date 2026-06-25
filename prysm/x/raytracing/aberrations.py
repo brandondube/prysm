@@ -10,14 +10,10 @@ from .paraxial import (
     entrance_pupil_z,
     local_vertex_curvatures,
 )
-from ._meta import (
-    system_wavelength,
-    system_epd,
-    system_stop_index,
-    object_space_index,
-)
+from ._meta import object_space_index
+from ._resolve import compiled_surfaces, resolve_chief_metadata
 
-# microns of wavelength per one prescription length unit, used to express the
+# microns of wavelength per one system length unit, used to express the
 # wavefront coefficients in waves.  Unknown units fall back to mm (prysm's
 # documented default, matching analysis.wavefront).
 _MICRONS_PER_UNIT = {
@@ -42,23 +38,16 @@ class _ParaxialRecord:
         self.typ = typ
 
 
-def _surfaces_of(prescription):
-    """Compiled Surface list for a LensData, or the sequence itself."""
-    if hasattr(prescription, 'to_surfaces'):
-        return prescription.to_surfaces()
-    return list(prescription)
-
-
-def paraxial_trace(prescription, y0, theta0, wvl, n_ambient):
+def paraxial_trace(system, y0, theta0, wvl, n_ambient):
     """Trace one paraxial ray in real-slope coordinates, recording each surface.
 
-    Walks the prescription vertex-to-vertex: a transfer y += t*theta through
+    Walks the system vertex-to-vertex: a transfer y += t*theta through
     each gap, then refraction (or reflection, n' = -n) at the surface.  theta
     is the real ray slope (not the reduced angle n*theta).
 
     Parameters
     ----------
-    prescription : sequence of Surface or LensData
+    system : sequence of Surface or LensData
     y0 : float
         ray height at the first surface vertex.
     theta0 : float
@@ -74,7 +63,7 @@ def paraxial_trace(prescription, y0, theta0, wvl, n_ambient):
         one record per surface, in order.
 
     """
-    surfaces = _surfaces_of(prescription)
+    surfaces = compiled_surfaces(system)
     _assert_first_order_geometry(surfaces)
     recs = []
     n = float(n_ambient)
@@ -200,7 +189,7 @@ def _max_field(fields):
     return best
 
 
-def _marginal_chief_launch(prescription, field, wvl, n_ambient, epd,
+def _marginal_chief_launch(system, field, wvl, n_ambient, epd,
                            stop_index):
     """Object-space (y, theta) launches for the marginal and chief rays.
 
@@ -209,14 +198,14 @@ def _marginal_chief_launch(prescription, field, wvl, n_ambient, epd,
     through the center of the entrance pupil.
 
     """
-    z_ep = entrance_pupil_z(prescription, wvl, stop_index=stop_index)
+    surfaces = compiled_surfaces(system)
+    z_ep = entrance_pupil_z(surfaces, wvl, stop_index=stop_index)
     if z_ep is None:
         raise ValueError(
             'cannot locate the entrance pupil (no aperture stop, or the '
             'system is telecentric in object space); Seidel sums need a '
             'defined chief ray.  Set stop_index on the OpticalSystem.'
         )
-    surfaces = _surfaces_of(prescription)
     z_s1 = float(surfaces[0].P[2])
     a = float(epd) / 2.0
 
@@ -246,7 +235,7 @@ class SeidelResult:
     ----------
     SI, SII, SIII, SIV, SV : ndarray
         per-surface Seidel sums (spherical, coma, astigmatism, Petzval,
-        distortion), in prescription length units.  Aspheric fourth-order
+        distortion), in system length units.  Aspheric fourth-order
         contributions are folded in.
     CI, CII : ndarray or None
         per-surface primary axial and lateral chromatic sums; None when fewer
@@ -258,7 +247,7 @@ class SeidelResult:
     wavelength : float
         wavelength used, microns.
     unit : str
-        prescription length unit used for the waves conversion.
+        system length unit used for the waves conversion.
     field : Field
         the field point the chief-ray terms were evaluated at.
 
@@ -307,7 +296,7 @@ class SeidelResult:
         (astigmatism), W220 (field curvature, Petzval + tangential), and
         W311 (distortion), following Welford's 1/8, 1/2, 1/2, 1/4, 1/2
         factors.  Waves are referenced to the analysis wavelength expressed
-        in the prescription length unit.
+        in the system length unit.
 
         """
         wvl_len = self._wavelength_in_length()
@@ -368,14 +357,14 @@ class SeidelResult:
         return '\n'.join(lines)
 
 
-def seidel_aberrations(prescription, field=None, wvl=None, *,
+def seidel_aberrations(system, field=None, wvl=None, *,
                        epd=None, stop_index=None,
                        wavelengths=None, unit=None):
     """Compute surface-by-surface Seidel and primary chromatic aberrations.
 
     Parameters
     ----------
-    prescription : sequence of Surface or OpticalSystem
+    system : sequence of Surface or OpticalSystem
         the system.  An OpticalSystem supplies epd, stop_index, fields,
         reference wavelength, and unit when those arguments are omitted; the
         object-space index comes from the object surface material.
@@ -383,9 +372,8 @@ def seidel_aberrations(prescription, field=None, wvl=None, *,
         the field point at which the field-dependent terms (coma,
         astigmatism, distortion, lateral color) are evaluated.  Defaults to
         the largest-magnitude field of the system.
-    wvl : float or str, optional
-        wavelength in microns (or a system wavelength name).  Defaults to
-        the reference wavelength.
+    wvl : float, optional
+        wavelength in microns.  Defaults to the reference wavelength.
     epd : float, optional
         entrance pupil diameter.
     stop_index : int, optional
@@ -395,7 +383,7 @@ def seidel_aberrations(prescription, field=None, wvl=None, *,
         Defaults to the system wavelengths.  Chromatic terms are skipped
         when fewer than two are available.
     unit : str, optional
-        prescription length unit, used only for the waves conversion in
+        system length unit, used only for the waves conversion in
         SeidelResult.wavefront_coefficients.  Defaults to a system unit,
         else 'mm'.
 
@@ -404,29 +392,27 @@ def seidel_aberrations(prescription, field=None, wvl=None, *,
     SeidelResult
 
     """
-    wvl = system_wavelength(prescription, wvl)
-    n_object = object_space_index(prescription, wvl)
-    epd = system_epd(prescription, epd, wvl)
-    stop_index = system_stop_index(prescription, stop_index)
+    surfaces, wvl, epd, stop_index = resolve_chief_metadata(
+        system, wvl, epd, stop_index)
+    n_object = object_space_index(surfaces, wvl)
     if epd is None:
         raise ValueError('an entrance pupil diameter is required (epd=...)')
     if field is None:
-        fields = getattr(prescription, 'fields', None)
+        fields = getattr(system, 'fields', None)
         if not fields:
             raise ValueError(
-                'a field is required (field=...); the prescription carries '
+                'a field is required (field=...); the system carries '
                 'no fields to default from.'
             )
         field = _max_field(fields)
     if unit is None:
-        unit = getattr(prescription, 'unit', None) or 'mm'
+        unit = getattr(system, 'unit', None) or 'mm'
     if wavelengths is None:
-        wavelengths = getattr(prescription, 'wavelengths', None)
-    surfaces = _surfaces_of(prescription)
+        wavelengths = getattr(system, 'wavelengths', None)
     _assert_rotational_third_order_geometry(surfaces)
 
     (y0_m, u0_m), (y0_c, u0_c) = _marginal_chief_launch(
-        prescription, field, wvl, n_object, epd, stop_index)
+        system, field, wvl, n_object, epd, stop_index)
 
     marg = paraxial_trace(surfaces, y0_m, u0_m, wvl, n_object)
     chief = paraxial_trace(surfaces, y0_c, u0_c, wvl, n_object)

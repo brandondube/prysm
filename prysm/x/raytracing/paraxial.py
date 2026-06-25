@@ -3,20 +3,16 @@
 from prysm.conf import config
 from prysm.mathops import np
 
-from .spencer_and_murty import STYPE_REFLECT, STYPE_REFRACT
-from ._meta import (
-    system_wavelength,
-    system_epd,
-    system_stop_index,
-    object_space_index,
-)
+from .spencer_and_murty import (
+    STYPE_REFLECT, STYPE_REFRACT, _is_measurement_surf)
+from ._meta import object_space_index
 
 
 _AXIAL_GEOMETRY_TOL = 1e-12
 
 
 class NonAxialSystemError(ValueError):
-    """A prescription is outside the centered-axial first-order ABCD contract.
+    """A surface sequence is outside the centered-axial first-order ABCD contract.
 
     Subclasses ValueError so existing broad handlers keep working; callers that
     can degrade gracefully (e.g. entrance-pupil resolution on a tilted system)
@@ -24,11 +20,25 @@ class NonAxialSystemError(ValueError):
     """
 
 
-def _as_surface_list(prescription):
-    """Compiled Surface list for a LensData, or the supplied sequence."""
-    if hasattr(prescription, 'to_surfaces'):
-        return prescription.to_surfaces()
-    return list(prescription)
+def _require_wavelength(wvl):
+    """Coerce a resolved wavelength to a float, raising when it is absent."""
+    if wvl is None:
+        raise ValueError(
+            'wavelength must be resolved before calling a paraxial primitive; '
+            'pass an explicit wvl or call via the OpticalSystem, which resolves '
+            'None to the reference wavelength.'
+        )
+    return float(wvl)
+
+
+def _as_surface_list(surfaces):
+    """Validate that surfaces is a compiled list, not a system or LensData."""
+    if hasattr(surfaces, 'to_surfaces'):
+        raise TypeError(
+            'paraxial primitives take a compiled surface list, not a system or '
+            'LensData; pass system.to_surfaces().'
+        )
+    return list(surfaces)
 
 
 def _as_float_scalar(value):
@@ -130,9 +140,9 @@ def _assert_first_order_geometry(surfaces):
                 pass
 
 
-def _first_order_surfaces(prescription):
+def _first_order_surfaces(surfaces):
     """Surface list validated for centered axial first-order analysis."""
-    surfaces = _as_surface_list(prescription)
+    surfaces = _as_surface_list(surfaces)
     _assert_first_order_geometry(surfaces)
     return surfaces
 
@@ -160,16 +170,16 @@ def _apply_surface_matrix(M, n, surf, wvl):
     return M, n
 
 
-def _walk_matrix(prescription, wvl, n_start, *,
+def _walk_matrix(surfaces, wvl, n_start, *,
                  end_index=None, include_end_surface=True):
-    """Walk a prescription and compose its ABCD matrix from a starting index."""
-    prescription = _first_order_surfaces(prescription)
+    """Walk a surface sequence and compose its ABCD matrix from a start index."""
+    surfaces = _first_order_surfaces(surfaces)
     M = np.eye(2, dtype=config.precision)
     n = float(n_start)
-    z_prev = float(prescription[0].P[2])
+    z_prev = float(surfaces[0].P[2])
     if end_index is None:
-        end_index = len(prescription) - 1
-    for k, surf in enumerate(prescription):
+        end_index = len(surfaces) - 1
+    for k, surf in enumerate(surfaces):
         if k > end_index:
             break
         if k > 0:
@@ -181,30 +191,18 @@ def _walk_matrix(prescription, wvl, n_start, *,
     return M, n
 
 
-def system_matrix(prescription, wvl=None):
-    """Compose the local-y 2x2 ABCD system matrix for a sequential prescription.
+def system_matrix(surfaces, wvl=None):
+    """Compose the local-y 2x2 ABCD system matrix for a sequential system.
 
-    Walks the prescription in order: between consecutive surfaces a
-    translation matrix is applied with the running index n; at each
-    surface the refraction (or reflection, with n' = -n) matrix updates
-    the state.  Eval planes contribute only the translation that brings the
-    walk to their vertex.
+    Translation by the running index between surfaces, refraction (or
+    reflection, with n' = -n) at each.  Requires centered axial geometry.
 
     Parameters
     ----------
-    prescription : sequence of Surface
-        the prescription to analyse.  The scalar ABCD path assumes centered
-        axial geometry and uses each surface's local y vertex curvature.
-        Planes and eval surfaces do not contribute power.  When an
-        OpticalSystem is passed, wvl defaults to its reference wavelength.
-        The object-space index is taken from the object surface material (the
-        leading eval row), else air.
-    wvl : float or str, optional
-        wavelength in microns (passed to each refractive surface's n
-        callback).  A string names a wavelength of the system.  None
-        (default) resolves to the reference wavelength, or 0.6328
-        for a bare Surface sequence.  Has no effect on a purely reflective
-        prescription.
+    surfaces : sequence of Surface
+        compiled surfaces; the object-space index comes from the object row.
+    wvl : float
+        wavelength in microns
 
     Returns
     -------
@@ -212,43 +210,47 @@ def system_matrix(prescription, wvl=None):
         2x2 system matrix in (y, u) coordinates.
     n_final : float
         signed index of refraction in image space.  Negative when the
-        prescription contains an odd number of reflections.
+        surfaces contain an odd number of reflections.
 
     """
-    surfaces = _first_order_surfaces(prescription)
-    wvl = system_wavelength(prescription, wvl)
+    surfaces = _first_order_surfaces(surfaces)
+    wvl = _require_wavelength(wvl)
     n_object = object_space_index(surfaces, wvl)
     return _walk_matrix(surfaces, wvl, n_object)
 
 
-def paraxial_image_distance(prescription, wvl=None):
-    """Signed distance from the last surface vertex to the paraxial image plane for a collimated on-axis input.
+def paraxial_image_distance(surfaces, wvl=None):
+    """Signed distance from the last powered vertex to the paraxial image plane.
 
-    For a marginal ray launched at (y0, u0 = 0), the image plane is the
-    z position where y returns to zero.  In matrix form, this is
-    t = -A * n_final / C where A and C are entries of the
-    system matrix and n_final is the (signed) image-space index.
+    t = -A * n_final / C, where the image plane is where a collimated on-axis
+    ray (y0, u0=0) returns to y=0.
 
     Parameters
     ----------
-    prescription : sequence of Surface
+    surfaces : sequence of Surface
     wvl : float
         wavelength in microns
 
     Returns
     -------
     bfd : float
-        signed lab-frame z-displacement from prescription[-1].P[2] to
-        the paraxial image.
+        signed lab-frame z-displacement from the last powered surface vertex
+        to the paraxial image.
 
     Raises
     ------
     ValueError
-        if the prescription has no net paraxial power; collimated input
+        if the surfaces have no net paraxial power; collimated input
         stays collimated and there is no finite image distance.
 
     """
-    M, n_final = system_matrix(prescription, wvl=wvl)
+    surfaces = _as_surface_list(surfaces)
+    # strip trailing measurement planes so the BFD references the last
+    # interacting vertex, not the image plane's back-focal gap
+    while len(surfaces) > 1 and _is_measurement_surf(
+            getattr(surfaces[-1], 'typ', None)):
+        surfaces = surfaces[:-1]
+    M, n_final = system_matrix(surfaces, wvl=wvl)
     A = M[0, 0]
     C = M[1, 0]
     if abs(C) < 1e-30:
@@ -260,17 +262,13 @@ def paraxial_image_distance(prescription, wvl=None):
     return -A * n_final / C
 
 
-def effective_focal_length(prescription, wvl=None):
+def effective_focal_length(surfaces, wvl=None):
     """System effective focal length (EFL) from the ABCD matrix.
 
-    EFL = -n_object / C, where C is the system matrix entry coupling input
-    height to output reduced angle and n_object is the object-space index.
-    Sign follows the usual convention: positive EFL for a converging system
-    seen from object space.
-
+    EFL = -n_object / C; positive for a converging system seen from object space.
     """
-    surfaces = _first_order_surfaces(prescription)
-    wvl = system_wavelength(prescription, wvl)
+    surfaces = _first_order_surfaces(surfaces)
+    wvl = _require_wavelength(wvl)
     n_object = object_space_index(surfaces, wvl)
     M, _ = _walk_matrix(surfaces, wvl, n_object)
     C = M[1, 0]
@@ -281,41 +279,39 @@ def effective_focal_length(prescription, wvl=None):
     return -float(n_object) / C
 
 
-def back_focal_length(prescription, wvl=None):
-    """System back focal length (BFL) — distance from the last *powered* surface vertex to the rear focal point.
+def back_focal_length(surfaces, wvl=None):
+    """Distance from the last *powered* vertex to the rear focal point.
 
-    Equivalent to paraxial_image_distance when the prescription ends at
-    the last powered surface; if downstream eval planes are present, BFL
-    measures from the last surface with non-zero curvature, while
-    paraxial_image_distance measures from the very last entry.
-
+    Differs from paraxial_image_distance only when the last interacting
+    surface is flat: BFL measures from the last curved vertex.
     """
-    surfaces = _first_order_surfaces(prescription)
+    surfaces = _first_order_surfaces(surfaces)
     last_powered = None
+    last_interacting = None
     for surf in surfaces:
-        if (_paraxial_curvature(surf) != 0.0
-                and surf.typ in (STYPE_REFLECT, STYPE_REFRACT)):
+        if surf.typ not in (STYPE_REFLECT, STYPE_REFRACT):
+            continue
+        last_interacting = surf
+        if _paraxial_curvature(surf) != 0.0:
             last_powered = surf
     if last_powered is None:
         raise ValueError(
-            'prescription contains no powered surfaces; BFL is undefined.'
+            'surfaces contain no powered surfaces; BFL is undefined.'
         )
-    bfd_from_end = paraxial_image_distance(surfaces, wvl=wvl)
-    extra = float(surfaces[-1].P[2]) - float(last_powered.P[2])
-    return bfd_from_end + extra
+    # paraxial_image_distance references the last interacting (refracting/
+    # reflecting) vertex; translate that to the last *powered* vertex.
+    bfd = paraxial_image_distance(surfaces, wvl=wvl)
+    extra = float(last_interacting.P[2]) - float(last_powered.P[2])
+    return bfd + extra
 
 
-def front_focal_length(prescription, wvl=None):
-    """System front focal length (FFL) — distance from the front focal point to the first *powered* surface vertex.
+def front_focal_length(surfaces, wvl=None):
+    """Distance from the front focal point to the first *powered* vertex.
 
-    Sign convention: positive when the front focal point lies upstream of
-    the first powered surface (the usual case for a converging system in
-    air).  Computed from the system matrix as -D * n_object / C and
-    then translated to the first powered vertex if leading eval planes are
-    present.
-
+    -D * n_object / C, translated to the first powered vertex.  Positive when
+    the front focus lies upstream of it.
     """
-    surfaces = _first_order_surfaces(prescription)
+    surfaces = _first_order_surfaces(surfaces)
     first_powered = None
     for surf in surfaces:
         if (_paraxial_curvature(surf) != 0.0
@@ -324,9 +320,9 @@ def front_focal_length(prescription, wvl=None):
             break
     if first_powered is None:
         raise ValueError(
-            'prescription contains no powered surfaces; FFL is undefined.'
+            'surfaces contain no powered surfaces; FFL is undefined.'
         )
-    wvl = system_wavelength(prescription, wvl)
+    wvl = _require_wavelength(wvl)
     n_object = object_space_index(surfaces, wvl)
     M, _ = _walk_matrix(surfaces, wvl, n_object)
     C = M[1, 0]
@@ -340,37 +336,31 @@ def front_focal_length(prescription, wvl=None):
     return ffl_from_first_entry + extra
 
 
-def _matrix_to_plane(prescription, k, wvl, n_start):
-    """ABCD from the first entry's vertex (with refraction) to the *plane* of prescription[k] — translation only, no refraction at k.
+def _matrix_to_plane(surfaces, k, wvl, n_start):
+    """ABCD from the first vertex to the plane of surfaces[k], no refraction at k.
 
-    Returns (M, n_at_plane).  Used for paraxial pupil location, where
-    the stop is treated as an aperture in a plane rather than as a
-    refracting surface.
-
+    Returns (M, n_at_plane).  Used for pupil location, where the stop is an
+    aperture in a plane rather than a refracting surface.
     """
-    return _walk_matrix(prescription, wvl, n_start,
+    return _walk_matrix(surfaces, wvl, n_start,
                         end_index=k, include_end_surface=False)
 
 
-def entrance_pupil_z(prescription, wvl=None, stop_index=None):
+def entrance_pupil_z(surfaces, wvl=None, stop_index=None):
     """Lab-frame z of the paraxial entrance pupil.
 
-    The entrance pupil is the image of the aperture stop in object space; its
-    center is where an object-space chief ray crosses the axis.  This is the
-    plane a collimated or finite-conjugate bundle must pass through for a
-    field point to be sampled correctly, so launch() uses it to position
-    off-axis bundles.
+    The stop imaged into object space; launch() positions off-axis bundles
+    through it.
 
     Parameters
     ----------
-    prescription : sequence of Surface
-        when an OpticalSystem is passed, wvl and stop_index each default to the
-        corresponding system metadata it carries; the object-space index comes
-        from the object surface material.
-    wvl : float or str, optional
-        wavelength in microns (or a system wavelength name).
+    surfaces : sequence of Surface
+        compiled surfaces; the object-space index comes from the object
+        surface material.
+    wvl : float
+        wavelength in microns.
     stop_index : int, optional
-        index of the aperture stop within prescription.
+        index of the aperture stop within surfaces.
 
     Returns
     -------
@@ -381,10 +371,9 @@ def entrance_pupil_z(prescription, wvl=None, stop_index=None):
         object space (entrance pupil at infinity).
 
     """
-    surfaces = _first_order_surfaces(prescription)
-    wvl = system_wavelength(prescription, wvl)
+    surfaces = _first_order_surfaces(surfaces)
+    wvl = _require_wavelength(wvl)
     n_object = object_space_index(surfaces, wvl)
-    stop_index = system_stop_index(prescription, stop_index)
     if stop_index is None:
         return None
     k = int(stop_index)
@@ -400,7 +389,7 @@ def entrance_pupil_z(prescription, wvl=None, stop_index=None):
 
 
 class FirstOrderProperties:
-    """Paraxial first-order properties of a prescription."""
+    """Paraxial first-order properties of a surface sequence."""
 
     __slots__ = (
         'wavelength', 'n_object', 'n_image',
@@ -454,17 +443,16 @@ class FirstOrderProperties:
         return '\n'.join(line for line in lines if line is not None)
 
 
-def ynu_first_order(prescription, wvl=None, *, epd=None, stop_index=None):
+def ynu_first_order(surfaces, wvl=None, *, epd=None, stop_index=None):
     """Paraxial first-order properties from the scalar YNU/ABCD matrix walk.
 
     Requires centered axial geometry.
 
     Parameters
     ----------
-    prescription : sequence of Surface
-    wvl : float or str, optional
-        wavelength in microns (or a system wavelength name).  None defaults
-        to the reference wavelength, else 0.6328.
+    surfaces : sequence of Surface
+    wvl : float
+        wavelength in microns.
     epd : float, optional
         entrance pupil diameter.
     stop_index : int, optional
@@ -476,15 +464,14 @@ def ynu_first_order(prescription, wvl=None, *, epd=None, stop_index=None):
         computed properties; unavailable quantities are None.
 
     """
-    surfaces = _first_order_surfaces(prescription)
-    wvl = system_wavelength(prescription, wvl)
+    surfaces = _first_order_surfaces(surfaces)
+    wvl = _require_wavelength(wvl)
     n_object = object_space_index(surfaces, wvl)
-    epd = system_epd(prescription, epd, wvl)
-    stop_index = system_stop_index(prescription, stop_index)
+    epd = None if epd is None else float(epd)
     out = FirstOrderProperties()
     n_surfaces = len(surfaces)
     if n_surfaces == 0:
-        raise ValueError('prescription is empty')
+        raise ValueError('surfaces is empty')
 
     out.wavelength = float(wvl)
     out.n_object = float(n_object)
@@ -497,7 +484,6 @@ def ynu_first_order(prescription, wvl=None, *, epd=None, stop_index=None):
     M, n_image_signed = _walk_matrix(surfaces, wvl, n_object)
     out.n_image = float(n_image_signed)
     A = float(M[0, 0])
-    B = float(M[0, 1])
     C = float(M[1, 0])
     D = float(M[1, 1])
 
@@ -518,7 +504,7 @@ def ynu_first_order(prescription, wvl=None, *, epd=None, stop_index=None):
                     first_powered = surf
                 last_powered = surf
         # measured from the last reflecting/refracting surface, not from
-        # surfaces[-1]: a prescription whose last entry is an image plane at
+        # surfaces[-1]: a system whose last entry is an image plane at
         # paraxial focus would otherwise always report ~0
         if last_interacting is not None:
             out.paraxial_image_distance = (
@@ -543,7 +529,7 @@ def ynu_first_order(prescription, wvl=None, *, epd=None, stop_index=None):
         k = int(stop_index)
         if k < 0 or k >= n_surfaces:
             raise IndexError(
-                f'stop_index {k} out of range for prescription of length '
+                f'stop_index {k} out of range for surfaces of length '
                 f'{n_surfaces}'
             )
         out.stop_index = k

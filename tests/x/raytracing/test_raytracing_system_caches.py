@@ -15,20 +15,19 @@ from prysm.x.raytracing.system import ApertureSpec as _ApertureSpec
 
 
 def _doublet(aperture=None):
+    # OBJECT/IMAGE endpoints implicit (ADR-0006); first powered surface is row 1.
     ld = (LensData()
-          .add(Plane(), typ='eval', thickness=10.0)
           .add(Sphere(1 / 61.47), thickness=6.0,
                material=materials.ConstantMaterial(1.5168), semidiameter=12.0)
           .add(Sphere(-1 / 44.64), thickness=2.5,
                material=materials.ConstantMaterial(1.673), semidiameter=12.0)
           .add(Sphere(-1 / 129.94), thickness=0.0,
-               material=materials.air, semidiameter=12.0)
-          .add(Plane(), typ='eval'))
+               material=materials.air, semidiameter=12.0))
     sys = OpticalSystem(ld, aperture=aperture or ApertureSpec.epd(22.0),
                         fields=[Field(0, 0), Field(0, 0.7), Field(0, 1.0)],
                         wavelengths=[0.486, 0.587, 0.656], reference=1,
                         stop_index=1)
-    sys.solve_image_distance()
+    sys.solve.image_distance()
     return sys
 
 
@@ -63,7 +62,8 @@ def test_first_order_cached_per_version_and_wavelength(monkeypatch):
 
 def test_entrance_pupil_z_cached_and_correct(monkeypatch):
     sys = _doublet()
-    direct = paraxial.entrance_pupil_z(sys, 0.587)
+    direct = paraxial.entrance_pupil_z(sys.to_surfaces(), 0.587,
+                                       stop_index=sys.stop_index)
     calls = _count_calls(monkeypatch, paraxial, 'entrance_pupil_z')
     z1 = sys.entrance_pupil_z(0.587)
     z2 = sys.entrance_pupil_z(0.587)

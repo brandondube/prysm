@@ -22,8 +22,11 @@ from prysm.polynomials import (
 
 from .spencer_and_murty import (
     STYPE_EVAL,
+    STYPE_OBJ,
+    STYPE_IMG,
     STYPE_REFLECT,
     STYPE_REFRACT,
+    _is_measurement_surf,
     STATUS_OK,
     STATUS_MISS,
     STATUS_NEWTON,
@@ -44,7 +47,7 @@ from .intersections import (
     ray_plane_intersect,
     ray_sphere_intersect,
 )
-from .phase import as_phase_function
+from .phase import PhaseFunction
 from .sags import (
     Q2d_and_der,
     Q2d_sag,
@@ -149,6 +152,49 @@ DEPARTURE_BAND_SAMPLES = 64
 DEPARTURE_GRADIENT_WARN = 0.5
 
 
+class DepartureBand:
+    """Conic-seed departure bounds for the intersection first-root guarantee.
+
+    bounded is False (numeric fields None) for an analytic shape or a
+    conic-seed with no characterizable domain.
+
+    Attributes
+    ----------
+    max_departure : float
+        padded max sag departure from the seed conic over the domain
+    domain_radius : float
+        disk radius the band was characterized on
+    gradient_bound : float
+        departure-slope bound for the monotonicity certificate
+    lipschitz : float
+        sag-slope bound for the Lipschitz-march rescue
+    """
+
+    __slots__ = ('bounded', 'max_departure', 'domain_radius',
+                 'gradient_bound', 'lipschitz')
+
+    def __init__(self, *, bounded, max_departure=None, domain_radius=None,
+                 gradient_bound=None, lipschitz=None):
+        self.bounded = bounded
+        self.max_departure = max_departure
+        self.domain_radius = domain_radius
+        self.gradient_bound = gradient_bound
+        self.lipschitz = lipschitz
+
+    @classmethod
+    def unbounded(cls):
+        """A band with no finite bound (analytic shape / no conic domain)."""
+        return cls(bounded=False)
+
+    def __repr__(self):
+        if not self.bounded:
+            return 'DepartureBand(bounded=False)'
+        return (f'DepartureBand(max_departure={self.max_departure:g}, '
+                f'domain_radius={self.domain_radius:g}, '
+                f'gradient_bound={self.gradient_bound:g}, '
+                f'lipschitz={self.lipschitz:g})')
+
+
 def _map_stype(typ):
     """Map a surface interaction name or integer to an STYPE constant."""
     if isinstance(typ, int):
@@ -160,9 +206,14 @@ def _map_stype(typ):
         return STYPE_REFRACT
     if typ_lc == 'eval':
         return STYPE_EVAL
+    if typ_lc in ('obj', 'object'):
+        return STYPE_OBJ
+    if typ_lc in ('img', 'image'):
+        return STYPE_IMG
     raise ValueError(
         f'unknown surface type {typ!r}; expected one of '
-        "'refl'/'reflect', 'refr'/'refract', 'eval', or an STYPE_* int."
+        "'refl'/'reflect', 'refr'/'refract', 'eval', 'object', 'image', or an "
+        'STYPE_* int.'
     )
 
 
@@ -1245,11 +1296,8 @@ class Surface:
         self.sag = shape.sag
         self.sag_and_normal = shape.sag_and_normal
         self._analytic_intersect = bool(getattr(shape, 'analytic_intersect', False))
-        # (D, domain_radius) for the first-root acceptance band.
+        # Cached DepartureBand for the first-root acceptance band.
         self._departure_band = None
-        # G = max |grad departure|; L = max |grad sag| over the domain.
-        self._departure_gradient = None
-        self._sag_lipschitz = None
 
     @property
     def grating(self):
@@ -1258,15 +1306,19 @@ class Surface:
 
     @grating.setter
     def grating(self, value):
-        # Everything downstream sees a PhaseFunction or None.
-        self._grating = as_phase_function(value)
+        # First-class objects only (ADR-0011): a PhaseFunction or None, no
+        # (period, g_vec, order) tuple coercion.
+        if value is not None and not isinstance(value, PhaseFunction):
+            raise TypeError(
+                'grating must be a PhaseFunction (LinearGrating, CallablePhase) '
+                f'or None; got {value!r}')
+        self._grating = value
 
     def departure_band(self):
-        """Max departure from the conic seed over the characterized domain.
+        """Conic-seed departure bounds for the first-root acceptance band.
 
-        Returns (D, domain_radius), or (None, None) when no conic seed/domain is
-        available.  Also fills the departure-gradient and sag-Lipschitz bounds.
-
+        Returns a DepartureBand; an analytic shape or a surface with no
+        characterizable conic domain yields DepartureBand.unbounded().
         """
         if self._departure_band is None:
             self._departure_band = self._compute_departure_band()
@@ -1275,7 +1327,7 @@ class Surface:
     def _compute_departure_band(self):
         shape = self.shape
         if not hasattr(shape, 'seed_conic'):
-            return None, None
+            return DepartureBand.unbounded()
         c, k, dx, dy = shape.seed_conic()
         R = None
         if self.bounding is not None:
@@ -1291,7 +1343,7 @@ class Surface:
                 # Stay just inside the seed conic's finite sag domain.
                 R = 0.999 / np.sqrt(ckk)
         if R is None or not np.isfinite(R) or R <= 0:
-            return None, None
+            return DepartureBand.unbounded()
         R = float(R)
         n = DEPARTURE_BAND_SAMPLES
         xs = np.linspace(-R, R, n, dtype=config.precision)
@@ -1314,7 +1366,7 @@ class Surface:
         dep[outside] = np.nan
         gmag_dep[outside] = np.nan
         if not np.isfinite(dep).any():
-            return None, None
+            return DepartureBand.unbounded()
         D = float(np.nanmax(np.abs(dep)))
         # Departure slope bound for the monotonicity certificate.
         G = float(np.nanmax(gmag_dep))
@@ -1327,8 +1379,6 @@ class Surface:
             gmag = np.hypot(nrm[..., 0], nrm[..., 1]) / np.abs(nrm[..., 2])
         gmag[Xm * Xm + Ym * Ym > R_march * R_march] = np.nan
         L = float(np.nanmax(gmag))
-        self._departure_gradient = 1.1 * G
-        self._sag_lipschitz = 1.1 * L
         if G >= DEPARTURE_GRADIENT_WARN:
             # Static message: surfaces are recompiled every edit (optimization /
             # tolerancing rebuilds them), so a value-templated warning would
@@ -1338,7 +1388,9 @@ class Surface:
                 'intersection acceptance band can admit multiple ray crossings; '
                 'the traced intersection on such a surface may be ambiguous.'
             )
-        return 1.1 * D, R
+        return DepartureBand(bounded=True, max_departure=1.1 * D,
+                             domain_radius=R, gradient_bound=1.1 * G,
+                             lipschitz=1.1 * L)
 
     def diffract(self, S_specular, n_hat, n_post, wvl, Q_loc, grad=None):
         """Apply the diffractive bend from the surface phase function.
@@ -1433,8 +1485,9 @@ class Surface:
 
         """
         P0, S_loc = transform_to_local_coords(P_in, self.P, S_in, self.R)
-        # Later reflect/refract surfaces reject roots behind the incoming ray.
-        forward_only = self.typ != STYPE_EVAL and not first_segment
+        # Later reflect/refract surfaces reject roots behind the incoming ray;
+        # measurement planes (eval/object/image) are exempt.
+        forward_only = not _is_measurement_surf(self.typ) and not first_segment
         Q_loc, n_hat, converged = self.intersect(P0, S_loc, tol_sag=tol_sag,
                                                  forward_only=forward_only)
 
@@ -1517,14 +1570,14 @@ class Surface:
         # tol_sag stays None here so it resolves at newton_raphson_solve_s,
         # where the working dtype (float32/float64) is known.
         if hasattr(self.shape, 'seed_conic'):
-            departure, domain_radius = self.departure_band()
+            band = self.departure_band()
             return self.shape.intersect(P, S, self.sag_and_normal,
                                         tol_sag=tol_sag,
                                         maxiter=maxiter,
-                                        departure=departure,
-                                        domain_radius=domain_radius,
-                                        departure_gradient=self._departure_gradient,
-                                        sag_lipschitz=self._sag_lipschitz,
+                                        departure=band.max_departure,
+                                        domain_radius=band.domain_radius,
+                                        departure_gradient=band.gradient_bound,
+                                        sag_lipschitz=band.lipschitz,
                                         forward_only=forward_only)
         if hasattr(self.shape, 'intersect'):
             return self.shape.intersect(P, S, self.sag_and_normal,
@@ -1540,6 +1593,8 @@ __all__ = [
     'STYPE_REFLECT',
     'STYPE_REFRACT',
     'STYPE_EVAL',
+    'STYPE_OBJ',
+    'STYPE_IMG',
     'Shape',
     'CallableShape',
     'Plane',
@@ -1555,6 +1610,7 @@ __all__ = [
     'Toroid',
     'Biconic',
     'Surface',
+    'DepartureBand',
     'circular_aperture',
     'annular_aperture',
     'product_rule',

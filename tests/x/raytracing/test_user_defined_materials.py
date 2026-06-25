@@ -21,9 +21,9 @@ def test_material_objects_compile_through_lensdata_verbatim():
           .add(Plane(), thickness=1.0, material=mat)
           .add(Plane(), thickness=1.0, material=other)
           .add(Plane(), typ='eval'))
-    assert ld.surfaces[0].material is mat
-    assert ld.surfaces[0].material.n(0.55) == pytest.approx(1.5)
-    assert ld.surfaces[1].material is other
+    assert ld.surfaces[1].material is mat      # surfaces[0] is the OBJECT plane
+    assert ld.surfaces[1].material.n(0.55) == pytest.approx(1.5)
+    assert ld.surfaces[2].material is other
 
 
 def test_tabulated_material_scalar_vector_and_linear_interpolation():
@@ -67,7 +67,7 @@ def test_k_interpolation_and_nk_work_for_scalars_and_vectors():
         wavelengths=[0.5, 0.6, 0.7],
         n=[1.6, 1.5, 1.4],
         k=[1e-5, 3e-6, 1e-6],
-        k_method='log',
+        k_interpolation='log',
     )
     expected_k = np.exp((np.log(1e-5) + np.log(3e-6)) / 2)
     assert mat.k(0.55) == pytest.approx(expected_k)
@@ -95,12 +95,12 @@ def test_log_k_zero_policy_is_explicit_and_negative_k_is_rejected():
     with pytest.raises(ValueError, match='positive k samples'):
         materials.TabulatedMaterial(
             'ZEROK', [0.5, 0.6], [1.5, 1.4], k=[0.0, 1e-6],
-            k_method='log',
+            k_interpolation='log',
         )
 
     explicit = materials.TabulatedMaterial(
         'ZEROK', [0.5, 0.6, 0.7], [1.5, 1.4, 1.3],
-        k=[0.0, 1e-6, 2e-6], k_method='log',
+        k=[0.0, 1e-6, 2e-6], k_interpolation='log',
         k_zero_policy='linear',
     )
     assert explicit.k(0.55) == pytest.approx(0.5e-6)
@@ -187,7 +187,7 @@ def test_page_info_supports_listing_and_best_effort_io_names():
     ld = (LensData()
           .add(Conic(0.01, 0.0), thickness=1.0, material=mat)
           .add(Plane(), typ='eval'))
-    assert surface_table(ld).records[0]['material'] == 'USERGLASS'
+    assert surface_table(ld).records[1]['material'] == 'USERGLASS'  # [0] is OBJECT
     assert 'GLAS USERGLASS' in write_zmx(ld)
     assert 'GLA USERGLASS' in write_seq(ld)
 

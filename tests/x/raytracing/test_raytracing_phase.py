@@ -7,7 +7,6 @@ from prysm.x.raytracing.phase import (
     PhaseFunction,
     LinearGrating,
     CallablePhase,
-    as_phase_function,
 )
 from prysm.x.raytracing.spencer_and_murty import raytrace
 from tests.x.raytracing.surface_helpers import plane
@@ -40,52 +39,19 @@ def test_linear_grating_uses_only_in_plane_components():
     np.testing.assert_allclose(g3.phase(x, y), g2.phase(x, y))
 
 
-# ---------- coercion --------------------------------------------------------
+# ---------- first-class grating objects (ADR-0011, no coercion) -------------
 
-def test_as_phase_function_coerces_legacy_tuple():
-    pf = as_phase_function((4.0, [1.0, 0.0], 2))
-    assert isinstance(pf, LinearGrating)
-    np.testing.assert_allclose(pf.phase(np.array([2.0]), np.array([0.0])), [1.0])
-
-
-def test_as_phase_function_passthrough_and_none():
-    g = LinearGrating(3.0)
-    assert as_phase_function(g) is g
-    assert as_phase_function(None) is None
-
-
-def test_as_phase_function_rejects_garbage():
-    with pytest.raises(TypeError, match='PhaseFunction'):
-        as_phase_function(42.0)
-
-
-def test_surface_grating_property_coerces_tuple():
-    """Assigning the legacy tuple to Surface.grating stores a PhaseFunction."""
+def test_surface_grating_property_requires_phase_function():
+    """Surface.grating accepts a PhaseFunction or None and rejects tuples."""
     s = plane(interaction='refl', P=[0, 0, 0])
-    s.grating = (2.0e-3, [1.0, 0.0, 0.0], 1)
+    s.grating = LinearGrating(2.0e-3, [1.0, 0.0, 0.0], 1)
     assert isinstance(s.grating, PhaseFunction)
     s.grating = None
     assert s.grating is None
-
-
-def test_tuple_and_provider_trace_identically():
-    """Legacy tuples and LinearGrating trace identically."""
-    period, g_vec, order = 5.0, [1.0, 0.0, 0.0], 1
-    P = np.array([[1.0, 0.0, -5.0], [0.0, 2.0, -5.0], [-3.0, 1.0, -5.0]])
-    S = np.broadcast_to(np.array([0.0, 0.0, 1.0]), (3, 3)).copy()
-    img = plane(interaction='eval', P=[0, 0, -10.0])
-
-    s_tuple = plane(interaction='refl', P=[0, 0, 0])
-    s_tuple.grating = (period, g_vec, order)
-    r_tuple = raytrace([s_tuple, img], P, S, wvl=0.55)
-
-    s_prov = plane(interaction='refl', P=[0, 0, 0])
-    s_prov.grating = LinearGrating(period, g_vec, order)
-    r_prov = raytrace([s_prov, img], P, S, wvl=0.55)
-
-    np.testing.assert_array_equal(r_tuple.S, r_prov.S)
-    np.testing.assert_array_equal(r_tuple.P, r_prov.P)
-    np.testing.assert_array_equal(r_tuple.OPL, r_prov.OPL)
+    with pytest.raises(TypeError, match='PhaseFunction'):
+        s.grating = (2.0e-3, [1.0, 0.0, 0.0], 1)
+    with pytest.raises(TypeError, match='PhaseFunction'):
+        s.grating = 42.0
 
 
 # ---------- base finite-difference fallbacks --------------------------------

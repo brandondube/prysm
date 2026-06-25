@@ -14,7 +14,7 @@ from prysm.x.raytracing.io import (
 from prysm.x.raytracing.surfaces import (
     Conic, EvenAsphere, Plane, Toroid, Biconic,
     Zernike, XY,
-    STYPE_REFLECT, STYPE_EVAL,
+    STYPE_REFLECT, STYPE_EVAL, STYPE_IMG,
 )
 from prysm.x.raytracing.io._indexing import xy_j_to_mn
 from prysm.x.raytracing.spencer_and_murty import raytrace, valid_mask
@@ -122,7 +122,7 @@ SURF 3
 def test_zmx_parses_singlet_surface_count(refractiveindex_database):
     pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
     # OBJECT stripped, S1, S2, IMAGE -> 3 surfaces in prescription
-    assert len(pf.surfaces) == 3
+    assert len(pf.surfaces) == 4
     assert pf.source_format == 'zemax'
 
 
@@ -130,35 +130,34 @@ def test_zmx_singlet_header_fields(refractiveindex_database):
     pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
     assert pf.epd == 10.0
     np.testing.assert_allclose(pf.wavelengths, [0.55])
-    assert pf.stop_index == 0  # Zemax SURF 1 -> our index 0
-    assert pf.unit == 'mm'
+    assert pf.stop_index == 1  # Zemax SURF 1 -> our index 1 (OBJECT is index 0)
 
 
 def test_zmx_singlet_curvatures_match_input(refractiveindex_database):
     pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
-    assert isinstance(pf.surfaces[0].shape, Conic)
-    assert pf.surfaces[0].params['c'] == 0.02
-    assert pf.surfaces[1].params['c'] == -0.02
+    assert isinstance(pf.surfaces[1].shape, Conic)
+    assert pf.surfaces[1].params['c'] == 0.02
+    assert pf.surfaces[2].params['c'] == -0.02
 
 
 def test_zmx_singlet_glass_resolves_to_bk7(refractiveindex_database):
     pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
-    np.testing.assert_allclose(float(pf.surfaces[0].material.n(0.587)), 1.5168, atol=1e-3)
+    np.testing.assert_allclose(float(pf.surfaces[1].material.n(0.587)), 1.5168, atol=1e-3)
 
 
 def test_zmx_singlet_image_is_eval_plane(refractiveindex_database):
     pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
     img = pf.surfaces[-1]
     assert isinstance(img.shape, Plane)
-    assert img.typ == STYPE_EVAL
+    assert img.typ == STYPE_IMG
 
 
 def test_zmx_singlet_vertex_z_stacks_disz(refractiveindex_database):
     pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
     # vertex_z's:  S1 at 0, S2 at 5, IMAGE at 5+95=100
-    assert pf.surfaces[0].P[2] == 0.0
-    assert pf.surfaces[1].P[2] == 5.0
-    assert pf.surfaces[2].P[2] == 100.0
+    assert pf.surfaces[1].P[2] == 0.0
+    assert pf.surfaces[2].P[2] == 5.0
+    assert pf.surfaces[3].P[2] == 100.0
 
 
 _ZMX_CLEAR_APERTURE = """\
@@ -183,7 +182,7 @@ SURF 2
 
 def test_zmx_diam_becomes_clear_aperture_and_clips():
     pf = read_zmx(_ZMX_CLEAR_APERTURE, _is_text=True)
-    assert pf.rows[0].semidiameter == 1.0
+    assert pf.rows[1].semidiameter == 1.0
     P = np.array([[0.0, 0.0, -1.0],
                   [0.0, 1.5, -1.0]])
     S = np.array([[0.0, 0.0, 1.0],
@@ -191,7 +190,7 @@ def test_zmx_diam_becomes_clear_aperture_and_clips():
     tr = raytrace(pf.surfaces, P, S, 0.55)
     assert tr.status.imag[0] == 0
     assert tr.status.imag[1] != 0
-    assert tr.status.real[1] == 1
+    assert tr.status.real[1] == 2   # blocked at the lens surface (OBJECT is 0)
 
 
 _ZMX_CM_UNITS = """\
@@ -217,11 +216,10 @@ SURF 2
 
 def test_zmx_non_mm_lengths_scale_to_mm():
     pf = read_zmx(_ZMX_CM_UNITS, _is_text=True)
-    assert pf.unit == 'mm'
     assert pf.epd == 10.0
-    np.testing.assert_allclose(pf.surfaces[0].params['c'], 0.2)
-    np.testing.assert_allclose(pf.surfaces[1].P[2], 5.0)
-    np.testing.assert_allclose(pf.rows[0].semidiameter, 2.0)
+    np.testing.assert_allclose(pf.surfaces[1].params['c'], 0.2)
+    np.testing.assert_allclose(pf.surfaces[2].P[2], 5.0)
+    np.testing.assert_allclose(pf.rows[1].semidiameter, 2.0)
 
 
 _ZMX_CM_COORD_BREAK = """\
@@ -246,9 +244,9 @@ SURF 2
 
 def test_zmx_non_mm_coordbreak_decenters_scale_to_mm():
     pf = read_zmx(_ZMX_CM_COORD_BREAK, _is_text=True)
-    np.testing.assert_allclose(pf.rows[0].decenter, [10.0, 20.0, 0.0])
-    np.testing.assert_allclose(pf.rows[0].thickness, 5.0)
-    np.testing.assert_allclose(pf.surfaces[0].P, [10.0, 20.0, 5.0])
+    np.testing.assert_allclose(pf.rows[1].decenter, [10.0, 20.0, 0.0])
+    np.testing.assert_allclose(pf.rows[1].thickness, 5.0)
+    np.testing.assert_allclose(pf.surfaces[1].P, [10.0, 20.0, 5.0])
 
 
 _ZMX_IMAGE_HEIGHT_FIELD = """\
@@ -314,7 +312,7 @@ SURF 2
 
 def test_zmx_mirror_surface_is_reflective():
     pf = read_zmx(_ZMX_PARABOLA, _is_text=True)
-    assert pf.surfaces[0].typ == STYPE_REFLECT
+    assert pf.surfaces[1].typ == STYPE_REFLECT
 
 
 def test_zmx_parabola_focuses_to_paraxial_focus():
@@ -358,7 +356,7 @@ SURF 3
 
 def test_zmx_evenasph_builds_asphere(refractiveindex_database):
     pf = read_zmx(_ZMX_EVENASPH, _is_text=True, database=refractiveindex_database)
-    s1 = pf.surfaces[0]
+    s1 = pf.surfaces[1]
     assert isinstance(s1.shape, EvenAsphere)
     assert s1.params['coefs'] == (1.0e-6, 0.0, -2.0e-12)
 
@@ -389,7 +387,7 @@ SURF 2
 
 def test_zmx_biconic_assigns_independent_axes():
     pf = read_zmx(_ZMX_BICONIC, _is_text=True)
-    s = pf.surfaces[0]
+    s = pf.surfaces[1]
     assert isinstance(s.shape, Biconic)
     assert s.params['c_x'] == 0.015
     assert s.params['c_y'] == 0.02
@@ -422,7 +420,7 @@ SURF 2
 
 def test_zmx_toroid_uses_parm_1_for_rotation_radius():
     pf = read_zmx(_ZMX_TOROID, _is_text=True)
-    s = pf.surfaces[0]
+    s = pf.surfaces[1]
     assert isinstance(s.shape, Toroid)
     np.testing.assert_allclose(s.params['c_x'], 1.0 / 50.0)
     np.testing.assert_allclose(s.params['c_y'], 0.02)
@@ -451,7 +449,7 @@ def test_zmx_reads_from_file_path(refractiveindex_database):
     try:
         pf = read_zmx(path, database=refractiveindex_database)
         assert pf.source_path == path
-        assert len(pf.surfaces) == 3
+        assert len(pf.surfaces) == 4
     finally:
         os.unlink(path)
 
@@ -477,19 +475,19 @@ GO
 def test_seq_singlet_surface_count(refractiveindex_database):
     pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
     # SO is stripped, two real surfaces, SI -> 3 surfaces (two refr + img)
-    assert len(pf.surfaces) == 3
+    assert len(pf.surfaces) == 4
     assert pf.source_format == 'codev'
 
 
 def test_seq_singlet_curvatures_match_radii(refractiveindex_database):
     pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
-    np.testing.assert_allclose(pf.surfaces[0].params['c'], 1 / 50.0)
-    np.testing.assert_allclose(pf.surfaces[1].params['c'], -1 / 50.0)
+    np.testing.assert_allclose(pf.surfaces[1].params['c'], 1 / 50.0)
+    np.testing.assert_allclose(pf.surfaces[2].params['c'], -1 / 50.0)
 
 
 def test_seq_singlet_glass_resolves(refractiveindex_database):
     pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
-    np.testing.assert_allclose(float(pf.surfaces[0].material.n(0.587)),
+    np.testing.assert_allclose(float(pf.surfaces[1].material.n(0.587)),
                                1.5168, atol=1e-3)
 
 
@@ -497,14 +495,14 @@ def test_seq_image_is_eval_plane(refractiveindex_database):
     pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
     img = pf.surfaces[-1]
     assert isinstance(img.shape, Plane)
-    assert img.typ == STYPE_EVAL
+    assert img.typ == STYPE_IMG
 
 
 def test_seq_vertex_z_skips_object_thickness(refractiveindex_database):
     pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
-    assert pf.surfaces[0].P[2] == 0.0
-    assert pf.surfaces[1].P[2] == 5.0
-    assert pf.surfaces[2].P[2] == 100.0
+    assert pf.surfaces[1].P[2] == 0.0
+    assert pf.surfaces[2].P[2] == 5.0
+    assert pf.surfaces[3].P[2] == 100.0
 
 
 def test_seq_round_trips_through_raytrace(refractiveindex_database):
@@ -530,7 +528,7 @@ GO
 
 def test_seq_cao_becomes_clear_aperture_and_clips():
     pf = read_seq(_SEQ_CLEAR_APERTURE, _is_text=True)
-    assert pf.rows[0].semidiameter == 1.0
+    assert pf.rows[1].semidiameter == 1.0
     P = np.array([[0.0, 0.0, -1.0],
                   [0.0, 1.5, -1.0]])
     S = np.array([[0.0, 0.0, 1.0],
@@ -538,7 +536,7 @@ def test_seq_cao_becomes_clear_aperture_and_clips():
     tr = raytrace(pf.surfaces, P, S, 0.55)
     assert tr.status.imag[0] == 0
     assert tr.status.imag[1] != 0
-    assert tr.status.real[1] == 1
+    assert tr.status.real[1] == 2   # blocked at the lens surface (OBJECT is 0)
 
 
 _SEQ_CM_UNITS = """\
@@ -556,11 +554,10 @@ GO
 
 def test_seq_non_mm_lengths_scale_to_mm():
     pf = read_seq(_SEQ_CM_UNITS, _is_text=True)
-    assert pf.unit == 'mm'
     assert pf.epd == 10.0
-    np.testing.assert_allclose(pf.surfaces[0].params['c'], 0.02)
-    np.testing.assert_allclose(pf.surfaces[1].P[2], 5.0)
-    np.testing.assert_allclose(pf.rows[0].semidiameter, 2.0)
+    np.testing.assert_allclose(pf.surfaces[1].params['c'], 0.02)
+    np.testing.assert_allclose(pf.surfaces[2].P[2], 5.0)
+    np.testing.assert_allclose(pf.rows[1].semidiameter, 2.0)
 
 
 _SEQ_IMAGE_HEIGHT_FIELD = """\
@@ -582,7 +579,7 @@ GO
 def test_seq_image_height_fields_become_equivalent_angles(refractiveindex_database):
     pf = read_seq(_SEQ_IMAGE_HEIGHT_FIELD, _is_text=True,
                   database=refractiveindex_database)
-    efl = abs(effective_focal_length(pf, wvl=pf.wavelength()))
+    efl = abs(effective_focal_length(pf.to_surfaces(), wvl=pf.wavelength()))
     expected_hy = np.degrees(np.arctan2(1.0, efl))
 
     assert len(pf.fields) == 1
@@ -598,7 +595,7 @@ def test_seq_fno_becomes_image_space_fnumber(refractiveindex_database):
     assert pf.aperture.value == 7.0
     np.testing.assert_allclose(
         pf.epd,
-        abs(effective_focal_length(pf, wvl=pf.wavelength())) / 7.0,
+        abs(effective_focal_length(pf.to_surfaces(), wvl=pf.wavelength())) / 7.0,
     )
 
 
@@ -651,10 +648,10 @@ GO
 
 def test_seq_cir_sets_clear_aperture():
     pf = read_seq(_SEQ_CIR_APERTURE, _is_text=True)
-    s0 = pf.surfaces[0]
+    s0 = pf.surfaces[1]
     assert s0.bounding == {'outer_radius': 8.0}
     assert s0.aperture is not None
-    s1 = pf.surfaces[1]
+    s1 = pf.surfaces[2]
     assert s1.bounding is None
     assert s1.aperture is None
 
@@ -681,10 +678,11 @@ def test_seq_sto_marks_the_surface_it_appears_on():
 
     Regression: the ordinal counted the object surface, which the downstream
     real_counter walk skips, so the stop landed one real surface too late.
-    STO here follows the first real surface, so stop_index must be 0.
+    STO here follows the first real surface, so stop_index must be 1
+    (OBJECT is index 0).
     """
     ld = read_seq(_SEQ_STOP, _is_text=True)
-    assert ld.stop_index == 0
+    assert ld.stop_index == 1
 
 
 # ---- mirror ----------------------------------------------------------------
@@ -703,7 +701,7 @@ GO
 
 def test_seq_mirror_keyword_yields_reflective():
     pf = read_seq(_SEQ_PARABOLA, _is_text=True)
-    assert pf.surfaces[0].typ == STYPE_REFLECT
+    assert pf.surfaces[1].typ == STYPE_REFLECT
 
 
 def test_seq_parabola_focuses_on_axis():
@@ -735,7 +733,7 @@ GO
 
 def test_seq_A_through_C_coefs_become_asphere(refractiveindex_database):
     pf = read_seq(_SEQ_ASPH, _is_text=True, database=refractiveindex_database)
-    s1 = pf.surfaces[0]
+    s1 = pf.surfaces[1]
     assert isinstance(s1.shape, EvenAsphere)
     assert s1.params['coefs'] == (1.0e-6, 0.0, -2.0e-12)
 
@@ -794,7 +792,7 @@ def test_seq_reads_from_file_path(refractiveindex_database):
     try:
         pf = read_seq(path, database=refractiveindex_database)
         assert pf.source_path == path
-        assert len(pf.surfaces) == 3
+        assert len(pf.surfaces) == 4
     finally:
         os.unlink(path)
 
@@ -844,8 +842,8 @@ SURF 2
 
 def test_zmx_zernsag_builds_surface_zernike():
     pf = read_zmx(_ZMX_ZERNSAG, _is_text=True)
-    assert isinstance(pf.surfaces[0].shape, Zernike)
-    params = pf.surfaces[0].params
+    assert isinstance(pf.surfaces[1].shape, Zernike)
+    params = pf.surfaces[1].params
     assert params['normalization_radius'] == 5.0
     # PARM 1 → norm radius; 6 XDAT terms set
     assert len(params['nms']) == 6
@@ -870,7 +868,7 @@ def test_zmx_zernsag_no_coefs_falls_back_to_conic():
         'SURF 2\n  TYPE STANDARD\n  DISZ 0.0\n'
     )
     pf = read_zmx(txt, _is_text=True)
-    assert isinstance(pf.surfaces[0].shape, Conic)
+    assert isinstance(pf.surfaces[1].shape, Conic)
 
 
 _ZMX_XYPOLY = """\
@@ -900,8 +898,8 @@ SURF 2
 
 def test_zmx_xypoly_builds_surface_xy():
     pf = read_zmx(_ZMX_XYPOLY, _is_text=True)
-    assert isinstance(pf.surfaces[0].shape, XY)
-    params = pf.surfaces[0].params
+    assert isinstance(pf.surfaces[1].shape, XY)
+    params = pf.surfaces[1].params
     assert params['normalization_radius'] == 10.0
     # 4 terms parsed
     assert len(params['mns']) == 4
@@ -914,7 +912,7 @@ def test_zmx_xypoly_default_norm_radius_when_zero():
     """PARM 1 = 0 (or absent) yields normalization_radius = 1.0."""
     txt = _ZMX_XYPOLY.replace('PARM 1 10.0', 'PARM 1 0.0')
     pf = read_zmx(txt, _is_text=True)
-    assert pf.surfaces[0].params['normalization_radius'] == 1.0
+    assert pf.surfaces[1].params['normalization_radius'] == 1.0
 
 
 # ============================================================================
@@ -935,8 +933,8 @@ GO
 
 def test_seq_biconic_built_when_x_axis_present():
     pf = read_seq(_SEQ_BICONIC, _is_text=True)
-    assert isinstance(pf.surfaces[0].shape, Biconic)
-    p = pf.surfaces[0].params
+    assert isinstance(pf.surfaces[1].shape, Biconic)
+    p = pf.surfaces[1].params
     np.testing.assert_allclose(p['c_y'], 1 / 100.0)
     np.testing.assert_allclose(p['c_x'], 1 / 50.0)
     assert p['k_y'] == -1.0
@@ -946,7 +944,7 @@ def test_seq_biconic_built_when_x_axis_present():
 def test_seq_no_x_axis_stays_conic(refractiveindex_database):
     """Without RDX/CUX/CCX, S is just a conic, not a biconic."""
     pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
-    assert isinstance(pf.surfaces[0].shape, Conic)
+    assert isinstance(pf.surfaces[1].shape, Conic)
 
 
 # ============================================================================
@@ -969,8 +967,8 @@ GO
 
 def test_seq_zfr_builds_zernike_surface_with_fringe_norm():
     pf = read_seq(_SEQ_ZFR, _is_text=True)
-    assert isinstance(pf.surfaces[0].shape, Zernike)
-    p = pf.surfaces[0].params
+    assert isinstance(pf.surfaces[1].shape, Zernike)
+    p = pf.surfaces[1].params
     assert p['normalization_radius'] == 5.0
     assert p['norm'] is False  # Fringe is non-orthonormalized
     assert len(p['coefs']) == 6
@@ -981,7 +979,7 @@ def test_seq_zfr_default_norm_radius_is_one():
     """When NRR is omitted, normalization radius defaults to 1.0."""
     txt = _SEQ_ZFR.replace('NRR 5.0\n', '')
     pf = read_seq(txt, _is_text=True)
-    assert pf.surfaces[0].params['normalization_radius'] == 1.0
+    assert pf.surfaces[1].params['normalization_radius'] == 1.0
 
 
 # ============================================================================
@@ -1004,8 +1002,8 @@ GO
 
 def test_seq_xyp_builds_surface_xy():
     pf = read_seq(_SEQ_XYP, _is_text=True)
-    assert isinstance(pf.surfaces[0].shape, XY)
-    p = pf.surfaces[0].params
+    assert isinstance(pf.surfaces[1].shape, XY)
+    p = pf.surfaces[1].params
     assert p['normalization_radius'] == 10.0
     # term 4 corresponds to (m=2, n=0)
     assert p['mns'][3] == (2, 0)
@@ -1035,7 +1033,7 @@ GO
 
 def test_seq_decentered_surface_has_decenter(refractiveindex_database):
     pf = read_seq(_SEQ_DECENTER, _is_text=True, database=refractiveindex_database)
-    s = pf.surfaces[0]
+    s = pf.surfaces[1]
     # XDE/YDE was added to the surface position
     np.testing.assert_allclose(s.P[0], 0.5)
     np.testing.assert_allclose(s.P[1], 0.25)
@@ -1043,7 +1041,7 @@ def test_seq_decentered_surface_has_decenter(refractiveindex_database):
 
 def test_seq_decentered_surface_has_rotation(refractiveindex_database):
     pf = read_seq(_SEQ_DECENTER, _is_text=True, database=refractiveindex_database)
-    s = pf.surfaces[0]
+    s = pf.surfaces[1]
     # ADE=1, BDE=-2 -> a non-identity rotation
     assert s.R is not None
     # identity check: max deviation from eye(3) should be > 1e-4 for the
@@ -1056,7 +1054,7 @@ def test_seq_decentered_surface_has_rotation(refractiveindex_database):
 def test_seq_undecentered_surface_has_no_rotation(refractiveindex_database):
     """The second surface in _SEQ_DECENTER was not decentered."""
     pf = read_seq(_SEQ_DECENTER, _is_text=True, database=refractiveindex_database)
-    s2 = pf.surfaces[1]
+    s2 = pf.surfaces[2]
     assert s2.R is None
     np.testing.assert_allclose(s2.P[:2], (0.0, 0.0))
 
@@ -1084,14 +1082,14 @@ def test_seq_positional_radius_thickness_glass(refractiveindex_database):
     """S <radius> <thickness> <glass> positional free format parses."""
     pf = read_seq(_SEQ_POSITIONAL, _is_text=True,
                   database=refractiveindex_database)
-    np.testing.assert_allclose(pf.surfaces[0].params['c'], 1 / 50.0)
-    np.testing.assert_allclose(pf.surfaces[1].params['c'], -1 / 50.0)
-    np.testing.assert_allclose(float(pf.surfaces[0].material.n(0.587)), 1.5168,
+    np.testing.assert_allclose(pf.surfaces[1].params['c'], 1 / 50.0)
+    np.testing.assert_allclose(pf.surfaces[2].params['c'], -1 / 50.0)
+    np.testing.assert_allclose(float(pf.surfaces[1].material.n(0.587)), 1.5168,
                                atol=1e-3)
     # SO/S/SI consume their positional thickness: vertices stack the gaps.
-    assert pf.surfaces[0].P[2] == 0.0
-    assert pf.surfaces[1].P[2] == 5.0
-    assert pf.surfaces[2].P[2] == 100.0
+    assert pf.surfaces[1].P[2] == 0.0
+    assert pf.surfaces[2].P[2] == 5.0
+    assert pf.surfaces[3].P[2] == 100.0
 
 
 def test_seq_wavelength_converted_nm_to_um(refractiveindex_database):
@@ -1119,7 +1117,7 @@ GO
 def test_seq_K_sets_conic_and_CCY_is_a_control_code():
     """K is the conic constant; CCY 0 is a coupling code and is ignored."""
     pf = read_seq(_SEQ_K_CONIC, _is_text=True)
-    s = pf.surfaces[0]
+    s = pf.surfaces[1]
     np.testing.assert_allclose(s.params['c'], -1 / 80.0)
     np.testing.assert_allclose(s.params['k'], -1.0)
     assert s.typ == STYPE_REFLECT
@@ -1137,7 +1135,7 @@ def test_seq_stop_without_object_surface():
         'S 50 5\nS -50 90\nSI 0 0\nGO\n'
     )
     pf = read_seq(txt, _is_text=True)
-    assert pf.stop_index == 0
+    assert pf.stop_index == 1
 
 
 _SEQ_DAR_VS_BASIC = """\
@@ -1167,7 +1165,7 @@ def test_seq_dar_is_local_basic_persists():
     inherit that frame; the DAR on surface 1 applies to surface 1 only.
     """
     pf = read_seq(_SEQ_DAR_VS_BASIC, _is_text=True)
-    s0, s1, s2 = pf.surfaces[0], pf.surfaces[1], pf.surfaces[2]
+    s0, s1, s2 = pf.surfaces[1], pf.surfaces[2], pf.surfaces[3]
     # surface 0 (basic) is decentered up 10mm
     np.testing.assert_allclose(float(s0.P[1]), 10.0)
     # surface 1 carries the persistent basic decenter plus its own DAR offset
@@ -1184,5 +1182,5 @@ def test_seq_glass_catalog_suffix_stripped(refractiveindex_database):
         'SO 0. 1E10\nS 50 5 BK7_SCHOTT\nS -50 95\nSI 0 0\nGO\n'
     )
     pf = read_seq(txt, _is_text=True, database=refractiveindex_database)
-    np.testing.assert_allclose(float(pf.surfaces[0].material.n(0.587)), 1.5168,
+    np.testing.assert_allclose(float(pf.surfaces[1].material.n(0.587)), 1.5168,
                                atol=1e-3)

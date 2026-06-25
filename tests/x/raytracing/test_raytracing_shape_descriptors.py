@@ -74,7 +74,7 @@ def test_lensdata_row_round_trips(shape):
     """A LensData row flattens the DOFs and rebuilds the same shape."""
     ld = LensData()
     ld.add(shape, thickness=5.0)
-    rebuilt = ld.rows[0].build_shape()
+    rebuilt = ld.rows[1].build_shape()   # rows[0] is the OBJECT endpoint
     assert type(rebuilt) is type(shape)
     _params_equal(shape.params or {}, rebuilt.params or {})
 
@@ -109,7 +109,7 @@ def test_adding_a_shape_edits_one_place():
     """A self-describing shape is accepted by LensData with no other edits."""
     ld = LensData()
     ld.add(_ToyParabola(1 / 25.0), thickness=2.0)
-    row = ld.rows[0]
+    row = ld.rows[1]                     # rows[0] is the OBJECT endpoint
     assert row.shape_kind is _ToyParabola
     assert 'curvature' in row.categories
     rebuilt = row.build_shape()

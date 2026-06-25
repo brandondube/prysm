@@ -1,15 +1,18 @@
-"""Tests for prysm.x.raytracing.sensitivity — merit Jacobian over a LensData's
+"""Tests for prysm.x.raytracing.sensitivity — merit Jacobian over a system's
 dense free vector (`merit_jacobian_free`).
 
 The Problem-level wiring (FD vs numeric merit, restore, autograd gating through
 `Problem.jacobian`) lives in test_raytracing_lensdata_design.py; this module
 pins `merit_jacobian_free` directly against analytic paraxial derivatives.
+
+DOFs live on the system (ADR-0004), so each fixture wraps its LensData in an
+OpticalSystem and drives the free vector through sys.opt.
 """
 import numpy as np
 import pytest
 
 from prysm.x import materials
-from prysm.x.raytracing import LensData
+from prysm.x.raytracing import LensData, OpticalSystem
 from prysm.x.raytracing.surfaces import Conic
 from prysm.x.raytracing.sensitivity import merit_jacobian_free
 from prysm.x.raytracing.paraxial import (
@@ -31,9 +34,11 @@ def test_fd_jacobian_single_sphere_curvature():
     ld = LensData().add(
         Conic(c0, 0.0), typ='refr', material=materials.ConstantMaterial(n_glass),
         thickness=0.0)
-    ld.vary('curvature', surfaces=0)
+    sys = OpticalSystem(ld)
+    sys.opt.vary('curvature', surfaces=1)
     J = merit_jacobian_free(
-        ld, lambda: float(paraxial_image_distance(ld, wvl=0.55e-3)), step=1e-7)
+        sys.opt, lambda: float(paraxial_image_distance(ld.to_surfaces(), wvl=0.55e-3)),
+        step=1e-7)
     np.testing.assert_allclose(J[0], expected, rtol=1e-5)
 
 
@@ -51,34 +56,40 @@ def test_fd_jacobian_efl_doublet_curvatures():
                thickness=1e-9)
           .add(Conic(c2, 0.0), typ='refr', material=materials.air,
                thickness=0.0))
-    ld.vary('curvature', surfaces=[0, 1])
+    sys = OpticalSystem(ld)
+    sys.opt.vary('curvature', surfaces=[1, 2])
     J = merit_jacobian_free(
-        ld, lambda: float(effective_focal_length(ld, wvl=0.55e-3)), step=1e-7)
+        sys.opt, lambda: float(effective_focal_length(ld.to_surfaces(),
+                                                       wvl=0.55e-3)),
+        step=1e-7)
     np.testing.assert_allclose(J[0], expected_dfdc1, rtol=1e-5)
     np.testing.assert_allclose(J[1], expected_dfdc2, rtol=1e-5)
 
 
 def test_fd_jacobian_restores_free_vector():
-    """After Jacobian evaluation the LensData is back to its nominal free
-    vector (no transient perturbation leaks out)."""
+    """After Jacobian evaluation the free vector is back to its nominal value
+    (no transient perturbation leaks out)."""
     ld = LensData().add(
         Conic(1 / 50.0, 0.0), typ='refr', material=materials.ConstantMaterial(1.5),
         thickness=0.0)
-    ld.vary('curvature', surfaces=0)
-    x0 = ld.pack()
+    sys = OpticalSystem(ld)
+    sys.opt.vary('curvature', surfaces=1)
+    x0 = sys.opt.pack()
     merit_jacobian_free(
-        ld, lambda: float(paraxial_image_distance(ld, wvl=0.55e-3)))
-    np.testing.assert_allclose(ld.pack(), x0)
+        sys.opt,
+        lambda: float(paraxial_image_distance(ld.to_surfaces(), wvl=0.55e-3)))
+    np.testing.assert_allclose(sys.opt.pack(), x0)
 
 
 def test_fd_jacobian_unknown_method_raises():
     ld = LensData().add(
         Conic(1 / 50.0, 0.0), typ='refr', material=materials.ConstantMaterial(1.5),
         thickness=0.0)
-    ld.vary('curvature', surfaces=0)
+    sys = OpticalSystem(ld)
+    sys.opt.vary('curvature', surfaces=1)
     with pytest.raises(ValueError, match="method must be"):
         merit_jacobian_free(
-            ld, lambda: float(paraxial_image_distance(ld, wvl=0.55e-3)),
+            sys.opt, lambda: float(paraxial_image_distance(ld.to_surfaces(), wvl=0.55e-3)),
             method='nope')
 
 
@@ -90,8 +101,9 @@ def test_autograd_method_requires_torch_backend():
     ld = LensData().add(
         Conic(1 / 50.0, 0.0), typ='refr', material=materials.ConstantMaterial(1.5),
         thickness=0.0)
-    ld.vary('curvature', surfaces=0)
+    sys = OpticalSystem(ld)
+    sys.opt.vary('curvature', surfaces=1)
     with pytest.raises(RuntimeError, match='backend to be torch'):
         merit_jacobian_free(
-            ld, lambda: float(paraxial_image_distance(ld, wvl=0.55e-3)),
+            sys.opt, lambda: float(paraxial_image_distance(ld.to_surfaces(), wvl=0.55e-3)),
             method='autograd')

@@ -13,7 +13,7 @@ from prysm.x.optym.least_squares import (  # NOQA - re-export for users
 )
 
 from .launch import Field, Sampling, launch as _launch
-from .spencer_and_murty import raytrace, valid_mask, STYPE_EVAL
+from .spencer_and_murty import raytrace, valid_mask, _is_measurement_surf
 from .surfaces import _map_stype
 from .sensitivity import merit_jacobian_free as _merit_jacobian_free
 from .opt import (
@@ -26,6 +26,7 @@ from .paraxial import (
 )
 from . import analysis as _analysis
 from ._meta import object_space_index, image_space_index
+from ._resolve import compiled_surfaces, resolve_wavelength
 from ._cache import StateCache
 
 
@@ -34,11 +35,11 @@ from ._cache import StateCache
 class _TraceCache:
     """Per-merit-call raytrace cache keyed by array identity."""
 
-    __slots__ = ('_prescription', '_cache', '_n_traces', '_xp_cache',
+    __slots__ = ('_system', '_cache', '_n_traces', '_xp_cache',
                  '_launch_cache')
 
-    def __init__(self, prescription):
-        self._prescription = prescription
+    def __init__(self, system):
+        self._system = system
         self._cache = StateCache()
         self._xp_cache = StateCache()
         self._launch_cache = StateCache()
@@ -53,7 +54,7 @@ class _TraceCache:
         def _compute():
             f = Field() if field is None else field
             s = Sampling.hex(nrings=4) if sampling is None else sampling
-            return _launch(self._prescription, f, wavelength, s, epd=epd)
+            return _launch(self._system, f, wavelength, s, epd=epd)
 
         return self._launch_cache.get_or_compute(key, _compute)
 
@@ -62,7 +63,7 @@ class _TraceCache:
 
         def _compute():
             self._n_traces += 1
-            return raytrace(self._prescription, P, S, wavelength)
+            return raytrace(self._system, P, S, wavelength)
 
         return self._cache.get_or_compute(key, _compute)
 
@@ -75,7 +76,7 @@ class _TraceCache:
 
         def _compute():
             resolved_stop = (stop_index if stop_index is not None
-                             else getattr(self._prescription, 'stop_index', None))
+                             else getattr(self._system, 'stop_index', None))
             chief = None
             if resolved_stop is None:
                 tr = self.trace(P, S, wavelength)
@@ -83,7 +84,7 @@ class _TraceCache:
                       else _pupil_center_chief_index(P))
                 chief = (tr.P[-1, ci], tr.S[-1, ci])
             return _analysis.resolve_exit_pupil(
-                self._prescription, wavelength, stop_index=stop_index, epd=epd,
+                self._system, wavelength, stop_index=stop_index, epd=epd,
                 chief=chief, axis_point=axis_point, axis_dir=axis_dir)
 
         return self._xp_cache.get_or_compute(key, _compute)
@@ -95,20 +96,6 @@ class _TraceCache:
 
 
 # ---------- Operands ---------------------------------------------------------
-
-def _resolve_wavelength(prescription, wavelength):
-    """Resolve an operand wavelength, deferring None to the prescription."""
-    if wavelength is not None:
-        return float(wavelength)
-    resolve = getattr(prescription, 'wavelength', None)
-    if callable(resolve):
-        return float(resolve(None))
-    raise ValueError(
-        'operand wavelength=None resolves the reference wavelength of an '
-        'OpticalSystem; this prescription carries no wavelengths -- pass '
-        'wavelength= explicitly'
-    )
-
 
 def _class_accepts_kw(cls, name):
     """True when cls can be called with keyword `name`."""
@@ -131,23 +118,23 @@ class Merit:
         self.max = None if max is None else float(max)
         self._target_set = target is not None
 
-    def _bundle(self, prescription, cache):
+    def _bundle(self, system, cache):
         """Resolved (P, S, wavelength) for ray-based merits; None otherwise."""
         return None
 
-    def __call__(self, prescription, cache):
+    def __call__(self, system, cache):
         raise NotImplementedError(
             f'{type(self).__name__} provides no optimizer value')
 
-    def value(self, trace, prescription, wavelength):
+    def value(self, trace, system, wavelength):
         raise NotImplementedError(
             f'{type(self).__name__} provides no trace-based value')
 
-    def seed(self, trace, prescription, wavelength):
+    def seed(self, trace, system, wavelength):
         raise NotImplementedError(
             f'{type(self).__name__} provides no adjoint seed')
 
-    def direct_gradient(self, trace, prescription, wavelength, seeds):
+    def direct_gradient(self, trace, system, wavelength, seeds):
         """Optional direct d merit / d seed terms outside the ray-state sweep."""
         return None
 
@@ -173,10 +160,10 @@ def _zeros_like_trace_state(trace):
 class _RayMerit(Merit):
     """Merit over one launch recipe (field, wavelength, sampling).
 
-    field=None is the on-axis Field(); wavelength=None is the prescription
+    field=None is the on-axis Field(); wavelength=None is the system
     reference wavelength; sampling=None is Sampling.hex(nrings=4) -- all
     resolved at call time, not construction.  epd overrides the launch pupil
-    size (defaulting to the prescription aperture).
+    size (defaulting to the system aperture).
 
     """
 
@@ -188,8 +175,8 @@ class _RayMerit(Merit):
         self.sampling = sampling
         self.epd = epd
 
-    def _bundle(self, prescription, cache):
-        wvl = _resolve_wavelength(prescription, self.wavelength)
+    def _bundle(self, system, cache):
+        wvl = resolve_wavelength(system, self.wavelength)
         P, S = cache.launch(self.field, wvl, self.sampling, epd=self.epd)
         return P, S, wvl
 
@@ -199,15 +186,15 @@ class RmsSpotRadius(_RayMerit):
 
     name = 'rms_spot_radius'
 
-    def __call__(self, prescription, cache):
-        P, S, wvl = self._bundle(prescription, cache)
+    def __call__(self, system, cache):
+        P, S, wvl = self._bundle(system, cache)
         trace = cache.trace(P, S, wvl)
-        return self.value(trace, prescription, wvl)
+        return self.value(trace, system, wvl)
 
-    def value(self, trace, prescription, wavelength):
+    def value(self, trace, system, wavelength):
         return float(rms_spot_radius(trace.P[-1], status=trace.status))
 
-    def seed(self, trace, prescription, wavelength):
+    def seed(self, trace, system, wavelength):
         P_bar, S_bar, L_bar = _zeros_like_trace_state(trace)
         valid = valid_mask(trace.status, trace.P[-1])
         xy = trace.P[-1][valid, :2]
@@ -225,7 +212,7 @@ class RmsSpotRadius(_RayMerit):
 
 
 class RayHeightAt(_RayMerit):
-    """Position of one ray along one Cartesian axis at one prescription
+    """Position of one ray along one Cartesian axis at one system
     surface.
 
     Useful for chief / marginal ray boundary conditions and for
@@ -244,8 +231,8 @@ class RayHeightAt(_RayMerit):
         self.axis = int(axis)
         self.ray_index = int(ray_index)
 
-    def __call__(self, prescription, cache):
-        P, S, wvl = self._bundle(prescription, cache)
+    def __call__(self, system, cache):
+        P, S, wvl = self._bundle(system, cache)
         trace = cache.trace(P, S, wvl)
         return float(trace.P[self.surface_index, self.ray_index, self.axis])
 
@@ -264,8 +251,8 @@ class Boresight(_RayMerit):
                          min=min, max=max, epd=epd)
         self.target_xy = (float(target_xy[0]), float(target_xy[1]))
 
-    def __call__(self, prescription, cache):
-        P, S, wvl = self._bundle(prescription, cache)
+    def __call__(self, system, cache):
+        P, S, wvl = self._bundle(system, cache)
         trace = cache.trace(P, S, wvl)
         valid = valid_mask(trace.status, trace.P[-1])
         Pf = trace.P[-1]
@@ -281,7 +268,7 @@ class Boresight(_RayMerit):
 class EFL(Merit):
     """Effective focal length (paraxial ABCD).
 
-    wavelength=None resolves the prescription reference wavelength at call
+    wavelength=None resolves the system reference wavelength at call
     time, so EFL(target=100) works as a constraint on an OpticalSystem.
 
     """
@@ -293,9 +280,9 @@ class EFL(Merit):
         super().__init__(target=target, weight=weight, min=min, max=max)
         self.wavelength = None if wavelength is None else float(wavelength)
 
-    def __call__(self, prescription, cache):
-        wvl = _resolve_wavelength(prescription, self.wavelength)
-        return float(effective_focal_length(prescription, wvl=wvl))
+    def __call__(self, system, cache):
+        wvl = resolve_wavelength(system, self.wavelength)
+        return float(effective_focal_length(compiled_surfaces(system), wvl=wvl))
 
 
 class BFL(Merit):
@@ -308,9 +295,9 @@ class BFL(Merit):
         super().__init__(target=target, weight=weight, min=min, max=max)
         self.wavelength = None if wavelength is None else float(wavelength)
 
-    def __call__(self, prescription, cache):
-        wvl = _resolve_wavelength(prescription, self.wavelength)
-        return float(back_focal_length(prescription, wvl=wvl))
+    def __call__(self, system, cache):
+        wvl = resolve_wavelength(system, self.wavelength)
+        return float(back_focal_length(compiled_surfaces(system), wvl=wvl))
 
 
 class ParaxialImageDistance(Merit):
@@ -324,9 +311,10 @@ class ParaxialImageDistance(Merit):
         super().__init__(target=target, weight=weight, min=min, max=max)
         self.wavelength = None if wavelength is None else float(wavelength)
 
-    def __call__(self, prescription, cache):
-        wvl = _resolve_wavelength(prescription, self.wavelength)
-        return float(paraxial_image_distance(prescription, wvl=wvl))
+    def __call__(self, system, cache):
+        wvl = resolve_wavelength(system, self.wavelength)
+        return float(paraxial_image_distance(compiled_surfaces(system),
+                                             wvl=wvl))
 
 
 class TotalTrack(Merit):
@@ -334,7 +322,7 @@ class TotalTrack(Merit):
 
     The Code V TTL: the sum of finite row gaps, skipping the leading object
     row's gap (finite or infinite) so only the glass-to-image track counts.
-    Reads the prescription rows; no rays are traced.
+    Reads the system rows; no rays are traced.
 
     """
 
@@ -343,13 +331,13 @@ class TotalTrack(Merit):
     def __init__(self, target=None, weight=1.0, *, min=None, max=None):
         super().__init__(target=target, weight=weight, min=min, max=max)
 
-    def __call__(self, prescription, cache):
-        rows = prescription.rows
+    def __call__(self, system, cache):
+        rows = system.rows
         start = 0
         if rows:
             typ = getattr(rows[0], 'typ', None)
-            if typ is not None and _map_stype(typ) == STYPE_EVAL:
-                start = 1  # leading object row; its gap is object distance
+            if typ is not None and _is_measurement_surf(_map_stype(typ)):
+                start = 1  # leading OBJECT row; its gap is object distance
         total = 0.0
         for row in rows[start:]:
             t = float(getattr(row, 'thickness', 0.0))
@@ -359,7 +347,7 @@ class TotalTrack(Merit):
 
 
 class Thickness(Merit):
-    """One prescription row's axial gap, by row index.
+    """One system row's axial gap, by row index.
 
     The edge-guard constraint: Thickness(3, min=0.5) keeps row 3's gap
     manufacturable while other DOFs move.
@@ -373,12 +361,12 @@ class Thickness(Merit):
         super().__init__(target=target, weight=weight, min=min, max=max)
         self.surface = int(surface)
 
-    def __call__(self, prescription, cache):
-        return float(prescription.rows[self.surface].thickness)
+    def __call__(self, system, cache):
+        return float(system.rows[self.surface].thickness)
 
 
 class _CallableMerit(Merit):
-    """Adapter giving a bare f(prescription, cache) -> float the Merit
+    """Adapter giving a bare f(system, cache) -> float the Merit
     protocol, with target=0, weight=1, and the callable's name."""
 
     def __init__(self, fn, target=None, weight=1.0, *, min=None, max=None):
@@ -386,8 +374,8 @@ class _CallableMerit(Merit):
         self.fn = fn
         self.name = getattr(fn, '__name__', 'callable')
 
-    def __call__(self, prescription, cache):
-        return float(self.fn(prescription, cache))
+    def __call__(self, system, cache):
+        return float(self.fn(system, cache))
 
 
 class WavefrontRMS(_RayMerit):
@@ -412,7 +400,7 @@ class WavefrontRMS(_RayMerit):
         self.P_xp = P_xp
         self.stop_index = stop_index
 
-    def _geometry(self, trace, prescription, wavelength, *, P_xp_override=None):
+    def _geometry(self, trace, system, wavelength, *, P_xp_override=None):
         """Reference-sphere geometry + EIC OPD shared by value and seed."""
         valid = valid_mask(trace.status, trace.P[-1])
         chief = self.chief_index
@@ -424,8 +412,9 @@ class WavefrontRMS(_RayMerit):
         P_last = trace.P[-1]
         S_last = trace.S[-1]
         C = P_last[chief]
-        n_object = object_space_index(prescription, wavelength)
-        n_image = image_space_index(prescription, wavelength, fallback=n_object)
+        surfaces = compiled_surfaces(system)
+        n_object = object_space_index(surfaces, wavelength)
+        n_image = image_space_index(surfaces, wavelength, fallback=n_object)
 
         if P_xp_override is not None:
             P_xp = np.asarray(P_xp_override, dtype=config.precision)
@@ -437,7 +426,7 @@ class WavefrontRMS(_RayMerit):
             # the single exit-pupil owner reports its route; the adjoint needs
             # it to know whether P_xp is differentiably tied to the chief ray.
             P_xp, xp_mode = _analysis.resolve_exit_pupil(
-                prescription, wavelength, stop_index=self.stop_index,
+                system, wavelength, stop_index=self.stop_index,
                 epd=self.epd, chief=(C, S_last[chief]),
                 axis_point=self.axis_point, axis_dir=self.axis_dir,
                 return_mode=True)
@@ -462,26 +451,26 @@ class WavefrontRMS(_RayMerit):
                     opd=opd, rms=rms, n_image=n_image,
                     P_last=P_last, S_last=S_last)
 
-    def __call__(self, prescription, cache, *, return_seed=False):
-        P, S, wvl = self._bundle(prescription, cache)
+    def __call__(self, system, cache, *, return_seed=False):
+        P, S, wvl = self._bundle(system, cache)
         trace = cache.trace(P, S, wvl)
         if return_seed:
-            g = self._geometry(trace, prescription, wvl)
+            g = self._geometry(trace, system, wvl)
             return g['rms'], self._seed_from_geometry(trace, g)
         # Reuse the memoized exit pupil on the value path.
         P_xp = cache.exit_pupil(
             P, S, wvl, P_xp=self.P_xp,
             chief_index=self.chief_index, stop_index=self.stop_index,
             epd=self.epd, axis_point=self.axis_point, axis_dir=self.axis_dir)
-        g = self._geometry(trace, prescription, wvl,
+        g = self._geometry(trace, system, wvl,
                            P_xp_override=P_xp)
         return g['rms']
 
-    def value(self, trace, prescription, wavelength):
-        return self._geometry(trace, prescription, wavelength)['rms']
+    def value(self, trace, system, wavelength):
+        return self._geometry(trace, system, wavelength)['rms']
 
-    def seed(self, trace, prescription, wavelength):
-        g = self._geometry(trace, prescription, wavelength)
+    def seed(self, trace, system, wavelength):
+        g = self._geometry(trace, system, wavelength)
         return self._seed_from_geometry(trace, g)
 
     def _seed_components_from_geometry(self, trace, g):
@@ -547,14 +536,14 @@ class WavefrontRMS(_RayMerit):
     def _seed_from_geometry(self, trace, g):
         return self._seed_components_from_geometry(trace, g)[:3]
 
-    def direct_gradient(self, trace, prescription, wavelength, seeds):
+    def direct_gradient(self, trace, system, wavelength, seeds):
         if self.P_xp is not None:
             return None
         resolved_stop = (self.stop_index if self.stop_index is not None
-                         else getattr(prescription, 'stop_index', None))
+                         else getattr(system, 'stop_index', None))
         if resolved_stop is None:
             return None
-        g = self._geometry(trace, prescription, wavelength)
+        g = self._geometry(trace, system, wavelength)
         if g['xp_mode'] != 'paraxial':
             return None
         _, _, _, P_xp_bar = self._seed_components_from_geometry(trace, g)
@@ -563,7 +552,8 @@ class WavefrontRMS(_RayMerit):
         from ._diff_raytrace import paraxial_exit_pupil_z_tangents
 
         xp_z_dot = paraxial_exit_pupil_z_tangents(
-            prescription, wavelength, seeds, stop_index=resolved_stop)
+            compiled_surfaces(system), wavelength, seeds,
+            stop_index=resolved_stop)
         return P_xp_bar[2] * xp_z_dot
 
 
@@ -604,14 +594,14 @@ class ZernikeCoefficient(_RayMerit):
         self.normalization_radius = normalization_radius
         self.norm = bool(norm)
 
-    def __call__(self, prescription, cache):
-        P, S, wvl = self._bundle(prescription, cache)
+    def __call__(self, system, cache):
+        P, S, wvl = self._bundle(system, cache)
         P_xp = cache.exit_pupil(
             P, S, wvl, P_xp=self.P_xp,
             chief_index=self.chief_index, stop_index=self.stop_index,
             epd=self.epd, axis_point=self.axis_point, axis_dir=self.axis_dir)
         opd, x_pup, y_pup = _analysis.wavefront(
-            prescription, P, S, wvl,
+            system, P, S, wvl,
             chief_index=self.chief_index, P_xp=P_xp,
         )
         coefs, _ = _analysis.wavefront_zernike_fit(
@@ -635,10 +625,10 @@ class Distortion(Merit):
         self.epd = float(epd)
         self.paraxial_fraction = float(paraxial_fraction)
 
-    def __call__(self, prescription, cache):
-        wvl = _resolve_wavelength(prescription, self.wavelength)
+    def __call__(self, system, cache):
+        wvl = resolve_wavelength(system, self.wavelength)
         result = _analysis.distortion(
-            prescription, [self.field], wvl,
+            system, [self.field], wvl,
             epd=self.epd,
             paraxial_fraction=self.paraxial_fraction,
         )
@@ -660,11 +650,11 @@ class FieldCurvature(Merit):
         self.field = field
         self.wavelength = None if wavelength is None else float(wavelength)
 
-    def __call__(self, prescription, cache):
+    def __call__(self, system, cache):
         from .parabasal import parabasal_foci  # local: avoid a circular import
 
-        wvl = _resolve_wavelength(prescription, self.wavelength)
-        x_z, y_z = parabasal_foci(prescription, self.field, wvl)
+        wvl = resolve_wavelength(system, self.wavelength)
+        x_z, y_z = parabasal_foci(system, self.field, wvl)
         # parabasal_foci returns nan when the chief ray fails to trace; surface
         # that as a clear error (as WavefrontRMS does) rather than feeding a nan
         # residual into the optimizer, where it silently stalls the solve.
@@ -678,40 +668,33 @@ class FieldCurvature(Merit):
 
 # ---------- Problem ----------------------------------------------------------
 
-def _is_lensdata(model):
-    """A LensData duck-types as a system with a free vector + compiler."""
-    return (hasattr(model, 'pack') and hasattr(model, 'update')
-            and hasattr(model, 'to_surfaces'))
+def _is_system(model):
+    """An OpticalSystem owns design state (DesignState) and compiles surfaces."""
+    return hasattr(model, '_design') and hasattr(model, 'to_surfaces')
 
 
 class Problem:
-    """Design optimization over a LensData free vector.
+    """Design optimization over an OpticalSystem's free vector (ADR-0004).
 
     Operands produce weighted residuals.  Constraints are operands with
     target/min/max bounds.  gradient='auto' uses adjoint residual Jacobians
-    when available; gradient='fd' forces finite differences.
-
+    when available; gradient='fd' forces finite differences.  Keyed to the
+    system, which owns the DesignState free vector.
     """
 
-    def __init__(self, lensdata, operands=None, *,
+    def __init__(self, system, operands=None, *,
                  constraints=None, gradient='auto'):
-        # OpticalSystem supplies metadata; LensData owns the free vector.
-        prescription = lensdata
-        if not _is_lensdata(lensdata) and _is_lensdata(getattr(lensdata,
-                                                              'lens', None)):
-            prescription = lensdata
-            lensdata = lensdata.lens
-        elif not _is_lensdata(lensdata):
+        if not _is_system(system):
             raise TypeError(
-                'Problem requires a LensData or OpticalSystem (it needs '
-                'pack/update/to_surfaces to own the free vector); got '
-                f'{type(lensdata).__name__}.'
+                'Problem requires an OpticalSystem (it owns the DesignState '
+                'free vector and resolves the experiment metadata); got '
+                f'{type(system).__name__}.'
             )
         if gradient not in ('auto', 'fd'):
             raise ValueError(
                 f"gradient must be 'auto' or 'fd', got {gradient!r}")
-        self.lensdata = lensdata
-        self.prescription = prescription  # duck-types as a surface sequence
+        self.system = system
+        self.design = system._design     # DOF registry / free vector owner
         self.operands = list(operands or [])
         eqs, ineqs = _route_constraints(constraints)
         self.equality_constraints = eqs
@@ -720,17 +703,17 @@ class Problem:
         self.gradient = gradient
 
     def x0(self):
-        """Initial free vector from LensData.pack()."""
-        return self.lensdata.pack()
+        """Initial free vector from the system's DesignState."""
+        return self.design.pack()
 
     def _set_x(self, x):
-        self.lensdata.update(x)
+        self.design.update(x)
 
     def _operand_vector(self, operands, *, weighted):
-        cache = _TraceCache(self.prescription)
+        cache = _TraceCache(self.system)
         out = np.empty(len(operands), dtype=config.precision)
         for i, op in enumerate(operands):
-            v = op(self.prescription, cache)
+            v = op(self.system, cache)
             r = v - op.target
             if weighted:
                 r = op.weight * r
@@ -763,11 +746,11 @@ class Problem:
 
         """
         self._set_x(x)
-        cache = _TraceCache(self.prescription)
+        cache = _TraceCache(self.system)
         out = np.empty(len(self.inequality_constraints),
                        dtype=config.precision)
         for i, (op, kind, bound) in enumerate(self.inequality_constraints):
-            v = op(self.prescription, cache)
+            v = op(self.system, cache)
             out[i] = (v - bound) if kind == 'min' else (bound - v)
         if return_cache:
             return out, cache
@@ -804,12 +787,12 @@ class Problem:
             )
         return result
 
-    def _eval_merit(self, prescription):
-        """Sum of squared weighted residuals on the given prescription."""
-        cache = _TraceCache(prescription)
+    def _eval_merit(self, system):
+        """Sum of squared weighted residuals on the given system."""
+        cache = _TraceCache(system)
         total = 0.0
         for op in self.operands:
-            v = op(prescription, cache)
+            v = op(system, cache)
             r = op.weight * (v - op.target)
             total = total + r * r
         return total
@@ -817,20 +800,20 @@ class Problem:
     def merit(self, x):
         """Scalar sum of squared weighted residuals."""
         self._set_x(x)
-        return float(self._eval_merit(self.prescription))
+        return float(self._eval_merit(self.system))
 
     def _free_slot_seeds(self):
         """DiffSeed objects for current free DOFs."""
         from .tolerance import Perturbation
         from ._diff_raytrace import seeds_from_perturbations
 
-        ld = self.lensdata
+        lens = self.system.lens
         perturbations = []
-        for slot in ld.spec.free_slots():
+        for slot in self.design.free_slots():
             group, r, off = slot
-            nominal = float(ld.spec.get_value(slot))
+            nominal = float(lens._slot_value(slot))
             perturbations.append(Perturbation(
-                ld, slot, None, nominal, step=0.0, name=f'{group}{r}.{off}'))
+                lens, slot, None, nominal, step=0.0, name=f'{group}{r}.{off}'))
         return seeds_from_perturbations(perturbations)
 
     def residual_jacobian(self, x):
@@ -859,11 +842,11 @@ class Problem:
         from .adjoint.tolerance_analysis import multi_objective_sensitivity
 
         # Group operands that share the same launch bundle.
-        cache = _TraceCache(self.prescription)
+        cache = _TraceCache(self.system)
         bundles = []
         groups = {}
         for i, op in enumerate(ops):
-            bundle = op._bundle(self.prescription, cache)
+            bundle = op._bundle(self.system, cache)
             if bundle is None:
                 return None
             bundles.append(bundle)
@@ -873,7 +856,7 @@ class Problem:
         for idxs in groups.values():
             P, S, wvl = bundles[idxs[0]]
             result = multi_objective_sensitivity(
-                self.prescription, P, S, wvl,
+                self.system, P, S, wvl,
                 seeds, [ops[i] for i in idxs])
             for row, i in zip(result.jacobian, idxs):
                 J[i] = ops[i].weight * row
@@ -889,7 +872,7 @@ class Problem:
             method = 'fd'
         self._set_x(x)
         return _merit_jacobian_free(
-            self.lensdata, lambda: self._eval_merit(self.prescription),
+            self.design, lambda: self._eval_merit(self.system),
             method=method, step=step)
 
 

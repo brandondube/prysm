@@ -51,7 +51,7 @@ class Perturbation:
 
     def set(self, value):
         """Set the targeted DOF and invalidate the compiled system."""
-        self.lensdata.spec.set_value(self.slot, value)
+        self.lensdata._set_slot_value(self.slot, value)
         self.lensdata._invalidate()
 
     def sample(self, rng):
@@ -78,7 +78,7 @@ class Perturbation:
         """
         lensdata = _as_lens(lensdata)
         slot = _resolve_slot(lensdata, category, surface, component)
-        nom = float(lensdata.spec.get_value(slot))
+        nom = float(lensdata._slot_value(slot))
         sigma = float(sigma)
 
         def sampler(rng):
@@ -97,7 +97,7 @@ class Perturbation:
         """
         lensdata = _as_lens(lensdata)
         slot = _resolve_slot(lensdata, category, surface, component)
-        nom = float(lensdata.spec.get_value(slot))
+        nom = float(lensdata._slot_value(slot))
         sigma = abs(nom) * float(sigma_rel)
 
         def sampler(rng):
@@ -111,7 +111,7 @@ class Perturbation:
         """Uniform over (nominal - half_width, nominal + half_width)."""
         lensdata = _as_lens(lensdata)
         slot = _resolve_slot(lensdata, category, surface, component)
-        nom = float(lensdata.spec.get_value(slot))
+        nom = float(lensdata._slot_value(slot))
         hw = abs(float(half_width))
 
         def sampler(rng):
@@ -125,7 +125,7 @@ class Perturbation:
         """Triangular distribution centered on nominal with half-width hw."""
         lensdata = _as_lens(lensdata)
         slot = _resolve_slot(lensdata, category, surface, component)
-        nom = float(lensdata.spec.get_value(slot))
+        nom = float(lensdata._slot_value(slot))
         hw = abs(float(half_width))
 
         def sampler(rng):
@@ -137,16 +137,16 @@ class Perturbation:
 # ---------- operand_as_merit ------------------------------------------------
 
 def operand_as_merit(operand):
-    """Wrap a design.py operand into a one-arg merit(prescription) -> float.
+    """Wrap a design.py operand into a one-arg merit(system) -> float.
 
     Creates a fresh _TraceCache for each call so the operand can hit it
     without leaking cache state between merit evaluations.
 
     """
 
-    def merit(prescription):
-        cache = _TraceCache(prescription)
-        return float(operand(prescription, cache))
+    def merit(system):
+        cache = _TraceCache(system)
+        return float(operand(system, cache))
 
     return merit
 
@@ -158,7 +158,7 @@ class SensitivityTable:
 
     .rows is a list of dicts with keys: name, nominal, step, merit_plus,
     merit_minus, delta_plus, delta_minus, sensitivity (= centered dM/dx).
-    .merit_nominal is the merit at the unperturbed prescription.
+    .merit_nominal is the merit at the unperturbed system.
 
     Pretty repr renders as a column-aligned table.
 
@@ -198,7 +198,7 @@ class SensitivityTable:
         return '\n'.join(lines)
 
 
-def sensitivity_table(prescription, perturbations, merit, *, step=None):
+def sensitivity_table(system, perturbations, merit, *, step=None):
     """Centered-difference sensitivity of merit w.r.t. each perturbation.
 
     For each Perturbation in `perturbations`, set parameter to
@@ -209,9 +209,9 @@ def sensitivity_table(prescription, perturbations, merit, *, step=None):
 
     Parameters
     ----------
-    prescription : sequence of Surface
+    system : sequence of Surface
     perturbations : iterable of Perturbation
-    merit : callable merit(prescription) -> float
+    merit : callable merit(system) -> float
     step : float, optional
         global override for the per-perturbation step.
 
@@ -232,7 +232,7 @@ def sensitivity_table(prescription, perturbations, merit, *, step=None):
 
     """
     perturbations = list(perturbations)
-    m_nom = float(merit(prescription))
+    m_nom = float(merit(system))
     rows = []
     for p in perturbations:
         h = float(step) if step is not None else p.step
@@ -252,7 +252,7 @@ def sensitivity_table(prescription, perturbations, merit, *, step=None):
             continue
         def probe(value, p=p):
             p.set(value)
-            return merit(prescription)
+            return merit(system)
         try:
             m_plus, m_minus = central_difference(probe, p.nominal, h)
         finally:
@@ -331,22 +331,22 @@ class MonteCarloResult:
         )
 
 
-def monte_carlo(prescription, perturbations, merit, n_trials, *,
+def monte_carlo(system, perturbations, merit, n_trials, *,
                 seed=None, record_samples=False):
     """Run a Monte Carlo tolerancing simulation.
 
     For each of n_trials independent trials:
     1. Sample every perturbation's distribution.
     2. Set each parameter via its setter.
-    3. Evaluate merit(prescription) and record the result.
+    3. Evaluate merit(system) and record the result.
     Once all trials are done (or on any exception), restore each
     parameter to its nominal value.
 
     Parameters
     ----------
-    prescription : sequence of Surface
+    system : sequence of Surface
     perturbations : iterable of Perturbation
-    merit : callable merit(prescription) -> float
+    merit : callable merit(system) -> float
     n_trials : int
     seed : int, optional
         seed for numpy's default_rng for reproducibility.
@@ -372,7 +372,7 @@ def monte_carlo(prescription, perturbations, merit, n_trials, *,
                 p.set(v)
                 if record_samples:
                     sampled_x[trial, i] = v
-            merits[trial] = float(merit(prescription))
+            merits[trial] = float(merit(system))
     finally:
         for p in perturbations:
             p.reset()

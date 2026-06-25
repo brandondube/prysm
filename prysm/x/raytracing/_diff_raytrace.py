@@ -17,7 +17,7 @@ from .analysis import (
     _apply_field_and_output,
     close_on_reference_sphere,
 )
-from ._meta import object_space_index, image_space_index, system_stop_index
+from ._meta import object_space_index, image_space_index
 
 
 # ---------- broadcasting helpers --------------------------------------------
@@ -539,23 +539,22 @@ def _paraxial_walk_matrix_tangent(surfaces, wvl, n_start, n_start_dot,
     return M, n, Mdot, ndot
 
 
-def paraxial_exit_pupil_z_tangents(prescription, wvl, seeds, *,
+def paraxial_exit_pupil_z_tangents(surfaces, wvl, seeds, *,
                                    stop_index=None):
     """Derivative of ynu_first_order(...).xp_z with respect to DiffSeed entries."""
     from .paraxial import _first_order_surfaces
 
     seeds = list(seeds)
     n_params = len(seeds)
-    stop_index = system_stop_index(prescription, stop_index)
     if stop_index is None:
         return np.zeros(n_params, dtype=config.precision)
 
-    surfaces = _first_order_surfaces(prescription)
+    surfaces = _first_order_surfaces(surfaces)
     n_surfaces = len(surfaces)
     k = int(stop_index)
     if k < 0 or k >= n_surfaces:
         raise IndexError(
-            f'stop_index {k} out of range for prescription of length '
+            f'stop_index {k} out of range for surfaces of length '
             f'{n_surfaces}'
         )
 
@@ -650,7 +649,7 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None,
     Parameters
     ----------
     surfaces : sequence of Surface
-        the compiled prescription.
+        the compiled surface list.
     P, S : ndarray, (N, 3) or (3,)
         launch positions and direction cosines.
     wvl : float

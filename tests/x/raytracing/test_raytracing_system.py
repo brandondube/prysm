@@ -22,29 +22,28 @@ from prysm.x.raytracing.io._common import warn_vignetting_ignored
 
 
 def _singlet(aperture=ApertureSpec.epd(20.0), with_object=None):
+    # OBJECT/IMAGE endpoints are implicit (ADR-0006).  A finite object lives on
+    # the OBJECT row (distance + object-space medium); the first powered surface
+    # is row 1 in either conjugate, so the stop stays at index 1.
     ld = LensData()
     if with_object is not None:
-        ld.add(Plane(), typ='eval', material=materials.ConstantMaterial(with_object),
-               thickness=200.0)
+        ld.object_row.material = materials.ConstantMaterial(with_object)
+        ld.object_row.thickness = 200.0
     (ld.add(Conic(1 / 102.0, 0.0), thickness=6.0, material=materials.ConstantMaterial(1.5168),
             semidiameter=12.0)
        .add(Conic(-1 / 102.0, 0.0), thickness=95.0, material=materials.air,
-            semidiameter=12.0)
-       .add(Plane(), typ='eval', material=materials.air, semidiameter=12.0))
-    stop = 1 if with_object is not None else 0
+            semidiameter=12.0))
     return OpticalSystem(ld, aperture=aperture,
                          wavelengths=list(FRAUNHOFER_LINES_UM.values()),
-                         reference=1, stop_index=stop, unit='mm')
+                         reference=1, stop_index=1)
 
 
 def _afocal(aperture):
     ld = LensData()
-    (ld.add(Plane(), typ='eval', material=materials.air, thickness=10.0)
-       .add(Plane(), typ='refr', material=materials.air, thickness=10.0)
-       .add(Plane(), typ='eval', material=materials.air))
+    ld.add(Plane(), typ='refr', material=materials.air, thickness=10.0)
     return OpticalSystem(ld, aperture=aperture,
                          wavelengths=list(FRAUNHOFER_LINES_UM.values()),
-                         reference=1, stop_index=1, unit='mm')
+                         reference=1, stop_index=1)
 
 
 # ---------- ApertureSpec ----------------------------------------------------
@@ -107,9 +106,11 @@ def test_focusing_apertures_raise_for_afocal_system():
     ]
     for spec in specs:
         sys = _afocal(spec)
-        with pytest.raises(ValueError, match='no net power'):
+        # image-space focusing apertures need a focal length ('no net power');
+        # object-space ones additionally need a finite conjugate ('object-space')
+        with pytest.raises(ValueError, match='no net power|object-space'):
             spec.resolve(sys)
-        with pytest.raises(ValueError, match='no net power'):
+        with pytest.raises(ValueError, match='no net power|object-space'):
             _ = sys.epd
 
 
@@ -163,7 +164,8 @@ def test_object_space_na_low_na_matches_paraxial_epd():
     na = 0.005
     sys = _singlet(ApertureSpec.na(na, object_space=True), with_object=1.0)
     z_obj = float(sys[0].P[2])
-    z_ep = entrance_pupil_z(sys, sys.wavelength())
+    z_ep = entrance_pupil_z(sys.to_surfaces(), sys.wavelength(),
+                            stop_index=sys.stop_index)
     fld = Field(0.0, 0.0, kind='height', object_z=z_obj)
     P, S = launch(sys, fld, sys.wavelength(), Sampling.fan(n=5, axis='y'))
     # propagate the +y rim ray in object space to the entrance-pupil plane
@@ -233,21 +235,23 @@ def test_surface_table_marks_stop_and_formats_radius():
 
 def test_surface_table_marks_compiled_stop_after_coordbreak():
     ld = LensData()
-    ld.add_coordbreak(decenter=(1.0, 0.0, 0.0))
-    ld.add(Plane(), typ='eval')
-    sys = OpticalSystem(ld, stop_index=0)
+    ld.add_coordbreak(decenter=(1.0, 0.0, 0.0))   # rows[1] (rows[0] is OBJECT)
+    ld.add(Plane(), typ='eval')                    # rows[2]
+    sys = OpticalSystem(ld, stop_index=1)
     table = sys.list_surfaces()
-    assert table.records[0]['stop'] is False
-    assert table.records[0]['surface_index'] is None
-    assert table.records[1]['stop'] is True
-    assert table.records[1]['surface_index'] == 0
+    # the stop points at the coordbreak; it carries no compiled surface and the
+    # marker rolls onto the next real surface (the eval plane)
+    assert table.records[1]['stop'] is False
+    assert table.records[1]['surface_index'] is None
+    assert table.records[2]['stop'] is True
+    assert table.records[2]['surface_index'] == 1
 
 
 def test_aperture_table_reports_semidiameters():
     sys = _singlet()
     table = sys.list_apertures()
     assert repr(table).startswith('ApertureTable')
-    assert table.records[0]['semidiameter'] == pytest.approx(12.0)
+    assert table.records[1]['semidiameter'] == pytest.approx(12.0)  # [0] is OBJECT
 
 
 def test_decenter_table_lists_coordinate_breaks():
@@ -308,7 +312,7 @@ def test_exit_pupil_cache_keyed_by_stop_index():
     xp0 = sys.exit_pupil(wvl)
     # stop_index is a plain slot write (no hook), so it is part of the cache
     # key: reassigning it must not return the stale pupil.
-    sys.stop_index = 1
+    sys.stop_index = 2
     xp1 = sys.exit_pupil(wvl)
     assert xp1 is not xp0
 
@@ -403,7 +407,7 @@ def test_solve_image_distance_lands_d_line_paraxial_image():
     from prysm.x.raytracing.paraxial import paraxial_image_distance
     sys = _singlet()  # FRAUNHOFER wavelengths, reference index 1 (d-line)
     wvl = sys.reference_wavelength
-    sys.solve_image_distance()  # defaults to the reference (d) wavelength
+    sys.solve.image_distance()  # defaults to the reference (d) wavelength
     surfaces = sys.to_surfaces()
     # the image plane sits at the d-line paraxial image of the last powered surface
     expected = (float(surfaces[-2].P[2])
@@ -422,11 +426,10 @@ def _vignetted_singlet(rear_semidiameter=4.0, field=0.0):
     (ld.add(Conic(1 / 30.0, 0.0), thickness=4.0, material=n15,
             semidiameter=6.0)
        .add(Plane(), thickness=50.0, material=materials.air,
-            semidiameter=rear_semidiameter)
-       .add(Plane(), typ='eval', material=materials.air, semidiameter=20.0))
+            semidiameter=rear_semidiameter))
     sys = OpticalSystem(ld, aperture=10.0, fields=[field],
                         wavelengths=[0.5876], reference=0)
-    sys.solve_image_distance()
+    sys.solve.image_distance()
     return sys
 
 
@@ -445,7 +448,7 @@ def test_set_vignetting_rim_rays_transmit_inside_limiting_aperture():
     from prysm.x.raytracing.spencer_and_murty import valid_mask
 
     sys = _vignetted_singlet()
-    out = sys.set_vignetting()
+    out = sys.solve.vignetting()
     assert out is sys
     assert sys.field(0).vignetting is not None
 
@@ -454,7 +457,8 @@ def test_set_vignetting_rim_rays_transmit_inside_limiting_aperture():
     P, S = launch(sys, sys.field(0), sys.wavelength(), Sampling.cross(n=11))
     tr = raytrace(sys, P, S, sys.wavelength())
     assert valid_mask(tr.status).all()
-    r_rear = np.hypot(tr.P[2, :, 0], tr.P[2, :, 1])
+    # history rows: launch(0), OBJECT(1), conic(2), rear plane(3), IMAGE(4)
+    r_rear = np.hypot(tr.P[3, :, 0], tr.P[3, :, 1])
     assert float(r_rear.max()) <= 4.0
     assert float(r_rear.max()) > 4.0 * 0.98
 
@@ -464,8 +468,17 @@ def test_set_vignetting_overwrites_and_collapses_unvignetted_to_none():
     # stale hand-typed factors are referenced to the nominal pupil and
     # overwritten, not composed with; an unvignetted field stores None
     sys.field(0).vignetting = {'vux': 0.1, 'vlx': 0.1, 'vuy': 0.1, 'vly': 0.1}
-    sys.set_vignetting()
+    sys.solve.vignetting()
     assert sys.field(0).vignetting is None
+
+
+def test_solve_vignetting_accepts_numpy_int_field_indices():
+    # np.arange yields np.int64 indices; these must resolve through the field
+    # owner (sys.field), not the old bare `int` check that missed numpy ints
+    sys = _vignetted_singlet()
+    out = sys.solve.vignetting(fields=np.arange(len(sys.fields)))
+    assert out is sys
+    assert sys.field(0).vignetting is not None
 
 
 def test_solve_vignetting_blocked_chief_raises():
