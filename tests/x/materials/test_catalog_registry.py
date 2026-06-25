@@ -12,10 +12,10 @@ from prysm.x.materials import (
 
 def test_catalog_chain_namespace_lookup_and_ambiguity():
     schott = Catalog.from_materials([
-        ConstantMaterial('N-BK7', 1.5, catalog='SCHOTT', metadata={'aliases': ('BK7',)}),
+        ConstantMaterial(1.5, name='N-BK7', catalog='SCHOTT', metadata={'aliases': ('BK7',)}),
     ])
     ohara = Catalog.from_materials([
-        ConstantMaterial('S-BSL7', 1.52, catalog='OHARA', metadata={'aliases': ('BK7',)}),
+        ConstantMaterial(1.52, name='S-BSL7', catalog='OHARA', metadata={'aliases': ('BK7',)}),
     ])
     chain = CatalogChain([schott, ohara])
     assert chain['SCHOTT:N-BK7'].n(0.55) == pytest.approx(1.5)
@@ -27,8 +27,8 @@ def test_registry_resolves_by_name_via_shared_record_query():
     # the registry shares the RecordSet query seam, so name resolution and the
     # namespace:name getitem work the same as on a Catalog or a chain.
     registry = MaterialRegistry.from_catalogs(Catalog.from_materials([
-        ConstantMaterial('N-BK7', 1.5, catalog='SCHOTT'),
-        ConstantMaterial('S-BSL7', 1.52, catalog='OHARA'),
+        ConstantMaterial(1.5, name='N-BK7', catalog='SCHOTT'),
+        ConstantMaterial(1.52, name='S-BSL7', catalog='OHARA'),
     ]))
     assert registry.material_for_name('N-BK7').n(0.55) == pytest.approx(1.5)
     assert registry['OHARA:S-BSL7'].n(0.55) == pytest.approx(1.52)
@@ -62,9 +62,7 @@ def test_registry_metadata_and_computed_search():
 
 
 def test_registry_uses_catalog_matching_semantics():
-    material = ConstantMaterial(
-        'N-BK7',
-        1.5,
+    material = ConstantMaterial(1.5, name='N-BK7',
         catalog='SCHOTT',
         process='IBS',
         metadata={'aliases': ('BK7',)},
@@ -78,7 +76,7 @@ def test_registry_uses_catalog_matching_semantics():
 
 def test_registry_computed_criteria_validate_arity():
     registry = MaterialRegistry.from_catalogs(Catalog.from_materials([
-        ConstantMaterial('glass', 1.5),
+        ConstantMaterial(1.5, name='glass'),
     ]))
 
     with pytest.raises(ValueError, match='n_at criterion expects'):
@@ -91,8 +89,8 @@ def test_registry_computed_criteria_validate_arity():
 
 def test_registry_k_max_treats_missing_k_as_transparent():
     # a missing_k='raise' member must not abort the k_max filter.
-    opaque_unknown = ConstantMaterial('X', 2.0, missing_k='raise', catalog='LAB')
-    clear = ConstantMaterial('Y', 1.5, missing_k='zero', catalog='LAB')
+    opaque_unknown = ConstantMaterial(2.0, name='X', missing_k='raise', catalog='LAB')
+    clear = ConstantMaterial(1.5, name='Y', missing_k='zero', catalog='LAB')
     registry = MaterialRegistry.from_catalogs(
         Catalog.from_materials([opaque_unknown, clear])
     )

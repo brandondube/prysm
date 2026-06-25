@@ -31,7 +31,7 @@ DATA = Path(__file__).parents[1] / 'raytracing' / 'data' / 'materials'
 # --------------------------------------------------------------------------
 
 def test_constant_golden():
-    m = ConstantMaterial('constant', 1.5)
+    m = ConstantMaterial(1.5, name='constant')
     assert float(m.n(0.55)) == pytest.approx(1.5)
     assert float(m.k(0.55)) == pytest.approx(0.0)
 
@@ -99,7 +99,7 @@ def test_rii_formula_golden(rii_catalog):
 # --------------------------------------------------------------------------
 
 def test_constant_page_info():
-    m = ConstantMaterial('constant', 1.5)
+    m = ConstantMaterial(1.5, name='constant')
     assert m.page_info == {
         'shelf': 'user', 'book': 'USER', 'page': 'constant', 'filepath': '',
         'catalog': 'USER', 'rangeMin': None, 'rangeMax': None, 'model': 'constant',

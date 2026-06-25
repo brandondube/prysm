@@ -11,7 +11,7 @@ from prysm.x.materials import (
 
 
 def test_constant_material_scalar_vector_and_nk():
-    material = ConstantMaterial('absorber', 1.5, k=0.02)
+    material = ConstantMaterial(1.5, name='absorber', k=0.02)
     assert material(0.55) == pytest.approx(1.5)
     np.testing.assert_allclose(material.n([0.5, 0.6]), [1.5, 1.5])
     assert material.k(0.55) == pytest.approx(0.02)
@@ -19,17 +19,15 @@ def test_constant_material_scalar_vector_and_nk():
 
 
 def test_missing_k_policies_are_explicit():
-    transparent = ConstantMaterial('transparent', 1.5, missing_k='zero')
+    transparent = ConstantMaterial(1.5, name='transparent', missing_k='zero')
     assert transparent.k(0.55) == pytest.approx(0)
-    absorbing_unknown = ConstantMaterial('unknown', 1.5, missing_k='raise')
+    absorbing_unknown = ConstantMaterial(1.5, name='unknown', missing_k='raise')
     with pytest.raises(MissingKError):
         absorbing_unknown.k(0.55)
 
 
 def test_wavelength_and_temperature_ranges_raise_by_default():
-    material = ConstantMaterial(
-        'limited',
-        1.5,
+    material = ConstantMaterial(1.5, name='limited',
         wavelength_range=(0.4, 0.8),
         temperature_range=(80, 300),
     )
@@ -102,7 +100,7 @@ def test_constant_material_plain_sequence_uses_config_precision():
     old_precision = config.precision
     try:
         config.precision = np.float32
-        material = ConstantMaterial('constant', 1.5, k=0.01)
+        material = ConstantMaterial(1.5, name='constant', k=0.01)
 
         assert material.n([0.5, 0.6]).dtype == np.dtype(np.float32)
         assert material.k([0.5, 0.6]).dtype == np.dtype(np.float32)

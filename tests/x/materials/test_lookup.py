@@ -34,7 +34,7 @@ def test_resolve_index_numbers_and_callables():
     assert resolve_index(1.2 + 0.3j)(0.55) == 1.2 + 0.3j
     f = lambda wvl: 2.0
     assert resolve_index(f) is f
-    material = ConstantMaterial('glass', 1.7)
+    material = ConstantMaterial(1.7, name='glass')
     assert resolve_index(material) is material
 
 
@@ -42,13 +42,13 @@ def test_resolve_index_name_requires_resolver():
     # a glass name needs a catalog; without one it refuses rather than guessing
     with pytest.raises(TypeError, match='without a catalog'):
         resolve_index('N-BK7')
-    catalog = Catalog.from_materials([ConstantMaterial('N-BK7', 1.5168)])
+    catalog = Catalog.from_materials([ConstantMaterial(1.5168, name='N-BK7')])
     resolved = resolve_index('N-BK7', name_resolver=catalog.material_for_name)
     assert resolved.n(0.55) == pytest.approx(1.5168)
 
 
 def test_lookup_projects_blank_to_air_and_resolves_names():
-    catalog = Catalog.from_materials([ConstantMaterial('N-BK7', 1.5168)])
+    catalog = Catalog.from_materials([ConstantMaterial(1.5168, name='N-BK7')])
     assert lookup(None) is air
     assert lookup('') is air
     assert lookup('AIR') is air

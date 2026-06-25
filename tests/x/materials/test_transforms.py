@@ -10,7 +10,7 @@ from prysm.x.materials import (
 
 
 def test_correction_accepts_scalar_and_wavelength_only_callable():
-    base = ConstantMaterial('base', 1.5)
+    base = ConstantMaterial(1.5, name='base')
     # a bare scalar correction is a constant offset
     assert IndexOffsetMaterial(base, 0.01).n(0.55) == pytest.approx(1.51)
     # a wavelength-only callable is bound to its (wvl) shape, not handed a temperature
@@ -51,7 +51,7 @@ def test_callable_correction_typeerror_is_not_masked():
     def correction(wvl_um, temperature):
         raise TypeError('internal failure')
 
-    material = IndexOffsetMaterial(ConstantMaterial('base', 1.5), correction)
+    material = IndexOffsetMaterial(ConstantMaterial(1.5, name='base'), correction)
 
     with pytest.raises(TypeError, match='internal failure'):
         material.n(0.55, temperature=300)
