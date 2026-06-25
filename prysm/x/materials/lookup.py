@@ -16,8 +16,8 @@ _DEFAULT_CATALOG = None
 # Unit-index media as MaterialProtocol singletons (n == 1, k == 0).  Identity is
 # meaningful: resolve_index maps AIR / VACUUM / blank to the air singleton, and
 # the IO / listings display layers treat both as a blank glass via identity.
-air = ConstantMaterial('air', 1.0)
-vacuum = ConstantMaterial('vacuum', 1.0)
+air = ConstantMaterial(1.0, name='air')
+vacuum = ConstantMaterial(1.0, name='vacuum')
 
 
 def _default_catalog():

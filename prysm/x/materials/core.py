@@ -358,11 +358,12 @@ class BaseMaterial:
 class ConstantMaterial(BaseMaterial):
     """Material with constant n and optional constant k."""
 
-    def __init__(self, *args, name=None, n=None, k=None, **kwargs):
-        name, n = _constant_material_args(args, name, n)
+    def __init__(self, n, *, name=None, k=None, **kwargs):
         n = float(n)
         if not np.isfinite(n):
             raise ValueError('n must be finite')
+        if name is None:
+            name = f'const_{n:g}'
         if k is not None:
             k = float(k)
             if not np.isfinite(k) or k < 0:
@@ -398,28 +399,6 @@ class ConstantMaterial(BaseMaterial):
         if hasattr(wvl_um, 'shape'):
             return np.zeros_like(wvl_um) + self.k_value
         return np.zeros(np.shape(wvl_um), dtype=config.precision) + self.k_value
-
-
-def _constant_material_args(args, name, n):
-    if len(args) > 2:
-        raise TypeError('ConstantMaterial expects name, n or n with name=')
-    if len(args) == 2:
-        if name is not None or n is not None:
-            raise TypeError('ConstantMaterial got duplicate name or n')
-        return args[0], args[1]
-    if len(args) == 1:
-        if n is not None:
-            if name is not None:
-                raise TypeError('ConstantMaterial got duplicate name')
-            return args[0], n
-        if name is None:
-            if isinstance(args[0], str):
-                raise TypeError('ConstantMaterial missing n')
-            return 'CONSTANT', args[0]
-        return name, args[0]
-    if n is None:
-        raise TypeError('ConstantMaterial missing n')
-    return 'CONSTANT' if name is None else name, n
 
 
 class FormulaMaterial(BaseMaterial):

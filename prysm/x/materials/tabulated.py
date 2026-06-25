@@ -136,7 +136,6 @@ class TabulatedMaterial(BaseMaterial):
         sigma_k=None,
         extrapolate=False,
         method=None,
-        k_method=None,
         k_zero_policy='raise',
         **kwargs,
     ):
@@ -151,8 +150,6 @@ class TabulatedMaterial(BaseMaterial):
             raise ValueError('at least two samples are required for interpolation')
         if method is not None:
             interpolation = method
-        if k_method is not None:
-            k_interpolation = k_method
         interpolation = _normalize_interp_method(interpolation)
         n_interpolation = _normalize_interp_method(n_interpolation or interpolation)
         k_interpolation = _normalize_interp_method(k_interpolation or interpolation)
@@ -169,7 +166,6 @@ class TabulatedMaterial(BaseMaterial):
             metadata['extrapolate_wavelength'] = True
         metadata.update({
             'method': n_interpolation,
-            'k_method': k_interpolation if k is not None else None,
             'extrapolate': bool(extrapolate),
             'missing_k': missing_k,
             'k_zero_policy': k_zero_policy,
@@ -193,7 +189,6 @@ class TabulatedMaterial(BaseMaterial):
         self.n_interpolation = n_interpolation
         self.k_interpolation = k_interpolation
         self.method = n_interpolation
-        self.k_method = k_interpolation
         self.k_zero_policy = k_zero_policy
         self.extrapolate = extrapolate
         self.data = MaterialData(
