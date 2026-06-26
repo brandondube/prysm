@@ -7,6 +7,7 @@ from prysm.x.materials import (
     FormulaMaterial,
     MaterialRangeError,
     MissingKError,
+    model_glass,
 )
 
 
@@ -106,3 +107,12 @@ def test_constant_material_plain_sequence_uses_config_precision():
         assert material.k([0.5, 0.6]).dtype == np.dtype(np.float32)
     finally:
         config.precision = old_precision
+
+
+def test_model_glass_reproduces_nd_and_vd():
+    nd, vd = 1.658, 32.7
+    g = model_glass(nd, vd)
+    d, f, c = 0.5875618, 0.4861327, 0.6562725
+    assert float(g.n(d)) == pytest.approx(nd, abs=1e-9)
+    assert (g.n(d) - 1) / (g.n(f) - g.n(c)) == pytest.approx(vd, rel=1e-9)
+    assert g.metadata['model_glass'] is True

@@ -1,6 +1,7 @@
 """Code V .seq prescription reader."""
 
 import math
+import re
 
 from ... import materials as _materials
 from ._indexing import fringe_to_nm, xy_j_to_mn
@@ -622,23 +623,62 @@ def _build_spec(sd, radius_mode, database=None, length_scale=1.0):
     return spec('conic', dict(c=c_y, k=k_y))
 
 
+_MODEL_DOTTED = re.compile(r'^(\d{6})\.(\d{6})$')
+_MODEL_CODE = re.compile(r'^(\d{6})$')
+
+
+def _model_glass_from_token(token):
+    """Build a Code V model glass from an nd/Vd token, or None if not one.
+
+    Three spellings: nd:Vd (1.913:32.4); the dotted code AAAAAA.BBBBBB
+    (nd = 1+A/1e6, Vd = B/1e4); the six-digit code NNNVVV (nd = 1+NNN/1e3,
+    Vd = VVV/10).
+    """
+    if ':' in token:
+        a, b = token.split(':', 1)
+        try:
+            return _materials.model_glass(float(a), float(b))
+        except ValueError:
+            return None
+    m = _MODEL_DOTTED.match(token)
+    if m:
+        return _materials.model_glass(1.0 + int(m.group(1)) * 1e-6, int(m.group(2)) * 1e-4)
+    m = _MODEL_CODE.match(token)
+    if m:
+        code = m.group(1)
+        return _materials.model_glass(1.0 + int(code[:3]) * 1e-3, int(code[3:]) * 1e-1)
+    return None
+
+
 def _lookup_codev_glass(glass, database):
-    """Resolve a Code V GLA token, stripping a trailing _CATALOG suffix.
+    """Resolve a Code V GLA token GLASS_CATALOG, the suffix being a vendor.
 
-    Code V names glasses GLASS_CATALOG (e.g. BSM24_OHARA, N-BK7_SCHOTT).  Try
-    the literal name first, then the part before the last underscore, so the
-    catalog-qualified spelling still resolves against a refractiveindex.info
-    page named for the bare glass.
-
+    Code V names glasses GLASS_CATALOG (e.g. BSM24_OHARA, N-BK7_SCHOTT).  An
+    nd/Vd or glass-code token resolves to a model glass.  Otherwise try the
+    literal name first; then split the catalog suffix off and resolve the bare
+    name qualified by that vendor (so LAF3_SCHOTT picks Schott's LAF3, not an
+    ambiguous cross-vendor LAF3); finally fall back to the bare name with no
+    vendor, for refractiveindex.info pages named for the glass alone.
     """
     if glass is None:
+        return _materials.lookup(glass, database=database)
+    model = _model_glass_from_token(glass)
+    if model is not None:
+        return model
+    if '_' not in glass:
         return _materials.lookup(glass, database=database)
     try:
         return _materials.lookup(glass, database=database)
     except KeyError:
-        if '_' in glass:
-            return _materials.lookup(glass.rsplit('_', 1)[0], database=database)
-        raise
+        pass
+    name, vendor = glass.rsplit('_', 1)
+    model = _model_glass_from_token(name)
+    if model is not None:
+        return model
+    try:
+        return _materials.lookup(name, database=database, catalog=vendor)
+    except KeyError:
+        return _materials.lookup(name, database=database)
 
 
 def _glass_name(material, typ):

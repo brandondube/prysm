@@ -55,3 +55,22 @@ def test_callable_correction_typeerror_is_not_masked():
 
     with pytest.raises(TypeError, match='internal failure'):
         material.n(0.55, temperature=300)
+
+
+def test_isothermal_material_binds_temperature_for_bare_query():
+    from prysm.x.materials import IsothermalMaterial
+    from prysm.x.materials.charms import TemperatureSellmeierMaterial
+
+    parent = TemperatureSellmeierMaterial(
+        'g',
+        strength_coefficients=[[2.0, 1e-3], [1.0, 0.0], [0.5, 0.0]],
+        resonance_coefficients=[[0.1, 0.0], [0.2, 0.0], [5.0, 0.0]],
+    )
+    # the parent demands a temperature; the bound wrapper answers n(wvl) alone
+    with pytest.raises(ValueError):
+        parent.n(1.0)
+    bound = IsothermalMaterial(parent, 295.0)
+    assert float(bound.n(1.0)) == pytest.approx(float(parent.n(1.0, temperature=295.0)))
+    # an explicit temperature still overrides the bound one
+    assert float(bound.n(1.0, temperature=200.0)) == pytest.approx(
+        float(parent.n(1.0, temperature=200.0)))

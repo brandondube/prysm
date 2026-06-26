@@ -95,6 +95,10 @@ def _resolve_record(records, name, qualifiers):
     if not matches:
         raise KeyError(f'no material named {name!r}')
     if len(matches) > 1:
+        norm = _normalize_name(name)
+        primary = [r for r in matches if _normalize_name(r.name) == norm]
+        if len(primary) == 1:  # exact primary-name hit beats alias hits (LAF3 vs N-LAF3)
+            return primary[0]
         raise AmbiguousMaterialError(name, matches)
     return matches[0]
 

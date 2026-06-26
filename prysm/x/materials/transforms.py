@@ -106,6 +106,28 @@ class TemperatureShiftedMaterial(MaterialTransform):
         return base + slope * (temperature - self.reference_temperature)
 
 
+class IsothermalMaterial(MaterialTransform):
+    """Bind a temperature-dependent material to a fixed temperature.
+
+    Lets a model that demands a temperature answer the bare n(wvl_um) query the
+    ray trace makes; an explicit temperature still overrides the bound one.
+    """
+
+    def __init__(self, parent, temperature, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.temperature = temperature
+
+    def n(self, wvl_um, temperature=None):
+        """Evaluate the parent at the bound temperature (or an override)."""
+        t = self.temperature if temperature is None else temperature
+        return self.parent.n(wvl_um, temperature=t)
+
+    def k(self, wvl_um, temperature=None):
+        """Evaluate the parent's k at the bound temperature (or an override)."""
+        t = self.temperature if temperature is None else temperature
+        return self.parent.k(wvl_um, temperature=t)
+
+
 class IndexOffsetMaterial(MaterialTransform):
     """Apply an explicit additive offset to n and optionally k."""
 

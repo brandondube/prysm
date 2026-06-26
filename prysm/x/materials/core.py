@@ -440,3 +440,22 @@ class FormulaMaterial(BaseMaterial):
         if temperature is not None and self._k_formula_wants_temperature:
             return self.k_formula(wvl_um, *self.k_coefficients, temperature=temperature)
         return self.k_formula(wvl_um, *self.k_coefficients)
+
+
+# d/F/C spectral lines (microns) defining nd and the Abbe number.
+_LINE_D, _LINE_F, _LINE_C = 0.5875618, 0.4861327, 0.6562725
+
+
+def model_glass(nd, vd, name=None):
+    """Cauchy model glass reproducing index nd and Abbe number vd at d/F/C.
+
+    The two-term Cauchy A + B/wvl**2 is the unique fit through (nd, Vd); a
+    designer's stand-in for a real glass, not a partial-dispersion model.
+    """
+    from .formulas import cauchy
+    B = ((nd - 1.0) / vd) / (1.0 / _LINE_F ** 2 - 1.0 / _LINE_C ** 2)
+    A = nd - B / _LINE_D ** 2
+    if name is None:
+        name = f'model {nd:.4f}/{vd:.2f}'
+    return FormulaMaterial(name, cauchy, (A, B),
+                           metadata={'model_glass': True, 'nd': nd, 'vd': vd})

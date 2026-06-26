@@ -84,9 +84,12 @@ def resolve_index(spec, name_resolver=None):
     return lambda wvl: value
 
 
-def lookup(name, database=None):
-    """Resolve a glass token to a callable material, air, or the MIRROR sentinel."""
+def lookup(name, database=None, **qualifiers):
+    """Resolve a glass token to a callable material, air, or the MIRROR sentinel.
+
+    Qualifiers (e.g. catalog for a vendor) narrow a glass-name resolution.
+    """
     resolved = resolve_index(
-        name, name_resolver=lambda token: glass(token, database=database)
+        name, name_resolver=lambda token: glass(token, database=database, **qualifiers)
     )
     return air if resolved is None else resolved

@@ -8,6 +8,7 @@ from .core import (
     MaterialRecord,
     MaterialRangeError,
     MissingKError,
+    model_glass,
 )
 from .tabulated import MaterialData, TabulatedMaterial, TemperatureGridMaterial
 from .charms import (
@@ -20,11 +21,18 @@ from .catalog import AmbiguousMaterialError, Catalog, CatalogChain
 from .registry import MaterialRegistry
 from .transforms import (
     IndexOffsetMaterial,
+    IsothermalMaterial,
     MaterialTransform,
     ProcessVariantMaterial,
     StressOpticMaterial,
     TemperatureShiftedMaterial,
     ThicknessDependentMaterial,
+)
+from .infrared import (
+    charms_germanium,
+    charms_silicon,
+    sapphire_ordinary,
+    infrared_catalog,
 )
 from .agf import AGFCatalog, AGFMaterial, load_agf_catalog
 from .rii import RefractiveIndexCatalog, RefractiveIndexMaterial, default_db_path
@@ -53,6 +61,7 @@ __all__ = [
     'FittedMaterial',
     'FormulaMaterial',
     'IndexOffsetMaterial',
+    'IsothermalMaterial',
     'MIRROR',
     'MaterialData',
     'MaterialProtocol',
@@ -71,12 +80,17 @@ __all__ = [
     'TemperatureShiftedMaterial',
     'ThicknessDependentMaterial',
     'air',
+    'charms_germanium',
+    'charms_silicon',
     'default_db_path',
     'fit_material',
+    'infrared_catalog',
     'from_samples',
     'glass',
     'load_agf_catalog',
     'lookup',
+    'model_glass',
     'resolve_index',
+    'sapphire_ordinary',
     'vacuum',
 ]

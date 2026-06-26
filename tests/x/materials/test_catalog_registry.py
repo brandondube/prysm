@@ -23,6 +23,26 @@ def test_catalog_chain_namespace_lookup_and_ambiguity():
         chain.material_for_name('BK7')
 
 
+def test_exact_primary_name_beats_alias_match():
+    # both LAF3 (primary) and N-LAF3 (alias LAF3) live in Schott; the query LAF3
+    # must pick the primary, not raise on the alias collision.
+    schott = Catalog.from_materials([
+        ConstantMaterial(1.717, name='LAF3', catalog='SCHOTT'),
+        ConstantMaterial(1.720, name='N-LAF3', catalog='SCHOTT', metadata={'aliases': ('LAF3',)}),
+    ])
+    assert schott.material_for_name('LAF3').n(0.55) == pytest.approx(1.717)
+
+
+def test_alias_only_collision_still_ambiguous():
+    # no record matches LAF3 by primary name, so two alias hits stay ambiguous.
+    schott = Catalog.from_materials([
+        ConstantMaterial(1.720, name='N-LAF3', catalog='SCHOTT', metadata={'aliases': ('LAF3',)}),
+        ConstantMaterial(1.721, name='P-LAF3', catalog='SCHOTT', metadata={'aliases': ('LAF3',)}),
+    ])
+    with pytest.raises(AmbiguousMaterialError):
+        schott.material_for_name('LAF3')
+
+
 def test_registry_resolves_by_name_via_shared_record_query():
     # the registry shares the RecordSet query seam, so name resolution and the
     # namespace:name getitem work the same as on a Catalog or a chain.

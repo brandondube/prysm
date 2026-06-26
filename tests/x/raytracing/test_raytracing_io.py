@@ -7,7 +7,9 @@ from collections import OrderedDict
 import numpy as np
 import pytest
 
-from prysm.x.materials import RefractiveIndexCatalog
+from prysm.x.materials import (
+    RefractiveIndexCatalog, Catalog, CatalogChain, ConstantMaterial,
+)
 from prysm.x.raytracing.io import (
     read_zmx, read_seq, write_seq, SurfaceSpec, build_surface,
 )
@@ -1184,3 +1186,55 @@ def test_seq_glass_catalog_suffix_stripped(refractiveindex_database):
     pf = read_seq(txt, _is_text=True, database=refractiveindex_database)
     np.testing.assert_allclose(float(pf.surfaces[1].material.n(0.587)), 1.5168,
                                atol=1e-3)
+
+
+# ----- Code V model glasses and vendor-qualified names ----------------------
+
+_D, _F, _C = 0.5875618, 0.4861327, 0.6562725
+
+
+def _vd(material):
+    return float((material.n(_D) - 1) / (material.n(_F) - material.n(_C)))
+
+
+def _seq_with_glass(glass_token):
+    return (
+        'RDM\nLEN\nDIM M\nWL 587.6\nEPD 10.0\n'
+        f'SO 0. 1E10\nS 50 5 {glass_token}\nS -50 95\nSI 0 0\nGO\n'
+    )
+
+
+def test_seq_model_glass_dotted_code():
+    # AAAAAA.BBBBBB -> nd = 1+A/1e6, Vd = B/1e4
+    pf = read_seq(_seq_with_glass('658000.327000'), _is_text=True)
+    mat = pf.surfaces[1].material
+    assert float(mat.n(_D)) == pytest.approx(1.658, abs=1e-9)
+    assert _vd(mat) == pytest.approx(32.7, rel=1e-6)
+
+
+def test_seq_model_glass_colon_form():
+    pf = read_seq(_seq_with_glass('1.658:32.7'), _is_text=True)
+    mat = pf.surfaces[1].material
+    assert float(mat.n(_D)) == pytest.approx(1.658, abs=1e-9)
+    assert _vd(mat) == pytest.approx(32.7, rel=1e-6)
+
+
+def test_seq_model_glass_six_digit_code_with_vendor_suffix():
+    # 678552_SCHOTT -> the six-digit code NNNVVV: nd = 1.678, Vd = 55.2
+    pf = read_seq(_seq_with_glass('678552_SCHOTT'), _is_text=True)
+    mat = pf.surfaces[1].material
+    assert float(mat.n(_D)) == pytest.approx(1.678, abs=1e-9)
+    assert _vd(mat) == pytest.approx(55.2, rel=1e-6)
+
+
+def test_seq_vendor_suffix_disambiguates_glass():
+    # LAF3_SCHOTT must pick Schott's primary LAF3 over an aliased N-LAF3 and over
+    # another vendor's LAF3.
+    schott = Catalog.from_materials([
+        ConstantMaterial(1.111, name='LAF3', catalog='SCHOTT'),
+        ConstantMaterial(1.222, name='N-LAF3', catalog='SCHOTT', metadata={'aliases': ('LAF3',)}),
+    ])
+    hoya = Catalog.from_materials([ConstantMaterial(1.333, name='LAF3', catalog='HOYA')])
+    chain = CatalogChain([schott, hoya])
+    pf = read_seq(_seq_with_glass('LAF3_SCHOTT'), _is_text=True, database=chain)
+    assert float(pf.surfaces[1].material.n(0.55)) == pytest.approx(1.111)
