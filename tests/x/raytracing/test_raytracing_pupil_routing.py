@@ -184,6 +184,26 @@ def test_ladder_holds_chief_on_stop_center_at_wide_field():
     assert abs(y[7]) < 1e-9                       # center sample == chief (n=15)
 
 
+def test_adaptive_ladder_aims_chief_past_fixed_schedule_field():
+    """A steep field the primary and a fixed-step ladder both miss still aims.
+
+    At 55 deg on this fixture the paraxial-EP seed places the chief metres off
+    axis; a fixed-fraction field schedule steps out of the Newton basin and
+    leaves the chief unaimed.  The adaptive field-and-pupil homotopy walks it
+    onto the stop center, entering the front element within its clear aperture.
+    """
+    epd, ang, n = 8.0, 55.0, 15
+    sys = fisheye(epd)
+    _, _, conv_primary = _primary_only(sys, ang, epd, n=n)
+    assert not bool(conv_primary[n // 2])         # paraxial seed misses the chief
+    P, S = launch(sys, Field(0.0, float(ang), unit='deg'), WVL,
+                  Sampling.fan(n=n, axis='y'))
+    assert np.isfinite(S[n // 2]).all()           # the ladder aims the chief
+    Phist = raytrace(sys, P, S, WVL).P
+    assert abs(Phist[_FISHEYE_STOP + 1, n // 2, 1]) < 1e-7   # onto the stop center
+    assert abs(Phist[2, n // 2, 1]) < 14.0        # within the front clear aperture
+
+
 def test_ladder_is_dormant_when_primary_converges():
     """When primary aiming converges, the ladder returns it unchanged."""
     epd, ang, n = 4.0, 20.0, 15

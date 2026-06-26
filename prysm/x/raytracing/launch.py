@@ -420,7 +420,13 @@ def _real_aim_to_stop(P, S, rho, system, stop_index, wavelength, finite):
     return P, S, converged
 
 
-_LADDER_SCHEDULE = (0.25, 0.5, 0.75, 1.0)
+# Adaptive field-continuation homotopy: start step, growth on success, and the
+# step floor (and an iteration backstop) below which a field is taken as
+# untransmittable rather than subdivided further.
+_LADDER_STEP0 = 0.25
+_LADDER_GROW = 1.6
+_LADDER_MIN_STEP = 1.0 / 128
+_LADDER_MAXITER = 200
 
 
 def _scaled_field(field, frac):
@@ -461,34 +467,61 @@ def _warm_start_bundle(P, S, seedP, seedS, finite):
 
 def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, system,
                              stop_index, wavelength, finite, drop_unaimed=False):
-    """Real aiming with a field-continuation fallback."""
+    """Real aiming with an adaptive field-and-pupil continuation fallback.
+
+    Walks both the field and the pupil from on-axis up to the target, warm-
+    starting each rung from the previous one's solution and bisecting the step
+    whenever a rung loses the chief, so the seed stays inside the next rung's
+    Newton basin -- a wide-field system's valid launch window walks too fast for
+    a fixed schedule, and its near-paraxial pupil places a grazing-field bundle
+    metres off axis.  Scaling the pupil with the field walks the rim rays out
+    gradually rather than aiming a full bundle through a violently aberrated
+    pupil in one shot.  Acceptance follows the chief alone so a genuinely
+    vignetted rim ray cannot stall the walk (it is dropped at the end).
+    """
     P, S, conv = _real_aim_to_stop(P, S, rho, system, stop_index,
                                    wavelength, finite)
     if bool(np.all(conv)):
         return P, S
 
+    chief = int(np.argmin(rho[:, 0] ** 2 + rho[:, 1] ** 2))
     seedP = seedS = None
-    Pk = Sk = convk = None
-    for frac in _LADDER_SCHEDULE:
-        fld_k = _scaled_field(field, frac)
+    convfull = np.zeros(rho.shape[0], dtype=bool)
+    Pfull = Sfull = None
+    frac = 0.0
+    step = _LADDER_STEP0
+    for _ in range(_LADDER_MAXITER):
+        if frac >= 1.0:
+            break
+        nxt = min(1.0, frac + step)
+        fld_k = _scaled_field(field, nxt)
         ep_k = _parabasal_ep_z(system, fld_k, wavelength)
-        Pk, Sk, rho_k = build_bundle(fld_k, ep_k)
+        Pk, Sk, rho_k = build_bundle(fld_k, ep_k, escale=nxt)
         if seedP is not None:
             _warm_start_bundle(Pk, Sk, seedP, seedS, finite)
-        Pk, Sk, convk = _real_aim_to_stop(Pk, Sk, rho_k, system,
-                                          stop_index, wavelength, finite)
-        seedP, seedS = Pk, Sk
+        Pk, Sk, convk = _real_aim_to_stop(Pk, Sk, rho_k, system, stop_index,
+                                          wavelength, finite)
+        if bool(convk[chief]):
+            seedP, seedS = Pk, Sk
+            frac = nxt
+            step = min(step * _LADDER_GROW, 1.0)
+            if frac >= 1.0:
+                convfull, Pfull, Sfull = convk, Pk, Sk
+        else:
+            step *= 0.5
+            if step < _LADDER_MIN_STEP:
+                break
 
-    # Adopt only rays the primary missed.
-    rescued = convk & ~conv
+    # Adopt only the full-field rays the primary missed.
+    rescued = convfull & ~conv
     if bool(np.any(rescued)):
         P = P.copy()
         S = S.copy()
-        P[rescued] = Pk[rescued]
-        S[rescued] = Sk[rescued]
+        P[rescued] = Pfull[rescued]
+        S[rescued] = Sfull[rescued]
 
     if drop_unaimed:
-        aimed = conv | convk
+        aimed = conv | convfull
         if not bool(np.all(aimed)):
             # Keep launch positions finite for chief selection.
             S = np.array(S, copy=True)
@@ -575,18 +608,21 @@ def launch(system, field, wavelength, sampling, *,
             pupil_z = float(system[0].P[2])
         pupil_z = float(pupil_z)
 
-    def _build(fld, ep_z):
+    def _build(fld, ep_z, escale=1.0):
         """Bundle (P, S, rho) for one field, seeded onto entrance pupil ep_z.
 
         ep_z = 'paraxial' reads the paraxial pupil, a float overrides it (the
         ladder feeds the parabasal field-dependent EP), and None means no seed.
+        escale shrinks the pupil extent for the continuation homotopy (rho stays
+        normalized), so a wide-field bundle's rim rays walk out gradually.
         """
         if object_mode:
             return _object_space_cone_PS(system, fld, wavelength,
                                          sampling, na, ep_z=ep_z)
         e = (_entrance_pupil_z(system, wavelength)
              if ep_z == 'paraxial' else ep_z)
-        pupil_xy = sampling.build(extent)
+        ext = extent * escale
+        pupil_xy = sampling.build(ext)
         pupil_xy = _apply_vignetting(pupil_xy, fld)
         if pupil_xy.dtype != config.precision:
             pupil_xy = pupil_xy.astype(config.precision)
@@ -601,7 +637,7 @@ def launch(system, field, wavelength, sampling, *,
         else:
             target_z = float(e) if e is not None else pupil_z
             P, S = _finite_PS(pupil_xy, target_z, fld)
-        rho = pupil_xy / extent if extent > 0.0 else np.zeros_like(pupil_xy)
+        rho = pupil_xy / ext if ext > 0.0 else np.zeros_like(pupil_xy)
         return P, S, rho
 
     # Primary bundle: paraxial-EP seed (no seed when explicitly aiming).
