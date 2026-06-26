@@ -962,6 +962,24 @@ def plot_optics(system, result, *, wvl=None, ambient_index=1.0,
     return fig, ax
 
 
+class _OutlineTrace:
+    """Minimal P/S carrier so plot_optics can size glass over many fields."""
+    __slots__ = ('P', 'S')
+
+    def __init__(self, P, S):
+        self.P = P
+        self.S = S
+
+
+def _valid_only_positions(result):
+    """Position history with clipped/missed rays NaN'd out (for glass sizing)."""
+    P = _to_np(result.P).copy()
+    mask = valid_mask(_to_np(result.status), P[-1])
+    if mask is not None:
+        P[:, ~np.asarray(mask), :] = np.nan
+    return P
+
+
 def layout(system, *, fields=None, wavelength=None, sampling=None, axis='y',
            x='z', y='y', colors=None, lw=1, alpha=1,
            mirror_backing=None, lens_edges=None, fig=None, ax=None):
@@ -1020,7 +1038,17 @@ def layout(system, *, fields=None, wavelength=None, sampling=None, axis='y',
                         wvl)
                for field in fields]
 
-    fig, ax = plot_optics(system, results[0], wvl=wvl, x=x, y=y,
+    # Size and draw the glass from every field's footprint, not just the first:
+    # off-axis beams run far higher than the on-axis marginal through a front
+    # negative group (retrofocus, fish-eye), and the elements must contain them.
+    # Only rays that transit cleanly count -- a clipped ray keeps computing
+    # positions far outside the element (a 170-deg field launches marginal rays
+    # metres off axis), and must not balloon the glass.
+    outline = _OutlineTrace(
+        np.concatenate([_valid_only_positions(r) for r in results], axis=1),
+        np.concatenate([_to_np(r.S) for r in results], axis=1),
+    )
+    fig, ax = plot_optics(system, outline, wvl=wvl, x=x, y=y,
                           mirror_backing=mirror_backing, lens_edges=lens_edges,
                           fig=fig, ax=ax)
     for result, color in zip(results, colors):
