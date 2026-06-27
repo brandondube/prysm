@@ -860,6 +860,10 @@ class Problem:
                 seeds, [ops[i] for i in idxs])
             for row, i in zip(result.jacobian, idxs):
                 J[i] = ops[i].weight * row
+        # a vignetted/NaN ray makes the adjoint sweep non-finite; decline to FD
+        # rather than hand the solver a NaN Jacobian that stalls the line search.
+        if not np.all(np.isfinite(J)):
+            return None
         return J
 
     def jacobian(self, x, method='auto', step=1e-6):

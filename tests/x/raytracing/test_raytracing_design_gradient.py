@@ -90,6 +90,36 @@ def test_residual_jacobian_declines_when_gradient_fd():
     assert prob.residual_jacobian(prob.x0()) is None
 
 
+def _clipped_singlet(semidia):
+    lens = LensData()
+    (lens.add(Conic(1 / 50.0, 0.0), typ='refr',
+              material=materials.ConstantMaterial(1.5), thickness=5.0,
+              semidiameter=semidia)
+         .add(Conic(-1 / 50.0, 0.0), typ='refr', material=materials.air,
+              thickness=95.0))
+    return OpticalSystem(lens, aperture=8.0, wavelengths=[0.55],
+                         fields=[Field(0., 0.), Field(0., 18.)])
+
+
+def test_residual_jacobian_declines_on_nonfinite_adjoint():
+    # a clipping aperture vignettes part of the off-axis fan; the adjoint sweep
+    # runs non-finite through the dropped rays, so residual_jacobian must decline
+    # to FD rather than hand the solver a NaN that stalls the line search.
+    sys_ = _clipped_singlet(3.0)
+    sys_.opt.vary('thickness', surfaces=2)
+    prob = Problem(sys_, [RmsSpotRadius(Field(0., 18.), 0.55, Sampling.fan(n=15))])
+    assert prob.residual_jacobian(prob.x0()) is None
+    # the same bundle unclipped keeps the analytic route
+    wide = _clipped_singlet(50.0)
+    wide.opt.vary('thickness', surfaces=2)
+    pw = Problem(wide, [RmsSpotRadius(Field(0., 18.), 0.55, Sampling.fan(n=15))])
+    Jw = pw.residual_jacobian(pw.x0())
+    assert Jw is not None and np.all(np.isfinite(Jw))
+    # and DLS still steps via FD on the clipped problem
+    result = prob.solve(maxiter=10)
+    assert result.x.size == 1
+
+
 def test_gradient_kwarg_validated():
     sys_ = _singlet()
     with pytest.raises(ValueError, match='gradient'):

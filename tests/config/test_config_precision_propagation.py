@@ -9,7 +9,7 @@ from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.analysis import (
     distortion,
     field_curvature,
-    axial_color,
+    chromatic_focal_shift,
     lateral_color,
 )
 from prysm.x.raytracing.tolerance import (
@@ -79,10 +79,12 @@ def test_field_curvature_dtype_follows_config_precision(precision):
     assert result.y_fan_z.dtype == expected
 
 
-def test_axial_color_dtype_follows_config_precision(precision):
+def test_chromatic_focal_shift_dtype_follows_config_precision(precision):
     presc = _parabola()
-    out = axial_color(presc, wavelengths=[0.486e-3, 0.587e-3, 0.656e-3])
-    assert out.dtype == _expected_dtype(precision)
+    _, shift = chromatic_focal_shift(
+        presc, wavelengths=[0.486e-3, 0.587e-3, 0.656e-3],
+        reference_wavelength=0.587e-3, focus='paraxial')
+    assert shift.dtype == _expected_dtype(precision)
 
 
 def test_lateral_color_dtype_follows_config_precision(precision):

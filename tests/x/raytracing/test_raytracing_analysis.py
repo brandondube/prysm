@@ -25,13 +25,21 @@ from prysm.x.raytracing.analysis import (
     field_curvature,
     field_sweep,
     full_field,
-    axial_color,
     chromatic_focal_shift,
     lateral_color,
 )
+from prysm.x.raytracing.paraxial import paraxial_image_distance
+from prysm.x.raytracing._resolve import compiled_surfaces
 from prysm.x.raytracing.opt import (
     hopkins_eic_closing, reference_sphere_curvature,
 )
+
+
+def _axial_bfd(presc, wavelengths):
+    """Paraxial image distance at each wavelength (the old axial_color)."""
+    surfaces = compiled_surfaces(presc)
+    return np.array([paraxial_image_distance(surfaces, wvl=float(w))
+                     for w in wavelengths])
 
 
 # ---------- helpers ---------------------------------------------------------
@@ -430,40 +438,26 @@ def test_field_curvature_matches_real_ray_differential_oracle():
         np.testing.assert_allclose(float(result.y_fan_z[i]), y_z, atol=5e-3)
 
 
-# ---------- axial / lateral color ------------------------------------------
+# ---------- chromatic / lateral color --------------------------------------
 
-def test_axial_color_constant_index_returns_constant_bfd():
-    """When n_glass(w) is constant the paraxial image distance must not
-    depend on wavelength."""
+def test_paraxial_image_distance_constant_index_is_wavelength_independent():
+    """A constant-index singlet's paraxial image distance must not move with
+    wavelength."""
     presc = _spherical_singlet()
-    bfd = axial_color(presc, [0.45, 0.55, 0.65])
+    bfd = _axial_bfd(presc, [0.45, 0.55, 0.65])
     np.testing.assert_allclose(bfd, bfd[0], rtol=1e-12)
 
 
-def test_axial_color_varying_index_changes_bfd():
-    """A toy dispersion (n decreasing with wvl) should monotonically shift
-    the paraxial image."""
-    n_glass = materials.FormulaMaterial('GLASS', lambda w: 1.6 - 0.1 * (w - 0.45) / 0.2)
-    s1 = conic(c=1 / 50.0, k=0.0, interaction='refr',
-                       P=[0, 0, 0], material=n_glass)
-    s2 = conic(c=-1 / 50.0, k=0.0, interaction='refr',
-                       P=[0, 0, 5.0], material=materials.air)
-    img = plane(interaction='eval', P=[0, 0, 100.0])
-    presc = [s1, s2, img]
-    bfd = axial_color(presc, [0.45, 0.55, 0.65])
-    # n decreasing → focal length increasing (weaker glass) → bfd grows
-    assert bfd[0] != bfd[2]
-
-
-def test_chromatic_focal_shift_paraxial_matches_axial_color_difference():
+def test_chromatic_focal_shift_paraxial_matches_image_distance_difference():
+    """focus='paraxial' is the paraxial image distance, referenced to zero."""
     presc = _spherical_singlet()
     wavelengths = [0.45, 0.55, 0.65]
     wvl, shifts = chromatic_focal_shift(
         presc, wavelengths, focus='paraxial', reference_wavelength=0.55,
     )
     np.testing.assert_allclose(wvl, wavelengths)
-    ref = axial_color(presc, [0.55])[0]
-    np.testing.assert_allclose(shifts, axial_color(presc, wavelengths) - ref)
+    ref = _axial_bfd(presc, [0.55])[0]
+    np.testing.assert_allclose(shifts, _axial_bfd(presc, wavelengths) - ref)
 
 
 def test_chromatic_focal_shift_reference_wavelength_is_zero():

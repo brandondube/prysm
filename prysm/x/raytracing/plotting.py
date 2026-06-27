@@ -16,7 +16,6 @@ from .spencer_and_murty import (
 )
 from .analysis import (
     transverse_ray_aberration,
-    axial_color,
     chromatic_focal_shift,
     field_curvature,
     distortion,
@@ -1419,64 +1418,6 @@ def plot_chromatic_focal_shift(system, wavelengths=None, *,
             zorder=zorder, label=label)
     ax.set_xlabel('wavelength [um]')
     ax.set_ylabel('focus shift')
-    return fig, ax
-
-
-def plot_axial_color(system, wavelengths=None, *,
-                     reference_wavelength=None, result=None,
-                     c='r', marker='o', lw=1, alpha=1, zorder=4,
-                     label=None, fig=None, ax=None):
-    """Plot paraxial focus shift against wavelength (axial color).
-
-    A paraxial readout over the discrete system wavelength set; see
-    plot_chromatic_focal_shift for a smooth real-ray sweep.
-
-    Parameters
-    ----------
-    system : sequence of Surface or LensData
-        the optical system.
-    wavelengths : iterable of float, optional
-        wavelengths in microns; defaults to the system wavelength set.
-    reference_wavelength : float, optional
-        wavelength whose paraxial focus is the zero; the nearest grid
-        wavelength is used.  Defaults to the system reference wavelength.
-    result : ndarray, optional
-        precomputed analysis.axial_color output for wavelengths; when given
-        no paraxial solves happen here.
-    c : color, optional
-        curve color.
-    marker : str, optional
-        marker style; defaults to 'o' since the wavelength set is discrete.
-    lw : float, optional
-        line width.
-    alpha : float, optional
-        opacity.
-    zorder : int, optional
-        stack order.
-    label : str, optional
-        legend label.
-    fig : matplotlib.figure.Figure
-    ax : matplotlib.axes.Axis
-
-    Returns
-    -------
-    matplotlib.figure.Figure
-    matplotlib.axes.Axis
-
-    """
-    fig, ax = share_fig_ax(fig, ax)
-    wavelengths = _resolve_wavelengths(system, wavelengths)
-    if result is None:
-        result = axial_color(system, wavelengths)
-    bfd = _to_np(result)
-    wavelengths = np.asarray(wavelengths, dtype=float)
-    if reference_wavelength is None:
-        reference_wavelength = resolve_wavelength(system, None)
-    j_ref = int(np.argmin(np.abs(wavelengths - float(reference_wavelength))))
-    ax.plot(wavelengths, bfd - bfd[j_ref], c=c, marker=marker, lw=lw,
-            alpha=alpha, zorder=zorder, label=label)
-    ax.set_xlabel('wavelength [um]')
-    ax.set_ylabel('paraxial focus shift')
     return fig, ax
 
 

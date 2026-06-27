@@ -1,6 +1,6 @@
 """OpticalSystem convenience plot methods (layout_2d, plot_spots,
 plot_ray_fans, plot_opd_fans, plot_field_curvature, plot_distortion,
-plot_chromatic_focal_shift, plot_axial_color, plot_lateral_color) and the
+plot_chromatic_focal_shift, plot_lateral_color) and the
 live-fingerprint trace cache."""
 import matplotlib
 import numpy as np
@@ -14,9 +14,11 @@ from prysm.x.raytracing import (
 )
 from prysm.x import materials
 from prysm.x.raytracing.analysis import (
-    spot_diagrams, ray_aberration_fans, field_curvature, axial_color,
+    spot_diagrams, ray_aberration_fans, field_curvature,
     lateral_color,
 )
+from prysm.x.raytracing.paraxial import paraxial_image_distance
+from prysm.x.raytracing._resolve import compiled_surfaces
 
 
 def _doublet():
@@ -147,17 +149,20 @@ def test_plot_chromatic_focal_shift_spans_system_wavelengths():
         plt.close(fig)
 
 
-def test_plot_axial_color_zero_at_reference_wavelength():
+def test_plot_chromatic_focal_shift_paraxial_zero_at_reference_wavelength():
     sys = _doublet()
-    fig, ax = sys.plot.axial_color()
+    fig, ax = sys.plot.chromatic_focal_shift(focus='paraxial',
+                                             wavelengths=sys.wavelengths)
     try:
         line = ax.lines[0]
         x = line.get_xdata()
         y = line.get_ydata()
         assert len(x) == len(sys.wavelengths)
         assert y[sys.reference] == pytest.approx(0.0)
-        # crown-flint doublet: the shift matches the paraxial BFD differences
-        bfd = axial_color(sys)
+        # crown-flint doublet: the shift matches the paraxial image-distance diffs
+        surfaces = compiled_surfaces(sys)
+        bfd = np.array([paraxial_image_distance(surfaces, wvl=float(w))
+                        for w in sys.wavelengths])
         np.testing.assert_allclose(y, bfd - bfd[sys.reference])
     finally:
         plt.close(fig)

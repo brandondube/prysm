@@ -614,30 +614,6 @@ def field_curvature(system, fields=None, wavelength=None, *,
 
 # ---------- color -----------------------------------------------------------
 
-def axial_color(system, wavelengths=None):
-    """Paraxial image distance at each of several wavelengths.
-
-    Parameters
-    ----------
-    system : sequence of Surface
-    wavelengths : iterable of float, optional
-        wavelengths in microns.  None defaults to the system set, else the
-        reference wavelength.
-
-    Returns
-    -------
-    bfd : ndarray, shape (n_wavelengths,)
-        signed paraxial image distance from the last surface vertex.
-
-    """
-    wavelengths = _resolve_wavelengths(system, wavelengths)
-    surfaces = compiled_surfaces(system)
-    return np.array([
-        paraxial_image_distance(surfaces, wvl=float(w))
-        for w in wavelengths
-    ], dtype=config.precision)
-
-
 def _system_wavelength_range(system):
     """Wavelength span from OpticalSystem metadata, or None."""
     wavelengths = getattr(system, 'wavelengths', None)
