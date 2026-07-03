@@ -30,6 +30,13 @@ Temperature-dependent models (CHARMS)
 .. automodule:: prysm.x.materials.charms
     :members:
 
+==================
+Infrared materials
+==================
+
+.. automodule:: prysm.x.materials.infrared
+    :members:
+
 ========
 Catalogs
 ========

@@ -2,7 +2,7 @@
 x
 *
 
-Experimental modules, not subject to stability or compatiblity guarantees
+Experimental modules, not subject to stability or compatibility guarantees
 
 .. toctree::
    :maxdepth: 1

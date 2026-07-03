@@ -25,6 +25,9 @@ Surfaces and shapes
 .. automodule:: prysm.x.raytracing.sags
     :members:
 
+.. automodule:: prysm.x.raytracing.aperture
+    :members:
+
 =================
 Diffractive phase
 =================
