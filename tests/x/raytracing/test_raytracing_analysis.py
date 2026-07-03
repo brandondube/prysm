@@ -419,13 +419,19 @@ def test_field_curvature_returns_arrays_of_correct_shape():
 def test_field_curvature_matches_real_ray_differential_oracle():
     """The parabasal foci match the real-ray differential oracle."""
     from prysm.x.raytracing import Sampling, launch, raytrace
-    from prysm.x.raytracing._line_math import line_intersection_params
 
     def oracle_foci(presc, field, wavelength, epd, marginal_fraction=1e-3):
         def closest_z(P0, S0, P1, S1):
-            s = line_intersection_params(P0, S0, P1, S1)
-            Q0 = P0 + s[0] * S0
-            Q1 = P1 + s[1] * S1
+            # least-squares closest-approach parameters of the two rays
+            d = P1 - P0
+            a = np.dot(S0, S0)
+            b = np.dot(S0, S1)
+            c = np.dot(S1, S1)
+            e = np.dot(S0, d)
+            f = np.dot(S1, d)
+            denom = a * c - b * b
+            Q0 = P0 + ((c * e - b * f) / denom) * S0
+            Q1 = P1 + ((b * e - a * f) / denom) * S1
             return 0.5 * (float(Q0[2]) + float(Q1[2]))
 
         r = marginal_fraction * epd / 2.0

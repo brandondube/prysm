@@ -20,12 +20,11 @@ from .opt import (
 )
 from .paraxial import paraxial_image_distance
 from .launch import Field, Sampling, _apply_vignetting
-from ._meta import object_image_indices
 from ._trace_grid import (
     TraceRecord, iter_trace_grid, trace_cell, _resolve_fields,  # NOQA: F401 re-export
     _resolve_wavelengths, _require_epd, field_sweep,
 )
-from ._resolve import compiled_surfaces, resolve_wavelength
+from ._resolve import compiled_surfaces, resolve_wavelength, trace_context
 from .surfaces import Conic, EvenAsphere, Plane, Sphere
 
 
@@ -38,12 +37,16 @@ class DistortionResult:
     real_xy: object
     paraxial_xy: object
     percent: object
+    fields: object = None
 
 
 @dataclass(frozen=True, slots=True)
 class FieldCurvatureResult:
     x_fan_z: object
     y_fan_z: object
+    fields: object = None
+    labels: object = None
+    image_z: object = None
 
 
 RayFanGrid = namedtuple('RayFanGrid', ['fields', 'wavelengths', 'pupil_x', 'pupil_y', 'x', 'y'])
@@ -228,6 +231,43 @@ def transverse_ray_aberration(P_hist, axis='y', chief_index=None, status=None,
     return pupil[valid] - ref_pupil, image[valid] - ref_image
 
 
+def spot_positions(P_final, status=None, origin=None):
+    """Valid image-plane spot landings, optionally re-centered.
+
+    Parameters
+    ----------
+    P_final : ndarray, shape (N, 3)
+        final ray positions (trace.P[-1]).
+    status : ndarray, optional
+        per-ray status from raytrace; invalid rays are dropped when given.
+    origin : str or iterable, optional
+        center to subtract: 'centroid' or an explicit (x, y).
+
+    Returns
+    -------
+    x, y : ndarray
+        image-plane coordinates of the surviving rays.
+
+    """
+    P_final = np.asarray(P_final)
+    x = P_final[..., 0]
+    y = P_final[..., 1]
+    if status is not None:
+        valid = valid_mask(status, P_final)
+        x = x[valid]
+        y = y[valid]
+    if origin is not None:
+        if isinstance(origin, str):
+            if origin.lower() == 'centroid':
+                origin = (np.nanmean(x), np.nanmean(y))
+            else:
+                raise ValueError("origin string must be 'centroid'")
+        origin = np.asarray(origin)
+        x = x - origin[0]
+        y = y - origin[1]
+    return x, y
+
+
 # ---------- wavefront -------------------------------------------------------
 
 
@@ -319,7 +359,7 @@ class WavefrontClosing:
 def close_wavefront(system, trace, wavelength, chief_index, *, field=None,
                     center=None, P_xp=None, stop_index=None, epd=None,
                     axis_point=None, axis_dir=None, min_perp=1e-6, valid=None,
-                    reference='chief', apply_field_tilt=True):
+                    reference='chief', apply_field_tilt=True, ctx=None):
     """Close a traced bundle into a chief-referenced OPD, resolving as needed.
 
     Owns the full recipe: validity, medium indices, exit-pupil resolution,
@@ -350,6 +390,8 @@ def close_wavefront(system, trace, wavelength, chief_index, *, field=None,
         'chief' or 'centroid'; phrases the invalid-anchor error.
     apply_field_tilt : bool, optional
         apply the field ramp from trace.P[0] when field is given.
+    ctx : TraceContext, optional
+        resolved metadata; built from the system when omitted.
 
     Returns
     -------
@@ -361,7 +403,9 @@ def close_wavefront(system, trace, wavelength, chief_index, *, field=None,
         valid = valid_mask(trace.status, trace.P[-1])
     chief_index = int(chief_index)
     _require_valid_chief(valid, chief_index, reference)
-    _, n_image = object_image_indices(compiled_surfaces(system), wavelength)
+    if ctx is None:
+        ctx = trace_context(system, wavelength)
+    n_image = ctx.n_image
     P_chief = trace.P[-1, chief_index]
     if center is None:
         center = P_chief
@@ -564,8 +608,8 @@ def distortion(system, fields=None, wavelength=None, *, epd=None,
     Returns
     -------
     DistortionResult
-        Object with real_xy, paraxial_xy, and percent attributes; element i of
-        each array corresponds to fields[i].
+        Object with real_xy, paraxial_xy, percent, and fields attributes;
+        element i of each array corresponds to fields[i].
     real_xy : ndarray, shape (n_fields, 2)
         actual chief-ray image-plane (x, y) per field.
     paraxial_xy : ndarray, shape (n_fields, 2)
@@ -625,7 +669,7 @@ def distortion(system, fields=None, wavelength=None, *, epd=None,
             real_height = float(np.dot(real_xy[i], paraxial_xy[i])) / denom
             percent[i] = 100.0 * (real_height - denom) / denom
 
-    return DistortionResult(real_xy, paraxial_xy, percent)
+    return DistortionResult(real_xy, paraxial_xy, percent, tuple(fields))
 
 
 # ---------- field curvature -------------------------------------------------
@@ -679,8 +723,8 @@ def field_curvature(system, fields=None, wavelength=None, *,
     Returns
     -------
     FieldCurvatureResult
-        Object with x_fan_z and y_fan_z attributes; element i of each array
-        corresponds to fields[i].
+        Object with x_fan_z, y_fan_z, fields, labels, and image_z attributes;
+        element i of each array corresponds to fields[i].
     x_fan_z : ndarray, shape (n_fields,)
         z where the x-section pencil focuses.
     y_fan_z : ndarray, shape (n_fields,)
@@ -689,7 +733,8 @@ def field_curvature(system, fields=None, wavelength=None, *,
     """
     from .parabasal import parabasal_foci  # local: avoid a circular import
 
-    wavelength = resolve_wavelength(system, wavelength)
+    ctx = trace_context(system, wavelength)
+    wavelength = ctx.wavelength
     fields = field_sweep(system, fields, samples)
     n = len(fields)
     x_fan_z = np.zeros(n, dtype=config.precision)
@@ -697,7 +742,9 @@ def field_curvature(system, fields=None, wavelength=None, *,
     for i, field in enumerate(fields):
         x_fan_z[i], y_fan_z[i] = parabasal_foci(system, field,
                                                 wavelength)
-    return FieldCurvatureResult(x_fan_z, y_fan_z)
+    labels, _ = _field_curvature_labels(ctx.surfaces, fields)
+    return FieldCurvatureResult(x_fan_z, y_fan_z, tuple(fields), labels,
+                                float(ctx.surfaces[-1].P[2]))
 
 
 # ---------- color -----------------------------------------------------------

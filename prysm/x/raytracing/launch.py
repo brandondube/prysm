@@ -10,8 +10,7 @@ from .opt import aim_rays
 from .paraxial import entrance_pupil_z, NonAxialSystemError
 from .spencer_and_murty import (
     raytrace, valid_mask, transform_to_local_coords)
-from ._meta import object_space_index
-from ._resolve import compiled_surfaces
+from ._resolve import trace_context
 
 
 def _entrance_pupil_z(system, wavelength):
@@ -313,7 +312,7 @@ def _object_space_cone_PS(system, field, wavelength, sampling, na,
         raise ValueError(
             'an object-space NA / F-number aperture requires a finite-'
             "conjugate (kind='height') field")
-    n_obj = object_space_index(compiled_surfaces(system), wavelength)
+    n_obj = trace_context(system, wavelength).n_object
     sinU = float(na) / float(n_obj)
     if not (0.0 < sinU < 1.0):
         raise ValueError(
@@ -713,8 +712,30 @@ def solve_apertures(system, *, fields=None, wavelength=None, oversize=1.05,
     return system
 
 
-def solve_vignetting(system, field, wavelength, *, tol=1e-3, maxiter=20):
-    """Solve Code V-style real-ray vignetting factors for one field."""
+def solve_vignetting(system, fields=None, wavelength=None, *, tol=1e-3,
+                     maxiter=20):
+    """Solve and store Code V-style vignetting factors per field (a solve).
+
+    fields None resolves to the system field set; entries may be Field
+    objects, (hx, hy) pairs, or field indices (resolved via system.field).
+    Writes field.vignetting on each resolved Field and returns the system.
+    """
+    wvl = system.wavelength(wavelength)
+    if fields is None:
+        fields = system.fields
+    for field in fields:
+        # route through the field owner: handles an int/Integral index
+        # (numpy ints included), a (hx, hy) tuple, or a Field passthrough
+        field = system.field(field)
+        factors = _solve_vignetting_factors(system, field, wvl, tol=tol,
+                                            maxiter=maxiter)
+        field.vignetting = _normalize_vignetting(factors)
+    return system
+
+
+def _solve_vignetting_factors(system, field, wavelength, *, tol=1e-3,
+                              maxiter=20):
+    """Solve the four vignetting factors for one field."""
     # Solve on an unvignetted clone.
     bare = Field(field.hx, field.hy, kind=field.kind, unit=field.unit,
                  object_z=field.object_z)

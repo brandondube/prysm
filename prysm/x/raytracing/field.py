@@ -18,7 +18,7 @@ from .opt import (
     _pupil_center_chief_index,
 )
 from .analysis import _apply_field_and_output, close_wavefront
-from ._resolve import resolve_wavelength, compiled_surfaces
+from ._resolve import trace_context
 from ._trace_grid import trace_cell
 from ._meta import object_space_index
 
@@ -437,14 +437,14 @@ class PupilField:
         return self.P_matrix is not None
 
 
-def _pupil_coordinate_scale(system, wavelength, P_xp, center):
+def _pupil_coordinate_scale(ctx, P_xp, center):
     """Length scale for the sine-space pupil coordinate.
 
     Uses |EFL| when available, otherwise the reference-sphere radius.
     """
-    surfaces = compiled_surfaces(system)
     try:
-        return abs(float(effective_focal_length(surfaces, wvl=wavelength)))
+        return abs(float(effective_focal_length(ctx.surfaces,
+                                                wvl=ctx.wavelength)))
     except ValueError:
         if P_xp is None:
             raise
@@ -491,11 +491,10 @@ def pupil_field(system, field, wavelength=None, *, epd=None, npupil=64,
         scattered sine-space samples.
 
     """
-    wavelength = resolve_wavelength(system, wavelength)
-    if epd is None:
-        resolver = getattr(system, 'entrance_pupil_diameter', None)
-        if callable(resolver):
-            epd = resolver(wavelength)
+    ctx = trace_context(system, wavelength, chief=True, epd=epd,
+                        stop_index=stop_index)
+    wavelength = ctx.wavelength
+    epd = ctx.epd
     if epd is None:
         raise TypeError(
             'epd is required; pass epd=... or an OpticalSystem whose aperture '
@@ -545,17 +544,18 @@ def pupil_field(system, field, wavelength=None, *, epd=None, npupil=64,
     # the auto-chief half a step off axis.
     P_img = None if P_img is None else np.asarray(P_img)
     closing = close_wavefront(system, trace, wavelength, chief_index,
-                              center=P_img, P_xp=P_xp, stop_index=stop_index,
+                              center=P_img, P_xp=P_xp,
+                              stop_index=ctx.stop_index,
                               epd=epd, axis_dir=axis_dir, min_perp=1e-3,
                               valid=valid, reference=reference,
-                              apply_field_tilt=False)
+                              apply_field_tilt=False, ctx=ctx)
     P_img = closing.center
     P_xp = closing.P_xp
     n_image = closing.n_image
     opd = closing.opd
 
     # Sine-space pupil coordinates from ray direction cosines.
-    scale = _pupil_coordinate_scale(system, wavelength, P_xp, P_img)
+    scale = _pupil_coordinate_scale(ctx, P_xp, P_img)
     X_all, Y_all = sine_space_coords(trace.S[-1], trace.S[-1, chief_index],
                                      scale, axis_dir)
 

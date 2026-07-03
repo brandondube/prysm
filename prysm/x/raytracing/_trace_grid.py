@@ -2,8 +2,11 @@
 
 import math
 
+from prysm.mathops import np
+
 from .spencer_and_murty import raytrace, valid_mask
-from .launch import Field, launch
+from .launch import Field, Sampling, launch
+from ._resolve import resolve_wavelength, trace_context
 
 
 def _resolve_fields(system, fields):
@@ -90,21 +93,20 @@ def _resolve_wavelengths(system, wavelengths):
     wv = getattr(system, 'wavelengths', None)
     if wv is not None and len(wv):
         return [float(w) for w in wv]
-    resolver = getattr(system, 'wavelength', None)
-    if callable(resolver):
-        return [float(resolver(None))]
-    raise TypeError(
-        'wavelengths is required for a bare surface sequence; only an '
-        'OpticalSystem defaults the wavelength set.'
-    )
+    try:
+        return [resolve_wavelength(system, None)]
+    except ValueError:
+        # phrase the error for the plural axis this helper owns
+        raise TypeError(
+            'wavelengths is required for a bare surface sequence; only an '
+            'OpticalSystem defaults the wavelength set.'
+        ) from None
 
 
 def _require_epd(system, epd, wvl=None):
     """Resolve epd from an explicit value or the system; error if neither."""
     if epd is None:
-        resolver = getattr(system, 'entrance_pupil_diameter', None)
-        if callable(resolver):
-            epd = resolver(wvl)
+        epd = trace_context(system, wvl, chief=True).epd
     if epd is None:
         raise TypeError(
             'epd is required; pass epd=... or supply an OpticalSystem whose '
@@ -215,3 +217,86 @@ def iter_trace_grid(system, fields, wavelengths, sampling, *,
                 system, field, wvl, sampling, epd=epd, pupil_z=pupil_z,
                 aim_to=aim_to, trace_fn=trace_fn)
             yield TraceRecord(i, j, field, wvl, epd_w, P, S, trace, valid)
+
+
+class LayoutRecord:
+    """One traced layout fan: the field, its trace, and the valid mask."""
+
+    __slots__ = ('field', 'trace', 'valid')
+
+    def __init__(self, field, trace, valid):
+        self.field = field
+        self.trace = trace
+        self.valid = valid
+
+
+class _OutlineTrace:
+    """Minimal P/S carrier so plot_optics can size glass over many fields."""
+
+    __slots__ = ('P', 'S')
+
+    def __init__(self, P, S):
+        self.P = P
+        self.S = S
+
+
+def _valid_only_positions(trace):
+    """Position history with clipped/missed rays NaN'd out (for glass sizing)."""
+    P = np.array(trace.P)
+    mask = valid_mask(trace.status, P[-1])
+    if mask is not None:
+        P[:, ~mask, :] = np.nan
+    return P
+
+
+def layout_records(system, fields=None, wavelength=None, sampling=None,
+                   axis='y'):
+    """Trace one pupil fan per field for a 2D layout drawing.
+
+    Parameters
+    ----------
+    system : sequence of Surface or OpticalSystem
+        the optical system.
+    fields : iterable of Field, optional
+        fields to trace; None defaults to the system FieldSet, else on-axis.
+    wavelength : float, optional
+        in microns; None resolves to the system reference.
+    sampling : Sampling or int, optional
+        pupil sampling per fan; an int is shorthand for a fan of that many
+        rays along axis, None a 3-ray fan.
+    axis : str, optional
+        fan axis 'y' or 'x', used when sampling is None or an int.
+
+    Returns
+    -------
+    records : list of LayoutRecord
+        one traced fan per field.
+    outline : _OutlineTrace
+        every field's footprint concatenated, for glass sizing.
+
+    """
+    wvl = resolve_wavelength(system, wavelength)
+    fields = _resolve_fields(system, fields)
+    if sampling is None:
+        sampling = Sampling.fan(n=3, axis=axis)
+    elif isinstance(sampling, int):
+        sampling = Sampling.fan(n=int(sampling), axis=axis)
+    records = []
+    for field in fields:
+        trace = raytrace(system, *launch(system, field, wvl, sampling,
+                                         drop_unaimed=True), wvl)
+        records.append(LayoutRecord(field, trace,
+                                    valid_mask(trace.status, trace.P[-1])))
+    # Size the glass from every field's footprint, not just the first:
+    # off-axis beams run far higher than the on-axis marginal through a front
+    # negative group (retrofocus, fish-eye), and the elements must contain
+    # them.  Only rays that transit cleanly count -- a clipped ray keeps
+    # computing positions far outside the element (a 170-deg field launches
+    # marginal rays metres off axis), and must not balloon the glass.  An
+    # unsolved auto extent reads this footprint as its drawn radius.
+    outline = _OutlineTrace(
+        np.concatenate([_valid_only_positions(r.trace) for r in records],
+                       axis=1),
+        np.concatenate([np.asarray(r.trace.S) for r in records], axis=1),
+    )
+    return records, outline

@@ -10,8 +10,7 @@ from .paraxial import (
     entrance_pupil_z,
     local_vertex_curvatures,
 )
-from ._meta import object_space_index
-from ._resolve import compiled_surfaces, resolve_chief_metadata
+from ._resolve import compiled_surfaces, trace_context
 
 # microns of wavelength per one system length unit, used to express the
 # wavefront coefficients in waves.  Unknown units fall back to mm (prysm's
@@ -189,8 +188,7 @@ def _max_field(fields):
     return best
 
 
-def _marginal_chief_launch(system, field, wvl, n_ambient, epd,
-                           stop_index):
+def _marginal_chief_launch(ctx, field):
     """Object-space (y, theta) launches for the marginal and chief rays.
 
     The marginal (axial) ray runs from the on-axis object point through the
@@ -198,8 +196,9 @@ def _marginal_chief_launch(system, field, wvl, n_ambient, epd,
     through the center of the entrance pupil.
 
     """
-    surfaces = compiled_surfaces(system)
-    z_ep = entrance_pupil_z(surfaces, wvl, stop_index=stop_index)
+    surfaces = ctx.surfaces
+    z_ep = entrance_pupil_z(surfaces, ctx.wavelength,
+                            stop_index=ctx.stop_index)
     if z_ep is None:
         raise ValueError(
             'cannot locate the entrance pupil (no aperture stop, or the '
@@ -207,7 +206,7 @@ def _marginal_chief_launch(system, field, wvl, n_ambient, epd,
             'defined chief ray.  Set stop_index on the OpticalSystem.'
         )
     z_s1 = float(surfaces[0].P[2])
-    a = float(epd) / 2.0
+    a = ctx.epd / 2.0
 
     obj_z, fld, is_angle = _reduce_field(field)
     if is_angle:
@@ -392,10 +391,12 @@ def seidel_aberrations(system, field=None, wvl=None, *,
     SeidelResult
 
     """
-    surfaces, wvl, epd, stop_index = resolve_chief_metadata(
-        system, wvl, epd, stop_index)
-    n_object = object_space_index(surfaces, wvl)
-    if epd is None:
+    ctx = trace_context(system, wvl, chief=True, epd=epd,
+                        stop_index=stop_index)
+    surfaces = ctx.surfaces
+    wvl = ctx.wavelength
+    n_object = ctx.n_object
+    if ctx.epd is None:
         raise ValueError('an entrance pupil diameter is required (epd=...)')
     if field is None:
         fields = getattr(system, 'fields', None)
@@ -411,8 +412,7 @@ def seidel_aberrations(system, field=None, wvl=None, *,
         wavelengths = getattr(system, 'wavelengths', None)
     _assert_rotational_third_order_geometry(surfaces)
 
-    (y0_m, u0_m), (y0_c, u0_c) = _marginal_chief_launch(
-        system, field, wvl, n_object, epd, stop_index)
+    (y0_m, u0_m), (y0_c, u0_c) = _marginal_chief_launch(ctx, field)
 
     marg = paraxial_trace(surfaces, y0_m, u0_m, wvl, n_object)
     chief = paraxial_trace(surfaces, y0_c, u0_c, wvl, n_object)

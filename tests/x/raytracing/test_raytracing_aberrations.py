@@ -15,6 +15,7 @@ from prysm.x.raytracing.aberrations import (
     _marginal_chief_launch,
 )
 from prysm.x.raytracing.paraxial import paraxial_image_distance
+from prysm.x.raytracing._resolve import trace_context
 
 
 def _n_const(value):
@@ -67,8 +68,8 @@ def test_optical_invariant_constant_across_surfaces():
     ld = _singlet()
     wvl = ld.wavelength()
     field = Field(0.0, 2.0, kind='angle')
-    (y0m, u0m), (y0c, u0c) = _marginal_chief_launch(
-        ld, field, wvl, 1.0, epd=ld.epd, stop_index=1)
+    ctx = trace_context(ld, wvl, chief=True, epd=ld.epd, stop_index=1)
+    (y0m, u0m), (y0c, u0c) = _marginal_chief_launch(ctx, field)
     marg = paraxial_trace(ld, y0m, u0m, wvl, 1.0)
     chief = paraxial_trace(ld, y0c, u0c, wvl, 1.0)
     # H = n (u y_bar - u_bar y); using before-surface quantities at each surface
@@ -83,8 +84,8 @@ def test_petzval_matches_analytic_sum():
     field = Field(0.0, 2.0, kind='angle')
     res = seidel_aberrations(ld, field=field)
     wvl = ld.wavelength()
-    (y0m, u0m), _ = _marginal_chief_launch(
-        ld, field, wvl, 1.0, epd=ld.epd, stop_index=1)
+    ctx = trace_context(ld, wvl, chief=True, epd=ld.epd, stop_index=1)
+    (y0m, u0m), _ = _marginal_chief_launch(ctx, field)
     marg = paraxial_trace(ld, y0m, u0m, wvl, 1.0)
     P_petz = sum(m.c * (1.0 / m.n_a - 1.0 / m.n_b) for m in marg)
     expected = -res.optical_invariant ** 2 * P_petz

@@ -437,10 +437,10 @@ def _vignetted_singlet(rear_semidiameter=4.0, field=0.0):
 
 
 def test_solve_vignetting_factors_are_symmetric_on_axis():
-    from prysm.x.raytracing.launch import solve_vignetting
+    from prysm.x.raytracing.launch import _solve_vignetting_factors
 
     sys = _vignetted_singlet()
-    factors = solve_vignetting(sys, sys.field(0), sys.wavelength())
+    factors = _solve_vignetting_factors(sys, sys.field(0), sys.wavelength())
     vals = [factors[k] for k in ('vux', 'vlx', 'vuy', 'vly')]
     # rotationally symmetric system, on-axis field: all four sides agree
     assert max(vals) - min(vals) < 1e-9
@@ -491,4 +491,4 @@ def test_solve_vignetting_blocked_chief_raises():
     # the 0.3 semidiameter; factors are chief-referenced, so this must raise
     sys = _vignetted_singlet(rear_semidiameter=0.3, field=10.0)
     with pytest.raises(ValueError, match='chief'):
-        solve_vignetting(sys, sys.field(0), sys.wavelength())
+        solve_vignetting(sys)

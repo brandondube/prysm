@@ -29,45 +29,6 @@ def unit_vector_between(P1, P2):
     return normalize_vector(diff, axis=-1)
 
 
-def line_intersection_params(P1, S1, P2, S2):
-    """Return least-squares line parameters for two 3D rays.
-
-    Solves [S1, -S2] @ [t1, t2] = P2 - P1 in the least-squares sense,
-    yielding the parameters along each ray that minimize the squared
-    distance between the two lines.
-
-    Parameters
-    ----------
-    P1 : ndarray
-        origin of ray 1, length-3
-    S1 : ndarray
-        direction of ray 1, length-3
-    P2 : ndarray
-        origin of ray 2, length-3
-    S2 : ndarray
-        direction of ray 2, length-3
-
-    Returns
-    -------
-    ndarray
-        length-2 vector (t1, t2) of parameters along S1 and S2
-
-    """
-    d = P2 - P1
-    a = np.dot(S1, S1)
-    b = np.dot(S1, S2)
-    c = np.dot(S2, S2)
-    e = np.dot(S1, d)
-    f = np.dot(S2, d)
-    denom = a * c - b * b
-    if abs(denom) < 1e-30:
-        # parallel rays; fall back to projecting d onto S1
-        return np.asarray([e / a, 0.0])
-    t1 = (c * e - b * f) / denom
-    t2 = (b * e - a * f) / denom
-    return np.asarray([t1, t2])
-
-
 def closest_point_on_line_to_line(P, S, axis_point, axis_dir):
     """Point on an axis line closest to another 3D line.
 

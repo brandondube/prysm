@@ -6,8 +6,7 @@ from prysm.mathops import np
 from .launch import Field, Sampling, launch, _perp_basis
 from .spencer_and_murty import STYPE_REFLECT, STYPE_REFRACT, reflect, valid_mask
 from ._diff_raytrace import DiffSeed, raytrace_with_tangents
-from ._meta import object_space_index
-from ._resolve import resolve_chief_metadata
+from ._resolve import trace_context
 
 
 _SEED_NAMES = ('dx', 'dy', 'du', 'dv')
@@ -222,10 +221,11 @@ class ParabasalFirstOrder:
         return '\n'.join(line for line in lines if line is not None)
 
 
-def _fill_metadata(out, surfaces, wvl, fld, epd, stop_index, force_sym):
+def _fill_metadata(out, ctx, fld, force_sym):
     """Scalar metadata shared by the parabasal and ynu-fallback paths."""
+    surfaces = ctx.surfaces
     n_surfaces = len(surfaces)
-    out.wavelength = float(wvl)
+    out.wavelength = ctx.wavelength
     out.field = fld
     out.force_sym = bool(force_sym)
     out.n_surfaces = n_surfaces
@@ -233,10 +233,10 @@ def _fill_metadata(out, surfaces, wvl, fld, epd, stop_index, force_sym):
     out.n_reflective = sum(1 for s in surfaces if s.typ == STYPE_REFLECT)
     out.n_eval = n_surfaces - out.n_refractive - out.n_reflective
     out.total_track = float(surfaces[-1].P[2]) - float(surfaces[0].P[2])
-    if epd is not None:
-        out.epd = float(epd)
-    if stop_index is not None:
-        k = int(stop_index)
+    if ctx.epd is not None:
+        out.epd = ctx.epd
+    if ctx.stop_index is not None:
+        k = ctx.stop_index
         if k < 0 or k >= n_surfaces:
             raise IndexError(
                 f'stop_index {k} out of range for surfaces of length '
@@ -245,14 +245,18 @@ def _fill_metadata(out, surfaces, wvl, fld, epd, stop_index, force_sym):
         out.stop_index = k
 
 
-def _fill_from_ynu(out, system, surfaces, wvl, epd, stop_index):
+def _fill_from_ynu(out, system, ctx):
     """Populate the section pairs from the scalar YNU walk (chief failed)."""
+    wvl = ctx.wavelength
+    epd = ctx.epd
+    stop_index = ctx.stop_index
     resolver = getattr(system, '_ynu_first_order', None)
     if callable(resolver):
         fo = resolver(wvl=wvl, epd=epd, stop_index=stop_index)
     else:
         from .paraxial import ynu_first_order  # local: avoid a circular import
-        fo = ynu_first_order(surfaces, wvl=wvl, epd=epd, stop_index=stop_index)
+        fo = ynu_first_order(ctx.surfaces, wvl=wvl, epd=epd,
+                             stop_index=stop_index)
     out.backend = 'ynu'
     out.n_object = fo.n_object
     out.n_image = fo.n_image
@@ -292,14 +296,16 @@ def first_order(system, field=None, wavelength=None, *, epd=None,
         computed properties; unavailable quantities are None.
 
     """
-    surfaces, wvl, epd, stop_index = resolve_chief_metadata(
-        system, wavelength, epd, stop_index)
+    ctx = trace_context(system, wavelength, chief=True, epd=epd,
+                        stop_index=stop_index)
+    surfaces = ctx.surfaces
+    wvl = ctx.wavelength
     if len(surfaces) == 0:
         raise ValueError('surfaces is empty')
     fld = _resolve_field(system, field)
 
     out = ParabasalFirstOrder()
-    _fill_metadata(out, surfaces, wvl, fld, epd, stop_index, force_sym)
+    _fill_metadata(out, ctx, fld, force_sym)
 
     res = _chief_tangent_trace(system, surfaces, fld, wvl)
     trace = res.trace
@@ -309,14 +315,14 @@ def first_order(system, field=None, wavelength=None, *, epd=None,
                 and bool(np.all(np.isfinite(res.Sdot[-1]))))
 
     if not chief_ok:
-        _fill_from_ynu(out, system, surfaces, wvl, epd, stop_index)
+        _fill_from_ynu(out, system, ctx)
         if force_sym:
             for name in _PAIR_SLOTS:
                 setattr(out, name, _collapse(getattr(out, name)))
         return out
 
     out.backend = 'parabasal'
-    n_obj = float(object_space_index(surfaces, wvl))
+    n_obj = ctx.n_object
     n_img_phys = _image_space_physical_index(surfaces, wvl, n_obj)
     n_img_signed = n_img_phys if out.n_reflective % 2 == 0 else -n_img_phys
     out.n_object = n_obj
@@ -452,8 +458,9 @@ def parabasal_foci(system, field, wavelength=None):
         lab-frame z where the x and y section pencils focus.
 
     """
-    surfaces, wvl, _, _ = resolve_chief_metadata(
-        system, wavelength, None, None)
+    ctx = trace_context(system, wavelength)
+    surfaces = ctx.surfaces
+    wvl = ctx.wavelength
     fld = _resolve_field(system, field)
     res = _chief_tangent_trace(system, surfaces, fld, wvl)
     trace = res.trace

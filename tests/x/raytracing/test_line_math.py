@@ -5,24 +5,9 @@ import numpy as np
 from prysm.x.raytracing import _line_math
 
 
-def test_line_intersection_params_and_unit_vector_between():
-    P1 = np.array([0., 0., 0.])
-    S1 = np.array([1., 0., 0.])
-    P2 = np.array([2., -1., 0.])
-    S2 = np.array([0., 1., 0.])
-    s = _line_math.line_intersection_params(P1, S1, P2, S2)
-    np.testing.assert_allclose(P1 + s[0] * S1, P2 + s[1] * S2)
-    np.testing.assert_allclose(_line_math.unit_vector_between(P1, [0, 0, 3]),
-                               [0, 0, 1])
-
-
-def test_line_intersection_params_parallel_rays():
-    P1 = np.array([0., 0., 0.])
-    S1 = np.array([1., 0., 0.])
-    P2 = np.array([0., 1., 0.])
-    S2 = np.array([1., 0., 0.])
-    s = _line_math.line_intersection_params(P1, S1, P2, S2)
-    assert np.isfinite(s).all()
+def test_unit_vector_between():
+    np.testing.assert_allclose(
+        _line_math.unit_vector_between([0., 0., 0.], [0, 0, 3]), [0, 0, 1])
 
 
 def test_closest_point_on_line_to_line():

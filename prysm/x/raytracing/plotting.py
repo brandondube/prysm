@@ -7,10 +7,8 @@ from prysm.mathops import array_to_true_numpy
 
 from .spencer_and_murty import (
     RayTraceResult,
-    raytrace,
     transform_to_global_coords,
     transform_to_local_coords,
-    valid_mask,
 )
 from .analysis import (
     transverse_ray_aberration,
@@ -18,14 +16,15 @@ from .analysis import (
     field_curvature,
     distortion,
     lateral_color,
-    _field_curvature_labels,
+    spot_positions,
 )
 from ._resolve import resolve_wavelength
-from .launch import launch, Sampling
 from .surfaces import STYPE_REFLECT, STYPE_REFRACT
 from .aperture import SurfaceSubstrate
 from .lensdata import lens_element_groups
-from ._trace_grid import _resolve_fields, _resolve_wavelengths, field_sweep
+from ._trace_grid import (
+    _resolve_wavelengths, field_sweep, layout_records,
+)
 
 import numpy as np  # see module docstring; do not "fix" to mathops np
 
@@ -669,33 +668,16 @@ def plot_optics(system, result, *, wvl=None, ambient_index=1.0,
     return fig, ax
 
 
-class _OutlineTrace:
-    """Minimal P/S carrier so plot_optics can size glass over many fields."""
-    __slots__ = ('P', 'S')
-
-    def __init__(self, P, S):
-        self.P = P
-        self.S = S
-
-
-def _valid_only_positions(result):
-    """Position history with clipped/missed rays NaN'd out (for glass sizing)."""
-    P = _to_np(result.P).copy()
-    mask = valid_mask(_to_np(result.status), P[-1])
-    if mask is not None:
-        P[:, ~np.asarray(mask), :] = np.nan
-    return P
-
-
 def layout(system, *, fields=None, wavelength=None, sampling=None, axis='y',
            x='z', y='y', colors=None, lw=1, alpha=1, fig=None, ax=None):
     """Draw a 2D layout: the optics plus a ray fan per field.
 
     A one-call composition of plot_optics (once) and plot_ray_paths (per field)
-    for the common show-me-the-system view.  Tracing happens here, so system
-    must carry (or be given) enough metadata to launch -- an aperture, fields,
-    and a wavelength.  Solved surface extents size the glass; an unsolved auto
-    extent falls back to the per-call ray footprint (and warns once).
+    for the common show-me-the-system view.  Tracing happens in
+    layout_records, so system must carry (or be given) enough metadata to
+    launch -- an aperture, fields, and a wavelength.  Solved surface extents
+    size the glass; an unsolved auto extent falls back to the per-call ray
+    footprint (and warns once).
 
     Parameters
     ----------
@@ -729,34 +711,15 @@ def layout(system, *, fields=None, wavelength=None, sampling=None, axis='y',
         An axis object
 
     """
-    wvl = resolve_wavelength(system, wavelength)
-    fields = _resolve_fields(system, fields)
-    if sampling is None:
-        sampling = Sampling.fan(n=3, axis=axis)
-    elif isinstance(sampling, int):
-        sampling = Sampling.fan(n=int(sampling), axis=axis)
+    records, outline = layout_records(system, fields=fields,
+                                      wavelength=wavelength,
+                                      sampling=sampling, axis=axis)
     if colors is None:
-        colors = [f'C{i % 10}' for i in range(len(fields))]
-
-    results = [raytrace(system,
-                        *launch(system, field, wvl, sampling, drop_unaimed=True),
-                        wvl)
-               for field in fields]
-
-    # Size and draw the glass from every field's footprint, not just the first:
-    # off-axis beams run far higher than the on-axis marginal through a front
-    # negative group (retrofocus, fish-eye), and the elements must contain them.
-    # Only rays that transit cleanly count -- a clipped ray keeps computing
-    # positions far outside the element (a 170-deg field launches marginal rays
-    # metres off axis), and must not balloon the glass.  An unsolved auto extent
-    # reads this footprint as its drawn radius (the D3 fallback).
-    outline = _OutlineTrace(
-        np.concatenate([_valid_only_positions(r) for r in results], axis=1),
-        np.concatenate([_to_np(r.S) for r in results], axis=1),
-    )
-    fig, ax = plot_optics(system, outline, wvl=wvl, x=x, y=y, fig=fig, ax=ax)
-    for result, color in zip(results, colors):
-        plot_ray_paths(result, x=x, y=y, c=color, lw=lw, alpha=alpha,
+        colors = [f'C{i % 10}' for i in range(len(records))]
+    fig, ax = plot_optics(system, outline, wvl=wavelength, x=x, y=y,
+                          fig=fig, ax=ax)
+    for record, color in zip(records, colors):
+        plot_ray_paths(record.trace, x=x, y=y, c=color, lw=lw, alpha=alpha,
                        fig=fig, ax=ax)
     return fig, ax
 
@@ -947,25 +910,11 @@ def plot_spot_diagram(phist, marker='+', c='k', alpha=1, zorder=4, s=None,
         if status is None:
             status = result.status
     phist = _to_np(phist)
-    x = phist[-1, ..., 0]
-    y = phist[-1, ..., 1]
     if status is not None:
         status = _to_np(status)
-        valid = valid_mask(status, phist[-1])
-        x = x[valid]
-        y = y[valid]
-    if origin is not None:
-        if isinstance(origin, str):
-            if origin.lower() == 'centroid':
-                origin = (float(np.nanmean(x)), float(np.nanmean(y)))
-            else:
-                raise ValueError("origin string must be 'centroid'")
-        if isinstance(origin, (list, tuple)):
-            origin = np.asarray(origin)
-        else:
-            origin = _to_np(origin)
-        x = x - origin[0]
-        y = y - origin[1]
+    if origin is not None and not isinstance(origin, str):
+        origin = _to_np(np.asarray(origin))
+    x, y = spot_positions(phist[-1], status=status, origin=origin)
     ax.scatter(x, y, c=c, s=s, marker=marker, alpha=alpha, zorder=zorder,
                label=label)
     if equal_aspect:
@@ -1007,8 +956,8 @@ def plot_field_curvature(system, fields=None, wavelength=None, *,
     samples : int, optional
         number of sweep points when fields is None.
     result : FieldCurvatureResult, optional
-        precomputed analysis.field_curvature output for fields; when given no
-        rays are traced here and wavelength is unused.
+        precomputed analysis.field_curvature output; when given no rays are
+        traced here and fields and wavelength are unused.
     reference : str or float, optional
         zero of the focus-shift axis.
     c : color, optional
@@ -1031,22 +980,21 @@ def plot_field_curvature(system, fields=None, wavelength=None, *,
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    fields = field_sweep(system, fields, samples)
     if result is None:
-        result = field_curvature(system, fields, wavelength)
+        result = field_curvature(system, fields, wavelength, samples=samples)
     x_fan_z = _to_np(result.x_fan_z)
     y_fan_z = _to_np(result.y_fan_z)
     if reference is None:
         ref = 0.0
     elif isinstance(reference, str):
         if reference.lower() == 'image':
-            ref = float(system[-1].P[2])
+            ref = float(result.image_z)
         else:
             raise ValueError("reference string must be 'image'")
     else:
         ref = float(reference)
-    field_values = _field_axis_values(fields)
-    suffixes, _ = _field_curvature_labels(system, fields)
+    field_values = _field_axis_values(result.fields)
+    suffixes = result.labels
     x_label = suffixes[0] if label is None else f'{label} {suffixes[0]}'
     y_label = suffixes[1] if label is None else f'{label} {suffixes[1]}'
     ax.plot(x_fan_z - ref, field_values, c=c, ls='-', lw=lw, alpha=alpha,
@@ -1151,8 +1099,8 @@ def plot_distortion(system, fields=None, wavelength=None, *, epd=None,
     samples : int, optional
         number of sweep points when fields is None.
     result : DistortionResult, optional
-        precomputed analysis.distortion output for fields; when given no rays
-        are traced here and wavelength, epd, distortion_type, and pupil_z are
+        precomputed analysis.distortion output; when given no rays are traced
+        here and fields, wavelength, epd, distortion_type, and pupil_z are
         unused.
     c : color, optional
         curve color.
@@ -1174,14 +1122,14 @@ def plot_distortion(system, fields=None, wavelength=None, *, epd=None,
 
     """
     fig, ax = share_fig_ax(fig, ax)
-    fields = field_sweep(system, fields, samples)
     if result is None:
         result = distortion(
             system, fields, wavelength, epd=epd,
             distortion_type=distortion_type, pupil_z=pupil_z,
+            samples=samples,
         )
     percent = _to_np(result.percent)
-    field_values = _field_axis_values(fields)
+    field_values = _field_axis_values(result.fields)
     ax.plot(percent, field_values, c=c, lw=lw, alpha=alpha, zorder=zorder,
             label=label)
     ax.set_xlabel('distortion [%]')

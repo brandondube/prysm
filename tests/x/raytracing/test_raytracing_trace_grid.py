@@ -195,3 +195,40 @@ def test_resolve_wavelengths_casts_to_float():
     out = _resolve_wavelengths(None, [1, 2])
     assert out == [1.0, 2.0]
     assert all(isinstance(w, float) for w in out)
+
+
+# ---------- layout records ---------------------------------------------------
+
+def test_layout_records_one_fan_per_field_plus_footprint():
+    from prysm.x.raytracing._trace_grid import layout_records
+
+    sys = _singlet_system()
+    records, outline = layout_records(sys, sampling=5)
+    assert len(records) == len(sys.fields)
+    for r in records:
+        assert r.trace.P.shape[1] == 5
+        np.testing.assert_array_equal(
+            r.valid, valid_mask(r.trace.status, r.trace.P[-1]))
+    # footprint concatenates every field's rays, invalid rays NaN'd
+    assert outline.P.shape[1] == 5 * len(sys.fields)
+    assert outline.S.shape[1] == 5 * len(sys.fields)
+
+
+def test_layout_records_footprint_nans_clipped_rays():
+    from prysm.x.raytracing._trace_grid import layout_records
+
+    lens = LensData()
+    (lens.add(Conic(1 / 50.0, 0.0), typ='refr', aperture=3.0,
+              material=materials.ConstantMaterial(1.5168), thickness=5.0)
+         .add(Conic(-1 / 50.0, 0.0), typ='refr', material=materials.air,
+              thickness=95.0)
+         .add(Plane(), typ='eval'))
+    sys = OpticalSystem(lens, aperture=ApertureSpec.epd(10.0),
+                        fields=[Field(0, 0)], wavelengths=[0.5876],
+                        reference=0, stop_index=0)
+    records, outline = layout_records(sys, sampling=9)
+    r = records[0]
+    assert not r.valid.all() and r.valid.any()
+    assert np.isnan(outline.P[:, ~r.valid, :]).all()
+    np.testing.assert_array_equal(outline.P[:, r.valid, :],
+                                  r.trace.P[:, r.valid, :])

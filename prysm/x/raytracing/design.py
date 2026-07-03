@@ -25,7 +25,7 @@ from .paraxial import (
     paraxial_image_distance,
 )
 from . import analysis as _analysis
-from ._resolve import compiled_surfaces, resolve_wavelength
+from ._resolve import compiled_surfaces, trace_context
 from ._cache import StateCache
 
 
@@ -35,14 +35,21 @@ class _TraceCache:
     """Per-merit-call raytrace cache keyed by array identity."""
 
     __slots__ = ('_system', '_cache', '_n_traces', '_xp_cache',
-                 '_launch_cache')
+                 '_launch_cache', '_ctx_cache')
 
     def __init__(self, system):
         self._system = system
         self._cache = StateCache()
         self._xp_cache = StateCache()
         self._launch_cache = StateCache()
+        self._ctx_cache = StateCache()
         self._n_traces = 0
+
+    def context(self, wavelength=None):
+        """Resolved TraceContext for one wavelength, memoized per merit call."""
+        key = None if wavelength is None else float(wavelength)
+        return self._ctx_cache.get_or_compute(
+            key, lambda: trace_context(self._system, wavelength))
 
     def launch(self, field, wavelength, sampling, *, epd=None):
         """Launch bundle (P, S) for a recipe, memoized for this merit call."""
@@ -175,7 +182,7 @@ class _RayMerit(Merit):
         self.epd = epd
 
     def _bundle(self, system, cache):
-        wvl = resolve_wavelength(system, self.wavelength)
+        wvl = cache.context(self.wavelength).wavelength
         P, S = cache.launch(self.field, wvl, self.sampling, epd=self.epd)
         return P, S, wvl
 
@@ -280,8 +287,8 @@ class EFL(Merit):
         self.wavelength = None if wavelength is None else float(wavelength)
 
     def __call__(self, system, cache):
-        wvl = resolve_wavelength(system, self.wavelength)
-        return float(effective_focal_length(compiled_surfaces(system), wvl=wvl))
+        ctx = cache.context(self.wavelength)
+        return float(effective_focal_length(ctx.surfaces, wvl=ctx.wavelength))
 
 
 class BFL(Merit):
@@ -295,8 +302,8 @@ class BFL(Merit):
         self.wavelength = None if wavelength is None else float(wavelength)
 
     def __call__(self, system, cache):
-        wvl = resolve_wavelength(system, self.wavelength)
-        return float(back_focal_length(compiled_surfaces(system), wvl=wvl))
+        ctx = cache.context(self.wavelength)
+        return float(back_focal_length(ctx.surfaces, wvl=ctx.wavelength))
 
 
 class ParaxialImageDistance(Merit):
@@ -311,9 +318,9 @@ class ParaxialImageDistance(Merit):
         self.wavelength = None if wavelength is None else float(wavelength)
 
     def __call__(self, system, cache):
-        wvl = resolve_wavelength(system, self.wavelength)
-        return float(paraxial_image_distance(compiled_surfaces(system),
-                                             wvl=wvl))
+        ctx = cache.context(self.wavelength)
+        return float(paraxial_image_distance(ctx.surfaces,
+                                             wvl=ctx.wavelength))
 
 
 class TotalTrack(Merit):
@@ -399,7 +406,8 @@ class WavefrontRMS(_RayMerit):
         self.P_xp = P_xp
         self.stop_index = stop_index
 
-    def _geometry(self, trace, system, wavelength, *, P_xp_override=None):
+    def _geometry(self, trace, system, wavelength, *, P_xp_override=None,
+                  ctx=None):
         """Chief-select and close; the WavefrontClosing feeds value and seed."""
         chief = self.chief_index
         if chief is None:
@@ -408,7 +416,7 @@ class WavefrontRMS(_RayMerit):
         return _analysis.close_wavefront(
             system, trace, wavelength, chief, field=self.field, P_xp=P_xp,
             stop_index=self.stop_index, epd=self.epd,
-            axis_point=self.axis_point, axis_dir=self.axis_dir)
+            axis_point=self.axis_point, axis_dir=self.axis_dir, ctx=ctx)
 
     @staticmethod
     def _rms(closing):
@@ -418,8 +426,9 @@ class WavefrontRMS(_RayMerit):
     def __call__(self, system, cache, *, return_seed=False):
         P, S, wvl = self._bundle(system, cache)
         trace = cache.trace(P, S, wvl)
+        ctx = cache.context(self.wavelength)
         if return_seed:
-            g = self._geometry(trace, system, wvl)
+            g = self._geometry(trace, system, wvl, ctx=ctx)
             return self._rms(g), self._seed_from_geometry(trace, g)
         # Reuse the memoized exit pupil on the value path.
         P_xp = cache.exit_pupil(
@@ -427,7 +436,7 @@ class WavefrontRMS(_RayMerit):
             chief_index=self.chief_index, stop_index=self.stop_index,
             epd=self.epd, axis_point=self.axis_point, axis_dir=self.axis_dir)
         g = self._geometry(trace, system, wvl,
-                           P_xp_override=P_xp)
+                           P_xp_override=P_xp, ctx=ctx)
         return self._rms(g)
 
     def value(self, trace, system, wavelength):
@@ -590,7 +599,7 @@ class Distortion(Merit):
         self.paraxial_fraction = float(paraxial_fraction)
 
     def __call__(self, system, cache):
-        wvl = resolve_wavelength(system, self.wavelength)
+        wvl = cache.context(self.wavelength).wavelength
         result = _analysis.distortion(
             system, [self.field], wvl,
             epd=self.epd,
@@ -617,7 +626,7 @@ class FieldCurvature(Merit):
     def __call__(self, system, cache):
         from .parabasal import parabasal_foci  # local: avoid a circular import
 
-        wvl = resolve_wavelength(system, self.wavelength)
+        wvl = cache.context(self.wavelength).wavelength
         x_z, y_z = parabasal_foci(system, self.field, wvl)
         # parabasal_foci returns nan when the chief ray fails to trace; surface
         # that as a clear error (as WavefrontRMS does) rather than feeding a nan
