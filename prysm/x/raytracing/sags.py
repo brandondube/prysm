@@ -503,10 +503,9 @@ def even_asphere_sag(c, kappa, coefs, rsq):
 def even_asphere_sag_der_xy(c, kappa, coefs, x, y, phi=None):
     """Cartesian partial derivatives of an even asphere.
 
-    z = z_conic(rho^2) + sum_i coefs[i] * rho^(2(i+2))
-    dz/dx = (c x / phi) + 2 x * sum_i (i+2) * coefs[i] * rho^(2(i+1))
-          = conic_der_x + 2 x * rho^2 * Horner(d_coefs)
-    where d_coefs[i] = (i + 2) * coefs[i].
+    z = z_conic(rho^2) + sum_i coefs[i] * rho^(2(i+2));
+    dz/dx = conic_der_x + 2 x rho^2 Horner(d_coefs),
+    d_coefs[i] = (i + 2) coefs[i].
 
     Parameters
     ----------
