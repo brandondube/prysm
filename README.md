@@ -5,7 +5,7 @@
 [![Coverage Status](https://coveralls.io/repos/github/brandondube/prysm/badge.svg?branch=master)](https://coveralls.io/github/brandondube/prysm?branch=master) [![DOI](http://joss.theoj.org/papers/10.21105/joss.01352/status.svg)](https://doi.org/10.21105/joss.01352)
 
 
-Prysm is a python 3.6+ library for numerical optics.  Its features are a superset of those in both POPPY and PROPER, not limited to physical optics, thin lens, thin film, and detector modeling.  There is also a submodule that can replace the software that comes with an interferometer for data analysis.
+Prysm is a python 3.10+ library for numerical optics.  Its features are a superset of those in both POPPY and PROPER, not limited to physical optics, thin lens, thin film, and detector modeling.  There is also a submodule that can replace the software that comes with an interferometer for data analysis.
 
 Prysm is believed to be by significant margin the fastest package in the world at what it does.  On CPU, end-to-end calculation is more than 100x as fast as the above for like-for-like calculations.  On GPU, prysm is more than 1,000x faster than its competition.  The [lowfssim](https://github.com/nasa-jpl/lowfssim) model can run at over 2kHz in real-time and is all prysm under the hood.
 
@@ -22,7 +22,7 @@ prysm requires only [numpy](http://www.numpy.org/), and [scipy](https://www.scip
 
 ### Optional Dependencies
 
-Prysm uses numpy for array operations or any compatible library.  To use GPUs, you may install [cupy](https://cupy.chainer.org/) and use it as the backend at runtime.  Plotting uses [matplotlib](https://matplotlib.org/).  Images are read and written with [imageio](https://imageio.github.io/).  Some MTF utilities utilize [pandas](https://pandas.pydata.org/) and [seaborn](https://seaborn.pydata.org/).  Reading of Zygo datx files requires [h5py](https://www.h5py.org/).
+Prysm uses numpy for array operations or any compatible library.  To use GPUs, you may install [cupy](https://cupy.chainer.org/) and use it as the backend at runtime.  Plotting uses [matplotlib](https://matplotlib.org/).  Images are read and written with [imageio](https://imageio.github.io/).  Reading of Zygo datx files requires [h5py](https://www.h5py.org/).
 
 ## Features
 
@@ -133,4 +133,4 @@ See the [documentation](https://prysm.readthedocs.io/en/stable/tutorials/index.h
 
 ## Contributing
 
-If you find an issue with prysm, please open an [issue](https://github.com/brandondube/prysm/issues) or [pull request](https://github.com/brandondube/prysm/pulls).  Prysm has some usage of f-strings, so any code contributed is only expected to work on python 3.6+, and is licensed under the [MIT license](https://github.com/brandondube/prysm/blob/master/LICENSE.md).
+If you find an issue with prysm, please open an [issue](https://github.com/brandondube/prysm/issues) or [pull request](https://github.com/brandondube/prysm/pulls).  Contributed code is only expected to work on python 3.10+, and is licensed under the [MIT license](https://github.com/brandondube/prysm/blob/master/LICENSE.md).
