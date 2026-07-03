@@ -17,12 +17,10 @@ from .paraxial import effective_focal_length
 from .opt import (
     _pupil_center_chief_index,
 )
-from .analysis import (
-    _apply_field_and_output, resolve_exit_pupil, close_on_reference_sphere,
-)
+from .analysis import _apply_field_and_output, close_wavefront
 from ._resolve import resolve_wavelength, compiled_surfaces
 from ._trace_grid import trace_cell
-from ._meta import object_space_index, image_space_index
+from ._meta import object_space_index
 
 
 def _complex_sqrt(x):
@@ -505,9 +503,6 @@ def pupil_field(system, field, wavelength=None, *, epd=None, npupil=64,
     if reference not in ('chief', 'centroid'):
         raise ValueError(
             f"reference must be 'chief' or 'centroid', got {reference!r}")
-    surfaces = compiled_surfaces(system)
-    n_object = object_space_index(surfaces, wavelength)
-
     sampling = Sampling.rect(n=npupil)
 
     def _trace_fn(presc, P, S, w):
@@ -535,20 +530,6 @@ def pupil_field(system, field, wavelength=None, *, epd=None, npupil=64,
     # Anchor the reference sphere before applying the circular pupil mask.
     mask = valid if reference == 'centroid' else None
     chief_index = _pupil_center_chief_index(pupil_xy, mask)
-    if not bool(valid[chief_index]):
-        if reference == 'chief':
-            raise ValueError(
-                'chief ray is obscured or vignetted; cannot anchor the '
-                "reference sphere.  Pass reference='centroid' for an "
-                'obscured or vignetted bundle.'
-            )
-        if not bool(np.any(valid)):
-            raise ValueError('no valid rays to anchor the reference sphere')
-        raise ValueError(
-            f'anchor ray (chief_index={chief_index}) is invalid; pass a '
-            'chief_index that survives the trace, or omit it to auto-select '
-            'the surviving ray nearest the pupil center'
-        )
 
     # Rect sampling fills a square; the entrance pupil is the inscribed circle.
     r_entrance = np.hypot(
@@ -558,21 +539,19 @@ def pupil_field(system, field, wavelength=None, *, epd=None, npupil=64,
     circ = r_entrance <= (0.5 * epd) * (1.0 + 1e-9)
     valid = valid & circ
 
-    # Default center is the real chief-ray landing.
-    chief_P = trace.P[-1, chief_index]
-    P_img = chief_P if P_img is None else np.asarray(P_img)
-    if P_xp is None:
-        # Even rect grids put the auto-chief half a step off axis.
-        P_xp = resolve_exit_pupil(
-            system, wavelength, stop_index=stop_index, epd=epd,
-            chief=(chief_P, trace.S[-1, chief_index]), axis_dir=axis_dir,
-            min_perp=1e-3)
-
-    # OPD on the chief-image reference sphere, valid rays only.
-    n_image = image_space_index(surfaces, wavelength, fallback=n_object)
-    closing = close_on_reference_sphere(trace, valid, chief_index,
-                                        center=P_img, P_xp=P_xp,
-                                        n_image=n_image)
+    # Reference-sphere center defaults to the real chief-ray landing (P_img
+    # override); the ramp stays local -- it rides the vignetting-compressed
+    # grid, not the launch positions.  min_perp raised: even rect grids put
+    # the auto-chief half a step off axis.
+    P_img = None if P_img is None else np.asarray(P_img)
+    closing = close_wavefront(system, trace, wavelength, chief_index,
+                              center=P_img, P_xp=P_xp, stop_index=stop_index,
+                              epd=epd, axis_dir=axis_dir, min_perp=1e-3,
+                              valid=valid, reference=reference,
+                              apply_field_tilt=False)
+    P_img = closing.center
+    P_xp = closing.P_xp
+    n_image = closing.n_image
     opd = closing.opd
 
     # Sine-space pupil coordinates from ray direction cosines.
@@ -592,7 +571,7 @@ def pupil_field(system, field, wavelength=None, *, epd=None, npupil=64,
     else:
         amplitude_all = amp_geo * coating_amp
 
-    # Match analysis.wavefront's chief-relative tilt removal.
+    # local tilt removal on the compressed grid, per the closing call above
     x_pupil = pupil_xy[valid, 0] - pupil_xy[chief_index, 0]
     y_pupil = pupil_xy[valid, 1] - pupil_xy[chief_index, 1]
     tilt_field = field if field.kind == 'angle' else None

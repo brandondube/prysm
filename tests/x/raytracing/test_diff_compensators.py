@@ -29,7 +29,7 @@ from prysm.x.raytracing.tolerance import Perturbation
 from prysm.x.raytracing.wavefront_differential import (
     wavefront_differential, compensate, project_out,
 )
-from tests.x.raytracing.surface_helpers import wavefront_with_resolved_exit_pupil
+from prysm.x.raytracing.analysis import wavefront
 
 
 WVL = 0.5
@@ -84,7 +84,7 @@ def reoptimize_rms(ld, comps, P, S, n_iter=12):
     def opd_at(cvals):
         for cp, v in zip(comps, cvals):
             cp.set(float(v))
-        opd, _, _ = wavefront_with_resolved_exit_pupil(
+        opd, _, _ = wavefront(
             ld.to_surfaces(), P, S, WVL, field=FLD)
         return opd
 

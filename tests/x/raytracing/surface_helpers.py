@@ -1,8 +1,5 @@
 """Test-only surface constructors for explicit shape-based raytracing tests."""
 
-from prysm.x.raytracing.analysis import wavefront, resolve_exit_pupil
-from prysm.x.raytracing.spencer_and_murty import raytrace
-from prysm.x.raytracing.opt import _pupil_center_chief_index
 from prysm.x.raytracing.surfaces import (
     Surface,
     Biconic,
@@ -89,16 +86,3 @@ def toroid(c_x, c_y, k_y, coefs_y, interaction, P, material=None, **kwargs):
 def biconic(c_x, c_y, k_x, k_y, interaction, P, material=None, **kwargs):
     return Surface(shape=Biconic(c_x, c_y, k_x, k_y), interaction=interaction,
                    P=P, material=material, **kwargs)
-
-
-def wavefront_with_resolved_exit_pupil(
-        prescription, P, S, wavelength, *, chief_index=None, stop_index=None,
-        epd=None, axis_point=None, axis_dir=None, **kw):
-    """Resolve P_xp from the traced chief ray, then evaluate wavefront."""
-    tr = raytrace(prescription, P, S, wavelength)
-    ci = chief_index if chief_index is not None else _pupil_center_chief_index(P)
-    P_xp = resolve_exit_pupil(prescription, wavelength, stop_index=stop_index,
-                              epd=epd, chief=(tr.P[-1, ci], tr.S[-1, ci]),
-                              axis_point=axis_point, axis_dir=axis_dir)
-    return wavefront(prescription, P, S, wavelength, P_xp=P_xp,
-                     chief_index=chief_index, **kw)

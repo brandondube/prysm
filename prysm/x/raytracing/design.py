@@ -25,7 +25,6 @@ from .paraxial import (
     paraxial_image_distance,
 )
 from . import analysis as _analysis
-from ._meta import object_space_index, image_space_index
 from ._resolve import compiled_surfaces, resolve_wavelength
 from ._cache import StateCache
 
@@ -401,62 +400,27 @@ class WavefrontRMS(_RayMerit):
         self.stop_index = stop_index
 
     def _geometry(self, trace, system, wavelength, *, P_xp_override=None):
-        """Reference-sphere geometry + EIC OPD shared by value and seed."""
-        valid = valid_mask(trace.status, trace.P[-1])
+        """Chief-select and close; the WavefrontClosing feeds value and seed."""
         chief = self.chief_index
         if chief is None:
             chief = _pupil_center_chief_index(trace.P[0])
-        if not bool(valid[chief]):
-            raise ValueError('chief ray is invalid; cannot define reference sphere')
+        P_xp = P_xp_override if P_xp_override is not None else self.P_xp
+        return _analysis.close_wavefront(
+            system, trace, wavelength, chief, field=self.field, P_xp=P_xp,
+            stop_index=self.stop_index, epd=self.epd,
+            axis_point=self.axis_point, axis_dir=self.axis_dir)
 
-        P_last = trace.P[-1]
-        S_last = trace.S[-1]
-        C = P_last[chief]
-        surfaces = compiled_surfaces(system)
-        n_object = object_space_index(surfaces, wavelength)
-        n_image = image_space_index(surfaces, wavelength, fallback=n_object)
-
-        if P_xp_override is not None:
-            P_xp = np.asarray(P_xp_override, dtype=config.precision)
-            xp_mode = 'fixed'
-        elif self.P_xp is not None:
-            P_xp = np.asarray(self.P_xp, dtype=config.precision)
-            xp_mode = 'fixed'
-        else:
-            # the single exit-pupil owner reports its route; the adjoint needs
-            # it to know whether P_xp is differentiably tied to the chief ray.
-            P_xp, xp_mode = _analysis.resolve_exit_pupil(
-                system, wavelength, stop_index=self.stop_index,
-                epd=self.epd, chief=(C, S_last[chief]),
-                axis_point=self.axis_point, axis_dir=self.axis_dir,
-                return_mode=True)
-            if P_xp is not None:
-                P_xp = np.asarray(P_xp, dtype=config.precision)
-
-        closing = _analysis.close_on_reference_sphere(
-            trace, valid, chief, center=C, P_xp=P_xp, n_image=n_image)
+    @staticmethod
+    def _rms(closing):
         opd = closing.opd
-        # Match analysis._apply_field_and_output for angular fields.
-        # This ramp depends only on the fixed launch positions.
-        if self.field is not None:
-            ax, ay = self.field.angle_radians()
-            P_pupil = trace.P[0]
-            x_pupil = P_pupil[valid, 0] - P_pupil[chief, 0]
-            y_pupil = P_pupil[valid, 1] - P_pupil[chief, 1]
-            opd = opd + (np.sin(ax) * x_pupil + np.sin(ay) * y_pupil)
-        rms = float(np.sqrt(np.mean(opd * opd)))
-        return dict(valid=valid, chief=chief, chief_v=closing.filtered_chief,
-                    C=C, R=closing.R, curvature=closing.curvature,
-                    delta=closing.delta, P_xp=P_xp, xp_mode=xp_mode,
-                    opd=opd, rms=rms, n_image=n_image,
-                    P_last=P_last, S_last=S_last)
+        return float(np.sqrt(np.mean(opd * opd)))
 
     def __call__(self, system, cache, *, return_seed=False):
         P, S, wvl = self._bundle(system, cache)
         trace = cache.trace(P, S, wvl)
         if return_seed:
             g = self._geometry(trace, system, wvl)
-            return g['rms'], self._seed_from_geometry(trace, g)
+            return self._rms(g), self._seed_from_geometry(trace, g)
         # Reuse the memoized exit pupil on the value path.
         P_xp = cache.exit_pupil(
             P, S, wvl, P_xp=self.P_xp,
@@ -464,10 +428,10 @@ class WavefrontRMS(_RayMerit):
             epd=self.epd, axis_point=self.axis_point, axis_dir=self.axis_dir)
         g = self._geometry(trace, system, wvl,
                            P_xp_override=P_xp)
-        return g['rms']
+        return self._rms(g)
 
     def value(self, trace, system, wavelength):
-        return self._geometry(trace, system, wavelength)['rms']
+        return self._rms(self._geometry(trace, system, wavelength))
 
     def seed(self, trace, system, wavelength):
         g = self._geometry(trace, system, wavelength)
@@ -481,19 +445,19 @@ class WavefrontRMS(_RayMerit):
             adj_closest_point_on_axis,
         )
 
-        valid = g['valid']
-        chief = g['chief']
-        chief_v = g['chief_v']
-        C = g['C']
-        R = g['R']
-        curvature = g['curvature']
-        delta = g['delta']
-        xp_mode = g['xp_mode']
-        opd = g['opd']
-        rms = g['rms']
-        n_image = g['n_image']
-        P_last = g['P_last']
-        S_last = g['S_last']
+        valid = g.valid
+        chief = g.chief_index
+        chief_v = g.filtered_chief
+        C = g.center
+        R = g.R
+        curvature = g.curvature
+        delta = g.delta
+        xp_mode = g.xp_mode
+        opd = g.opd
+        rms = self._rms(g)
+        n_image = g.n_image
+        P_last = trace.P[-1]
+        S_last = trace.S[-1]
 
         P_bar, S_bar, L_bar = _zeros_like_trace_state(trace)
         if rms <= 1e-300:
@@ -544,7 +508,7 @@ class WavefrontRMS(_RayMerit):
         if resolved_stop is None:
             return None
         g = self._geometry(trace, system, wavelength)
-        if g['xp_mode'] != 'paraxial':
+        if g.xp_mode != 'paraxial':
             return None
         _, _, _, P_xp_bar = self._seed_components_from_geometry(trace, g)
         if P_xp_bar[2] == 0.0:

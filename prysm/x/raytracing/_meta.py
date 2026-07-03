@@ -31,6 +31,13 @@ def object_space_index(surfaces, wavelength):
     return 1.0
 
 
+def object_image_indices(surfaces, wavelength):
+    """Resolve (n_object, n_image), the image falling back to the object."""
+    n_object = object_space_index(surfaces, wavelength)
+    n_image = image_space_index(surfaces, wavelength, fallback=n_object)
+    return n_object, n_image
+
+
 def image_space_index(surfaces, wavelength, fallback=1.0):
     """Resolve the image-space medium index from an explicit image surface.
 

@@ -15,9 +15,10 @@ from ._diff_nominal import refract_nominal, eic_nominal
 from .analysis import (
     _pupil_center_chief_index,
     _apply_field_and_output,
+    _require_valid_chief,
     close_on_reference_sphere,
 )
-from ._meta import object_space_index, image_space_index
+from ._meta import object_space_index, object_image_indices
 
 
 # ---------- broadcasting helpers --------------------------------------------
@@ -882,15 +883,13 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
     """
     P = np.asarray(P).astype(config.precision)
     S = np.asarray(S).astype(config.precision)
-    n_object = object_space_index(surfaces, wavelength)
     res = raytrace_with_tangents(surfaces, P, S, wavelength, seeds)
     trace = res.trace
 
     if chief_index is None:
         chief_index = _pupil_center_chief_index(P)
     valid = valid_mask(trace.status, trace.P[-1])
-    if not valid[chief_index]:
-        raise ValueError('chief ray is invalid; cannot define reference sphere')
+    _require_valid_chief(valid, chief_index)
 
     P_chief_final = trace.P[-1, chief_index]
     S_chief_final = trace.S[-1, chief_index]
@@ -927,7 +926,7 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
     kappa = 1.0 / R
     kappa_dot = -Rdot / (R * R)
 
-    n_image = image_space_index(surfaces, wavelength, fallback=n_object)
+    _, n_image = object_image_indices(surfaces, wavelength)
     # Same closing kernel as analysis.wavefront; tangent carries kappa_dot.
     closing = close_on_reference_sphere(trace, valid, chief_index,
                                         center=C, P_xp=P_xp, n_image=n_image)

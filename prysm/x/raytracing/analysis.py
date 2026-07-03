@@ -20,7 +20,7 @@ from .opt import (
 )
 from .paraxial import paraxial_image_distance
 from .launch import Field, Sampling, _apply_vignetting
-from ._meta import object_space_index, image_space_index
+from ._meta import object_image_indices
 from ._trace_grid import (
     TraceRecord, iter_trace_grid, trace_cell, _resolve_fields,  # NOQA: F401 re-export
     _resolve_wavelengths, _require_epd, field_sweep,
@@ -244,6 +244,22 @@ def _resolve_chief_index(P, valid, reference, chief_index):
     return _pupil_center_chief_index(P, mask)
 
 
+def _require_valid_chief(valid, chief_index, reference='chief'):
+    """Raise the canonical error when the anchor ray did not survive."""
+    if bool(valid[chief_index]):
+        return
+    if reference == 'chief':
+        raise ValueError(
+            "chief ray is invalid; cannot define reference sphere.  Pass "
+            "reference='centroid' for an obscured or vignetted bundle."
+        )
+    raise ValueError(
+        f'anchor ray (chief_index={chief_index}) is invalid; pass a '
+        'chief_index that survives the trace, or omit it to auto-select '
+        'the surviving ray nearest the pupil center'
+    )
+
+
 class ReferenceSphereClosing:
     """Chief-zeroed OPD and reusable reference-sphere geometry."""
 
@@ -279,47 +295,122 @@ def close_on_reference_sphere(trace, valid, chief_index, *, center, P_xp,
     return ReferenceSphereClosing(opd, curvature, filtered_chief, R, delta)
 
 
+class WavefrontClosing:
+    """Closed wavefront of one traced bundle, with the geometry that made it."""
+
+    __slots__ = ('opd', 'valid', 'chief_index', 'center', 'P_xp', 'xp_mode',
+                 'curvature', 'R', 'delta', 'filtered_chief', 'n_image')
+
+    def __init__(self, opd, valid, chief_index, center, P_xp, xp_mode,
+                 curvature, R, delta, filtered_chief, n_image):
+        self.opd = opd
+        self.valid = valid
+        self.chief_index = chief_index
+        self.center = center
+        self.P_xp = P_xp
+        self.xp_mode = xp_mode
+        self.curvature = curvature
+        self.R = R
+        self.delta = delta
+        self.filtered_chief = filtered_chief
+        self.n_image = n_image
+
+
+def close_wavefront(system, trace, wavelength, chief_index, *, field=None,
+                    center=None, P_xp=None, stop_index=None, epd=None,
+                    axis_point=None, axis_dir=None, min_perp=1e-6, valid=None,
+                    reference='chief', apply_field_tilt=True):
+    """Close a traced bundle into a chief-referenced OPD, resolving as needed.
+
+    Owns the full recipe: validity, medium indices, exit-pupil resolution,
+    EIC closing, and the launch-plane field-tilt ramp.  Chief selection stays
+    with the caller.  OPD is in length units; output scaling is presentation.
+
+    Parameters
+    ----------
+    system : sequence of Surface or OpticalSystem
+    trace : RayTraceResult
+        traced bundle to close.
+    wavelength : float
+        in microns.
+    chief_index : int
+        row index of the anchor ray.
+    field : Field, optional
+        angular field whose launch-plane tilt ramp is removed when
+        apply_field_tilt.
+    center : ndarray, optional
+        reference-sphere center; defaults to the chief image point.
+    P_xp : iterable, optional
+        exit-pupil point; default resolves through resolve_exit_pupil.
+    stop_index, epd, axis_point, axis_dir, min_perp
+        forwarded to resolve_exit_pupil when P_xp is None.
+    valid : ndarray, optional
+        bool valid-ray mask; defaults to the trace validity.
+    reference : str, optional
+        'chief' or 'centroid'; phrases the invalid-anchor error.
+    apply_field_tilt : bool, optional
+        apply the field ramp from trace.P[0] when field is given.
+
+    Returns
+    -------
+    WavefrontClosing
+        opd over the valid rays plus the reusable closing geometry.
+
+    """
+    if valid is None:
+        valid = valid_mask(trace.status, trace.P[-1])
+    chief_index = int(chief_index)
+    _require_valid_chief(valid, chief_index, reference)
+    _, n_image = object_image_indices(compiled_surfaces(system), wavelength)
+    P_chief = trace.P[-1, chief_index]
+    if center is None:
+        center = P_chief
+    if P_xp is None:
+        # None back means telecentric image space: curvature 0.
+        P_xp, xp_mode = resolve_exit_pupil(
+            system, wavelength, stop_index=stop_index, epd=epd,
+            chief=(P_chief, trace.S[-1, chief_index]),
+            axis_point=axis_point, axis_dir=axis_dir, min_perp=min_perp,
+            return_mode=True)
+    else:
+        xp_mode = 'fixed'
+    if P_xp is not None:
+        P_xp = np.asarray(P_xp, dtype=config.precision)
+    closing = close_on_reference_sphere(trace, valid, chief_index,
+                                        center=center, P_xp=P_xp,
+                                        n_image=n_image)
+    opd = closing.opd
+    if apply_field_tilt and field is not None:
+        ax, ay = field.angle_radians()
+        P0 = trace.P[0]
+        x_pupil = P0[valid, 0] - P0[chief_index, 0]
+        y_pupil = P0[valid, 1] - P0[chief_index, 1]
+        opd = opd + (np.sin(ax) * x_pupil + np.sin(ay) * y_pupil)
+    return WavefrontClosing(opd, valid, chief_index, center, P_xp, xp_mode,
+                            closing.curvature, closing.R, closing.delta,
+                            closing.filtered_chief, n_image)
+
+
 def _wavefront_from_trace(system, P, wavelength, trace, *, P_xp=None,
                           chief_index=None, pupil_coords=None, field=None,
                           output='length', reference='chief'):
     """Wavefront kernel for callers that already have the raytrace result."""
     valid = valid_mask(trace.status, trace.P[-1])
     chief_index = _resolve_chief_index(P, valid, reference, chief_index)
-    if not bool(valid[chief_index]):
-        if reference == 'chief':
-            raise ValueError(
-                "chief ray is invalid; cannot define reference sphere.  Pass "
-                "reference='centroid' for an obscured or vignetted bundle."
-            )
-        raise ValueError(
-            f'anchor ray (chief_index={chief_index}) is invalid; pass a '
-            'chief_index that survives the trace, or omit it to auto-select '
-            'the surviving ray nearest the pupil center'
-        )
-
-    surfaces = compiled_surfaces(system)
-    n_object = object_space_index(surfaces, wavelength)
-    n_image = image_space_index(surfaces, wavelength, fallback=n_object)
-    P_chief_final = trace.P[-1, chief_index]
-    if P_xp is None:
-        # None back means telecentric image space: curvature 0.
-        P_xp = resolve_exit_pupil(
-            system, wavelength, field=field,
-            chief=(P_chief_final, trace.S[-1, chief_index]))
-    if P_xp is not None:
-        P_xp = np.asarray(P_xp, dtype=P.dtype)
-    opd = close_on_reference_sphere(trace, valid, chief_index,
-                                    center=P_chief_final, P_xp=P_xp,
-                                    n_image=n_image).opd
+    closing = close_wavefront(system, trace, wavelength, chief_index,
+                              field=field, P_xp=P_xp, valid=valid,
+                              reference=reference,
+                              apply_field_tilt=pupil_coords is None)
     if pupil_coords is None:
         x_pupil = P[valid, 0] - P[chief_index, 0]
         y_pupil = P[valid, 1] - P[chief_index, 1]
+        tilt_field = None   # ramp already applied by close_wavefront
     else:
         x_pupil = np.asarray(pupil_coords[0])[valid]
         y_pupil = np.asarray(pupil_coords[1])[valid]
-
-    opd, _ = _apply_field_and_output(opd, x_pupil, y_pupil, field, output,
-                                     wavelength)
+        tilt_field = field  # override coordinates carry the ramp
+    opd, _ = _apply_field_and_output(closing.opd, x_pupil, y_pupil, tilt_field,
+                                     output, wavelength)
     return opd, x_pupil, y_pupil, valid
 
 

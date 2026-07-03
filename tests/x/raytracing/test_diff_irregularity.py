@@ -22,7 +22,7 @@ from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing.spencer_and_murty import _is_measurement_surf
 from prysm.x.raytracing.paraxial import paraxial_image_distance
-from prysm.x.raytracing.analysis import wavefront_zernike_fit
+from prysm.x.raytracing.analysis import wavefront, wavefront_zernike_fit
 from prysm.x.raytracing.sags import zernike_irregularity_partials
 from prysm.x.raytracing._diff_raytrace import (
     wavefront_with_tangents,
@@ -34,9 +34,7 @@ from prysm.x.raytracing.wavefront_differential import (
     wavefront_differential, WavefrontDifferential,
 )
 from prysm.x.raytracing.surfaces import Zernike
-from tests.x.raytracing.surface_helpers import (
-    conic, zernike, plane, wavefront_with_resolved_exit_pupil,
-)
+from tests.x.raytracing.surface_helpers import conic, zernike, plane
 
 
 # ---------- kernel-level: seed_irregularity dW vs FD ------------------------
@@ -86,9 +84,9 @@ def test_irregularity_dW_matches_fd(mode):
     seed = seed_irregularity(0, mode[0], mode[1], RN)
     _, _, _, dW = wavefront_with_tangents(make_system(), P, S, WVL, [seed])
     h = 1e-6
-    op, _, _ = wavefront_with_resolved_exit_pupil(
+    op, _, _ = wavefront(
         make_system((mode, +h)), P, S, WVL)
-    om, _, _ = wavefront_with_resolved_exit_pupil(
+    om, _, _ = wavefront(
         make_system((mode, -h)), P, S, WVL)
     dW_fd = (op - om) / (2 * h)
     # FD of the composed trace->OPD pipeline is truncation-limited; the analytic
@@ -103,9 +101,9 @@ def test_irregularity_waves_output_scales():
     _, _, _, dW = wavefront_with_tangents(make_system(), P, S, WVL, [seed],
                                           output='waves')
     h = 1e-6
-    op, _, _ = wavefront_with_resolved_exit_pupil(
+    op, _, _ = wavefront(
         make_system((mode, +h)), P, S, WVL, output='waves')
-    om, _, _ = wavefront_with_resolved_exit_pupil(
+    om, _, _ = wavefront(
         make_system((mode, -h)), P, S, WVL, output='waves')
     np.testing.assert_allclose(dW[:, 0], (op - om) / (2 * h),
                                rtol=1e-5, atol=1e-6)
@@ -131,9 +129,9 @@ def test_multiple_irregularity_seeds_one_trace():
     assert dW.shape[1] == 3
     h = 1e-6
     for p, mode in enumerate([(2, 2), (2, -2)]):
-        op, _, _ = wavefront_with_resolved_exit_pupil(
+        op, _, _ = wavefront(
             make_system((mode, +h)), P, S, WVL)
-        om, _, _ = wavefront_with_resolved_exit_pupil(
+        om, _, _ = wavefront(
             make_system((mode, -h)), P, S, WVL)
         np.testing.assert_allclose(dW[:, p], (op - om) / (2 * h),
                                    rtol=1e-5, atol=1e-7)
@@ -212,7 +210,7 @@ def test_zernike_sensitivity_matches_fd():
     def fit_perturbed(pert, T):
         try:
             pert.set(pert.nominal + T)
-            opd, x, y = wavefront_with_resolved_exit_pupil(
+            opd, x, y = wavefront(
                 ld, P, S, 0.5, output='length')
             c, _ = wavefront_zernike_fit(opd, x, y, NMS,
                                          normalization_radius=R)
