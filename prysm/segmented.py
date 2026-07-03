@@ -184,10 +184,10 @@ class CompositeHexagonalAperture:
         ----------
         basis_func : callable
             a function with signature basis_func(orders, [x, y or r, t], keyword arguments)
-            for example, zernike_nm_sequence from prysm.polyomials fits the bill
+            for example, zernike_nm_seq from prysm.polynomials fits the bill
         orders : iterable
             sequence of polynomial orders or indices.
-            for example, zernike_nm_sequence may be combined with a monoindexing
+            for example, zernike_nm_seq may be combined with a monoindexing
             function as e.g. orders=[noll_to_nm(j) for j in range(3,12)]
         basis_func_kwargs : dict
             any keyword arguments to pass to basis_func.  The spatial coordinates
@@ -477,10 +477,10 @@ class CompositeKeystoneAperture:
         ----------
         basis_func : callable
             a function with signature basis_func(orders, [x, y or r, t], keyword arguments)
-            for example, zernike_nm_sequence from prysm.polyomials fits the bill
+            for example, zernike_nm_seq from prysm.polynomials fits the bill
         orders : iterable
             sequence of polynomial orders or indices.
-            for example, zernike_nm_sequence may be combined with a monoindexing
+            for example, zernike_nm_seq may be combined with a monoindexing
             function as e.g. orders=[noll_to_nm(j) for j in range(3,12)]
         basis_func_kwargs : dict
             any keyword arguments to pass to basis_func.  The spatial coordinates
