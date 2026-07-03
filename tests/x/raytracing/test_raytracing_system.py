@@ -30,9 +30,9 @@ def _singlet(aperture=ApertureSpec.epd(20.0), with_object=None):
         ld.object_row.material = materials.ConstantMaterial(with_object)
         ld.object_row.thickness = 200.0
     (ld.add(Conic(1 / 102.0, 0.0), thickness=6.0, material=materials.ConstantMaterial(1.5168),
-            semidiameter=12.0)
+            aperture=12.0)
        .add(Conic(-1 / 102.0, 0.0), thickness=95.0, material=materials.air,
-            semidiameter=12.0))
+            aperture=12.0))
     return OpticalSystem(ld, aperture=aperture,
                          wavelengths=list(FRAUNHOFER_LINES_UM.values()),
                          reference=1, stop_index=1)
@@ -247,11 +247,14 @@ def test_surface_table_marks_compiled_stop_after_coordbreak():
     assert table.records[2]['surface_index'] == 1
 
 
-def test_aperture_table_reports_semidiameters():
+def test_aperture_table_reports_clip_and_drawn_extent():
     sys = _singlet()
     table = sys.list_apertures()
     assert repr(table).startswith('ApertureTable')
-    assert table.records[1]['semidiameter'] == pytest.approx(12.0)  # [0] is OBJECT
+    rec = table.records[1]  # [0] is OBJECT
+    assert rec['clip'] == 'circular 12'           # the 12 mm circular clip
+    assert rec['drawn'] == pytest.approx(12.0 * 1.05)  # clip x oversize
+    assert rec['provenance'] == 'user'
 
 
 def test_decenter_table_lists_coordinate_breaks():
@@ -424,9 +427,9 @@ def _vignetted_singlet(rear_semidiameter=4.0, field=0.0):
     n15 = materials.ConstantMaterial(1.5)
     ld = LensData()
     (ld.add(Conic(1 / 30.0, 0.0), thickness=4.0, material=n15,
-            semidiameter=6.0)
+            aperture=6.0)
        .add(Plane(), thickness=50.0, material=materials.air,
-            semidiameter=rear_semidiameter))
+            aperture=rear_semidiameter))
     sys = OpticalSystem(ld, aperture=10.0, fields=[field],
                         wavelengths=[0.5876], reference=0)
     sys.solve.image_distance()

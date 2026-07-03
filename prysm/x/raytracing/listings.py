@@ -13,6 +13,7 @@ No plotting and no matplotlib here -- these are text tables for inspection.
 from .spencer_and_murty import (
     STYPE_EVAL, STYPE_OBJ, STYPE_IMG, STYPE_REFLECT, STYPE_REFRACT)
 from .surfaces import _map_stype
+from .aperture import AnnularClip, CircularClip
 from ..materials import MIRROR, air, vacuum
 from .lensdata import CoordBreak, SurfaceRow
 
@@ -111,24 +112,24 @@ class SurfaceTable:
 
 
 class ApertureTable:
-    """Per-surface clear-aperture table: semidiameter, aperture kind, bounding outer radius."""
+    """Per-surface aperture table: clip kind, drawn radius, provenance, staleness."""
 
-    __slots__ = ('records',)
+    __slots__ = ('records', 'version')
 
-    def __init__(self, records):
+    def __init__(self, records, version=None):
         self.records = records
+        self.version = version
 
     def __repr__(self):
-        header = (f'  {"#":>3s} {"semidia":>12s} {"aperture":>16s} '
-                  f'{"outer_radius":>14s}')
+        header = (f'  {"#":>3s} {"clip":>18s} {"drawn":>12s} '
+                  f'{"provenance":>10s} {"stale":>6s}')
         lines = ['ApertureTable', header, '  ' + '-' * (len(header) - 2)]
         for r in self.records:
-            sd = '' if r['semidiameter'] is None else f'{r["semidiameter"]:.6g}'
-            outer = ('' if r['outer_radius'] is None
-                     else f'{r["outer_radius"]:.6g}')
+            drawn = '' if r['drawn'] is None else f'{r["drawn"]:.6g}'
+            stale = 'stale' if r['stale'] else ''
             lines.append(
-                f'  {r["index"]:>3d} {sd:>12s} {r["aperture"]:>16s} '
-                f'{outer:>14s}')
+                f'  {r["index"]:>3d} {r["clip"]:>18s} {drawn:>12s} '
+                f'{r["provenance"]:>10s} {stale:>6s}')
         return '\n'.join(lines)
 
 
@@ -185,32 +186,46 @@ def surface_table(lensdata, *, stop_index=None, unit=None):
             'conic': f'{float(k):.6g}',
             'thickness': float(row.thickness),
             'material': material_str(row.material, row.typ),
-            'semidiameter': (None if row.semidiameter is None
-                             else float(row.semidiameter)),
+            'semidiameter': _clip_radius(row.aperture),
             'coating': getattr(row, 'coating', None) is not None,
             'surface_index': surface_index, 'stop': is_stop,
         })
     return SurfaceTable(records, unit=unit, stop_index=stop_index)
 
 
+def _clip_radius(aperture):
+    """Limiting clip radius of a row's aperture, else None."""
+    r = aperture.limiting_radius()
+    return None if r is None else float(r)
+
+
+def _clip_str(clip):
+    """Short label for a row aperture's clip."""
+    if clip is None:
+        return ''
+    if isinstance(clip, CircularClip):
+        return f'circular {clip.radius:.6g}'
+    if isinstance(clip, AnnularClip):
+        return f'annular {clip.inner_radius:.4g}-{clip.outer_radius:.4g}'
+    return type(clip).__name__
+
+
 def aperture_table(lensdata):
-    """Build the per-surface clear-aperture table for a LensData."""
+    """Build the per-surface aperture table for a LensData."""
     records = []
+    version = lensdata._version
     for i, row in enumerate(lensdata.rows):
         if isinstance(row, CoordBreak):
             continue
-        aperture = row.aperture
-        kind = getattr(aperture, '__name__', None) or (
-            type(aperture).__name__ if aperture is not None else '')
-        bounding = row.bounding or {}
+        ap = row.aperture
         records.append({
             'index': i,
-            'semidiameter': (None if row.semidiameter is None
-                             else float(row.semidiameter)),
-            'aperture': kind,
-            'outer_radius': bounding.get('outer_radius'),
+            'clip': _clip_str(ap.clip),
+            'drawn': ap.drawn_radius(),
+            'provenance': 'auto' if ap.is_auto else 'user',
+            'stale': ap.is_stale(version),
         })
-    return ApertureTable(records)
+    return ApertureTable(records, version=version)
 
 
 def decenter_table(lensdata):

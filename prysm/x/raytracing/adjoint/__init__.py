@@ -34,6 +34,7 @@ from .tolerance_analysis import (
     compensated_jacobian,
     multi_objective_budget,
 )
+from .._diff_raytrace import seeds_from_perturbations
 
 __all__ = [
     # primitives
@@ -58,4 +59,6 @@ __all__ = [
     'rss_prediction',
     'compensated_jacobian',
     'multi_objective_budget',
+    # perturbation -> seed bridge
+    'seeds_from_perturbations',
 ]

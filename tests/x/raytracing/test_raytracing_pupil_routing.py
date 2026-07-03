@@ -135,12 +135,12 @@ def fisheye(epd, ray_aiming='real'):
     """Wide-angle retrofocus with a strong negative front group."""
     NG = pmat.ConstantMaterial(1.6)
     ld = LensData()
-    ld.add(Conic(1 / 40.0, 0.0), thickness=3.0, material=NG, semidiameter=14.0)
+    ld.add(Conic(1 / 40.0, 0.0), thickness=3.0, material=NG, aperture=14.0)
     ld.add(Conic(1 / 9.0, 0.0), thickness=22.0, material=pmat.air,
-           semidiameter=9.0)
-    ld.add(Conic(1 / 16.0, 0.0), thickness=4.0, material=NG, semidiameter=6.0)
+           aperture=9.0)
+    ld.add(Conic(1 / 16.0, 0.0), thickness=4.0, material=NG, aperture=6.0)
     ld.add(Conic(-1 / 16.0, 0.0), thickness=45.0, material=pmat.air,
-           semidiameter=6.0)
+           aperture=6.0)
     sys = OpticalSystem(ld, aperture=epd, fields=[0.0], wavelengths=[WVL],
                         reference=0, stop_index=_FISHEYE_STOP)
     sys.ray_aiming = ray_aiming

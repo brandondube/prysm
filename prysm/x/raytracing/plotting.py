@@ -2,8 +2,6 @@
 
 import warnings
 
-from collections.abc import Mapping, Sequence
-
 from prysm.plotting import share_fig_ax
 from prysm.mathops import array_to_true_numpy
 
@@ -25,6 +23,7 @@ from .analysis import (
 from ._resolve import resolve_wavelength
 from .launch import launch, Sampling
 from .surfaces import STYPE_REFLECT, STYPE_REFRACT
+from .aperture import SurfaceSubstrate
 from .lensdata import lens_element_groups
 from ._trace_grid import _resolve_fields, _resolve_wavelengths, field_sweep
 
@@ -138,51 +137,31 @@ def _global_plot_coordinates(surf, sag, ploty, x, y):
     return global_points[..., _axis_index(x)], global_points[..., _axis_index(y)]
 
 
-def _surface_profile(surf, phist, j, points, y, radius=None, clear_radius=None,
-                     center=0.0, max_radius=None):
-    if radius is None:
-        if surf.bounding is None:
-            p = phist[j + 1]
-            dirs = np.zeros_like(p)
-            p, _ = transform_to_local_coords(p, surf.P, dirs, surf.R)
-            src = p[..., 1] if y == 'y' else p[..., 0]
-            mask = []
-            ploty = np.linspace(src.min(), src.max(), points)
-            xpt, ypt = _axis_pair(ploty, y)
-        else:
-            bound = surf.bounding
-            local = np.linspace(-bound['outer_radius'], bound['outer_radius'],
-                                points)
-            mask = abs(local) < bound.get('inner_radius', 0)
-            ploty = center + local
-            xpt, ypt = _axis_pair(ploty, y)
-    else:
-        local = np.linspace(-radius, radius, points)
-        ploty = center + local
-        bound = surf.bounding or {}
-        mn = bound.get('inner_radius', 0)
-        mask = abs(local) < mn
-        # The plotted points span the full element radius, but the sag is only
-        # evaluated out to max_radius (where this surface still exists).  Beyond
-        # that the evaluation coordinate is held at the rim, so the sag is flat
-        # at the edge value and the profile becomes a constant-z (radial)
-        # segment from the surface edge out to the element OD -- the vertical
-        # bridge that closes the outline on a surface too steep to reach the OD.
-        if max_radius is not None:
-            eval_local = np.clip(local, -max_radius, max_radius)
-        else:
-            eval_local = local
-        eval_coord = center + eval_local
-        xpt, ypt = _axis_pair(eval_coord, y)
+def _extent_inner_radius(surf):
+    """Central bore radius of a surface's drawn extent (0 when none)."""
+    extent = surf.aperture.extent
+    return 0.0 if extent is None else extent.inner_radius
 
-    sag = surf.sag(xpt, ypt)
-    sag = np.asarray(sag) + surf.P[2]
+
+def _surface_profile(surf, points, y, *, outer_radius, inner_radius=0.0,
+                     center=0.0, max_radius=None):
+    """Meridional profile (sag, ploty, edge_sag) of one surface face.
+
+    The face is sampled over +/- outer_radius about center; inner_radius masks a
+    central bore.  max_radius clamps the sag evaluation (where the surface still
+    exists), holding the edge value out to the rim so a steep surface bridges
+    flat to the drawn outer radius.
+    """
+    local = np.linspace(-outer_radius, outer_radius, points)
+    ploty = center + local
+    mask = np.abs(local) < inner_radius
+    if max_radius is not None:
+        eval_local = np.clip(local, -max_radius, max_radius)
+    else:
+        eval_local = local
+    xpt, ypt = _axis_pair(center + eval_local, y)
+    sag = np.asarray(surf.sag(xpt, ypt)) + surf.P[2]
     edge_sag = sag.copy()
-    mask = np.asarray(mask)
-    if mask.size == 0:
-        mask = np.zeros_like(ploty, dtype=bool)
-    if clear_radius is not None:
-        mask = mask | (abs(ploty - center) > clear_radius)
     sag[mask] = np.nan
     return sag, ploty, edge_sag
 
@@ -282,182 +261,80 @@ def _stop_marker_outline(surf, phist, shist, j, x, y, stem_fraction=0.2):
     return xx, yy
 
 
-def _lens_edge_for(lens_edges, surface_index, pair_index):
-    if lens_edges is None:
-        return None
-
-    if isinstance(lens_edges, Mapping):
-        return lens_edges.get(surface_index, lens_edges.get(pair_index))
-
-    if isinstance(lens_edges, Sequence) and not isinstance(lens_edges, (str, bytes)):
-        if pair_index < len(lens_edges):
-            return lens_edges[pair_index]
-        return None
-
-    return lens_edges
+def _warn_unsolved_extent():
+    """Warn once that an auto aperture is drawn from the per-call footprint."""
+    # Static message so Python's once-per-location dedup holds across the loop.
+    warnings.warn(
+        'drawing a surface whose auto aperture is unsolved or stale; sizing it '
+        'from the per-call ray footprint.  Call sys.solve.apertures() to size '
+        'and persist the drawn extents.',
+        stacklevel=2,
+    )
 
 
-def _mirror_backing_mode(backing):
-    if backing is None:
-        return 'surface'
-    if isinstance(backing, str):
-        return backing.lower()
-    return backing.get('mode', backing.get('kind', 'parallel')).lower()
-
-
-def _mirror_clear_radius(backing):
-    if backing is None:
-        return None
-    return backing.get('clear_radius')
-
-
-def _mirror_backing_center(backing, phist, surface_index, surf, y):
-    center = backing.get(f'center_{y}', backing.get(
-        'aperture_center', backing.get('center', backing.get('centre', 0.0)),
-    ))
+def _resolve_center(center, phist, surface_index, surf, y):
+    """Resolve a drawing center: a number, or 'rays' -> mean ray height."""
     if isinstance(center, str):
-        center = center.lower()
-        if center in ('rays', 'ray', 'footprint', 'chief'):
+        if center.lower() in ('rays', 'ray', 'footprint', 'chief'):
             coord = _local_axis_coordinates_from_phist(
-                phist, surface_index, y, surf=surf,
-            )
+                phist, surface_index, y, surf=surf)
             return float(np.nanmean(coord))
-        raise ValueError(f'unknown mirror backing center {center!r}')
+        raise ValueError(f'unknown drawing center {center!r}')
     return float(center)
 
 
-def _plot_axis_reference_coordinate(surf, ploty, y, reference):
-    if reference is None:
-        reference = 'aperture'
+def _aperture_radius(surf, phist, surface_index, y, center=0.0):
+    """Drawn half-diameter from the surface aperture, else the ray footprint."""
+    ap = surf.aperture
+    if ap.extent is not None:
+        return ap.extent.outer_radius
+    if ap.clip is not None:
+        return ap.drawn_radius()
+    # the unsolved footprint fallback is the raw extent (today's behavior); the
+    # oversize lives in the solved extent that sys.solve.apertures() persists.
+    return _axis_extent_from_phist(phist, surface_index, y, surf=surf,
+                                   center=center)
 
-    if not isinstance(reference, str):
-        return float(reference)
 
-    reference = reference.lower()
-    if reference in ('center', 'centre'):
-        return float(np.nanmean(ploty))
-    if reference in ('local_vertex', 'section_vertex'):
-        return 0.0
-    if reference in ('parent', 'parent_vertex'):
-        params = surf.params or {}
-        key = 'dy' if y == 'y' else 'dx'
-        return -float(params.get(key, 0.0))
-    if reference in ('aperture', 'near_aperture', 'edge', 'near_edge'):
-        parent = _plot_axis_reference_coordinate(surf, ploty, y, 'parent')
-        return float(np.clip(parent, np.nanmin(ploty), np.nanmax(ploty)))
-
-    raise ValueError(f'unknown mirror backing reference {reference!r}')
+def _drawn_radius(surf, phist, j, y, version, center=0.0):
+    """Version-aware drawn half-diameter; a stale/unsolved auto extent warns."""
+    ap = surf.aperture
+    extent = ap.extent
+    if extent is not None and not ap.is_stale(version):
+        return extent.outer_radius
+    if ap.clip is not None:
+        return ap.drawn_radius()
+    _warn_unsolved_extent()
+    return _axis_extent_from_phist(phist, j, y, surf=surf, center=center)
 
 
 def _mirror_surface_outline_from_phist(surf, phist, surface_index, points, x, y,
-                                       radius, clear_radius, center=0.0):
+                                       radius, center=0.0):
+    if radius is None:
+        radius = _aperture_radius(surf, phist, surface_index, y, center)
     sag, ploty, _ = _surface_profile(
-        surf, phist, surface_index, points, y, radius=radius,
-        clear_radius=clear_radius, center=center,
-    )
+        surf, points, y, outer_radius=radius,
+        inner_radius=_extent_inner_radius(surf), center=center)
     return _global_plot_coordinates(surf, sag, ploty, x, y)
 
 
-def _mirror_substrate_outline_from_phist(surf, phist, surface_index, backing,
-                                         points, x, y, radius):
-    if not isinstance(backing, Mapping):
-        backing = {'mode': backing}
-    center = _mirror_backing_center(backing, phist, surface_index, surf, y)
+def _mirror_substrate_outline_from_phist(surf, phist, surface_index, substrate,
+                                         points, x, y, radius, center=0.0):
     if radius is None:
-        for key in ('od_radius', 'outer_radius', 'radius'):
-            if key in backing:
-                radius = backing[key]
-                break
-        else:
-            if surf.bounding is not None and 'outer_radius' in surf.bounding:
-                radius = surf.bounding['outer_radius']
-            else:
-                radius = _axis_extent_from_phist(
-                    phist, surface_index, y, surf=surf, center=center,
-                )
-    clear_radius = _mirror_clear_radius(backing)
+        radius = _aperture_radius(surf, phist, surface_index, y, center)
+    inner = _extent_inner_radius(surf)
     sag, ploty, edge_sag = _surface_profile(
-        surf, phist, surface_index, points, y, radius=radius,
-        clear_radius=clear_radius, center=center,
-    )
-    mode = _mirror_backing_mode(backing)
-    if mode in ('surface', 'optical', 'optical_surface', 'none'):
-        return _global_plot_coordinates(surf, sag, ploty, x, y)
-
-    if 'thickness' not in backing:
-        raise ValueError('mirror substrate drawing requires a thickness')
-
-    side = backing.get('side', backing.get('direction', 'auto'))
-    if isinstance(side, str):
-        side = side.lower()
-        if side in ('auto',):
-            departure = np.nanmean(edge_sag - edge_sag[len(edge_sag) // 2])
-            side = -1.0 if departure > 0 else 1.0
-        elif side in ('+', 'positive', 'pos', 'right', 'rear', 'back'):
-            side = 1.0
-        elif side in ('-', 'negative', 'neg', 'left', 'front'):
-            side = -1.0
-        else:
-            raise ValueError(f'unknown mirror backing side {side!r}')
-    else:
-        side = float(side)
-        if side == 0:
-            raise ValueError('mirror backing side must be nonzero')
-        side = np.sign(side)
-
-    offset = side * float(backing['thickness'])
-    if mode in ('parallel', 'equal', 'equal_thickness'):
-        rear_sag = edge_sag + offset
-    elif mode in ('flat_parent', 'parent', 'parent_vertex', 'vertex'):
-        rear_sag = np.full_like(edge_sag, surf.P[2] + offset)
-    elif mode in ('flat_aperture', 'aperture', 'near_uniform',
-                  'uniform', 'hockey_puck'):
-        reference = backing.get('reference', 'aperture')
-        ref = _plot_axis_reference_coordinate(surf, ploty, y, reference)
-        coord = np.asarray([ref])
-        xpt, ypt = _axis_pair(coord, y)
-        use_fy = y == 'y'
-
-        z, n_hat = surf.sag_and_normal(xpt, ypt)
-        Fx = -n_hat[..., 0] / n_hat[..., 2]
-        Fy = -n_hat[..., 1] / n_hat[..., 2]
-        slope = (Fy if use_fy else Fx)[0]
-        rear_sag = surf.P[2] + z[0] + slope * (ploty - ref) + offset
-    else:
-        raise ValueError(f'unknown mirror backing mode {mode!r}')
-
-    # a bored substrate (central hole, set by bounding inner_radius or an
-    # explicit backing inner_radius) is open through both faces, so its
-    # meridional section is two disjoint closed loops -- one per side of the
-    # bore -- not a single outline bridged across a solid back
-    inner = 0.0
-    if surf.bounding is not None:
-        inner = float(surf.bounding.get('inner_radius', 0.0))
-    inner = float(backing.get('inner_radius', inner))
-    if inner > 0.0:
-        ploty_arr = np.asarray(ploty)
-        front = np.asarray(sag)
-        rear = np.asarray(rear_sag).copy()
-        rear[np.abs(ploty_arr - center) < inner] = np.nan
-        xx, yy = [], []
-        for sel in (ploty_arr >= center + inner, ploty_arr <= center - inner):
-            good = sel & np.isfinite(front) & np.isfinite(rear)
-            if not good.any():
-                continue
-            fz, rz, py = front[good], rear[good], ploty_arr[good]
-            # front face out, rear face back, closed by the bore and rim walls
-            xx += [*fz, *rz[::-1], fz[0], np.nan]
-            yy += [*py, *py[::-1], py[0], np.nan]
-        return _global_plot_coordinates(surf, xx, yy, x, y)
-
-    xx = [*sag, rear_sag[-1], *rear_sag[::-1], sag[0]]
-    yy = [*ploty, ploty[-1], *ploty[::-1], ploty[0]]
-    return _global_plot_coordinates(surf, xx, yy, x, y)
+        surf, points, y, outer_radius=radius, inner_radius=inner, center=center)
+    if substrate is None:
+        substrate = SurfaceSubstrate()
+    bore = max(inner, getattr(substrate, 'bore', 0.0) or 0.0)
+    zz, tt = substrate.back_outline(surf, ploty, sag, edge_sag, center,
+                                    bore=bore)
+    return _global_plot_coordinates(surf, zz, tt, x, y)
 
 
 def mirror_surface_outline(surf, result, surface_index=0, *, points=100,
-                           x='z', y='y', radius=None, clear_radius=None,
-                           center=0.0):
+                           x='z', y='y', radius=None, center=0.0):
     """Return X/Y arrays for drawing one mirror optical surface.
 
     Parameters
@@ -465,11 +342,11 @@ def mirror_surface_outline(surf, result, surface_index=0, *, points=100,
     surf : Surface
         the reflective surface to outline.
     result : RayTraceResult
-        a trace whose ray positions bound the drawn extent when radius and
-        the surface bounding geometry are both unset.
+        a trace whose ray positions bound the drawn extent when radius and the
+        surface aperture extent are both unset.
     surface_index : int, optional
-        index of surf within the traced system, used to read the ray
-        positions at that surface.
+        index of surf within the traced system, used to read the ray positions
+        at that surface.
     points : int, optional
         number of points sampled along the surface profile.
     x, y : str, optional
@@ -477,15 +354,10 @@ def mirror_surface_outline(surf, result, surface_index=0, *, points=100,
         defaults to the traditional z-y meridional view.
     radius : float, optional
         outer half-diameter of the drawn profile; defaults to the surface
-        bounding outer_radius, else the traced ray extent.
-    clear_radius : float, optional
-        radius of the optical zone; the profile is masked beyond it, toward
-        the rim.  This is an outer limit on the drawn face, NOT a central
-        hole -- a hole (bored or perforated mirror) comes from the surface
-        bounding inner_radius.
+        aperture's drawn radius, else the traced ray extent.
     center : float or str, optional
-        transverse center of the drawn extent; the string rays (also chief,
-        footprint) centers on the mean ray height at the surface.
+        transverse center of the drawn extent; the string rays centers on the
+        mean ray height at the surface.
 
     Returns
     -------
@@ -496,17 +368,14 @@ def mirror_surface_outline(surf, result, surface_index=0, *, points=100,
     phist = _to_np(result.P)
     x = x.lower()
     y = y.lower()
-    if isinstance(center, str):
-        center = _mirror_backing_center(
-            {'center': center}, phist, surface_index, surf, y,
-        )
+    center = _resolve_center(center, phist, surface_index, surf, y)
     return _mirror_surface_outline_from_phist(
-        surf, phist, surface_index, points, x, y, radius, clear_radius, center,
-    )
+        surf, phist, surface_index, points, x, y, radius, center)
 
 
-def mirror_substrate_outline(surf, result, surface_index=0, *, backing,
-                             points=100, x='z', y='y', radius=None):
+def mirror_substrate_outline(surf, result, surface_index=0, *, substrate,
+                             points=100, x='z', y='y', radius=None,
+                             center=0.0):
     """Return X/Y arrays for drawing one mirror substrate outline.
 
     Parameters
@@ -514,57 +383,24 @@ def mirror_substrate_outline(surf, result, surface_index=0, *, backing,
     surf : Surface
         the reflective surface to outline.
     result : RayTraceResult
-        a trace whose ray positions bound the drawn extent when radius and
-        the backing outer radius are both unset.
+        a trace whose ray positions bound the drawn extent when radius and the
+        surface aperture extent are both unset.
     surface_index : int, optional
-        index of surf within the traced system, used to read the ray
-        positions at that surface.
-    backing : mapping or str
-        substrate geometry.  A string is shorthand for a mapping with only
-        mode set.  Recognized keys:
-
-        mode (or kind) : str
-            surface (synonyms optical, optical_surface, none) draws only
-            the optical face; parallel (equal, equal_thickness; the
-            default) offsets the face by thickness into a uniform-thickness
-            shell; flat_parent (parent, parent_vertex, vertex) closes with
-            a flat back at the parent vertex sag plus thickness;
-            flat_aperture (aperture, near_uniform, uniform, hockey_puck)
-            closes with a back plane parallel to the surface tangent at the
-            reference coordinate.
-        thickness : float
-            substrate thickness, required for any mode that draws a back.
-        od_radius (or outer_radius, radius) : float
-            outer half-diameter of the substrate; defaults to the surface
-            bounding outer_radius, else the traced ray extent.
-        clear_radius : float
-            radius of the optical zone; the drawn face is masked beyond it,
-            toward the rim.  This is an outer limit on the face, NOT a
-            central hole.
-        inner_radius : float
-            radius of a central bore; defaults to the surface bounding
-            inner_radius.  A bored substrate is open through both faces and
-            renders as two disjoint closed loops, one per side of the bore.
-        side (or direction) : str or float
-            which side of the face carries the substrate; auto (the
-            default) infers it from the sag departure, or give a signed
-            number or one of rear, back, right, positive / front, left,
-            negative.
-        center (or centre, aperture_center, center_x, center_y) : float or str
-            transverse center of the drawn aperture; the string rays (also
-            chief, footprint) centers on the mean ray height at the
-            surface.
-        reference : str or float
-            for flat_aperture mode, where the back plane's slope is
-            referenced: aperture (the default), parent, local_vertex, or a
-            numeric transverse coordinate.
+        index of surf within the traced system, used to read the ray positions
+        at that surface.
+    substrate : Substrate or None
+        the substrate to draw (ParallelSubstrate / FlatParentSubstrate /
+        FlatBackSubstrate / SurfaceSubstrate); None draws the optical face only.
     points : int, optional
         number of points sampled along the surface profile.
-    y : str, optional
-        meridian to draw in, 'y' (default) or 'x'.
+    x, y : str, optional
+        plot axes; defaults to the traditional z-y meridional view.
     radius : float, optional
-        outer half-diameter override; takes precedence over the backing
-        radius keys when given.
+        outer half-diameter override; defaults to the surface aperture's drawn
+        radius, else the traced ray extent.
+    center : float or str, optional
+        transverse center of the drawn extent; rays centers on the mean ray
+        height at the surface.
 
     Returns
     -------
@@ -575,57 +411,35 @@ def mirror_substrate_outline(surf, result, surface_index=0, *, backing,
     phist = _to_np(result.P)
     x = x.lower()
     y = y.lower()
+    center = _resolve_center(center, phist, surface_index, surf, y)
     return _mirror_substrate_outline_from_phist(
-        surf, phist, surface_index, backing, points, x, y, radius,
-    )
+        surf, phist, surface_index, substrate, points, x, y, radius, center)
 
 
 def plot_mirror_surface(surf, result, surface_index=0, *, points=100,
-                        x='z', y='y', radius=None, clear_radius=None,
-                        center=0.0,
+                        x='z', y='y', radius=None, center=0.0,
                         lw=1, ls='-', c='k', alpha=1, zorder=3,
                         fig=None, ax=None):
-    """Draw one mirror optical surface.
-
-    See mirror_surface_outline for the geometry parameters; in particular
-    clear_radius is the outer radius of the drawn optical zone, not a
-    central hole (a hole comes from the surface bounding inner_radius).
-
-    """
+    """Draw one mirror optical surface (see mirror_surface_outline)."""
     fig, ax = share_fig_ax(fig, ax)
     xx, yy = mirror_surface_outline(
         surf, result, surface_index, points=points, y=y, radius=radius,
-        x=x, clear_radius=clear_radius, center=center,
-    )
+        x=x, center=center)
     ax.plot(xx, yy, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
     return fig, ax
 
 
-def plot_mirror_substrate(surf, result, surface_index=0, *, backing,
-                          points=100, x='z', y='y', radius=None,
+def plot_mirror_substrate(surf, result, surface_index=0, *, substrate,
+                          points=100, x='z', y='y', radius=None, center=0.0,
                           lw=1, ls='-', c='k', alpha=1, zorder=3,
                           fig=None, ax=None):
-    """Draw one mirror with an optical surface and substrate.
-
-    See mirror_substrate_outline for the backing schema.
-
-    """
+    """Draw one mirror with an optical surface and substrate."""
     fig, ax = share_fig_ax(fig, ax)
     xx, yy = mirror_substrate_outline(
-        surf, result, surface_index, backing=backing, points=points,
-        x=x, y=y, radius=radius,
-    )
+        surf, result, surface_index, substrate=substrate, points=points,
+        x=x, y=y, radius=radius, center=center)
     ax.plot(xx, yy, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
     return fig, ax
-
-
-def _surface_clear_radius(lens_edge, which):
-    if lens_edge is None:
-        return None
-    specific_key = f'clear_radius_{which}'
-    if specific_key in lens_edge:
-        return lens_edge[specific_key]
-    return lens_edge.get('clear_radius')
 
 
 def _append_wall_point(xs, ys, x, y):
@@ -636,59 +450,34 @@ def _append_wall_point(xs, ys, x, y):
 
 
 def _wall_path(x0, x1, outer_y, features, side, endpoint_names):
+    """Rim-wall meridian from x0 to x1, inset by each applicable EdgeFeature."""
     xs = [x0]
     ys = [outer_y]
     direction = np.sign(x1 - x0) or 1
     current = x0
     spans = []
 
+    lo = min(x0, x1)
+    hi = max(x0, x1)
     for feature in features:
-        target = feature.get('side', 'both').lower()
-        if target not in ('both', side):
+        if not feature.applies_to(side):
             continue
-        kind = feature.get('kind', feature.get('type', 'square')).lower()
-        if kind in ('square_cut', 'flat', 'chamfer'):
-            if 'z_start' not in feature or 'z_end' not in feature:
-                raise ValueError(f'{kind} lens edge features require z_start and z_end')
-            start = feature['z_start']
-            end = feature['z_end']
-        elif kind == 'seat':
-            if 'width' not in feature:
-                raise ValueError('seat lens edge features require width')
-            face = feature.get('face', endpoint_names[0]).lower()
-            width = feature['width']
-            if face == endpoint_names[0]:
-                start = x0
-                end = x0 + np.sign(x1 - x0) * width
-            elif face == endpoint_names[1]:
-                start = x1 - np.sign(x1 - x0) * width
-                end = x1
-            else:
-                raise ValueError('seat face must name one wall endpoint')
-        elif kind == 'square':
-            continue
-        else:
-            raise ValueError(f'unknown lens edge feature kind {kind!r}')
-
+        start, end, depth = feature.span(x0, x1, endpoint_names)
         if direction < 0:
             start, end = end, start
-        lo = min(x0, x1)
-        hi = max(x0, x1)
         start = min(max(start, lo), hi)
         end = min(max(end, lo), hi)
         if start == end:
             continue
-        depth = feature.get('depth', feature.get('amount', 0))
-        kind = feature.get('kind', feature.get('type', 'square')).lower()
-        spans.append((start, end, depth, kind))
+        spans.append((start, end, depth, feature.is_chamfer))
 
     spans.sort(key=lambda item: direction * item[0])
 
-    for start, end, depth, kind in spans:
+    for start, end, depth, is_chamfer in spans:
         inset = outer_y + depth if outer_y < 0 else outer_y - depth
         if direction * (start - current) > 0:
             _append_wall_point(xs, ys, start, outer_y)
-        if kind == 'chamfer':
+        if is_chamfer:
             _append_wall_point(xs, ys, end, inset)
         else:
             _append_wall_point(xs, ys, start, inset)
@@ -700,12 +489,22 @@ def _wall_path(x0, x1, outer_y, features, side, endpoint_names):
     return xs, ys
 
 
+def _system_version(system):
+    """The owning LensData edit version (None for a bare surface list)."""
+    return getattr(getattr(system, 'lens', system), '_version', None)
+
+
 def plot_optics(system, result, *, wvl=None, ambient_index=1.0,
-                index_atol=1e-9, mirror_backing=None, points=100,
+                index_atol=1e-9, points=100,
                 lw=1, ls='-', c='k', alpha=1, zorder=3,
-                x='z', y='y', fig=None, ax=None, lens_edges=None,
-                stop_index=None):
+                x='z', y='y', fig=None, ax=None, stop_index=None):
     """Draw the optics of a system.
+
+    Drawing is driven by each surface's Aperture: its drawn extent sizes the
+    optical face, its substrate (reflective surfaces) draws the back, and its
+    rim features inset the element walls.  A surface whose auto extent is
+    unsolved or stale is sized from the per-call ray footprint (and warns once);
+    call sys.solve.apertures() to size and persist the extents.
 
     Parameters
     ----------
@@ -720,11 +519,6 @@ def plot_optics(system, result, *, wvl=None, ambient_index=1.0,
         Refractive index that closes a physical lens group.
     index_atol : float, optional
         Absolute tolerance for comparing material index to ambient_index.
-    mirror_backing : mapping, sequence, str, optional
-        substrate geometry for reflective surfaces; see
-        mirror_substrate_outline for the schema.  A mapping of config keys
-        applies to every mirror; a mapping keyed by surface index, or a
-        sequence ordered by mirror, gives per-mirror geometry.
     points : int, optional
         the number of points used in making the curve for the surface
     lw : float, optional
@@ -745,20 +539,6 @@ def plot_optics(system, result, *, wvl=None, ambient_index=1.0,
         A figure object
     ax : matplotlib.axes.Axis
         An axis object
-    lens_edges : mapping or sequence, optional
-        edge geometry for refracting lens groups, keyed by the group's first
-        surface index (mapping) or ordered by group (sequence); defaults to
-        the edge attribute carried by each group's first surface.
-        Recognized keys: od_radius (or outer_radius, radius) sets the
-        element outer half-diameter; clear_radius -- or the per-face
-        clear_radius_front, clear_radius_rear, and clear_radius_surface_N
-        for the Nth interior surface of a cemented group -- is the radius
-        of that face's optical zone, masking the drawn face beyond it
-        toward the rim (an outer limit, NOT a central hole); features is a
-        list of edge feature mappings (square_cut, chamfer, seat) applied
-        to the rim walls.  To cap a face's optical zone with a closed flat
-        land out to the OD, set bounding outer_radius on that surface
-        instead of clear_radius.
     stop_index : int, optional
         index of the aperture stop surface; defaults from the system
         (OpticalSystem / LensData stop_index).  A stop that draws nothing
@@ -782,6 +562,7 @@ def plot_optics(system, result, *, wvl=None, ambient_index=1.0,
     fig, ax = share_fig_ax(fig, ax)
     ax.set(aspect='equal')
     phist = _to_np(result.P)
+    version = _system_version(system)
     if stop_index is None:
         stop_index = getattr(system, 'stop_index', None)
 
@@ -797,60 +578,20 @@ def plot_optics(system, result, *, wvl=None, ambient_index=1.0,
     groups_by_start = {group[0]: (group_index, group)
                        for group_index, group in enumerate(lens_groups)}
 
-    # when the caller does not pass edge geometry explicitly, pick up whatever
-    # the surfaces carry themselves (LensData rows / Surface.edge), keyed by the
-    # group's first surface index so _lens_edge_for resolves it per element
-    if lens_edges is None:
-        derived = {}
-        for group in lens_groups:
-            edge = getattr(system[group[0]], 'edge', None)
-            if edge is not None:
-                derived[group[0]] = edge
-        lens_edges = derived or None
-
     j = 0
-    mirror_index = 0
     jj = len(system)
     while j < jj:
         surf = system[j]
         if surf.typ == STYPE_REFLECT:
-            if isinstance(mirror_backing, Mapping):
-                config_keys = {
-                    'mode', 'kind', 'thickness', 'od_radius', 'outer_radius',
-                    'radius', 'clear_radius', 'side', 'direction', 'reference',
-                    'center', 'centre', 'aperture_center', 'center_x',
-                    'center_y',
-                }
-                if config_keys & set(mirror_backing):
-                    backing = mirror_backing
-                else:
-                    backing = _lens_edge_for(mirror_backing, j, mirror_index)
-            else:
-                backing = _lens_edge_for(mirror_backing, j, mirror_index)
-
-            if backing is None:
+            radius = _drawn_radius(surf, phist, j, y, version)
+            substrate = surf.aperture.substrate
+            if substrate is None:
                 xx, yy = _mirror_surface_outline_from_phist(
-                    surf, phist, j, points, x, y, None, None,
-                )
+                    surf, phist, j, points, x, y, radius)
             else:
-                if not isinstance(backing, Mapping):
-                    backing = {'mode': backing}
-                if _mirror_backing_mode(backing) in ('surface', 'optical',
-                                                     'optical_surface', 'none'):
-                    center = _mirror_backing_center(
-                        backing, phist, j, surf, y,
-                    )
-                    xx, yy = _mirror_surface_outline_from_phist(
-                        surf, phist, j, points, x, y, None,
-                        _mirror_clear_radius(backing), center,
-                    )
-                else:
-                    xx, yy = _mirror_substrate_outline_from_phist(
-                        surf, phist, j, backing, points, x, y, None,
-                    )
-
+                xx, yy = _mirror_substrate_outline_from_phist(
+                    surf, phist, j, substrate, points, x, y, radius)
             ax.plot(xx, yy, c=c, lw=lw, ls=ls, alpha=alpha, zorder=zorder)
-            mirror_index += 1
             j += 1
         elif surf.typ == STYPE_REFRACT:
             if j not in groups_by_start:
@@ -862,51 +603,21 @@ def plot_optics(system, result, *, wvl=None, ambient_index=1.0,
                 j += 1
                 continue
             group_index, group = groups_by_start[j]
-            lens_edge = _lens_edge_for(lens_edges, j, group_index)
 
-            od_radius = None
-            if lens_edge is not None:
-                for key in ('od_radius', 'outer_radius', 'radius'):
-                    if key in lens_edge:
-                        od_radius = lens_edge[key]
-                        break
-            if od_radius is None:
-                radii = []
-                for surface_index in group:
-                    group_surface = system[surface_index]
-                    if (group_surface.bounding is not None and
-                            'outer_radius' in group_surface.bounding):
-                        radii.append(group_surface.bounding['outer_radius'])
-                if radii:
-                    od_radius = max(radii)
-                else:
-                    od_radius = max(
-                        _axis_extent_from_phist(phist, surface_index, y)
-                        for surface_index in group
-                    )
+            # the element OD is the largest drawn radius in the group
+            group_radii = [_drawn_radius(system[si], phist, si, y, version)
+                           for si in group]
+            od_radius = max(group_radii)
 
             profiles = []
-            group_size = len(group)
-            for surface_number, surface_index in enumerate(group):
-                if surface_number == 0:
-                    clear_radius = _surface_clear_radius(lens_edge, 'front')
-                elif surface_number == group_size - 1:
-                    clear_radius = _surface_clear_radius(lens_edge, 'rear')
-                else:
-                    clear_radius = _surface_clear_radius(
-                        lens_edge, f'surface_{surface_number}',
-                    )
+            for own_radius, surface_index in zip(group_radii, group):
                 surf_obj = system[surface_index]
                 sag_radius = _surface_drawable_radius(surf_obj, od_radius, y)
-                # the surface's own clear aperture also caps its optical zone;
-                # beyond it the element is drawn as a flat land (normal to the
-                # OD) out to the element outer radius.  This is an intentional
-                # aperture, not a surface that cannot reach the OD, so it is
-                # silent
-                cap = None
-                bound = surf_obj.bounding
-                if bound is not None and 'outer_radius' in bound:
-                    cap = float(bound['outer_radius'])
+                # a surface drawn smaller than the element OD caps its optical
+                # zone at its own drawn radius, bridging a flat land out to the
+                # OD; that is an intentional aperture and stays silent
+                cap = (own_radius if own_radius < od_radius * (1.0 - 1e-9)
+                       else None)
                 draw_radius = sag_radius if cap is None else min(sag_radius, cap)
                 if (sag_radius < od_radius * (1.0 - 1e-9)
                         and (cap is None or sag_radius < cap)):
@@ -920,18 +631,15 @@ def plot_optics(system, result, *, wvl=None, ambient_index=1.0,
                         stacklevel=2,
                     )
                 profiles.append(_surface_profile(
-                    surf_obj, phist, surface_index, points,
-                    y, radius=od_radius, clear_radius=clear_radius,
-                    max_radius=draw_radius,
-                ))
+                    surf_obj, points, y, outer_radius=od_radius,
+                    inner_radius=_extent_inner_radius(surf_obj),
+                    max_radius=draw_radius))
 
             sag1, ploty1, edge_sag1 = profiles[0]
             sag2, ploty2, edge_sag2 = profiles[-1]
-            features = []
-            if lens_edge is not None:
-                features = lens_edge.get('features', [])
-                if isinstance(features, Mapping):
-                    features = [features]
+            # rim features come from the group's first and last surfaces (D2)
+            features = (list(system[group[0]].aperture.features)
+                        + list(system[group[-1]].aperture.features))
 
             top_x, top_y = _wall_path(
                 edge_sag1[-1], edge_sag2[-1], od_radius, features, 'upper',
@@ -980,14 +688,14 @@ def _valid_only_positions(result):
 
 
 def layout(system, *, fields=None, wavelength=None, sampling=None, axis='y',
-           x='z', y='y', colors=None, lw=1, alpha=1,
-           mirror_backing=None, lens_edges=None, fig=None, ax=None):
+           x='z', y='y', colors=None, lw=1, alpha=1, fig=None, ax=None):
     """Draw a 2D layout: the optics plus a ray fan per field.
 
     A one-call composition of plot_optics (once) and plot_ray_paths (per field)
     for the common show-me-the-system view.  Tracing happens here, so system
     must carry (or be given) enough metadata to launch -- an aperture, fields,
-    and a wavelength.
+    and a wavelength.  Solved surface extents size the glass; an unsolved auto
+    extent falls back to the per-call ray footprint (and warns once).
 
     Parameters
     ----------
@@ -1010,8 +718,6 @@ def layout(system, *, fields=None, wavelength=None, sampling=None, axis='y',
         one matplotlib color per field; defaults to the property cycle.
     lw, alpha : float, optional
         ray line width and opacity.
-    mirror_backing, lens_edges : optional
-        forwarded to plot_optics for substrate / edge drawing.
     fig : matplotlib.figure.Figure, optional
     ax : matplotlib.axes.Axis, optional
 
@@ -1042,14 +748,13 @@ def layout(system, *, fields=None, wavelength=None, sampling=None, axis='y',
     # negative group (retrofocus, fish-eye), and the elements must contain them.
     # Only rays that transit cleanly count -- a clipped ray keeps computing
     # positions far outside the element (a 170-deg field launches marginal rays
-    # metres off axis), and must not balloon the glass.
+    # metres off axis), and must not balloon the glass.  An unsolved auto extent
+    # reads this footprint as its drawn radius (the D3 fallback).
     outline = _OutlineTrace(
         np.concatenate([_valid_only_positions(r) for r in results], axis=1),
         np.concatenate([_to_np(r.S) for r in results], axis=1),
     )
-    fig, ax = plot_optics(system, outline, wvl=wvl, x=x, y=y,
-                          mirror_backing=mirror_backing, lens_edges=lens_edges,
-                          fig=fig, ax=ax)
+    fig, ax = plot_optics(system, outline, wvl=wvl, x=x, y=y, fig=fig, ax=ax)
     for result, color in zip(results, colors):
         plot_ray_paths(result, x=x, y=y, c=color, lw=lw, alpha=alpha,
                        fig=fig, ax=ax)

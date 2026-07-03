@@ -23,6 +23,7 @@ from prysm.x.raytracing.surfaces import (
     Zernike,
     circular_aperture,
 )
+from prysm.x.raytracing.aperture import Aperture, CircularExtent
 
 
 n_bk7 = materials.ConstantMaterial(1.5168, name='N-BK7')
@@ -31,9 +32,9 @@ n_bk7 = materials.ConstantMaterial(1.5168, name='N-BK7')
 def make_singlet_lensdata(image_gap=95.0):
     ld = LensData()
     (ld.add(Conic(1 / 102.0, 0.0), thickness=6.0, material=n_bk7,
-            semidiameter=10.0)
+            aperture=10.0)
        .add(Conic(-1 / 102.0, 0.0), thickness=image_gap,
-            material=materials.air, semidiameter=10.0))
+            material=materials.air, aperture=10.0))
     return ld
 
 
@@ -44,11 +45,10 @@ def make_singlet_hand(image_gap=95.0):
         Surface(shape=Plane(), interaction='object', P=[0, 0, 0.0],
                 material=materials.air),
         Surface(shape=Conic(1 / 102.0, 0.0), interaction='refr',
-                P=[0, 0, 0.0], material=n_bk7, bounding={'outer_radius': 10.0},
+                P=[0, 0, 0.0], material=n_bk7,
                 aperture=circular_aperture(10.0)),
         Surface(shape=Conic(-1 / 102.0, 0.0), interaction='refr',
                 P=[0, 0, 6.0], material=materials.air,
-                bounding={'outer_radius': 10.0},
                 aperture=circular_aperture(10.0)),
         Surface(shape=Plane(), interaction='image', P=[0, 0, 6.0 + image_gap],
                 material=materials.air),
@@ -111,7 +111,7 @@ def test_direct_surface_row_thickness_edit_invalidates_cache():
 def test_direct_surface_row_array_and_metadata_edits_invalidate_cache():
     ld = LensData().add(Conic(1 / 100.0, 0.0), typ='refr',
                         material=materials.ConstantMaterial(1.5),
-                        bounding={'outer_radius': 4.0})
+                        aperture=Aperture(extent=CircularExtent(4.0)))
     before = ld.surfaces
 
     ld.rows[1].params[0] = 1 / 50.0       # rows[0] is OBJECT; the conic is rows[1]
@@ -121,12 +121,12 @@ def test_direct_surface_row_array_and_metadata_edits_invalidate_cache():
     ld.rows[1].material = materials.ConstantMaterial(1.6)
     assert ld.surfaces[1].material.n(0.55) == pytest.approx(1.6)
 
-    ld.rows[1].aperture = circular_aperture(2.0)
-    blocked = ld.surfaces[1].aperture(np.array([3.0]), np.array([0.0]))
+    # an Aperture is immutable-by-convention: replace the whole object to edit.
+    before = ld.surfaces
+    ld.rows[1].aperture = 2.0             # a circular clip at radius 2
+    assert ld.surfaces is not before
+    blocked = ld.surfaces[1].aperture.clips(np.array([3.0]), np.array([0.0]))
     assert bool(blocked[0]) is False
-
-    ld.rows[1].bounding['outer_radius'] = 6.0
-    assert ld.surfaces[1].bounding['outer_radius'] == pytest.approx(6.0)
 
 
 def test_direct_coordbreak_array_edit_invalidates_cache():
@@ -315,7 +315,7 @@ def test_extras_and_provenance_fields_round_trip():
 def test_even_asphere_round_trips_through_lensdata():
     coefs = (1e-4, -2e-6, 3e-9)
     shape = EvenAsphere(1 / 50.0, -0.5, coefs)
-    ld = LensData().add(shape, thickness=2.0, material=n_bk7, semidiameter=8.0)
+    ld = LensData().add(shape, thickness=2.0, material=n_bk7, aperture=8.0)
     rebuilt = ld.surfaces[1].shape    # surfaces[0] is the OBJECT plane
     x = np.linspace(-7, 7, 13)
     y = np.linspace(-7, 7, 13)
@@ -329,7 +329,7 @@ def test_coating_round_trips_onto_compiled_surface_and_listing():
     from prysm.x.raytracing import surface_table
     ar = Stack([1.38], [0.1], substrate_index=1.5, ambient_index=1.0)
     ld = LensData().add(Conic(1 / 100.0, 0.0), thickness=5.0, material=n_bk7,
-                        semidiameter=8.0, coating=ar)
+                        aperture=8.0, coating=ar)
     assert ld.rows[1].coating is ar
     assert ld.surfaces[1].coating is ar
     assert ld.surfaces[2].coating is None            # bare image plane
@@ -343,7 +343,7 @@ def test_zernike_round_trips_with_static_metadata():
     nms = [(2, 0), (4, 0)]
     coefs = (0.3, -0.1)
     shape = Zernike(0.0, 0.0, 10.0, nms, coefs, norm=True)
-    ld = LensData().add(shape, thickness=1.0, typ='eval', semidiameter=10.0)
+    ld = LensData().add(shape, thickness=1.0, typ='eval', aperture=10.0)
     rebuilt = ld.surfaces[1].shape    # surfaces[0] is the OBJECT plane
     assert rebuilt.params['nms'] == tuple(nms)
     assert rebuilt.params['norm'] is True
@@ -356,7 +356,7 @@ def test_varying_a_coef_changes_only_that_coef():
     coefs = (1e-4, -2e-6, 3e-9)
     ld = OpticalSystem(LensData().add(EvenAsphere(1 / 50.0, -0.5, coefs),
                                       thickness=2.0, material=n_bk7,
-                                      semidiameter=8.0))
+                                      aperture=8.0))
     ld.opt.vary('coefs', surfaces=1)          # rows[0] is OBJECT
     x = ld.opt.pack()
     assert len(x) == 3
@@ -390,7 +390,7 @@ def test_copy_is_independent():
 def test_coordbreak_declares_dofs_and_lays_out():
     ld = OpticalSystem(LensData()
           .add(Conic(1 / 100.0, 0.0), thickness=5.0, material=n_bk7,
-               semidiameter=5.0)
+               aperture=5.0)
           .add_coordbreak(tilt=(0.0, 0.0, 5.0), thickness=2.0))
     assert isinstance(ld.rows[2], CoordBreak)   # rows[0]=OBJECT, rows[1]=conic
     ld.opt.vary('tilt', surfaces=2)

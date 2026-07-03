@@ -11,7 +11,6 @@ from matplotlib import pyplot as plt
 
 from prysm.x.raytracing.plotting import (
     mirror_substrate_outline,
-    mirror_surface_outline,
     plot_chromatic_focal_shift,
     plot_distortion,
     plot_field_curvature,
@@ -25,6 +24,25 @@ from prysm.x.raytracing.lensdata import LensData, lens_element_groups
 from prysm.x.raytracing.launch import Field
 from prysm.x.raytracing.spencer_and_murty import RayTraceResult
 from prysm.x.raytracing.surfaces import Conic, OffAxisConic, Plane, Surface
+from prysm.x.raytracing.aperture import (
+    Aperture,
+    Chamfer,
+    CircularExtent,
+    Flat,
+    FlatBackSubstrate,
+    FlatParentSubstrate,
+    ParallelSubstrate,
+    Seat,
+    SquareCut,
+)
+
+
+def _extent(outer_radius, inner_radius=None):
+    """A drawn-only Aperture (no clip), mirroring the old bounding dict."""
+    if outer_radius is None:
+        return None
+    inner = 0.0 if inner_radius is None else inner_radius
+    return Aperture(extent=CircularExtent(outer_radius, inner_radius=inner))
 
 
 def _singlet_lensdata():
@@ -33,9 +51,9 @@ def _singlet_lensdata():
     air = materials.air
     lens = LensData()
     (lens.add(Conic(1 / 60.0, 0.0), thickness=4.0, material=n15,
-              semidiameter=8.0)
+              aperture=8.0)
          .add(Conic(-1 / 60.0, 0.0), thickness=95.0, material=air,
-              semidiameter=8.0))
+              aperture=8.0))
     ld = OpticalSystem(lens, aperture=10.0, fields=[0.0, 3.0, 5.0],
                        wavelengths=[0.5876], reference=0)
     ld.solve.image_distance()
@@ -43,35 +61,21 @@ def _singlet_lensdata():
 
 
 def _refracting_plane(z, outer_radius=1, inner_radius=None, n=1.0):
-    if outer_radius is None:
-        bounding = None
-    else:
-        bounding = {'outer_radius': outer_radius}
-    if inner_radius is not None:
-        bounding['inner_radius'] = inner_radius
-
     return Surface(
         shape=Plane(),
         interaction='refr',
         P=np.asarray([0., 0., z]),
         material=materials.ConstantMaterial(n),
-        bounding=bounding,
+        aperture=_extent(outer_radius, inner_radius),
     )
 
 
 def _reflecting_surface(shape, z=0, outer_radius=1, inner_radius=None):
-    if outer_radius is None:
-        bounding = None
-    else:
-        bounding = {'outer_radius': outer_radius}
-    if inner_radius is not None:
-        bounding['inner_radius'] = inner_radius
-
     return Surface(
         shape=shape,
         interaction='refl',
         P=np.asarray([0., 0., z]),
-        bounding=bounding,
+        aperture=_extent(outer_radius, inner_radius),
     )
 
 
@@ -127,16 +131,12 @@ def test_plot_optics_infers_larger_paired_surface_od():
     assert y.min() == -1.5
 
 
-def test_plot_optics_can_mask_clear_aperture_inside_mechanical_od():
-    edges = {0: {'od_radius': 1.5, 'clear_radius': 1}}
-    x, y = _line_from_plot([_refracting_plane(0, n=1.5),
-                            _refracting_plane(2, n=1.0)], lens_edges=edges)
-
-    assert y.max() == 1.5
-    assert y.min() == -1.5
-    assert np.isnan(x[0])
-    assert np.isnan(x[4])
-    assert not np.isnan(x[1:4]).any()
+def _featured_front(*features, z=0, n=1.5, outer_radius=1):
+    """A refracting plane whose aperture carries rim features at the given OD."""
+    surf = _refracting_plane(z, outer_radius=outer_radius, n=n)
+    surf.aperture = Aperture(extent=CircularExtent(outer_radius),
+                             features=features)
+    return surf
 
 
 def test_plot_optics_keeps_inner_radius_mask_on_lenses():
@@ -147,50 +147,29 @@ def test_plot_optics_keeps_inner_radius_mask_on_lenses():
 
 
 def test_plot_optics_square_cut_feature_insets_wall():
-    edges = {
-        0: {
-            'features': [
-                {'kind': 'square_cut', 'side': 'upper',
-                 'z_start': 0.5, 'z_end': 1.5, 'depth': 0.25},
-            ],
-        },
-    }
-    x, y = _line_from_plot([_refracting_plane(0, n=1.5),
-                            _refracting_plane(2, n=1.0)], lens_edges=edges)
+    front = _featured_front(SquareCut(0.5, 1.5, 0.25, side='upper'))
+    x, y = _line_from_plot([front, _refracting_plane(2, n=1.0)])
 
     np.testing.assert_allclose(x[5:10], [0.5, 0.5, 1.5, 1.5, 2.0])
     np.testing.assert_allclose(y[5:10], [1.0, 0.75, 0.75, 1.0, 1.0])
 
 
 def test_plot_optics_seat_feature_steps_from_named_face():
-    edges = [
-        {
-            'features': [
-                {'kind': 'seat', 'side': 'upper',
-                 'face': 'front', 'width': 0.5, 'depth': 0.2},
-            ],
-        },
-    ]
-    x, y = _line_from_plot([_refracting_plane(0, n=1.5),
-                            _refracting_plane(2, n=1.0)], lens_edges=edges)
+    front = _featured_front(Seat('front', 0.5, 0.2, side='upper'))
+    x, y = _line_from_plot([front, _refracting_plane(2, n=1.0)])
 
     np.testing.assert_allclose(x[5:9], [0.0, 0.5, 0.5, 2.0])
     np.testing.assert_allclose(y[5:9], [0.8, 0.8, 1.0, 1.0])
 
 
 def test_plot_optics_flat_and_chamfer_features_render_named_segments():
-    flat_edges = {0: {'features': [{'kind': 'flat', 'side': 'upper',
-                                    'z_start': 0.5, 'z_end': 1.5, 'depth': 0.25}]}}
-    chamfer_edges = {0: {'features': [{'kind': 'chamfer', 'side': 'upper',
-                                       'z_start': 0.5, 'z_end': 1, 'depth': 0.2}]}}
-
-    prescription = [_refracting_plane(0, n=1.5), _refracting_plane(2, n=1.0)]
-
-    x, y = _line_from_plot(prescription, lens_edges=flat_edges)
+    front_flat = _featured_front(Flat(0.5, 1.5, 0.25, side='upper'))
+    x, y = _line_from_plot([front_flat, _refracting_plane(2, n=1.0)])
     np.testing.assert_allclose(x[5:10], [0.5, 0.5, 1.5, 1.5, 2.0])
     np.testing.assert_allclose(y[5:10], [1.0, 0.75, 0.75, 1.0, 1.0])
 
-    x, y = _line_from_plot(prescription, lens_edges=chamfer_edges)
+    front_chamfer = _featured_front(Chamfer(0.5, 1.0, 0.2, side='upper'))
+    x, y = _line_from_plot([front_chamfer, _refracting_plane(2, n=1.0)])
     np.testing.assert_allclose(x[5:9], [0.5, 1.0, 1.0, 2.0])
     np.testing.assert_allclose(y[5:9], [1.0, 0.8, 1.0, 1.0])
 
@@ -427,12 +406,12 @@ def test_plot_optics_marks_stop_from_system_metadata():
     n15 = materials.ConstantMaterial(1.5)
     air = materials.air
     lens = LensData()
-    (lens.add(Plane(), thickness=5.0, material=air, semidiameter=5.0)
+    (lens.add(Plane(), thickness=5.0, material=air, aperture=5.0)
          .add(Conic(1 / 60.0, 0.0), thickness=4.0, material=n15,
-              semidiameter=8.0)
+              aperture=8.0)
          .add(Conic(-1 / 60.0, 0.0), thickness=95.0, material=air,
-              semidiameter=8.0)
-         .add(Plane(), typ='eval', material=air, semidiameter=20.0))
+              aperture=8.0)
+         .add(Plane(), typ='eval', material=air, aperture=20.0))
     sys = OpticalSystem(lens, aperture=8.0, fields=[0.0],
                         wavelengths=[0.5876], reference=0, stop_index=0)
 
@@ -496,13 +475,13 @@ def test_plot_optics_bridges_steep_surface_to_od_with_normal_segment():
 
 
 def test_plot_optics_draws_clear_aperture_land_to_od_silently():
-    # intentional smaller apertures bridge silently
+    # intentional smaller drawn extents bridge silently
     front = Surface(shape=Conic(1 / 50.0, 0.0), interaction='refr',
                     P=np.asarray([0., 0., 0.]), material=materials.ConstantMaterial(1.5),
-                    bounding={'outer_radius': 1.0})
+                    aperture=_extent(1.0))
     rear = Surface(shape=Conic(-1 / 50.0, 0.0), interaction='refr',
                    P=np.asarray([0., 0., 1.0]), material=materials.air,
-                   bounding={'outer_radius': 3.0})
+                   aperture=_extent(3.0))
     prescription = [front, rear]
 
     import warnings as _warnings
@@ -518,7 +497,7 @@ def test_plot_optics_draws_clear_aperture_land_to_od_silently():
 
     assert np.isfinite(x).all()
     assert np.isfinite(y).all()
-    # the element OD is the larger surface's clear aperture
+    # the element OD is the larger surface's drawn extent
     np.testing.assert_allclose(np.max(np.abs(y)), 3.0)
     # small front surface bridges to the larger OD
     rim_sag = float(front.sag(np.asarray([0.]), np.asarray([1.0]))[0])
@@ -528,13 +507,13 @@ def test_plot_optics_draws_clear_aperture_land_to_od_silently():
 
 
 def test_plot_optics_steep_surface_capped_by_own_aperture_is_silent():
-    # aperture-limited steep surfaces do not warn
+    # extent-limited steep surfaces do not warn
     gentle = Surface(shape=Conic(1 / 5.0, 0.0), interaction='refr',
                      P=np.asarray([0., 0., 0.]), material=materials.ConstantMaterial(1.5),
-                     bounding={'outer_radius': 1.0})
+                     aperture=_extent(1.0))
     steep = Surface(shape=Conic(1 / 0.5, 0.0), interaction='refr',
                     P=np.asarray([0., 0., 1.0]), material=materials.air,
-                    bounding={'outer_radius': 0.4})
+                    aperture=_extent(0.4))
     prescription = [gentle, steep]
 
     import warnings as _warnings
@@ -545,11 +524,9 @@ def test_plot_optics_steep_surface_capped_by_own_aperture_is_silent():
     plt.close(fig)
 
 
-def test_plot_optics_reads_edge_geometry_from_surface_when_unset():
-    front = _refracting_plane(0, n=1.5)
+def test_plot_optics_reads_edge_features_from_surface_aperture():
+    front = _featured_front(SquareCut(0.5, 1.5, 0.25, side='upper'))
     rear = _refracting_plane(2, n=1.0)
-    front.edge = {'features': [{'kind': 'square_cut', 'side': 'upper',
-                                'z_start': 0.5, 'z_end': 1.5, 'depth': 0.25}]}
 
     x, y = _line_from_plot([front, rear])
 
@@ -557,35 +534,22 @@ def test_plot_optics_reads_edge_geometry_from_surface_when_unset():
     np.testing.assert_allclose(y[5:10], [1.0, 0.75, 0.75, 1.0, 1.0])
 
 
-def test_plot_optics_explicit_lens_edges_override_surface_edge():
-    front = _refracting_plane(0, n=1.5)
-    rear = _refracting_plane(2, n=1.0)
-    front.edge = {'features': [{'kind': 'square_cut', 'side': 'upper',
-                                'z_start': 0.5, 'z_end': 1.5, 'depth': 0.25}]}
-
-    # an explicit (featureless) edge spec wins: the wall is a plain square OD
-    x, y = _line_from_plot([front, rear], lens_edges={0: {}})
-
-    assert np.any((y[:-1] == 1) & (y[1:] == 1) & (x[:-1] == 0) & (x[1:] == 2))
-
-
-def test_lensdata_add_edge_propagates_to_compiled_surface():
-    edge = {'od_radius': 9.0,
-            'features': [{'kind': 'chamfer', 'side': 'both',
-                          'z_start': 0.0, 'z_end': 0.5, 'depth': 0.3}]}
+def test_lensdata_add_aperture_features_propagate_to_compiled_surface():
+    ap = Aperture(extent=CircularExtent(9.0),
+                  features=(Chamfer(0.0, 0.5, 0.3),))
     lens = LensData()
     (lens.add(Conic(1 / 60.0, 0.0), thickness=4.0, material=materials.ConstantMaterial(1.5),
-              semidiameter=8.0, edge=edge)
+              aperture=ap)
          .add(Conic(-1 / 60.0, 0.0), thickness=95.0, material=materials.air,
-              semidiameter=8.0))
+              aperture=8.0))
     ld = OpticalSystem(lens, aperture=10.0, wavelengths=[0.5876],
                        reference=0)
 
     surfaces = ld.to_surfaces()
-    assert surfaces[1].edge is edge        # surfaces[0] is the OBJECT plane
-    assert surfaces[2].edge is None
-    # the edge survives a copy of the LensData
-    assert ld.copy().to_surfaces()[1].edge is edge
+    assert surfaces[1].aperture.features == ap.features  # [0] is OBJECT
+    assert surfaces[2].aperture.features == ()
+    # the features survive a copy of the LensData
+    assert ld.copy().to_surfaces()[1].aperture.features == ap.features
 
 
 def test_plot_optics_draws_mirror_optical_surface_by_default():
@@ -597,11 +561,26 @@ def test_plot_optics_draws_mirror_optical_surface_by_default():
     np.testing.assert_allclose(y, np.linspace(-1, 1, 5))
 
 
-def test_plot_optics_draws_parallel_mirror_substrate():
-    prescription = [_reflecting_surface(Plane(), outer_radius=1)]
-    backing = {0: {'mode': 'parallel', 'thickness': 2, 'side': 1}}
+def _mirror_with_substrate(substrate, outer_radius=1, inner_radius=None,
+                           shape=None, **surf_kwargs):
+    """A reflective surface carrying a drawn extent and a substrate."""
+    surf = Surface(
+        shape=shape if shape is not None else Plane(),
+        interaction='refl',
+        aperture=Aperture(
+            extent=CircularExtent(
+                outer_radius,
+                inner_radius=0.0 if inner_radius is None else inner_radius),
+            substrate=substrate),
+        **surf_kwargs,
+    )
+    return surf
 
-    x, y = _line_from_plot(prescription, mirror_backing=backing)
+
+def test_plot_optics_draws_parallel_mirror_substrate():
+    surf = _mirror_with_substrate(ParallelSubstrate(thickness=2, side=1),
+                                  P=np.asarray([0., 0., 0.]))
+    x, y = _line_from_plot([surf])
 
     np.testing.assert_allclose(x[:5], np.zeros(5))
     assert np.any((y[:-1] == 1) & (y[1:] == 1) & (x[:-1] == 0) & (x[1:] == 2))
@@ -609,28 +588,13 @@ def test_plot_optics_draws_parallel_mirror_substrate():
     np.testing.assert_allclose(x[6:11], np.full(5, 2.0))
 
 
-def test_plot_optics_accepts_global_mirror_backing_config():
-    prescription = [_reflecting_surface(Plane(), outer_radius=1)]
-    backing = {'mode': 'parallel', 'thickness': 2, 'side': 1}
-
-    x, _ = _line_from_plot(prescription, mirror_backing=backing)
-
-    np.testing.assert_allclose(x[6:11], np.full(5, 2.0))
-
-
 def test_mirror_substrate_outline_applies_surface_decenter():
-    surf = Surface(
-        shape=Plane(),
-        interaction='refl',
-        P=np.asarray([0., 10., 5.]),
-        bounding={'outer_radius': 1},
-    )
+    surf = _mirror_with_substrate(ParallelSubstrate(thickness=2, side=1),
+                                  P=np.asarray([0., 10., 5.]))
     result = _trace_result([surf])
 
     x, y = mirror_substrate_outline(
-        surf, result, backing={'mode': 'parallel', 'thickness': 2, 'side': 1},
-        points=5,
-    )
+        surf, result, substrate=surf.aperture.substrate, points=5)
 
     np.testing.assert_allclose(x[:5], np.full(5, 5.0))
     np.testing.assert_allclose(y[:5], np.linspace(9, 11, 5))
@@ -638,19 +602,14 @@ def test_mirror_substrate_outline_applies_surface_decenter():
 
 
 def test_mirror_substrate_outline_bores_a_through_hole():
-    # inner_radius draws two loops with an open bore
-    surf = Surface(
-        shape=Conic(1 / 200.0, 0.0),
-        interaction='refl',
-        P=np.asarray([0., 0., 0.]),
-        bounding={'outer_radius': 10.0, 'inner_radius': 3.0},
-    )
+    # an annular drawn extent draws two loops with an open bore
+    surf = _mirror_with_substrate(
+        FlatParentSubstrate(thickness=5.0, side=1),
+        shape=Conic(1 / 200.0, 0.0), outer_radius=10.0, inner_radius=3.0,
+        P=np.asarray([0., 0., 0.]))
     result = _trace_result([surf])
     x, y = mirror_substrate_outline(
-        surf, result,
-        backing={'mode': 'flat_parent', 'thickness': 5.0, 'side': 'rear'},
-        points=41,
-    )
+        surf, result, substrate=surf.aperture.substrate, points=41)
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
     # one separator between loops, plus the trailing separator
@@ -662,30 +621,9 @@ def test_mirror_substrate_outline_bores_a_through_hole():
     assert np.isclose(x[finite].max(), 5.0)
 
 
-def test_mirror_clear_radius_is_an_outer_zone_limit_not_a_hole():
-    # clear_radius clips only the outer optical zone
-    surf = _reflecting_surface(Conic(1 / 200.0, 0.0), outer_radius=10.0)
-    result = _trace_result([surf])
-    x, y = mirror_surface_outline(
-        surf, result, points=41, radius=10.0, clear_radius=5.0,
-    )
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-    drawn = np.isfinite(x)
-    # everything beyond the clear radius is masked, the center is drawn
-    assert np.all(np.abs(y[drawn]) <= 5.0 + 1e-9)
-    assert drawn[np.argmin(np.abs(y))]
-    # the rim region exists in the sampling but is masked
-    assert np.any(~drawn & (np.abs(y) > 5.0))
-
-
 def test_mirror_substrate_outline_can_center_on_ray_footprint():
-    surf = Surface(
-        shape=Plane(),
-        interaction='refl',
-        P=np.asarray([0., 0., 0.]),
-        bounding={'outer_radius': 1},
-    )
+    surf = _mirror_with_substrate(ParallelSubstrate(thickness=2, side=1),
+                                  P=np.asarray([0., 0., 0.]))
     P = np.asarray([
         [[0., 9., -1.], [0., 10., -1.], [0., 11., -1.]],
         [[0., 9., 0.], [0., 10., 0.], [0., 11., 0.]],
@@ -696,14 +634,8 @@ def test_mirror_substrate_outline_can_center_on_ray_footprint():
     )
 
     x, y = mirror_substrate_outline(
-        surf, result, backing={
-            'mode': 'parallel',
-            'thickness': 2,
-            'side': 1,
-            'center': 'rays',
-        },
-        points=5,
-    )
+        surf, result, substrate=surf.aperture.substrate, center='rays',
+        points=5)
 
     np.testing.assert_allclose(x[:5], np.zeros(5))
     np.testing.assert_allclose(y[:5], np.linspace(9, 11, 5))
@@ -711,19 +643,13 @@ def test_mirror_substrate_outline_can_center_on_ray_footprint():
 
 
 def test_mirror_substrate_outline_applies_surface_tilt_in_xz_projection():
-    surf = Surface(
-        shape=Plane(),
-        interaction='refl',
-        P=np.asarray([0., 0., 0.]),
-        R=(0, -45, 0),
-        bounding={'outer_radius': 1},
-    )
+    surf = _mirror_with_substrate(ParallelSubstrate(thickness=2, side=1),
+                                  P=np.asarray([0., 0., 0.]), R=(0, -45, 0))
     result = _trace_result([surf])
 
     x, y = mirror_substrate_outline(
-        surf, result, backing={'mode': 'parallel', 'thickness': 2, 'side': 1},
-        points=5, x='z', y='x',
-    )
+        surf, result, substrate=surf.aperture.substrate, points=5,
+        x='z', y='x')
 
     front_x = np.asarray(x[:5])
     front_y = np.asarray(y[:5])
@@ -734,31 +660,27 @@ def test_mirror_substrate_outline_applies_surface_tilt_in_xz_projection():
 
 
 def test_mirror_substrate_can_cut_flat_from_parent_vertex_plane():
-    surf = _reflecting_surface(
-        OffAxisConic(c=1 / 100., k=-1., dy=10),
-        outer_radius=5,
-    )
+    surf = _mirror_with_substrate(
+        FlatParentSubstrate(thickness=2, side=1),
+        shape=OffAxisConic(c=1 / 100., k=-1., dy=10), outer_radius=5,
+        P=np.asarray([0., 0., 0.]))
     result = _trace_result([surf])
 
     x, _ = mirror_substrate_outline(
-        surf, result, backing={'mode': 'flat_parent', 'thickness': 2, 'side': 1},
-        points=5,
-    )
+        surf, result, substrate=surf.aperture.substrate, points=5)
 
     np.testing.assert_allclose(x[6:11], np.full(5, 2.0))
 
 
 def test_mirror_substrate_can_cut_flat_near_aperture_for_uniform_thickness():
-    surf = _reflecting_surface(
-        OffAxisConic(c=1 / 100., k=-1., dy=10),
-        outer_radius=5,
-    )
+    surf = _mirror_with_substrate(
+        FlatBackSubstrate(thickness=2, side=1),
+        shape=OffAxisConic(c=1 / 100., k=-1., dy=10), outer_radius=5,
+        P=np.asarray([0., 0., 0.]))
     result = _trace_result([surf])
 
     x, y = mirror_substrate_outline(
-        surf, result, backing={'mode': 'flat_aperture', 'thickness': 2, 'side': 1},
-        points=5,
-    )
+        surf, result, substrate=surf.aperture.substrate, points=5)
 
     rear_x = np.asarray(x[6:11])
     rear_y = np.asarray(y[6:11])

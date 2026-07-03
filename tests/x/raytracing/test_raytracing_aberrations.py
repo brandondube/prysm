@@ -38,9 +38,9 @@ def _singlet(epd=8.0, c1=1 / 61.0, gap=None, material=None, dispersive=False):
     mat = material or _n_const(1.5168)
     probe_lens = LensData()
     (probe_lens.add(Conic(c1, 0.0), thickness=6.0, material=mat,
-                    semidiameter=10.0)
+                    aperture=10.0)
                .add(Conic(-c1, 0.0), thickness=50.0,
-                    material=materials.air, semidiameter=10.0))
+                    material=materials.air, aperture=10.0))
     ld_probe = OpticalSystem(
         probe_lens, aperture=epd, fields=[Field(0, 0.0, kind='angle')],
         wavelengths=list(FRAUNHOFER_LINES_UM.values()), reference=1,
@@ -51,9 +51,9 @@ def _singlet(epd=8.0, c1=1 / 61.0, gap=None, material=None, dispersive=False):
         gap = paraxial_image_distance(ld_probe.surfaces[:-1], wvl)
     lens = LensData()
     (lens.add(Conic(c1, 0.0), thickness=6.0, material=mat,
-              semidiameter=10.0)
+              aperture=10.0)
          .add(Conic(-c1, 0.0), thickness=gap, material=materials.air,
-              semidiameter=10.0))
+              aperture=10.0))
     ld = OpticalSystem(
         lens, aperture=epd, fields=[Field(0, 0.0, kind='angle')],
         wavelengths=(list(FRAUNHOFER_LINES_UM.values()) if dispersive

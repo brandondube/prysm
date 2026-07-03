@@ -7,6 +7,7 @@ from prysm.conf import config
 from prysm.mathops import np, array_to_true_numpy
 
 from ..materials import MIRROR, air
+from .aperture import as_aperture
 from .surfaces import (
     Biconic,
     Chebyshev,
@@ -21,7 +22,6 @@ from .surfaces import (
     Toroid,
     XY,
     Zernike,
-    circular_aperture,
     _map_stype,
 )
 from .paraxial import paraxial_image_distance
@@ -406,24 +406,25 @@ class SurfaceRow:
     """One sequential optical surface in a LensData system."""
 
     _INVALIDATING_ATTRS = {
-        'params', 'meta', 'thickness', 'material', 'typ', 'semidiameter',
-        'aperture', 'bounding', 'grating', 'edge', 'coating',
+        'params', 'meta', 'thickness', 'material', 'typ',
+        'aperture', 'grating', 'coating',
     }
 
     def __setattr__(self, name, value):
         if name == 'params':
             value = _invalidating_array(value, self, dtype=config.precision)
-        elif name in ('meta', 'bounding'):
+        elif name == 'meta':
             value = _invalidating_dict(value, self)
         elif name == 'material':
             value = _validate_material(value)
+        elif name == 'aperture':
+            value = as_aperture(value)
         object.__setattr__(self, name, value)
         if name in self._INVALIDATING_ATTRS:
             _invalidate_row_owner(self)
 
     def __init__(self, shape, *, thickness=0.0, material=None, typ='refr',
-                 semidiameter=None, aperture=None, bounding=None, grating=None,
-                 edge=None, coating=None):
+                 aperture=None, grating=None, coating=None):
         """Initialize a surface row from a shape."""
         object.__setattr__(self, '_owner', None)
         adapter = _adapter_for(shape)
@@ -457,15 +458,8 @@ class SurfaceRow:
         self.thickness = thickness
         self.material = material
         self.typ = typ
-        self.semidiameter = semidiameter
-        if aperture is None and semidiameter is not None:
-            aperture = circular_aperture(semidiameter)
         self.aperture = aperture
-        if bounding is None and semidiameter is not None:
-            bounding = {'outer_radius': float(semidiameter)}
-        self.bounding = bounding
         self.grating = grating
-        self.edge = edge
         self.coating = coating
 
     @property
@@ -505,11 +499,8 @@ class SurfaceRow:
         new.thickness = self.thickness
         new.material = self.material
         new.typ = self.typ
-        new.semidiameter = self.semidiameter
-        new.aperture = self.aperture
-        new.bounding = self.bounding
+        new.aperture = self.aperture.copy()
         new.grating = self.grating
-        new.edge = self.edge
         new.coating = self.coating
         return new
 
@@ -660,13 +651,11 @@ class LensData:
         return self.rows[-1]
 
     def add(self, shape, *, thickness=0.0, material=None, typ='refr',
-            semidiameter=None, aperture=None, bounding=None, grating=None,
-            edge=None, coating=None):
+            aperture=None, grating=None, coating=None):
         """Insert a surface row before the IMAGE endpoint and return self."""
         self.rows.insert(len(self.rows) - 1, SurfaceRow(
             shape, thickness=thickness, material=material, typ=typ,
-            semidiameter=semidiameter, aperture=aperture, bounding=bounding,
-            grating=grating, edge=edge, coating=coating,
+            aperture=aperture, grating=grating, coating=coating,
         ))
         self._invalidate()
         return self
@@ -717,8 +706,7 @@ class LensData:
         return Surface(
             shape=row.build_shape(), interaction=row.typ, P=P, R=R,
             material=None if row.material is MIRROR else row.material,
-            bounding=row.bounding, aperture=row.aperture, grating=row.grating,
-            edge=getattr(row, 'edge', None),
+            aperture=row.aperture, grating=row.grating,
             coating=getattr(row, 'coating', None),
         )
 

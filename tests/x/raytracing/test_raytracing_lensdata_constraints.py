@@ -19,7 +19,7 @@ def make_triplet():
     radii = [50.0, -80.0, 40.0, -40.0, 80.0, -50.0]
     for i, r in enumerate(radii):
         ld.add(Conic(1.0 / r, 0.0), thickness=3.0 + i,
-               material=_air, semidiameter=8.0)
+               material=_air, aperture=8.0)
     return OpticalSystem(ld)
 
 
@@ -124,7 +124,7 @@ def test_relative_radius_bound_orders_negative_nominal():
 
 def test_relative_bound_on_zero_curvature_is_unbounded_with_warning():
     ld = OpticalSystem(LensData().add(Conic(0.0, 0.0), thickness=1.0,
-                                      material=_air, semidiameter=5.0))
+                                      material=_air, aperture=5.0))
     ld.opt.vary('curvature', surfaces=1)          # rows[0] is OBJECT
     with pytest.warns(UserWarning):
         ld.opt.constrain('curvature', relative=0.1, surfaces=1)
@@ -134,7 +134,7 @@ def test_relative_bound_on_zero_curvature_is_unbounded_with_warning():
 
 def test_relative_radius_bound_on_flat_surface_is_unbounded_with_warning():
     ld = OpticalSystem(LensData().add(Conic(0.0, 0.0), thickness=1.0,
-                                      material=_air, semidiameter=5.0))
+                                      material=_air, aperture=5.0))
     ld.opt.vary('radius', surfaces=1)
     with pytest.warns(UserWarning):
         ld.opt.constrain('radius', relative=0.1, surfaces=1)
@@ -174,7 +174,7 @@ def test_coefs_relative_bound_per_coefficient():
     coefs = (1e-4, -2e-6, 3e-9)
     ld = OpticalSystem(LensData().add(EvenAsphere(1 / 50.0, 0.0, coefs),
                                       thickness=2.0, material=_air,
-                                      semidiameter=8.0))
+                                      aperture=8.0))
     ld.opt.vary('coefs', surfaces=1)              # rows[0] is OBJECT
     ld.opt.constrain('coefs', relative=0.5, surfaces=1)
     lo, hi = ld.opt.bounds()

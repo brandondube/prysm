@@ -7,7 +7,6 @@ import pytest
 from prysm.x import materials
 from prysm.x.raytracing import (
     LensData, OpticalSystem, Field, Sampling, launch, raytrace,
-    circular_aperture,
 )
 from prysm.x.raytracing.surfaces import Sphere, Conic, Plane
 from prysm.x.raytracing.launch import _perp_basis
@@ -23,41 +22,40 @@ from prysm.x.raytracing._diff_raytrace import DiffSeed, raytrace_with_tangents
 def _singlet_system(aperture_radius=None):
     ld = LensData()
     ld.add(Sphere(1 / 100.0), thickness=4,
-           material=materials.ConstantMaterial(1.52), semidiameter=12,
-           aperture=(circular_aperture(aperture_radius)
-                     if aperture_radius is not None else None))
+           material=materials.ConstantMaterial(1.52),
+           aperture=(aperture_radius if aperture_radius is not None else 12))
     ld.add(Sphere(-1 / 100.0), thickness=92, material=materials.air,
-           semidiameter=12)
-    ld.add(Plane(), typ='eval', semidiameter=30)
+           aperture=12)
+    ld.add(Plane(), typ='eval', aperture=30)
     return OpticalSystem(ld, stop_index=1, wavelengths=[0.55])
 
 
 def _parabola_system():
     ld = LensData()
     ld.add(Conic(-1 / 400.0, -1.0), thickness=-200, typ='refl',
-           semidiameter=30)
-    ld.add(Plane(), typ='eval', semidiameter=5)
+           aperture=30)
+    ld.add(Plane(), typ='eval', aperture=5)
     return OpticalSystem(ld, stop_index=0, wavelengths=[0.55])
 
 
 def _two_mirror_system():
     ld = LensData()
     ld.add(Conic(-1 / 400.0, -1.0), thickness=-80, typ='refl',
-           semidiameter=30)
+           aperture=30)
     ld.add(Conic(-1 / 150.0, -3.0), thickness=200, typ='refl',
-           semidiameter=8)
-    ld.add(Plane(), typ='eval', semidiameter=5)
+           aperture=8)
+    ld.add(Plane(), typ='eval', aperture=5)
     return OpticalSystem(ld, stop_index=0, wavelengths=[0.55])
 
 
 def _finite_conjugate_system():
     ld = LensData()
-    ld.add(Plane(), thickness=300, typ='eval', semidiameter=1)
+    ld.add(Plane(), thickness=300, typ='eval', aperture=1)
     ld.add(Sphere(1 / 100.0), thickness=4,
-           material=materials.ConstantMaterial(1.52), semidiameter=12)
+           material=materials.ConstantMaterial(1.52), aperture=12)
     ld.add(Sphere(-1 / 100.0), thickness=140, material=materials.air,
-           semidiameter=12)
-    ld.add(Plane(), typ='eval', semidiameter=30)
+           aperture=12)
+    ld.add(Plane(), typ='eval', aperture=30)
     return OpticalSystem(ld, stop_index=2, wavelengths=[0.55],
                          fields=[Field(0, 0, kind='height', object_z=0.0)])
 
@@ -65,11 +63,11 @@ def _finite_conjugate_system():
 def _decentered_singlet_system(dy=0.4):
     ld = LensData()
     ld.add(Sphere(1 / 100.0), thickness=4,
-           material=materials.ConstantMaterial(1.52), semidiameter=12)
+           material=materials.ConstantMaterial(1.52), aperture=12)
     ld.add_coordbreak(decenter=(0.0, dy, 0.0))
     ld.add(Sphere(-1 / 100.0), thickness=92, material=materials.air,
-           semidiameter=12)
-    ld.add(Plane(), typ='eval', semidiameter=30)
+           aperture=12)
+    ld.add(Plane(), typ='eval', aperture=30)
     return OpticalSystem(ld, stop_index=1, wavelengths=[0.55])
 
 

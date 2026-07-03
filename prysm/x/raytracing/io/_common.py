@@ -152,23 +152,27 @@ def scale_surface_params_to_mm(kind, params, scale):
 
 
 def aperture_kwargs_from_radii(outer_radius, scale, inner_radius=None):
-    """LensData.add keyword args for a circular or annular clear aperture."""
+    """LensData.add keyword args for a circular or annular clear aperture.
+
+    A semi-diameter becomes a circular clip (drawn at clip x oversize); an
+    annular pair becomes an annular clip with an explicit annular extent so the
+    bore draws.
+    """
     outer = scale_length_to_mm(outer_radius, scale)
     if outer is None:
         return {}
     inner = scale_length_to_mm(inner_radius, scale)
+    from ..aperture import Aperture, annular_aperture, CircularExtent
     if inner is None:
-        return {'semidiameter': outer}
+        return {'aperture': Aperture(clip=float(outer))}
     if inner < 0 or outer <= 0 or inner >= outer:
         raise ValueError(
             'clear-aperture radii must satisfy 0 <= inner < outer'
         )
-    from ..surfaces import annular_aperture
-    return {
-        'semidiameter': outer,
-        'aperture': annular_aperture(inner, outer),
-        'bounding': {'inner_radius': float(inner), 'outer_radius': float(outer)},
-    }
+    return {'aperture': Aperture(
+        clip=annular_aperture(inner, outer),
+        extent=CircularExtent(float(outer), inner_radius=float(inner)),
+    )}
 
 
 def fold_sign(n_refl):

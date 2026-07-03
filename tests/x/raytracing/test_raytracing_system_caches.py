@@ -18,11 +18,11 @@ def _doublet(aperture=None):
     # OBJECT/IMAGE endpoints implicit (ADR-0006); first powered surface is row 1.
     ld = (LensData()
           .add(Sphere(1 / 61.47), thickness=6.0,
-               material=materials.ConstantMaterial(1.5168), semidiameter=12.0)
+               material=materials.ConstantMaterial(1.5168), aperture=12.0)
           .add(Sphere(-1 / 44.64), thickness=2.5,
-               material=materials.ConstantMaterial(1.673), semidiameter=12.0)
+               material=materials.ConstantMaterial(1.673), aperture=12.0)
           .add(Sphere(-1 / 129.94), thickness=0.0,
-               material=materials.air, semidiameter=12.0))
+               material=materials.air, aperture=12.0))
     sys = OpticalSystem(ld, aperture=aperture or ApertureSpec.epd(22.0),
                         fields=[Field(0, 0), Field(0, 0.7), Field(0, 1.0)],
                         wavelengths=[0.486, 0.587, 0.656], reference=1,

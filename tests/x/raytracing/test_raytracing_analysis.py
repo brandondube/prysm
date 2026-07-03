@@ -374,6 +374,17 @@ def test_distortion_paraxial_proxy_scales_linearly():
     assert abs(result.percent[0]) < 0.1
 
 
+def test_distortion_linear_angle_matches_f_tan_at_small_field():
+    # tan(theta) ~= theta at 0.05 deg, so the two conventions must agree
+    presc = _spherical_singlet()
+    field = [Field(0., 0.05, unit='deg')]
+    ftan = distortion(presc, field, 0.55, epd=4.0)
+    lin = distortion(presc, field, 0.55, epd=4.0,
+                     distortion_type='linear-angle')
+    np.testing.assert_allclose(lin.paraxial_xy, ftan.paraxial_xy, rtol=1e-6)
+    np.testing.assert_allclose(lin.percent, ftan.percent, atol=1e-4)
+
+
 def test_distortion_sign_distinguishes_barrel_and_pincushion():
     # a positive singlet with the stop in front of the lens gives barrel
     # (negative) distortion; with the stop behind it gives pincushion
@@ -542,11 +553,11 @@ def _doublet_system():
     # OBJECT/IMAGE endpoints implicit (ADR-0006); first powered surface is row 1.
     ld = (LensData()
           .add(SphereShape(1 / 61.47), thickness=6.0,
-               material=materials.ConstantMaterial(1.5168), semidiameter=12.0)
+               material=materials.ConstantMaterial(1.5168), aperture=12.0)
           .add(SphereShape(-1 / 44.64), thickness=2.5,
-               material=materials.ConstantMaterial(1.673), semidiameter=12.0)
+               material=materials.ConstantMaterial(1.673), aperture=12.0)
           .add(SphereShape(-1 / 129.94), thickness=0.0,
-               material=materials.air, semidiameter=12.0))
+               material=materials.air, aperture=12.0))
     sys = OpticalSystem(ld, aperture=ApertureSpec.epd(22.0),
                         fields=[Field(0, 0), Field(0, 0.7), Field(0, 1.0)],
                         wavelengths=[0.486, 0.587, 0.656], reference=1,

@@ -47,6 +47,11 @@ from .intersections import (
     ray_plane_intersect,
     ray_sphere_intersect,
 )
+from .aperture import (
+    annular_aperture,
+    as_aperture,
+    circular_aperture,
+)
 from .phase import PhaseFunction
 from .sags import (
     Q2d_and_der,
@@ -71,75 +76,6 @@ from .sags import (
     sphere_sag,
     sphere_sag_der,
 )
-
-
-def circular_aperture(radius, x0=0.0, y0=0.0):
-    """Create a circular surface aperture predicate.
-
-    Parameters
-    ----------
-    radius : float
-        Radius of the clear aperture.
-    x0, y0 : float, optional
-        Center of the aperture in local surface coordinates.
-
-    Returns
-    -------
-    callable
-        Predicate returning True for points inside or on the aperture.
-
-    """
-    radius = float(radius)
-    x0 = float(x0)
-    y0 = float(y0)
-    rsq = radius * radius
-
-    def aperture(x, y):
-        """Evaluate whether local coordinates are inside the aperture."""
-        dx = x - x0
-        dy = y - y0
-        return dx * dx + dy * dy <= rsq
-
-    return aperture
-
-
-def annular_aperture(inner_radius, outer_radius, x0=0.0, y0=0.0):
-    """Create an annular surface aperture predicate.
-
-    Passes points in the ring between inner_radius and outer_radius and blocks
-    the central disk; the natural way to model a central obstruction such as the
-    shadow of a Cassegrain secondary, placed on the stop surface.
-
-    Parameters
-    ----------
-    inner_radius : float
-        Radius of the obscured central disk; points inside it are blocked.
-    outer_radius : float
-        Outer radius of the clear annulus.
-    x0, y0 : float, optional
-        Center of the aperture in local surface coordinates.
-
-    Returns
-    -------
-    callable
-        Predicate returning True for points within the clear annulus.
-
-    """
-    inner_radius = float(inner_radius)
-    outer_radius = float(outer_radius)
-    x0 = float(x0)
-    y0 = float(y0)
-    ri_sq = inner_radius * inner_radius
-    ro_sq = outer_radius * outer_radius
-
-    def aperture(x, y):
-        """Evaluate whether local coordinates fall in the clear annulus."""
-        dx = x - x0
-        dy = y - y0
-        rsq = dx * dx + dy * dy
-        return (rsq >= ri_sq) & (rsq <= ro_sq)
-
-    return aperture
 
 
 # Sample count per axis for the departure-band precompute (Surface
@@ -1216,8 +1152,8 @@ class Surface:
 
     def __init__(self, shape=None, interaction=None, pose=None, material=None,
                  aperture=None, grating=None, *, P=None, R=None,
-                 bounding=None, tilt=None, decenter=None, tilt_radians=False,
-                 edge=None, coating=None):
+                 tilt=None, decenter=None, tilt_radians=False,
+                 coating=None):
         """Initialize a posed optical surface.
 
         Parameters
@@ -1233,8 +1169,10 @@ class Surface:
             Optical material for refractive surfaces; its .n(wavelength) gives
             the real geometric index and .nk(wavelength) the complex index.
             None for reflective / eval surfaces.
-        aperture : callable, optional
-            Aperture predicate evaluated in local surface coordinates.
+        aperture : Aperture, float, callable, or None, optional
+            The surface aperture: clip, drawn extent, substrate, and rim
+            features.  A float is a circular clip, a callable an opaque clip,
+            None an auto aperture.
         grating : PhaseFunction or tuple, optional
             Diffractive phase function on the surface; None for a plain surface.
             Legacy (period, grating_vector, order) tuples are accepted.
@@ -1242,16 +1180,10 @@ class Surface:
             Surface vertex position.
         R : array_like, optional
             Surface rotation matrix.
-        bounding : object, optional
-            Bounding data carried by the surface.
         tilt, decenter : array_like, optional
             Pose adjustments applied after P and R are resolved.
         tilt_radians : bool, optional
             If True, tilt values are interpreted as radians.
-        edge : mapping, optional
-            Mechanical edge geometry (outer diameter, chamfers, seats, ...)
-            carried for layout drawing.  Consumed by plotting.plot_optics; see
-            its lens_edges parameter for the schema.
         coating : coatings.Stack, optional
             Thin-film stack on this surface; None (default) gives the bare
             Fresnel interface (and, on reflection, the lossless ideal mirror).
@@ -1288,16 +1220,25 @@ class Surface:
         self.R = R
         self.material = material
         self.params = shape.params
-        self.bounding = bounding
         self.aperture = aperture
         self.grating = grating
-        self.edge = edge
         self.coating = coating
         self.sag = shape.sag
         self.sag_and_normal = shape.sag_and_normal
         self._analytic_intersect = bool(getattr(shape, 'analytic_intersect', False))
         # Cached DepartureBand for the first-root acceptance band.
         self._departure_band = None
+
+    @property
+    def aperture(self):
+        """The surface Aperture (clip, drawn extent, substrate, rim features)."""
+        return self._aperture
+
+    @aperture.setter
+    def aperture(self, value):
+        # Always an Aperture: a float is a circular clip, a callable an opaque
+        # clip, None an auto aperture.
+        self._aperture = as_aperture(value)
 
     @property
     def grating(self):
@@ -1329,9 +1270,11 @@ class Surface:
         if not hasattr(shape, 'seed_conic'):
             return DepartureBand.unbounded()
         c, k, dx, dy = shape.seed_conic()
-        R = None
-        if self.bounding is not None:
-            R = self.bounding.get('outer_radius')
+        # the aperture bounds the characterized domain: the drawn extent if set,
+        # else the clip radius (rays land only inside it)
+        ap = self.aperture
+        R = ap.extent.outer_radius if ap.extent is not None \
+            else ap.limiting_radius()
         if R is None:
             p = shape.params or {}
             R = p.get('normalization_radius')
@@ -1494,9 +1437,8 @@ class Surface:
         miss = STATUS_MISS if self._analytic_intersect else STATUS_NEWTON
         code = np.where(converged, STATUS_OK, miss)
 
-        if self.aperture is not None:
-            inside = np.asarray(self.aperture(Q_loc[..., 0], Q_loc[..., 1]),
-                                dtype=bool)
+        if self.aperture.clip is not None:
+            inside = self.aperture.clips(Q_loc[..., 0], Q_loc[..., 1])
             code[converged & ~inside] = STATUS_CLIP
 
         if self.typ == STYPE_REFLECT:

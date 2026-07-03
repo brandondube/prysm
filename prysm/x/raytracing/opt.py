@@ -473,6 +473,20 @@ def locate_xp(P_chief, S_chief, P_img, P_sk):
 
 # ---------- spot statistics ----------
 
+def _centered_r2(x, y, axis, center):
+    """Squared distance from a per-slice center; NaN-aware centroid default."""
+    x = np.asarray(x)
+    y = np.asarray(y)
+    if center is None:
+        cx = np.nanmean(x, axis=axis, keepdims=True)
+        cy = np.nanmean(y, axis=axis, keepdims=True)
+    else:
+        cx, cy = center
+    dx = x - cx
+    dy = y - cy
+    return dx * dx + dy * dy
+
+
 def centroid_referenced_rms(x, y, *, axis=-1, center=None):
     """RMS distance from a per-slice center, reduced over the sample axis.
 
@@ -499,16 +513,31 @@ def centroid_referenced_rms(x, y, *, axis=-1, center=None):
         RMS radius with the sample axis removed.
 
     """
-    x = np.asarray(x)
-    y = np.asarray(y)
-    if center is None:
-        cx = np.nanmean(x, axis=axis, keepdims=True)
-        cy = np.nanmean(y, axis=axis, keepdims=True)
-    else:
-        cx, cy = center
-    dx = x - cx
-    dy = y - cy
-    return np.sqrt(np.nanmean(dx * dx + dy * dy, axis=axis))
+    return np.sqrt(np.nanmean(_centered_r2(x, y, axis, center), axis=axis))
+
+
+def centroid_referenced_max(x, y, *, axis=-1, center=None):
+    """Maximum distance from a per-slice center, reduced over the sample axis.
+
+    The geometric-radius companion of centroid_referenced_rms; same centering
+    and NaN handling, nanmax reduction instead of nanmean.
+
+    Parameters
+    ----------
+    x, y : ndarray
+        transverse coordinate arrays of the same shape.
+    axis : int, optional
+        the sample axis reduced; default the trailing axis.
+    center : tuple of (ndarray or float), optional
+        explicit (cx, cy) reference; default the per-slice centroid.
+
+    Returns
+    -------
+    ndarray
+        maximum radius with the sample axis removed.
+
+    """
+    return np.sqrt(np.nanmax(_centered_r2(x, y, axis, center), axis=axis))
 
 
 def spot_centroid(P_final, status=None):

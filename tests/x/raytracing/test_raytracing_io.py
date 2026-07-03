@@ -184,7 +184,7 @@ SURF 2
 
 def test_zmx_diam_becomes_clear_aperture_and_clips():
     pf = read_zmx(_ZMX_CLEAR_APERTURE, _is_text=True)
-    assert pf.rows[1].semidiameter == 1.0
+    assert pf.rows[1].aperture.clip.radius == 1.0
     P = np.array([[0.0, 0.0, -1.0],
                   [0.0, 1.5, -1.0]])
     S = np.array([[0.0, 0.0, 1.0],
@@ -221,7 +221,7 @@ def test_zmx_non_mm_lengths_scale_to_mm():
     assert pf.epd == 10.0
     np.testing.assert_allclose(pf.surfaces[1].params['c'], 0.2)
     np.testing.assert_allclose(pf.surfaces[2].P[2], 5.0)
-    np.testing.assert_allclose(pf.rows[1].semidiameter, 2.0)
+    np.testing.assert_allclose(pf.rows[1].aperture.clip.radius, 2.0)
 
 
 _ZMX_CM_COORD_BREAK = """\
@@ -530,7 +530,7 @@ GO
 
 def test_seq_cao_becomes_clear_aperture_and_clips():
     pf = read_seq(_SEQ_CLEAR_APERTURE, _is_text=True)
-    assert pf.rows[1].semidiameter == 1.0
+    assert pf.rows[1].aperture.clip.radius == 1.0
     P = np.array([[0.0, 0.0, -1.0],
                   [0.0, 1.5, -1.0]])
     S = np.array([[0.0, 0.0, 1.0],
@@ -559,7 +559,7 @@ def test_seq_non_mm_lengths_scale_to_mm():
     assert pf.epd == 10.0
     np.testing.assert_allclose(pf.surfaces[1].params['c'], 0.02)
     np.testing.assert_allclose(pf.surfaces[2].P[2], 5.0)
-    np.testing.assert_allclose(pf.rows[1].semidiameter, 2.0)
+    np.testing.assert_allclose(pf.rows[1].aperture.clip.radius, 2.0)
 
 
 _SEQ_IMAGE_HEIGHT_FIELD = """\
@@ -651,11 +651,9 @@ GO
 def test_seq_cir_sets_clear_aperture():
     pf = read_seq(_SEQ_CIR_APERTURE, _is_text=True)
     s0 = pf.surfaces[1]
-    assert s0.bounding == {'outer_radius': 8.0}
-    assert s0.aperture is not None
+    assert s0.aperture.clip.radius == 8.0
     s1 = pf.surfaces[2]
-    assert s1.bounding is None
-    assert s1.aperture is None
+    assert s1.aperture.clip is None
 
 
 # ---- STO (aperture stop) ---------------------------------------------------

@@ -25,9 +25,9 @@ def make_singlet(image_gap=96.0, fields=(0,), wavelengths=(0.55,),
     # OBJECT/IMAGE endpoints implicit (ADR-0006); conics are rows 1 and 2.
     lens = LensData()
     (lens.add(Conic(1 / 102.0, 0.0), thickness=6.0, material=_glass,
-              semidiameter=12.0)
+              aperture=12.0)
          .add(Conic(-1 / 102.0, 0.0), thickness=image_gap,
-              material=materials.air, semidiameter=12.0))
+              material=materials.air, aperture=12.0))
     return OpticalSystem(lens, aperture=20.0, fields=list(fields),
                          wavelengths=list(wavelengths), weights=weights,
                          stop_index=stop_index)

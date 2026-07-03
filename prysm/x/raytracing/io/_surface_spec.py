@@ -24,7 +24,6 @@ class SurfaceSpec:
     n: object = None
     params: dict = field(default_factory=dict)
     R: object = None
-    bounding: object = None
     aperture: object = None
     tilt: object = None
     decenter: object = None
@@ -64,7 +63,7 @@ def build_surface(spec):
     return Surface(
         shape=build_shape(spec),
         interaction=spec.typ, P=spec.P, material=spec.n, R=spec.R,
-        bounding=spec.bounding, aperture=spec.aperture,
+        aperture=spec.aperture,
         tilt=spec.tilt, decenter=spec.decenter,
         tilt_radians=spec.tilt_radians, grating=spec.grating,
         coating=spec.coating,

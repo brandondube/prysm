@@ -34,7 +34,8 @@ def fd_jacobian(f, x, step=1e-6, mask=None):
     f(x) -> scalar.  Component i is stepped by h_i = step * (|x_i| or 1); a
     False entry in mask leaves that component's derivative at 0.  x is copied
     for each probe (never mutated in place here), so f sees exactly one varied
-    component at a time.
+    component at a time.  Not optym's forward-difference vector-residual
+    Jacobian; this is a scalar-merit gradient.
 
     Parameters
     ----------

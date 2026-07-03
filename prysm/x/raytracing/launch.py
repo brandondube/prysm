@@ -8,7 +8,8 @@ from prysm.mathops import np, array_to_true_numpy
 from . import raygen
 from .opt import aim_rays
 from .paraxial import entrance_pupil_z, NonAxialSystemError
-from .spencer_and_murty import raytrace, valid_mask
+from .spencer_and_murty import (
+    raytrace, valid_mask, transform_to_local_coords)
 from ._meta import object_space_index
 from ._resolve import compiled_surfaces
 
@@ -656,6 +657,60 @@ def launch(system, field, wavelength, sampling, *,
             finite, drop_unaimed=drop_unaimed)
 
     return P, S
+
+
+def _footprint_radii(surfaces, Phist):
+    """Per-surface max valid ray radius in each surface's local frame."""
+    radii = np.zeros(len(surfaces))
+    for j, surf in enumerate(surfaces):
+        p = Phist[j + 1]
+        dirs = np.zeros_like(p)
+        p_loc, _ = transform_to_local_coords(p, surf.P, dirs, surf.R)
+        r = np.hypot(p_loc[..., 0], p_loc[..., 1])
+        if np.isfinite(r).any():
+            radii[j] = float(np.nanmax(r))
+    return radii
+
+
+def solve_apertures(system, *, fields=None, wavelength=None, oversize=1.05,
+                    sampling=None):
+    """Size each auto surface aperture from the traced ray footprint (a solve).
+
+    Traces the resolved field set once (valid rays only), takes the per-surface
+    superset footprint radius, and writes a CircularExtent of footprint x
+    oversize onto every auto aperture (no clip, no user extent), version-stamped
+    against the lens.  User-clip rows are untouched -- their drawn radius is the
+    clip times oversize, computed on demand.
+    """
+    from .lensdata import SurfaceRow
+    lens = system.lens
+    wvl = wavelength if wavelength is not None else system.wavelength()
+    if fields is None:
+        fields = system.fields
+    if sampling is None:
+        sampling = Sampling.hex(nrings=6)
+    surfaces = system.to_surfaces()
+
+    foot = np.zeros(len(surfaces))
+    for field in fields:
+        field = system.field(field)
+        P, S = launch(system, field, wvl, sampling, drop_unaimed=True)
+        result = raytrace(surfaces, P, S, wvl)
+        Phist = array_to_true_numpy(result.P).copy()
+        mask = valid_mask(array_to_true_numpy(result.status), Phist[-1])
+        if mask is not None:
+            Phist[:, ~np.asarray(mask), :] = np.nan
+        foot = np.maximum(foot, _footprint_radii(surfaces, Phist))
+
+    si = 0
+    for row in lens.rows:
+        if not isinstance(row, SurfaceRow):
+            continue
+        ap = row.aperture
+        if ap.is_auto:
+            ap.solve_extent(foot[si], lens._version, oversize=oversize)
+        si += 1
+    return system
 
 
 def solve_vignetting(system, field, wavelength, *, tol=1e-3, maxiter=20):

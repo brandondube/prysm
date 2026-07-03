@@ -23,9 +23,9 @@ def make_singlet(c0=1 / 102.0, c1=-1 / 102.0, gap=95.0):
     # 1 and 2, and the IMAGE plane is always present.
     lens = LensData()
     (lens.add(Conic(c0, 0.0), thickness=6.0, material=n_bk7,
-              semidiameter=10.0)
+              aperture=10.0)
          .add(Conic(c1, 0.0), thickness=gap, material=materials.air,
-              semidiameter=10.0))
+              aperture=10.0))
     return OpticalSystem(lens, aperture=20.0, wavelengths=list(FRAUNHOFER_LINES_UM.values()),
                          reference=1)
 
@@ -67,9 +67,9 @@ def test_pickup_length_mismatch_raises():
     coefs = (1e-4, -2e-6)
     ld = OpticalSystem(LensData()
           .add(EvenAsphere(1 / 50.0, 0.0, coefs), thickness=2.0,
-               material=n_bk7, semidiameter=8.0)
+               material=n_bk7, aperture=8.0)
           .add(Conic(1 / 80.0, 0.0), thickness=2.0, material=materials.air,
-               semidiameter=8.0))
+               aperture=8.0))
     with pytest.raises(ValueError):
         # 2 coefs cannot be picked up from 1 curvature (rows[0] is OBJECT)
         ld.opt.pickup('coefs', 1, from_surface=2, from_category='curvature')
@@ -79,9 +79,9 @@ def test_coef_symmetry_pickup_elementwise():
     coefs = (1e-4, -2e-6, 3e-9)
     ld = OpticalSystem(LensData()
           .add(EvenAsphere(1 / 50.0, 0.0, coefs), thickness=2.0,
-               material=n_bk7, semidiameter=8.0)
+               material=n_bk7, aperture=8.0)
           .add(EvenAsphere(1 / 50.0, 0.0, (0.0, 0.0, 0.0)), thickness=2.0,
-               material=materials.air, semidiameter=8.0))
+               material=materials.air, aperture=8.0))
     ld.opt.pickup('coefs', 2, from_surface=1, scale=-1.0)
     np.testing.assert_allclose(
         np.asarray(ld.surfaces[2].params['coefs']),
@@ -108,9 +108,9 @@ def test_image_solve_preserves_leading_object_medium():
     lens.object_row.material = materials.ConstantMaterial(1.33)
     lens.object_row.thickness = 40.0
     (lens.add(Conic(1 / 100.0, 0.0), thickness=5.0, material=n_bk7,
-              semidiameter=10.0)
+              aperture=10.0)
          .add(Conic(-1 / 100.0, 0.0), thickness=10.0,
-              material=materials.air, semidiameter=10.0))
+              material=materials.air, aperture=10.0))
     sys = OpticalSystem(lens, aperture=20.0, wavelengths=list(FRAUNHOFER_LINES_UM.values()),
                         reference=1)
     sys.solve.image_distance()

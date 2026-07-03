@@ -28,9 +28,9 @@ from prysm.x.raytracing.paraxial import (
 def _singlet(epd=8.0):
     mat = materials.ConstantMaterial(1.5168)
     probe = LensData()
-    (probe.add(Conic(1 / 61.0, 0.0), thickness=6.0, material=mat, semidiameter=10.0)
+    (probe.add(Conic(1 / 61.0, 0.0), thickness=6.0, material=mat, aperture=10.0)
           .add(Conic(-1 / 61.0, 0.0), thickness=50.0, material=materials.air,
-               semidiameter=10.0))
+               aperture=10.0))
     sysp = OpticalSystem(probe, aperture=epd, fields=[Field(0, 0.0, kind='angle')],
                          wavelengths=[0.5875618], reference=0,
                          stop_index=1)   # first powered surface (index 0 is OBJECT)
@@ -38,9 +38,9 @@ def _singlet(epd=8.0):
     # measure from the last powered surface (exclude the IMAGE endpoint plane)
     foc = paraxial_image_distance(sysp.surfaces[:-1], wvl)
     lens = LensData()
-    (lens.add(Conic(1 / 61.0, 0.0), thickness=6.0, material=mat, semidiameter=10.0)
+    (lens.add(Conic(1 / 61.0, 0.0), thickness=6.0, material=mat, aperture=10.0)
          .add(Conic(-1 / 61.0, 0.0), thickness=foc, material=materials.air,
-              semidiameter=10.0))
+              aperture=10.0))
     return OpticalSystem(lens, aperture=epd, fields=[Field(0, 0.0, kind='angle')],
                          wavelengths=[0.5875618], reference=0,
                          stop_index=1)
@@ -51,9 +51,9 @@ def _telecentric(epd=6.0):
     mat = materials.ConstantMaterial(1.5168)
     c = 1.0 / 40.0
     probe = LensData()
-    (probe.add(Conic(c, 0.0), thickness=3.0, material=mat, semidiameter=14.0)
+    (probe.add(Conic(c, 0.0), thickness=3.0, material=mat, aperture=14.0)
           .add(Conic(-c, 0.0), thickness=60.0, material=materials.air,
-               semidiameter=14.0))
+               aperture=14.0))
     sp = OpticalSystem(probe, aperture=epd, fields=[Field(3, 0.0, kind='angle')],
                        wavelengths=[0.5875618], reference=0,
                        stop_index=1)   # first powered surface (index 0 is OBJECT)
@@ -63,9 +63,9 @@ def _telecentric(epd=6.0):
     # The stop sits a front-focal-length ahead of the lens -> image-space
     # telecentric (exit pupil at infinity).
     lens = LensData()
-    (lens.add(Plane(), typ='eval', material=materials.air, semidiameter=epd / 2)
-         .add(Conic(c, 0.0), thickness=3.0, material=mat, semidiameter=20.0)
-         .add(Conic(-c, 0.0), thickness=60.0, material=materials.air, semidiameter=20.0))
+    (lens.add(Plane(), typ='eval', material=materials.air, aperture=epd / 2)
+         .add(Conic(c, 0.0), thickness=3.0, material=mat, aperture=20.0)
+         .add(Conic(-c, 0.0), thickness=60.0, material=materials.air, aperture=20.0))
     lens.rows[1].thickness = abs(ffl)
     sysT = OpticalSystem(lens, aperture=epd, fields=[Field(3, 0.0, kind='angle')],
                          wavelengths=[0.5875618], reference=0,

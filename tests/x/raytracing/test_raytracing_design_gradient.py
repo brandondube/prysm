@@ -94,7 +94,7 @@ def _clipped_singlet(semidia):
     lens = LensData()
     (lens.add(Conic(1 / 50.0, 0.0), typ='refr',
               material=materials.ConstantMaterial(1.5), thickness=5.0,
-              semidiameter=semidia)
+              aperture=semidia)
          .add(Conic(-1 / 50.0, 0.0), typ='refr', material=materials.air,
               thickness=95.0))
     return OpticalSystem(lens, aperture=8.0, wavelengths=[0.55],

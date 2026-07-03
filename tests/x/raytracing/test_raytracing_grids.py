@@ -178,6 +178,17 @@ def test_spot_geometric_radius_ge_rms():
     assert np.all(spot_geometric_radius(grid) >= spot_rms_radius(grid))
 
 
+def test_spot_geometric_radius_matches_manual():
+    sys = _singlet_system()
+    grid = spot_diagrams(sys, sampling=Sampling.hex(nrings=5))
+    x = np.asarray(grid.x)
+    y = np.asarray(grid.y)
+    xc = x - np.nanmean(x, axis=2, keepdims=True)
+    yc = y - np.nanmean(y, axis=2, keepdims=True)
+    manual = np.sqrt(np.nanmax(xc * xc + yc * yc, axis=2))
+    assert np.array_equal(spot_geometric_radius(grid), manual)
+
+
 def test_spot_diagrams_default_sampling():
     sys = _singlet_system()
     grid = spot_diagrams(sys)

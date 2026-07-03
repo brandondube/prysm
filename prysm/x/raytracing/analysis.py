@@ -15,6 +15,7 @@ from .opt import (
     hopkins_eic_closing,
     reference_sphere_curvature,
     centroid_referenced_rms,
+    centroid_referenced_max,
     _pupil_center_chief_index,
 )
 from .paraxial import paraxial_image_distance
@@ -492,21 +493,17 @@ def distortion(system, fields=None, wavelength=None, *, epd=None,
     chief = Sampling.chief()
 
     # Compare the real chief ray to a tiny-field paraxial proxy.
-    angles = [field.angle_radians() for field in fields]
-    proxy_fields = [
-        Field(float(np.degrees(ax * paraxial_fraction)),
-              float(np.degrees(ay * paraxial_fraction)),
-              kind='angle', unit='deg')
-        for ax, ay in angles
-    ]
-    real = iter_trace_grid(system, fields, [wavelength], chief,
+    for i, field in enumerate(fields):
+        ax, ay = field.angle_radians()
+        proxy_field = Field(float(np.degrees(ax * paraxial_fraction)),
+                            float(np.degrees(ay * paraxial_fraction)),
+                            kind='angle', unit='deg')
+        real = trace_cell(system, field, wavelength, chief,
+                          epd=epd, pupil_z=pupil_z)
+        proxy = trace_cell(system, proxy_field, wavelength, chief,
                            epd=epd, pupil_z=pupil_z)
-    proxy = iter_trace_grid(system, proxy_fields, [wavelength], chief,
-                            epd=epd, pupil_z=pupil_z)
-    for rr, pr, (ax, ay) in zip(real, proxy, angles):
-        i = rr.i
-        real_xy[i] = rr.trace.P[-1, 0, :2]
-        proxy_xy = pr.trace.P[-1, 0, :2]
+        real_xy[i] = real.trace.P[-1, 0, :2]
+        proxy_xy = proxy.trace.P[-1, 0, :2]
 
         if distortion_type == 'linear-angle':
             paraxial_xy[i] = proxy_xy / paraxial_fraction
@@ -1009,15 +1006,6 @@ def spot_diagrams(system, fields=None, wavelengths=None, *,
                     x, y, valid, reference_xy)
 
 
-def _spot_centered(spot_grid):
-    """Centroid-referenced x, y of a SpotGrid, regardless of stored reference."""
-    x = np.asarray(spot_grid.x)
-    y = np.asarray(spot_grid.y)
-    xc = x - np.nanmean(x, axis=2, keepdims=True)
-    yc = y - np.nanmean(y, axis=2, keepdims=True)
-    return xc, yc
-
-
 def spot_rms_radius(spot_grid):
     """Centroid-referenced RMS spot radius per field and wavelength.
 
@@ -1045,8 +1033,8 @@ def spot_geometric_radius(spot_grid):
         entry [i, j] is fields[i] at wavelengths[j].
 
     """
-    xc, yc = _spot_centered(spot_grid)
-    return np.sqrt(np.nanmax(xc * xc + yc * yc, axis=2))
+    return centroid_referenced_max(np.asarray(spot_grid.x),
+                                   np.asarray(spot_grid.y), axis=2)
 
 
 # ---------- full-field displays ----------------------------------------------

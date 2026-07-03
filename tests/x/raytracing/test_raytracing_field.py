@@ -238,9 +238,9 @@ def _telecentric_slow(epd=3.0):
     mat = materials.ConstantMaterial(1.5168)
     c = 1.0 / 120.0
     probe = LensData()
-    (probe.add(Conic(c, 0.0), thickness=2.0, material=mat, semidiameter=8.0)
+    (probe.add(Conic(c, 0.0), thickness=2.0, material=mat, aperture=8.0)
           .add(Conic(-c, 0.0), thickness=120.0, material=materials.air,
-               semidiameter=8.0))
+               aperture=8.0))
     sp = OpticalSystem(probe, aperture=epd, fields=[Field(0, 0, kind='angle')],
                        wavelengths=[0.5875618], reference=0,
                        stop_index=1)   # first powered surface (index 0 is OBJECT)
@@ -248,9 +248,9 @@ def _telecentric_slow(epd=3.0):
                           stop_index=1).ffl
     # rows: OBJECT(0), front stop plane(1), conic1(2), conic2(3), IMAGE(4)
     lens = LensData()
-    (lens.add(Plane(), typ='eval', material=materials.air, semidiameter=epd / 2)
-         .add(Conic(c, 0.0), thickness=2.0, material=mat, semidiameter=10.0)
-         .add(Conic(-c, 0.0), thickness=120.0, material=materials.air, semidiameter=10.0))
+    (lens.add(Plane(), typ='eval', material=materials.air, aperture=epd / 2)
+         .add(Conic(c, 0.0), thickness=2.0, material=mat, aperture=10.0)
+         .add(Conic(-c, 0.0), thickness=120.0, material=materials.air, aperture=10.0))
     lens.rows[1].thickness = abs(ffl)
     sysT = OpticalSystem(lens, aperture=epd, fields=[Field(0, 0, kind='angle')],
                          wavelengths=[0.5875618], reference=0,

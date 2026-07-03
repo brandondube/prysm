@@ -24,11 +24,11 @@ _dispersive = materials.FormulaMaterial('DISP', lambda wvl: 1.5 + 0.01 / wvl)
 def _singlet(material=_n_bk7):
     lens = LensData()
     (lens.add(Conic(1 / 102.0, 0.0), thickness=6.0, material=material,
-              semidiameter=12.0)
+              aperture=12.0)
          .add(Conic(-1 / 102.0, 0.0), thickness=95.0,
-              material=materials.air, semidiameter=12.0)
+              material=materials.air, aperture=12.0)
          .add(Plane(), typ='eval', material=materials.air,
-              semidiameter=12.0))
+              aperture=12.0))
     return OpticalSystem(lens, aperture=20.0, fields=[0, 1.0],
                          wavelengths=list(FRAUNHOFER_LINES_UM.values()),
                          reference=1, stop_index=0)
@@ -47,7 +47,7 @@ def test_system_without_wavelengths_uses_kernel_default():
     # A system carrying no wavelengths resolves None to the kernel default
     # (0.6328); this default no longer lives in the free primitives.
     lens = LensData().add(Conic(1 / 102.0, 0.0), thickness=6.0,
-                          material=_n_bk7, semidiameter=12.0)
+                          material=_n_bk7, aperture=12.0)
     sys = OpticalSystem(lens)
     assert sys.wavelength(None) == pytest.approx(0.6328)
     assert sys.wavelength(0.5) == pytest.approx(0.5)
