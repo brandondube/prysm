@@ -89,32 +89,61 @@ def check(seed, over_plus, over_minus, h, rtol=1e-6, atol_P=1e-7,
 
 
 # ---------- per-perturbation validation -------------------------------------
-# each perturbation's propagated (dP, dS, dL) vs central FD; thickness fans out
-# to the downstream image plane, tilt carries looser FD-truncation tolerances.
 
-_H6, _H5 = 1e-6, 1e-5
-_SEED_CASES = [
-    ('curvature0', seed_curvature(0), dict(c0=BASE['c0'] + _H6), dict(c0=BASE['c0'] - _H6), _H6, {}),
-    ('curvature1', seed_curvature(1), dict(c1=BASE['c1'] + _H6), dict(c1=BASE['c1'] - _H6), _H6, {}),
-    ('conic0', seed_conic(0), dict(k0=BASE['k0'] + _H5), dict(k0=BASE['k0'] - _H5), _H5, {}),
-    ('conic1', seed_conic(1), dict(k1=BASE['k1'] + _H5), dict(k1=BASE['k1'] - _H5), _H5, {}),
-    ('despace1', seed_despace([(1, +1)]), dict(z1=BASE['z1'] + _H6), dict(z1=BASE['z1'] - _H6), _H6, {}),
-    ('thickness_fanout', seed_despace([(1, +1), (2, +1)]),
-     dict(z1=BASE['z1'] + _H6, zimg=BASE['zimg'] + _H6),
-     dict(z1=BASE['z1'] - _H6, zimg=BASE['zimg'] - _H6), _H6, {}),
-    ('decenter1_x', seed_decenter(1, 'x'), dict(x1=_H6), dict(x1=-_H6), _H6, {}),
-    ('decenter1_y', seed_decenter(1, 'y'), dict(y1=_H6), dict(y1=-_H6), _H6, {}),
-    ('tilt1_x', seed_tilt(1, 'x'), dict(tiltx1=_H6), dict(tiltx1=-_H6), _H6,
-     dict(rtol=1e-5, atol_P=1e-6, atol_S=1e-8, atol_L=1e-6)),
-    ('index_glass', seed_index(0), dict(ng=NG + _H6), dict(ng=NG - _H6), _H6, {}),
-]
+def test_curvature_surface0():
+    h = 1e-6
+    check(seed_curvature(0), dict(c0=BASE['c0'] + h), dict(c0=BASE['c0'] - h), h)
 
 
-@pytest.mark.parametrize('seed, over_plus, over_minus, h, tols',
-                         [c[1:] for c in _SEED_CASES],
-                         ids=[c[0] for c in _SEED_CASES])
-def test_seed_tangents_match_fd(seed, over_plus, over_minus, h, tols):
-    check(seed, over_plus, over_minus, h, **tols)
+def test_curvature_surface1():
+    h = 1e-6
+    check(seed_curvature(1), dict(c1=BASE['c1'] + h), dict(c1=BASE['c1'] - h), h)
+
+
+def test_conic_surface0():
+    h = 1e-5
+    check(seed_conic(0), dict(k0=BASE['k0'] + h), dict(k0=BASE['k0'] - h), h)
+
+
+def test_conic_surface1():
+    h = 1e-5
+    check(seed_conic(1), dict(k1=BASE['k1'] + h), dict(k1=BASE['k1'] - h), h)
+
+
+def test_despace_surface1_only():
+    """Despace: surface 1 moves in +z, image plane fixed."""
+    h = 1e-6
+    check(seed_despace([(1, +1)]),
+          dict(z1=BASE['z1'] + h), dict(z1=BASE['z1'] - h), h)
+
+
+def test_thickness_fan_out():
+    """Thickness t(0->1): surface 1 AND the downstream image plane move."""
+    h = 1e-6
+    check(seed_despace([(1, +1), (2, +1)]),
+          dict(z1=BASE['z1'] + h, zimg=BASE['zimg'] + h),
+          dict(z1=BASE['z1'] - h, zimg=BASE['zimg'] - h), h)
+
+
+def test_decenter_surface1_x():
+    h = 1e-6
+    check(seed_decenter(1, 'x'), dict(x1=h), dict(x1=-h), h)
+
+
+def test_decenter_surface1_y():
+    h = 1e-6
+    check(seed_decenter(1, 'y'), dict(y1=h), dict(y1=-h), h)
+
+
+def test_tilt_surface1_x():
+    h = 1e-6
+    check(seed_tilt(1, 'x'), dict(tiltx1=h), dict(tiltx1=-h), h,
+          rtol=1e-5, atol_P=1e-6, atol_S=1e-8, atol_L=1e-6)
+
+
+def test_index_glass():
+    h = 1e-6
+    check(seed_index(0), dict(ng=NG + h), dict(ng=NG - h), h)
 
 
 # ---------- local-FD fallback on base Shape ---------------------------------

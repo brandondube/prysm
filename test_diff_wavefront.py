@@ -79,26 +79,58 @@ def check(seed, over_plus, over_minus, h, rtol=1e-5, atol=1e-7,
     np.testing.assert_allclose(dW[:, 0], dW_fd, rtol=rtol, atol=atol)
 
 
-# curvature0, conic1, despace1, decenter1_y and index0 are validated in bulk by
-# test_all_seeds_one_trace below; these cases cover the remaining seed types.
-_H6, _H5 = 1e-6, 1e-5
-_SEED_CASES = [
-    ('curvature1', seed_curvature(1), dict(c1=BASE['c1'] + _H6), dict(c1=BASE['c1'] - _H6), _H6, {}),
-    ('conic0', seed_conic(0), dict(k0=BASE['k0'] + _H5), dict(k0=BASE['k0'] - _H5), _H5, {}),
-    ('thickness_fanout', seed_despace([(1, +1), (2, +1)]),
-     dict(z1=BASE['z1'] + _H6, zimg=BASE['zimg'] + _H6),
-     dict(z1=BASE['z1'] - _H6, zimg=BASE['zimg'] - _H6), _H6, {}),
-    ('decenter1_x', seed_decenter(1, 'x'), dict(x1=_H6), dict(x1=-_H6), _H6, {}),
-    ('tilt1_x', seed_tilt(1, 'x'), dict(tiltx1=_H6), dict(tiltx1=-_H6), _H6,
-     dict(rtol=1e-4, atol=1e-7)),
-]
+def test_curvature_surface0():
+    h = 1e-6
+    check(seed_curvature(0), dict(c0=BASE['c0'] + h), dict(c0=BASE['c0'] - h), h)
 
 
-@pytest.mark.parametrize('seed, over_plus, over_minus, h, tols',
-                         [c[1:] for c in _SEED_CASES],
-                         ids=[c[0] for c in _SEED_CASES])
-def test_seed_dW_matches_fd(seed, over_plus, over_minus, h, tols):
-    check(seed, over_plus, over_minus, h, **tols)
+def test_curvature_surface1():
+    h = 1e-6
+    check(seed_curvature(1), dict(c1=BASE['c1'] + h), dict(c1=BASE['c1'] - h), h)
+
+
+def test_conic_surface0():
+    h = 1e-5
+    check(seed_conic(0), dict(k0=BASE['k0'] + h), dict(k0=BASE['k0'] - h), h)
+
+
+def test_conic_surface1():
+    h = 1e-5
+    check(seed_conic(1), dict(k1=BASE['k1'] + h), dict(k1=BASE['k1'] - h), h)
+
+
+def test_despace_surface1_only():
+    h = 1e-6
+    check(seed_despace([(1, +1)]),
+          dict(z1=BASE['z1'] + h), dict(z1=BASE['z1'] - h), h)
+
+
+def test_thickness_fan_out():
+    h = 1e-6
+    check(seed_despace([(1, +1), (2, +1)]),
+          dict(z1=BASE['z1'] + h, zimg=BASE['zimg'] + h),
+          dict(z1=BASE['z1'] - h, zimg=BASE['zimg'] - h), h)
+
+
+def test_decenter_surface1_x():
+    h = 1e-6
+    check(seed_decenter(1, 'x'), dict(x1=h), dict(x1=-h), h)
+
+
+def test_decenter_surface1_y():
+    h = 1e-6
+    check(seed_decenter(1, 'y'), dict(y1=h), dict(y1=-h), h)
+
+
+def test_tilt_surface1_x():
+    h = 1e-6
+    check(seed_tilt(1, 'x'), dict(tiltx1=h), dict(tiltx1=-h), h,
+          rtol=1e-4, atol=1e-7)
+
+
+def test_index_glass():
+    h = 1e-6
+    check(seed_index(0), dict(ng=NG + h), dict(ng=NG - h), h)
 
 
 def test_chief_opd_tangent_is_zero():

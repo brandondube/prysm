@@ -121,22 +121,42 @@ SURF 3
 """
 
 
-def test_zmx_singlet_parses(refractiveindex_database):
+def test_zmx_parses_singlet_surface_count(refractiveindex_database):
     pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
-    # OBJECT stripped, S1, S2, IMAGE -> 4 surfaces (OBJECT is index 0)
+    # OBJECT stripped, S1, S2, IMAGE -> 3 surfaces in prescription
     assert len(pf.surfaces) == 4
     assert pf.source_format == 'zemax'
+
+
+def test_zmx_singlet_header_fields(refractiveindex_database):
+    pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
     assert pf.epd == 10.0
     np.testing.assert_allclose(pf.wavelengths, [0.55])
     assert pf.stop_index == 1  # Zemax SURF 1 -> our index 1 (OBJECT is index 0)
+
+
+def test_zmx_singlet_curvatures_match_input(refractiveindex_database):
+    pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
     assert isinstance(pf.surfaces[1].shape, Conic)
     assert pf.surfaces[1].params['c'] == 0.02
     assert pf.surfaces[2].params['c'] == -0.02
+
+
+def test_zmx_singlet_glass_resolves_to_bk7(refractiveindex_database):
+    pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
     np.testing.assert_allclose(float(pf.surfaces[1].material.n(0.587)), 1.5168, atol=1e-3)
+
+
+def test_zmx_singlet_image_is_eval_plane(refractiveindex_database):
+    pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
     img = pf.surfaces[-1]
     assert isinstance(img.shape, Plane)
     assert img.typ == STYPE_IMG
-    # vertex z's stack DISZ:  S1 at 0, S2 at 5, IMAGE at 5+95=100
+
+
+def test_zmx_singlet_vertex_z_stacks_disz(refractiveindex_database):
+    pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)
+    # vertex_z's:  S1 at 0, S2 at 5, IMAGE at 5+95=100
     assert pf.surfaces[1].P[2] == 0.0
     assert pf.surfaces[2].P[2] == 5.0
     assert pf.surfaces[3].P[2] == 100.0
@@ -454,21 +474,34 @@ GO
 """
 
 
-def test_seq_singlet_parses(refractiveindex_database):
+def test_seq_singlet_surface_count(refractiveindex_database):
     pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
-    # SO stripped, two real surfaces, SI -> 4 surfaces (two refr + img)
+    # SO is stripped, two real surfaces, SI -> 3 surfaces (two refr + img)
     assert len(pf.surfaces) == 4
     assert pf.source_format == 'codev'
-    # a plain S with no RDX/CUX/CCX stays a conic, not a biconic
-    assert isinstance(pf.surfaces[1].shape, Conic)
+
+
+def test_seq_singlet_curvatures_match_radii(refractiveindex_database):
+    pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
     np.testing.assert_allclose(pf.surfaces[1].params['c'], 1 / 50.0)
     np.testing.assert_allclose(pf.surfaces[2].params['c'], -1 / 50.0)
+
+
+def test_seq_singlet_glass_resolves(refractiveindex_database):
+    pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
     np.testing.assert_allclose(float(pf.surfaces[1].material.n(0.587)),
                                1.5168, atol=1e-3)
+
+
+def test_seq_image_is_eval_plane(refractiveindex_database):
+    pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
     img = pf.surfaces[-1]
     assert isinstance(img.shape, Plane)
     assert img.typ == STYPE_IMG
-    # vertex z's skip the object thickness:  S1 at 0, S2 at 5, IMAGE at 100
+
+
+def test_seq_vertex_z_skips_object_thickness(refractiveindex_database):
+    pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
     assert pf.surfaces[1].P[2] == 0.0
     assert pf.surfaces[2].P[2] == 5.0
     assert pf.surfaces[3].P[2] == 100.0
@@ -906,6 +939,12 @@ def test_seq_biconic_built_when_x_axis_present():
     np.testing.assert_allclose(p['c_x'], 1 / 50.0)
     assert p['k_y'] == -1.0
     assert p['k_x'] == -0.5
+
+
+def test_seq_no_x_axis_stays_conic(refractiveindex_database):
+    """Without RDX/CUX/CCX, S is just a conic, not a biconic."""
+    pf = read_seq(_SEQ_SINGLET, _is_text=True, database=refractiveindex_database)
+    assert isinstance(pf.surfaces[1].shape, Conic)
 
 
 # ============================================================================

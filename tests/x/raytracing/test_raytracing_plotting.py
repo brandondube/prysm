@@ -267,42 +267,21 @@ def test_plot_wave_aberration_fan_can_use_nm():
         plt.close(fig)
 
 
-def test_plot_wave_aberration_fan_can_remove_linear_fit():
+def test_plot_wave_aberration_fan_detrend():
     coord = np.asarray([-1., 0., 1.])
     opd = 0.5 * coord + 0.125 * coord * coord + 0.25
-
-    fig, ax = plot_wave_aberration_fan(
-        coord, opd, wavelength=1, detrend=True,
-    )
+    detrended = [1 / 24, -1 / 12, 1 / 24]
+    # detrend removes the piston+tilt fit; on by default and via detrend=True
+    for kw in (dict(wavelength=1), dict(wavelength=1, detrend=True)):
+        fig, ax = plot_wave_aberration_fan(coord, opd, **kw)
+        try:
+            np.testing.assert_allclose(ax.lines[0].get_ydata(), detrended)
+        finally:
+            plt.close(fig)
+    # detrend=False keeps the raw OPD
+    fig, ax = plot_wave_aberration_fan(coord, opd, wavelength=1, detrend=False)
     try:
-        line = ax.lines[0]
-        np.testing.assert_allclose(line.get_ydata(), [1 / 24, -1 / 12, 1 / 24])
-    finally:
-        plt.close(fig)
-
-
-def test_plot_wave_aberration_fan_detrends_by_default():
-    coord = np.asarray([-1., 0., 1.])
-    opd = 0.5 * coord + 0.125 * coord * coord + 0.25
-
-    fig, ax = plot_wave_aberration_fan(coord, opd, wavelength=1)
-    try:
-        line = ax.lines[0]
-        np.testing.assert_allclose(line.get_ydata(), [1 / 24, -1 / 12, 1 / 24])
-    finally:
-        plt.close(fig)
-
-
-def test_plot_wave_aberration_fan_can_keep_linear_fit():
-    coord = np.asarray([-1., 0., 1.])
-    opd = 0.5 * coord + 0.125 * coord * coord + 0.25
-
-    fig, ax = plot_wave_aberration_fan(
-        coord, opd, wavelength=1, detrend=False,
-    )
-    try:
-        line = ax.lines[0]
-        np.testing.assert_allclose(line.get_ydata(), opd)
+        np.testing.assert_allclose(ax.lines[0].get_ydata(), opd)
     finally:
         plt.close(fig)
 
