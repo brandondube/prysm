@@ -34,7 +34,7 @@ def _parabola_mirror(kappa=-1.0):
     """
     c = -1 / 80.0
     f = abs(1.0 / (2.0 * c))  # 40
-    # OBJECT/IMAGE endpoints implicit (ADR-0006); the mirror is row 1.
+    # mirror is row 1
     lens = LensData()
     lens.add(Conic(c, kappa), typ='refl', thickness=f)
     return OpticalSystem(lens, aperture=10.0, wavelengths=[0.55e-3])

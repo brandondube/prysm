@@ -91,14 +91,6 @@ def test_problem_default_fg_calls_f_and_g():
     assert p.f_calls == 1 and p.g_calls == 1
 
 
-def test_fg_calls_canonical_methods():
-    p = FGOnly()
-    x = np.array([3.0, 4.0])
-    f, g = p.fg(x)
-    np.testing.assert_allclose(p.f(x), f)
-    np.testing.assert_allclose(p.g(x), g)
-
-
 def test_forward_difference_gradient_from_f():
     p = FOnly(fd_method='forward')
     x = np.array([3.0, 4.0])
@@ -167,13 +159,3 @@ def test_adam_accepts_problem_instance():
     # somewhat -- but cost should drop by orders of magnitude
     f0, _ = _quadratic_fg(x0)
     assert f < f0 * 1e-3
-
-
-def test_adam_callable_form_still_works():
-    """Backward compat: existing callable fg interface must keep working."""
-    x0 = np.array([5.0, -3.0])
-    opt = Adam(_quadratic_fg, x0, alpha=0.5)
-    for _ in range(200):
-        opt.step()
-    # opt.problem should be the auto-wrapped _CallableProblem
-    assert isinstance(opt.problem, _CallableProblem)

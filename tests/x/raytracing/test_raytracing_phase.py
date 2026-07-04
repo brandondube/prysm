@@ -39,7 +39,7 @@ def test_linear_grating_uses_only_in_plane_components():
     np.testing.assert_allclose(g3.phase(x, y), g2.phase(x, y))
 
 
-# ---------- first-class grating objects (ADR-0011, no coercion) -------------
+# ---------- first-class grating objects -------------------------------------
 
 def test_surface_grating_property_requires_phase_function():
     """Surface.grating accepts a PhaseFunction or None and rejects tuples."""

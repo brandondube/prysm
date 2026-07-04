@@ -1,20 +1,4 @@
-"""compensators -- SVD/least-squares projection vs FD re-optimization.
-
-The compensated wavefront-differential model projects the nominal wavefront and
-every tolerance map onto the orthogonal complement of the compensator
-derivative maps (one extra column per compensator in the same nominal trace).
-That is the linear-least-squares analog of re-solving the back focus per
-perturbation, so it is validated against an FD that actually re-optimizes the
-compensator DOF -- here the image-gap despace (focus) -- by Gauss-Newton on the
-real analysis.wavefront RMS for the nominal and the +/- perturbed systems.
-
-The test system is run with a small off-axis field (so the exit pupil is well
-defined, unlike the on-axis chief-parallel-to-axis degeneracy) and its field
-tilt removed, with the image plane deliberately defocused so focus is a strong
-but small compensator -- the small-degradation regime where the linearized
-wavefront-error quadratic compensation and a true nonlinear re-optimization
-agree.
-"""
+"""Compensator projection vs finite-difference re-optimization."""
 import numpy as np
 import pytest
 
@@ -45,7 +29,7 @@ _air = materials.air
 
 
 def singlet():
-    # rows: OBJECT(0), conic1(1), conic2(2), IMAGE(3) (ADR-0006)
+    # rows: OBJECT(0), conic1(1), conic2(2), IMAGE(3)
     ld_data = LensData()
     (ld_data.add(Conic(1 / 24.0, 0.0), typ='refr', thickness=5.0, material=_glass)
             .add(Conic(-1 / 80.0, 0.0), typ='refr', thickness=20.0, material=_air))

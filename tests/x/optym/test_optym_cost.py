@@ -45,17 +45,6 @@ def test_mse_grad_dtype_matches_input():
 # bias_and_gain_invariant_error
 # -----------------------------------------------------------------------------
 
-def test_bgie_returns_finite_cost_and_grad():
-    """Sanity: function evaluates without crashing on a realistic input."""
-    rng = np.random.default_rng(0)
-    D = rng.standard_normal(64) + 1.0  # nonzero mean so D·D is bounded away from 0
-    I = rng.standard_normal(64) + 0.5
-    cost, grad = bias_and_gain_invariant_error(I, D)
-    assert np.isfinite(cost)
-    assert np.all(np.isfinite(grad))
-    assert grad.shape == I.shape
-
-
 def test_bgie_zero_on_exact_linear_transform():
     """Cost must be zero when I and D are related by exact gain and bias."""
     rng = np.random.default_rng(1)

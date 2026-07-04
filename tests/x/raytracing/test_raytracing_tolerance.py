@@ -19,7 +19,7 @@ _n_glass = materials.ConstantMaterial(1.5)
 # ---------- helpers --------------------------------------------------------
 
 def _spherical_singlet():
-    # OBJECT/IMAGE endpoints implicit (ADR-0006); the conics are rows 1 and 2.
+    # conics are rows 1 and 2
     lens = LensData()
     (lens.add(Conic(1 / 50.0, 0.0), typ='refr', thickness=5.0,
               material=_n_glass)

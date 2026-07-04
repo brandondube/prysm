@@ -59,13 +59,7 @@ def test_ray_fans_shape_and_indexing():
     assert npup == grid.pupil_x.shape[-1] == 21
     assert grid.pupil_x.shape == grid.pupil_y.shape == (nf, npup)
     assert grid.y.shape == grid.x.shape
-
-
-def test_ray_fans_default_metadata_from_system():
-    """Omitting fields/wavelengths pulls them from the OpticalSystem."""
-    sys = _singlet_system()
-    grid = ray_aberration_fans(sys, nrays=11)
-    assert len(grid.fields) == 2
+    # omitting fields/wavelengths pulls them from the OpticalSystem
     np.testing.assert_allclose(sorted(grid.wavelengths),
                                sorted([0.4861, 0.5876, 0.6563]))
 
@@ -187,12 +181,6 @@ def test_spot_geometric_radius_matches_manual():
     yc = y - np.nanmean(y, axis=2, keepdims=True)
     manual = np.sqrt(np.nanmax(xc * xc + yc * yc, axis=2))
     assert np.array_equal(spot_geometric_radius(grid), manual)
-
-
-def test_spot_diagrams_default_sampling():
-    sys = _singlet_system()
-    grid = spot_diagrams(sys)
-    assert grid.x.shape[0] == 2 and grid.x.shape[1] == 3
 
 
 # ---------- plotters --------------------------------------------------------

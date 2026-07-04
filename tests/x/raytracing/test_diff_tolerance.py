@@ -1,17 +1,4 @@
-"""tolerance.Perturbation -> DiffSeed mapping vs FD sensitivity_table.
-
-Validates seeds_from_perturbations: each lens-design tolerance type (curvature,
-conic, thickness fan-out, tilt, decenter) is mapped onto a
-LensData through tolerance.Perturbation slots, and the wavefront-differential
-prediction of d(RMS WFE)/dtau is checked against central finite differences of
-the same WavefrontRMS merit via tolerance.sensitivity_table.
-
-The WD sensitivity comes from one nominal differential trace:
-    RMS = sqrt(mean(W0**2)),  d(RMS)/dtau = mean(W0 * dW/dtau) / RMS
-with W0 the nominal OPD and dW the per-tolerance map from
-wavefront_with_tangents.  Off-axis fields are used so the nominal wavefront has
-structure and every tolerance has a non-vanishing first-order sensitivity.
-"""
+"""Perturbation-to-DiffSeed mapping vs FD sensitivity_table."""
 import numpy as np
 import pytest
 
@@ -51,10 +38,7 @@ def _place_image(ld, gap_row):
 
 
 def singlet():
-    """Axial thick singlet, image plane at the paraxial focus.
-
-    Rows: OBJECT(0), conic1(1), conic2(2), IMAGE(3) (ADR-0006).
-    """
+    """Axial thick singlet, image plane at the paraxial focus."""
     lens = LensData()
     (lens.add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
          .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air))
@@ -63,10 +47,7 @@ def singlet():
 
 
 def singlet_cb():
-    """Same singlet with a basic coordinate break (nominal null) before S1.
-
-    Rows: OBJECT(0), conic1(1), coordbreak(2), conic2(3), IMAGE(4).
-    """
+    """Same singlet with a basic coordinate break before S1."""
     lens = LensData()
     (lens.add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
          .add_coordbreak(decenter=(0., 0., 0.), tilt=(0., 0., 0.),
@@ -86,13 +67,7 @@ def singlet_solved():
 
 
 def bundle(ld):
-    """Diagonal off-axis collimated 2D grid, launched in front of the lens.
-
-    The diagonal field gives the nominal wavefront both x and y structure, so
-    decenter / tilt about either axis has a non-vanishing first-order RMS
-    sensitivity (an axis-aligned field would null the orthogonal component by
-    symmetry).
-    """
+    """Diagonal off-axis collimated 2D grid."""
     return launch(ld, Field(2.5, 2.5), WVL, Sampling.rect(n=7),
                   epd=10.0, pupil_z=-5.0)
 
@@ -110,11 +85,7 @@ def wd_rms_sensitivities(ld, P, S, perturbations):
 
 
 def fd_rms_sensitivities(ld, P, S, perturbations):
-    """FD sensitivity_table of the WavefrontRMS merit (the validation gate).
-
-    Built on the operand's value over the exact hand bundle, frozen across
-    the FD re-traces -- the tangent bundle differentiates these rays too.
-    """
+    """FD sensitivity_table of the WavefrontRMS merit."""
     op = WavefrontRMS()
 
     def merit(prescription):

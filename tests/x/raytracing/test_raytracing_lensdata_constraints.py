@@ -13,8 +13,7 @@ _air = materials.air
 
 
 def make_triplet():
-    # OBJECT/IMAGE endpoints are implicit (ADR-0006); the six conics are rows
-    # 1..6, the IMAGE plane is row 7.
+    # the six conics are rows 1..6; the image plane is row 7
     ld = LensData()
     radii = [50.0, -80.0, 40.0, -40.0, 80.0, -50.0]
     for i, r in enumerate(radii):

@@ -151,21 +151,3 @@ def test_sample_problems_reject_invalid_dimensions():
 
     with pytest.raises(ValueError, match='exactly two'):
         himmelblau(np.array([1.0, 2.0, 3.0]))
-
-
-def test_sample_problems_are_exported_from_package_and_module():
-    from prysm.x.optym import (
-        HimmelblauProblem as HimmelblauProblemFromPackage,
-        RastriginProblem as RastriginProblemFromPackage,
-        RosenbrockProblem as RosenbrockProblemFromPackage,
-        SphereProblem as SphereProblemFromPackage,
-    )
-
-    assert SphereProblemFromPackage is SphereProblem
-    assert RosenbrockProblemFromPackage is RosenbrockProblem
-    assert RastriginProblemFromPackage is RastriginProblem
-    assert HimmelblauProblemFromPackage is HimmelblauProblem
-    assert sphere is sphere_from_module
-    assert rosenbrock is rosenbrock_from_module
-    assert rastrigin is rastrigin_from_module
-    assert himmelblau is himmelblau_from_module

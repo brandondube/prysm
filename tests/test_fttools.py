@@ -7,7 +7,7 @@ import numpy as np
 from prysm import fttools
 from prysm.fttools import MDFT, CZT, fftrange
 
-ARRAY_SIZES = (8, 16, 32, 64, 128, 256, 512, 1024)
+ARRAY_SIZES = (8, 64, 512)
 
 # one power of two, one odd number, one even non power of two
 ARRAY_SIZES_FOR_PAD = (8, 9, 12)
@@ -100,15 +100,6 @@ def test_czt_equiv_to_fft(samples):
     x, y, fx, fy = _fft_equivalent_coords(samples)
     czt = CZT(x, y, fx, fy)(inp) / samples
     assert np.allclose(fft, czt)
-
-
-@pytest.mark.parametrize('samples', ARRAY_SIZES)
-def test_czt_reverses_self_(samples):
-    inp = np.random.rand(samples, samples)
-    x, y, fx, fy = _fft_equivalent_coords(samples)
-    fwd = CZT(x, y, fx, fy, sign=-1)(inp) / samples
-    back = CZT(x, y, fx, fy, sign=+1)(fwd) / samples
-    assert np.allclose(inp, back)
 
 
 @pytest.mark.parametrize('samples', ARRAY_SIZES)

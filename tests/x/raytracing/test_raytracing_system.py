@@ -22,9 +22,7 @@ from prysm.x.raytracing.io._common import warn_vignetting_ignored
 
 
 def _singlet(aperture=ApertureSpec.epd(20.0), with_object=None):
-    # OBJECT/IMAGE endpoints are implicit (ADR-0006).  A finite object lives on
-    # the OBJECT row (distance + object-space medium); the first powered surface
-    # is row 1 in either conjugate, so the stop stays at index 1.
+    # first powered surface is row 1 in either conjugate
     ld = LensData()
     if with_object is not None:
         ld.object_row.material = materials.ConstantMaterial(with_object)

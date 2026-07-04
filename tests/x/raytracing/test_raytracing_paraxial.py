@@ -163,9 +163,7 @@ def test_efl_thin_lens_matches_lensmakers():
 
 
 def test_paraxial_primitive_requires_resolved_wavelength():
-    # ADR-0001: wavelength resolution lives on OpticalSystem; the free function
-    # is a pure primitive that raises on a None wavelength rather than
-    # silently defaulting.
+    # Free primitives require resolved scalar metadata.
     ld = LensData().add(Conic(1 / 50.0, 0.0),
                         typ='refr', material=materials.ConstantMaterial(1.5))
     with pytest.raises(ValueError, match='wavelength must be resolved'):
@@ -191,7 +189,6 @@ def test_object_index_comes_from_object_surface_material():
     c = 1 / 50.0
 
     def _lens(n_obj):
-        # the object-space medium lives on the OBJECT endpoint row (ADR-0006)
         ld = LensData()
         ld.object_row.material = materials.ConstantMaterial(n_obj)
         ld.add(Conic(c, 0.0), typ='refr', material=materials.ConstantMaterial(1.5))

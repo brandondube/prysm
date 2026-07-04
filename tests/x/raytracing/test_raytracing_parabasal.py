@@ -229,9 +229,7 @@ def test_parabasal_stop_index_out_of_range_raises():
 
 
 def test_first_order_bare_surfaces_defaults_to_on_axis():
-    # The documented power-user path: a bare compiled surface list with no
-    # explicit field must default to on-axis rather than raising (the field=0
-    # default would hit ADR-0009's bare-scalar rejection).
+    # Bare compiled surfaces with no explicit field default to on-axis.
     sys = _singlet_system()
     surfs = sys.to_surfaces()
     fo = first_order(surfs, wavelength=0.55, epd=20, stop_index=1)
@@ -252,7 +250,7 @@ def test_system_field_indices_are_authoritative():
     fo_literal = first_order(sys, field=(0.0, 1.0), wavelength=0.55, epd=20)
     assert fo_literal.field.hy == pytest.approx(1.0)
 
-    # ADR-0009: a bare float is neither an index nor a literal field.
+    # A bare float is neither an index nor a literal field.
     with pytest.raises(TypeError):
         first_order(sys, field=1.0, wavelength=0.55, epd=20)
 

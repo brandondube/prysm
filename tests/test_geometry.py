@@ -67,9 +67,7 @@ def test_truecircle_correct_area():
 
 
 def test_truecircle_physical_grid_area_and_registration():
-    # on a physical (non-normalized) grid the historical 2/samples pitch is
-    # wrong; passing dx anti-aliases the edge correctly. area is right to a
-    # fraction of an edge pixel and the mask stays centered (no half-pixel shift)
+    # physical-grid dx anti-aliases the edge correctly and stays centered
     import numpy as np
     dx = 0.05
     x, y = coordinates.make_xy_grid(256, dx=dx)
@@ -87,7 +85,7 @@ def test_truecircle_physical_grid_area_and_registration():
 
 
 def test_truecircle_normalized_grid_matches_legacy():
-    # dx=None reproduces the historical normalized-grid behavior bit-for-bit
+    # dx=None reproduces the normalized-grid default bit-for-bit
     import numpy as np
     x, y = coordinates.make_xy_grid(256, diameter=2)
     r = np.hypot(x, y)

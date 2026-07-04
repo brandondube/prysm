@@ -1,13 +1,4 @@
-"""Tests for prysm.x.raytracing.sensitivity — merit Jacobian over a system's
-dense free vector (`merit_jacobian_free`).
-
-The Problem-level wiring (FD vs numeric merit, restore, autograd gating through
-`Problem.jacobian`) lives in test_raytracing_lensdata_design.py; this module
-pins `merit_jacobian_free` directly against analytic paraxial derivatives.
-
-DOFs live on the system (ADR-0004), so each fixture wraps its LensData in an
-OpticalSystem and drives the free vector through sys.opt.
-"""
+"""Merit Jacobian over an OpticalSystem dense free vector."""
 import numpy as np
 import pytest
 
@@ -96,8 +87,7 @@ def test_fd_jacobian_unknown_method_raises():
 # ---------- autograd backend gating ----------
 
 def test_autograd_method_requires_torch_backend():
-    """With the default numpy backend, asking for 'autograd' must error
-    helpfully rather than silently producing nonsense."""
+    """With numpy backend, method='autograd' must error helpfully."""
     ld = LensData().add(
         Conic(1 / 50.0, 0.0), typ='refr', material=materials.ConstantMaterial(1.5),
         thickness=0.0)

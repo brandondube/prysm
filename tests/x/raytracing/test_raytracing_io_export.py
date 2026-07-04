@@ -12,7 +12,7 @@ from prysm.x.raytracing.surfaces import Conic, EvenAsphere, Plane
 
 
 def make_refractive():
-    # OBJECT/IMAGE endpoints are implicit (ADR-0006).
+    # OBJECT/IMAGE endpoints are implicit.
     lens = LensData()
     (lens.add(Conic(1 / 50.0, 0.0), thickness=5.0, material=materials.air)
          .add(Conic(-1 / 50.0, -0.5), thickness=95.0, material=materials.air))

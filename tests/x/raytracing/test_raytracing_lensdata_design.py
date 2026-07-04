@@ -19,7 +19,7 @@ n_bk7 = materials.ConstantMaterial(1.5168, name='N-BK7')
 
 
 def make_singlet(image_gap=95.0):
-    # OBJECT/IMAGE endpoints implicit (ADR-0006); the conics are rows 1 and 2.
+    # conics are rows 1 and 2
     lens = LensData()
     (lens.add(Conic(1 / 102.0, 0.0), thickness=6.0, material=n_bk7,
               aperture=12.0)

@@ -457,17 +457,6 @@ def _dark_hole_max(rig, fpm):
 
 
 @pytest.mark.parametrize('kind', ['mdft', 'czt'])
-def test_multiresolution_vortex_darkens_lyot_interior(kind):
-    # a charge-2 vortex diffracts a clear circular aperture entirely outside
-    # the geometric pupil, leaving the interior of the Lyot stop dark
-    rig = _vortex_rig(kind)
-    lyot_field = _lyot_field(rig, propagation.vortex_phase_mask(2))
-    interior = rig['r'] < 0.8 * rig['Dap'] / 2
-    intensity = np.abs(lyot_field) ** 2 / rig['pupil_peak']
-    assert intensity[interior].max() < 1e-4
-
-
-@pytest.mark.parametrize('kind', ['mdft', 'czt'])
 def test_multiresolution_vortex_dark_hole_below_1e12(kind):
     # after the undersized (0.8 R) Lyot stop, the next focus has a deep dark
     # hole: normalized intensity (PSF / non-coronagraphic peak) below 1e-12

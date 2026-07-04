@@ -1,11 +1,4 @@
-"""Characterization net for the x/materials unification refactor.
-
-These tests pin the externally observable behavior of one representative of
-each data source: golden n/k values, the per-source page_info dict, and
-__all__ resolvability.  They are the gate the unification phases must not move
-(except the deliberate RII page_info re-baseline in Phase 5, which gets its own
-characterization alongside the rewritten rii.py).
-"""
+"""Characterization tests for x/materials data-source behavior."""
 
 from pathlib import Path
 

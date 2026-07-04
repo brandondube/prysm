@@ -39,8 +39,7 @@ def make_singlet_lensdata(image_gap=95.0):
 
 
 def make_singlet_hand(image_gap=95.0):
-    # OBJECT, ...powered, IMAGE (ADR-0006): OBJECT sits coincident with the
-    # first powered surface at z=0 for an infinite conjugate.
+    # OBJECT sits coincident with the first powered surface at z=0.
     return [
         Surface(shape=Plane(), interaction='object', P=[0, 0, 0.0],
                 material=materials.air),
@@ -148,8 +147,7 @@ def test_material_object_identity_is_preserved():
 
 
 def test_add_rejects_bare_material_forms():
-    # ADR-0002: materials are MaterialProtocol objects -- a bare number, string,
-    # or lambda raises at add() rather than detonating mid-trace.
+    # bare numbers, strings, and lambdas are not MaterialProtocol objects.
     for bad in (1.5, 'N-BK7', lambda wvl: 1.5):
         with pytest.raises(TypeError, match='MaterialProtocol'):
             LensData().add(Conic(0.0, 0.0), thickness=1.0, material=bad)

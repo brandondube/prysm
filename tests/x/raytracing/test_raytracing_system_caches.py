@@ -15,7 +15,7 @@ from prysm.x.raytracing.system import ApertureSpec as _ApertureSpec
 
 
 def _doublet(aperture=None):
-    # OBJECT/IMAGE endpoints implicit (ADR-0006); first powered surface is row 1.
+    # first powered surface is row 1
     ld = (LensData()
           .add(Sphere(1 / 61.47), thickness=6.0,
                material=materials.ConstantMaterial(1.5168), aperture=12.0)

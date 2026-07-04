@@ -1,11 +1,4 @@
-"""dOPD/dtau maps vs central FD of analysis.wavefront.
-
-Validates wavefront_with_tangents' per-tolerance wavefront-derivative maps
-dW_p = dOPD/dtau_p against central finite differences of analysis.wavefront,
-for every perturbation type.  This exercises the moving reference sphere: both
-the chief image point C and the auto-located exit pupil P_xp shift with the
-perturbation, and that motion is differentiated in closed form.
-"""
+"""dOPD/dtau maps vs central FD of analysis.wavefront."""
 import numpy as np
 import pytest
 

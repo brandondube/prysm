@@ -19,8 +19,7 @@ n_bk7 = materials.ConstantMaterial(1.5168, name='N-BK7')
 
 
 def make_singlet(c0=1 / 102.0, c1=-1 / 102.0, gap=95.0):
-    # OBJECT/IMAGE endpoints are implicit (ADR-0006); the two conics are rows
-    # 1 and 2, and the IMAGE plane is always present.
+    # conics are rows 1 and 2
     lens = LensData()
     (lens.add(Conic(c0, 0.0), thickness=6.0, material=n_bk7,
               aperture=10.0)
@@ -103,7 +102,7 @@ def test_image_solve_places_eval_at_paraxial_image():
 
 
 def test_image_solve_preserves_leading_object_medium():
-    # the object-space medium now lives on the OBJECT row (ADR-0006)
+    # object-space medium on the OBJECT row
     lens = LensData()
     lens.object_row.material = materials.ConstantMaterial(1.33)
     lens.object_row.thickness = 40.0

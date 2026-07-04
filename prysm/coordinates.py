@@ -20,8 +20,10 @@ def optimize_xy_separable(x, y):
 
     Returns
     -------
-    x, y
-        optimized arrays (x as 1D row, y as 1D column)
+    x : ndarray
+        optimized 1D row.
+    y : ndarray
+        optimized 1D column.
 
     Notes
     -----

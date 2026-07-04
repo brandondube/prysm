@@ -34,7 +34,7 @@ def _singlet(material=_n_bk7):
                          reference=1, stop_index=0)
 
 
-# ---------- system-level metadata resolution (ADR-0001) --------------------
+# ---------- system-level metadata resolution --------------------------------
 
 def test_system_wavelength_defaults_and_resolves():
     # Wavelength resolution lives on OpticalSystem: None -> reference.
@@ -63,8 +63,7 @@ def test_system_epd_and_stop_defaults():
 # ---------- paraxial --------------------------------------------------------
 
 def test_efl_defaults_wavelength_to_reference():
-    # Default-wavelength resolution lives on OpticalSystem (ADR-0001); the
-    # system resolves None to the reference before calling the primitive.
+    # OpticalSystem resolves None to the reference before calling the primitive.
     sys = _singlet()
     assert sys._ynu_first_order().efl == pytest.approx(
         effective_focal_length(sys.to_surfaces(),

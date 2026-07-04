@@ -1,17 +1,4 @@
-"""surface irregularity (CYN/CYD) tangents + Zernike-coef sensitivity.
-
-Two stretch deliverables of the wavefront-differential notes:
-
-- seed_irregularity models a Zernike surface departure delta z = a Z_n^m(x/R,y/R)
-  as an added sag term with analytic partials (sags.zernike_irregularity_partials).
-  Its dOPD/da map is validated against central FD of analysis.wavefront with the
-  perturbed surface built as an actual Zernike shape carrying +/- h of that mode
-  -- so the analytic seed is checked against the real kernel, no special casing.
-- WavefrontDifferential.zernike_sensitivity fits the nominal wavefront and each
-  per-tolerance map onto a Zernike basis (reusing wavefront_zernike_fit); the
-  linear least-squares fit makes the fit of dW_p exactly dc/dtau_p, validated
-  against central FD of wavefront_zernike_fit(wavefront(perturbed)).
-"""
+"""Surface-irregularity tangents and Zernike-coefficient sensitivity."""
 import numpy as np
 import pytest
 
@@ -160,7 +147,7 @@ _air = materials.air
 
 def singlet():
     # rows: OBJECT(0), conic1(1), conic2(2), IMAGE(3); compiled surfaces are the
-    # same index sequence (ADR-0006).
+    # same row index sequence.
     ld_data = LensData()
     (ld_data.add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
             .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air))

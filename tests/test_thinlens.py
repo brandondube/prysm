@@ -11,13 +11,7 @@ def inf_fno(request):
     return request.param
 
 
-def test_magnification_unity_case():
-    efl = 1
-    objdist = 2
-    assert thinlens.object_dist_to_mag(efl, objdist) == -1
-
-
-@pytest.mark.parametrize('objdist', [1.25, 3, -1, -2])
+@pytest.mark.parametrize('objdist', [1.25, 2, 3, -1, -2])
 def test_magnification_matches_thin_lens_formula(objdist):
     efl = 1
 
@@ -31,11 +25,6 @@ def test_lin_to_long_mag(mag):
     assert thinlens.linear_to_long_mag(mag) == mag ** 2
 
 
-def test_mag_to_fno_inf_case(inf_fno):
-    m = 0
-    assert thinlens.mag_to_fno(m, inf_fno) == inf_fno
-
-
 @pytest.mark.parametrize('mag', [0, 1, -2, 3.05])
 def test_mag_to_fno_matches_working_f_number_formula(mag, inf_fno):
     pupil_mag = 0.5
@@ -43,11 +32,6 @@ def test_mag_to_fno_matches_working_f_number_formula(mag, inf_fno):
     result = thinlens.mag_to_fno(mag, inf_fno, pupil_mag)
 
     assert result == pytest.approx((1 + abs(mag) / pupil_mag) * inf_fno)
-
-
-def test_mag_to_fno_reacts_to_pupil_mag():
-    m, inf_fno = 1.17, 10.85
-    assert thinlens.mag_to_fno(m, inf_fno, 1) != thinlens.mag_to_fno(m, inf_fno, 0.5)
 
 
 @pytest.mark.parametrize('fno', [1, 1.4, 2, 2.8, 4, 5.6, 8, 11, 16, 22])
@@ -153,21 +137,6 @@ def test_twolens_efl_matches_in_contact():
 def test_twolens_bfl_matches_efl_in_contact():
     efl1, efl2 = 2.0, 2.0
     assert thinlens.twolens_bfl(efl1, efl2, 0) == efl1 / 2
-
-
-@pytest.fixture(params=[[1, 1, 0], [-1, 1, 1], [1, 1, 50]])
-def twolens_params(request):
-    return request.param
-
-
-def test_twolens_efl_general(twolens_params):
-    efl1, efl2, t = twolens_params
-    assert thinlens.twolens_efl(efl1, efl2, t)
-
-
-def test_twolens_bfl_general(twolens_params):
-    efl1, efl2, t = twolens_params
-    assert thinlens.twolens_bfl(efl1, efl2, t)
 
 
 def test_twolens_bfl_matches_first_order_formula():

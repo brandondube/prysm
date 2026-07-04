@@ -1,18 +1,4 @@
-"""the wavefront-differential front end (the wavefront-error quadratic).
-
-Validates wavefront_differential / WavefrontDifferential built from one nominal
-differential trace:
-
-- the assembled quadratic (C, B, Gram) reproduces design.WavefrontRMS' nominal
-  RMS and the FD sensitivity_table slope;
-- rms_at(p, T) tracks the re-traced RMS and beats the pure-linear extrapolation
-  at finite T (the point of the quadratic);
-- inverse_sensitivity round-trips against rms_at;
-- expected_rms is the exact independent-zero-mean roll-up of the quadratic;
-- fast_monte_carlo matches the slow re-tracing tolerance.monte_carlo in
-  distribution (same seed, same perturbations) -- the headline deliverable;
-- cumulative_probability is a proper empirical CDF.
-"""
+"""WavefrontDifferential front-end tests."""
 import numpy as np
 import pytest
 
@@ -51,7 +37,7 @@ def _place_image(ld, gap_row):
 
 
 def singlet():
-    # OBJECT/IMAGE endpoints implicit (ADR-0006); conics are rows 1, 2.
+    # conics are rows 1 and 2
     lens = LensData()
     (lens.add(Conic(1 / 30.0, 0.0), typ='refr', thickness=4.0, material=_glass)
          .add(Conic(-1 / 30.0, 0.0), typ='refr', thickness=20.0, material=_air))

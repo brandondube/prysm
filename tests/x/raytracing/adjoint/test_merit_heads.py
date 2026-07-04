@@ -1,17 +1,4 @@
-"""Seedable merits: adjoint gradient vs forward mode and central differences.
-
-The unified merits (design.RmsSpotRadius / design.WavefrontRMS) are seedable:
-the adjoint backward sweep transports their image-plane cotangent to every
-tolerance parameter at once.  Each is differentiated three ways and
-cross-checked:
-  - the adjoint backward sweep (one sweep, all parameters)
-  - (RMS WFE) prysm's forward-mode wavefront_with_tangents, contracted with the
-    merit's OPD cotangent
-  - central finite differences of the merit recomputed on perturbed systems
-The FD recomputes the chief ray and (auto) exit pupil per perturbation, so it is
-the faithful total derivative the adjoint must reproduce.  Both merits report
-the RMS (length); the seed carries the sqrt-chain factor 1 / (2 RMS).
-"""
+"""Seedable merit gradients vs forward mode and central differences."""
 import numpy as np
 import pytest
 

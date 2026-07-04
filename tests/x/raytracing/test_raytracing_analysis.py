@@ -556,7 +556,7 @@ def test_wavefront_centroid_matches_chief_when_chief_valid():
 # ---------- field_sweep ------------------------------------------------------
 
 def _doublet_system():
-    # OBJECT/IMAGE endpoints implicit (ADR-0006); first powered surface is row 1.
+    # first powered surface is row 1
     ld = (LensData()
           .add(SphereShape(1 / 61.47), thickness=6.0,
                material=materials.ConstantMaterial(1.5168), aperture=12.0)

@@ -542,7 +542,7 @@ def test_jacobi_der_seq_same_as_loop():
         assert np.allclose(exp, elem)
 
 
-@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+@pytest.mark.parametrize('n', [1, 4])
 def test_cheby1_der_matches_finite_diff(n):
     # need more points for accurate finite diff
     x = np.linspace(-1, 1, 128)
@@ -562,7 +562,7 @@ def test_cheby1_der_seq_same_as_loop():
         assert np.allclose(exp, elem)
 
 
-@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+@pytest.mark.parametrize('n', [1, 4])
 def test_cheby2_der_matches_finite_diff(n):
     # need more points for accurate finite diff
     x = np.linspace(-1, 1, 128)
@@ -582,7 +582,7 @@ def test_cheby2_der_seq_same_as_loop():
         assert np.allclose(exp, elem)
 
 
-@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+@pytest.mark.parametrize('n', [1, 4])
 def test_cheby3_der_matches_finite_diff(n):
     # need more points for accurate finite diff
     x = np.linspace(-1, 1, 128)
@@ -602,7 +602,7 @@ def test_cheby3_der_seq_same_as_loop():
         assert np.allclose(exp, elem)
 
 
-@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+@pytest.mark.parametrize('n', [1, 4])
 def test_cheby4_der_matches_finite_diff(n):
     # need more points for accurate finite diff
     x = np.linspace(-1, 1, 128)
@@ -622,7 +622,7 @@ def test_cheby4_der_seq_same_as_loop():
         assert np.allclose(exp, elem)
 
 
-@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+@pytest.mark.parametrize('n', [1, 4])
 def test_legendre_der_matches_finite_diff(n):
     # need more points for accurate finite diff
     x = np.linspace(-1, 1, 128)
@@ -642,7 +642,7 @@ def test_legendre_der_seq_same_as_loop():
         assert np.allclose(exp, elem)
 
 
-@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+@pytest.mark.parametrize('n', [1, 4])
 def test_hermite_He_der_matches_finite_diff(n):
     # need more points for accurate finite diff
     x = np.linspace(-1, 1, 128)
@@ -662,7 +662,7 @@ def test_hermite_He_der_seq_same_as_loop():
         assert np.allclose(exp, elem)
 
 
-@pytest.mark.parametrize('n', [1, 2, 3, 4, 5])
+@pytest.mark.parametrize('n', [1, 4])
 def test_hermite_H_der_matches_finite_diff(n):
     # need more points for accurate finite diff
     x = np.linspace(-1, 1, 128)

@@ -100,8 +100,7 @@ def test_grid_bare_prescription_defaults_fields_but_requires_wavelengths():
     r = records[0]
     assert (r.field.hx, r.field.hy) == (0.0, 0.0)
     assert r.wvl == pytest.approx(0.6328)
-    # ...but wavelength resolution lives on the system (ADR-0001): a bare
-    # sequence carrying no wavelengths must be given one explicitly.
+    # ...but a bare sequence carrying no wavelengths needs one explicitly.
     with pytest.raises(TypeError, match='wavelengths is required'):
         list(iter_trace_grid(presc, None, None, Sampling.chief(), epd=4.0))
 

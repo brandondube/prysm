@@ -24,28 +24,14 @@ def sample_i_mutate():
     return i.mask(circle(40, i.r)).crop().remove_piston().remove_tiptilt().remove_power().fill()
 
 
-def test_dropout_is_correct(sample_i):
+def test_summary_stats_are_correct(sample_i):
     assert 25.73 == pytest.approx(sample_i.dropout_percentage, abs=1e-2)
-
-
-def test_pv_is_correct(sample_i):
     assert 330.7 == pytest.approx(sample_i.pv, abs=1e-2)
-
-
-def test_rms_is_correct(sample_i):
     assert 44.591 == pytest.approx(sample_i.rms, abs=1e-2)
-
-
-def test_std_is_correct(sample_i):
     assert 44.591 == pytest.approx(sample_i.std, abs=1e-2)
+    assert 29.552 == pytest.approx(sample_i.Sa, abs=1e-2)
+    assert 0.938 == pytest.approx(sample_i.strehl, abs=1e-3)
 
-
-def test_sa_is_correct(sample_i):
-    assert 29.552 == pytest.approx(sample_i.Sa, abs=1e3)
-
-
-def test_strehl_is_correct(sample_i):
-    assert 0.938 == pytest.approx(sample_i.strehl, abs=1e3)
 
 def test_doublecrop_has_no_effect(sample_i_mutate):
     sample_i_mutate.crop()

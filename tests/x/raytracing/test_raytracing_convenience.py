@@ -22,8 +22,7 @@ from prysm.x.raytracing._resolve import compiled_surfaces
 
 
 def _doublet():
-    # OBJECT/IMAGE endpoints are implicit (ADR-0006); the first powered surface
-    # is row 1, so the stop stays at index 1.
+    # first powered surface is row 1, so the stop stays at index 1
     ld = (LensData()
           .add(Sphere(1 / 61.47), thickness=6.0,
                material=materials.ConstantMaterial(1.5168), aperture=12.0)

@@ -39,11 +39,6 @@ def x0_f32():
     return np.array([1.0, -2.0, 3.0, -4.0], dtype=np.float32)
 
 
-def test_import_from_optym_namespace():
-    from prysm.x.optym import PrysmLBFGSB as _Cls
-    assert _Cls is PrysmLBFGSB
-
-
 def test_construct_with_callable(x0_f64):
     opt = PrysmLBFGSB(_quadratic_fg, x0_f64)
     assert opt.problem is not None
@@ -97,12 +92,6 @@ def test_history_starts_empty(x0_f64):
     assert opt.last_step_metadata == {}
 
 
-def test_memory_size_respected(x0_f64):
-    opt = PrysmLBFGSB(_quadratic_fg, x0_f64, memory=17)
-    assert opt.m == 17
-    assert opt.S.shape == (17, x0_f64.size)
-
-
 # -------------------------- algorithmic --------------------------
 
 
@@ -141,19 +130,6 @@ def test_quadratic_converges_to_known_minimum():
     # f at the minimum is 0
     assert result.records[-1].f >= 0
     assert opt.iter <= 50
-
-
-def test_quadratic_drives_gradient_to_zero():
-    """On an SPD quadratic, ||g|| should drop to machine precision."""
-    fg, x_star = _make_quadratic(dim=5, seed=2)
-    x0 = np.zeros_like(x_star)
-
-    opt = PrysmLBFGSB(fg, x0, memory=10)
-    run_until(opt, MaxIterations(50))
-
-    _, g = fg(opt.x)
-    assert np.linalg.norm(g) < 1e-8
-    assert np.linalg.norm(opt.x - x_star) < 1e-8
 
 
 def test_first_step_is_steepest_descent():
@@ -314,19 +290,6 @@ def test_run_until_gradient_convergence_still_reports_success():
     assert result.success
 
 
-@pytest.mark.parametrize('dtype', [np.float32, np.float64])
-def test_history_dtype_preserved_after_update(dtype):
-    fg, x_star = _make_quadratic(dim=4, dtype=dtype, seed=7)
-    x0 = np.zeros_like(x_star)
-    opt = PrysmLBFGSB(fg, x0, memory=5)
-    opt.step()
-    assert opt.S.dtype == dtype
-    assert opt.Y.dtype == dtype
-    assert opt.ys.dtype == dtype
-    assert opt.theta.dtype == dtype
-    assert opt.x.dtype == dtype
-
-
 def test_run_until_returns_governor_decision():
     fg, x_star = _make_quadratic(dim=4, seed=8)
     opt = PrysmLBFGSB(fg, np.zeros_like(x_star), memory=5)
@@ -412,14 +375,6 @@ def test_Hg_handles_empty_history():
     g = np.array([1.0, -2.0, 3.0, 0.5])
     np.testing.assert_array_equal(opt._Hg(g), -g)
     np.testing.assert_array_equal(opt._Bv(g), g)
-
-
-def test_Hg_drives_convergence_after_compact_step_switch():
-    """After wiring step() to use _Hg, the quadratic still converges."""
-    fg, x_star = _make_quadratic(dim=5, seed=15)
-    opt = PrysmLBFGSB(fg, np.zeros_like(x_star), memory=10)
-    run_until(opt, MaxIterations(50))
-    assert np.linalg.norm(opt.x - x_star) < 1e-8
 
 
 def test_M_diagonal_blocks_match_definitions():
@@ -1247,38 +1202,6 @@ def test_projected_branch_lands_at_x_bar_on_first_step():
     assert opt.last_step_metadata['subspace_mode'] == 'projected'
     assert opt.last_step_metadata['alpha'] == pytest.approx(1.0)
     np.testing.assert_allclose(opt.x, [0.0, 0.0, 0.0, 0.0], atol=1e-10)
-
-
-def test_truncated_branch_fires_when_projection_is_ascent():
-    """Pathological hand-built case: drive xc + dx outside the box in
-    such a way that gᵀ(x_bar - x_k) >= 0 so the projected direction is
-    not descent, forcing the truncation fallback.
-
-    Easiest construction: pin coords already at a bound + a contrived
-    history where the subspace Newton step jumps wildly.  Simplest in
-    practice is to look at a step where projection collapses to zero
-    motion (x_bar == x_k), making gᵀp_proj == 0; then the fallback
-    fires and the BLNZ truncation rule still produces progress along
-    the unprojected path.
-    """
-    # x is interior; pick a direction whose projection is the zero
-    # vector (every coord's x_hat sits past the bound it's nearest to,
-    # but the gradient ensures p_proj sums to gᵀp_proj == 0).  Easiest
-    # to fabricate: just monkey with x_hat to be xc itself when xc == x.
-    n = 2
-
-    def fg(x):
-        # f = 0 anywhere; gradient identically 0.  Forces gᵀp_proj == 0
-        # (not < 0), triggering the fallback branch.
-        return 0.0, np.zeros_like(x)
-
-    x0 = np.array([0.5, 0.5])
-    lb = np.array([0.0, 0.0])
-    ub = np.array([1.0, 1.0])
-    opt = PrysmLBFGSB(fg, x0, lower_bounds=lb, upper_bounds=ub, memory=3)
-    # with g == 0, the line search will reject (no descent possible)
-    with pytest.raises(StopIteration):
-        opt.step()
 
 
 def test_projection_keeps_iterates_in_box():

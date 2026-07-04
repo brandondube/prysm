@@ -1,13 +1,4 @@
-"""Entrance-pupil routing in launch() and its analysis consequences.
-
-launch() positions off-axis bundles so the pupil sampling lands on the
-paraxial entrance pupil when the stop is known (a LensData carries
-stop_index).  Before this, bundles were launched centered on the axis at the
-first surface, which is only correct when the stop is the first surface; for a
-stop in the middle of the system (the common case) off-axis spot/distortion/
-field-curvature/wavefront were wrong.
-
-"""
+"""Entrance-pupil routing in launch() and downstream analyses."""
 import numpy as np
 import pytest
 

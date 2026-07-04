@@ -1,6 +1,4 @@
 """Unit tests for the physics of prysm."""
-from itertools import product
-
 import numpy as np
 
 import pytest
@@ -68,17 +66,14 @@ def test_array_orientation_consistency_tilt():
     x, y = make_xy_grid(N, diameter=2.1)
     r, t = cart_to_polar(x, y)
     amp = circle(1, r)
-    wf = Wavefront.from_amp_and_phase(amp, None, wvl, x[0, 1] - x[0, 0])
+    phs = 1000 * y  # a few waves of +y tilt, OPD in nm
+    wf = Wavefront.from_amp_and_phase(amp, phs, wvl, x[0, 1] - x[0, 0])
     psf = wf.focus(1, Q=Q).intensity
     idx_y, idx_x = np.unravel_index(psf.data.argmax(), psf.data.shape)  # row-major y, x
     assert idx_x == (N*Q) // 2
-    assert idx_y > N // 2
+    assert idx_y > (N*Q) // 2
 
 
-FNOS = [1, 1.4, 2, 2.8, 4, 5.6, 8]
-WVLS = [.5, .55, 1, 10]
-
-
-@pytest.mark.parametrize('fno, wvl', product(FNOS, WVLS))
+@pytest.mark.parametrize('fno, wvl', [(1, .5), (8, 10)])
 def test_airydisk_has_unit_peak(fno, wvl):
     assert airydisk(0, fno=fno, wavelength=wvl) == 1

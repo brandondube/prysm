@@ -22,7 +22,7 @@ _glass = materials.ConstantMaterial(1.5168, name='N-BK7')
 
 def make_singlet(image_gap=96.0, fields=(0,), wavelengths=(0.55,),
                  weights=None, stop_index=None):
-    # OBJECT/IMAGE endpoints implicit (ADR-0006); conics are rows 1 and 2.
+    # conics are rows 1 and 2
     lens = LensData()
     (lens.add(Conic(1 / 102.0, 0.0), thickness=6.0, material=_glass,
               aperture=12.0)
