@@ -647,13 +647,7 @@ def _is_system(model):
 
 
 class Problem:
-    """Design optimization over an OpticalSystem's free vector (ADR-0004).
-
-    Operands produce weighted residuals.  Constraints are operands with
-    target/min/max bounds.  gradient='auto' uses adjoint residual Jacobians
-    when available; gradient='fd' forces finite differences.  Keyed to the
-    system, which owns the DesignState free vector.
-    """
+    """Design optimization over an OpticalSystem's free vector."""
 
     def __init__(self, system, operands=None, *,
                  constraints=None, gradient='auto'):

@@ -558,9 +558,7 @@ def launch(system, field, wavelength, sampling, *,
     aim_strict : bool, optional
         forwarded to aim_rays on the explicit aim_to path.
     drop_unaimed : bool, optional
-        under real aiming, NaN the S of rays that cannot be aimed onto the stop
-        so a vignetted ray cannot masquerade as a valid bundle sample.  Default
-        True (ADR-0009); solves that must probe the rim pass False.
+        under real aiming, NaN rays that cannot be aimed onto the stop.
 
     Returns
     -------
@@ -752,8 +750,7 @@ def _solve_vignetting_factors(system, field, wavelength, *, tol=1e-3,
     def transmits(scales):
         s = np.asarray([1.0, *scales], dtype=config.precision)
         xy = edges * s[:, np.newaxis]
-        # Probe the rim to find where vignetting begins -- keep best-effort
-        # un-aimed rays rather than NaN-ing them (ADR-0009).
+        # Probe the rim; keep best-effort un-aimed rays for the solve.
         P, S = launch(system, bare, wavelength, Sampling.points(xy),
                       drop_unaimed=False)
         result = raytrace(system, P, S, wavelength)

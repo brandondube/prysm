@@ -1291,40 +1291,23 @@ def _full_field_rms_wfe(system, fields, wavelength, sampling, epd,
 
 def full_field(system, metric='rms spot', *, samples=15, max_field=None,
                wavelengths=None, sampling=None, epd=None, stop_index=None):
-    """Scalar image-quality metric over a 2D grid of field points.
-
-    The full-field analog of Code V FMA / full-field displays: a samples x
-    samples Cartesian grid spans the field square, and points inside the
-    field disc (radius max_field) are evaluated; points outside are NaN.
+    """Scalar image-quality metric over a 2D field grid.
 
     Parameters
     ----------
     system : sequence of Surface or OpticalSystem
         the optical system.
     metric : str, optional
-        which scalar to evaluate per field point:
-
-        - 'rms spot': polychromatic centroid-referenced RMS spot radius, in
-          system length units.  Rays from every wavelength pool into
-          one spectrally-weighted bundle.
-        - 'rms wfe': piston-removed RMS wavefront error in waves, at the
-          first given wavelength (default the reference wavelength).
-        - 'distortion': signed percent distortion of the chief ray vs the
-          paraxial proxy, at the first given wavelength.
-        - 'lateral color': magnitude of the chief-ray landing separation
-          between the shortest and longest wavelengths, in length units.
+        'rms spot', 'rms wfe', 'distortion', or 'lateral color'.
 
     samples : int, optional
         grid points per axis.
     max_field : float, optional
-        field-disc radius, in the system field units; defaults to the
-        largest system field magnitude.
+        field-disc radius; defaults to the largest system field magnitude.
     wavelengths : float or iterable of float, optional
-        wavelengths in microns; defaults to the system set.  The
-        monochromatic metrics use the first entry.
+        wavelengths in microns; defaults to the system set.
     sampling : Sampling, optional
-        pupil sampling for the bundle metrics ('rms spot', 'rms wfe');
-        defaults to a 6-ring hexapolar grid.
+        pupil sampling for 'rms spot' and 'rms wfe'.
     epd : float, optional
         entrance pupil diameter; defaults from a system aperture spec.
     stop_index : int, optional

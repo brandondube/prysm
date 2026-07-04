@@ -22,19 +22,9 @@ def _resolve_fields(system, fields):
 def field_sweep(system, fields=None, samples=101):
     """Dense field samples spanning the system field set.
 
-    A drop-in upgrade of _resolve_fields for analyses that are smooth
-    functions of field (field curvature, distortion, lateral color):
-    explicitly given fields pass through verbatim, but when fields is None
-    the defaulted system FieldSet is replaced by samples points spaced
-    linearly from the smallest to the largest field magnitude, along the
-    direction of the largest field.  The dense points carry no per-field
-    vignetting; the chief-ray analyses this serves launch at the pupil
-    center, which vignetting factors do not move.
-
-    Falls back to the discrete _resolve_fields result whenever a sweep is
-    not well defined: a heterogeneous field set (mixed kind, angular unit,
-    or object plane) or an all-on-axis one.  A field set with a single
-    distinct magnitude sweeps from on axis out to it.
+    When fields is None and the system fields are homogeneous, return
+    samples along the largest field's direction.  Otherwise return the
+    resolved fields.
 
     Parameters
     ----------
@@ -96,7 +86,6 @@ def _resolve_wavelengths(system, wavelengths):
     try:
         return [resolve_wavelength(system, None)]
     except ValueError:
-        # phrase the error for the plural axis this helper owns
         raise TypeError(
             'wavelengths is required for a bare surface sequence; only an '
             'OpticalSystem defaults the wavelength set.'
@@ -287,13 +276,7 @@ def layout_records(system, fields=None, wavelength=None, sampling=None,
                                          drop_unaimed=True), wvl)
         records.append(LayoutRecord(field, trace,
                                     valid_mask(trace.status, trace.P[-1])))
-    # Size the glass from every field's footprint, not just the first:
-    # off-axis beams run far higher than the on-axis marginal through a front
-    # negative group (retrofocus, fish-eye), and the elements must contain
-    # them.  Only rays that transit cleanly count -- a clipped ray keeps
-    # computing positions far outside the element (a 170-deg field launches
-    # marginal rays metres off axis), and must not balloon the glass.  An
-    # unsolved auto extent reads this footprint as its drawn radius.
+    # Size glass from every valid field footprint; clipped rays are NaN'd out.
     outline = _OutlineTrace(
         np.concatenate([_valid_only_positions(r.trace) for r in records],
                        axis=1),

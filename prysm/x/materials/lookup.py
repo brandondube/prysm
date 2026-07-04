@@ -1,10 +1,4 @@
-"""Raytracing-facing material lookup helpers.
-
-A glass token resolves to a material via a catalog object that exposes
-material_for_name(name).  When no catalog is supplied the refractiveindex.info
-database is used (downloaded on first use); AIR / VACUUM / blank resolve to the
-unit-index air singleton and MIRROR to a reflective sentinel.
-"""
+"""Material lookup helpers."""
 
 from .core import ConstantMaterial
 
@@ -13,9 +7,7 @@ MIRROR = '__MIRROR__'
 
 _DEFAULT_CATALOG = None
 
-# Unit-index media as MaterialProtocol singletons (n == 1, k == 0).  Identity is
-# meaningful: resolve_index maps AIR / VACUUM / blank to the air singleton, and
-# the IO / listings display layers treat both as a blank glass via identity.
+# Unit-index media as MaterialProtocol singletons.
 air = ConstantMaterial(1.0, name='air')
 vacuum = ConstantMaterial(1.0, name='vacuum')
 
@@ -47,23 +39,8 @@ def glass(name, database=None, **qualifiers):
 def resolve_index(spec, name_resolver=None):
     """Resolve any index spec to a callable n(wvl), MIRROR, air, or None.
 
-    The single owner of the material/index spec grammar shared by the raytracing
-    glass layer.  Each caller projects the result to what it needs (raytracing
-    takes the real part; a complex-aware caller keeps n + 1j*k).
-
-    Grammar
-    -------
-    None                          -> None    (no index; a reflective / eval surface)
-    the MIRROR sentinel           -> MIRROR
-    'MIRROR' (any case)           -> MIRROR
-    '', 'AIR', 'VACUUM'           -> air     (unit-index callable)
-    a real or complex number      -> a constant callable
-    a callable or material        -> returned unchanged
-    any other string (glass name) -> name_resolver(name), or TypeError if None
-
-    name_resolver is the catalog hook a glass name routes through; leaving it None
-    forbids name resolution (and any implicit catalog download) for callers that
-    only normalize already-resolved specs.
+    Strings 'MIRROR', 'AIR', and 'VACUUM' are special.  Other strings route
+    through name_resolver; numeric specs become constant callables.
     """
     if spec is None:
         return None

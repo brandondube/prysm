@@ -48,13 +48,7 @@ def ray_plane_intersect(P, S):
 
 
 def _conic_quadratic_coeffs(c, kappa, P1, S, dx, dy):
-    """Coefficients (A, B, C) of the conic-intersection quadratic A t^2 + 2 B t + C.
-
-    P1 is on the vertex tangent plane; dx, dy shift the surface off the parent
-    conic vertex.  The vertex-side root is C / (-B +/- sqrt(B^2 - A C)) and the
-    ray's closest approach to the axis is at t = -B / A.
-
-    """
+    """Coefficients of A t^2 + 2 B t + C for conic intersection."""
     Sx = S[..., 0]
     Sy = S[..., 1]
     Sz = S[..., 2]
@@ -69,9 +63,7 @@ def _conic_quadratic_coeffs(c, kappa, P1, S, dx, dy):
 def _conic_quadratic_t(c, kappa, P1, S, dx, dy):
     """Solve the conic-intersection quadratic for the vertex-side root.
 
-    Uses Welford's rationalized form to reduce cancellation and select the
-    root in the ray's propagation direction.  P1 is on the vertex tangent
-    plane.  Returns (t, disc_nonneg).
+    Uses Welford's rationalized form.  Returns (t, disc_nonneg).
 
     """
     Sz = S[..., 2]
@@ -97,9 +89,6 @@ def _conic_quadratic_t(c, kappa, P1, S, dx, dy):
 
 def ray_conic_intersect(P, S, c, kappa, dx=0.0, dy=0.0):
     """Intersect rays P + t*S with a (possibly off-axis) conicoid.
-
-    Projects P onto the vertex tangent plane, matching the Newton path, then
-    solves the quadratic with _conic_quadratic_t.
 
     Parameters
     ----------
@@ -146,9 +135,7 @@ def ray_conic_intersect(P, S, c, kappa, dx=0.0, dy=0.0):
 
 
 def ray_sphere_intersect(P, S, c):
-    """Intersect rays P + t*S with a sphere of curvature c, vertex at origin.
-
-    Thin wrapper over ray_conic_intersect with kappa=0.
+    """Intersect rays P + t*S with a sphere of curvature c.
 
     Parameters
     ----------
@@ -214,9 +201,7 @@ def _lipschitz_march_solve_s(sag_and_normal, P1, S, s_lo, s_hi,
                              sag_lipschitz, tol_sag, maxiter, domain_radius=None):
     """First-root solve by Lipschitz (sphere-tracing) descent from the floor.
 
-    Steps |F| / Lip from s_lo, where Lip bounds |F'|.  Near the root it
-    switches to local Newton.  Returns (Pj, n_hat, valid), with NaN on
-    invalid rays.
+    Steps abs(F) / Lip from s_lo and switches to local Newton near the root.
 
     """
     dtype = P1.dtype
@@ -310,7 +295,7 @@ def bracketed_newton_solve_s(P1, S, sag_and_normal, s_lo, s_hi,
     maxiter : int, optional
         maximum number of iterations per solve.
     lipschitz : float
-        max |grad sag| over the domain; required -- it is what guarantees the
+        max abs(grad sag) over the domain; required -- it is what guarantees the
         march finds the first root.
     domain_radius : float, optional
         radius of the characterized disk; clips the march to where the bound
@@ -369,16 +354,16 @@ class ConicSeedMixin:
         maxiter : int, optional
             maximum Newton iterations.
         departure : float, optional
-            max |sag - seed conic sag| over the characterized domain; enables
+            max abs(sag - seed conic sag) over the characterized domain; enables
             the departure-band acceptance.
         domain_radius : float, optional
             radius of the characterized domain; the band is only policed for
             rays whose conic-seed hit falls inside it (outside, departure does
             not bound the surface and convergence alone decides).
         departure_gradient : float, optional
-            max |grad(sag - seed conic)| over the domain.
+            max abs(grad(sag - seed conic)) over the domain.
         sag_lipschitz : float, optional
-            max |grad sag| over the domain; enables the Lipschitz rescue.
+            max abs(grad sag) over the domain; enables the Lipschitz rescue.
         forward_only : bool, optional
             when True, reject roots behind the ray origin.  Only sound for the
             forward-propagating (non-folded) configurations the conic seed

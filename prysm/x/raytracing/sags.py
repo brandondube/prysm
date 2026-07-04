@@ -76,10 +76,8 @@ def _der_inv_phi_conic_rhosq(c, k, rhosq, phi=None):
 def der_direction_cosine_conic(c, k, rho, rhosq=None, phi=None):
     """Derivative term needed for the product rule and Q type aspheres.
 
-    sag z(rho) = 1/phi * (weighted sum of Q polynomials)
-
-    The return of this function is the derivative of 1/phi required
-    for completing the product rule on the surface's derivative.
+    For z(rho) = (weighted sum of Q polynomials) / phi, returns
+    d(1 / phi) / drho.
 
     Parameters
     ----------
@@ -93,10 +91,7 @@ def der_direction_cosine_conic(c, k, rho, rhosq=None, phi=None):
         squared radial coordinate (non-normalized)
         rho ** 2 if None
     phi : ndarray, optional
-        (1 - (1 + k) c^2 r^2)^.5
-        computed if not provided
-        many surface types utilize phi; its computation can be
-        de-duplicated by passing the optional argument
+        (1 - (1 + k) c^2 r^2)^.5, computed if not provided.
 
     Returns
     -------
@@ -134,17 +129,9 @@ def sphere_sag(c, rhosq, phi=None):
     c : float
         surface curvature
     rhosq : ndarray
-        radial coordinate squared
-        e.g. for a 15 mm half-diameter optic,
-        rho = 0 .. 15
-        rhosq = 0 .. 225
-        there is no requirement on rectilinear sampling or array
-        dimensionality
+        radial coordinate squared.
     phi : ndarray, optional
-        (1 - c^2 r^2)^.5
-        computed if not provided
-        many surface types utilize phi; its computation can be
-        de-duplicated by passing the optional argument
+        (1 - c^2 r^2)^.5, computed if not provided.
 
     Returns
     -------
@@ -167,16 +154,9 @@ def sphere_sag_der(c, rho, phi=None):
     c : float
         surface curvature
     rho : ndarray
-        radial coordinate
-        e.g. for a 15 mm half-diameter optic,
-        rho = 0 .. 15
-        there is no requirement on rectilinear sampling or array
-        dimensionality
+        radial coordinate.
     phi : ndarray, optional
-        (1 - c^2 r^2)^.5
-        computed if not provided
-        many surface types utilize phi; its computation can be
-        de-duplicated by passing the optional argument
+        (1 - c^2 r^2)^.5, computed if not provided.
 
     Returns
     -------
@@ -201,17 +181,9 @@ def conic_sag(c, kappa, rhosq, phi=None):
     kappa : float
         conic constant
     rhosq : ndarray
-        radial coordinate squared
-        e.g. for a 15 mm half-diameter optic,
-        rho = 0 .. 15
-        rhosq = 0 .. 225
-        there is no requirement on rectilinear sampling or array
-        dimensionality
+        radial coordinate squared.
     phi : ndarray, optional
-        (1 - (1+kappa) c^2 r^2)^.5
-        computed if not provided
-        many surface types utilize phi; its computation can be
-        de-duplicated by passing the optional argument
+        (1 - (1+kappa) c^2 r^2)^.5, computed if not provided.
 
     Returns
     -------
@@ -235,16 +207,9 @@ def conic_sag_der(c, kappa, rho, phi=None):
     kappa : float
         conic constant, where -1 is a parabola and 0 is a sphere
     rho : ndarray
-        radial coordinate
-        e.g. for a 15 mm half-diameter optic,
-        rho = 0 .. 15
-        there is no requirement on rectilinear sampling or array
-        dimensionality
+        radial coordinate.
     phi : ndarray, optional
-        (1 - (1+kappa) c^2 r^2)^.5
-        computed if not provided
-        many surface types utilize phi; its computation can be
-        de-duplicated by passing the optional argument
+        (1 - (1+kappa) c^2 r^2)^.5, computed if not provided.
 
     Returns
     -------
@@ -327,10 +292,7 @@ def conic_sag_param_partials(c, kappa, x, y, name, phi=None):
     """Partials of conic sag and sag-gradient wrt a shape parameter.
 
     For name in {'c', 'k'}, returns (sag_t, gx_t, gy_t):
-    the partial of the sag and of its two gradient components (dz/dx, dz/dy)
-    with respect to the named parameter, evaluated at fixed (x, y).  These are
-    the explicit shape tangents the differential trace injects at the surface
-    a curvature/conic tolerance touches.
+    d(sag), d(dz/dx), and d(dz/dy) wrt the named parameter at fixed (x, y).
 
     Parameters
     ----------
@@ -374,27 +336,15 @@ def conic_sag_param_partials(c, kappa, x, y, name, phi=None):
 def zernike_irregularity_partials(n, m, x, y, normalization_radius, norm=True):
     """Sag and sag-gradient partials of one Zernike surface-irregularity term.
 
-    A surface irregularity modelled as an added Zernike departure
-    delta z = a * Z_n^m(x / R, y / R) has, at amplitude a, the explicit
-    (parameter) tangents the differential trace injects for that amplitude:
+    For delta z = a * Z_n^m(x / R, y / R), the amplitude tangents are:
 
         d(sag)/da   = Z_n^m(x / R, y / R)
         d(dz/dx)/da = (1 / R) dZ_n^m/dx
         d(dz/dy)/da = (1 / R) dZ_n^m/dy
 
-    The value uses the polar Zernike (smooth via r^|m| trig(m theta)) and the
-    gradient uses the Cartesian-direct zernike_nm_der_xy (smooth at the origin),
-    so the two match how the Zernike surface shape evaluates itself.  The
-    amplitude is in the surface's sag length units; with norm=True a unit
-    amplitude is one unit RMS of that mode over the disk of radius R.
-
-    The low-order cylinder cases correspond to surface-error terms in the
-    perturbed-lens-system framework of Rimmer, Applied Optics 9(3), 533-537
-    (1970): Z_2^2 is cylinder along the axes, (x^2 - y^2)/R^2, and
-    Z_2^-2 is cylinder at 45 degrees, 2xy/R^2.  Any (n, m) is admitted (power
-    Z_2^0, spherical Z_4^0, ...).  Because the nominal amplitude is zero the
-    nominal sag and Hessian are unchanged, so this enters the trace purely
-    through these tangents.
+    The sag value uses polar Zernikes; gradients use zernike_nm_der_xy.  With
+    norm=True, unit amplitude is unit RMS over the disk of radius R.  Z_2^2 and
+    Z_2^-2 are the Rimmer cylinder terms (Applied Optics 9(3), 533-537, 1970).
 
     Parameters
     ----------
@@ -428,10 +378,6 @@ def zernike_irregularity_partials(n, m, x, y, normalization_radius, norm=True):
 def _conic_base_xy(c, kappa, x, y):
     """Sag and Cartesian partial derivatives of an on-axis conic at (x, y).
 
-    Convenience wrapper around conic_sag and conic_sag_der_xy that shares a
-    single phi computation.  Used by the polynomial-deformed surface sag_and_normal
-    closures to write themselves as conic-base + perturbation.
-
     Returns
     -------
     z, dz/dx, dz/dy : ndarray
@@ -452,9 +398,7 @@ def _conic_base_xy_sag(c, kappa, x, y):
 def _add_conic_base_derivatives(c, kappa, x, y, z_p, ddx_p, ddy_p):
     """Add an on-axis conic base to a polynomial perturbation.
 
-    The caller is responsible for any chain-rule rescaling of (ddx_p, ddy_p)
-    needed to bring them into unnormalized-coordinate units before reaching
-    here.
+    ddx_p and ddy_p must already be in unnormalized-coordinate units.
 
     """
     z_c, ddx_c, ddy_c = _conic_base_xy(c, kappa, x, y)
@@ -577,29 +521,18 @@ def _q2d_conic_base_terms(c, k, x, y, r, t, dx=0, dy=0):
 
 
 def Q2d_and_der(cm0, ams, bms, x, y, normalization_radius, c, k, dx=0, dy=0):
-    """Q-type freeform surface, with base (perhaps shifted) conicoic.
+    """Q-type freeform surface, with base (perhaps shifted) conicoid.
 
-    Returns the sag and the polar derivatives (dz/dr, dz/dt).  Q2D.sag_and_normal
-    converts to Cartesian (dz/dx, dz/dy) via the chain rule with
-    a small on-axis patch (r=0 has a removable 0/0).
+    Returns sag and polar derivatives (dz/dr, dz/dt).
 
     Parameters
     ----------
     cm0 : iterable
-        surface coefficients when m=0 (inside curly brace, top line, Eq. B.1)
-        span n=0 .. len(cms)-1 and mus tbe fully dense
+        m=0 coefficients (Eq. B.1), dense in n.
     ams : iterable of iterables
-        ams[0] are the coefficients for the m=1 cosine terms,
-        ams[1] for the m=2 cosines, and so on.  Same order n rules as cm0
+        cosine coefficients; ams[m-1] holds azimuthal order m.
     bms : iterable of iterables
-        same as ams, but for the sine terms
-        ams and bms must be the same length - that is, if an azimuthal order m
-        is presnet in ams, it must be present in bms.  The azimuthal orders
-        need not have equal radial expansions.
-
-        For example, if ams extends to m=3, then bms must reach m=3
-        but, if the ams for m=3 span n=0..5, it is OK for the bms to span n=0..3,
-        or any other value, even just [0].
+        sine coefficients, with the same azimuthal orders as ams.
     x : ndarray
         X coordinates
     y : ndarray

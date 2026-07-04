@@ -1,14 +1,4 @@
-"""Tabular listings of a LensData: surfaces, clear apertures, coordinate breaks.
-
-Numbers-only table builders that mirror the lens-data-editor views of
-commercial codes.  Each returns a vanilla __slots__ table object whose
-__repr__ is a clean aligned table (modeled on paraxial.FirstOrderProperties and
-aberrations.SeidelResult).  LensData exposes thin delegators (list_surfaces /
-list_apertures / list_decenters); OpticalSystem forwards its stop_index and unit
-to the surface table.
-
-No plotting and no matplotlib here -- these are text tables for inspection.
-"""
+"""Tabular LensData listings: surfaces, apertures, and coordinate breaks."""
 
 from .spencer_and_murty import (
     STYPE_EVAL, STYPE_OBJ, STYPE_IMG, STYPE_REFLECT, STYPE_REFRACT)
@@ -43,11 +33,7 @@ def _type_str(typ):
 
 
 def material_str(material, typ):
-    """Display string for a row material.
-
-    MIRROR (or a reflective surface) shows as MIRROR; a named material shows its
-    name; air / None is blank.
-    """
+    """Display string for a row material."""
     if _map_stype(typ) == STYPE_REFLECT or material is MIRROR \
             or material == MIRROR:
         return 'MIRROR'
@@ -60,10 +46,7 @@ def material_str(material, typ):
 
 
 def surface_row_mappings(lensdata):
-    """Map raw rows to compiled surface and exported Zemax surface indices.
-
-    OBJECT is row 0, matching Zemax's SURF 0 numbering.
-    """
+    """Map raw rows to compiled and Zemax-style surface indices."""
     records = []
     surface_index = 0
     zemax_surface_number = 0

@@ -136,8 +136,6 @@ class CompositeHexagonalAperture:
     def __init__(self, x, y, rings, segment_diameter, segment_separation, segment_angle=90, exclude=()):  # NOQA - length
         """Create a new CompositeHexagonalAperture.
 
-        Note that __init__ is relatively computationally expensive and hides a lot of work.
-
         Parameters
         ----------
         x : ndarray
@@ -183,28 +181,16 @@ class CompositeHexagonalAperture:
         Parameters
         ----------
         basis_func : callable
-            a function with signature basis_func(orders, [x, y or r, t], keyword arguments)
-            for example, zernike_nm_seq from prysm.polynomials fits the bill
+            called with orders and either r/t or x/y keyword grids.
         orders : iterable
-            sequence of polynomial orders or indices.
-            for example, zernike_nm_seq may be combined with a monoindexing
-            function as e.g. orders=[noll_to_nm(j) for j in range(3,12)]
-        basis_func_kwargs : dict
-            any keyword arguments to pass to basis_func.  The spatial coordinates
-            will already be passed based on inspection of the function signature
-            and should not be attempted to be included here
-        normalization_radius : float
-            the normaliation radius to use to convert local surface coordinates
-            to normalized coordinates for an orthogonal polynomial.
-            if None, defaults to the half segment vertex to vertex distance,
-            v to v is 2/sqrt(3) times the segment diameter given in the constructor
-            if basis_func does not take arguments (r, t), the radius is assumed
-            to be equal in X and Y
+            polynomial orders or indices.
+        basis_func_kwargs : dict, optional
+            extra keyword arguments for basis_func.
+        normalization_radius : float or 2-tuple, optional
+            normalization radius.  Defaults to half the segment
+            vertex-to-vertex diameter.
 
         """
-        # if the norm radius isn't given, assume it's V to V
-        # the conversion to a length two tuple is so that we know it's length
-        # two for either the r,t or x,y branch below
         if normalization_radius is None:
             normalization_radius = self.vtov/2
 
@@ -273,15 +259,13 @@ class CompositeHexagonalAperture:
         return grids, bases
 
     def compose_opd(self, coefs, out=None):
-        """Compose per-segment optical path errors using the basis from prepare_opd_bases.
+        """Compose per-segment optical path error.
 
         Parameters
         ----------
         coefs : iterable
-            an iterable of coefficients for each segment present, i.e. excluding
-            those in the exclude list from the constructor
-            if an array, must be of shape (len(self.segment_ids), len(orders))
-            where orders comes from the proceeding call to prepare_opd_bases
+            coefficients for each present segment.  Array shape is
+            (len(self.segment_ids), len(orders)).
         out : ndarray
             array to insert OPD into, allocated if None
 
@@ -410,15 +394,7 @@ class CompositeKeystoneAperture:
         azimuthal_gap : float
             gap between segments in each ring, if None same as radial_gap
         rotation_per_ring : float or Iterable, optional
-            the rotation of each ring.  Rotation is used to avoid alignment
-            of segment gaps into radial lines, when fractal segment divisions
-            are used.
-
-            For example, two rings with [8, 16] segments per ring will produce
-            a gap in the second ring aligned to the gap in the previous ring.
-
-            None for this argument will shift/rotate/phase the second ring
-            by (360/16)=22.5 degrees so that the gaps do not align
+            rotation of each ring.  None staggers rings to avoid aligned gaps.
 
         """
         if azimuthal_gap is None:
@@ -475,24 +451,14 @@ class CompositeKeystoneAperture:
 
         Parameters
         ----------
-        basis_func : callable
-            a function with signature basis_func(orders, [x, y or r, t], keyword arguments)
-            for example, zernike_nm_seq from prysm.polynomials fits the bill
-        orders : iterable
-            sequence of polynomial orders or indices.
-            for example, zernike_nm_seq may be combined with a monoindexing
-            function as e.g. orders=[noll_to_nm(j) for j in range(3,12)]
-        basis_func_kwargs : dict
-            any keyword arguments to pass to basis_func.  The spatial coordinates
-            will already be passed based on inspection of the function signature
-            and should not be attempted to be included here
-        normalization_radius : float
-            the normaliation radius to use to convert local surface coordinates
-            to normalized coordinates for an orthogonal polynomial.
-            if None, defaults to the half segment vertex to vertex distance,
-            v to v is 2/sqrt(3) times the segment diameter given in the constructor
-            if basis_func does not take arguments (r, t), the radius is assumed
-            to be equal in X and Y
+        center_basis, segment_basis : callable
+            called with orders and either r/t or x/y keyword grids.
+        center_orders, segment_orders : iterable
+            polynomial orders or indices.
+        center_basis_kwargs, segment_basis_kwargs : dict, optional
+            extra keyword arguments for each basis function.
+        rotate_xyaxes : bool, optional
+            rotate segment x/y bases into the local radial frame.
 
         """
         if center_basis_kwargs is None:
@@ -605,15 +571,14 @@ class CompositeKeystoneAperture:
         return grids, bases
 
     def compose_opd(self, center_coefs, segment_coefs, out=None):
-        """Compose per-segment optical path errors using the basis from prepare_opd_bases.
+        """Compose center and segment optical path error.
 
         Parameters
         ----------
-        coefs : iterable
-            an iterable of coefficients for each segment present, i.e. excluding
-            those in the exclude list from the constructor
-            if an array, must be of shape (len(self.segment_ids), len(orders))
-            where orders comes from the proceeding call to prepare_opd_bases
+        center_coefs : iterable
+            coefficients for the center segment basis.
+        segment_coefs : iterable
+            coefficients for each keystone segment basis.
         out : ndarray
             array to insert OPD into, allocated if None
 

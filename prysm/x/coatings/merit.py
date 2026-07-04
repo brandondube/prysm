@@ -125,7 +125,7 @@ class _Term:
 
 
 class Reflectance(_Term):
-    """Target the intensity reflectance R = |r|^2 over a sample grid."""
+    """Target the intensity reflectance R = abs(r)^2 over a sample grid."""
 
     quantity = 'R'
 
@@ -173,7 +173,7 @@ class LayerAbsorptance(_Term):
 
 
 class FieldIntensityAtBoundary(_Term):
-    """Target the standing-wave intensity |E|^2 at one boundary."""
+    """Target the standing-wave intensity abs(E)^2 at one boundary."""
 
     quantity = 'Esq'
 

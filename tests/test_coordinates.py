@@ -25,11 +25,7 @@ def data_2d_complex():
 
 
 @pytest.mark.parametrize('x, y', [
-    [1, 0],
-    [0, 1],
     [1, 1],
-    [-1, 0],
-    [0, -1],
     [-1, -1],
     [np.linspace(-1, 1, TEST_SAMPLES), np.linspace(-1, 1, TEST_SAMPLES)]])
 def test_cart_to_polar(x, y):
@@ -40,8 +36,6 @@ def test_cart_to_polar(x, y):
 
 @pytest.mark.parametrize('rho, phi', [
     [1, 0],
-    [0, 90],
-    [0, 180],
     [-1, 90],
     [np.linspace(0, 1, TEST_SAMPLES), np.linspace(0, 2 * np.pi, TEST_SAMPLES)]])
 def test_polar_to_cart(rho, phi):

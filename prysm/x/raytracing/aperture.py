@@ -97,11 +97,7 @@ class CircularExtent:
         self.inner_radius = float(inner_radius)
 
     def outline(self, points, *, center=0.0, radius=None):
-        """Sampled meridian (ploty, mask) for the drawn extent.
-
-        radius overrides the outer half-diameter (element OD sizing); the bore
-        mask still follows inner_radius.
-        """
+        """Sample a meridian and bore mask; radius overrides outer_radius."""
         r = self.outer_radius if radius is None else radius
         local = np.linspace(-r, r, points)
         ploty = center + local
@@ -120,11 +116,7 @@ class CircularExtent:
 # ---------------------------------------------------------------------------
 
 class Substrate:
-    """Base mirror substrate: how a reflective element's back face draws.
-
-    Cosmetic only.  Subclasses implement back_sag; the base owns side
-    resolution and closing the meridional outline (including a bored back).
-    """
+    """Cosmetic mirror-substrate drawing model."""
 
     def __init__(self, thickness, side='auto', bore=0.0):
         self.thickness = float(thickness)
@@ -151,9 +143,8 @@ class Substrate:
     def back_outline(self, surf, ploty, sag, edge_sag, center, bore=None):
         """Closed meridional outline (zz, tt) of the optical + back faces.
 
-        A bored back (bore > 0) is open through both faces and renders as two
-        disjoint loops, one per side of the bore.  bore defaults to the
-        substrate's own bore; a drawn annular extent passes its inner radius.
+        A bored back renders as two disjoint loops.  bore defaults to the
+        substrate bore; a drawn annulus passes its inner radius.
         """
         bore = self.bore if bore is None else float(bore)
         rear_sag = self.back_sag(surf, ploty, sag, edge_sag, center)
@@ -250,7 +241,7 @@ def _reference_coordinate(surf, ploty, reference):
 # ---------------------------------------------------------------------------
 
 class EdgeFeature:
-    """Base rim-wall cosmetic.  Cosmetic only."""
+    """Base rim-wall cosmetic."""
 
     is_chamfer = False
 
@@ -320,13 +311,11 @@ class Aperture:
     Parameters
     ----------
     clip : None, float, or callable
-        the physics: None (no clip), a float (circular), or an opaque
-        predicate.  A ray outside it gets a CLIP status.
+        ray clip.  A float makes a circular clip; None does not clip.
     extent : CircularExtent, optional
-        the drawn outline (never clips).  None means auto -- derived as the
-        limiting circle times oversize, or solved from the ray footprint.
+        drawn outline, never a clip.  None derives or solves from footprint.
     oversize : float, optional
-        ratio from the limiting circle to the derived drawn extent (1.05).
+        ratio from limiting circle to derived drawn extent.
     substrate : Substrate, optional
         mirror backing.
     features : iterable of EdgeFeature, optional
@@ -344,8 +333,7 @@ class Aperture:
         self.features = tuple(features)
         self._user_extent = extent is not None
         self.extent = extent
-        # version of the owning LensData this extent was solved against; None
-        # until sys.solve.apertures() writes it (auto extents only).
+        # LensData version used by sys.solve.apertures() for auto extents.
         self._solved_at_version = None
 
     @property
@@ -369,7 +357,7 @@ class Aperture:
         return footprint
 
     def drawn_radius(self, footprint=None):
-        """Drawn half-diameter: explicit extent, else limiting_radius x oversize."""
+        """Drawn radius: explicit extent, else limiting_radius x oversize."""
         if self.extent is not None:
             return self.extent.outer_radius
         lr = self.limiting_radius(footprint)

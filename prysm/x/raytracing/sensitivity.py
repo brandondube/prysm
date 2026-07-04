@@ -1,14 +1,4 @@
-"""Jacobian of a scalar merit w.r.t. a LensData's dense free vector.
-
-Two backends via the `method` kwarg of merit_jacobian_free:
-
-- `'fd'` (default): central finite differences over the free vector.  Works
-  regardless of which numerical backend `prysm.mathops` points at.
-- `'autograd'`: PyTorch reverse-mode autodiff through `update` ->
-  `to_surfaces` -> merit.  Requires the prysm backend to be torch
-  (`prysm.mathops.set_backend_to_pytorch()`).
-
-"""
+"""Scalar-merit Jacobian over a LensData free vector."""
 
 from prysm.conf import config
 from prysm.mathops import np
@@ -17,25 +7,13 @@ from prysm.mathops import np
 def central_difference(probe, base, h):
     """Central-difference probe of a scalar about base by +/- h.
 
-    probe(value) -> scalar evaluates the figure of merit with the single varied
-    DOF set to value; base is its unperturbed value and h the half-step.
-    Returns (f_plus, f_minus) = (probe(base + h), probe(base - h)); the
-    derivative is (f_plus - f_minus) / (2 * h).  A caller that also needs the
-    raw evaluations -- a sensitivity table reporting merit_plus / merit_minus --
-    reads them off the pair.  probe leaves the DOF at the last value it set, so
-    the caller restores it.
+    Returns (probe(base + h), probe(base - h)).
     """
     return float(probe(base + h)), float(probe(base - h))
 
 
 def fd_jacobian(f, x, step=1e-6, mask=None):
     """Central-difference gradient of a scalar f over the vector x.
-
-    f(x) -> scalar.  Component i is stepped by h_i = step * (|x_i| or 1); a
-    False entry in mask leaves that component's derivative at 0.  x is copied
-    for each probe (never mutated in place here), so f sees exactly one varied
-    component at a time.  Not optym's forward-difference vector-residual
-    Jacobian; this is a scalar-merit gradient.
 
     Parameters
     ----------
@@ -44,7 +22,7 @@ def fd_jacobian(f, x, step=1e-6, mask=None):
     x : array_like
         the point at which the gradient is taken.
     step : float, optional
-        relative FD step; the per-component half-step is step * (|x_i| or 1).
+        relative FD half-step, scaled by abs(x_i) or 1.
     mask : array_like of bool, optional
         components to differentiate; others keep derivative 0.
 
@@ -76,13 +54,6 @@ def fd_jacobian(f, x, step=1e-6, mask=None):
 def merit_jacobian_free(dofs, merit, method='fd', step=1e-6):
     """Gradient of a scalar merit w.r.t. a system's dense free vector.
 
-    The merit is a zero-argument callable returning the scalar figure of merit
-    of the system in its current state.  `method='fd'` perturbs each free
-    DOF with central differences (mutating the free vector in place and
-    restoring it on return).  `method='autograd'` differentiates through
-    `update` -> `to_surfaces` -> merit, and requires the prysm backend to
-    be torch.
-
     Parameters
     ----------
     dofs : DesignState
@@ -91,9 +62,9 @@ def merit_jacobian_free(dofs, merit, method='fd', step=1e-6):
     merit : callable
         `merit() -> scalar` evaluating the current system state.
     method : {'fd', 'autograd'}, optional
-        differentiation backend.  Default `'fd'`.
+        differentiation backend.  `'autograd'` requires the torch backend.
     step : float, optional
-        FD step, scaled by `|x_i|` (or 1 if zero) per DOF.  Default 1e-6.
+        FD step, scaled by abs(x_i) (or 1 if zero) per DOF.  Default 1e-6.
 
     Returns
     -------

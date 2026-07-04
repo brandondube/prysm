@@ -219,13 +219,7 @@ def _invalidate_row_owner(row):
 
 
 def _layout_thickness(row):
-    """Axial gap a row contributes to the running layout.
-
-    An infinite OBJECT distance (infinite conjugate) lays out as zero so the
-    OBJECT plane sits coincident with the first powered surface and the powered
-    surfaces keep their coordinates (ADR-0006); the infinity survives as object
-    metadata, not geometry.
-    """
+    """Axial gap a row contributes to the running layout."""
     thi = float(row.thickness)
     if not math.isfinite(thi):
         return 0.0
@@ -233,12 +227,7 @@ def _layout_thickness(row):
 
 
 def _validate_material(material):
-    """Validate a row material is a MaterialProtocol object (ADR-0002).
-
-    Accepts None (air), the MIRROR sentinel, or any object exposing a callable
-    .n(wvl_um).  Bare numbers/strings/lambdas raise immediately rather than
-    detonating mid-trace.
-    """
+    """Validate a row material is a MaterialProtocol object."""
     if material is None or material is MIRROR:
         return material
     if not callable(getattr(material, 'n', None)):
@@ -621,18 +610,12 @@ class LensData:
     """Editable sequential optical system."""
 
     def __init__(self):
-        """Initialize a lens as the [OBJECT, IMAGE] endpoint invariant (ADR-0006).
-
-        OBJECT (row 0) carries the object distance (inf for infinite conjugate)
-        and the object-space medium; IMAGE (last row) is a flat measurement plane.
-        add() inserts powered surfaces between them.
-        """
+        """Initialize a lens with OBJECT and IMAGE endpoint rows."""
         self.rows = _RowList(self)
         self._surfaces_cache = None
         self._version = 0  # bumped on every edit; keys system-side derived caches
         self._resolving = False  # True while solves/pickups write derived DOFs
-        # the owning system's DesignState (ADR-0004) installs this hook to apply
-        # dependent DOFs at compile time; a bare LensData has none.
+        # DesignState installs this hook to apply dependent DOFs at compile time.
         self._resolve_hook = None
         # Seed the OBJECT...IMAGE endpoints (infinite conjugate by default).
         self.rows.append(SurfaceRow(
@@ -923,11 +906,7 @@ class LensData:
 
     # -- copy --
     def copy(self):
-        """Return a structural copy with cloned rows (no design state).
-
-        Design state (DOFs, pickups, solves) lives on a DesignState owned by
-        the system, which copies it separately (OpticalSystem.copy).
-        """
+        """Return a structural copy with cloned rows."""
         new = LensData()
         new.rows = _RowList(new, [row.copy() for row in self.rows])
         return new
@@ -938,19 +917,7 @@ class LensData:
 
 
 class DesignState:
-    """The DOF registry, pickups, and solves for a LensData (ADR-0004).
-
-    Owned by an OpticalSystem (as system._design), it holds everything you
-    *do* to a lens for design and optimization: which row scalars are free,
-    their box bounds, pickup couplings, and an image-distance solve.  It
-    addresses row scalars through the LensData's slot helpers and installs a
-    resolve hook so dependent DOFs (pickups, solves) are applied whenever the
-    lens compiles.  A bare LensData carries no DesignState and compiles its
-    rows verbatim.
-
-    The public verbs are exposed on the system through sys.opt (vary, freeze,
-    constrain, pickup, update, pack, bounds) and sys.solve (image_distance).
-    """
+    """DOF registry, pickups, and solves for an OpticalSystem."""
 
     def __init__(self, lens):
         self.lens = lens

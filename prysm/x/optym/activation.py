@@ -75,7 +75,7 @@ class Softmax:
         # first step is to compute the dot product between the activation levels
         # and the input gradient
         tmp = row_dot(grad, self.out)
-        # tmp will be of shape (K,) for an (N, K) work shape
+        # tmp will be, shape (K,) for an (N, K) work shape
         tmp = np.broadcast_to(tmp[:, np.newaxis], self.work_shape)
 
         tmp2 = grad - tmp

@@ -68,9 +68,7 @@ def _aperture_key(aperture):
 class ApertureSpec:
     """The aperture of an optical system: a mode plus a value.
 
-    mode is one of EPD, FNO_IMAGE, FNO_OBJECT, NA_IMAGE, NA_OBJECT (module-level
-    string constants).  F-number and numerical-aperture modes resolve to an
-    equivalent entrance-pupil diameter.
+    mode is one of EPD, FNO_IMAGE, FNO_OBJECT, NA_IMAGE, NA_OBJECT.
 
     """
 
@@ -112,18 +110,7 @@ class ApertureSpec:
         return cls(value, NA_OBJECT if object_space else NA_IMAGE)
 
     def validate(self, object_at_infinity, *, has_power=True):
-        """Raise if this spec is illegal for the conjugate / power it sees.
-
-        Parameters
-        ----------
-        object_at_infinity : bool
-            True when the object is at infinity (no finite object surface).
-            Object-space modes are illegal in that case.
-        has_power : bool, optional
-            False for an afocal system; focusing modes (F-number, NA) are then
-            illegal.
-
-        """
+        """Raise if this spec is illegal for the conjugate or system power."""
         if object_at_infinity and self.mode in _OBJECT_SPACE_MODES:
             raise ValueError(
                 f'aperture mode {self.mode!r} is object-space and requires a '
@@ -149,13 +136,7 @@ class ApertureSpec:
     def resolve(self, system, wvl=None):
         """Resolve this spec to a tagged launch boundary condition.
 
-        Returns a (kind, value) pair naming the aperture definition and its
-        numeric value: ('EPD', diameter), ('NA_OBJECT', na), etc.  launch
-        consumes the tag directly -- it sets up the launch positions and
-        direction cosines from the definition and aims the resulting rays onto
-        the stop, so no privileged scalar pre-conversion happens here.  The
-        equivalent entrance-pupil diameter (a first-order readout) is available
-        separately via entrance_pupil_diameter.
+        Returns (kind, value), e.g. ('EPD', diameter) or ('NA_OBJECT', na).
 
         """
         self._validate_for_system(system, wvl)
@@ -164,15 +145,7 @@ class ApertureSpec:
     def entrance_pupil_diameter(self, system, wvl=None):
         """Equivalent paraxial entrance-pupil diameter for this spec.
 
-        A first-order readout: EPD returns its value directly; the image-space
-        modes invert the paraxial relations EFL = -n_object / C and
-        NA_image = |C| * EPD / 2; the object-space modes propagate a paraxial
-        marginal ray of the requested object-space NA from the object surface
-        to the entrance pupil.  Used for reporting (system.epd) and to size the
-        pupil-sampling pattern in the analysis layer; the launch geometry is
-        driven by the tagged definition from resolve, not by this scalar.
-
-        Returns the entrance-pupil diameter in system length units.
+        Returned in system length units.
 
         """
         object_at_infinity = bool(getattr(system, 'object_at_infinity', True))
@@ -279,8 +252,6 @@ class OpticalSystem:
                  source_format=None, extras=None):
         """Initialize a system over a lens."""
         self.lens = lens
-        # Design state (DOFs, pickups, solves) lives here, not on the lens
-        # (ADR-0004); it installs the lens's compile-time resolve hook.
         self._design = DesignState(lens)
         if aperture is not None and not isinstance(aperture, ApertureSpec):
             aperture = ApertureSpec.epd(aperture)
@@ -335,9 +306,7 @@ class OpticalSystem:
     def __getitem__(self, item):
         return self.lens[item]
 
-    # -- inner verb namespaces (ADR-0010) --
-    # sys.lens is the LensData attribute itself (structure: add, rows,
-    # to_surfaces, element_groups).  The verb pile is grouped under thin views.
+    # -- inner verb namespaces --
     @property
     def opt(self):
         """Design + optimization namespace (vary, constrain, problem, ...)."""
@@ -509,11 +478,7 @@ class OpticalSystem:
 
     # -- listings delegate to the lens --
     def list_surfaces(self, *, unit='mm'):
-        """Tabular surface listing (lens data editor).
-
-        Lengths are always millimeters (ADR-0008); unit is a fixed-mm cosmetic
-        table label.
-        """
+        """Tabular surface listing."""
         return self.lens.list_surfaces(
             stop_index=self.stop_index, unit=unit)
 
@@ -552,12 +517,7 @@ class OpticalSystem:
 # ---------------------------------------------------------------------------
 
 def _coerce_field(field):
-    """Coerce a literal field specification (Field or (hx, hy)) to a Field.
-
-    A bare scalar is rejected (ADR-0009): an int is an index (resolved by
-    OpticalSystem.field, not here) and a bare float is ambiguous -- pass a
-    (hx, hy) pair for a literal field.
-    """
+    """Coerce a literal field specification (Field or (hx, hy)) to a Field."""
     if isinstance(field, Field):
         return field
     if isinstance(field, numbers.Number):
@@ -568,14 +528,7 @@ def _coerce_field(field):
 
 
 def _coerce_fields(fields):
-    """Coerce a sequence of field specifications.  None becomes an empty list.
-
-    The plural FieldSet constructor stays a bulk convenience: a scalar element
-    is read as a y field value, in addition to (hx, hy) pairs and Field objects.
-    The bare-float rejection of ADR-0009 applies to the *singular* selector
-    (OpticalSystem.field), the one disambiguation point between an index and a
-    literal.
-    """
+    """Coerce field metadata; None becomes an empty list."""
     if fields is None:
         return []
     if isinstance(fields, FieldSet):

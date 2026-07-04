@@ -1,24 +1,8 @@
-"""Inner verb namespaces for OpticalSystem (ADR-0010).
-
-OpticalSystem groups its verbs under thin inner namespaces instead of a flat
-method pile: sys.opt (design + optimization), sys.solve (state-writing solves),
-sys.plot (plotting), sys.analysis (analysis verbs), and sys.tol (tolerancing,
-including the wavefront differential at sys.tol.wavefront).  sys.lens is the
-LensData itself (the structural owner), not a view defined here.
-
-Each view is a lightweight object bound to its system; the heavy modules
-(design, analysis, plotting, tolerance) are imported lazily inside the methods
-to keep package import light and avoid circular imports.
-"""
+"""Inner OpticalSystem verb namespaces."""
 
 
 class _OptNamespace:
-    """Design + optimization verbs: sys.opt (ADR-0004/0010).
-
-    DOF selection (vary/freeze/constrain/pickup), the optimizer free vector
-    (pack/update/bounds), and problem assembly/solve all live here, driven by
-    the system's DesignState.
-    """
+    """Design and optimization verbs under sys.opt."""
 
     __slots__ = ('_sys',)
 
@@ -92,11 +76,7 @@ class _OptNamespace:
 
 
 class _SolveNamespace:
-    """State-writing solves: sys.solve (ADR-0010).
-
-    A solve computes and writes system state -- image distance writes a
-    thickness, vignetting writes per-field factors.  Each returns the system.
-    """
+    """State-writing solves under sys.solve."""
 
     __slots__ = ('_sys',)
 
@@ -131,11 +111,7 @@ class _SolveNamespace:
 
 
 class _PlotNamespace:
-    """Plotting verbs: sys.plot (ADR-0010).
-
-    Convenience plotters over the live-fingerprint trace cache; the grids are
-    memoized on the system and rendered through the plotting module.
-    """
+    """Plotting verbs under sys.plot."""
 
     __slots__ = ('_sys',)
 
@@ -242,12 +218,7 @@ class _PlotNamespace:
 
 
 class _AnalysisNamespace:
-    """Analysis verbs: sys.analysis (ADR-0010).
-
-    Thin forwards to the analysis free functions (and the system's cached
-    first-order / exit-pupil resolvers), passing the system so metadata
-    resolves once.
-    """
+    """Analysis verbs under sys.analysis."""
 
     __slots__ = ('_sys',)
 
@@ -311,13 +282,7 @@ class _AnalysisNamespace:
 
 
 class _TolNamespace:
-    """Tolerancing verbs: sys.tol (ADR-0010).
-
-    Scalar-merit sensitivity (FD), Monte Carlo, and inverse sensitivity, plus
-    the forward-mode wavefront differential at sys.tol.wavefront (the Code V
-    TOR math).  The three sensitivity backends are deliberately not
-    consolidated -- they are cardinality-optimal for their respective problems.
-    """
+    """Tolerancing verbs under sys.tol."""
 
     __slots__ = ('_sys',)
 

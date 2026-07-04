@@ -53,7 +53,7 @@ class AdjointResult:
         return self.jacobian[self._row(head)]
 
     def ranked_by(self, head):
-        """Parameters sorted by |sensitivity| for one objective, descending."""
+        """Parameters sorted by abs(sensitivity) for one objective, descending."""
         row = self.sensitivity_for(head)
         order = np.argsort(-np.abs(row))
         return [(self.param_names[i], float(row[i])) for i in order]
@@ -141,7 +141,7 @@ class ToleranceSensitivityTable:
         self.steps = np.asarray(steps, dtype=config.precision)
 
     def sensitivity(self):
-        """|dF_m / dtau_p| matrix, (M, P)."""
+        """abs(dF_m / dtau_p) matrix, (M, P)."""
         return np.abs(self.result.jacobian)
 
     def degradation_at_step(self):
@@ -155,7 +155,7 @@ class ToleranceSensitivityTable:
 def inverse_sensitivity(J, budget, steps_min=None, steps_max=None):
     """Per-parameter tolerance giving exactly `budget` merit degradation.
 
-    For each parameter p, tol_p = budget / |J[m, p]| with the tightest (most
+    For each parameter p, tol_p = budget / abs(J[m, p]) with the tightest (most
     constraining) objective m taken.  Parameters with zero sensitivity are
     unconstrained (tolerance -> steps_max if given, else +inf).  Result is
     clipped to [steps_min, steps_max] when provided.
@@ -242,7 +242,7 @@ def compensated_jacobian(J, J_comp):
 def multi_objective_budget(J, budgets):
     """Per-parameter tolerance satisfying all objective budgets at once.
 
-    Minimax over objectives: tol_p = min_m budgets[m] / |J[m, p]|.  Equivalent
+    Minimax over objectives: tol_p = min_m budgets[m] / abs(J[m, p]).  Equivalent
     to inverse_sensitivity with a per-objective budget vector.
 
     Parameters

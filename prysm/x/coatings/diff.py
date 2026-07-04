@@ -43,9 +43,9 @@ def char_matrix_vjp(beta, eta, M_bar):
     Parameters
     ----------
     beta, eta : ndarray
-        phase thickness and admittance, shape (*calc,).
+        phase thickness and admittance, shape (calc,).
     M_bar : ndarray
-        cotangent of the characteristic matrix, shape (*calc, 2, 2).
+        cotangent of the characteristic matrix, shape (calc, 2, 2).
 
     Returns
     -------
@@ -134,7 +134,7 @@ class ForwardEval:
 
     @property
     def R_value(self):
-        """Reflectance |r|^2."""
+        """Reflectance abs(r)^2."""
         return np.abs(self.r) ** 2
 
     @property
@@ -144,13 +144,13 @@ class ForwardEval:
 
     @property
     def A_value(self):
-        """Per-layer absorptance, shape (N, *calc)."""
+        """Per-layer absorptance, shape (N, calc)."""
         flux = np.real(self.E * np.conj(self.H)) / np.real(self.eta0)
         return flux[:-1] - flux[1:]
 
     @property
     def Esq_value(self):
-        """Standing-wave intensity |E|^2 at each boundary, shape (N+1, *calc)."""
+        """Standing-wave intensity abs(E)^2 at each boundary, shape (N+1, calc)."""
         return np.abs(self.E) ** 2
 
 
@@ -236,7 +236,7 @@ def layer_cotangents(fwd, dR=None, dT=None, dA=None, dEsq=None):
     Returns
     -------
     (list, list)
-        c_beta and c_eta, each a length-N list of (*calc,) arrays.
+        c_beta and c_eta, each a length-N list of (calc,) arrays.
 
     """
     N = len(fwd.matrices)

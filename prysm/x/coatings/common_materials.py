@@ -1,24 +1,4 @@
-"""Common coating materials by spectral band and application.
-
-Tokens are refractiveindex.info names: either a book string (MgF2) or a
-(book, page) pair where the database's default page does not cover the band.
-The materials function resolves them through x/materials into dispersion
-callables for Stack; the names function returns the raw tokens.  Tables are
-keyed by band, then by role within the design:
-
-- low / mid / high: refractive index class of the dielectric layers
-- metal / barrier: the reflective layer and its corrosion-protection layer
-  (enhanced metal mirrors only)
-
-The oxide family (SiO2, TiO2, Ta2O5, Nb2O5, HfO2, Al2O3, ZrO2) absorbs beyond
-about 2.5-3 um, so the menu changes completely between SWIR and MWIR; the
-fluorides and semiconductors carry the IR.  Two staples of the literature are
-constrained by database coverage: ThF4 (the legacy, radioactive LWIR
-low-index) has no IR data on refractiveindex.info, so YbF3 stands in for the
-whole YF3/YbF3/ThF4 family, and PbTe data begin at 4.1 um, so it appears only
-in the LWIR bandpass table.  Cryolite (the ZnS/Na3AlF6 visible bandpass
-pairing) is absent from the database and omitted.
-"""
+"""Common coating material tokens by spectral band and application."""
 
 from ..materials import glass as _glass
 
@@ -136,8 +116,7 @@ def names(application, band):
     Returns
     -------
     dict
-        role -> tuple of tokens; each token is a refractiveindex.info book
-        name or a (book, page) pair.
+        role -> tuple of book names or (book, page) pairs.
 
     """
     table = APPLICATIONS[application.upper()]
@@ -154,8 +133,7 @@ def materials(application, band, database=None):
     band : str
         a key of BANDS; case-insensitive.
     database : material catalog, optional
-        forwarded to x/materials glass; None uses the refractiveindex.info
-        database (downloaded on first use).
+        forwarded to x/materials glass.
 
     Returns
     -------

@@ -9,10 +9,7 @@ SURFACE_INTERSECTION_DEFAULT_MAXITER = 100
 DEFAULT_TOL_SAG = 1e-12
 
 # Surface-type constants live here to avoid an import cycle with surfaces.py.
-# The bending types are REFLECT/REFRACT; the measurement types (EVAL/OBJ/IMG)
-# do not bend a ray (they record state on whatever shape they carry, flat or
-# curved) and are exempt from the forward_only behind-origin rejection -- test
-# them with _is_measurement_surf, never a bare == STYPE_EVAL (ADR-0006).
+# Measurement types do not bend rays; test them with _is_measurement_surf.
 STYPE_REFLECT = -1
 STYPE_REFRACT = -2
 STYPE_EVAL = -3  # NOQA  intermediate measurement surface (neither object nor image)

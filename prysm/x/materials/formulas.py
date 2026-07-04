@@ -72,7 +72,7 @@ def agf_formula(formula, wvl_um, *coefficients, name='material'):
 
     Coefficients follow the wavelength positionally so that
     partial(agf_formula, formula_id) matches the FormulaMaterial calling
-    convention formula(wvl_um, *coefficients).
+    convention formula(wvl_um, coef0, coef1, ...).
     """
     if formula == 1:
         if len(coefficients) < 6:
@@ -110,7 +110,7 @@ def riinfo_formula(formula_id, wvl_um, *coefficients):
     through mathops.np so the consumption path stays backend-pure and
     differentiable.  Coefficients follow the wavelength positionally so that
     partial(riinfo_formula, formula_id) matches the FormulaMaterial calling
-    convention formula(wvl_um, *coefficients).
+    convention formula(wvl_um, coef0, coef1, ...).
     """
     C = coefficients
     # pad so the fixed-index formulas (4, 7, 8, 9) tolerate short coefficient

@@ -1,19 +1,10 @@
-"""System-entry metadata resolvers (ADR-0001).
-
-These accept a system (OpticalSystem or LensData) and resolve metadata through
-its own methods, falling back to an explicit-scalar requirement for a bare
-surface sequence.  The leaf primitives in _meta stay system-free.
-"""
+"""System-entry metadata resolvers."""
 
 from ._meta import object_space_index, image_space_index
 
 
 def compiled_surfaces(system):
-    """Compiled Surface list for a system/LensData, or the sequence itself.
-
-    Always returns a list: an OpticalSystem or LensData compiles via
-    to_surfaces(); a bare surface sequence is copied into a list.
-    """
+    """Return a compiled Surface list for a system or bare sequence."""
     to_surfaces = getattr(system, 'to_surfaces', None)
     if callable(to_surfaces):
         return to_surfaces()
@@ -21,11 +12,7 @@ def compiled_surfaces(system):
 
 
 def resolve_wavelength(system, wavelength):
-    """Resolve a None wavelength via the system; require explicit for a list.
-
-    A system maps None to its reference wavelength; a bare sequence carries no
-    metadata, so None is an error there.
-    """
+    """Resolve wavelength, using the system reference when available."""
     resolver = getattr(system, 'wavelength', None)
     if callable(resolver):
         return float(resolver(wavelength))
@@ -37,12 +24,7 @@ def resolve_wavelength(system, wavelength):
 
 
 class TraceContext:
-    """Resolved trace metadata: compiled surfaces plus bare scalars.
-
-    Produced by the system layer (trace_context); never required by a leaf
-    primitive.  epd and stop_index are None unless resolved; n_object and
-    n_image resolve from the surfaces on first access.
-    """
+    """Compiled surfaces and trace metadata."""
 
     __slots__ = ('surfaces', 'wavelength', 'epd', 'stop_index',
                  '_n_object', '_n_image')
@@ -74,11 +56,6 @@ class TraceContext:
 def trace_context(system, wavelength=None, *, chief=False, epd=None,
                   stop_index=None):
     """Resolve a system or bare sequence into a TraceContext.
-
-    A system fills a None wavelength from its reference; a bare sequence
-    needs it given.  chief=True additionally fills None epd/stop_index from
-    the system metadata for chief-ray analyses; a bare sequence leaves them
-    as passed.
 
     Parameters
     ----------

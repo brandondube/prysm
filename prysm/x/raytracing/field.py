@@ -223,14 +223,14 @@ def interface_coefficients(n0, n1, cosI, typ, *, coating=None, wavelength=None):
 
 
 def _power_coefficient(a_s, a_p):
-    """Unpolarized power coefficient (|a_s|**2 + |a_p|**2) / 2."""
+    """Unpolarized power coefficient (abs(a_s)^2 + abs(a_p)^2) / 2."""
     return 0.5 * (np.abs(a_s) ** 2 + np.abs(a_p) ** 2)
 
 
 def unpolarized_amplitude(system, trace, wavelength):
     """Per-ray scalar amplitude transmittance through the system.
 
-    Uses sqrt((|a_s|**2 + |a_p|**2) / 2) at each surface.
+    Uses sqrt((abs(a_s)^2 + abs(a_p)^2) / 2) at each surface.
 
     Parameters
     ----------
@@ -314,7 +314,7 @@ def sine_space_coords(S_last, S_chief, scale, axis_dir=None):
     S_chief : ndarray, shape (3,)
         chief-ray direction cosines (the pupil-coordinate origin).
     scale : float
-        length scale (|EFL|, or the reference-sphere radius for a tilted system
+        length scale (abs(EFL), or the reference-sphere radius for a tilted system
         whose paraxial EFL is undefined).
     axis_dir : iterable, optional
         optical-axis direction; default +z.
@@ -440,7 +440,7 @@ class PupilField:
 def _pupil_coordinate_scale(ctx, P_xp, center):
     """Length scale for the sine-space pupil coordinate.
 
-    Uses |EFL| when available, otherwise the reference-sphere radius.
+    Uses abs(EFL) when available, otherwise the reference-sphere radius.
     """
     try:
         return abs(float(effective_focal_length(ctx.surfaces,

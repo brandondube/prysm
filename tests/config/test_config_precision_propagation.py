@@ -121,7 +121,7 @@ def test_monte_carlo_merits_dtype_follows_config_precision(precision):
         return 0.0
 
     # one trivial perturbation; sigma=0 so each trial reports nominal.
-    # surface 1 is the mirror (surface 0 is the OBJECT endpoint, ADR-0006).
+    # surface 1 is the mirror; surface 0 is the OBJECT endpoint.
     pert = Perturbation.normal(ld, 'curvature', 1, sigma=0.0, name='c0')
     res = monte_carlo(ld, [pert], merit, n_trials=3,
                       seed=42, record_samples=True)

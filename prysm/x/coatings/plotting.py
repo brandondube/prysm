@@ -101,7 +101,7 @@ def plot_index_profile(stack, wvl=None, fig=None, ax=None):
 
 def plot_field_intensity(stack, wvl, theta=0.0, pol='s', n_points=1000,
                          fig=None, ax=None):
-    """Plot the standing-wave intensity |E(z)|^2 through the stack.
+    """Plot the standing-wave intensity abs(E(z))^2 through the stack.
 
     Parameters
     ----------

@@ -339,7 +339,7 @@ def adj_eic_closing_full(P, S, C, kappa, s_bar):
 
     The full transpose of opt.hopkins_eic_closing's per-ray segment
     s_tilde = -b - kappa m / (1 + sqrt(1 + kappa^2 m)), b = S.(P - C),
-    m = b^2 - |P - C|^2, returning cotangents for the ray (P, S), the reference
+    m = b^2 - (P - C).(P - C), returning cotangents for the ray (P, S), the reference
     center C, and the curvature kappa = 1/R.  The C / kappa cotangents close the
     reference sphere's dependence on the chief ray and the exit pupil (handled
     by the WFE merit head).  The determinate replacement for the sphere-segment

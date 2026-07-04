@@ -37,7 +37,6 @@ def _resolve_field(system, field):
         return Field(0.0, 0.0)
     if isinstance(field, Field):
         return field
-    # ADR-0009: a literal field is a (hx, hy) pair; a bare scalar is rejected.
     if np.isscalar(field):
         raise TypeError(
             'a literal field must be a (hx, hy) pair or a Field, not a bare '
@@ -60,9 +59,7 @@ def _chief_tangent_trace(system, surfaces, fld, wvl):
 def _raw_matrix(res, j_pos, j_dir, basis):
     """4x4 launch-to-surface map in the chief T/S frame at that surface.
 
-    Rows are (x, y, theta_x, theta_y) responses; columns are the dx, dy,
-    du, dv launch seeds.  Transverse coordinates are lengths and angles are
-    radians (no reduced-index scaling).
+    Rows are (x, y, theta_x, theta_y); columns are dx, dy, du, dv seeds.
     """
     e1, e2 = basis
     Pd = res.Pdot[j_pos][0]
@@ -121,11 +118,7 @@ def _section_parity(trace, surfaces, e1, e2, exit_basis):
 
 
 def _collapse(pair):
-    """Mean of an (x, y) section pair; the lone section when one is degenerate.
-
-    Only None when BOTH sections are undefined -- a single afocal/degenerate
-    meridian must not mask the well-defined orthogonal section.
-    """
+    """Mean of an (x, y) pair; lone defined section if one is degenerate."""
     if pair is None:
         return None
     a, b = pair
@@ -141,10 +134,8 @@ def _collapse(pair):
 def _section_image_foci(res, at_inf):
     """Per-section paraxial image z (x_z, y_z) from a chief-tangent trace.
 
-    The collimated (position-seed) column at infinite conjugates, the
-    point-source (angle-seed) column at finite conjugates.  Either element is
-    None when that section has no axis crossing.  Shared by first_order and
-    parabasal_foci so the foci and the reported image plane never drift.
+    Uses the position-seed column at infinite conjugates, angle-seed column at
+    finite conjugates.  None means that section has no axis crossing.
     """
     trace = res.trace
     P_img = trace.P[-1, 0]
@@ -269,17 +260,12 @@ def first_order(system, field=None, wavelength=None, *, epd=None,
                 stop_index=None, force_sym=False):
     """Parabasal first-order properties of a system about a chief ray.
 
-    Uses dx/dy/du/dv chief-ray launch tangents to form a 4x4 T/S ABCD map.
-    If the chief ray fails, the scalar YNU walk supplies the fallback values.
-
     Parameters
     ----------
     system : OpticalSystem or sequence of Surface
-        a system resolves wavelength/EPD/stop/field; a bare sequence needs them
-        passed explicitly.
+        a system resolves wavelength/EPD/stop/field.
     field : int, tuple, or Field, optional
-        chief-ray field; None is the first field (or on-axis).  A bare float is
-        rejected.
+        chief-ray field; None is the first field or on-axis.
     wavelength : float, optional
         wavelength in microns; None resolves to the system reference.
     epd : float, optional
@@ -370,21 +356,16 @@ def first_order(system, field=None, wavelength=None, *, epd=None,
             if out.epd is not None:
                 pairs['fno'][i] = abs(pairs['efl'][i]) / out.epd
                 pairs['na_image'][i] = abs(C_red) * out.epd / 2.0
-            # rear focal point: the collimated (position-seed) column
             t_f = _axis_crossing(A, C)
             if t_f is not None and last_powered is not None:
                 focal_z = z_img + t_f * simz
                 pairs['bfl'][i] = focal_z - float(last_powered.P[2])
-            # front focal point: the input ray that exits collimated has
-            # (x, theta) proportional to (D, -C)
             if first_powered is not None:
                 t_ffp = _axis_crossing(D, -C)
                 if t_ffp is not None:
                     front_focal_z = z0 + t_ffp * s0z
                     pairs['ffl'][i] = (float(first_powered.P[2])
                                        - front_focal_z)
-        # paraxial image foci shared with parabasal_foci (so the foci and the
-        # reported image plane never drift).
         if image_foci[i] is not None:
             pairs['paraxial_image_z'][i] = image_foci[i]
             if last_interacting is not None:
@@ -394,8 +375,6 @@ def first_order(system, field=None, wavelength=None, *, epd=None,
         if M_ls is None:
             continue
         As, Bs, Cs, Ds = _section(M_ls, i)
-        # entrance pupil: the object-space ray through the stop center has
-        # (x, theta) proportional to (Bs, -As)
         t_ep = _axis_crossing(Bs, -As)
         if t_ep is not None:
             pairs['ep_z'][i] = z0 + t_ep * s0z

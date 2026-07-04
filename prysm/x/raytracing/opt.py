@@ -240,7 +240,7 @@ def xp_reference_sphere(P_chief, S_chief, axis_point=None, axis_dir=None,
     """Compute the exit-pupil reference sphere for a single chief ray.
 
     The reference sphere is centered on the chief ray's image point (P_chief)
-    and has radius |P_xp - P_chief|, where P_xp is the chief ray's closest
+    and has radius norm(P_xp - P_chief), where P_xp is the chief ray's closest
     approach to the optical axis.
 
     Parameters
@@ -341,7 +341,7 @@ def reference_sphere_curvature(P_xp, center):
     """Curvature kappa = 1/R of the chief-image reference sphere.
 
     The reference sphere is centered on the image point center and passes
-    through the exit-pupil point P_xp, so R = |P_xp - center|.  Returns the
+    through the exit-pupil point P_xp, so R = norm(P_xp - center).  Returns the
     curvature kappa = 1/R, which is the determinate handle the EIC closing
     uses: a finite exit pupil gives kappa > 0, and an exit pupil at infinity
     (image-space telecentric / afocal) is the kappa = 0 limit -- signalled by
@@ -380,11 +380,11 @@ def hopkins_eic_closing(P_hist, S_hist, OPL_hist, *, center, curvature,
     to the chief-ray image point through the equally-inclined chord -- but in a
     branch-free, cancellation-free form parametrized by the reference sphere's
     finite center and its curvature kappa = 1/R.  The segment from the last
-    surface to the sphere, t = -b - sqrt(b^2 - |r|^2 + R^2) with r = P_last -
+    surface to the sphere, t = -b - sqrt(b^2 - r . r + R^2) with r = P_last -
     center and b = S_last . r, is rewritten by shifting off the common radius:
 
-        s = t + R = -b - kappa |r|^2-corrected-term, exactly
-        s = -b - kappa * m / (1 + sqrt(1 + kappa^2 * m)),   m = b^2 - |r|^2.
+        s = t + R = -b - kappa (r . r)-corrected-term, exactly
+        s = -b - kappa * m / (1 + sqrt(1 + kappa^2 * m)),   m = b^2 - r . r.
 
     The common -R is ray-independent and drops out under the chief reference,
     so n_image * s is the reference-sphere OPD to machine precision for a

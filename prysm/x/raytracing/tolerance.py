@@ -89,7 +89,7 @@ class Perturbation:
     @classmethod
     def normal_relative(cls, lensdata, category, surface, sigma_rel, name='',
                         component=None):
-        """Normal distribution with sigma = sigma_rel * |nominal DOF|.
+        """Normal distribution with sigma = sigma_rel * abs(nominal DOF).
 
         For a DOF whose nominal is 0 this collapses to a delta function --
         use .normal with an explicit absolute sigma in that case.
@@ -177,7 +177,7 @@ class SensitivityTable:
         return np.array([r['sensitivity'] for r in self.rows])
 
     def worst_delta_per_row(self):
-        """max(|delta_plus|, |delta_minus|) per row, in row order."""
+        """max(abs(delta_plus), abs(delta_minus)) per row, in row order."""
         return np.array([
             max(abs(r['delta_plus']), abs(r['delta_minus']))
             for r in self.rows
@@ -276,12 +276,17 @@ def sensitivity_table(system, perturbations, merit, *, step=None):
 class MonteCarloResult:
     """Outcome of a tolerancing Monte Carlo trial run.
 
-    .merits : ndarray (n_trials,) of merit values per trial.
-    .sampled_x : ndarray (n_trials, n_params) or None; sampled parameter
-                 values per trial.  Populated only when monte_carlo was
-                 called with record_samples=True.
-    .nominals : ndarray (n_params,) of nominal parameter values.
-    .names : list of str, length n_params.
+    Attributes
+    ----------
+    merits : ndarray (n_trials,)
+        merit value per trial.
+    sampled_x : ndarray (n_trials, n_params) or None
+        sampled parameter values per trial; populated only when monte_carlo
+        was called with record_samples=True.
+    nominals : ndarray (n_params,)
+        nominal parameter values.
+    names : list of str, length n_params
+        parameter names.
 
     """
 

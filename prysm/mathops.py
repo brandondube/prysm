@@ -165,12 +165,6 @@ def array_to_true_numpy(*args):
 def row_dot(a, b):
     """Batched dot product along the last (row) axis: `sum(a * b, axis=-1)`.
 
-    For inputs of shape `(N, K)` returns shape `(N,)`.  Implementation
-    uses `einsum` because it is the fastest route on numpy and works
-    unchanged on the cupy / torch backends.  See the prior incarnation in
-    `prysm/x/raytracing/spencer_and_murty.py` (`_multi_dot`) for
-    benchmark notes — this task is memory-bandwidth limited.
-
     Parameters
     ----------
     a : ndarray

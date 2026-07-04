@@ -33,14 +33,7 @@ def _range_contains(outer, inner):
 
 
 def _user_page_info(material):
-    """Default page_info shape for a user-defined material.
-
-    page_info is provenance surfaced for the IO writers (which read 'page' and
-    'book').  It is derived on access from the material's own attributes so it
-    cannot drift.  Each data source owns its shape: AGF and RII install their
-    own builder (see materials.agf / materials.rii) so this module carries no
-    per-source enumeration.
-    """
+    """Default page_info shape for a user-defined material."""
     wr = material.wavelength_range
     lo, hi = wr if wr is not None else (None, None)
     meta = material.metadata
@@ -58,11 +51,7 @@ def _user_page_info(material):
 
 
 def _accepts_temperature(func):
-    """True if func can be called with a temperature= keyword.
-
-    Used to let a dispersion-formula callable opt into temperature dependence
-    without forcing every formula to carry an unused temperature parameter.
-    """
+    """True if func can be called with a temperature= keyword."""
     if func is None:
         return False
     try:
@@ -104,13 +93,7 @@ def _validate_range(values, valid_range, label, name):
 
 
 class MaterialProtocol:
-    """Documents the duck-typed optical material interface.
-
-    A material is anything that carries the metadata attributes name, catalog,
-    variant, source, citation, license, wavelength_range, temperature_range,
-    process, and metadata, and that provides the methods below.  Nothing
-    subclasses this; it is a reference for the convention only.
-    """
+    """Duck-typed optical material interface."""
 
     def n(self, wvl_um, temperature=None):
         """Return real refractive index at wavelength in microns."""

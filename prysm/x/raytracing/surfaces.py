@@ -1153,7 +1153,7 @@ class Surface:
     def __init__(self, shape=None, interaction=None, pose=None, material=None,
                  aperture=None, grating=None, *, P=None, R=None,
                  tilt=None, decenter=None, tilt_radians=False,
-                 coating=None):
+        coating=None):
         """Initialize a posed optical surface.
 
         Parameters
@@ -1170,9 +1170,7 @@ class Surface:
             the real geometric index and .nk(wavelength) the complex index.
             None for reflective / eval surfaces.
         aperture : Aperture, float, callable, or None, optional
-            The surface aperture: clip, drawn extent, substrate, and rim
-            features.  A float is a circular clip, a callable an opaque clip,
-            None an auto aperture.
+            surface aperture.  A float is a circular clip; None is auto.
         grating : PhaseFunction or tuple, optional
             Diffractive phase function on the surface; None for a plain surface.
             Legacy (period, grating_vector, order) tuples are accepted.
@@ -1185,10 +1183,7 @@ class Surface:
         tilt_radians : bool, optional
             If True, tilt values are interpreted as radians.
         coating : coatings.Stack, optional
-            Thin-film stack on this surface; None (default) gives the bare
-            Fresnel interface (and, on reflection, the lossless ideal mirror).
-            Consumed by the field / polarization paths via
-            field.interface_coefficients.
+            thin-film stack; None uses the bare interface.
 
         """
         if shape is None:
@@ -1231,13 +1226,11 @@ class Surface:
 
     @property
     def aperture(self):
-        """The surface Aperture (clip, drawn extent, substrate, rim features)."""
+        """Surface aperture model."""
         return self._aperture
 
     @aperture.setter
     def aperture(self, value):
-        # Always an Aperture: a float is a circular clip, a callable an opaque
-        # clip, None an auto aperture.
         self._aperture = as_aperture(value)
 
     @property
@@ -1247,8 +1240,7 @@ class Surface:
 
     @grating.setter
     def grating(self, value):
-        # First-class objects only (ADR-0011): a PhaseFunction or None, no
-        # (period, g_vec, order) tuple coercion.
+        # PhaseFunction or None; no legacy tuple coercion.
         if value is not None and not isinstance(value, PhaseFunction):
             raise TypeError(
                 'grating must be a PhaseFunction (LinearGrating, CallablePhase) '
@@ -1270,8 +1262,7 @@ class Surface:
         if not hasattr(shape, 'seed_conic'):
             return DepartureBand.unbounded()
         c, k, dx, dy = shape.seed_conic()
-        # the aperture bounds the characterized domain: the drawn extent if set,
-        # else the clip radius (rays land only inside it)
+        # Bound the characterized domain by drawn extent, else clip radius.
         ap = self.aperture
         R = ap.extent.outer_radius if ap.extent is not None \
             else ap.limiting_radius()

@@ -45,11 +45,7 @@ def charms_silicon(name='silicon'):
 
 
 def charms_germanium(name='germanium'):
-    """CHARMS temperature-dependent germanium (1.9-5.5 um, 20-300 K).
-
-    dn/dT is enormous (~4e-4 /K near room temperature); a real Ge design must
-    fix the operating temperature, not assume the room-temperature index.
-    """
+    """CHARMS temperature-dependent germanium (1.9-5.5 um, 20-300 K)."""
     return TemperatureSellmeierMaterial(
         name, _GE_STRENGTH, _GE_RESONANCE,
         wavelength_range=(1.9, 5.5), temperature_range=(20.0, 300.0),
@@ -74,13 +70,7 @@ def sapphire_ordinary(name='sapphire', *, aliases=()):
 
 
 def infrared_catalog(temperature=295.0):
-    """Catalog of MWIR materials, the CHARMS models bound to temperature (K).
-
-    Germanium and silicon are the temperature-dependent CHARMS models frozen at
-    temperature so they answer the bare n(wvl) the ray trace makes; sapphire is
-    the room-temperature Malitson model.  Names and aliases cover the usual Code
-    V tokens (GERMMW, SILICON, SAPHIR).
-    """
+    """Catalog of MWIR materials with CHARMS models bound to temperature."""
     ge = IsothermalMaterial(
         charms_germanium(), temperature, name='germanium',
         metadata={'aliases': ('GE', 'GERMANIUM', 'GERMMW')})
