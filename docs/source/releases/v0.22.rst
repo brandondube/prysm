@@ -27,11 +27,11 @@ A basic summary of the changelog is:
   allowing gradient-based optimization of a wide range of problems in optics
   such as:
 
-  * * Phase Retrieval
+  * Phase Retrieval
 
-  * * Coronagraph mask optimization
+  * Coronagraph mask optimization
 
-  * * In raytracing: Using backpropagation to obtain partial derivatives of a
+  * In raytracing: Using backpropagation to obtain partial derivatives of a
     cost function with respect to tolerances and other parameters, similar to
     wavefront differential tolerancing (which is also implemented).
 
@@ -40,8 +40,16 @@ A basic summary of the changelog is:
 
 The new x/ modules are detailed in the release notes below.
 
-.. toctree::
-   :maxdepth: 2
+Documentation
+=============
+
+The documentation has been rebuilt around a set of colleges: numbered,
+narrated notebook courses, one per domain, from foundations through
+polynomials, diffraction, optimization, apertures and segmented systems,
+raytracing, materials and coatings, polarization, interferometry, fibers,
+and performance.  A lens design gallery works classic forms from Smith's
+Modern Lens Design end to end with the raytracing module.  The previous
+tutorials, how-tos, and explanation articles remain.
 
 Core library
 ============
@@ -882,12 +890,28 @@ biconic sags, with consistent :code:`F` / :code:`FFp` height-and-slope
 contracts.  The Spencer-and-Murty tracer now carries richer status information
 through apertures, interaction failures, gratings, and inactive rays.
 
-A new :code:`Prescription` wrapper provides an ergonomic sequential-system
-interface over the low-level surface list.  It stores fields, wavelengths, EPD,
-ambient index, and reference wavelength; can build simple refractive sequences;
-can solve and set the paraxial image plane or target focal length; and exposes
-one-call launch, trace, RMS spot, focus optimization, transverse ray fan, wave
-aberration fan, and layout/fan plotting helpers.
+A new :code:`OpticalSystem` wrapper provides an ergonomic sequential-system
+interface over the low-level surface list.  The lens structure itself lives in
+a :code:`LensData` container (rows of radius, thickness, material, aperture --
+the same spreadsheet mental model as commercial codes), and the system adds the
+metadata a trace needs: fields, wavelengths and spectral weights, an aperture
+specification (EPD, F/#, NA, ...), reference wavelength, stop index, and ray
+aiming policy.  The system's verbs are grouped into a handful of small
+namespaces rather than one flat method pile: :code:`sys.lens` (structure),
+:code:`sys.opt` (variables, constraints, optimization), :code:`sys.solve`
+(image distance, vignetting factors, aperture sizing -- solves that write
+state), :code:`sys.plot` (layouts, spot diagrams, ray and OPD fans, field
+curves), :code:`sys.analysis` (first order, wavefront, distortion, ...), and
+:code:`sys.tol` (sensitivity, Monte Carlo, wavefront-differential
+tolerancing).
+
+Each surface carries one unified :code:`Aperture` object in place of the
+previous pile of semidiameter, bounding, and edge-drawing inputs: a clip
+predicate that actually vignettes rays, a drawn extent for layout plots, an
+oversize factor relating the two, and optional substrate and edge features for
+mirrors and mounted elements.  :code:`aperture=X` on a surface is shorthand
+for a circular clip of radius X, and :code:`sys.solve.apertures()` sizes the
+automatic extents from a trace of all fields.
 
 The launch and first-order layers have grown into reusable user APIs:
 :code:`Field` describes finite or angular object fields, :code:`Sampling`
@@ -925,7 +949,7 @@ Newton surface intersections now carry a first-root guarantee on strong
 aspheres.  Each conic-seeded surface precomputes the max departure D of its
 sag from the seed conic over its characterized domain (bounding outer
 radius, else normalization radius, else the conic's own domain limit); a
-Newton root is accepted only within |s - s_conic| <= D/\|cos theta_inc\| of
+Newton root is accepted only within \|s - s_conic\| <= D/\|cos theta_inc\| of
 the conic root and inside the domain, so convergence onto the wrong sheet of
 a gull-wing asphere — which previously traced silently — is caught.  Rays
 failing the band (and rays whose seed conic misses while the real surface
@@ -956,7 +980,8 @@ surfaces now participate fully in the differential and adjoint stacks
 
 Analysis, design, and tolerancing tools have been added around the tracer.
 Analysis routines now cover transverse ray aberration, wavefront OPD and
-Zernike fitting, distortion, field curvature, axial color, and lateral color.
+Zernike fitting, distortion, field curvature, chromatic focal shift (real-ray
+or paraxial), and lateral color.
 The design layer introduces variable factories for curvature, radius, conic
 constant, indexed coefficients, position, and air/glass thickness; operands
 for RMS spot radius, ray height, boresight, EFL, BFL, paraxial image distance,
@@ -995,15 +1020,15 @@ list whose operands route by their bounds: :code:`target=` makes an equality,
 constraints.
 
 A high-level optimization API now mirrors the plotting sugar:
-:code:`OpticalSystem.problem(goal, ...)` assembles a :code:`Problem` by
+:code:`sys.opt.problem(goal, ...)` assembles a :code:`Problem` by
 fanning goal items out over the system fields and wavelengths (with the
-system spectral weights), and :code:`OpticalSystem.optimize(...)` solves it
+system spectral weights), and :code:`sys.opt.optimize(...)` solves it
 in one shot, updating the lens in place.  Goals mix freely: strings name
 boxed operands (:code:`'spot'`, :code:`'wavefront'`), a Merit subclass fans
 out like the strings, a Merit instance passes through, and a bare callable
-:code:`f(prescription, cache) -> float` is wrapped.  The Code V
+:code:`f(system, cache) -> float` is wrapped.  The Code V
 :code:`aut; efl=100; ttl<100; go` becomes
-:code:`sys.optimize('spot', constraints=[EFL(target=100), TotalTrack(max=100)])`.
+:code:`sys.opt.optimize('spot', constraints=[EFL(target=100), TotalTrack(max=100)])`.
 
 :code:`OpticalSystem` caches its paraxial common-mode work (first-order
 properties, entrance pupil location, equivalent entrance pupil diameter) in
@@ -1054,7 +1079,7 @@ curves with a 2D map over the whole field disc:
 spectrally-weighted RMS spot radius; piston-removed RMS wavefront error in
 waves; percent distortion; or lateral color) on a Cartesian grid of field
 points spanning the field disc, and :code:`plotting.plot_full_field` /
-:code:`OpticalSystem.plot_full_field` draw the resulting
+:code:`sys.plot.full_field` draw the resulting
 :code:`FullFieldGrid` as a color map.
 
 Several robustness fixes for real-world prescription files: the Code V reader
@@ -1063,7 +1088,7 @@ skips a standalone stop or dummy plane (an ambient-to-ambient surface belongs
 to no lens element), truncates drawn ray paths at the surface where a ray was
 clipped or otherwise terminated, and no longer warns about a steep surface
 that cannot reach the element OD when that surface's own clear aperture
-intentionally caps the drawn zone.  A new :code:`OpticalSystem.set_vignetting`
+intentionally caps the drawn zone.  A new :code:`sys.solve.vignetting`
 solves the vignetting factors against the system's own apertures and ray
 aiming: per field and per pupil side, an edge ray is bisected radially toward
 the chief until it transmits (:code:`Sampling.points` carries the per-sample
@@ -1107,6 +1132,19 @@ Material models
   :class:`~prysm.x.materials.CHARMSTableMaterial`, and
   :class:`~prysm.x.materials.TemperatureSellmeierMaterial`; thermo-optic
   (temperature-dependent) dispersion
+
+* :class:`~prysm.x.materials.IsothermalMaterial`; bind a thermo-optic
+  material to a fixed temperature so it answers the bare n(wvl) query the
+  ray trace makes
+
+* :func:`~prysm.x.materials.model_glass`; two-term Cauchy model glass
+  reproducing (nd, Vd) -- a designer's stand-in for a real glass.  The
+  prescription readers resolve 6-digit glass codes and Code V-style
+  nnn.nnn tokens to model glasses
+
+* the :code:`prysm.x.materials.infrared` module: NASA CHARMS cryogenic
+  dispersion data for silicon and germanium, Malitson sapphire, and a small
+  infrared catalog
 
 Catalogs
 ^^^^^^^^

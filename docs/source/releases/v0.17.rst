@@ -10,7 +10,7 @@ authors apologize for this, and note that we make these changes to improve the
 maintainability and cleanliness of the library's codebase as it expands.  This
 release brings a large number of new features in addition to these breaking
 changes.  A guide for transitioning and a tour of the new features has been
-prepared: :doc:`Upgrading and a Tour of v0.17`.
+prepared.
 
 New Features
 ============

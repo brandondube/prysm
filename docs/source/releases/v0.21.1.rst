@@ -15,7 +15,7 @@ the scaling described in Soummer et al.  As collateral changes, FFTs now use
 :code:`norm='unitary'` which scales both forward FFT and inverse FFT by
 :code:`1/sqrt(N)`.  The change to FFT based propagations is to allow matrix DFTs
 and FFTs to be equal in terms of scaling.  The :doc:`Radiometric Scaling docs
-<../how-tos/Radiometrically-Correct-Modeling>` have been updated to reflect the
+<../how-tos/Radiometrically Correct Modeling>` have been updated to reflect the
 new scaling rules.  This scaling change is likely the last breaking change to
 the portion of prysm which is outside the experimental folder.
 

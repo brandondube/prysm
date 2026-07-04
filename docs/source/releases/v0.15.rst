@@ -21,8 +21,8 @@ New Features
   :func:`~prysm.interferogram.render_synthetic_surface` and
   :meth:`~prysm.interferogram.Interferogram.render_from_psd` convenience
   wrappers for synthesizing surface or wavefront data from PSD curves.  Examples
-  of this technique can be seen in e.g. _E. Sidick Power Spectral Density
-  Specification and Analysis of Large Optical Surfaces_.
+  of this technique can be seen in e.g. *E. Sidick, Power Spectral Density
+  Specification and Analysis of Large Optical Surfaces*.
 
 * convenience wrapper :meth:`~prysm.interferogram.Interferogram.fit_zernikes`
   replacing :code:`zernikefit(i.phase, ...)` invocation.

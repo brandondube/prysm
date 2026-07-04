@@ -288,7 +288,7 @@ polynomials package is now the fastest known for the supported polynomials, e.g.
 beating POPPY by more than a factor of 100 on large collections of Zernike
 polynomials.  This speed introduces mild complexity into the API, which must be
 appreciated. For a complete tutorial see :doc:`Ins and Outs of Polynomials
-<../explanation/Ins-and-Outs-of-Polynomials>`.
+<../explanation/Ins and Outs of Polynomials>`.
 
 - :code:`prysm.polynomials/` - top level routines, common to any basis set:
 - - :func:`~prysm.polynomials.lstsq` for least-squares fitting of 2D basis
@@ -468,7 +468,7 @@ the TMT aperture, it is more than 100x faster to rasterize the amplitude than
 POPPY.  For more information, see `This post
 <https://www.retrorefractions.com/blog/massively-faster-segmented/>`_.  The
 :doc:`Notable Telescope Apertures
-<../How-tos/Notable-Telescope-Apertures.ipynb>` page also contains example
+<../how-tos/Notable Telescope Apertures>` page also contains example
 usage.
 
 - :class:`~prysm.segmented.CompositeHexagonalAperture`

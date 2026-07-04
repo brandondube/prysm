@@ -24,8 +24,8 @@ In this release, prysm has gained increased capability for performing
 propagations outside of the pupil-to-image case.  The API has also been revised
 for reduced verbosity and better clarity.  The old API is provided with
 deprecations to ease transition.  A demo showing more than two order of
-magnitude performance improvement is available :doc:`Polychromatic Propagation
-in v0.19`.
+magnitude performance improvement is available in :doc:`Polychromatic
+Propagation <../how-tos/Polychromatic Propagation>`.
 
 - :func:`~prysm.propagation.angular_spectrum` for plane-to-plane (i.e free
   space) propagation via the angular spectrum method
