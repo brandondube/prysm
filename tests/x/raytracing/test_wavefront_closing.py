@@ -119,3 +119,29 @@ def test_close_wavefront_invalid_chief_errors():
     with pytest.raises(ValueError, match='anchor ray'):
         close_wavefront(sys, trace, WVL, chief, valid=dead,
                         reference='centroid')
+
+
+def test_close_wavefront_off_axis_geometric_fallback():
+    """A decentered system resolves its exit pupil geometrically, not by raising.
+
+    An off-axis parabola imaging collimated light to its parent focus has
+    OPD identically zero; the centered-ABCD route is unavailable, and the
+    closing must fall back to the chief-axis geometric route.
+    """
+    from prysm.x.raytracing import LensData
+    from prysm.x.raytracing.surfaces import Conic, Plane
+
+    lens = (LensData()
+            .add(Plane(), typ='eval', thickness=50.0)
+            .add_coordbreak(decenter=(0.0, -30.0, 0.0))
+            .add(Conic(-1.0 / 200.0, -1.0), typ='refl', thickness=100.0))
+    sys = OpticalSystem(lens, aperture=16.0, fields=[0.0],
+                        wavelengths=[WVL], reference=0, stop_index=2)
+    fld = Field(0.0, 0.0)
+    P, S = launch(sys, fld, WVL, Sampling.rect(n=11))
+    opd, xp, yp = wavefront(sys, P, S, WVL, field=fld, output='length')
+    assert np.nanmax(np.abs(opd)) < 1e-9
+    from prysm.x.raytracing.analysis import resolve_exit_pupil
+    P_xp, mode = resolve_exit_pupil(sys, WVL, return_mode=True)
+    assert mode == 'geometric'
+    assert np.isfinite(np.asarray(P_xp)).all()

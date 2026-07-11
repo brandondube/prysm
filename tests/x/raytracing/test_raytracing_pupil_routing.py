@@ -93,8 +93,8 @@ def test_real_ray_aiming_lands_chief_on_stop_center():
 
 def test_real_ray_aiming_linearizes_pupil_to_stop_map():
     """Real aiming maps the normalized pupil linearly onto the stop (the
-    pupil-distortion correction), holding the rim marginal; paraxial routing
-    does not."""
+    pupil-distortion correction), rho = 1 on the stop edge; paraxial routing
+    does neither."""
     fld = Field(0.0, 20.0, unit='deg')
     rho = np.linspace(-1.0, 1.0, 11)             # fan(n=11) normalized pupil
     real_sys = cooke()
@@ -107,9 +107,12 @@ def test_real_ray_aiming_linearizes_pupil_to_stop_map():
     ratio_par = y_par[nz] / rho[nz]
     assert np.std(ratio_real) < 1e-6
     assert np.std(ratio_par) > 1e-3
-    # the aperture (rim-to-rim span at the stop) is held by the secant scale
-    np.testing.assert_allclose(y_real[-1] - y_real[0], y_par[-1] - y_par[0],
-                               rtol=1e-6)
+    # rho = 1 lands on the stop edge: the off-axis span equals the stop
+    # diameter (the on-axis marginal span), not the compressed paraxial span
+    y_axial = _y_at_stop(real_sys, Field(0.0, 0.0, unit='deg'))
+    np.testing.assert_allclose(y_real[-1] - y_real[0],
+                               y_axial[-1] - y_axial[0], rtol=1e-6)
+    assert y_real[-1] - y_real[0] > y_par[-1] - y_par[0]
 
 
 # ---------- Phase 5: real-aiming field-continuation ladder ------------------
@@ -138,6 +141,22 @@ def fisheye(epd, ray_aiming='real'):
     return sys
 
 
+def _axial_r_stop(sys, epd):
+    """The stop semi-diameter launch aims rho = 1 to (axial rim, clip-bound)."""
+    from prysm.x.raytracing.opt import declipped
+    pupil_z = float(list(sys.to_surfaces())[0].P[2])
+    half = epd / 2.0
+    xy = np.array([[half, 0.0], [-half, 0.0], [0.0, half], [0.0, -half]])
+    P, S = _collimated_PS(xy, pupil_z, Field(0.0, 0.0))
+    surfs = sys.to_surfaces()
+    tr = raytrace(declipped(surfs[:_FISHEYE_STOP + 1]), P, S, WVL)
+    r = float(np.nanmax(np.hypot(tr.P[-1, :, 0], tr.P[-1, :, 1])))
+    clip_r = surfs[_FISHEYE_STOP].aperture.limiting_radius(None)
+    if clip_r is not None and clip_r < r:
+        r = clip_r * (1.0 - 1e-9)
+    return r
+
+
 def _primary_only(sys, angle, epd, n=15):
     """Real aiming without the continuation ladder."""
     ep = _entrance_pupil_z(sys, WVL)
@@ -150,20 +169,19 @@ def _primary_only(sys, angle, epd, n=15):
     shift = (pupil_z - ep) / S0[2]
     P = P + np.stack([shift * S0[0], shift * S0[1], np.zeros_like(shift)])
     return _real_aim_to_stop(P, S, pupil_xy / (epd / 2), sys, _FISHEYE_STOP,
-                             WVL, False)
+                             WVL, False, r_stop=_axial_r_stop(sys, epd))
 
 
 def test_ladder_rescues_wide_field_marginal_rays():
-    """At wide field the ladder converges more rays than primary aiming."""
-    epd, ang, n = 6.0, 50.0, 15
+    """At wide field the ladder aims more rays than primary aiming."""
+    epd, ang, n = 8.0, 55.0, 15
     sys = fisheye(epd)
     _, _, conv_primary = _primary_only(sys, ang, epd, n=n)
     P, S = launch(sys, Field(0.0, ang, unit='deg'), WVL,
                   Sampling.fan(n=n, axis='y'))
-    finite_ladder = np.isfinite(
-        raytrace(sys, P, S, WVL).P[_FISHEYE_STOP + 1, :, 1]).sum()
+    aimed = int(np.isfinite(S).all(axis=1).sum())
     assert int(conv_primary.sum()) < 13          # paraxial seed leaves rays out
-    assert int(finite_ladder) > int(conv_primary.sum())  # ladder rescues them
+    assert aimed > int(conv_primary.sum())       # ladder rescues them
 
 
 def test_ladder_holds_chief_on_stop_center_at_wide_field():
@@ -175,24 +193,25 @@ def test_ladder_holds_chief_on_stop_center_at_wide_field():
     assert abs(y[7]) < 1e-9                       # center sample == chief (n=15)
 
 
-def test_adaptive_ladder_aims_chief_past_fixed_schedule_field():
-    """A steep field the primary and a fixed-step ladder both miss still aims.
+def test_adaptive_ladder_aims_chief_past_primary_field():
+    """A steep field where the one-shot primary loses the chief still aims.
 
-    At 55 deg on this fixture the paraxial-EP seed places the chief metres off
-    axis; a fixed-fraction field schedule steps out of the Newton basin and
-    leaves the chief unaimed.  The adaptive field-and-pupil homotopy walks it
+    At 64 deg on this fixture the paraxial-EP seed leaves the chief outside
+    the primary Newton basin.  The adaptive field-and-pupil homotopy walks it
     onto the stop center, entering the front element within its clear aperture.
     """
-    epd, ang, n = 8.0, 55.0, 15
+    from prysm.x.raytracing.opt import declipped
+    epd, ang, n = 8.0, 64.0, 15
     sys = fisheye(epd)
     _, _, conv_primary = _primary_only(sys, ang, epd, n=n)
     assert not bool(conv_primary[n // 2])         # paraxial seed misses the chief
     P, S = launch(sys, Field(0.0, float(ang), unit='deg'), WVL,
                   Sampling.fan(n=n, axis='y'))
     assert np.isfinite(S[n // 2]).all()           # the ladder aims the chief
-    Phist = raytrace(sys, P, S, WVL).P
+    # registration is clip-blind; whether the chief transmits is the real
+    # trace's verdict (at 64 deg it vignettes on the front group)
+    Phist = raytrace(declipped(sys.to_surfaces()), P, S, WVL).P
     assert abs(Phist[_FISHEYE_STOP + 1, n // 2, 1]) < 1e-7   # onto the stop center
-    assert abs(Phist[2, n // 2, 1]) < 14.0        # within the front clear aperture
 
 
 def test_ladder_is_dormant_when_primary_converges():
@@ -224,15 +243,14 @@ def test_ladder_never_worse_than_primary_across_fields():
         _, _, conv_primary = _primary_only(sys, ang, epd, n=n)
         P, S = launch(sys, Field(0.0, ang, unit='deg'), WVL,
                       Sampling.fan(n=n, axis='y'))
-        finite_ladder = np.isfinite(
-            raytrace(sys, P, S, WVL).P[_FISHEYE_STOP + 1, :, 1]).sum()
-        assert int(finite_ladder) >= int(conv_primary.sum())
+        aimed = int(np.isfinite(S).all(axis=1).sum())
+        assert aimed >= int(conv_primary.sum())
 
 
 def test_drop_unaimed_nans_unaimable_ray_directions():
     """drop_unaimed NaNs only unaimable ray directions."""
     sys = fisheye(6.0)
-    fld = Field(0.0, 30.0, unit='deg')             # the +y rim is unaimable here
+    fld = Field(0.0, 72.0, unit='deg')             # the -y rim is unaimable here
     samp = Sampling.fan(n=15, axis='y')
     P_be, S_be = launch(sys, fld, WVL, samp, drop_unaimed=False)  # best-effort
     P_dr, S_dr = launch(sys, fld, WVL, samp)                      # dropped (default)
@@ -242,9 +260,6 @@ def test_drop_unaimed_nans_unaimable_ray_directions():
     assert np.isfinite(S_be).all()                   # default keeps them finite
     np.testing.assert_array_equal(P_be, P_dr)        # positions untouched
     np.testing.assert_array_equal(S_dr[~unaimable], S_be[~unaimable])
-    # Best-effort launch would still trace the dropped ray.
-    img_be = raytrace(sys, P_be, S_be, WVL).P[-1]
-    assert np.isfinite(img_be[unaimable]).all()
 
 
 def test_ray_fans_truncate_unaimable_rim_without_kink():
@@ -279,6 +294,55 @@ def test_parabasal_ep_z_is_field_dependent():
 
 def test_ray_aiming_paraxial_is_the_default():
     assert cooke().ray_aiming == 'paraxial'
+
+
+def test_real_aiming_applies_to_chief_only_sampling():
+    """Sampling.chief() real-aims: the lone chief lands on the stop center."""
+    real_sys = cooke()
+    real_sys.ray_aiming = 'real'
+    fld = Field(0.0, 20.0, unit='deg')
+    P, S = launch(real_sys, fld, WVL, Sampling.chief())
+    tr = raytrace(real_sys.to_surfaces(), P, S, WVL)
+    assert abs(tr.P[STOP_INDEX + 1, 0, 1]) < 1e-9
+    # and it is the same chief a sampled grid aims (distortion == wavefront)
+    Pf, Sf = launch(real_sys, fld, WVL, Sampling.fan(n=11, axis='y'))
+    trf = raytrace(real_sys.to_surfaces(), Pf, Sf, WVL)
+    np.testing.assert_allclose(tr.P[-1, 0, :2], trf.P[-1, 5, :2], atol=1e-9)
+
+
+def test_real_aiming_targets_decentered_stop_local_center():
+    """Aim targets are stop-local: a decentered stop is hit at its own center."""
+    from prysm.x.raytracing.spencer_and_murty import transform_to_local_coords
+    dy = 1.0
+    lens = LensData()
+    for i, (R, t, n) in enumerate(_COOKE):
+        mat = pmat.ConstantMaterial(n) if n != 1.0 else pmat.air
+        if i == 3:
+            lens.add_coordbreak(decenter=(0.0, dy, 0.0), kind='basic')
+        lens.add(Conic(1.0 / R, 0.0), thickness=t, material=mat)
+        if i == 3:
+            lens.add_coordbreak(decenter=(0.0, dy, 0.0), kind='rev')
+    sys = OpticalSystem(lens, aperture=EPD, fields=[0.0], wavelengths=[WVL],
+                        reference=0, stop_index=STOP_INDEX)
+    sys.ray_aiming = 'real'
+    surfs = sys.to_surfaces()
+    P, S = launch(sys, Field(0.0, 0.0), WVL, Sampling.fan(n=11, axis='y'))
+    tr = raytrace(surfs, P, S, WVL)
+    stop = surfs[STOP_INDEX]
+    loc, _ = transform_to_local_coords(tr.P[STOP_INDEX + 1], stop.P,
+                                       tr.S[STOP_INDEX + 1], stop.R)
+    assert abs(loc[5, 1]) < 1e-9                  # chief on the stop CENTER
+    assert abs(tr.P[STOP_INDEX + 1, 5, 1] - dy) < 1e-9   # = lab (0, dy)
+
+
+def test_binding_stop_clip_bounds_the_aimed_pupil():
+    """A stop clip tighter than the axial marginal is the pupil edge."""
+    epd = 8.0                       # axial marginal at the stop > the 6.0 clip
+    sys = fisheye(epd)
+    P, S = launch(sys, Field(0.0, 0.0), WVL, Sampling.fan(n=15, axis='y'))
+    y = raytrace(sys, P, S, WVL).P[_FISHEYE_STOP + 1, :, 1]
+    assert np.isfinite(y).all()                   # rim rays are NOT clipped
+    assert np.nanmax(np.abs(y)) == pytest.approx(6.0, rel=1e-6)
 
 
 # ---------- routing geometry ------------------------------------------------

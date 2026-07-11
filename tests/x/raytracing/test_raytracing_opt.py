@@ -159,6 +159,26 @@ def test_aim_rays_onto_tilted_surface():
     np.testing.assert_allclose(tr.P[2, :, :2], 0.0, atol=1e-9)
 
 
+def test_aim_rays_targets_are_local_to_a_decentered_tilted_surface():
+    """target (0, 0) is the aim surface's vertex, not the lab axis."""
+    from prysm.x.raytracing.spencer_and_murty import raytrace
+    dy = 4.0
+    presc = [
+        plane(interaction='eval', P=np.array([0., 0., 0.])),
+        plane(interaction='eval', P=np.array([0., dy, 30.]),
+              tilt=(12., 0., 0.)),
+        plane(interaction='eval', P=np.array([0., 0., 60.])),
+    ]
+    P, S = _collimated_y_fan(5, half=2.0, z0=-10.0, theta_deg=0.0)
+    P_aim, _, converged = aim_rays(P, S, presc, surface_index=1,
+                                   target_xy=(0.0, 0.0), wvl=0.55)
+    assert bool(np.all(converged))
+    tr = raytrace(presc, P_aim, S, wvl=0.55)
+    # every ray passes through the tilted surface's vertex at lab (0, dy, 30)
+    np.testing.assert_allclose(tr.P[2], np.tile([0.0, dy, 30.0], (5, 1)),
+                               atol=1e-9)
+
+
 def test_aim_rays_masks_divergent_ray():
     """A ray that TIRs for every launch is flagged not-converged and the
     rest of the bundle still aims (strict=False)."""

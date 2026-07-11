@@ -6,7 +6,7 @@ from prysm.conf import config
 from prysm.mathops import np, array_to_true_numpy
 
 from . import raygen
-from .opt import aim_rays
+from .opt import aim_rays, declipped
 from .paraxial import entrance_pupil_z, NonAxialSystemError
 from .spencer_and_murty import (
     raytrace, valid_mask, transform_to_local_coords)
@@ -390,34 +390,80 @@ def _warn_paraxial_aiming(system, ray_aiming):
         )
 
 
-def _real_aim_to_stop(P, S, rho, system, stop_index, wavelength, finite):
-    """Aim a normalized pupil grid linearly onto the real stop.
+def _real_aim_to_stop(P, S, rho, system, stop_index, wavelength, finite,
+                      r_stop=None):
+    """Aim a normalized pupil grid onto the stop: rho -> rho * r_stop.
 
+    r_stop is the stop semi-diameter (stop-local frame), so rho = 1 lands on
+    the stop edge.  None falls back to a secant scale of this bundle's own
+    landings -- the pupil keeps its launched size instead of filling the stop.
     Returns (P, S, converged); converged is the per-ray aim_rays mask.
     """
-    trace_path = system[:stop_index + 1]
-    tr = raytrace(trace_path, P, S, wavelength)
-    L = tr.P[-1, :, :2]
-    valid = np.isfinite(L).all(axis=1)
+    if r_stop is None:
+        trace_path = declipped(system[:stop_index + 1])
+        tr = raytrace(trace_path, P, S, wavelength)
+        stop_surf = system[stop_index]
+        L, _ = transform_to_local_coords(tr.P[-1], stop_surf.P, tr.S[-1],
+                                         stop_surf.R)
+        L = L[:, :2]
+        valid = np.isfinite(L).all(axis=1)
 
-    def _scale(rk, lk):
-        # Pupil-to-stop secant through the two rim rays.
-        rk = rk[valid]
-        lk = lk[valid]
-        if rk.size < 2:
-            return 0.0
-        imax = int(np.argmax(rk))
-        imin = int(np.argmin(rk))
-        drho = float(rk[imax] - rk[imin])
-        return float(lk[imax] - lk[imin]) / drho if abs(drho) > 1e-12 else 0.0
+        def _scale(rk, lk):
+            # Pupil-to-stop secant through the two rim rays.
+            rk = rk[valid]
+            lk = lk[valid]
+            if rk.size < 2:
+                return 0.0
+            imax = int(np.argmax(rk))
+            imin = int(np.argmin(rk))
+            drho = float(rk[imax] - rk[imin])
+            return (float(lk[imax] - lk[imin]) / drho
+                    if abs(drho) > 1e-12 else 0.0)
 
-    sx = _scale(rho[:, 0], L[:, 0])
-    sy = _scale(rho[:, 1], L[:, 1])
-    target = np.stack([rho[:, 0] * sx, rho[:, 1] * sy], axis=1)
+        sx = _scale(rho[:, 0], L[:, 0])
+        sy = _scale(rho[:, 1], L[:, 1])
+        target = np.stack([rho[:, 0] * sx, rho[:, 1] * sy], axis=1)
+    else:
+        target = rho * r_stop
     vary = 'direction' if finite else 'position'
     P, S, converged = aim_rays(P, S, system, stop_index, target,
                                wavelength, vary=vary, strict=False)
     return P, S, converged
+
+
+def _axial_field(field):
+    """The on-axis sibling of a field (same kind/conjugate, no vignetting)."""
+    if field.kind == 'angle':
+        return Field(0.0, 0.0, kind='angle', unit=field.unit)
+    return Field(0.0, 0.0, kind='height', object_z=field.object_z)
+
+
+# rim probes for the stop semi-diameter: +/-x and +/-y at rho = 1
+_STOP_RIM_XY = ((1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0))
+
+
+def _stop_semidiameter(system, stop_index, wavelength, build_bundle, field):
+    """Stop semi-diameter: the axial marginal footprint at the stop.
+
+    The system-aperture-sized on-axis bundle's rim radius in the stop's
+    local frame -- the quantity rho = 1 aims to.  None when the axial rim
+    cannot be traced to the stop.
+    """
+    rim = Sampling.points(np.asarray(_STOP_RIM_XY, dtype=config.precision))
+    P0, S0, _ = build_bundle(_axial_field(field), 'paraxial', samp=rim)
+    tr = raytrace(declipped(system[:stop_index + 1]), P0, S0, wavelength)
+    surf = system[stop_index]
+    loc, _ = transform_to_local_coords(tr.P[-1], surf.P, tr.S[-1], surf.R)
+    r = np.hypot(loc[..., 0], loc[..., 1])
+    if not bool(np.isfinite(r).any()):
+        return None
+    r = float(np.nanmax(r))
+    # a stop clip tighter than the axial marginal is the binding pupil edge;
+    # aim just inside it so rim rays do not coin-flip on the exact boundary
+    clip_r = surf.aperture.limiting_radius(None)
+    if clip_r is not None and clip_r < r:
+        r = clip_r * (1.0 - 1e-9)
+    return r if r > 0.0 else None
 
 
 # Adaptive field-continuation homotopy: start step, growth on success, and the
@@ -436,11 +482,38 @@ def _scaled_field(field, frac):
                  vignetting=field.vignetting)
 
 
+class _ParaxialAimingView:
+    """A system view that pins ray_aiming to paraxial.
+
+    The ladder's parabasal EP seed launches a chief of its own; under real
+    aiming that launch would re-enter the ladder (unbounded recursion), and a
+    seed heuristic does not need an aimed chief.
+    """
+
+    __slots__ = ('_sys',)
+    ray_aiming = 'paraxial'
+
+    def __init__(self, system):
+        self._sys = system
+
+    def __getattr__(self, name):
+        return getattr(self._sys, name)
+
+    def __getitem__(self, key):
+        return self._sys[key]
+
+    def __len__(self):
+        return len(self._sys)
+
+    def __iter__(self):
+        return iter(self._sys)
+
+
 def _parabasal_ep_z(system, field, wavelength):
     """Field-dependent entrance-pupil z, with paraxial fallback."""
     from .parabasal import first_order  # lazy: parabasal imports this module
     try:
-        ep = first_order(system, field, wavelength).ep_z
+        ep = first_order(_ParaxialAimingView(system), field, wavelength).ep_z
     except (ValueError, IndexError, ArithmeticError, np.linalg.LinAlgError):
         # Degenerate parabasal chiefs fall back to the paraxial pupil.
         ep = None
@@ -451,22 +524,28 @@ def _parabasal_ep_z(system, field, wavelength):
     return float(ep)
 
 
-def _warm_start_bundle(P, S, seedP, seedS, finite):
-    """Seed the varied transverse component from the previous ladder rung."""
+def _warm_start_bundle(P, S, seedP, seedS, finite, good):
+    """Seed the varied transverse component from the previous ladder rung.
+
+    Only rays the previous rung converged are seeded -- a rung's unconverged
+    rim rays hold stalled-Newton garbage that would poison the next rung
+    (acceptance is chief-only, so they are present in every accepted rung).
+    """
     if finite:
         # direction-varied: seed the transverse direction cosines, then
-        # renormalize so the trace that sets the secant scale stays unit-length.
-        S[:, 0] = seedS[:, 0]
-        S[:, 1] = seedS[:, 1]
+        # renormalize so the trace stays unit-length.
+        S[good, 0] = seedS[good, 0]
+        S[good, 1] = seedS[good, 1]
         S /= np.sqrt(np.sum(S * S, axis=1, keepdims=True))
     else:
         # position-varied: seed the transverse launch positions.
-        P[:, 0] = seedP[:, 0]
-        P[:, 1] = seedP[:, 1]
+        P[good, 0] = seedP[good, 0]
+        P[good, 1] = seedP[good, 1]
 
 
 def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, system,
-                             stop_index, wavelength, finite, drop_unaimed=False):
+                             stop_index, wavelength, finite,
+                             drop_unaimed=False, r_stop=None):
     """Real aiming with an adaptive field-and-pupil continuation fallback.
 
     Walks both the field and the pupil from on-axis up to the target, warm-
@@ -476,16 +555,20 @@ def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, system,
     a fixed schedule, and its near-paraxial pupil places a grazing-field bundle
     metres off axis.  Scaling the pupil with the field walks the rim rays out
     gradually rather than aiming a full bundle through a violently aberrated
-    pupil in one shot.  Acceptance follows the chief alone so a genuinely
-    vignetted rim ray cannot stall the walk (it is dropped at the end).
+    pupil in one shot; the stop targets shrink with the same rung fraction.
+    Acceptance follows the chief alone so a genuinely vignetted rim ray
+    cannot stall the walk (it is dropped at the end).
     """
     P, S, conv = _real_aim_to_stop(P, S, rho, system, stop_index,
-                                   wavelength, finite)
+                                   wavelength, finite, r_stop=r_stop)
     if bool(np.all(conv)):
         return P, S
 
     chief = int(np.argmin(rho[:, 0] ** 2 + rho[:, 1] ** 2))
+    # per-ray best-so-far seeds: a rim ray whose branch is lost at one rung
+    # re-seeds from its own last-converged solution, not the chief's grid
     seedP = seedS = None
+    seedconv = np.zeros(rho.shape[0], dtype=bool)
     convfull = np.zeros(rho.shape[0], dtype=bool)
     Pfull = Sfull = None
     frac = 0.0
@@ -498,11 +581,17 @@ def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, system,
         ep_k = _parabasal_ep_z(system, fld_k, wavelength)
         Pk, Sk, rho_k = build_bundle(fld_k, ep_k, escale=nxt)
         if seedP is not None:
-            _warm_start_bundle(Pk, Sk, seedP, seedS, finite)
+            _warm_start_bundle(Pk, Sk, seedP, seedS, finite, seedconv)
+        rk = None if r_stop is None else r_stop * nxt
         Pk, Sk, convk = _real_aim_to_stop(Pk, Sk, rho_k, system, stop_index,
-                                          wavelength, finite)
+                                          wavelength, finite, r_stop=rk)
         if bool(convk[chief]):
-            seedP, seedS = Pk, Sk
+            if seedP is None:
+                seedP, seedS = Pk.copy(), Sk.copy()
+            else:
+                seedP[convk] = Pk[convk]
+                seedS[convk] = Sk[convk]
+            seedconv = seedconv | convk
             frac = nxt
             step = min(step * _LADDER_GROW, 1.0)
             if frac >= 1.0:
@@ -520,8 +609,39 @@ def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, system,
         P[rescued] = Pfull[rescued]
         S[rescued] = Sfull[rescued]
 
+    # Caustic-fold rescue: a folded pupil map (landing has a local extremum
+    # between seed and target) traps damped Newton at the fold.  Seed the
+    # still-unaimed rays by extrapolating the converged rays' solutions
+    # linearly in rho -- the far branch is smooth -- and re-aim once.
+    aimed = conv | convfull
+    if not bool(np.all(aimed)) and int(np.sum(aimed)) >= 3:
+        var = S if finite else P
+        A = np.stack([np.ones(int(aimed.sum())), rho[aimed, 0],
+                      rho[aimed, 1]], axis=1)
+        coef, *_ = np.linalg.lstsq(A, var[aimed, :2], rcond=None)
+        miss = ~aimed
+        pred = (np.stack([np.ones(int(miss.sum())), rho[miss, 0],
+                          rho[miss, 1]], axis=1) @ coef)
+        P2 = P.copy()
+        S2 = S.copy()
+        if finite:
+            S2[miss, 0] = pred[:, 0]
+            S2[miss, 1] = pred[:, 1]
+            S2 /= np.sqrt(np.sum(S2 * S2, axis=1, keepdims=True))
+        else:
+            P2[miss, 0] = pred[:, 0]
+            P2[miss, 1] = pred[:, 1]
+        P2, S2, conv2 = _real_aim_to_stop(P2, S2, rho, system, stop_index,
+                                          wavelength, finite, r_stop=r_stop)
+        won = conv2 & miss
+        if bool(np.any(won)):
+            P = P.copy()
+            S = S.copy()
+            P[won] = P2[won]
+            S[won] = S2[won]
+            aimed = aimed | won
+
     if drop_unaimed:
-        aimed = conv | convfull
         if not bool(np.all(aimed)):
             # Keep launch positions finite for chief selection.
             S = np.array(S, copy=True)
@@ -567,8 +687,7 @@ def launch(system, field, wavelength, sampling, *,
 
     """
     ray_aiming = str(getattr(system, 'ray_aiming', 'paraxial')).lower()
-    real_aiming = (ray_aiming == 'real' and aim_to is None
-                   and sampling.kind != 'chief')
+    real_aiming = ray_aiming == 'real' and aim_to is None
     stop_index = getattr(system, 'stop_index', None)
     if aim_to is None:
         _warn_paraxial_aiming(system, ray_aiming)
@@ -606,21 +725,23 @@ def launch(system, field, wavelength, sampling, *,
             pupil_z = float(system[0].P[2])
         pupil_z = float(pupil_z)
 
-    def _build(fld, ep_z, escale=1.0):
+    def _build(fld, ep_z, escale=1.0, samp=None):
         """Bundle (P, S, rho) for one field, seeded onto entrance pupil ep_z.
 
         ep_z = 'paraxial' reads the paraxial pupil, a float overrides it (the
         ladder feeds the parabasal field-dependent EP), and None means no seed.
         escale shrinks the pupil extent for the continuation homotopy (rho stays
         normalized), so a wide-field bundle's rim rays walk out gradually.
+        samp overrides the launch sampling (the stop-size probe).
         """
+        samp = sampling if samp is None else samp
         if object_mode:
             return _object_space_cone_PS(system, fld, wavelength,
-                                         sampling, na, ep_z=ep_z)
+                                         samp, na, ep_z=ep_z)
         e = (_entrance_pupil_z(system, wavelength)
              if ep_z == 'paraxial' else ep_z)
         ext = extent * escale
-        pupil_xy = sampling.build(ext)
+        pupil_xy = samp.build(ext)
         pupil_xy = _apply_vignetting(pupil_xy, fld)
         if pupil_xy.dtype != config.precision:
             pupil_xy = pupil_xy.astype(config.precision)
@@ -649,9 +770,13 @@ def launch(system, field, wavelength, sampling, *,
             strict=aim_strict, vary=vary,
         )
     elif real_aiming and stop_index is not None:
+        # rho = 1 aims to the stop edge; a chief-only bundle needs no size
+        r_stop = (None if sampling.kind == 'chief' else
+                  _stop_semidiameter(system, stop_index, wavelength,
+                                     _build, field))
         P, S = _aim_to_stop_with_ladder(
             P, S, rho, _build, field, system, stop_index, wavelength,
-            finite, drop_unaimed=drop_unaimed)
+            finite, drop_unaimed=drop_unaimed, r_stop=r_stop)
 
     return P, S
 

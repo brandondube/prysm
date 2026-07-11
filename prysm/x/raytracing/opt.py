@@ -1,5 +1,7 @@
 """Minor optimization routines."""
 
+import copy
+
 from prysm.conf import config
 from prysm.mathops import np, array_to_true_numpy
 from . import spencer_and_murty
@@ -9,6 +11,22 @@ from ._line_math import (
     normalize_vector,
     unit_vector_between,
 )
+
+
+def declipped(surfaces):
+    """Surfaces with clips removed; aiming registers rays, it does not clip.
+
+    A ray aimed onto a stop edge would otherwise NaN mid-solve when a Newton
+    iterate or FD probe steps past the clip.  Clips apply in the real trace.
+    """
+    out = []
+    for surf in surfaces:
+        if getattr(surf.aperture, 'clip', None) is not None:
+            bare = copy.copy(surf)
+            bare.aperture = None
+            surf = bare
+        out.append(surf)
+    return out
 
 
 def aim_rays(P, S, surfaces, surface_index, target_xy, wvl,
@@ -26,9 +44,11 @@ def aim_rays(P, S, surfaces, surface_index, target_xy, wvl,
     surface_index : int
         index of the aim surface; rays are driven to target_xy on it.
     target_xy : iterable
-        target landing (x, y) on the aim surface; either a length-2 point
-        (shared by every ray) or an (N, 2) array of per-ray targets (so a
-        sampled pupil can be aimed to fill the stop).
+        target landing (x, y) on the aim surface, in the surface's local
+        frame -- (0, 0) is its aperture center regardless of decenter or
+        tilt; either a length-2 point (shared by every ray) or an (N, 2)
+        array of per-ray targets (so a sampled pupil can be aimed to fill
+        the stop).
     wvl : float
         wavelength for the aim trace, microns.
     tol : float, optional
@@ -57,7 +77,7 @@ def aim_rays(P, S, surfaces, surface_index, target_xy, wvl,
     target = np.asarray(target_xy, dtype=config.precision)
     if target.ndim == 1:
         target = target.reshape(1, 2)
-    trace_path = surfaces[:surface_index + 1]
+    trace_path = declipped(surfaces[:surface_index + 1])
 
     if vary == 'direction':
         sz_sign = np.sign(S[:, 2])
@@ -82,10 +102,16 @@ def aim_rays(P, S, surfaces, surface_index, target_xy, wvl,
 
         var0 = P[:, :2].copy()
 
+    aim_surf = surfaces[surface_index]
+
     def landing(var):
         apply(var)
         tr = spencer_and_murty.raytrace(trace_path, P, S, wvl)
-        return tr.P[-1, :, :2]
+        # compare in the aim surface's local frame so a decentered or tilted
+        # stop is aimed at its own center, not the lab axis
+        loc, _ = spencer_and_murty.transform_to_local_coords(
+            tr.P[-1], aim_surf.P, tr.S[-1], aim_surf.R)
+        return loc[:, :2]
 
     eps = float(np.finfo(config.precision).eps)
     sqrt_eps = eps ** 0.5
@@ -95,15 +121,10 @@ def aim_rays(P, S, surfaces, surface_index, target_xy, wvl,
     rn = np.sqrt((r * r).sum(axis=1))
     dead = ~np.isfinite(rn)  # NaN landing (TIR / miss): cannot be aimed
 
-    prev_max = np.inf
     for _ in range(int(maxiter)):
-        active = ~dead
-        if not bool(np.any(active)):
+        stepping = (~dead) & (rn > tol)
+        if not bool(np.any(stepping)):
             break
-        cur_max = float(np.max(np.where(active, rn, 0.0)))
-        if cur_max < tol or cur_max >= prev_max:
-            break
-        prev_max = cur_max
 
         # forward-difference 2x2 Jacobian: columns d(x,y)/dvar0, d(x,y)/dvar1
         h = sqrt_eps * np.maximum(
@@ -131,31 +152,36 @@ def aim_rays(P, S, surfaces, surface_index, target_xy, wvl,
         d0 = (-rx * d + b * ry) / det  # closed-form 2x2 solve J@d = -r
         d1 = (rx * c - a * ry) / det
 
-        freeze = dead | singular
         delta = np.stack([d0, d1], axis=1)
-        delta[freeze] = 0.0
+        delta[~stepping | singular] = 0.0
         dead = dead | singular
+        stepping = stepping & ~singular
 
-        # damped step: backtrack if the active-ray max residual rose
-        alpha = 1.0
+        # per-ray damped step: halve a ray's own step while it fails to
+        # reduce its own residual, so one stubborn ray cannot stall or
+        # freeze the rest of the bundle
+        alpha = np.ones_like(rn)
+        var_try = var
+        r_try = r
+        rn_try = rn
         for _bt in range(40):
-            var_try = var + alpha * delta
+            var_try = var + alpha[:, np.newaxis] * delta
             r_try = landing(var_try) - target
             rn_try = np.sqrt((r_try * r_try).sum(axis=1))
-            bad = ~np.isfinite(rn_try)
-            cur = float(np.max(np.where((~dead) & (~bad), rn_try, 0.0)))
-            if cur <= cur_max or alpha <= sqrt_eps:
+            # a NaN residual compares False and keeps backtracking
+            need = stepping & ~(rn_try <= rn) & (alpha > sqrt_eps)
+            if not bool(np.any(need)):
                 break
-            alpha = alpha * 0.5
+            alpha[need] *= 0.5
 
-        # rays that went non-finite this step revert to their last good
-        # parameter and are flagged dead; everyone else takes the step
-        bad = ~np.isfinite(rn_try)
-        var_try[bad] = var[bad]
-        r_try[bad] = r[bad]
-        rn_try[bad] = rn[bad]
-        var, r, rn = var_try, r_try, rn_try
-        dead = dead | bad
+        # accept improving steps; a ray still worse (or non-finite) at the
+        # step floor is a stalled Newton: revert it and mark it dead
+        ok = stepping & (rn_try <= rn)
+        stalled = stepping & ~ok
+        var = np.where(ok[:, np.newaxis], var_try, var)
+        r = np.where(ok[:, np.newaxis], r_try, r)
+        rn = np.where(ok, rn_try, rn)
+        dead = dead | stalled
 
     apply(var)
     converged = np.isfinite(rn) & (rn <= tol)

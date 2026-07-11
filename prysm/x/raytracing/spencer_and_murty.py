@@ -354,13 +354,13 @@ def intersect(P0, S, sag_and_normal, s1=0,
 
 
 def transform_to_global_coords(XYZ, P, S, R=None):
-    """Transform the coordiantes XYZ from local coordinates about P back to global coordinates.
+    """Transform the coordinates XYZ from local coordinates about P back to global coordinates.
 
     Parameters
     ----------
     XYZ : ndarray
         shape (3,) or (N,3), any float dtype
-        "world" coordinates [X,Y,Z] along the final dimension
+        local coordinates [X,Y,Z] along the final dimension
     P : ndarray
         shape (3,), any float dtype
         point defining the origin of the local coordinate frame, [X0,Y0,Z0]
@@ -369,7 +369,8 @@ def transform_to_global_coords(XYZ, P, S, R=None):
         (k,l,m) incident direction cosines
     R : ndarray
         shape (3,3), any float dtype
-        rotation matrix to apply, if the surface is tilted
+        the surface's lab-to-local rotation, the same matrix
+        transform_to_local_coords takes; its transpose is applied here
 
     Returns
     -------
@@ -379,8 +380,9 @@ def transform_to_global_coords(XYZ, P, S, R=None):
     """
     if R is not None:
         XYZ, S = np.atleast_2d(XYZ, S)
-        XYZ = np.matmul(R, XYZ[..., np.newaxis]).squeeze(-1)
-        S = np.matmul(R, S[..., np.newaxis]).squeeze(-1)
+        Rt = np.swapaxes(R, -1, -2)
+        XYZ = np.matmul(Rt, XYZ[..., np.newaxis]).squeeze(-1)
+        S = np.matmul(Rt, S[..., np.newaxis]).squeeze(-1)
 
     XYZ = XYZ + P
     return XYZ, S

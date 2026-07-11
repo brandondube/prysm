@@ -129,9 +129,8 @@ def _global_plot_coordinates(surf, sag, ploty, x, y):
     xpart, ypart = _axis_pair(ploty, y)
     local = np.stack([xpart, ypart, sag - surf.P[2]], axis=-1)
     dirs = np.zeros_like(local)
-    rotation = None if surf.R is None else surf.R.T
     global_points, _ = transform_to_global_coords(
-        local, surf.P, dirs, rotation,
+        local, surf.P, dirs, surf.R,
     )
     return global_points[..., _axis_index(x)], global_points[..., _axis_index(y)]
 

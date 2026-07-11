@@ -1459,8 +1459,7 @@ class Surface:
             code[(code == STATUS_OK) & ~valid_diff] = STATUS_EVANESCENT
             opl_grating = wvl * gphase
 
-        Rt = None if self.R is None else self.R.T
-        P_out, S_out = transform_to_global_coords(Q_loc, self.P, Sprime, Rt)
+        P_out, S_out = transform_to_global_coords(Q_loc, self.P, Sprime, self.R)
 
         seg = P_out - P_in
         # Signed segment length supports virtual first segments.
