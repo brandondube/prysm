@@ -14,13 +14,12 @@ from ._common import (
     warn_vignetting_ignored as _warn_vignetting_ignored,
     length_scale_to_mm,
     scale_length_to_mm,
-    scale_surface_params_to_mm,
     aperture_kwargs_from_radii,
     parse_float,
 )
 from ..lensdata import LensData
 from ..system import OpticalSystem, ApertureSpec
-from ._surface_spec import SurfaceSpec, build_shape
+from ._surface_spec import build_shape, surface_spec_factory
 
 
 # ---------- low-level tokenizer ---------------------------------------------
@@ -243,13 +242,7 @@ def _make_spec(block, database, length_scale=1.0):
     k = block.get('coni', 0.0)
     glas = block.get('glas', '')
     n_callable = _materials.lookup(glas, database=database)
-    is_mirror = (n_callable is _materials.MIRROR)
-    typ = 'refl' if is_mirror else 'refr'
-    n_arg = None if is_mirror else n_callable
-
-    def spec(kind, params):
-        params = scale_surface_params_to_mm(kind, params, length_scale)
-        return SurfaceSpec(kind, typ, None, n_arg, params)
+    spec = surface_spec_factory(n_callable, length_scale)
 
     if surf_type == 'STANDARD':
         return spec('conic', dict(c=c, k=k))

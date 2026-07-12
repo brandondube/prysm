@@ -379,10 +379,8 @@ def transform_to_global_coords(XYZ, P, S, R=None):
 
     """
     if R is not None:
-        XYZ, S = np.atleast_2d(XYZ, S)
-        Rt = np.swapaxes(R, -1, -2)
-        XYZ = np.matmul(Rt, XYZ[..., np.newaxis]).squeeze(-1)
-        S = np.matmul(Rt, S[..., np.newaxis]).squeeze(-1)
+        XYZ = np.matmul(XYZ, R)
+        S = np.matmul(S, R)
 
     XYZ = XYZ + P
     return XYZ, S
@@ -414,12 +412,9 @@ def transform_to_local_coords(XYZ, P, S, R=None):
     """
     XYZ2 = XYZ - P
     if R is not None:
-        XYZ2, S = np.atleast_2d(XYZ2, S)
-        # in regular matmul, 3x3 @ (3,) has a 1 appended to the dimension
-        # of the second array to make it into a column vector
-        # for batch compatibility, we do that manually
-        XYZ2 = np.matmul(R, XYZ2[..., np.newaxis]).squeeze(-1)
-        S = np.matmul(R, S[..., np.newaxis]).squeeze(-1)
+        Rt = np.swapaxes(R, -1, -2)
+        XYZ2 = np.matmul(XYZ2, Rt)
+        S = np.matmul(S, Rt)
 
     return XYZ2, S
 

@@ -7,6 +7,7 @@ from .launch import Field, Sampling, launch, _perp_basis
 from .spencer_and_murty import STYPE_REFLECT, STYPE_REFRACT, reflect, valid_mask
 from ._diff_raytrace import DiffSeed, raytrace_with_tangents
 from ._resolve import trace_context
+from ._first_order import format_first_order, initialize_slots
 
 
 _SEED_NAMES = ('dx', 'dy', 'du', 'dv')
@@ -162,54 +163,11 @@ class ParabasalFirstOrder:
     ) + _PAIR_SLOTS
 
     def __init__(self):
-        for s in self.__slots__:
-            setattr(self, s, None)
+        initialize_slots(self)
 
     def __repr__(self):
-        def fmt(value, spec='.6g'):
-            return 'n/a' if value is None else format(value, spec)
-
-        def row(label, value, spec='.6g', suffix=''):
-            if value is None:
-                return None
-            if isinstance(value, tuple):
-                return (f'  {label:<22s}: {fmt(value[0], spec):>12s} '
-                        f'{fmt(value[1], spec):>12s}{suffix}')
-            return f'  {label:<22s}: {format(value, spec)}{suffix}'
-
-        lines = [f'ParabasalFirstOrder (backend: {self.backend})']
-        lines.append(row('wavelength', self.wavelength, '.6g', ' um'))
-        if self.field is not None:
-            lines.append(f'  {"field":<22s}: {self.field!r}')
-        if self.n_surfaces is not None:
-            lines.append(
-                f'  {"surfaces":<22s}: '
-                f'{self.n_surfaces} ({self.n_refractive} refr, '
-                f'{self.n_reflective} refl, {self.n_eval} eval)'
-            )
-        lines.append(row('total track', self.total_track))
-        lines.append(row('n object', self.n_object))
-        lines.append(row('n image (signed)', self.n_image))
-        if not self.force_sym:
-            lines.append(f'  {"":<22s}  {"X":>12s} {"Y":>12s}')
-        lines.append(row('EFL', self.efl))
-        lines.append(row('BFL', self.bfl))
-        lines.append(row('FFL', self.ffl))
-        lines.append(row('paraxial image dist', self.paraxial_image_distance))
-        lines.append(row('paraxial image z', self.paraxial_image_z))
-        lines.append(row('EPD', self.epd))
-        lines.append(row('F/#', self.fno, '.4g'))
-        lines.append(row('NA image', self.na_image, '.4g'))
-        if self.stop_index is not None:
-            lines.append(f'  {"stop index":<22s}: {self.stop_index}')
-        lines.append(row('EP z', self.ep_z))
-        lines.append(row('EP distance from S1', self.ep_distance))
-        lines.append(row('XP z', self.xp_z))
-        lines.append(row('XP distance from SN', self.xp_distance))
-        lines.append(row('stop diameter', self.stop_diameter))
-        lines.append(row('EP diameter', self.ep_diameter))
-        lines.append(row('XP diameter', self.xp_diameter))
-        return '\n'.join(line for line in lines if line is not None)
+        title = f'ParabasalFirstOrder (backend: {self.backend})'
+        return format_first_order(self, title, paired=True)
 
 
 def _fill_metadata(out, ctx, fld, force_sym):

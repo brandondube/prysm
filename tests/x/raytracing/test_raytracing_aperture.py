@@ -60,6 +60,12 @@ def test_circular_aperture_carries_radius():
     assert clip.limiting_radius == 4.0
 
 
+def test_aperture_center_comes_from_clip_or_surface_origin():
+    assert Aperture().center() == (0.0, 0.0)
+    clip = circular_aperture(4.0, x0=1.5, y0=-2.5)
+    assert Aperture(clip).center() == (1.5, -2.5)
+
+
 # ---- limiting / drawn radius --------------------------------------------
 
 def test_limiting_radius_prefers_clip_then_footprint():

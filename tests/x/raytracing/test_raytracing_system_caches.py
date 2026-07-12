@@ -4,31 +4,12 @@ import numpy as np
 
 import pytest
 
-from prysm.x import materials
-from prysm.x.raytracing import (
-    OpticalSystem, ApertureSpec, LensData, Sphere, Plane, Field, Sampling,
-)
+from prysm.x.raytracing import ApertureSpec, Field, Sampling
 from prysm.x.raytracing import paraxial
 from prysm.x.raytracing import parabasal
 from prysm.x.raytracing.launch import launch
 from prysm.x.raytracing.system import ApertureSpec as _ApertureSpec
-
-
-def _doublet(aperture=None):
-    # first powered surface is row 1
-    ld = (LensData()
-          .add(Sphere(1 / 61.47), thickness=6.0,
-               material=materials.ConstantMaterial(1.5168), aperture=12.0)
-          .add(Sphere(-1 / 44.64), thickness=2.5,
-               material=materials.ConstantMaterial(1.673), aperture=12.0)
-          .add(Sphere(-1 / 129.94), thickness=0.0,
-               material=materials.air, aperture=12.0))
-    sys = OpticalSystem(ld, aperture=aperture or ApertureSpec.epd(22.0),
-                        fields=[Field(0, 0), Field(0, 0.7), Field(0, 1.0)],
-                        wavelengths=[0.486, 0.587, 0.656], reference=1,
-                        stop_index=1)
-    sys.solve.image_distance()
-    return sys
+from tests.x.raytracing.system_helpers import doublet_system as _doublet
 
 
 def _count_calls(monkeypatch, module, name):

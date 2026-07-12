@@ -9,33 +9,14 @@ import pytest
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
-from prysm.x.raytracing import (
-    OpticalSystem, ApertureSpec, LensData, Sphere, Plane, Field, Sampling,
-)
-from prysm.x import materials
+from prysm.x.raytracing import Field, Sampling
 from prysm.x.raytracing.analysis import (
     spot_diagrams, ray_aberration_fans, field_curvature,
     lateral_color,
 )
 from prysm.x.raytracing.paraxial import paraxial_image_distance
 from prysm.x.raytracing._resolve import compiled_surfaces
-
-
-def _doublet():
-    # first powered surface is row 1, so the stop stays at index 1
-    ld = (LensData()
-          .add(Sphere(1 / 61.47), thickness=6.0,
-               material=materials.ConstantMaterial(1.5168), aperture=12.0)
-          .add(Sphere(-1 / 44.64), thickness=2.5,
-               material=materials.ConstantMaterial(1.673), aperture=12.0)
-          .add(Sphere(-1 / 129.94), thickness=0.0,
-               material=materials.air, aperture=12.0))
-    sys = OpticalSystem(ld, aperture=ApertureSpec.epd(22.0),
-                        fields=[Field(0, 0), Field(0, 0.7), Field(0, 1.0)],
-                        wavelengths=[0.486, 0.587, 0.656], reference=1,
-                        stop_index=1)
-    sys.solve.image_distance()
-    return sys
+from tests.x.raytracing.system_helpers import doublet_system as _doublet
 
 
 # ---------- layout_2d -------------------------------------------------------

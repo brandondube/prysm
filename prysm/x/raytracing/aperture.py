@@ -356,6 +356,12 @@ class Aperture:
                 return r
         return footprint
 
+    def center(self):
+        """Local xy center exposed by the clip, else the surface origin."""
+        clip = self.clip
+        return (float(getattr(clip, 'x0', 0.0)),
+                float(getattr(clip, 'y0', 0.0)))
+
     def drawn_radius(self, footprint=None):
         """Drawn radius: explicit extent, else limiting_radius x oversize."""
         if self.extent is not None:

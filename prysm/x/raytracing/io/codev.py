@@ -12,14 +12,13 @@ from ._common import (
     writable_shape_or_raise,
     length_scale_to_mm,
     scale_length_to_mm,
-    scale_surface_params_to_mm,
     aperture_kwargs_from_radii,
     parse_float,
 )
 from ..lensdata import LensData
 from ..system import OpticalSystem, ApertureSpec, FieldSet
 from ..paraxial import effective_focal_length
-from ._surface_spec import SurfaceSpec, build_shape
+from ._surface_spec import build_shape, surface_spec_factory
 
 
 # Code V represents an infinite object conjugate with a large finite thickness
@@ -577,13 +576,7 @@ def _build_spec(sd, radius_mode, database=None, length_scale=1.0):
         n_callable = _materials.MIRROR
     else:
         n_callable = _lookup_codev_glass(glass, database)
-    is_mirror = (n_callable is _materials.MIRROR)
-    typ = 'refl' if is_mirror else 'refr'
-    n_arg = None if is_mirror else n_callable
-
-    def spec(kind, params):
-        params = scale_surface_params_to_mm(kind, params, length_scale)
-        return SurfaceSpec(kind, typ, None, n_arg, params)
+    spec = surface_spec_factory(n_callable, length_scale)
 
     # Zernike (Fringe) surface
     if sd.get('zfr_coefs') is not None:

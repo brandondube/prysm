@@ -22,23 +22,7 @@ from prysm.x.raytracing._trace_grid import (
     _resolve_wavelengths,
     _require_epd,
 )
-
-
-def _singlet_system(fields=None, wavelengths=None, ref=1):
-    """Sphere/sphere singlet with system metadata (stop at the first surface)."""
-    lens = LensData()
-    (lens.add(Conic(1 / 50.0, 0.0), typ='refr', material=materials.ConstantMaterial(1.5168),
-              thickness=5.0)
-         .add(Conic(-1 / 50.0, 0.0), typ='refr', material=materials.air,
-              thickness=95.0)
-         .add(Plane(), typ='eval'))
-    if fields is None:
-        fields = [Field(0, 0), Field(0, 3)]
-    if wavelengths is None:
-        wavelengths = [0.4861, 0.5876, 0.6563]  # F, d, C
-    return OpticalSystem(lens, aperture=ApertureSpec.epd(10.0), fields=fields,
-                         wavelengths=wavelengths, reference=ref,
-                         stop_index=0)
+from tests.x.raytracing.system_helpers import singlet_system as _singlet_system
 
 
 def _bare_singlet():

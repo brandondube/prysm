@@ -4,7 +4,8 @@ import pytest
 
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData, launch, raytrace, Sampling, Field
-from prysm.x.raytracing.surfaces import Conic, Plane
+from prysm.x.raytracing.surfaces import Conic, Plane, Toroid
+from prysm.x.raytracing.aperture import circular_aperture
 from prysm.x import materials as pmat
 from prysm.x.raytracing.paraxial import ynu_first_order, entrance_pupil_z
 from prysm.x.raytracing import analysis as pa
@@ -119,7 +120,7 @@ def test_real_ray_aiming_linearizes_pupil_to_stop_map():
 
 from prysm.x.raytracing.launch import (
     _collimated_PS, _apply_vignetting, _entrance_pupil_z, _real_aim_to_stop,
-    _scaled_field, _parabasal_ep_z,
+    _scaled_field, _parabasal_ep_z, _STOP_RIM_XY, _StopTarget,
 )
 
 _FISHEYE_STOP = 3   # 3rd powered surface (compiled index 1..4; index 0 is OBJECT)
@@ -141,8 +142,8 @@ def fisheye(epd, ray_aiming='real'):
     return sys
 
 
-def _axial_r_stop(sys, epd):
-    """The stop semi-diameter launch aims rho = 1 to (axial rim, clip-bound)."""
+def _axial_stop_target(sys, epd):
+    """The symmetric fisheye's clip-bound stop center and pupil map."""
     from prysm.x.raytracing.opt import declipped
     pupil_z = float(list(sys.to_surfaces())[0].P[2])
     half = epd / 2.0
@@ -150,11 +151,18 @@ def _axial_r_stop(sys, epd):
     P, S = _collimated_PS(xy, pupil_z, Field(0.0, 0.0))
     surfs = sys.to_surfaces()
     tr = raytrace(declipped(surfs[:_FISHEYE_STOP + 1]), P, S, WVL)
-    r = float(np.nanmax(np.hypot(tr.P[-1, :, 0], tr.P[-1, :, 1])))
-    clip_r = surfs[_FISHEYE_STOP].aperture.limiting_radius(None)
-    if clip_r is not None and clip_r < r:
-        r = clip_r * (1.0 - 1e-9)
-    return r
+    loc = tr.P[-1, :, :2]
+    pupil_map = np.stack([
+        0.5 * (loc[0] - loc[1]),
+        0.5 * (loc[2] - loc[3]),
+    ], axis=1)
+    stop = surfs[_FISHEYE_STOP]
+    center = np.asarray(stop.aperture.center())
+    clip_r = stop.aperture.limiting_radius(None)
+    edge_r = float(np.max(np.sqrt(np.sum(pupil_map * pupil_map, axis=0))))
+    if clip_r is not None and clip_r < edge_r:
+        pupil_map = np.eye(2) * clip_r * (1.0 - 1e-9)
+    return _StopTarget(center, pupil_map)
 
 
 def _primary_only(sys, angle, epd, n=15):
@@ -168,8 +176,9 @@ def _primary_only(sys, angle, epd, n=15):
     S0 = S[0]
     shift = (pupil_z - ep) / S0[2]
     P = P + np.stack([shift * S0[0], shift * S0[1], np.zeros_like(shift)])
-    return _real_aim_to_stop(P, S, pupil_xy / (epd / 2), sys, _FISHEYE_STOP,
-                             WVL, False, r_stop=_axial_r_stop(sys, epd))
+    return _real_aim_to_stop(
+        P, S, pupil_xy / (epd / 2), sys, _FISHEYE_STOP, WVL, False,
+        stop_target=_axial_stop_target(sys, epd))
 
 
 def test_ladder_rescues_wide_field_marginal_rays():
@@ -343,6 +352,47 @@ def test_binding_stop_clip_bounds_the_aimed_pupil():
     y = raytrace(sys, P, S, WVL).P[_FISHEYE_STOP + 1, :, 1]
     assert np.isfinite(y).all()                   # rim rays are NOT clipped
     assert np.nanmax(np.abs(y)) == pytest.approx(6.0, rel=1e-6)
+
+
+@pytest.mark.filterwarnings(
+    'ignore:a surface departs from its conic seed steeply enough')
+def test_real_aiming_preserves_anamorphic_axial_pupil_map():
+    """An unclipped toroidal system retains distinct x/y stop scales."""
+    lens = LensData()
+    lens.add(Toroid(c_x=0.0, c_y=1 / 100.0, k_y=0.0, coefs_y=()),
+             thickness=15.0, material=pmat.ConstantMaterial(1.5))
+    lens.add(Plane(), thickness=30.0, material=pmat.air)
+    sys = OpticalSystem(lens, aperture=EPD, fields=[0.0],
+                        wavelengths=[WVL], reference=0, stop_index=2)
+    points = Sampling.points(_STOP_RIM_XY)
+
+    P0, S0 = launch(sys, Field(0.0, 0.0), WVL, points)
+    expected = raytrace(sys, P0, S0, WVL).P[3, :, :2]
+    assert not np.isclose(abs(expected[0, 0]), abs(expected[2, 1]))
+
+    sys.ray_aiming = 'real'
+    P, S = launch(sys, Field(0.0, 0.0), WVL, points)
+    actual = raytrace(sys, P, S, WVL).P[3, :, :2]
+    np.testing.assert_allclose(actual, expected, atol=1e-9)
+
+
+def test_real_aiming_uses_shifted_clip_center():
+    """A shifted circular stop is filled around its own local center."""
+    sys = cooke()
+    sys.ray_aiming = 'real'
+    stop = sys.to_surfaces()[STOP_INDEX]
+    stop.aperture = circular_aperture(0.2, x0=1.0, y0=-0.5)
+
+    P, S = launch(sys, Field(0.0, 0.0), WVL,
+                  Sampling.fan(n=5, axis='x'))
+    tr = raytrace(sys, P, S, WVL)
+    assert np.isfinite(tr.P[-1]).all()
+    from prysm.x.raytracing.spencer_and_murty import transform_to_local_coords
+    loc, _ = transform_to_local_coords(tr.P[STOP_INDEX + 1], stop.P,
+                                       tr.S[STOP_INDEX + 1], stop.R)
+    np.testing.assert_allclose(loc[:, 0], np.linspace(0.8, 1.2, 5),
+                               atol=1e-9)
+    np.testing.assert_allclose(loc[:, 1], -0.5, atol=1e-9)
 
 
 # ---------- routing geometry ------------------------------------------------

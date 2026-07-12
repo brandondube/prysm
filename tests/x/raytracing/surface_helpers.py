@@ -1,5 +1,7 @@
 """Test-only surface constructors for explicit shape-based raytracing tests."""
 
+import numpy as np
+
 from prysm.x.raytracing.surfaces import (
     Surface,
     Biconic,
@@ -86,3 +88,23 @@ def toroid(c_x, c_y, k_y, coefs_y, interaction, P, material=None, **kwargs):
 def biconic(c_x, c_y, k_x, k_y, interaction, P, material=None, **kwargs):
     return Surface(shape=Biconic(c_x, c_y, k_x, k_y), interaction=interaction,
                    P=P, material=material, **kwargs)
+
+
+def xy_grid(span=4.0, n=9):
+    """Return a square Cartesian test grid spanning ``[-span, span]``."""
+    samples = np.linspace(-span, span, n)
+    return np.meshgrid(samples, samples, indexing='xy')
+
+
+def sag_derivatives(shape, x, y):
+    """Recover ``(sag, dz/dx, dz/dy)`` from a shape's unit normal."""
+    sag, normal = shape.sag_and_normal(x, y)
+    nz = normal[..., 2]
+    return sag, -normal[..., 0] / nz, -normal[..., 1] / nz
+
+
+def central_difference_xy(sag, x, y, h=1e-6):
+    """Numerically differentiate a two-coordinate sag function."""
+    dx = (sag(x + h, y) - sag(x - h, y)) / (2 * h)
+    dy = (sag(x, y + h) - sag(x, y - h)) / (2 * h)
+    return dx, dy

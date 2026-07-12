@@ -6,6 +6,7 @@ from prysm.mathops import np
 from .spencer_and_murty import (
     STYPE_REFLECT, STYPE_REFRACT, _is_measurement_surf)
 from ._meta import object_space_index
+from ._first_order import format_first_order, initialize_slots
 
 
 _AXIAL_GEOMETRY_TOL = 1e-12
@@ -404,43 +405,10 @@ class FirstOrderProperties:
     )
 
     def __init__(self):
-        for s in self.__slots__:
-            setattr(self, s, None)
+        initialize_slots(self)
 
     def __repr__(self):
-        def row(label, value, fmt='.6g', suffix=''):
-            if value is None:
-                return None
-            return f'  {label:<22s}: {format(value, fmt)}{suffix}'
-
-        lines = ['FirstOrderProperties']
-        lines.append(row('wavelength', self.wavelength, '.6g', ' um'))
-        lines.append(
-            f'  {"surfaces":<22s}: '
-            f'{self.n_surfaces} ({self.n_refractive} refr, '
-            f'{self.n_reflective} refl, {self.n_eval} eval)'
-        )
-        lines.append(row('total track', self.total_track))
-        lines.append(row('n object', self.n_object))
-        lines.append(row('n image (signed)', self.n_image))
-        lines.append(row('EFL', self.efl))
-        lines.append(row('BFL', self.bfl))
-        lines.append(row('FFL', self.ffl))
-        lines.append(row('paraxial image dist', self.paraxial_image_distance))
-        lines.append(row('paraxial image z', self.paraxial_image_z))
-        lines.append(row('EPD', self.epd))
-        lines.append(row('F/#', self.fno, '.4g'))
-        lines.append(row('NA image', self.na_image, '.4g'))
-        if self.stop_index is not None:
-            lines.append(f'  {"stop index":<22s}: {self.stop_index}')
-        lines.append(row('EP z', self.ep_z))
-        lines.append(row('EP distance from S1', self.ep_distance, '+.6g'))
-        lines.append(row('XP z', self.xp_z))
-        lines.append(row('XP distance from SN', self.xp_distance, '+.6g'))
-        lines.append(row('stop diameter', self.stop_diameter))
-        lines.append(row('EP diameter', self.ep_diameter))
-        lines.append(row('XP diameter', self.xp_diameter))
-        return '\n'.join(line for line in lines if line is not None)
+        return format_first_order(self, 'FirstOrderProperties')
 
 
 def ynu_first_order(surfaces, wvl=None, *, epd=None, stop_index=None):

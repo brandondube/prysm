@@ -8,7 +8,11 @@ from tests.x.raytracing.surface_helpers import (
 )
 
 from prysm.coordinates import make_rotation_matrix
-from prysm.x.raytracing.spencer_and_murty import raytrace
+from prysm.x.raytracing.spencer_and_murty import (
+    raytrace,
+    transform_to_global_coords,
+    transform_to_local_coords,
+)
 
 
 # ---------- decenter ----------
@@ -40,6 +44,24 @@ def test_decenter_validates_shape():
 
 
 # ---------- tilt ----------
+
+def test_coordinate_transforms_preserve_single_ray_rank_with_rotation():
+    """A rotated vector round trip remains shape (3,), not (1, 3)."""
+    R = make_rotation_matrix((3.0, -7.0, 11.0))
+    origin = np.array([1.0, -2.0, 3.0])
+    point = np.array([4.0, 5.0, 6.0])
+    direction = np.array([0.1, -0.2, 0.97])
+    local_point, local_direction = transform_to_local_coords(
+        point, origin, direction, R)
+    assert local_point.shape == (3,)
+    assert local_direction.shape == (3,)
+    roundtrip_point, roundtrip_direction = transform_to_global_coords(
+        local_point, origin, local_direction, R)
+    assert roundtrip_point.shape == (3,)
+    assert roundtrip_direction.shape == (3,)
+    np.testing.assert_allclose(roundtrip_point, point, atol=1e-12)
+    np.testing.assert_allclose(roundtrip_direction, direction, atol=1e-12)
+
 
 def test_tilt_alone_sets_R_to_rotation_matrix():
     """With R=None and tilt=(rz, ry, rx), Surface.R should equal

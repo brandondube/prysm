@@ -6,7 +6,9 @@ from prysm.x import materials
 from prysm.x.raytracing.phase import LinearGrating
 from tests.x.raytracing.surface_helpers import (
     plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
-    chebyshev, jacobi, toroid, biconic,
+    chebyshev, jacobi, toroid, biconic, xy_grid as _xy_grid,
+    sag_derivatives as _sag_derivs,
+    central_difference_xy as _central_difference_xy,
 )
 
 from prysm.x.raytracing.surfaces import (
@@ -18,27 +20,6 @@ from prysm.x.raytracing.surfaces import (
     conic_sag_der_xy,
 )
 from prysm.x.raytracing.spencer_and_murty import raytrace
-
-
-def _xy_grid(rmax=4.0, n=9):
-    x1 = np.linspace(-rmax, rmax, n)
-    x, y = np.meshgrid(x1, x1, indexing='xy')
-    return x, y
-
-
-def _sag_derivs(shape, x, y):
-    """Recover (z, dz/dx, dz/dy) from a shape's sag_and_normal unit normal."""
-    z, n_hat = shape.sag_and_normal(x, y)
-    nz = n_hat[..., 2]
-    return z, -n_hat[..., 0] / nz, -n_hat[..., 1] / nz
-
-
-def _central_difference_xy(sag, x, y, h=1e-6):
-    z_xp = sag(x + h, y)
-    z_xm = sag(x - h, y)
-    z_yp = sag(x, y + h)
-    z_ym = sag(x, y - h)
-    return (z_xp - z_xm) / (2 * h), (z_yp - z_ym) / (2 * h)
 
 
 # ---- Toroid -----------------------------------------------------------------

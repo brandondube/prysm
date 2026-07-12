@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 
+from ... import materials as _materials
 from ..surfaces import (
     Surface,
     Biconic,
@@ -12,6 +13,7 @@ from ..surfaces import (
     XY,
     Zernike,
 )
+from ._common import scale_surface_params_to_mm
 
 
 @dataclass
@@ -30,6 +32,25 @@ class SurfaceSpec:
     tilt_radians: bool = False
     grating: object = None
     coating: object = None
+
+
+def make_surface_spec(kind, typ, material, params, length_scale=1.0):
+    """Build a pose-free parser-neutral spec in millimeter units."""
+    params = scale_surface_params_to_mm(kind, params, length_scale)
+    return SurfaceSpec(kind, typ, None, material, params)
+
+
+def surface_spec_factory(material, length_scale=1.0):
+    """Bind parser-level material semantics and source-unit scaling."""
+    is_mirror = material is _materials.MIRROR
+    typ = 'refl' if is_mirror else 'refr'
+    normalized_material = None if is_mirror else material
+
+    def make(kind, params):
+        return make_surface_spec(
+            kind, typ, normalized_material, params, length_scale)
+
+    return make
 
 
 def build_shape(spec):
@@ -70,4 +91,7 @@ def build_surface(spec):
     )
 
 
-__all__ = ['SurfaceSpec', 'build_surface', 'build_shape']
+__all__ = [
+    'SurfaceSpec', 'make_surface_spec', 'surface_spec_factory',
+    'build_surface', 'build_shape',
+]

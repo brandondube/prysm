@@ -7,10 +7,10 @@ from tests.x.raytracing.surface_helpers import (
     plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
     chebyshev, jacobi, toroid, biconic,
 )
+from tests.x.raytracing.system_helpers import doublet_system as _doublet_system
 
 from prysm.x.raytracing.surfaces import (
     Plane, Surface, circular_aperture, annular_aperture,
-    Sphere as SphereShape,
 )
 from prysm.x.raytracing import LensData, OpticalSystem, ApertureSpec
 from prysm.x.raytracing.spencer_and_murty import STATUS_CLIP
@@ -221,6 +221,29 @@ def test_resolve_exit_pupil_decentered_system_stop_falls_back_to_axis_route():
     assert np.isfinite(opd).all()
     np.testing.assert_allclose(x_pup, [0.0, 0.1, -0.1])
     np.testing.assert_allclose(y_pup, 0.0)
+
+
+def test_resolve_exit_pupil_nonaxial_system_requires_explicit_axis():
+    """A non-axial system must not silently use the lab z axis."""
+    ld = (LensData()
+          .add_coordbreak(tilt=(0.0, 20.0, 0.0))
+          .add(Plane(), typ='eval'))
+    sys = OpticalSystem(ld, aperture=ApertureSpec.epd(2.0),
+                        wavelengths=[0.55], reference=0, stop_index=1)
+    surf = sys.to_surfaces()[1]
+    axis_dir = np.asarray(surf.R).T @ np.array([0.0, 0.0, 1.0])
+    perp = np.asarray(surf.R).T @ np.array([1.0, 0.0, 0.0])
+    chief = surf.P + 100.0 * axis_dir + 5.0 * perp
+    chief_dir = axis_dir + 0.03 * perp
+    chief_dir /= np.linalg.norm(chief_dir)
+
+    with pytest.raises(ValueError, match='centered axial geometry'):
+        resolve_exit_pupil(sys, 0.55, chief=(chief, chief_dir))
+
+    P_xp = resolve_exit_pupil(
+        sys, 0.55, chief=(chief, chief_dir),
+        axis_point=surf.P, axis_dir=axis_dir)
+    assert np.isfinite(P_xp).all()
 
 
 def test_wavefront_uses_penultimate_surface_image_medium():
@@ -554,23 +577,6 @@ def test_wavefront_centroid_matches_chief_when_chief_valid():
 
 
 # ---------- field_sweep ------------------------------------------------------
-
-def _doublet_system():
-    # first powered surface is row 1
-    ld = (LensData()
-          .add(SphereShape(1 / 61.47), thickness=6.0,
-               material=materials.ConstantMaterial(1.5168), aperture=12.0)
-          .add(SphereShape(-1 / 44.64), thickness=2.5,
-               material=materials.ConstantMaterial(1.673), aperture=12.0)
-          .add(SphereShape(-1 / 129.94), thickness=0.0,
-               material=materials.air, aperture=12.0))
-    sys = OpticalSystem(ld, aperture=ApertureSpec.epd(22.0),
-                        fields=[Field(0, 0), Field(0, 0.7), Field(0, 1.0)],
-                        wavelengths=[0.486, 0.587, 0.656], reference=1,
-                        stop_index=1)
-    sys.solve.image_distance()
-    return sys
-
 
 def test_field_sweep_densifies_system_default():
     sys = _doublet_system()

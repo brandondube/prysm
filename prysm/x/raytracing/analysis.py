@@ -18,7 +18,7 @@ from .opt import (
     centroid_referenced_max,
     _pupil_center_chief_index,
 )
-from .paraxial import paraxial_image_distance
+from .paraxial import paraxial_image_distance, NonAxialSystemError
 from .launch import Field, Sampling, _apply_vignetting
 from ._trace_grid import (
     TraceRecord, iter_trace_grid, trace_cell, _resolve_fields,  # NOQA: F401 re-export
@@ -91,13 +91,6 @@ def _center_valid(values, valid, reference, chief_index, *, allow_none=False):
     return out, ref
 
 
-def _first_order_geometry_failure(exc):
-    """True when first_order failed because scalar ABCD geometry is invalid."""
-    msg = str(exc)
-    return ('centered axial geometry' in msg
-            or 'vertex normal to be axial' in msg)
-
-
 def resolve_exit_pupil(system, wavelength, *, stop_index=None, epd=None,
                        field=None, chief=None, axis_point=None, axis_dir=None,
                        min_perp=1e-6, return_mode=False):
@@ -148,10 +141,12 @@ def resolve_exit_pupil(system, wavelength, *, stop_index=None, epd=None,
                 fo = ynu_first_order(compiled_surfaces(system),
                                      wvl=wavelength, epd=epd,
                                      stop_index=resolved_stop)
-        except ValueError as exc:
-            # Only explicit-axis calls can fall back from centered ABCD errors.
-            if ((axis_point is None and axis_dir is None)
-                    or not _first_order_geometry_failure(exc)):
+        except NonAxialSystemError:
+            # Non-axial geometry has no centered ABCD.  Its optical axis
+            # cannot be inferred from the surface sequence in general (an
+            # off-axis parent and a tilted local axis are distinct cases), so
+            # only an explicit-axis call may take the geometric route.
+            if axis_point is None and axis_dir is None:
                 raise
         else:
             if fo.xp_z is None:

@@ -22,6 +22,7 @@ from prysm.x.raytracing.wavefront_differential import (
 )
 from prysm.x.raytracing.surfaces import Zernike
 from tests.x.raytracing.surface_helpers import conic, zernike, plane
+from tests.x.raytracing.differential_helpers import ray_bundle
 
 
 # ---------- kernel-level: seed_irregularity dW vs FD ------------------------
@@ -45,22 +46,6 @@ def make_system(irr=None):
     s1 = conic(c=-1 / 55.0, k=0.2, interaction='refr', P=[0, 0, 6.0], material=materials.air)
     img = plane(interaction='eval', P=[0, 0, 56.0])
     return [s0, s1, img]
-
-
-def ray_bundle():
-    ax, ay = 0.04, 0.06
-    Sx, Sy = np.sin(ax), np.sin(ay)
-    Sz = np.sqrt(1.0 - Sx * Sx - Sy * Sy)
-    xs = np.linspace(-7, 7, 5)
-    ys = np.linspace(-7, 7, 5)
-    XX, YY = np.meshgrid(xs, ys)
-    pupil = np.stack([XX.ravel(), YY.ravel()], axis=-1)
-    n = pupil.shape[0]
-    P = np.empty((n, 3))
-    P[:, :2] = pupil
-    P[:, 2] = -12.0
-    S = np.broadcast_to(np.array([Sx, Sy, Sz]), (n, 3)).copy()
-    return P, S
 
 
 # CYN = Z(2,2) cylinder along axes; CYD = Z(2,-2) 45-degree cylinder; plus a

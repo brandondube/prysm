@@ -1,5 +1,6 @@
 """Field, Sampling, launch, and stop-aim ergonomics."""
 
+from dataclasses import dataclass
 import warnings
 
 from prysm.conf import config
@@ -390,16 +391,36 @@ def _warn_paraxial_aiming(system, ray_aiming):
         )
 
 
-def _real_aim_to_stop(P, S, rho, system, stop_index, wavelength, finite,
-                      r_stop=None):
-    """Aim a normalized pupil grid onto the stop: rho -> rho * r_stop.
+@dataclass(frozen=True, slots=True)
+class _StopTarget:
+    """Stop-local center and normalized-pupil affine map."""
 
-    r_stop is the stop semi-diameter (stop-local frame), so rho = 1 lands on
-    the stop edge.  None falls back to a secant scale of this bundle's own
-    landings -- the pupil keeps its launched size instead of filling the stop.
+    center: object
+    pupil_map: object = None
+
+    def scaled(self, scale):
+        """Keep the center fixed and scale the pupil extent."""
+        if self.pupil_map is None:
+            return self
+        return _StopTarget(self.center, self.pupil_map * scale)
+
+
+def _real_aim_to_stop(P, S, rho, system, stop_index, wavelength, finite,
+                      stop_target=None):
+    """Aim a normalized pupil grid onto a stop-local affine target.
+
+    The target maps normalized (rho_x, rho_y) into stop-local xy, preserving
+    anamorphic scale and axis mixing.  Its center is the surface or clip
+    center.  A missing map falls back to secant scales from this bundle's own
+    landings, so the pupil keeps its launched size instead of filling a stop.
     Returns (P, S, converged); converged is the per-ray aim_rays mask.
     """
-    if r_stop is None:
+    if stop_target is None:
+        stop_target = _StopTarget(
+            np.zeros(2, dtype=config.precision), None)
+    stop_center = np.asarray(stop_target.center, dtype=config.precision)
+    pupil_map = stop_target.pupil_map
+    if pupil_map is None:
         trace_path = declipped(system[:stop_index + 1])
         tr = raytrace(trace_path, P, S, wavelength)
         stop_surf = system[stop_index]
@@ -422,9 +443,11 @@ def _real_aim_to_stop(P, S, rho, system, stop_index, wavelength, finite,
 
         sx = _scale(rho[:, 0], L[:, 0])
         sy = _scale(rho[:, 1], L[:, 1])
-        target = np.stack([rho[:, 0] * sx, rho[:, 1] * sy], axis=1)
+        pupil_map = np.array([[sx, 0.0], [0.0, sy]],
+                             dtype=config.precision)
     else:
-        target = rho * r_stop
+        pupil_map = np.asarray(pupil_map, dtype=config.precision)
+    target = stop_center + rho @ pupil_map.T
     vary = 'direction' if finite else 'position'
     P, S, converged = aim_rays(P, S, system, stop_index, target,
                                wavelength, vary=vary, strict=False)
@@ -438,32 +461,38 @@ def _axial_field(field):
     return Field(0.0, 0.0, kind='height', object_z=field.object_z)
 
 
-# rim probes for the stop semi-diameter: +/-x and +/-y at rho = 1
+# Rim probes for the stop pupil map: +/-x and +/-y at rho = 1.
 _STOP_RIM_XY = ((1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0))
 
 
-def _stop_semidiameter(system, stop_index, wavelength, build_bundle, field):
-    """Stop semi-diameter: the axial marginal footprint at the stop.
+def _stop_target(system, stop_index, wavelength, build_bundle, field):
+    """Return the stop-local center and normalized-pupil affine map.
 
-    The system-aperture-sized on-axis bundle's rim radius in the stop's
-    local frame -- the quantity rho = 1 aims to.  None when the axial rim
-    cannot be traced to the stop.
+    The columns of pupil_map are the on-axis +/-x and +/-y marginal secants,
+    retaining anamorphism and cross-axis coupling.  A tighter radial clip
+    replaces that map with its limiting circle.  Shifted built-in clips carry
+    their own center.
     """
     rim = Sampling.points(np.asarray(_STOP_RIM_XY, dtype=config.precision))
     P0, S0, _ = build_bundle(_axial_field(field), 'paraxial', samp=rim)
     tr = raytrace(declipped(system[:stop_index + 1]), P0, S0, wavelength)
     surf = system[stop_index]
     loc, _ = transform_to_local_coords(tr.P[-1], surf.P, tr.S[-1], surf.R)
-    r = np.hypot(loc[..., 0], loc[..., 1])
-    if not bool(np.isfinite(r).any()):
-        return None
-    r = float(np.nanmax(r))
+    center = np.asarray(surf.aperture.center(), dtype=config.precision)
+    if not bool(np.isfinite(loc[:, :2]).all()):
+        return _StopTarget(center, None)
+    x_column = 0.5 * (loc[0, :2] - loc[1, :2])
+    y_column = 0.5 * (loc[2, :2] - loc[3, :2])
+    pupil_map = np.stack([x_column, y_column], axis=1)
+
     # a stop clip tighter than the axial marginal is the binding pupil edge;
     # aim just inside it so rim rays do not coin-flip on the exact boundary
     clip_r = surf.aperture.limiting_radius(None)
-    if clip_r is not None and clip_r < r:
-        r = clip_r * (1.0 - 1e-9)
-    return r if r > 0.0 else None
+    edge_r = float(np.max(np.sqrt(np.sum(pupil_map * pupil_map, axis=0))))
+    if clip_r is not None and clip_r < edge_r:
+        bound = float(clip_r) * (1.0 - 1e-9)
+        pupil_map = np.eye(2, dtype=config.precision) * bound
+    return _StopTarget(center, pupil_map)
 
 
 # Adaptive field-continuation homotopy: start step, growth on success, and the
@@ -545,7 +574,7 @@ def _warm_start_bundle(P, S, seedP, seedS, finite, good):
 
 def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, system,
                              stop_index, wavelength, finite,
-                             drop_unaimed=False, r_stop=None):
+                             drop_unaimed=False, stop_target=None):
     """Real aiming with an adaptive field-and-pupil continuation fallback.
 
     Walks both the field and the pupil from on-axis up to the target, warm-
@@ -560,7 +589,7 @@ def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, system,
     cannot stall the walk (it is dropped at the end).
     """
     P, S, conv = _real_aim_to_stop(P, S, rho, system, stop_index,
-                                   wavelength, finite, r_stop=r_stop)
+                                   wavelength, finite, stop_target=stop_target)
     if bool(np.all(conv)):
         return P, S
 
@@ -582,9 +611,11 @@ def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, system,
         Pk, Sk, rho_k = build_bundle(fld_k, ep_k, escale=nxt)
         if seedP is not None:
             _warm_start_bundle(Pk, Sk, seedP, seedS, finite, seedconv)
-        rk = None if r_stop is None else r_stop * nxt
+        target_k = (None if stop_target is None
+                    else stop_target.scaled(nxt))
         Pk, Sk, convk = _real_aim_to_stop(Pk, Sk, rho_k, system, stop_index,
-                                          wavelength, finite, r_stop=rk)
+                                          wavelength, finite,
+                                          stop_target=target_k)
         if bool(convk[chief]):
             if seedP is None:
                 seedP, seedS = Pk.copy(), Sk.copy()
@@ -632,7 +663,8 @@ def _aim_to_stop_with_ladder(P, S, rho, build_bundle, field, system,
             P2[miss, 0] = pred[:, 0]
             P2[miss, 1] = pred[:, 1]
         P2, S2, conv2 = _real_aim_to_stop(P2, S2, rho, system, stop_index,
-                                          wavelength, finite, r_stop=r_stop)
+                                          wavelength, finite,
+                                          stop_target=stop_target)
         won = conv2 & miss
         if bool(np.any(won)):
             P = P.copy()
@@ -770,13 +802,11 @@ def launch(system, field, wavelength, sampling, *,
             strict=aim_strict, vary=vary,
         )
     elif real_aiming and stop_index is not None:
-        # rho = 1 aims to the stop edge; a chief-only bundle needs no size
-        r_stop = (None if sampling.kind == 'chief' else
-                  _stop_semidiameter(system, stop_index, wavelength,
-                                     _build, field))
+        stop_target = _stop_target(system, stop_index, wavelength,
+                                   _build, field)
         P, S = _aim_to_stop_with_ladder(
             P, S, rho, _build, field, system, stop_index, wavelength,
-            finite, drop_unaimed=drop_unaimed, r_stop=r_stop)
+            finite, drop_unaimed=drop_unaimed, stop_target=stop_target)
 
     return P, S
 

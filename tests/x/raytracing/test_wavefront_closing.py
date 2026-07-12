@@ -122,7 +122,7 @@ def test_close_wavefront_invalid_chief_errors():
 
 
 def test_close_wavefront_off_axis_geometric_fallback():
-    """A decentered system resolves its exit pupil geometrically, not by raising.
+    """An explicit parent axis resolves a decentered system geometrically.
 
     An off-axis parabola imaging collimated light to its parent focus has
     OPD identically zero; the centered-ABCD route is unavailable, and the
@@ -139,9 +139,12 @@ def test_close_wavefront_off_axis_geometric_fallback():
                         wavelengths=[WVL], reference=0, stop_index=2)
     fld = Field(0.0, 0.0)
     P, S = launch(sys, fld, WVL, Sampling.rect(n=11))
-    opd, xp, yp = wavefront(sys, P, S, WVL, field=fld, output='length')
-    assert np.nanmax(np.abs(opd)) < 1e-9
     from prysm.x.raytracing.analysis import resolve_exit_pupil
-    P_xp, mode = resolve_exit_pupil(sys, WVL, return_mode=True)
+    P_xp, mode = resolve_exit_pupil(
+        sys, WVL, axis_point=(0.0, 0.0, 0.0),
+        axis_dir=(0.0, 0.0, 1.0), return_mode=True)
     assert mode == 'geometric'
     assert np.isfinite(np.asarray(P_xp)).all()
+    opd, xp, yp = wavefront(sys, P, S, WVL, field=fld, P_xp=P_xp,
+                            output='length')
+    assert np.nanmax(np.abs(opd)) < 1e-9

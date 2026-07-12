@@ -4,7 +4,8 @@ import pytest
 
 from prysm.x import materials
 from tests.x.raytracing.surface_helpers import (
-    plane, sphere, conic, off_axis_conic, even_asphere, q2d
+    plane, sphere, conic, off_axis_conic, even_asphere, q2d,
+    xy_grid as _xy_grid, sag_derivatives as _sag_derivs,
 )
 
 from prysm.x.raytracing.surfaces import (
@@ -44,13 +45,6 @@ def _sag_and_normal_from_derivatives(sag_derivatives):
     return sag_and_normal
 
 
-def _sag_derivs(shape, x, y):
-    """Recover (z, dz/dx, dz/dy) from a shape's sag_and_normal unit normal."""
-    z, n_hat = shape.sag_and_normal(x, y)
-    nz = n_hat[..., 2]
-    return z, -n_hat[..., 0] / nz, -n_hat[..., 1] / nz
-
-
 @pytest.mark.parametrize('dx,dy', [(3.0, 4.0), (-2.0, 5.0)])
 def test_q2d_sigma_inv_der_matches_numerical(dx, dy):
     c = 1 / 80.0
@@ -72,12 +66,6 @@ def test_q2d_sigma_inv_der_matches_numerical(dx, dy):
 
     np.testing.assert_allclose(dr_an, dr_num, rtol=1e-5, atol=1e-7)
     np.testing.assert_allclose(dt_an, dt_num, rtol=1e-5, atol=1e-7)
-
-
-def _xy_grid(span=4.0, n=15):
-    xs = np.linspace(-span, span, n)
-    X, Y = np.meshgrid(xs, xs, indexing='xy')
-    return X, Y
 
 
 @pytest.mark.parametrize('kappa', [-1.0, 0.0, -0.5, 0.7])
@@ -113,7 +101,7 @@ def test_conic_kappa_minus_one_is_parabola():
 @pytest.mark.parametrize('kappa', [0.0, -1.0, -0.5, 0.7])
 def test_conic_sag_der_xy_matches_numerical(kappa):
     c = 1 / 80.0
-    x, y = _xy_grid()
+    x, y = _xy_grid(n=15)
     h = 1e-5
 
     def sag(xx, yy):
@@ -130,7 +118,7 @@ def test_conic_sag_der_xy_matches_numerical(kappa):
 @pytest.mark.parametrize('kappa', [0.0, -1.0, -0.5, 0.7])
 def test_shifted_conic_sag_der_xy_matches_numerical(dx, dy, kappa):
     c = 1 / 80.0
-    x, y = _xy_grid()
+    x, y = _xy_grid(n=15)
     h = 1e-5
 
     def sag(xx, yy):

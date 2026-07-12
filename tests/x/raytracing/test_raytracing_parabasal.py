@@ -222,6 +222,20 @@ def test_parabasal_force_sym_scalars():
     np.testing.assert_allclose(fo.xp_z, fo_y.xp_z, rtol=1e-9)
 
 
+def test_parabasal_repr_reports_backend_field_and_sections():
+    fo = first_order(
+        _singlet_system(), field=Field(0, 1), wavelength=0.55, epd=20)
+    text = repr(fo)
+    assert 'ParabasalFirstOrder (backend: parabasal)' in text
+    assert 'field' in text
+    assert 'EFL' in text
+    assert '           X            Y' in text
+
+    symmetric = first_order(
+        _singlet_system(), wavelength=0.55, epd=20, force_sym=True)
+    assert '           X            Y' not in repr(symmetric)
+
+
 def test_parabasal_stop_index_out_of_range_raises():
     sys = _singlet_system()
     with pytest.raises(IndexError):
