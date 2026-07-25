@@ -184,7 +184,7 @@ def image_dist_epd_to_na(image_distance, epd):
     """
     rho = epd / 2
     marginal_ray_angle = abs(np.arctan2(rho, image_distance))
-    return marginal_ray_angle
+    return np.sin(marginal_ray_angle)
 
 
 def image_dist_epd_to_fno(image_distance, epd):
@@ -238,7 +238,7 @@ def na_to_fno(na):
         fno.  The f/# of the system.
 
     """
-    return 1 / (2 * np.sin(na))
+    return 1 / (2 * na)
 
 
 def object_dist_to_mag(efl, object_dist):
