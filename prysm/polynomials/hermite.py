@@ -15,6 +15,8 @@ The derivative also collapses to a single formula:
 
 from prysm.mathops import np
 
+from ._recurrence import _seq_by_recurrence
+
 
 def _hermite_value(n, x, kind):
     """Hermite polynomial of order n.  kind is 1 (He) or 2 (H)."""
@@ -39,44 +41,12 @@ def _hermite_value(n, x, kind):
 
 def _hermite_value_seq(ns, x, kind):
     """Hermite polynomials at sorted orders ns.  See _hermite_value."""
-    if not hasattr(ns, '__len__'):
-        ns = list(ns)
-    min_i = 0
-    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
-    if ns[min_i] == 0:
-        out[min_i] = 1
-        min_i += 1
-
-    if min_i == len(ns):
-        return out
-
     kx = kind * x
-    if ns[min_i] == 1:
-        out[min_i] = kx
-        min_i += 1
 
-    if min_i == len(ns):
-        return out
+    def step(k, Pnm1, Pnm2):
+        return kx * Pnm1 - kind * (k - 1) * Pnm2
 
-    P1 = kx
-    P2 = kx * kx - kind
-    if ns[min_i] == 2:
-        out[min_i] = P2
-        min_i += 1
-
-    if min_i == len(ns):
-        return out
-
-    Pnm2, Pnm1 = P1, P2
-    max_n = ns[-1]
-    for nn in range(3, max_n + 1):
-        Pn = kx * Pnm1 - kind * (nn - 1) * Pnm2
-        Pnm2, Pnm1 = Pnm1, Pn
-        if ns[min_i] == nn:
-            out[min_i] = Pn
-            min_i += 1
-
-    return out
+    return _seq_by_recurrence(ns, x, 1, kx, step)
 
 
 def _hermite_der_seq(ns, x, kind):
@@ -89,42 +59,19 @@ def _hermite_der_seq(ns, x, kind):
     """
     if not hasattr(ns, '__len__'):
         ns = list(ns)
-    min_i = 0
     out = np.empty((len(ns), *x.shape), dtype=x.dtype)
-    if ns[min_i] == 0:
-        out[min_i] = 0
-        min_i += 1
+    lead = 0
+    while lead < len(ns) and ns[lead] == 0:
+        out[lead] = 0
+        lead += 1
 
-    if min_i == len(ns):
+    if lead == len(ns):
         return out
 
-    if ns[min_i] == 1:
-        # d/dx P_1 = kind  (since P_1 = kx)
-        out[min_i] = kind
-        min_i += 1
-
-    if min_i == len(ns):
-        return out
-
-    kx = kind * x
-    P1 = kx
-    P2 = kx * kx - kind
-    if ns[min_i] == 2:
-        # kind * 2 * P_1 = 2 kind kx = 2 kind^2 x; for He (kind=1) -> 2x, for H (kind=2) -> 8x
-        out[min_i] = kind * 2 * P1
-        min_i += 1
-
-    if min_i == len(ns):
-        return out
-
-    Pnm2, Pnm1 = P1, P2
-    max_n = ns[-1]
-    for nn in range(3, max_n + 1):
-        Pn = kx * Pnm1 - kind * (nn - 1) * Pnm2
-        if ns[min_i] == nn:
-            out[min_i] = kind * nn * Pnm1
-            min_i += 1
-        Pnm2, Pnm1 = Pnm1, Pn
+    shifted = [n - 1 for n in ns[lead:]]
+    Pns = _hermite_value_seq(shifted, x, kind)
+    for i, n in enumerate(ns[lead:], start=lead):
+        out[i] = kind * n * Pns[i - lead]
 
     return out
 

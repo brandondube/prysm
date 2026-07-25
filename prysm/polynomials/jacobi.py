@@ -4,6 +4,7 @@ from prysm.mathops import np
 from functools import lru_cache
 
 from ._clenshaw import _initialize_alphas, _clenshaw_sum, _clenshaw_sum_der  # NOQA
+from ._recurrence import _seq_by_recurrence, _seq_by_recurrence_with_der
 
 
 def weight(alpha, beta, x):
@@ -133,6 +134,17 @@ def jacobi_with_der(n, alpha, beta, x):
     return Pn, dPn
 
 
+def _jacobi_pd_step(alpha, beta, x):
+    """Build the joint (value, derivative) step for jacobi_seq_with_der."""
+    def step(k, Pnm1, Pnm2, Dnm1, Dnm2):
+        A, B, C = recurrence_abc(k - 1, alpha, beta)
+        lin = A * x + B
+        Pn = lin * Pnm1 - C * Pnm2
+        Dn = A * Pnm1 + lin * Dnm1 - C * Dnm2
+        return Pn, Dn
+    return step
+
+
 def jacobi_seq(ns, alpha, beta, x):
     """Jacobi polynomials of orders ns with weight parameters alpha and beta.
 
@@ -155,52 +167,12 @@ def jacobi_seq(ns, alpha, beta, x):
         return has shape (5, 100, 100)
 
     """
-    # previously returned a gnerator; ergonomics were not-good
-    # typical usage would be array(list(jacobi_seq(...))
-    # generator lowers peak memory consumption by allowing caller
-    # to do weighted sums 'inline', but
-    # for example (1024, 1024) x is ~8 megabytes per mode;
-    # need to be in an edge case scenario for it to matter,
-    # just return array for ergonomics
-    if not hasattr(ns, '__len__'):
-        ns = list(ns)
-    min_i = 0
-    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
-    if ns[min_i] == 0:
-        out[min_i] = 1
-        min_i += 1
+    def step(k, Pnm1, Pnm2):
+        A, B, C = recurrence_abc(k - 1, alpha, beta)
+        return (A * x + B) * Pnm1 - C * Pnm2
 
-    if min_i == len(ns):
-        return out
-
-    Pn = alpha + 1 + (alpha + beta + 2) * ((x - 1) / 2)
-    if ns[min_i] == 1:
-        out[min_i] = Pn
-        min_i += 1
-
-    if min_i == len(ns):
-        return out
-
-    Pnm1 = Pn
-    A, B, C = recurrence_abc(1, alpha, beta)
-    Pn = (A * x + B) * Pnm1 - C  # no C * Pnm2 =because Pnm2 = 1
-    if ns[min_i] == 2:
-        out[min_i] = Pn
-        min_i += 1
-
-    if min_i == len(ns):
-        return out
-
-    max_n = ns[-1]
-    for i in range(3, max_n+1):
-        Pnm2, Pnm1 = Pnm1, Pn
-        A, B, C = recurrence_abc(i-1, alpha, beta)
-        Pn = (A * x + B) * Pnm1 - C * Pnm2
-        if ns[min_i] == i:
-            out[min_i] = Pn
-            min_i += 1
-
-    return out
+    seed1 = alpha + 1 + (alpha + beta + 2) * ((x - 1) / 2)
+    return _seq_by_recurrence(ns, x, 1, seed1, step)
 
 
 def jacobi_seq_with_der(ns, alpha, beta, x):
@@ -223,50 +195,10 @@ def jacobi_seq_with_der(ns, alpha, beta, x):
         P_n and dP_n/dx arrays, each shaped as (len(ns),) followed by x.shape
 
     """
-    if not hasattr(ns, '__len__'):
-        ns = list(ns)
-    min_i = 0
-    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
-    dout = np.empty_like(out)
-
-    if ns[min_i] == 0:
-        out[min_i] = 1
-        dout[min_i] = 0
-        min_i += 1
-
-    if min_i == len(ns):
-        return out, dout
-
     dP1 = 0.5 * (alpha + beta + 2)
     P1 = alpha + 1 + (alpha + beta + 2) * ((x - 1) / 2)
-    if ns[min_i] == 1:
-        out[min_i] = P1
-        dout[min_i] = dP1
-        min_i += 1
-
-    if min_i == len(ns):
-        return out, dout
-
-    Pnm2 = np.ones_like(x)
-    dPnm2 = np.zeros_like(x)
-    Pnm1 = P1
-    dPnm1 = np.ones_like(x) * dP1
-    max_n = ns[-1]
-    for i in range(2, max_n + 1):
-        A, B, C = recurrence_abc(i - 1, alpha, beta)
-        lin = A * x + B
-        Pn = lin * Pnm1 - C * Pnm2
-        dPn = A * Pnm1 + lin * dPnm1 - C * dPnm2
-        Pnm2, Pnm1 = Pnm1, Pn
-        dPnm2, dPnm1 = dPnm1, dPn
-        if ns[min_i] == i:
-            out[min_i] = Pn
-            dout[min_i] = dPn
-            min_i += 1
-            if min_i == len(ns):
-                return out, dout
-
-    return out, dout
+    step = _jacobi_pd_step(alpha, beta, x)
+    return _seq_by_recurrence_with_der(ns, x, 1, P1, 0, dP1, step)
 
 
 def jacobi_der(n, alpha, beta, x):
@@ -324,82 +256,22 @@ def jacobi_der_seq(ns, alpha, beta, x):
         return has shape (5, 100, 100)
 
     """
-    # the body of this function is very similar to that of jacobi_seq,
-    # except note that der is related to jacobi n-1,
-    # and the actual jacobi polynomial has a different alpha and beta
-
-    # special note: P0 is invariant of alpha, beta
-    # and within this function alphap1 and betap1 are "a+1" and "b+1"
-    alphap1 = alpha + 1
-    betap1 = beta + 1
-    # except when it comes time to yield terms, we yield the modification
-    # per A&S / the NIST link
-    # and we modify the arguments to
+    # dPn/dx = 0.5 (n+a+b+1) P_{n-1}^{a+1,b+1}; see jacobi_der.
     if not hasattr(ns, '__len__'):
         ns = list(ns)
-    min_i = 0
     out = np.empty((len(ns), *x.shape), dtype=x.dtype)
-    if ns[min_i] == 0:
-        # n=0 is piston, der==0
-        out[min_i] = 0
-        min_i += 1
+    lead = 0
+    while lead < len(ns) and ns[lead] == 0:
+        out[lead] = 0
+        lead += 1
 
-    if min_i == len(ns):
+    if lead == len(ns):
         return out
 
-    if ns[min_i] == 1:
-        out[min_i] = (0.5 * (1 + alpha + beta + 1))
-        min_i += 1
-
-    if min_i == len(ns):
-        return out
-
-    # min_n is at least two, which means min n-1 is 1
-    # from here below, Pn is P of order i to keep the reader sane, but Pnm1
-    # is all that is needed;
-    # therefor, Pn is computed only after testing if we are done and can return
-    # to avoid a waste computation at the end of the loop
-    # note that we can hardcode / unroll the loop up to n=3, one further than
-    # in jacobi, because we use Pnm1
-    P1 = alphap1 + 1 + (alphap1 + betap1 + 2) * ((x - 1) / 2)
-    if ns[min_i] == 2:
-        out[min_i] = P1 * (0.5 * (2 + alpha + beta + 1))
-        min_i += 1
-
-    if min_i == len(ns):
-        return out
-
-    A, B, C = recurrence_abc(1, alphap1, betap1)
-    P2 = (A * x + B) * P1 - C  # no C * Pnm2 =because Pnm2 = 1
-    if ns[min_i] == 3:
-        out[min_i] = P2 * (0.5 * (3 + alpha + beta + 1))
-        min_i += 1
-
-    if min_i == len(ns):
-        return out
-
-    # weird look just above P2, need to prepare for lower loop
-    # by setting Pnm2 = P1, Pnm1 = P2
-    Pnm2 = P1
-    Pnm1 = P1
-    Pn = P2
-    # A, B, C = recurrence_abc(2, alpha, beta)
-    # P3 = (A * x + B) * P2 - C * P1
-    # Pn = P3
-
-    max_n = ns[-1]
-    for i in range(3, max_n+1):
-        Pnm2, Pnm1 = Pnm1, Pn
-        if ns[min_i] == i:
-            coef = 0.5 * (i + alpha + beta + 1)
-            out[min_i] = Pnm1 * coef
-            min_i += 1
-
-        if min_i == len(ns):
-            return out
-
-        A, B, C = recurrence_abc(i-1, alphap1, betap1)
-        Pn = (A * x + B) * Pnm1 - C * Pnm2
+    shifted = [n - 1 for n in ns[lead:]]
+    Pns = jacobi_seq(shifted, alpha + 1, beta + 1, x)
+    for i, n in enumerate(ns[lead:], start=lead):
+        out[i] = Pns[i - lead] * (0.5 * (n + alpha + beta + 1))
 
     return out
 

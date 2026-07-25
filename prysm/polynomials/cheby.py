@@ -1,23 +1,60 @@
 """Chebyshev polynomials."""
 from prysm.mathops import np
 
-from .jacobi import (
-    jacobi,
-    jacobi_der,
-    jacobi_seq,
-    jacobi_der_seq,
-)
+from ._recurrence import _seq_by_recurrence, _seq_by_recurrence_with_der
 
 
-def _cheby_inv_jacobi_at_one(ns, alpha, beta, dtype):
-    """Return 1 / P_n^(alpha,beta)(1) for each n in ns, shape (len(ns),).
+def _cheby_value(n, x, seed1):
+    """Value of the shared T/U/V/W recurrence P_{k+1} = 2x P_k - P_{k-1} at order n."""
+    if n == 0:
+        return np.ones_like(x)
+    if n == 1:
+        return seed1
 
-    The cheby families differ only in which (alpha, beta) they pull and what
-    scalar coefficient they fold on top; this helper isolates the shared
-    jacobi-at-1 normalization that every cheby*_seq / cheby*_der_seq performs.
-    """
-    pn_at_one = jacobi_seq(ns, alpha, beta, np.ones(1, dtype=dtype))[:, 0]
-    return 1 / pn_at_one
+    Pnm2, Pnm1 = np.ones_like(x), seed1
+    for _ in range(2, n + 1):
+        Pnm2, Pnm1 = Pnm1, 2*x*Pnm1 - Pnm2
+    return Pnm1
+
+
+def _cheby_value_seq(ns, x, seed1):
+    """Sequence form of _cheby_value."""
+    def step(k, Pnm1, Pnm2):
+        return 2*x*Pnm1 - Pnm2
+    return _seq_by_recurrence(ns, x, 1, seed1, step)
+
+
+def _cheby_pd_step(x):
+    """Build the joint (value, derivative) step shared by all four kinds."""
+    def step(k, Pnm1, Pnm2, Dnm1, Dnm2):
+        Pn = 2*x*Pnm1 - Pnm2
+        Dn = 2*Pnm1 + 2*x*Dnm1 - Dnm2
+        return Pn, Dn
+    return step
+
+
+def _cheby_der(n, x, seed1, dseed1):
+    """First derivative of the shared T/U/V/W recurrence at order n."""
+    if n == 0:
+        return np.zeros_like(x)
+    if n == 1:
+        return np.ones_like(x) * dseed1
+
+    Pnm2, Pnm1 = np.ones_like(x), seed1
+    Dnm2, Dnm1 = np.zeros_like(x), np.ones_like(x) * dseed1
+    for _ in range(2, n + 1):
+        Pn = 2*x*Pnm1 - Pnm2
+        Dn = 2*Pnm1 + 2*x*Dnm1 - Dnm2
+        Pnm2, Pnm1 = Pnm1, Pn
+        Dnm2, Dnm1 = Dnm1, Dn
+    return Dn
+
+
+def _cheby_der_seq(ns, x, seed1, dseed1):
+    """Sequence form of _cheby_der."""
+    step = _cheby_pd_step(x)
+    _, dout = _seq_by_recurrence_with_der(ns, x, 1, seed1, 0, dseed1, step)
+    return dout
 
 
 def cheby1(n, x):
@@ -31,14 +68,11 @@ def cheby1(n, x):
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
-    c = 1 / jacobi(n, -.5, -.5, 1)  # single div, many mul
-    return jacobi(n, -.5, -.5, x) * c
+    return _cheby_value(n, x, x)
 
 
 def cheby1_seq(ns, x):
     """Chebyshev polynomials of the first kind of orders ns.
-
-    Faster than chevy1 in a loop.
 
     Parameters
     ----------
@@ -51,14 +85,9 @@ def cheby1_seq(ns, x):
     -------
     ndarray
         has shape (len(ns),) followed by x.shape
-        e.g., for 5 modes and x of dimension 100x100,
-        return has shape (5, 100, 100)
 
     """
-    ns = np.asarray(ns)
-    cs = _cheby_inv_jacobi_at_one(ns, -.5, -.5, x.dtype)
-    seq = jacobi_seq(ns, -.5, -.5, x)
-    return seq * cs.reshape((-1,) + (1,) * x.ndim)
+    return _cheby_value_seq(ns, x, x)
 
 
 def cheby1_der(n, x):
@@ -72,14 +101,11 @@ def cheby1_der(n, x):
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
-    c = 1 / jacobi(n, -.5, -.5, 1)  # single div, many mul
-    return jacobi_der(n, -0.5, -0.5, x) * c
+    return _cheby_der(n, x, x, 1)
 
 
 def cheby1_der_seq(ns, x):
     """Partial derivative w.r.t. x of Chebyshev polynomials of the first kind of orders ns.
-
-    Faster than chevy1_der in a loop.
 
     Parameters
     ----------
@@ -92,14 +118,9 @@ def cheby1_der_seq(ns, x):
     -------
     ndarray
         has shape (len(ns),) followed by x.shape
-        e.g., for 5 modes and x of dimension 100x100,
-        return has shape (5, 100, 100)
 
     """
-    ns = np.asarray(ns)
-    cs = _cheby_inv_jacobi_at_one(ns, -.5, -.5, x.dtype)
-    seq = jacobi_der_seq(ns, -.5, -.5, x)
-    return seq * cs.reshape((-1,) + (1,) * x.ndim)
+    return _cheby_der_seq(ns, x, x, 1)
 
 
 def cheby2(n, x):
@@ -113,14 +134,11 @@ def cheby2(n, x):
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
-    c = (n+1) / jacobi(n, .5, .5, 1)  # single div, many mul
-    return jacobi(n, .5, .5, x) * c
+    return _cheby_value(n, x, 2*x)
 
 
 def cheby2_seq(ns, x):
     """Chebyshev polynomials of the second kind of orders ns.
-
-    Faster than chevy1 in a loop.
 
     Parameters
     ----------
@@ -133,14 +151,9 @@ def cheby2_seq(ns, x):
     -------
     ndarray
         has shape (len(ns),) followed by x.shape
-        e.g., for 5 modes and x of dimension 100x100,
-        return has shape (5, 100, 100)
 
     """
-    ns = np.asarray(ns)
-    cs = (ns + 1) * _cheby_inv_jacobi_at_one(ns, .5, .5, x.dtype)
-    seq = jacobi_seq(ns, .5, .5, x)
-    return seq * cs.reshape((-1,) + (1,) * x.ndim)
+    return _cheby_value_seq(ns, x, 2*x)
 
 
 def cheby2_der(n, x):
@@ -154,14 +167,11 @@ def cheby2_der(n, x):
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
-    c = (n+1) / jacobi(n, .5, .5, 1)  # single div, many mul
-    return jacobi_der(n, .5, .5, x) * c
+    return _cheby_der(n, x, 2*x, 2)
 
 
 def cheby2_der_seq(ns, x):
     """Partial derivative w.r.t. x of Chebyshev polynomials of the second kind of orders ns.
-
-    Faster than chevy2_der in a loop.
 
     Parameters
     ----------
@@ -174,14 +184,9 @@ def cheby2_der_seq(ns, x):
     -------
     ndarray
         has shape (len(ns),) followed by x.shape
-        e.g., for 5 modes and x of dimension 100x100,
-        return has shape (5, 100, 100)
 
     """
-    ns = np.asarray(ns)
-    cs = (ns + 1) * _cheby_inv_jacobi_at_one(ns, .5, .5, x.dtype)
-    seq = jacobi_der_seq(ns, .5, .5, x)
-    return seq * cs.reshape((-1,) + (1,) * x.ndim)
+    return _cheby_der_seq(ns, x, 2*x, 2)
 
 
 def cheby3(n, x):
@@ -195,14 +200,11 @@ def cheby3(n, x):
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
-    c = 1 / jacobi(n, -.5, .5, 1)  # single div, many mul
-    return jacobi(n, -.5, .5, x) * c
+    return _cheby_value(n, x, 2*x - 1)
 
 
 def cheby3_seq(ns, x):
     """Chebyshev polynomials of the third kind of orders ns.
-
-    Faster than chevy1 in a loop.
 
     Parameters
     ----------
@@ -215,14 +217,9 @@ def cheby3_seq(ns, x):
     -------
     ndarray
         has shape (len(ns),) followed by x.shape
-        e.g., for 5 modes and x of dimension 100x100,
-        return has shape (5, 100, 100)
 
     """
-    ns = np.asarray(ns)
-    cs = _cheby_inv_jacobi_at_one(ns, -.5, .5, x.dtype)
-    seq = jacobi_seq(ns, -.5, .5, x)
-    return seq * cs.reshape((-1,) + (1,) * x.ndim)
+    return _cheby_value_seq(ns, x, 2*x - 1)
 
 
 def cheby3_der(n, x):
@@ -236,14 +233,11 @@ def cheby3_der(n, x):
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
-    c = 1 / jacobi(n, -.5, .5, 1)  # single div, many mul
-    return jacobi_der(n, -0.5, 0.5, x) * c
+    return _cheby_der(n, x, 2*x - 1, 2)
 
 
 def cheby3_der_seq(ns, x):
     """Partial derivative w.r.t. x of Chebyshev polynomials of the third kind of orders ns.
-
-    Faster than chevy1_der in a loop.
 
     Parameters
     ----------
@@ -256,14 +250,9 @@ def cheby3_der_seq(ns, x):
     -------
     ndarray
         has shape (len(ns),) followed by x.shape
-        e.g., for 5 modes and x of dimension 100x100,
-        return has shape (5, 100, 100)
 
     """
-    ns = np.asarray(ns)
-    cs = _cheby_inv_jacobi_at_one(ns, -.5, .5, x.dtype)
-    seq = jacobi_der_seq(ns, -.5, .5, x)
-    return seq * cs.reshape((-1,) + (1,) * x.ndim)
+    return _cheby_der_seq(ns, x, 2*x - 1, 2)
 
 
 def cheby4(n, x):
@@ -277,14 +266,11 @@ def cheby4(n, x):
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
-    c = (2 * n + 1) / jacobi(n, .5, -.5, 1)  # single div, many mul
-    return jacobi(n, .5, -.5, x) * c
+    return _cheby_value(n, x, 2*x + 1)
 
 
 def cheby4_seq(ns, x):
     """Chebyshev polynomials of the fourth kind of orders ns.
-
-    Faster than chevy1 in a loop.
 
     Parameters
     ----------
@@ -297,14 +283,9 @@ def cheby4_seq(ns, x):
     -------
     ndarray
         has shape (len(ns),) followed by x.shape
-        e.g., for 5 modes and x of dimension 100x100,
-        return has shape (5, 100, 100)
 
     """
-    ns = np.asarray(ns)
-    cs = (2 * ns + 1) * _cheby_inv_jacobi_at_one(ns, .5, -.5, x.dtype)
-    seq = jacobi_seq(ns, .5, -.5, x)
-    return seq * cs.reshape((-1,) + (1,) * x.ndim)
+    return _cheby_value_seq(ns, x, 2*x + 1)
 
 
 def cheby4_der(n, x):
@@ -318,14 +299,11 @@ def cheby4_der(n, x):
         point(s) at which to evaluate, orthogonal over [-1,1]
 
     """
-    c = (2 * n + 1) / jacobi(n, .5, -.5, 1)  # single div, many mul
-    return jacobi_der(n, 0.5, -0.5, x) * c
+    return _cheby_der(n, x, 2*x + 1, 2)
 
 
 def cheby4_der_seq(ns, x):
     """Partial derivative w.r.t. x of Chebyshev polynomials of the fourth kind of orders ns.
-
-    Faster than chevy1_der in a loop.
 
     Parameters
     ----------
@@ -338,14 +316,9 @@ def cheby4_der_seq(ns, x):
     -------
     ndarray
         has shape (len(ns),) followed by x.shape
-        e.g., for 5 modes and x of dimension 100x100,
-        return has shape (5, 100, 100)
 
     """
-    ns = np.asarray(ns)
-    cs = (2 * ns + 1) * _cheby_inv_jacobi_at_one(ns, .5, -.5, x.dtype)
-    seq = jacobi_der_seq(ns, .5, -.5, x)
-    return seq * cs.reshape((-1,) + (1,) * x.ndim)
+    return _cheby_der_seq(ns, x, 2*x + 1, 2)
 
 
 def cheby1_2d_sum(coefs, mns, x, y):

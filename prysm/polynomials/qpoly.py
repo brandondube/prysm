@@ -4,14 +4,9 @@ from functools import lru_cache
 
 from scipy.special import factorial, factorial2
 
-from .jacobi import (
-    jacobi,
-    jacobi_with_der,
-    jacobi_seq,
-    jacobi_seq_with_der,
-    jacobi_sum_clenshaw_der,
-)
+from .jacobi import jacobi_sum_clenshaw_der
 from ._clenshaw import _initialize_alphas, _clenshaw_sum, _clenshaw_sum_der
+from ._recurrence import _seq_by_recurrence, _seq_by_recurrence_with_der
 
 from prysm.mathops import np, kronecker, gamma, sign
 from prysm.conf import config
@@ -552,6 +547,77 @@ def Qbfs_der_seq(ns, x):
     return out
 
 
+@lru_cache(512)
+def _qcon_abc(n):
+    """A, B, C of the jacobi(alpha=0, beta=4) recurrence Qcon is built on."""
+    A = (2*n+5)*(n+3) / ((n+1)*(n+5))
+    B = -4*(2*n+5) / ((n+1)*(n+5)*(n+2))
+    C = n*(n+4)*(n+3) / ((n+1)*(n+5)*(n+2))
+    return A, B, C
+
+
+def _qcon_jacobi(n, xx):
+    """Value of the jacobi(alpha=0, beta=4) polynomial Qcon rides on, at order n."""
+    A0, B0, _ = _qcon_abc(0)
+    if n == 0:
+        return np.ones_like(xx)
+    Pnm2, Pnm1 = np.ones_like(xx), A0*xx + B0
+    if n == 1:
+        return Pnm1
+    for k in range(2, n + 1):
+        A, B, C = _qcon_abc(k - 1)
+        Pnm2, Pnm1 = Pnm1, (A*xx + B)*Pnm1 - C*Pnm2
+    return Pnm1
+
+
+def _qcon_jacobi_seq(ns, xx):
+    """Sequence form of _qcon_jacobi."""
+    A0, B0, _ = _qcon_abc(0)
+
+    def step(k, Pnm1, Pnm2):
+        A, B, C = _qcon_abc(k - 1)
+        return (A*xx + B)*Pnm1 - C*Pnm2
+
+    return _seq_by_recurrence(ns, xx, 1, A0*xx + B0, step)
+
+
+def _qcon_pd_step(xx):
+    """Build the joint (value, d/dxx) step for the jacobi(0, 4) recurrence."""
+    def step(k, Pnm1, Pnm2, Dnm1, Dnm2):
+        A, B, C = _qcon_abc(k - 1)
+        lin = A*xx + B
+        Pn = lin*Pnm1 - C*Pnm2
+        Dn = A*Pnm1 + lin*Dnm1 - C*Dnm2
+        return Pn, Dn
+    return step
+
+
+def _qcon_jacobi_with_der(n, xx):
+    """Value and d/dxx of the jacobi(alpha=0, beta=4) polynomial Qcon rides on."""
+    A0, B0, _ = _qcon_abc(0)
+    if n == 0:
+        return np.ones_like(xx), np.zeros_like(xx)
+    Pnm2, Pnm1 = np.ones_like(xx), A0*xx + B0
+    Dnm2, Dnm1 = np.zeros_like(xx), np.ones_like(xx) * A0
+    if n == 1:
+        return Pnm1, Dnm1
+    for k in range(2, n + 1):
+        A, B, C = _qcon_abc(k - 1)
+        lin = A*xx + B
+        Pn = lin*Pnm1 - C*Pnm2
+        Dn = A*Pnm1 + lin*Dnm1 - C*Dnm2
+        Pnm2, Pnm1 = Pnm1, Pn
+        Dnm2, Dnm1 = Dnm1, Dn
+    return Pnm1, Dnm1
+
+
+def _qcon_jacobi_seq_with_der(ns, xx):
+    """Sequence form of _qcon_jacobi_with_der."""
+    A0, B0, _ = _qcon_abc(0)
+    step = _qcon_pd_step(xx)
+    return _seq_by_recurrence_with_der(ns, xx, 1, A0*xx + B0, 0, A0, step)
+
+
 def Qcon(n, x):
     """Qcon polynomial of order n at point(s) x.
 
@@ -581,7 +647,7 @@ def Qcon(n, x):
     """
     x2 = x * x
     xx = 2 * x2 - 1
-    Pn = jacobi(n, 0, 4, xx)
+    Pn = _qcon_jacobi(n, xx)
     return Pn * x2 * x2
 
 
@@ -606,7 +672,7 @@ def Qcon_seq(ns, x):
     x2 = x * x
     xx = 2 * x2 - 1
     x4 = x2 * x2
-    Pns = jacobi_seq(ns, 0, 4, xx)
+    Pns = _qcon_jacobi_seq(ns, xx)
     return Pns * x4
 
 
@@ -633,7 +699,7 @@ def Qcon_der(n, x):
     """
     xx = 2 * x * x - 1
     x3 = x * x * x
-    Pn, dPn = jacobi_with_der(n, 0, 4, xx)
+    Pn, dPn = _qcon_jacobi_with_der(n, xx)
     return 4 * x3 * Pn + 4 * x3 * (x * x) * dPn
 
 
@@ -658,7 +724,7 @@ def Qcon_der_seq(ns, x):
     xx = 2 * x * x - 1
     x3 = x * x * x
     x5 = x3 * x * x
-    Pns, dPns = jacobi_seq_with_der(ns, 0, 4, xx)
+    Pns, dPns = _qcon_jacobi_seq_with_der(ns, xx)
     return 4 * x3 * Pns + 4 * x5 * dPns
 
 

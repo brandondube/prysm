@@ -19,7 +19,6 @@ from .qpoly import _harmonic_powers
 
 from prysm.mathops import np, kronecker, sign, is_odd
 from prysm.coordinates import cart_to_polar
-from prysm.util import sort_xy
 from prysm.plotting import share_fig_ax
 
 
@@ -911,7 +910,6 @@ def barplot(coefs, names=None, orientation='h', buffer=1, zorder=3, number=True,
         Axis containing the plot
 
     """
-    from matplotlib import pyplot as plt
     fig, ax = share_fig_ax(fig, ax)
 
     coefs = truenp.asarray(coefs)
@@ -981,8 +979,6 @@ def barplot_magnitudes(coefs, nms, errorbars=None, orientation='h', sort=False,
         Axis containing the plot
 
     """
-    from matplotlib import pyplot as plt
-
     lst = [(*nm, v) for nm, v in zip(nms, coefs)]
     pak = zernikes_to_magnitude_angle(lst)
 

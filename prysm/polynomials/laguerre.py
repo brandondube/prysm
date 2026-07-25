@@ -1,7 +1,8 @@
 """Laguerre polynomials."""
 
 from prysm.mathops import np
-from prysm.conf import config
+
+from ._recurrence import _seq_by_recurrence
 
 
 def laguerre(n, alpha, x):
@@ -81,58 +82,13 @@ def laguerre_seq(ns, alpha, x):
         generalized laguerre polynomials evaluated at the given points
 
     """
-    ns = list(ns)
-    min_i = 0
-    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
+    def step(k, Lnm1, Lnm2):
+        A = alpha + 2*k - 1 - x
+        B = alpha + k - 1
+        return (A*Lnm1 - B*Lnm2) / k
 
-    if ns[min_i] == 0:
-        out[min_i] = 1
-        min_i += 1
-
-    if min_i == len(ns):
-        return out
-
-    if ns[min_i] == 1:
-        out[min_i] = (alpha+1) - x
-        min_i += 1
-
-    if min_i == len(ns):
-        return out
-
-    L0 = 1
-    L1 = (alpha+1) - x
-
-    # n-1 and n
-    Lnm1 = L0
-    Ln = L1
-
-    # 3 = 2n+1, n=1
-    A = (alpha + 3 - x)
-    B = alpha + 1
-    Lnp1 = 0.5 * (A*Ln - B*Lnm1)  # written differently; ordinarily / n
-
-    if ns[min_i] == 2:
-        out[min_i] = Lnp1
-        min_i += 1
-
-    Ln, Lnm1 = Lnp1, Ln
-
-    if min_i == len(ns):
-        return out
-
-    max_n = ns[-1]
-    for np1 in range(3, max_n+1):
-        n = np1 - 1
-        A = (alpha + 2*n + 1 - x)
-        B = alpha + n
-        Lnp1 = 1/(n+1) * (A*Ln - B*Lnm1)
-        Ln, Lnm1 = Lnp1, Ln
-
-        if ns[min_i] == np1:
-            out[min_i] = Lnp1
-            min_i += 1
-
-    return out
+    seed1 = (alpha+1) - x
+    return _seq_by_recurrence(ns, x, 1, seed1, step)
 
 
 def laguerre_der(n, alpha, x):

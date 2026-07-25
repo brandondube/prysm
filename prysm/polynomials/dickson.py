@@ -2,6 +2,8 @@
 
 from prysm.mathops import np
 
+from ._recurrence import _seq_by_recurrence, _seq_by_recurrence_with_der
+
 
 def dickson1(n, alpha, x):
     """Dickson Polynomial of the first kind of order n.
@@ -106,40 +108,10 @@ def dickson1_seq(ns, alpha, x):
         return has shape (5, 100, 100)
 
     """
-    if not hasattr(ns, '__len__'):
-        ns = list(ns)
-    min_i = 0
-    j = 0
-    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
-    P0 = 2
-    if ns[min_i] == 0:
-        out[j] = 2
-        min_i += 1
-        j += 1
+    def step(k, Pnm1, Pnm2):
+        return x * Pnm1 - alpha * Pnm2
 
-    if min_i == len(ns):
-        return out
-
-    P1 = x
-    if ns[min_i] == 1:
-        out[j] = x
-        min_i += 1
-        j += 1
-
-    if min_i == len(ns):
-        return out
-
-    Pnm2 = P0
-    Pnm1 = P1
-    for i in range(2, ns[-1]+1):
-        Pn = x * Pnm1 - alpha * Pnm2
-        Pnm1, Pnm2 = Pn, Pnm1
-        if ns[min_i] == i:
-            out[j] = Pn
-            min_i += 1
-            j += 1
-
-    return out
+    return _seq_by_recurrence(ns, x, 2, x, step)
 
 
 def dickson1_der(n, alpha, x):
@@ -182,6 +154,15 @@ def dickson1_der(n, alpha, x):
     return Dn
 
 
+def _dickson_pd_step(alpha, x):
+    """Build the joint (value, derivative) step shared by dickson1/2_der_seq."""
+    def step(k, Pnm1, Pnm2, Dnm1, Dnm2):
+        Pn = x * Pnm1 - alpha * Pnm2
+        Dn = Pnm1 + x * Dnm1 - alpha * Dnm2
+        return Pn, Dn
+    return step
+
+
 def dickson1_der_seq(ns, alpha, x):
     """Partial derivative w.r.t. x of Dickson Polynomials of the first kind for orders ns.
 
@@ -200,42 +181,9 @@ def dickson1_der_seq(ns, alpha, x):
         has shape (len(ns),) followed by x.shape; the i-th plane is d/dx D_{ns[i]}(x)
 
     """
-    if not hasattr(ns, '__len__'):
-        ns = list(ns)
-    min_i = 0
-    j = 0
-    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
-    if ns[min_i] == 0:
-        out[j] = 0
-        min_i += 1
-        j += 1
-
-    if min_i == len(ns):
-        return out
-
-    if ns[min_i] == 1:
-        out[j] = 1
-        min_i += 1
-        j += 1
-
-    if min_i == len(ns):
-        return out
-
-    Pnm2 = np.ones_like(x) * 2
-    Pnm1 = x
-    Dnm2 = np.zeros_like(x)
-    Dnm1 = np.ones_like(x)
-    for i in range(2, ns[-1]+1):
-        Pn = x * Pnm1 - alpha * Pnm2
-        Dn = Pnm1 + x * Dnm1 - alpha * Dnm2
-        Pnm2, Pnm1 = Pnm1, Pn
-        Dnm2, Dnm1 = Dnm1, Dn
-        if ns[min_i] == i:
-            out[j] = Dn
-            min_i += 1
-            j += 1
-
-    return out
+    step = _dickson_pd_step(alpha, x)
+    _, dout = _seq_by_recurrence_with_der(ns, x, 2, x, 0, 1, step)
+    return dout
 
 
 def dickson2_der(n, alpha, x):
@@ -295,42 +243,9 @@ def dickson2_der_seq(ns, alpha, x):
         has shape (len(ns),) followed by x.shape; the i-th plane is d/dx E_{ns[i]}(x)
 
     """
-    if not hasattr(ns, '__len__'):
-        ns = list(ns)
-    min_i = 0
-    j = 0
-    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
-    if ns[min_i] == 0:
-        out[j] = 0
-        min_i += 1
-        j += 1
-
-    if min_i == len(ns):
-        return out
-
-    if ns[min_i] == 1:
-        out[j] = 1
-        min_i += 1
-        j += 1
-
-    if min_i == len(ns):
-        return out
-
-    Pnm2 = np.ones_like(x)
-    Pnm1 = x
-    Dnm2 = np.zeros_like(x)
-    Dnm1 = np.ones_like(x)
-    for i in range(2, ns[-1]+1):
-        Pn = x * Pnm1 - alpha * Pnm2
-        Dn = Pnm1 + x * Dnm1 - alpha * Dnm2
-        Pnm2, Pnm1 = Pnm1, Pn
-        Dnm2, Dnm1 = Dnm1, Dn
-        if ns[min_i] == i:
-            out[j] = Dn
-            min_i += 1
-            j += 1
-
-    return out
+    step = _dickson_pd_step(alpha, x)
+    _, dout = _seq_by_recurrence_with_der(ns, x, 1, x, 0, 1, step)
+    return dout
 
 
 def dickson2_seq(ns, alpha, x):
@@ -354,37 +269,7 @@ def dickson2_seq(ns, alpha, x):
         return has shape (5, 100, 100)
 
     """
-    if not hasattr(ns, '__len__'):
-        ns = list(ns)
-    min_i = 0
-    j = 0
-    out = np.empty((len(ns), *x.shape), dtype=x.dtype)
-    P0 = 1
-    if ns[min_i] == 0:
-        out[j] = 1
-        min_i += 1
-        j += 1
+    def step(k, Pnm1, Pnm2):
+        return x * Pnm1 - alpha * Pnm2
 
-    if min_i == len(ns):
-        return out
-
-    P1 = x
-    if ns[min_i] == 1:
-        out[j] = x
-        min_i += 1
-        j += 1
-
-    if min_i == len(ns):
-        return out
-
-    Pnm2 = P0
-    Pnm1 = P1
-    for i in range(2, ns[-1]+1):
-        Pn = x * Pnm1 - alpha * Pnm2
-        Pnm1, Pnm2 = Pn, Pnm1
-        if ns[min_i] == i:
-            out[j] = Pn
-            min_i += 1
-            j += 1
-
-    return out
+    return _seq_by_recurrence(ns, x, 1, x, step)
