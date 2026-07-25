@@ -40,7 +40,7 @@ def critical_angle(n0, n1, deg=True):
         the angle in degrees at which TIR begins to occur
 
     """
-    ang = np.arcsin(n0/n1)
+    ang = np.arcsin(n1/n0)
     if deg:
         return np.degrees(ang)
 
