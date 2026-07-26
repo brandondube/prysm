@@ -11,7 +11,7 @@ import numpy as truenp
 
 from .conf import config
 from .mathops import np
-from .geometry import regular_polygon, circle, spider
+from .geometry import regular_polygon_sdf, circle_sdf, annulus_sdf, spider, antialias
 from .coordinates import cart_to_polar, polar_to_cart
 from .polynomials import sum_of_2d_modes
 
@@ -313,14 +313,15 @@ def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x
     cy = int(np.ceil(y.shape[0]/2))
     center_segment_window = _local_window(cy, cx, (0, 0), dx, samples_per_seg, x, y)
 
-    mask = np.zeros(x.shape, dtype=bool)
+    mask = np.zeros(x.shape, dtype=config.precision)
 
     segment_id = 0
     xx = x[center_segment_window]
     yy = y[center_segment_window]
-    center_mask = regular_polygon(6, rseg, xx, yy, center=(0, 0), rotation=segment_angle)
+    center_sdf = regular_polygon_sdf(6, rseg, xx, yy, center=(0, 0), rotation=segment_angle)
+    center_mask = antialias(center_sdf, dx)
     if 0 not in exclude:
-        mask[center_segment_window] |= center_mask
+        mask[center_segment_window] = np.maximum(mask[center_segment_window], center_mask)
         local_masks = [center_mask]
         segment_ids = [0]
         all_centers = [(0., 0.)]
@@ -357,9 +358,10 @@ def _composite_hexagonal_aperture(rings, segment_diameter, segment_separation, x
 
             local_coords.append((xx-center[0], yy-center[1]))
 
-            local_mask = regular_polygon(6, rseg, xx, yy, center=center, rotation=segment_angle)
+            local_sdf = regular_polygon_sdf(6, rseg, xx, yy, center=center, rotation=segment_angle)
+            local_mask = antialias(local_sdf, dx)
             local_masks.append(local_mask)
-            mask[local_window] |= local_mask
+            mask[local_window] = np.maximum(mask[local_window], local_mask)
 
         segment_id = ids[-1]
 
@@ -484,10 +486,10 @@ class CompositeKeystoneAperture:
         else:
             nr = self.center_circle_diameter/2
             xx = self.center_xx / nr
-            yy = self.center_yy
+            yy = self.center_yy / nr
             basis = list(center_basis(center_orders, x=xx, y=yy, **center_basis_kwargs))  # NOQA - length
             basis = np.asarray(basis)
-            grids.append((rr, tt))
+            grids.append((xx, yy))
             bases.append(basis)
 
         # now do each segment
@@ -531,7 +533,7 @@ class CompositeKeystoneAperture:
 
                     rcenter, tcenter = cart_to_polar(xcenter, ycenter, vec_to_grid=False)
                     tcenter -= t_offset
-                    xcenter, ycenter = cart_to_polar(rcenter, tcenter, vec_to_grid=False)
+                    xcenter, ycenter = polar_to_cart(rcenter, tcenter)
                     xmax = xcenter.max()
 
                     rcorner, tcorner = cart_to_polar(xcorner, ycorner, vec_to_grid=False)  # NOQA - length
@@ -552,13 +554,6 @@ class CompositeKeystoneAperture:
                     basis = np.asarray(basis)
                 else:
                     raise ValueError('must rotate xy axes')
-
-                    # xext = float(x[0, -1] - x[0, 0])
-                    # yext = float(y[-1, 0] - y[0, 0])
-                    xext = x.max() - x.min()
-                    yext = y.max() - y.min()
-                    xx = x / (xext/2)
-                    yy = y / (yext/2)
 
                 basis = segment_basis(segment_orders, x=xx, y=yy, **segment_basis_kwargs)  # NOQA - length
                 basis = np.asarray(basis)
@@ -594,10 +589,12 @@ class CompositeKeystoneAperture:
 
         if out is None:
             out = np.zeros_like(self.x)
+        center_coefs = np.asarray(center_coefs, dtype=self.opd_bases[0].dtype)
         tile = sum_of_2d_modes(self.opd_bases[0], center_coefs)
         out[self.center_window] += (tile*self.center_mask)
 
         for win, mask, base, c in zip(self.segment_windows, self.segment_masks, self.opd_bases[1:], segment_coefs):
+            c = np.asarray(c, dtype=base.dtype)
             tile = sum_of_2d_modes(base, c)
             tile *= mask
             out[win] += tile
@@ -653,7 +650,7 @@ def _composite_keystone_aperture(x, y, center_circle_diameter,
     left_edges = []
     right_edges = []
     radial_diameters = []
-    primary_mask = np.zeros(x.shape, dtype=bool)
+    primary_mask = np.zeros(x.shape, dtype=config.precision)
     all_spiders = np.zeros(x.shape, dtype=bool)
     corners = []
     idods = []
@@ -673,7 +670,7 @@ def _composite_keystone_aperture(x, y, center_circle_diameter,
     center_yy = y[win]
     center_rr = r[win]
     center_tt = t[win]
-    center_mask = circle(center_radius, center_rr)
+    center_mask = antialias(circle_sdf(center_radius, center_rr), dx)
     primary_mask[win] = center_mask
     outer_radius = center_radius
 
@@ -742,9 +739,9 @@ def _composite_keystone_aperture(x, y, center_circle_diameter,
             yyy = y[window]
             rr = r[window]
             tt = t[window]
-            inner_include = circle(inner_radius, rr)
-            outer_exclude = circle(outer_radius, rr)
-            arc = (inner_include ^ outer_exclude)
+            # radial (ring) edges are antialiased via SDF; the angular wedge
+            # cut stays a hard boolean gate (no wedge SDF in geometry.py)
+            arc = antialias(annulus_sdf(inner_radius, outer_radius, rr), dx)
             ang_mask = (tt > lo) & (tt < hi)
             if (lo < np.pi) & (hi > np.pi):
                 ang_mask |= (tt < (hi-2*np.pi))
@@ -754,8 +751,8 @@ def _composite_keystone_aperture(x, y, center_circle_diameter,
                 ang_mask = (tt > llo) & (tt < lhi)
                 lo, hi = llo, lhi
 
-            mask = arc & ang_mask
-            primary_mask[window] |= mask
+            mask = arc * ang_mask
+            primary_mask[window] = np.maximum(primary_mask[window], mask)
 
             # now compute the edges and center coordinate of the segment
             # for OPD expansions later
@@ -801,15 +798,15 @@ def _composite_keystone_aperture(x, y, center_circle_diameter,
             yy = y[window]
             rr = r[window]
             # TODO: this can be optimized with fewer bitwise inversions?
-            spid = ~spider(1, azimuthal_gap, xx, yy, rotation=hi, rotation_is_rad=True)  # NOQA - length
+            spid = spider(1, azimuthal_gap, xx, yy, rotation=hi, rotation_is_rad=True)  # NOQA - length
 
-            low_cut = ~circle(inner_radius, rr)
-            hi_cut = circle(outer_radius, rr)
+            low_cut = circle_sdf(inner_radius, rr) > 0
+            hi_cut = circle_sdf(outer_radius, rr) <= 0
             spid &= low_cut
             spid &= hi_cut
             all_spiders[window] |= spid
 
-    primary_mask &= ~all_spiders
+    primary_mask[all_spiders] = 0
     return {
         'center_segment': {
             'x': center_xx,

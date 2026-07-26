@@ -54,3 +54,24 @@ def test_composite_keystone_aperture_center_and_segment_coefficients_contribute(
     assert opd.shape == x.shape
     assert np.count_nonzero(opd[csa.center_window] * csa.center_mask) > 0
     assert np.count_nonzero(opd) > np.count_nonzero(opd[csa.center_window] * csa.center_mask)
+
+
+def test_composite_keystone_supports_xy_basis_on_center():
+    x, y = coordinates.make_xy_grid(96, diameter=8)
+    csa = segmented.CompositeKeystoneAperture(
+        x, y, center_circle_diameter=2.4, rings=1,
+        segments_per_ring=[6], ring_radius=0.9, radial_gap=.007,
+    )
+    orders = [polynomials.xy_j_to_mn(2)]
+
+    grids, bases = csa.prepare_opd_bases(
+        polynomials.xy_seq, orders,
+        polynomials.xy_seq, orders,
+        rotate_xyaxes=True,
+        center_basis_kwargs=dict(cartesian_grid=False),
+        segment_basis_kwargs=dict(cartesian_grid=False),
+    )
+
+    assert grids[0][0].shape == csa.center_xx.shape
+    assert grids[0][1].shape == csa.center_yy.shape
+    assert bases[0].shape[0] == 1

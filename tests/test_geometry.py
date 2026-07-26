@@ -3,6 +3,8 @@ import math
 
 import pytest
 
+import numpy as np
+
 from prysm import geometry, coordinates
 
 
@@ -55,45 +57,91 @@ def test_circle_correct_area():
     assert mask.sum() == pytest.approx(expected_area_of_circle, abs=3)
 
 
-def test_truecircle_correct_area():
+def test_antialias_circle_correct_area():
     x, y = coordinates.make_xy_grid(256, diameter=2)
     dx = x[0, 1] - x[0, 0]
     r_samples = 100
     r_circle = dx*r_samples
     r, _ = coordinates.cart_to_polar(x, y)
-    mask = geometry.truecircle(r_circle, r)
+    mask = geometry.antialias(geometry.circle_sdf(r_circle, r), dx)
     expected_area_of_circle = r_samples*r_samples * math.pi
     assert mask.sum() == pytest.approx(expected_area_of_circle, abs=1.5)
 
 
-def test_truecircle_physical_grid_area_and_registration():
-    # physical-grid dx anti-aliases the edge correctly and stays centered
-    import numpy as np
+def test_antialias_physical_grid_area_and_registration():
     dx = 0.05
     x, y = coordinates.make_xy_grid(256, dx=dx)
     r = np.hypot(x, y)
     r_samples = 80
-    mask = geometry.truecircle(dx * r_samples, r, dx=dx)
+    mask = geometry.antialias(geometry.circle_sdf(dx * r_samples, r), dx)
     assert mask.sum() == pytest.approx(r_samples * r_samples * math.pi, abs=1.5)
     # centered: first moment is zero to machine precision
     assert abs((mask * x).sum() / mask.sum()) < 1e-12
     assert abs((mask * y).sum() / mask.sum()) < 1e-12
-    # the default (dx=None) infers 2/samples and is wrong here: a tiny pitch
-    # makes the transition collapse toward a hard edge, so the areas differ
-    hard_like = geometry.truecircle(dx * r_samples, r)
-    assert abs(hard_like.sum() - mask.sum()) > 1
 
 
-def test_truecircle_normalized_grid_matches_legacy():
-    # dx=None reproduces the normalized-grid default bit-for-bit
-    import numpy as np
-    x, y = coordinates.make_xy_grid(256, diameter=2)
+def test_antialias_hexagon_correct_area():
+    dx = 0.05
+    x, y = coordinates.make_xy_grid(256, dx=dx)
+    radius = 4.0
+    d = geometry.regular_polygon_sdf(6, radius, x, y, rotation=15)
+    cover = geometry.antialias(d, dx)
+    analytic = 3 * math.sqrt(3) / 2 * radius * radius
+    assert cover.sum() * dx * dx == pytest.approx(analytic, rel=1e-4)
+
+
+def test_sdf_pairing_invariant():
+    # every binary rasterizer is its SDF thresholded at zero
+    x, y = coordinates.make_xy_grid(65, diameter=2)
     r = np.hypot(x, y)
-    radius = 100 * (2 / 256)
-    new = geometry.truecircle(radius, r)
-    one_pixel = 2 / 256
-    legacy = np.minimum(np.maximum((radius + one_pixel / 2 - r) * (256 / 2), 0), 1)
-    np.testing.assert_array_equal(new, legacy)
+    pairs = [
+        (geometry.circle(0.5, r),
+         geometry.circle_sdf(0.5, r)),
+        (geometry.annulus(0.2, 0.5, r),
+         geometry.annulus_sdf(0.2, 0.5, r)),
+        (geometry.rectangle(0.5, x, y, height=0.25, angle=17),
+         geometry.rectangle_sdf(0.5, x, y, height=0.25, angle=17)),
+        (geometry.rotated_ellipse(0.6, 0.3, x, y, major_axis_angle=30),
+         geometry.rotated_ellipse_sdf(0.6, 0.3, x, y, major_axis_angle=30)),
+        (geometry.regular_polygon(5, 0.5, x, y, rotation=10),
+         geometry.regular_polygon_sdf(5, 0.5, x, y, rotation=10)),
+        (geometry.spider(3, 0.05, x, y, rotation=20),
+         geometry.spider_sdf(3, 0.05, x, y, rotation=20)),
+        (geometry.rectangle_with_corner_fillets(0.5, 0.4, 0.1, x, y),
+         geometry.rectangle_with_corner_fillets_sdf(0.5, 0.4, 0.1, x, y)),
+    ]
+    for binary, d in pairs:
+        assert (np.asarray(binary) == (d <= 0)).all()
+
+
+def test_polygon_tolerates_empty_windows():
+    # segmented apertures rasterize per-segment windows; off-grid segments are empty
+    x = np.zeros((0, 5))
+    y = np.zeros((0, 5))
+    mask = geometry.regular_polygon(6, 1, x, y)
+    assert mask.shape == (0, 5)
+
+
+def test_polygon_sdf_winding_invariant():
+    x, y = coordinates.make_xy_grid(65, diameter=2)
+    verts = geometry._generate_vertices(6, 0.6, rotation=15)
+    cw = geometry.polygon_sdf(verts, x, y)
+    ccw = geometry.polygon_sdf(verts[::-1], x, y)
+    np.testing.assert_allclose(cw, ccw, atol=1e-12)
+
+
+def test_composition_helpers():
+    x, y = coordinates.make_xy_grid(65, diameter=2)
+    r = np.hypot(x, y)
+    inner = geometry.circle_sdf(0.2, r)
+    outer = geometry.circle_sdf(0.5, r)
+    composed = geometry.subtract(outer, inner)
+    np.testing.assert_allclose(composed, geometry.annulus_sdf(0.2, 0.5, r), atol=1e-15)
+    # union of the annulus with its hole fills the disk back in
+    refilled = geometry.union(composed, inner)
+    assert ((refilled <= 0) == (outer <= 0)).all()
+    # intersection with the hole is empty
+    assert not (geometry.intersect(composed, inner) <= 0).any()
 
 
 def test_rectangle_correct_area():
@@ -136,14 +184,14 @@ def test_annulus_excludes_center_and_outer_region():
     assert not mask[32, 0]
 
 
-def test_spider_blocks_expected_axis():
+def test_spider_masks_vane_region():
     x, y = coordinates.make_xy_grid(65, diameter=2)
 
     mask = geometry.spider(1, 0.2, x, y)
 
-    assert not mask[32, 48]
-    assert mask[32, 16]
-    assert mask[48, 32]
+    assert mask[32, 48]      # on the +x vane
+    assert not mask[32, 16]  # -x, no vane
+    assert not mask[48, 32]  # +y, no vane
 
 
 def test_spider_rotation_degrees_matches_radians():
@@ -163,3 +211,22 @@ def test_rectangle_with_corner_fillets_removes_corners():
 
     assert mask[32, 32]
     assert not mask[12, 12]
+
+
+def test_multisample_centered_and_matches_antialias():
+    dx = 0.05
+    x, y = coordinates.make_xy_grid(128, dx=dx)
+    radius = 40 * dx
+
+    def member(xx, yy):
+        return np.hypot(xx, yy) <= radius
+
+    cover = geometry.multisample(member, x, y, samples=8)
+    assert cover.sum() == pytest.approx(40 * 40 * math.pi, abs=1.5)
+    # centered subsample offsets: no registration bias
+    assert abs((cover * x).sum() / cover.sum()) < 1e-12
+    assert abs((cover * y).sum() / cover.sum()) < 1e-12
+    # agrees with the analytic ramp to within the two edge models
+    r = np.hypot(x, y)
+    analytic = geometry.antialias(geometry.circle_sdf(radius, r), dx)
+    assert float(abs(cover - analytic).max()) < 0.1

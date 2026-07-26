@@ -1,17 +1,154 @@
 """Functions used to generate various geometrical constructs."""
-import math
 
-# truenp: host-side polygon / aperture construction; scipy.spatial.Delaunay
-#         (used in mask_cleaner) only accepts real numpy arrays.
+# truenp: polygon vertex generation is host-side scalar work
 import numpy as truenp
-
-# scipy.spatial is not exposed via prysm.mathops because no cupy/torch
-# equivalent of Delaunay triangulation exists; this module is host-only.
-from scipy import spatial
 
 from .conf import config
 from .mathops import np
 from .coordinates import cart_to_polar, optimize_xy_separable, polar_to_cart
+
+
+def antialias(d, dx):
+    """Convert signed distance to pixel coverage with a one pixel edge ramp.
+
+    Parameters
+    ----------
+    d : ndarray
+        signed distance, negative inside the shape, same units as dx
+    dx : float
+        sample spacing
+
+    Returns
+    -------
+    ndarray
+        coverage; 1 inside, 0 outside, fractional within a pixel of the edge
+
+    Notes
+    -----
+    Generalizes a gray-pixel circle algorithm by Jim Fienup.  Combine shapes
+    on distance (union, intersect, subtract) and ramp once; multiplying
+    already-ramped masks double counts shared edges.
+
+    """
+    coverage = 0.5 - d/dx
+    return np.minimum(np.maximum(coverage, 0), 1)
+
+
+def union(*ds):
+    """Signed distance of the union of shapes.
+
+    Parameters
+    ----------
+    ds : ndarray
+        signed distance arrays
+
+    Returns
+    -------
+    ndarray
+        signed distance of the combined shape
+
+    """
+    out = ds[0]
+    for d in ds[1:]:
+        out = np.minimum(out, d)
+    return out
+
+
+def intersect(*ds):
+    """Signed distance of the intersection of shapes.
+
+    Parameters
+    ----------
+    ds : ndarray
+        signed distance arrays
+
+    Returns
+    -------
+    ndarray
+        signed distance of the combined shape
+
+    """
+    out = ds[0]
+    for d in ds[1:]:
+        out = np.maximum(out, d)
+    return out
+
+
+def subtract(d1, d2):
+    """Signed distance of shape 1 with shape 2 removed.
+
+    Parameters
+    ----------
+    d1 : ndarray
+        signed distance of the shape to keep
+    d2 : ndarray
+        signed distance of the shape to remove
+
+    Returns
+    -------
+    ndarray
+        signed distance of the combined shape
+
+    """
+    return np.maximum(d1, -d2)
+
+
+def multisample(func, x, y, samples=8):
+    """Anti-alias a membership function by multisampling within edge pixels.
+
+    Parameters
+    ----------
+    func : callable
+        func(x, y) -> ndarray, membership of the shape, bool or 0/1 float
+    x : ndarray
+        x spatial coordinates, 2D or 1D
+    y : ndarray
+        y spatial coordinates, 2D or 1D
+    samples : int
+        subsamples per axis within each edge pixel
+
+    Returns
+    -------
+    ndarray
+        coverage; edge pixels carry the mean of samples x samples subsamples
+
+    Notes
+    -----
+    Fallback for membership functions with no signed distance; prefer
+    antialias when one exists.  Edge pixels are those whose 3x3 neighborhood
+    is mixed; features containing no pixel centers are invisible.  Subsamples
+    are centered within each pixel -- drawing on a finer FFT-aligned grid and
+    binning is biased by nearly half a pixel.
+
+    """
+    x, y = optimize_xy_separable(x, y)
+    xr = x.ravel()
+    yr = y.ravel()
+    dx = float(xr[1] - xr[0])
+    dy = float(yr[1] - yr[0])
+    cover = func(x, y).astype(config.precision)
+    # edge pixels: any disagreement within the 3x3 neighborhood
+    N0, N1 = cover.shape
+    p = np.pad(cover, 1, mode='edge')
+    mn = None
+    mx = None
+    for i in range(3):
+        for j in range(3):
+            window = p[i:i+N0, j:j+N1]
+            mn = window if mn is None else np.minimum(mn, window)
+            mx = window if mx is None else np.maximum(mx, window)
+    edge = mn != mx
+    if not edge.any():
+        return cover
+
+    xg = np.broadcast_to(x, cover.shape)[edge]
+    yg = np.broadcast_to(y, cover.shape)[edge]
+    off = (np.arange(samples) + 0.5) / samples - 0.5
+    xs = xg[:, None, None] + (off*dx)[None, :, None]
+    ys = yg[:, None, None] + (off*dy)[None, None, :]
+    vals = func(xs, ys).astype(config.precision)
+    cover[edge] = vals.reshape(vals.shape[0], -1).mean(axis=1)
+    return cover
 
 
 def gaussian(sigma, x, y, center=(0, 0)):
@@ -42,29 +179,27 @@ def gaussian(sigma, x, y, center=(0, 0)):
     return np.exp(-4 * np.log(2) * ((x - x0) ** 2 + (y - y0) ** 2) / s ** 2)
 
 
-def rectangle(width, x, y, height=None, angle=0):
-    """Generate a rectangular, with the "width" axis aligned to 'x'.
+def rectangle_sdf(width, x, y, height=None, angle=0):
+    """Signed distance to a rectangle, negative inside.
 
     Parameters
     ----------
     width : float
-        diameter of the rectangle, relative to the width of the array.
-        width=1 fills the horizontal extent when angle=0
+        half-width of the rectangle, x axis when angle=0
+    x : ndarray
+        x spatial coordinates, 2D or 1D
+    y : ndarray
+        y spatial coordinates, 2D or 1D
     height : float
-        diameter of the rectangle, relative to the height of the array.
-        height=1 fills the vertical extent when angle=0.
+        half-height of the rectangle, y axis when angle=0.
         If None, inherited from width to make a square
     angle : float
-        angle
-    x : ndarray
-        x spatial coordinates, 2D
-    y : ndarray
-        y spatial coordinates, 2D
+        angle, degrees
 
     Returns
     -------
     ndarray
-        array with the rectangle painted at 1 and the background at 0
+        signed distance
 
     """
     if angle != 0:
@@ -80,44 +215,104 @@ def rectangle(width, x, y, height=None, angle=0):
 
     if height is None:
         height = width
-    w_mask = (y <= height) & (y >= -height)
-    h_mask = (x <= width) & (x >= -width)
-    return w_mask & h_mask
+    qx = np.abs(x) - width
+    qy = np.abs(y) - height
+    outside = np.hypot(np.maximum(qx, 0), np.maximum(qy, 0))
+    inside = np.minimum(np.maximum(qx, qy), 0)
+    return outside + inside
 
 
-def rotated_ellipse(width_major, width_minor, x, y, major_axis_angle=0):
-    """Generate a binary mask for an ellipse, centered at the origin.
+def rectangle(width, x, y, height=None, angle=0):
+    """Generate a rectangle, with the "width" axis aligned to 'x'.
 
     Parameters
     ----------
-    width_major : float
-        width of the ellipse in its major axis
-    width_minor : float
-        width of the ellipse in its minor axis
-    major_axis_angle : float
-        angle of the major axis w.r.t. the x axis, degrees
+    width : float
+        half-width of the rectangle, x axis when angle=0
     x : ndarray
-        x spatial coordinates, 2D
+        x spatial coordinates, 2D or 1D
     y : ndarray
-        y spatial coordinates, 2D
+        y spatial coordinates, 2D or 1D
+    height : float
+        half-height of the rectangle, y axis when angle=0.
+        If None, inherited from width to make a square
+    angle : float
+        angle, degrees
 
     Returns
     -------
     ndarray
-        An ndarray of shape (samples,samples) of value 0 outside the ellipse and value 1 inside the ellipse
+        binary mask, 1 inside the rectangle and 0 outside
+
+    """
+    return rectangle_sdf(width, x, y, height=height, angle=angle) <= 0
+
+
+def rotated_ellipse_sdf(width_major, width_minor, x, y, major_axis_angle=0):
+    r"""Signed distance to an ellipse centered at the origin, negative inside.
+
+    Parameters
+    ----------
+    width_major : float
+        semi-major axis length
+    width_minor : float
+        semi-minor axis length
+    x : ndarray
+        x spatial coordinates, 2D
+    y : ndarray
+        y spatial coordinates, 2D
+    major_axis_angle : float
+        angle of the major axis w.r.t. the x axis, degrees
+
+    Returns
+    -------
+    ndarray
+        signed distance
+
+    Notes
+    -----
+    First-order (Taubin) estimate :math:`F / \lVert \nabla F \rVert` of the
+    implicit equation; exact at the edge to within a pixel, approximate far
+    from it.
 
     """
     if width_minor > width_major:
         raise ValueError('By definition, major axis must be larger than minor.')
 
-    arr = np.ones_like(x)
-
     A = np.radians(-major_axis_angle)
     a, b = width_major, width_minor
-    major_axis_term = ((x * np.cos(A) + y * np.sin(A)) ** 2) / a ** 2
-    minor_axis_term = ((x * np.sin(A) - y * np.cos(A)) ** 2) / b ** 2
-    arr[major_axis_term + minor_axis_term > 1] = 0
-    return arr
+    xr = x * np.cos(A) + y * np.sin(A)
+    yr = x * np.sin(A) - y * np.cos(A)
+    F = (xr/a)**2 + (yr/b)**2 - 1
+    # grad F vanishes at the center; guard keeps the divide finite, the
+    # ramp's clip saturates the interior anyway
+    g = np.hypot(2*xr/(a*a), 2*yr/(b*b))
+    return F / np.maximum(g, 1e-15)
+
+
+def rotated_ellipse(width_major, width_minor, x, y, major_axis_angle=0):
+    """Generate a mask for an ellipse, centered at the origin.
+
+    Parameters
+    ----------
+    width_major : float
+        semi-major axis length
+    width_minor : float
+        semi-minor axis length
+    x : ndarray
+        x spatial coordinates, 2D
+    y : ndarray
+        y spatial coordinates, 2D
+    major_axis_angle : float
+        angle of the major axis w.r.t. the x axis, degrees
+
+    Returns
+    -------
+    ndarray
+        binary mask, 1 inside the ellipse and 0 outside
+
+    """
+    return rotated_ellipse_sdf(width_major, width_minor, x, y, major_axis_angle=major_axis_angle) <= 0
 
 
 def square(x, y):
@@ -125,8 +320,6 @@ def square(x, y):
 
     Parameters
     ----------
-    samples : int, optional
-        number of samples in the square output array
     x : ndarray
         x spatial coordinates, 2D
     y : ndarray
@@ -141,35 +334,23 @@ def square(x, y):
     return np.ones_like(x)
 
 
-def truecircle(radius, r, dx=None):
-    """Create a "true" circular mask with anti-aliasing.
+def circle_sdf(radius, r):
+    """Signed distance to a circle, negative inside.
 
     Parameters
     ----------
     radius : float
         radius of the circle, same units as r
     r : ndarray
-        radial coordinate, 2D
-    dx : float, optional
-        cartesian sample spacing.  Must be given if r is not a normalized grid
+        radial coordinates, 2D or 1D
 
     Returns
     -------
     ndarray
-        nonbinary ndarray representation of the mask
-
-    Notes
-    -----
-    Based on a more general algorithm by Jim Fienup
+        signed distance
 
     """
-    if radius == 0:
-        return np.zeros_like(r)
-    if dx is None:
-        dx = 2 / r.shape[0]
-    # partial-pixel coverage: 0.5 where r == radius, +-0.5 per sample either side
-    coverage = (radius - r) / dx + 0.5
-    return np.minimum(np.maximum(coverage, 0), 1)
+    return r - radius
 
 
 def circle(radius, r):
@@ -178,18 +359,40 @@ def circle(radius, r):
     Parameters
     ----------
     radius : float
-        radius of the circle, same units as r.  The return is 1 inside the
-        radius and 0 outside
+        radius of the circle, same units as r
     r : ndarray
         2D array of radial coordinates
 
     Returns
     -------
     ndarray
-        binary ndarray representation of the mask
+        binary mask, 1 inside the radius and 0 outside
 
     """
-    return r <= radius
+    return circle_sdf(radius, r) <= 0
+
+
+def annulus_sdf(rin, rout, r):
+    """Signed distance to an annulus, negative inside.
+
+    Parameters
+    ----------
+    rin : float
+        inner radius
+    rout : float
+        outer radius
+    r : ndarray
+        radial coordinates, 2D or 1D
+
+    Returns
+    -------
+    ndarray
+        signed distance
+
+    """
+    center = (rin + rout) / 2
+    halfwidth = (rout - rin) / 2
+    return np.abs(r - center) - halfwidth
 
 
 def annulus(rin, rout, r):
@@ -207,12 +410,85 @@ def annulus(rin, rout, r):
     Returns
     -------
     ndarray
-        binary ndarray representation of the mask
+        binary mask, 1 between the radii and 0 outside
 
     """
-    lo = r >= rin
-    hi = r <= rout
-    return lo & hi
+    return annulus_sdf(rin, rout, r) <= 0
+
+
+def polygon_sdf(vertices, x, y):
+    """Signed distance to a polygon, negative inside.
+
+    Parameters
+    ----------
+    vertices : iterable
+        Nx2 collection of (x, y) vertices, either winding, without a repeated
+        closing vertex; need not be convex
+    x : ndarray
+        x spatial coordinates, 2D or 1D
+    y : ndarray
+        y spatial coordinates, 2D or 1D
+
+    Returns
+    -------
+    ndarray
+        signed distance
+
+    """
+    # segment windows can be empty slabs; element ops tolerate them, x[0, :] cannot
+    if x.size and y.size:
+        x, y = optimize_xy_separable(x, y)
+    n = len(vertices)
+    d2 = None
+    inside = None
+    for i in range(n):
+        x0, y0 = (float(v) for v in vertices[i])
+        x1, y1 = (float(v) for v in vertices[(i+1) % n])
+        ex = x1 - x0
+        ey = y1 - y0
+        wx = x - x0
+        wy = y - y0
+        # distance to the edge segment
+        t = (wx*ex + wy*ey) / (ex*ex + ey*ey)
+        t = np.minimum(np.maximum(t, 0), 1)
+        px = wx - t*ex
+        py = wy - t*ey
+        seg = px*px + py*py
+        d2 = seg if d2 is None else np.minimum(d2, seg)
+        # even-odd crossing parity for the sign; winding-agnostic
+        straddle = (y0 > y) != (y1 > y)
+        crosses = straddle & ((wx*ey < ex*wy) == (y1 > y0))
+        inside = crosses if inside is None else inside ^ crosses
+    d = np.sqrt(d2)
+    return np.where(inside, -d, d)
+
+
+def regular_polygon_sdf(sides, radius, x, y, center=(0, 0), rotation=0):
+    """Signed distance to a regular polygon, negative inside.
+
+    Parameters
+    ----------
+    sides : int
+        number of sides to the polygon
+    radius : float
+        distance from the center to a vertex
+    x : ndarray
+        x spatial coordinates, 2D or 1D
+    y : ndarray
+        y spatial coordinates, 2D or 1D
+    center : tuple of float
+        center of the polygon, (x,y)
+    rotation : float
+        rotation of the polygon, degrees
+
+    Returns
+    -------
+    ndarray
+        signed distance
+
+    """
+    verts = _generate_vertices(sides, radius, center, rotation)
+    return polygon_sdf(verts, x, y)
 
 
 def regular_polygon(sides, radius, x, y, center=(0, 0), rotation=0):
@@ -222,62 +498,24 @@ def regular_polygon(sides, radius, x, y, center=(0, 0), rotation=0):
     ----------
     sides : int
         number of sides to the polygon
-    radius : float, optional
-        distance from the origin to a vertex
+    radius : float
+        distance from the center to a vertex
     x : ndarray
         x spatial coordinates, 2D or 1D
     y : ndarray
         y spatial coordinates, 2D or 1D
     center : tuple of float
-        center of the gaussian, (x,y)
+        center of the polygon, (x,y)
     rotation : float
         rotation of the polygon, degrees
 
     Returns
     -------
     ndarray
-        mask for regular polygon with radius equal to the array radius
+        binary mask, 1 inside the polygon and 0 outside
 
     """
-    verts = _generate_vertices(sides, radius, center, rotation)
-    return _generate_mask(verts, x, y)
-
-
-def _generate_mask(vertices, x, y):
-    """Create a filled convex polygon mask based on the given vertices.
-
-    Parameters
-    ----------
-    vertices : iterable
-        ensemble of vertice (x,y) coordinates, in array units
-    x : ndarray
-        x spatial coordinates, 2D or 1D
-    y : ndarray
-        y spatial coordinates, 2D or 1D
-
-    Returns
-    -------
-    ndarray
-        polygon mask
-
-    """
-    vertices = truenp.asarray(vertices)
-    if hasattr(x, 'get'):
-        xx = x.get()
-        yy = y.get()
-    else:
-        try:
-            xx = truenp.array(x)
-            yy = truenp.array(y)
-        except Exception as e:
-            prev = str(e)
-            raise Exception('attempted to convert array to genuine numpy array with known methods.  Please make a PR to prysm with a mechanism to convert this data type to real numpy. failed with '+prev)  # NOQA
-
-    xxyy = truenp.stack((xx, yy), axis=2)
-    # use delaunay to fill from the vertices and produce a mask
-    triangles = spatial.Delaunay(vertices, qhull_options='QJ Qf')
-    mask = ~(triangles.find_simplex(xxyy) < 0)
-    return mask
+    return regular_polygon_sdf(sides, radius, x, y, center=center, rotation=rotation) <= 0
 
 
 def _generate_vertices(sides, radius=1, center=(0, 0), rotation=0):
@@ -309,16 +547,15 @@ def _generate_vertices(sides, radius=1, center=(0, 0), rotation=0):
     return truenp.stack((x, y), axis=1)
 
 
-def spider(vanes, width, x, y, rotation=0, center=(0, 0), rotation_is_rad=False):
-    """Generate the mask for a spider.
+def spider_sdf(vanes, width, x, y, rotation=0, center=(0, 0), rotation_is_rad=False):
+    """Signed distance to the vanes of a spider, negative inside the vanes.
 
     Parameters
     ----------
     vanes : int
         number of spider vanes
     width : float
-        width of the vanes in array units, i.e. a width=1/128 spider with
-        arydiam=1 and samples=128 will be 1 pixel wide
+        full width of the vanes, same units as x and y
     x : ndarray
         x spatial coordinates, 2D or 1D
     y : ndarray
@@ -333,7 +570,7 @@ def spider(vanes, width, x, y, rotation=0, center=(0, 0), rotation_is_rad=False)
     Returns
     -------
     ndarray
-        array, 0 inside the spider and 1 outside
+        signed distance
 
     """
     half_width = width / 2
@@ -344,17 +581,47 @@ def spider(vanes, width, x, y, rotation=0, center=(0, 0), rotation_is_rad=False)
         rotation = np.radians(rotation)
 
     step = 2 * np.pi / vanes
-    mask = np.zeros(x.shape, dtype=bool)
+    d = None
     for multiple in range(vanes):
         angle = step * multiple - rotation
         c = np.cos(angle)
         s = np.sin(angle)
         along = x * c - y * s
         across = x * s + y * c
-        mask_ = (along > 0) & (abs(across) < half_width)
-        mask |= mask_
+        # semi-infinite capsule: |across| along the vane, radial at the root
+        vane = np.hypot(np.minimum(along, 0), across) - half_width
+        d = vane if d is None else np.minimum(d, vane)
+    return d
 
-    return ~mask
+
+def spider(vanes, width, x, y, rotation=0, center=(0, 0), rotation_is_rad=False):
+    """Generate the mask for the vanes of a spider.
+
+    Parameters
+    ----------
+    vanes : int
+        number of spider vanes
+    width : float
+        full width of the vanes, same units as x and y
+    x : ndarray
+        x spatial coordinates, 2D or 1D
+    y : ndarray
+        y spatial coordinates, 2D or 1D
+    rotation : float, optional
+        rotational offset of the vanes, clockwise
+    center : tuple of float
+        point from which the vanes emanate, (x,y)
+    rotation_is_rad : bool, optional
+        if True, the rotation parameter is interpreted to be in radians
+
+    Returns
+    -------
+    ndarray
+        binary mask, 1 inside the vanes and 0 outside
+
+    """
+    return spider_sdf(vanes, width, x, y, rotation=rotation, center=center,
+                      rotation_is_rad=rotation_is_rad) <= 0
 
 
 def offset_circle(radius, x, y, center):
@@ -386,101 +653,47 @@ def offset_circle(radius, x, y, center):
     return circle(radius, r)
 
 
-def _circle_arc(t0, t1, r, N, center=(0, 0)):
-    cx, cy = center
-    theta = t0 + ((t1 - t0) / N) * np.arange(N)
-    x = cx + np.cos(theta) * r
-    y = cy + np.sin(theta) * r
-    return list(zip(x, y))
+def rectangle_with_corner_fillets_sdf(width, height, cradius, x, y, center=(0, 0), rotation=0):
+    """Signed distance to a rectangle with filleted corners, negative inside.
 
+    Parameters
+    ----------
+    width : float
+        half-width of the rectangle, same units as x and y
+    height : float
+        half-height of the rectangle, same units as x and y
+    cradius : float
+        radius of the corner fillets
+    x : ndarray
+        x coordinates
+    y : ndarray
+        y coordinates
+    center : tuple of float
+        (x,y) center of the rectangle
+    rotation : float
+        degrees of rotation **about coordinate grid center**
 
-def _qhull_points_for_rectangle_with_corner_fillets(width, height, cradius, x, y, center=(0, 0), rotation=0):
-    dx = x[0, 1] - x[0, 0]
-    # need circumference/4/dx points on the circle
-    # 4 = quarter-arc
-    # parametric equation of a circle is x=cos(theta)*r, y=sin(theta0*r)
-    C = 2*np.pi*cradius
-    Ncirc = math.ceil(C/4/dx)
+    Returns
+    -------
+    ndarray
+        signed distance
 
-    cx, cy = center
+    """
+    if rotation != 0:
+        r, t = cart_to_polar(x, y)
+        t += np.radians(rotation)
+        x, y = polar_to_cart(r, t)
+    else:
+        x, y = optimize_xy_separable(x, y)
 
-    # extremes of the rectangle
-    ledge = -width+cx
-    redge = +width+cx
-    top = height+cy
-    bottom = -height+cy
-
-    all_points = []
-    # the basic gist of this algorithm
-    #
-    #
-    # the rectangle is:
-    # x----------------------------------x
-    # |                                  |
-    # |                                  |
-    # |                                  |
-    # |                                  |
-    # |                                  |
-    # |                                  |
-    # x----------------------------------x
-    # find the point at which we transition from the rectangle to the
-    # circle, and the center of that circle:
-    # x----------------------------------x
-    # |     ^                            |
-    # |     |                            |
-    # | <-  .                            |
-    # |                                  |
-    # |                                  |
-    # |                                  |
-    # x----------------------------------x
-
-    # enumerate the points (last_p_rec, p_circ0, p_circ1, ..p_circN, first_p_rec)
-    # going around clockwise from top left
-    #
-    # give those to Qhull and shade the interior from the simplices
-    all_points = []
-
-    # top left
-    circle_cx = ledge+cradius
-    circle_cy = top-cradius
-    top_left_leading_extreme_rect = (ledge, circle_cy)
-    top_left_trailing_extreme_rect = (circle_cx, top)
-
-    all_points.append(top_left_leading_extreme_rect)
-    all_points += _circle_arc(np.pi, np.pi/2, cradius, Ncirc, center=(circle_cx, circle_cy))
-    all_points.append(top_left_trailing_extreme_rect)
-
-    # top right
-    circle_cx = redge-cradius
-    circle_cy = top-cradius
-    top_right_leading_extreme_rect = (circle_cx, top)
-    top_right_trailing_extreme_rect = (redge, circle_cy)
-
-    all_points.append(top_right_leading_extreme_rect)
-    all_points += _circle_arc(np.pi/2, 0, cradius, Ncirc, center=(circle_cx, circle_cy))
-    all_points.append(top_right_trailing_extreme_rect)
-
-    # bottom right
-    circle_cx = redge-cradius
-    circle_cy = bottom+cradius
-    bottom_right_leading_extreme_rect = (redge, circle_cy)
-    bottom_right_trailing_extreme_rect = (circle_cx, bottom)
-
-    all_points.append(bottom_right_leading_extreme_rect)
-    all_points += _circle_arc(0, -np.pi/2, cradius, Ncirc, center=(circle_cx, circle_cy))
-    all_points.append(bottom_right_trailing_extreme_rect)
-
-    # bottom left
-    circle_cx = ledge+cradius
-    circle_cy = bottom+cradius
-    bottom_right_leading_extreme_rect = (circle_cx, bottom)
-    bottom_right_trailing_extreme_rect = (ledge, circle_cy)
-
-    all_points.append(bottom_right_leading_extreme_rect)
-    all_points += _circle_arc(-np.pi/2, -np.pi, cradius, Ncirc, center=(circle_cx, circle_cy))
-    all_points.append(bottom_right_trailing_extreme_rect)
-
-    return all_points
+    x = x - center[0]
+    y = y - center[1]
+    # rounded box: shrink the box by cradius, inflate the distance field back
+    qx = np.abs(x) - (width - cradius)
+    qy = np.abs(y) - (height - cradius)
+    outside = np.hypot(np.maximum(qx, 0), np.maximum(qy, 0))
+    inside = np.minimum(np.maximum(qx, qy), 0)
+    return outside + inside - cradius
 
 
 def rectangle_with_corner_fillets(width, height, cradius, x, y, center=(0, 0), rotation=0):
@@ -506,17 +719,8 @@ def rectangle_with_corner_fillets(width, height, cradius, x, y, center=(0, 0), r
     Returns
     -------
     ndarray
-        1 inside "squircle", 0 outside
+        binary mask, 1 inside the "squircle" and 0 outside
 
     """
-    points = _qhull_points_for_rectangle_with_corner_fillets(width, height, cradius, x, y, center=center)
-
-    if rotation != 0:
-        r, t = cart_to_polar(x, y)
-        t += truenp.radians(rotation)
-        x, y = polar_to_cart(r, t)
-
-    xxyy = truenp.stack((x, y), axis=2)
-    triangles = spatial.Delaunay(points, qhull_options='QJ Qf')
-    mask = ~(triangles.find_simplex(xxyy) < 0)
-    return mask
+    return rectangle_with_corner_fillets_sdf(width, height, cradius, x, y,
+                                             center=center, rotation=rotation) <= 0
