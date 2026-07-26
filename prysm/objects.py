@@ -15,18 +15,14 @@ def slit(x, y, width_x, width_y=None):
     y : ndarray
         y coordinates, 1D or 2D
     width_x : float
-        the half-width of the slit in x, diameter will be 2x width_x.
-        produces a line along the y axis, use None to not do so
+        full width of the slit in x; None to draw no x slit
     width_y : float
-        the half-height of the slit in y, diameter will be 2x width_y.
-        produces a line along the y axis, use None to not do so
-    orientation : string, {'Horizontal', 'Vertical', 'Crossed', 'Both'}
-        the orientation of the slit; Crossed and Both produce the same results
+        full width of the slit in y; None to draw no y slit
 
-    Notes
-    -----
-    Default of 0 samples allows quick creation for convolutions without
-    generating the image; use samples > 0 for an actual image.
+    Returns
+    -------
+    ndarray
+        boolean mask, True inside the slit(s)
 
     """
     x, y = optimize_xy_separable(x, y)
@@ -42,18 +38,22 @@ def slit(x, y, width_x, width_y=None):
 
 
 def slit_ft(width_x, width_y, fx, fy):
-    """Analytic fourier transform of a slit.
+    """Analytic fourier transform of a slit, normalized to 1 at DC.
+
+    A slit spans the full grid along its long axis, so its spectrum is
+    confined to the conjugate frequency axis; grid support is recovered
+    from the frequency sample spacing.
 
     Parameters
     ----------
     width_x : float
-        x width of the slit, pass zero if the slit only has width in y
+        full width of the slit in x; None or 0 if the slit has no x part
     width_y : float
-        y width of the slit, pass zero if the slit only has width in x
+        full width of the slit in y; None or 0 if the slit has no y part
     fx : ndarray
-        sample points in x frequency axis
+        sample points in x frequency axis, fftshifted (contains 0)
     fy : ndarray
-        sample points in y frequency axis
+        sample points in y frequency axis, fftshifted (contains 0)
 
     Returns
     -------
@@ -61,13 +61,31 @@ def slit_ft(width_x, width_y, fx, fy):
         2D array containing the analytic fourier transform
 
     """
+    if not width_x:
+        width_x = None
+    if not width_y:
+        width_y = None
+    if width_x is None and width_y is None:
+        raise ValueError('slit_ft: at least one of width_x, width_y must be nonzero')
+
+    fx, fy = optimize_xy_separable(fx, fy)
     if width_x is not None and width_y is not None:
-        return (np.sinc(fx * width_x) +
-                np.sinc(fy * width_y)).astype(config.precision)
-    elif width_x is not None and width_y is None:
-        return np.sinc(fx * width_x).astype(config.precision)
+        # union of two full-length bands: FT(A) + FT(B) - FT(A & B)
+        Lx = 1 / (fx[0, 1] - fx[0, 0])
+        Ly = 1 / (fy[1, 0] - fy[0, 0])
+        sx = np.sinc(fx * width_x)
+        sy = np.sinc(fy * width_y)
+        band_x = (width_x * Ly) * sx * (fy == 0)
+        band_y = (width_y * Lx) * sy * (fx == 0)
+        overlap = (width_x * width_y) * sx * sy
+        area = width_x * Ly + width_y * Lx - width_x * width_y
+        out = (band_x + band_y - overlap) / area
+    elif width_x is not None:
+        out = np.sinc(fx * width_x) * (fy == 0)
     else:
-        return np.sinc(fy * width_y).astype(config.precision)
+        out = np.sinc(fy * width_y) * (fx == 0)
+
+    return out.astype(config.precision)
 
 
 def pinhole(radius, rho):
@@ -196,7 +214,7 @@ def tiltedsquare(x, y, angle=4, radius=0.5, contrast=0.9, background='white'):
     mask = (abs(xp) <= radius) * (abs(yp) <= radius)
 
     arr = np.zeros_like(x)
-    if background in ('b', 'white'):
+    if background in ('w', 'white'):
         arr[~mask] = (1 - delta)
         arr[mask] = delta
     else:
