@@ -1,7 +1,7 @@
 """Recipes for numerical convolution."""
 import inspect
 
-from .mathops import fft
+from .mathops import np, fft
 from .coordinates import optimize_xy_separable, cart_to_polar
 from .fttools import forward_ft_unit
 
@@ -25,10 +25,10 @@ def conv(obj, psf):
     # notation:
     o = obj
     h = psf
-    O = fft.fft2(fft.ifftshift(o))  # NOQA : O ambiguous (not, lowercase => uppercase notation)
+    O = fft.fft2(fft.ifftshift(o))  # noqa: E741
     H = fft.fft2(fft.ifftshift(h))
-    i = fft.fftshift(fft.ifft2(O*H)).real  # i = image
-    return i
+    i = fft.fftshift(fft.ifft2(O*H))  # i = image
+    return i.real if not np.iscomplexobj(obj) else i
 
 
 def apply_transfer_functions(obj, dx, tfs, fx=None, fy=None, ft=None, fr=None, shift=False):
@@ -65,17 +65,25 @@ def apply_transfer_functions(obj, dx, tfs, fx=None, fy=None, ft=None, fr=None, s
 
     """
     if any(callable(tf) for tf in tfs):
-        if fx is None:
-            fy, fx = [forward_ft_unit(dx, n) for n in obj.shape]
+        if fx is None or fy is None:
+            uy, ux = [forward_ft_unit(dx, n, shift=shift) for n in obj.shape]
+            if fx is None:
+                fx = ux
+            if fy is None:
+                fy = uy
 
         fx, fy = optimize_xy_separable(fx, fy)
-        fr, ft = cart_to_polar(fx, fy)
+        computed_fr, computed_ft = cart_to_polar(fx, fy)
+        if fr is None:
+            fr = computed_fr
+        if ft is None:
+            ft = computed_ft
 
     o = obj
     if shift:
         O = fft.fftshift(fft.fft2(fft.ifftshift(o)))  # NOQA
     else:
-        O = fft.fft2(o)  # NOQA
+        O = fft.fft2(fft.ifftshift(o))  # NOQA
 
     for tf in tfs:
         if callable(tf):
@@ -91,13 +99,16 @@ def apply_transfer_functions(obj, dx, tfs, fx=None, fy=None, ft=None, fr=None, s
             if 'ft' in params:
                 kwargs['ft'] = ft
 
+            if not kwargs:
+                raise ValueError(f'{tf} accepts none of fx, fy, fr, ft; a transfer function must accept at least one')
+
             tf = tf(**kwargs)
 
         O = O * tf  # NOQA
 
     if shift:
-        return fft.fftshift(fft.ifft2(fft.ifftshift(O))).real
+        i = fft.fftshift(fft.ifft2(fft.ifftshift(O)))
+        return i.real if not np.iscomplexobj(obj) else i
     # no if shift on this side, [i]fft will always place the origin at [0,0]
-    # real inside shift - 2x faster to shift real than to shift complex
-    i = fft.fftshift(fft.ifft2(O).real)
-    return i
+    i = fft.fftshift(fft.ifft2(O))
+    return i.real if not np.iscomplexobj(obj) else i
