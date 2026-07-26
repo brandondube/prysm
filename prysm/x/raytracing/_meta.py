@@ -1,6 +1,6 @@
 """Object/image-space index helpers over compiled surfaces."""
 
-from .spencer_and_murty import _is_measurement_surf
+from .spencer_and_murty import STYPE_REFRACT, _is_measurement_surf
 
 
 def _surface_medium_index(surface, wavelength, fallback):
@@ -42,6 +42,15 @@ def image_space_index(surfaces, wavelength, fallback=1.0):
             'an explicit image surface instead of relying on a bare final '
             'powered surface.'
         )
-    if len(surfaces) > 1:
-        return _surface_medium_index(surfaces[-2], wavelength, fallback)
-    return float(fallback)
+    n = object_space_index(surfaces, wavelength)
+    if len(surfaces) == 1:
+        return n
+    # Walk the actual medium transitions.  EVAL planes and mirrors do not
+    # change the medium, so any number of them may precede IMAGE.
+    start = 1 if _is_measurement_surf(
+        getattr(surfaces[0], 'typ', None)
+    ) else 0
+    for surface in surfaces[start:]:
+        if getattr(surface, 'typ', None) == STYPE_REFRACT:
+            n = _surface_medium_index(surface, wavelength, n)
+    return float(n)

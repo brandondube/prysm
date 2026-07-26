@@ -5,7 +5,8 @@ from .spencer_and_murty import (
 from .surfaces import _map_stype
 from .aperture import AnnularClip, CircularClip
 from ..materials import MIRROR, air, vacuum
-from .lensdata import CoordBreak, SurfaceRow
+from .lensdata import CoordBreak
+from ._surface_map import SurfaceMap
 
 
 def _radius_str(c):
@@ -47,22 +48,7 @@ def material_str(material, typ):
 
 def surface_row_mappings(lensdata):
     """Map raw rows to compiled and Zemax-style surface indices."""
-    records = []
-    surface_index = 0
-    zemax_surface_number = 0
-    for row_index, row in enumerate(lensdata.rows):
-        if isinstance(row, SurfaceRow):
-            compiled = surface_index
-            surface_index += 1
-        else:
-            compiled = None
-        records.append({
-            'row_index': row_index,
-            'surface_index': compiled,
-            'zemax_surface_number': zemax_surface_number,
-        })
-        zemax_surface_number += 1
-    return records
+    return SurfaceMap(lensdata).records()
 
 
 class SurfaceTable:

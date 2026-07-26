@@ -1,4 +1,4 @@
-"""Shared normalized surface specs for prescription readers."""
+"""Shared normalized surface specs for prescription IO ports."""
 
 from dataclasses import dataclass, field
 
@@ -9,6 +9,7 @@ from ..surfaces import (
     Conic,
     EvenAsphere,
     Plane,
+    Sphere,
     Toroid,
     XY,
     Zernike,
@@ -18,7 +19,7 @@ from ._common import scale_surface_params_to_mm
 
 @dataclass
 class SurfaceSpec:
-    """Parser-neutral surface construction record."""
+    """Format-neutral surface construction/serialization record."""
 
     kind: str
     typ: str
@@ -32,6 +33,7 @@ class SurfaceSpec:
     tilt_radians: bool = False
     grating: object = None
     coating: object = None
+    thickness: float = 0.0
 
 
 def make_surface_spec(kind, typ, material, params, length_scale=1.0):
@@ -51,6 +53,31 @@ def surface_spec_factory(material, length_scale=1.0):
             kind, typ, normalized_material, params, length_scale)
 
     return make
+
+
+def surface_spec_from_row(row):
+    """Normalize a LensData SurfaceRow for a writer port.
+
+    Readers and writers intentionally meet at this representation: format
+    parsing owns token semantics, while this module owns shape/material
+    semantics.  Coordinate breaks remain system-structure records rather than
+    pretending to be optical surfaces.
+    """
+    shape = row.build_shape()
+    if isinstance(shape, Plane):
+        kind = 'plane'
+    elif isinstance(shape, (Sphere, Conic)):
+        kind = 'conic'
+    else:
+        # Unsupported writer shapes still normalize coherently so preflight
+        # can report their concrete type before serialization begins.
+        kind = type(shape).__name__
+    return SurfaceSpec(
+        kind=kind, typ=row.typ, P=None, n=row.material,
+        params=dict(shape.params or {}), aperture=row.aperture,
+        grating=row.grating, coating=row.coating,
+        thickness=float(row.thickness),
+    )
 
 
 def build_shape(spec):
@@ -93,5 +120,5 @@ def build_surface(spec):
 
 __all__ = [
     'SurfaceSpec', 'make_surface_spec', 'surface_spec_factory',
-    'build_surface', 'build_shape',
+    'surface_spec_from_row', 'build_surface', 'build_shape',
 ]

@@ -225,51 +225,84 @@ class _AnalysisNamespace:
     def __init__(self, system):
         self._sys = system
 
-    def wavefront(self, P, S, wavelength=None, **kwargs):
+    def wavefront(self, P, S, wavelength=None, *, P_xp=None,
+                  chief_index=None, pupil_coords=None, field=None,
+                  output='length', reference='chief'):
         """Trace and compute OPD on the chief-ray reference sphere."""
         from .analysis import wavefront
         return wavefront(self._sys, P, S, self._sys.wavelength(wavelength),
-                         **kwargs)
+                         P_xp=P_xp, chief_index=chief_index,
+                         pupil_coords=pupil_coords, field=field,
+                         output=output, reference=reference)
 
-    def spot_diagrams(self, **kwargs):
+    def spot_diagrams(self, fields=None, wavelengths=None, *, sampling=None,
+                      epd=None, reference='centroid'):
         """Spot diagrams over the system fields and wavelengths."""
         from .analysis import spot_diagrams
-        return spot_diagrams(self._sys, **kwargs)
+        return spot_diagrams(self._sys, fields, wavelengths,
+                             sampling=sampling, epd=epd,
+                             reference=reference)
 
-    def ray_aberration_fans(self, **kwargs):
+    def ray_aberration_fans(self, fields=None, wavelengths=None, *, nrays=21,
+                            epd=None, distribution='uniform',
+                            reference='chief'):
         """Transverse ray-aberration fans."""
         from .analysis import ray_aberration_fans
-        return ray_aberration_fans(self._sys, **kwargs)
+        return ray_aberration_fans(
+            self._sys, fields, wavelengths, nrays=nrays, epd=epd,
+            distribution=distribution, reference=reference)
 
-    def opd_fans(self, **kwargs):
+    def opd_fans(self, fields=None, wavelengths=None, *, nrays=21, epd=None,
+                 distribution='uniform', stop_index=None, output='waves'):
         """Wavefront OPD fans."""
         from .analysis import opd_fans
-        return opd_fans(self._sys, **kwargs)
+        return opd_fans(
+            self._sys, fields, wavelengths, nrays=nrays, epd=epd,
+            distribution=distribution, stop_index=stop_index, output=output)
 
-    def distortion(self, **kwargs):
+    def distortion(self, fields=None, wavelength=None, *, epd=None,
+                   paraxial_fraction=1e-4, distortion_type='f-tan',
+                   pupil_z=None, samples=101):
         """Percent distortion over the field."""
         from .analysis import distortion
-        return distortion(self._sys, **kwargs)
+        return distortion(
+            self._sys, fields, wavelength, epd=epd,
+            paraxial_fraction=paraxial_fraction,
+            distortion_type=distortion_type, pupil_z=pupil_z,
+            samples=samples)
 
-    def field_curvature(self, **kwargs):
+    def field_curvature(self, fields=None, wavelength=None, *, samples=101):
         """Tangential / sagittal field curvature."""
         from .analysis import field_curvature
-        return field_curvature(self._sys, **kwargs)
+        return field_curvature(self._sys, fields, wavelength, samples=samples)
 
-    def lateral_color(self, **kwargs):
+    def lateral_color(self, fields=None, wavelengths=None, *, epd=None,
+                      samples=101):
         """Lateral color over the field for non-reference wavelengths."""
         from .analysis import lateral_color
-        return lateral_color(self._sys, **kwargs)
+        return lateral_color(self._sys, fields, wavelengths, epd=epd,
+                             samples=samples)
 
-    def chromatic_focal_shift(self, **kwargs):
+    def chromatic_focal_shift(self, wavelengths=None, *,
+                              reference_wavelength=None, focus='best',
+                              epd=None, field=None, sampling=None,
+                              samples=101):
         """Chromatic focal shift versus wavelength."""
         from .analysis import chromatic_focal_shift
-        return chromatic_focal_shift(self._sys, **kwargs)
+        return chromatic_focal_shift(
+            self._sys, wavelengths, reference_wavelength=reference_wavelength,
+            focus=focus, epd=epd, field=field, sampling=sampling,
+            samples=samples)
 
-    def full_field(self, **kwargs):
+    def full_field(self, metric='rms spot', *, samples=15, max_field=None,
+                   wavelengths=None, sampling=None, epd=None,
+                   stop_index=None):
         """2D image-quality metric map over the field disc."""
         from .analysis import full_field
-        return full_field(self._sys, **kwargs)
+        return full_field(
+            self._sys, metric, samples=samples, max_field=max_field,
+            wavelengths=wavelengths, sampling=sampling, epd=epd,
+            stop_index=stop_index)
 
     def first_order(self, field=0, wavelength=None, **kwargs):
         """Parabasal first-order properties about a chief ray."""

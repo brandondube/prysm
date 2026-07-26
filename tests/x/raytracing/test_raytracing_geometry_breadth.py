@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from prysm.x import materials
-from prysm.x.raytracing.phase import LinearGrating
+from prysm.x.raytracing.opl import LinearGrating
 from tests.x.raytracing.surface_helpers import (
     plane, sphere, conic, off_axis_conic, even_asphere, q2d, zernike, xy,
     chebyshev, jacobi, toroid, biconic, xy_grid as _xy_grid,
@@ -166,8 +166,8 @@ def test_grating_zeroth_order_matches_specular():
     img = plane(interaction='eval', P=[0, 0, -10.0])
     P = np.array([[1.0, 0.0, -5.0], [0.0, 2.0, -5.0]])
     S = np.array([[0.0, 0.0, 1.0]] * 2)
-    r0 = raytrace([g_surf, img], P, S, wvl=0.55e-3)
-    rb = raytrace([base, img], P, S, wvl=0.55e-3)
+    r0 = raytrace([g_surf, img], P, S, wvl=0.55)
+    rb = raytrace([base, img], P, S, wvl=0.55)
     np.testing.assert_allclose(r0.S, rb.S, atol=1e-12)
     np.testing.assert_allclose(r0.P, rb.P, atol=1e-12)
 
@@ -176,14 +176,14 @@ def test_grating_zeroth_order_matches_specular():
 def test_grating_equation_normal_incidence(order):
     """Reflection grating, normal incidence: |sin theta_diff| = m * lambda / d."""
     d = 2e-3
-    wvl = 0.5e-3  # so m*l/d in [0, 1] for orders -2..2
+    wvl = 0.5  # microns; so m*l_mm/d is in [0, 1] for orders -2..2
     g_surf = plane(interaction='refl', P=[0, 0, 0])
     g_surf.grating = LinearGrating(d, [1.0, 0.0, 0.0], order)
     img = plane(interaction='eval', P=[0, 0, -10.0])
     P = np.array([[0.0, 0.0, -5.0]])
     S = np.array([[0.0, 0.0, 1.0]])
     r = raytrace([g_surf, img], P, S, wvl=wvl)
-    expected_x = order * wvl / d
+    expected_x = order * wvl * 1e-3 / d
     expected_z = -np.sqrt(1 - expected_x ** 2)
     np.testing.assert_allclose(r.S[1].squeeze(), [expected_x, 0, expected_z],
                                atol=1e-12)
@@ -201,7 +201,7 @@ def test_grating_evanescent_flagged_as_evanescent():
     img = plane(interaction='eval', P=[0, 0, -10.0])
     P = np.array([[0.0, 0.0, -5.0]])
     S = np.array([[0.0, 0.0, 1.0]])
-    r = raytrace([g_surf, img], P, S, wvl=0.55e-3)
+    r = raytrace([g_surf, img], P, S, wvl=0.55)
     assert r.status.imag.item() == STATUS_EVANESCENT  # -3, not TIR (-2)
     assert r.status.real.item() == 1   # failed at surface 1 (the grating)
     assert 'EVANESCENT' in r.status_record.text[0]
@@ -210,7 +210,7 @@ def test_grating_evanescent_flagged_as_evanescent():
 def test_refraction_grating_equation():
     """Transmission grating, normal incidence: n' sin theta_diff = m lambda / d."""
     d = 1e-3
-    wvl = 0.55e-3
+    wvl = 0.55
     n_glass = 1.5
     g_surf = plane(interaction='refr', P=[0, 0, 0], material=materials.ConstantMaterial(n_glass))
     g_surf.grating = LinearGrating(d, [1.0, 0.0, 0.0], 1)
@@ -218,7 +218,7 @@ def test_refraction_grating_equation():
     P = np.array([[0.0, 0.0, -5.0]])
     S = np.array([[0.0, 0.0, 1.0]])
     r = raytrace([g_surf, img], P, S, wvl=wvl)
-    expected_x = wvl / (n_glass * d)
+    expected_x = wvl * 1e-3 / (n_glass * d)
     expected_z = +np.sqrt(1 - expected_x ** 2)
     np.testing.assert_allclose(r.S[1].squeeze(),
                                [expected_x, 0, expected_z], atol=1e-12)
@@ -234,7 +234,7 @@ def test_grating_phase_enters_opl():
     grating phase order*wvl*x_local/d.
     """
     d = 1e-3
-    wvl = 0.55e-3
+    wvl = 0.55
     x0 = 2.0
     img = plane(interaction='eval', P=[0, 0, -10.0])
     P = np.array([[x0, 0.0, -5.0]])
@@ -243,7 +243,9 @@ def test_grating_phase_enters_opl():
     g1 = plane(interaction='refl', P=[0, 0, 0])
     g1.grating = LinearGrating(d, [1.0, 0.0, 0.0], 1)
     r1 = raytrace([g1, img], P, S, wvl=wvl)
-    np.testing.assert_allclose(r1.OPL[1].item(), 5.0 + wvl * x0 / d, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(
+        r1.OPL[1].item(), 5.0 + wvl * 1e-3 * x0 / d,
+        rtol=0, atol=1e-12)
 
     # zeroth order adds no phase: OPL stays the bare geometric length
     g0 = plane(interaction='refl', P=[0, 0, 0])
@@ -257,7 +259,8 @@ def test_grating_phase_enters_opl():
     P2 = np.array([[x1, 0.0, -5.0]])
     r2 = raytrace([g1, img], P2, S, wvl=wvl)
     dopl = r2.OPL[1].item() - r1.OPL[1].item()
-    np.testing.assert_allclose(dopl / (x1 - x0), wvl / d, rtol=1e-12)
+    np.testing.assert_allclose(
+        dopl / (x1 - x0), wvl * 1e-3 / d, rtol=1e-12)
 
 
 def test_grating_off_curved_surface():
@@ -270,7 +273,7 @@ def test_grating_off_curved_surface():
     P = np.array([[0.0, 0.0, -50.0],
                   [0.0, 10.0, -50.0]])
     S = np.array([[0.0, 0.0, 1.0]] * 2)
-    r = raytrace([s], P, S, wvl=0.55e-3)
+    r = raytrace([s], P, S, wvl=0.55)
     # axial ray sees the full m*lambda/d shift along x (normal is +z, no projection loss)
     np.testing.assert_allclose(r.S[1, 0, 0], 0.55, atol=1e-12)
     # off-axis ray: y-tilted normal projects the x-direction grating vector

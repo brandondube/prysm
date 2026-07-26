@@ -6,13 +6,18 @@ from prysm.mathops import np
 
 from .spencer_and_murty import raytrace, valid_mask
 from .launch import Field, Sampling, launch
-from ._resolve import resolve_wavelength, trace_context
+from ._resolve import compiled_surfaces, resolve_wavelength, trace_context
 
 
 def _resolve_fields(system, fields):
     """Fields to evaluate, defaulting to the system's FieldSet, else on-axis."""
     if fields is not None:
-        return list(fields)
+        resolved = list(fields)
+        if not resolved:
+            raise ValueError(
+                'an explicit fields iterable must contain at least one field; '
+                'pass fields=None for the implicit on-axis field')
+        return resolved
     sys_fields = getattr(system, 'fields', None)
     if sys_fields is not None and len(sys_fields) > 0:
         return list(sys_fields)
@@ -147,7 +152,7 @@ def _launch_trace(system, field, wvl, sampling, *, epd, pupil_z, aim_to,
     # NaN unaimed real-aiming rays so fans/spots truncate at vignetting.
     P, S = launch(system, field, wvl, sampling, epd=epd, pupil_z=pupil_z,
                   aim_to=aim_to, drop_unaimed=True)
-    trace = trace_fn(system, P, S, wvl)
+    trace = trace_fn(compiled_surfaces(system), P, S, wvl)
     valid = valid_mask(trace.status, trace.P[-1])
     return epd, P, S, trace, valid
 
@@ -272,8 +277,9 @@ def layout_records(system, fields=None, wavelength=None, sampling=None,
         sampling = Sampling.fan(n=int(sampling), axis=axis)
     records = []
     for field in fields:
-        trace = raytrace(system, *launch(system, field, wvl, sampling,
-                                         drop_unaimed=True), wvl)
+        trace = raytrace(compiled_surfaces(system),
+                         *launch(system, field, wvl, sampling,
+                                 drop_unaimed=True), wvl)
         records.append(LayoutRecord(field, trace,
                                     valid_mask(trace.status, trace.P[-1])))
     # Size glass from every valid field footprint; clipped rays are NaN'd out.

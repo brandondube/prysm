@@ -4,6 +4,8 @@ Covers the two-type split: the aperture spec mode conversions and validation,
 media-from-surfaces, the surface/aperture/decenter listings, and the IO
 vignetting-ignored warning.
 """
+import inspect
+
 import numpy as np
 import pytest
 
@@ -19,6 +21,8 @@ from prysm.x.raytracing.surfaces import Conic, Plane
 from prysm.x.raytracing import launch, Sampling, raytrace
 from prysm.x.raytracing.paraxial import entrance_pupil_z
 from prysm.x.raytracing.io._common import warn_vignetting_ignored
+from prysm.x.raytracing import analysis as analysis_module
+from prysm.x import raytracing as raytracing_package
 
 
 def _singlet(aperture=ApertureSpec.epd(20.0), with_object=None):
@@ -44,6 +48,25 @@ def _afocal(aperture):
                          reference=1, stop_index=1)
 
 
+def test_analysis_namespace_signatures_match_function_ports():
+    sys = _singlet()
+    names = (
+        'wavefront', 'spot_diagrams', 'ray_aberration_fans', 'opd_fans',
+        'distortion', 'field_curvature', 'lateral_color',
+        'chromatic_focal_shift', 'full_field',
+    )
+    for name in names:
+        direct = inspect.signature(getattr(analysis_module, name))
+        forwarded = inspect.signature(getattr(sys.analysis, name))
+        direct_params = list(direct.parameters.values())[1:]
+        assert list(forwarded.parameters.values()) == direct_params
+
+
+def test_package_all_names_are_exported():
+    for name in raytracing_package.__all__:
+        assert hasattr(raytracing_package, name), name
+
+
 # ---------- ApertureSpec ----------------------------------------------------
 
 def test_aperture_spec_modes_and_factories():
@@ -54,6 +77,29 @@ def test_aperture_spec_modes_and_factories():
     assert ApertureSpec.na(0.1, object_space=True).mode == NA_OBJECT
     with pytest.raises(ValueError, match='aperture mode'):
         ApertureSpec(1.0, mode='nonsense')
+    with pytest.raises(ValueError, match='positive'):
+        ApertureSpec.epd(0.0)
+
+
+def test_lensdata_has_exclusive_system_owner_and_copy_is_independent():
+    lens = LensData()
+    system = OpticalSystem(lens)
+    assert lens.system_owner is system
+    with pytest.raises(ValueError, match='already attached'):
+        OpticalSystem(lens)
+    clone = system.copy()
+    assert clone.lens is not lens
+    assert clone.lens.system_owner is clone
+
+
+def test_fieldset_rejects_heterogeneous_metadata():
+    with pytest.raises(ValueError, match='field kind'):
+        FieldSet([Field(), Field(0, 0, kind='height', object_z=0)])
+    with pytest.raises(ValueError, match='angular unit'):
+        FieldSet([Field(unit='deg'), Field(unit='rad')])
+    with pytest.raises(ValueError, match='object plane'):
+        FieldSet([Field(0, 0, kind='height', object_z=0),
+                  Field(0, 0, kind='height', object_z=1)])
 
 
 def test_aperture_epd_resolves_directly():
@@ -145,7 +191,7 @@ def test_object_space_na_marginal_fills_stop_at_na_radius():
     z_obj = float(sys[0].P[2])
     fld = Field(0.0, 0.0, kind='height', object_z=z_obj)
     P, S = launch(sys, fld, sys.wavelength(), Sampling.fan(n=11, axis='y'))
-    tr = raytrace(sys, P, S, sys.wavelength())
+    tr = sys.trace(P, S)
     y_stop = tr.P[sys.stop_index + 1, :, 1]  # +1: history offset for launch row
     # chief (center sample) crosses the stop on axis
     np.testing.assert_allclose(y_stop[len(y_stop) // 2], 0.0, atol=1e-9)
@@ -445,6 +491,18 @@ def test_solve_vignetting_factors_are_symmetric_on_axis():
     assert 0.05 < vals[0] < 0.5
 
 
+def test_raytrace_rejects_system_and_system_trace_resolves_wavelength():
+    sys = _singlet()
+    P, S = launch(sys, Field(), sys.wavelength(), Sampling.chief())
+    with pytest.raises(TypeError, match='compiled surface'):
+        raytrace(sys, P, S, sys.wavelength())
+    direct = raytrace(sys.to_surfaces(), P, S, sys.wavelength())
+    through_system = sys.trace(P, S)
+    np.testing.assert_allclose(through_system.P, direct.P)
+    np.testing.assert_allclose(through_system.S, direct.S)
+    np.testing.assert_allclose(through_system.OPL, direct.OPL)
+
+
 def test_set_vignetting_rim_rays_transmit_inside_limiting_aperture():
     from prysm.x.raytracing.spencer_and_murty import valid_mask
 
@@ -456,7 +514,7 @@ def test_set_vignetting_rim_rays_transmit_inside_limiting_aperture():
     # with the factors stored, an ordinary rim-sampled launch transmits in
     # full and its marginal rays ride just inside the limiting aperture
     P, S = launch(sys, sys.field(0), sys.wavelength(), Sampling.cross(n=11))
-    tr = raytrace(sys, P, S, sys.wavelength())
+    tr = sys.trace(P, S)
     assert valid_mask(tr.status).all()
     # history rows: launch(0), OBJECT(1), conic(2), rear plane(3), IMAGE(4)
     r_rear = np.hypot(tr.P[3, :, 0], tr.P[3, :, 1])

@@ -11,6 +11,7 @@ from prysm.conf import config
 from prysm.mathops import np
 
 from prysm.x.raytracing._diff_raytrace import _assemble_seeds
+from prysm.x.raytracing._resolve import compiled_surfaces
 
 from .backward_sweep import (
     _forward_with_intermediates,
@@ -69,7 +70,7 @@ class AdjointResult:
 
 
 def multi_objective_sensitivity(surfaces, P, S, wvl, seeds, heads, *,
-                                tol_sag=None):
+                                tol_sag=None, launch_tangents=None):
     """Assemble the M x P adjoint Jacobian: one forward pass, M backward sweeps.
 
     Parameters
@@ -94,6 +95,8 @@ def multi_objective_sensitivity(surfaces, P, S, wvl, seeds, heads, *,
     """
     seeds = list(seeds)
     heads = list(heads)
+    system = surfaces
+    surfaces = compiled_surfaces(system)
     n_params = len(seeds)
     trace, inter = _forward_with_intermediates(
         surfaces, P, S, wvl, tol_sag=tol_sag)
@@ -107,18 +110,19 @@ def multi_objective_sensitivity(surfaces, P, S, wvl, seeds, heads, *,
     J = np.zeros((len(heads), n_params), dtype=config.precision)
     nominals = {}
     for m, head in enumerate(heads):
-        cot = head.seed(trace, surfaces, wvl)
+        cot = head.seed(trace, system, wvl)
         grad = _backward_sweep(surfaces, trace, inter, Qdot_s, Rdot_s,
                                nprimedot_s, shape_params, sag_partial_fns,
-                               cot, shape_partials=shape_partials)
+                               cot, shape_partials=shape_partials,
+                               launch_tangents=launch_tangents)
         direct = getattr(head, 'direct_gradient', None)
         if direct is not None:
-            extra = direct(trace, surfaces, wvl, seeds)
+            extra = direct(trace, system, wvl, seeds)
             if extra is not None:
                 grad = grad + extra
         J[m] = grad
         if _head_has_value(head):
-            nominals[head.name] = head.value(trace, surfaces, wvl)
+            nominals[head.name] = head.value(trace, system, wvl)
 
     head_names = [getattr(h, 'name', f'head{m}') for m, h in enumerate(heads)]
     param_names = [getattr(s, 'name', f'param{p}') or f'param{p}'

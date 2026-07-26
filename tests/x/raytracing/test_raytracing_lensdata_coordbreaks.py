@@ -150,7 +150,7 @@ def test_ben_90_degree_fold_places_and_traces_centered():
     np.testing.assert_allclose(np.asarray(s[3].P), [0.0, 8.0, 10.0], atol=1e-9)
 
     P0, S0 = generate_collimated_ray_fan(7, maxr=2.0, z=-5.0)
-    r = raytrace(ld, P0, S0, wvl=0.55)
+    r = raytrace(ld.to_surfaces(), P0, S0, wvl=0.55)
     assert valid_mask(r.status, r.P[-1]).all()
     # frame fold agrees with the kernel reflection: rays land on the folded
     # eval plane and the chief lands at its origin

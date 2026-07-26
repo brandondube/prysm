@@ -18,7 +18,7 @@ from .opt import (
     _pupil_center_chief_index,
 )
 from .analysis import _apply_field_and_output, close_wavefront
-from ._resolve import trace_context
+from ._resolve import compiled_surfaces, trace_context
 from ._trace_grid import trace_cell
 from ._meta import object_space_index
 
@@ -56,7 +56,26 @@ class FieldTraceResult:
         return self.trace.status
 
 
-def surface_normals_from_trace(system, trace, wavelength):
+def _complex_index(material, wavelength, *, consumer):
+    nk = getattr(material, 'nk', None)
+    if not callable(nk):
+        raise TypeError(
+            f'{consumer} requires material objects with callable .nk(wvl_um); '
+            f'{material!r} only satisfies the geometric .n tier'
+        )
+    return complex(nk(wavelength))
+
+
+def _complex_object_space_index(surfaces, wavelength, *, consumer):
+    if (surfaces and sm._is_measurement_surf(surfaces[0].typ)
+            and surfaces[0].material is not None):
+        return _complex_index(surfaces[0].material, wavelength,
+                              consumer=consumer)
+    return 1.0 + 0.0j
+
+
+def surface_normals_from_trace(system, trace, wavelength, *,
+                               complex_indices=False):
     """Recompute per-surface normals, incidence cosines, and indices.
 
     The kernel computes the surface normal and the incidence angle internally
@@ -96,11 +115,17 @@ def surface_normals_from_trace(system, trace, wavelength):
     jj = len(surfaces)
     n_rays = P_hist.shape[1]
     cosI = np.empty((jj, n_rays), dtype=P_hist.dtype)
-    n0 = np.empty(jj, dtype=config.precision)
-    n1 = np.empty(jj, dtype=config.precision)
+    index_dtype = (config.precision_complex if complex_indices
+                   else config.precision)
+    n0 = np.empty(jj, dtype=index_dtype)
+    n1 = np.empty(jj, dtype=index_dtype)
     typ = np.empty(jj, dtype=int)
 
-    nj = object_space_index(surfaces, wavelength)
+    if complex_indices:
+        nj = _complex_object_space_index(
+            surfaces, wavelength, consumer='physical field tracing')
+    else:
+        nj = object_space_index(surfaces, wavelength)
     for j, surf in enumerate(surfaces):
         # incident direction on surface j is S_hist[j]; the intersection is
         # P_hist[j+1].  Transform both into the surface's local frame.
@@ -114,7 +139,12 @@ def surface_normals_from_trace(system, trace, wavelength):
         n0[j] = nj
         typ[j] = surf.typ
         if surf.typ == STYPE_REFRACT:
-            nprime = float(surf.material.n(wavelength))
+            if complex_indices:
+                nprime = _complex_index(
+                    surf.material, wavelength,
+                    consumer='physical field tracing')
+            else:
+                nprime = float(surf.material.n(wavelength))
             n1[j] = nprime
             nj = nprime
         else:
@@ -248,7 +278,7 @@ def unpolarized_amplitude(system, trace, wavelength):
 
     """
     cosI, n0, n1, typ = surface_normals_from_trace(
-        system, trace, wavelength)
+        system, trace, wavelength, complex_indices=True)
     surfaces = list(system)
     jj, n_rays = cosI.shape
     amp = np.ones(n_rays, dtype=config.precision)
@@ -281,8 +311,9 @@ def raytrace_field(system, P, S, wavelength):
         carrying the geometric trace and the per-ray amplitude.
 
     """
-    trace = raytrace(system, P, S, wavelength)
-    amplitude = unpolarized_amplitude(system, trace, wavelength)
+    surfaces = compiled_surfaces(system)
+    trace = raytrace(surfaces, P, S, wavelength)
+    amplitude = unpolarized_amplitude(surfaces, trace, wavelength)
     return FieldTraceResult(trace, amplitude)
 
 
@@ -436,6 +467,10 @@ class PupilField:
     def polarized(self):
         return self.P_matrix is not None
 
+    def waves(self):
+        """OPD in waves at this field's wavelength (both stored in microns)."""
+        return np.asarray(self.opd) / float(self.wavelength)
+
 
 def _pupil_coordinate_scale(ctx, P_xp, center):
     """Length scale for the sine-space pupil coordinate.
@@ -455,7 +490,7 @@ def _pupil_coordinate_scale(ctx, P_xp, center):
 def pupil_field(system, field, wavelength=None, *, epd=None, npupil=64,
                 stop_index=None, P_xp=None, P_img=None, axis_dir=None,
                 pupil_z=None,
-                output='length', reference='chief', polarized=False):
+                reference='chief', polarized=False):
     """Realize the complex pupil field on the exit-pupil reference sphere.
 
     Parameters
@@ -480,8 +515,6 @@ def pupil_field(system, field, wavelength=None, *, epd=None, npupil=64,
     pupil_z : float, optional
         launch-plane z; passed to launch().  Per-surface coatings are read from
         each Surface.coating attribute.
-    output : str
-        'length' (default) or 'waves' for the returned opd units.
     reference : str
         'chief' or 'centroid'.
 
@@ -503,13 +536,32 @@ def pupil_field(system, field, wavelength=None, *, epd=None, npupil=64,
         raise ValueError(
             f"reference must be 'chief' or 'centroid', got {reference!r}")
     sampling = Sampling.rect(n=npupil)
+    nominal_grid = sampling.build(0.5 * epd)
+    grid_count = len(nominal_grid)
+    if sampling.chief_index is None:
+        normalized = sampling.build(1.0)
+        trace_sampling = Sampling.points(
+            np.concatenate([
+                normalized,
+                np.zeros((1, 2), dtype=config.precision),
+            ], axis=0)
+        )
+        chief_index = grid_count
+        nominal_pupil_xy = np.concatenate([
+            nominal_grid,
+            np.zeros((1, 2), dtype=config.precision),
+        ], axis=0)
+    else:
+        trace_sampling = sampling
+        chief_index = sampling.chief_index
+        nominal_pupil_xy = nominal_grid
 
     def _trace_fn(presc, P, S, w):
         if polarized:
             return raytrace_prt(presc, P, S, w)
         return raytrace_field(presc, P, S, w)
 
-    record = trace_cell(system, field, wavelength, sampling,
+    record = trace_cell(system, field, wavelength, trace_sampling,
                         epd=epd, pupil_z=pupil_z, trace_fn=_trace_fn)
     valid = record.valid
     result = record.trace
@@ -523,12 +575,14 @@ def pupil_field(system, field, wavelength=None, *, epd=None, npupil=64,
         P_matrix_all = None
 
     # Nominal coordinates define the circle; vignetted coordinates match rays.
-    nominal_pupil_xy = sampling.build(0.5 * epd)
     pupil_xy = _apply_vignetting(nominal_pupil_xy, field)
 
-    # Anchor the reference sphere before applying the circular pupil mask.
+    # Anchor the reference sphere before applying the circular pupil mask.  An
+    # even rectangular grid carries a separately traced exact chief at the end;
+    # it defines the gauge but is not added to the requested grid samples.
     mask = valid if reference == 'centroid' else None
-    chief_index = _pupil_center_chief_index(pupil_xy, mask)
+    if reference == 'centroid':
+        chief_index = _pupil_center_chief_index(pupil_xy, mask)
 
     # Rect sampling fills a square; the entrance pupil is the inscribed circle.
     r_entrance = np.hypot(
@@ -560,29 +614,38 @@ def pupil_field(system, field, wavelength=None, *, epd=None, npupil=64,
                                      scale, axis_dir)
 
     # amplitude: geometric apodization (structured grid) times coating factor
-    entrance_xy = np.ascontiguousarray(pupil_xy).reshape(npupil, npupil, 2)
-    sphere_xy = np.stack([X_all, Y_all], axis=-1).reshape(npupil, npupil, 2)
-    valid_grid = valid.reshape(npupil, npupil)
+    entrance_xy = np.ascontiguousarray(
+        pupil_xy[:grid_count]).reshape(npupil, npupil, 2)
+    sphere_xy = np.stack(
+        [X_all[:grid_count], Y_all[:grid_count]], axis=-1
+    ).reshape(npupil, npupil, 2)
+    valid_grid = valid[:grid_count].reshape(npupil, npupil)
     amp_geo = amplitude_apodization(entrance_xy, sphere_xy,
                                     valid=valid_grid).reshape(-1)
     # Scalar fields fold coating loss into amplitude; PRT carries it in P_matrix.
     if coating_amp is None:
         amplitude_all = amp_geo
     else:
-        amplitude_all = amp_geo * coating_amp
+        amplitude_all = amp_geo * coating_amp[:grid_count]
 
     # local tilt removal on the compressed grid, per the closing call above
     x_pupil = pupil_xy[valid, 0] - pupil_xy[chief_index, 0]
     y_pupil = pupil_xy[valid, 1] - pupil_xy[chief_index, 1]
     tilt_field = field if field.kind == 'angle' else None
-    opd, _ = _apply_field_and_output(opd, x_pupil, y_pupil, tilt_field, output,
-                                     wavelength)
+    opd, _ = _apply_field_and_output(opd, x_pupil, y_pupil, tilt_field,
+                                     'length', wavelength)
+    valid_indices = np.nonzero(valid)[0]
+    grid_valid = valid[:grid_count]
+    keep_grid_samples = valid_indices < grid_count
+    opd_um = opd[keep_grid_samples] * 1e3
 
     n_image = abs(float(n_image))
-    P_matrix = None if P_matrix_all is None else P_matrix_all[valid]
+    P_matrix = (None if P_matrix_all is None
+                else P_matrix_all[valid][keep_grid_samples])
     return PupilField(
-        X=X_all[valid], Y=Y_all[valid], amplitude=amplitude_all[valid],
-        opd=opd, wavelength=wavelength, efl=scale / n_image, n_image=n_image,
+        X=X_all[:grid_count][grid_valid], Y=Y_all[:grid_count][grid_valid],
+        amplitude=amplitude_all[:grid_count][grid_valid],
+        opd=opd_um, wavelength=wavelength, efl=scale / n_image, n_image=n_image,
         P_xp=(None if P_xp is None else np.asarray(P_xp)),
         P_img=P_img, P_matrix=P_matrix)
 
@@ -606,7 +669,7 @@ def _resample_grid(pf, npix, margin):
     opd_grid = interpolate.griddata(pts, opd, (xg, yg), method='cubic',
                                     fill_value=0.0)
     opd_grid[~np.isfinite(opd_grid)] = 0.0
-    phase_nm = opd_grid * 1.0e6   # length (mm) -> nm
+    phase_nm = opd_grid * 1.0e3   # OPD (um) -> nm
     return finite, pts, (xg, yg), dx, phase_nm
 
 
@@ -633,7 +696,7 @@ def pupil_field_to_wavefront(pf, *, npix=256, margin=1.05,
     Parameters
     ----------
     pf : PupilField
-        scattered samples from pupil_field (opd must be in length units).
+        scattered samples from pupil_field (opd is in microns).
     npix : int
         output grid is npix by npix.
     margin : float
@@ -798,15 +861,17 @@ def raytrace_prt(system, P, S, wavelength):
         the geometric trace and the per-ray (N, 3, 3) complex P matrix.
 
     """
-    trace = raytrace(system, P, S, wavelength)
-    surfaces = list(system)
+    surfaces = compiled_surfaces(system)
+    trace = raytrace(surfaces, P, S, wavelength)
+    surfaces = list(surfaces)
     P_hist = trace.P
     S_hist = trace.S
     n_rays = P_hist.shape[1]
     Pmat = np.broadcast_to(np.eye(3, dtype=config.precision_complex),
                            (n_rays, 3, 3)).copy()
 
-    nj = object_space_index(surfaces, wavelength)
+    nj = _complex_object_space_index(
+        surfaces, wavelength, consumer='polarization ray tracing')
     for j, surf in enumerate(surfaces):
         coating = surf.coating
         k_in = _unit(S_hist[j])
@@ -833,7 +898,9 @@ def raytrace_prt(system, P, S, wavelength):
         p_out = np.cross(k_out, s)
 
         if surf.typ == STYPE_REFRACT:
-            n1 = float(surf.material.n(wavelength))
+            n1 = _complex_index(
+                surf.material, wavelength,
+                consumer='polarization ray tracing')
         else:
             n1 = nj
         a_s, a_p = interface_coefficients(nj, n1, cosI, surf.typ,

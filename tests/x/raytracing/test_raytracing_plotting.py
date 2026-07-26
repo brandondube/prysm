@@ -527,8 +527,11 @@ def test_lensdata_add_aperture_features_propagate_to_compiled_surface():
     surfaces = ld.to_surfaces()
     assert surfaces[1].aperture.features == ap.features  # [0] is OBJECT
     assert surfaces[2].aperture.features == ()
-    # the features survive a copy of the LensData
-    assert ld.copy().to_surfaces()[1].aperture.features == ap.features
+    # parameter models survive as independent deep copies.
+    copied = ld.copy().to_surfaces()[1].aperture.features[0]
+    assert type(copied) is type(ap.features[0])
+    assert vars(copied) == vars(ap.features[0])
+    assert copied is not ap.features[0]
 
 
 def test_plot_optics_draws_mirror_optical_surface_by_default():

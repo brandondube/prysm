@@ -92,7 +92,7 @@ def test_closing_matches_reference_sphere_root_to_machine_precision():
     wvl = ld.wavelength()
     P, S = launch(ld, Field(0.0, 0.0, kind='angle'), wvl,
                   Sampling.fan(n=41, axis='y'), epd=ld.epd)
-    trace = raytrace(ld, P, S, wvl)
+    trace = ld.trace(P, S, wvl)
     chief = P.shape[0] // 2
     C = trace.P[-1, chief]
     P_xp = np.asarray(ld.exit_pupil(wvl))
@@ -121,7 +121,7 @@ def test_closing_is_finite_and_signed_at_telecentric_kappa_zero():
 
     fld = Field(3.0, 0.0, kind='angle')
     P, S = launch(ld, fld, wvl, Sampling.fan(n=31, axis='y'), epd=ld.epd)
-    trace = raytrace(ld, P, S, wvl)
+    trace = ld.trace(P, S, wvl)
     chief = P.shape[0] // 2
     C = trace.P[-1, chief]
     opd = hopkins_eic_closing(trace.P, trace.S, trace.OPL,
@@ -150,7 +150,7 @@ def test_closing_kappa_zero_is_limit_of_small_curvature():
     wvl = ld.wavelength()
     P, S = launch(ld, Field(0.0, 0.0, kind='angle'), wvl,
                   Sampling.fan(n=21, axis='y'), epd=ld.epd)
-    trace = raytrace(ld, P, S, wvl)
+    trace = ld.trace(P, S, wvl)
     chief = P.shape[0] // 2
     C = trace.P[-1, chief]
     opd0 = hopkins_eic_closing(trace.P, trace.S, trace.OPL, center=C,

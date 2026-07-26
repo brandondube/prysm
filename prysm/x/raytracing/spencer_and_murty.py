@@ -1,5 +1,7 @@
 """Spencer & Murty's General Ray-Trace algorithm."""
 
+from prysm.conf import config
+
 # Obsolete numpy-only fast path, kept as a note for archaeology.
 # from numpy.core.umath_tests import inner1d
 
@@ -523,9 +525,34 @@ def raytrace(surfaces, P, S, wvl, tol_sag=None, keep_intermediates=False):
         position, direction, OPL, and status histories.
 
     """
+    if hasattr(surfaces, 'to_surfaces'):
+        raise TypeError(
+            'raytrace requires a compiled surface sequence; call '
+            'system.trace(...) for an OpticalSystem or pass '
+            'lens.to_surfaces() explicitly'
+        )
+    try:
+        len(surfaces)
+    except TypeError as e:
+        raise TypeError('raytrace requires a sized compiled surface sequence') from e
+
     # Analytic misses and Newton non-convergence get distinct status codes.
     P = np.asarray(P)
     S = np.asarray(S)
+    for name, arr in (('P', P), ('S', S)):
+        dtype = arr.dtype
+        floating = getattr(dtype, 'is_floating_point', None)
+        if floating is None:
+            try:
+                floating = bool(np.issubdtype(dtype, np.floating))
+            except (AttributeError, TypeError):
+                floating = False
+        if not floating:
+            arr = arr.astype(config.precision)
+            if name == 'P':
+                P = arr
+            else:
+                S = arr
     # promote 1D single-ray inputs to 2D batch shape for the duration of the
     # trace; squeeze the trailing batch dim back off before returning
     squeeze_batch = (P.ndim == 1)

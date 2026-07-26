@@ -1,5 +1,7 @@
 """Unified surface aperture: clip, drawn extent, substrate, and edge features."""
 
+import copy
+
 from prysm.mathops import np
 
 
@@ -210,7 +212,6 @@ class FlatBackSubstrate(Substrate):
         ploty = np.asarray(ploty)
         ref = _reference_coordinate(surf, ploty, self.reference)
         # one-sample sag + slope at the reference coordinate
-        is_y = True
         coord = np.asarray([ref])
         xpt, ypt = (np.zeros_like(coord), coord)
         z, n_hat = surf.sag_and_normal(xpt, ypt)
@@ -383,9 +384,12 @@ class Aperture:
         return self._solved_at_version != version
 
     def copy(self):
-        """A shallow copy; the extent solve-stamp travels with it."""
-        new = Aperture(self.clip, extent=self.extent, oversize=self.oversize,
-                       substrate=self.substrate, features=self.features)
+        """A deep parameter copy; the extent solve-stamp travels with it."""
+        new = Aperture(copy.deepcopy(self.clip),
+                       extent=copy.deepcopy(self.extent),
+                       oversize=self.oversize,
+                       substrate=copy.deepcopy(self.substrate),
+                       features=copy.deepcopy(self.features))
         new._user_extent = self._user_extent
         new._solved_at_version = self._solved_at_version
         return new

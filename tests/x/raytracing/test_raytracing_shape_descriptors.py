@@ -13,6 +13,7 @@ table.  These tests pin two properties:
 import numpy as np
 import pytest
 
+from prysm.x import materials
 from prysm.x.raytracing.lensdata import LensData
 from prysm.x.raytracing.surfaces import (
     Shape,
@@ -73,7 +74,7 @@ def test_from_params_round_trips(shape):
 def test_lensdata_row_round_trips(shape):
     """A LensData row flattens the DOFs and rebuilds the same shape."""
     ld = LensData()
-    ld.add(shape, thickness=5.0)
+    ld.add(shape, thickness=5.0, material=materials.air)
     rebuilt = ld.rows[1].build_shape()   # rows[0] is the OBJECT endpoint
     assert type(rebuilt) is type(shape)
     _params_equal(shape.params or {}, rebuilt.params or {})
@@ -108,7 +109,8 @@ class _ToyParabola(Shape):
 def test_adding_a_shape_edits_one_place():
     """A self-describing shape is accepted by LensData with no other edits."""
     ld = LensData()
-    ld.add(_ToyParabola(1 / 25.0), thickness=2.0)
+    ld.add(_ToyParabola(1 / 25.0), thickness=2.0,
+           material=materials.air)
     row = ld.rows[1]                     # rows[0] is the OBJECT endpoint
     assert row.shape_kind is _ToyParabola
     assert 'curvature' in row.categories
@@ -131,4 +133,4 @@ def test_undescribed_shape_raises_clear_error():
     """A shape without from_params cannot be carried as a row."""
     ld = LensData()
     with pytest.raises(TypeError, match='not registered with LensData'):
-        ld.add(_UndescribedShape())
+        ld.add(_UndescribedShape(), material=materials.air)

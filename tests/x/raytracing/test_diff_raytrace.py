@@ -13,7 +13,7 @@ from prysm.x.raytracing._diff_raytrace import (
     seed_tilt,
     seed_index,
 )
-from prysm.x.raytracing.phase import PhaseFunction, LinearGrating
+from prysm.x.raytracing.opl import OPLFunc, LinearGrating
 from prysm.x.raytracing.adjoint.backward_sweep import adjoint_gradient
 from tests.x.raytracing.surface_helpers import conic, plane, even_asphere
 from tests.x.raytracing.differential_helpers import (
@@ -133,22 +133,22 @@ def test_all_seeds_simultaneously():
 # ---------- diffractive (grating) surfaces in the AD stacks -----------------
 
 
-class _RadialPhase(PhaseFunction):
-    """Nonlinear diffractive phase with nonzero Hessian."""
+class _RadialOPL(OPLFunc):
+    """Nonlinear OPL function with nonzero Hessian."""
 
     def __init__(self, a, bx=0.0):
         self.a = a
         self.bx = bx
 
-    def phase(self, x, y):
+    def opl(self, x, y, wavelength):
         return 0.5 * self.a * (x * x + y * y) + self.bx * x
 
-    def phase_and_gradient(self, x, y):
+    def opl_and_gradient(self, x, y, wavelength):
         x = np.asarray(x, float)
         y = np.asarray(y, float)
-        return self.phase(x, y), self.a * x + self.bx, self.a * y
+        return self.opl(x, y, wavelength), self.a * x + self.bx, self.a * y
 
-    def phase_hessian(self, x, y):
+    def opl_hessian(self, x, y, wavelength):
         x = np.asarray(x, float)
         o = np.full(x.shape, self.a)
         z = np.zeros_like(x)
@@ -179,8 +179,8 @@ def grating_fd(phase, over_plus, over_minus, P, S, h, **mk):
 
 
 # linear and radial phase fixtures
-_LINEAR = LinearGrating(5.0, [1.0, 0.0], 1)
-_RADIAL = _RadialPhase(2e-4, bx=3e-4)
+_LINEAR = LinearGrating(5e-3, [1.0, 0.0], 1)
+_RADIAL = _RadialOPL(2e-4, bx=3e-4)
 
 
 @pytest.mark.parametrize('phase', [_LINEAR, _RADIAL])

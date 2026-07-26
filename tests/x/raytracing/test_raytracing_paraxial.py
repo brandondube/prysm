@@ -23,7 +23,7 @@ from prysm.x.raytracing.paraxial import (
     local_y_vertex_curvature,
 )
 from prysm.x.raytracing._meta import image_space_index
-from prysm.x.raytracing.auto import rc_prescription_from_efl_bfl_sep
+from prysm.x.raytracing.auto import RitcheyChretien
 
 
 # ---------- system_matrix sanity ----------
@@ -134,7 +134,10 @@ def test_image_distance_no_power_raises():
 def test_paraxial_image_distance_rc_telescope_lands_on_bfl():
     """ABCD image distance places the RC paraxial image at the design BFL."""
     efl, bfl, sep = 1500.0, 250.0, 400.0
-    c1, c2, k1, k2 = rc_prescription_from_efl_bfl_sep(efl, bfl, sep)
+    p = RitcheyChretien(
+        efl=efl, bfl=bfl, separation=sep).prescription()
+    c1, c2 = p.primary_curvature, p.secondary_curvature
+    k1, k2 = p.primary_conic, p.secondary_conic
     P_pm = np.array([0.0, 0.0, 0.0])
     P_sm = np.array([0.0, 0.0, -sep])
     rx = [
@@ -210,7 +213,10 @@ def test_object_index_comes_from_object_surface_material():
 def test_efl_rc_telescope_matches_design():
     """RC EFL must match the value used to derive the prescription."""
     efl_design, bfl, sep = 1500.0, 250.0, 400.0
-    c1, c2, k1, k2 = rc_prescription_from_efl_bfl_sep(efl_design, bfl, sep)
+    p = RitcheyChretien(
+        efl=efl_design, bfl=bfl, separation=sep).prescription()
+    c1, c2 = p.primary_curvature, p.secondary_curvature
+    k1, k2 = p.primary_conic, p.secondary_conic
     rx = [
         conic(c1, k1, 'refl', np.array([0., 0., 0.])),
         conic(c2, k2, 'refl', np.array([0., 0., -sep])),
@@ -219,6 +225,61 @@ def test_efl_rc_telescope_matches_design():
     # signed: the RC design convention may yield negative depending on
     # mirror sign conventions; magnitude is what matches the design value.
     np.testing.assert_allclose(abs(efl), efl_design, rtol=1e-9)
+
+
+def test_rc_model_supports_partial_and_primary_geometry_constraints():
+    partial = RitcheyChretien(efl=1500.0)
+    assert not partial.complete
+    assert partial.degrees_of_freedom == 2
+    assert 'bfl' in partial.unresolved
+    with pytest.raises(ValueError, match='partially determined'):
+        partial.prescription()
+
+    reference = RitcheyChretien(efl=1500.0, bfl=250.0, separation=400.0)
+    rebuilt = RitcheyChretien(
+        efl=reference.efl,
+        primary_focal_length=reference.primary_focal_length,
+        primary_to_focus=reference.primary_to_focus,
+    )
+    assert rebuilt.complete
+    np.testing.assert_allclose(rebuilt.bfl, reference.bfl)
+    np.testing.assert_allclose(rebuilt.separation, reference.separation)
+
+    # Mirror radii plus separation are another complete input basis.
+    radii = RitcheyChretien(
+        separation=reference.separation,
+        primary_radius=reference.primary_radius,
+        secondary_radius=reference.secondary_radius,
+    )
+    assert radii.complete
+    np.testing.assert_allclose(radii.efl, reference.efl)
+    np.testing.assert_allclose(radii.bfl, reference.bfl)
+
+
+def test_rc_model_exposes_both_discrete_layout_branches():
+    reference = RitcheyChretien(efl=1500.0, bfl=250.0, separation=400.0)
+    ambiguous = RitcheyChretien(
+        efl=reference.efl,
+        primary_to_focus=reference.primary_to_focus,
+        secondary_radius=reference.secondary_radius,
+    )
+    assert not ambiguous.complete
+    assert ambiguous.degrees_of_freedom == 0
+    assert len(ambiguous.solutions) == 2
+    assert any(
+        np.isclose(solution.bfl, reference.bfl)
+        and np.isclose(solution.separation, reference.separation)
+        for solution in ambiguous.solutions)
+    with pytest.raises(ValueError, match='2 discrete solutions'):
+        ambiguous.prescription()
+
+
+def test_rc_model_reports_redundant_constraint_conflict():
+    with pytest.raises(ValueError, match='conflicts'):
+        RitcheyChretien(
+            efl=1500.0, bfl=250.0, separation=400.0,
+            secondary_magnification=99.0,
+        )
 
 
 def test_local_vertex_curvature_helpers_report_astigmatic_sections():
@@ -267,6 +328,20 @@ def test_image_space_index_requires_explicit_image_surface():
         plane(interaction='eval', P=np.array([0., 0., 100.])),
     ]
     assert image_space_index(rx_with_image, 0.55) == pytest.approx(n_glass)
+
+
+def test_image_space_index_walks_past_trailing_eval_planes():
+    glass = materials.ConstantMaterial(1.5)
+    rx = [
+        plane(interaction='object', P=np.array([0.0, 0.0, 0.0]),
+              material=materials.air),
+        plane(interaction='refr', P=np.array([0.0, 0.0, 1.0]),
+              material=glass),
+        plane(interaction='eval', P=np.array([0.0, 0.0, 2.0])),
+        plane(interaction='eval', P=np.array([0.0, 0.0, 3.0])),
+        plane(interaction='image', P=np.array([0.0, 0.0, 4.0])),
+    ]
+    assert image_space_index(rx, 0.55) == pytest.approx(1.5)
 
 
 # ---------- back focal length ----------

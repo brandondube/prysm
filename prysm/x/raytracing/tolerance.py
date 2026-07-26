@@ -39,15 +39,21 @@ def _resolve_slot(lensdata, category, surface, component=None):
 class Perturbation:
     """A LensData DOF slot plus a sampling distribution."""
 
-    __slots__ = ('name', 'lensdata', 'slot', 'sampler', 'nominal', 'step')
+    __slots__ = ('name', 'lensdata', 'slot', 'sampler', 'nominal', 'step',
+                 'variance', 'distribution')
 
-    def __init__(self, lensdata, slot, sampler, nominal, step, name=''):
+    def __init__(self, lensdata, slot, sampler, nominal, step, *, variance,
+                 distribution, name=''):
         self.name = str(name)
         self.lensdata = _as_lens(lensdata)
         self.slot = slot
         self.sampler = sampler  # callable(rng) -> sampled float
         self.nominal = float(nominal)
         self.step = float(step)
+        self.variance = float(variance)
+        if self.variance < 0.0 or not bool(np.isfinite(self.variance)):
+            raise ValueError('perturbation variance must be finite and nonnegative')
+        self.distribution = str(distribution)
 
     def set(self, value):
         """Set the targeted DOF and invalidate the compiled system."""
@@ -84,7 +90,8 @@ class Perturbation:
         def sampler(rng):
             return float(rng.normal(nom, sigma))
 
-        return cls(lensdata, slot, sampler, nom, sigma, name)
+        return cls(lensdata, slot, sampler, nom, sigma,
+                   variance=sigma * sigma, distribution='normal', name=name)
 
     @classmethod
     def normal_relative(cls, lensdata, category, surface, sigma_rel, name='',
@@ -103,7 +110,8 @@ class Perturbation:
         def sampler(rng):
             return float(rng.normal(nom, sigma))
 
-        return cls(lensdata, slot, sampler, nom, sigma, name)
+        return cls(lensdata, slot, sampler, nom, sigma,
+                   variance=sigma * sigma, distribution='normal', name=name)
 
     @classmethod
     def uniform(cls, lensdata, category, surface, half_width, name='',
@@ -117,7 +125,8 @@ class Perturbation:
         def sampler(rng):
             return float(rng.uniform(nom - hw, nom + hw))
 
-        return cls(lensdata, slot, sampler, nom, hw, name)
+        return cls(lensdata, slot, sampler, nom, hw,
+                   variance=hw * hw / 3.0, distribution='uniform', name=name)
 
     @classmethod
     def triangular(cls, lensdata, category, surface, half_width, name='',
@@ -131,7 +140,8 @@ class Perturbation:
         def sampler(rng):
             return float(rng.triangular(nom - hw, nom, nom + hw))
 
-        return cls(lensdata, slot, sampler, nom, hw, name)
+        return cls(lensdata, slot, sampler, nom, hw,
+                   variance=hw * hw / 6.0, distribution='triangular', name=name)
 
 
 # ---------- operand_as_merit ------------------------------------------------

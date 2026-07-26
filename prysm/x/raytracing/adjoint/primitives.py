@@ -139,7 +139,7 @@ def adj_reflect(S_loc, n_hat, dSprime_bar):
 
 # ---------- 1.4b diffract ---------------------------------------------------
 
-def adj_diffract(S_specular, n_hat, n_post, wvl, grad, hess, dSprime_bar):
+def adj_diffract(S_specular, n_hat, n_post, grad, hess, dSprime_bar):
     """Adjoint of the diffractive bend.
 
     Returns cotangents for the specular direction, normal, intersection point,
@@ -151,12 +151,10 @@ def adj_diffract(S_specular, n_hat, n_post, wvl, grad, hess, dSprime_bar):
         nominal specular direction and unit normal.
     n_post : float
         following index (the bend kick divides by it).
-    wvl : float
-        wavelength.
     grad : tuple of ndarray
-        (gx, gy) nominal in-plane phase gradient at the intersection, each (N,).
+        (gx, gy) nominal in-plane OPL gradient at the intersection, each (N,).
     hess : tuple of ndarray
-        (gxx, gxy, gyy) nominal phase Hessian, each (N,).
+        (gxx, gxy, gyy) nominal OPL Hessian, each (N,).
     dSprime_bar : ndarray, (N, 3)
         cotangent of the diffracted direction.
 
@@ -172,7 +170,7 @@ def adj_diffract(S_specular, n_hat, n_post, wvl, grad, hess, dSprime_bar):
     gx, gy = grad
     gxx, gxy, gyy = hess
     G = np.stack([gx, gy, np.zeros_like(gx)], axis=1)           # (N, 3)
-    a = wvl / n_post
+    a = 1.0 / n_post
 
     # --- nominal forward intermediates
     s_dot_n = row_dot(S_specular, n_hat)
@@ -196,11 +194,11 @@ def adj_diffract(S_specular, n_hat, n_post, wvl, grad, hess, dSprime_bar):
     # --- tan_sq = s_diff_tan . s_diff_tan
     s_diff_tan_bar = s_diff_tan_bar + 2.0 * tan_sq_bar[:, None] * s_diff_tan
 
-    # --- s_diff_tan = s_specular_tan + a G_tan, a = wvl/n_post
+    # --- s_diff_tan = s_specular_tan + a G_tan, a = 1/n_post
     s_specular_tan_bar = s_diff_tan_bar
     G_tan_bar = a * s_diff_tan_bar
     da_bar = row_dot(G_tan, s_diff_tan_bar)
-    n_post_bar = float(np.sum(da_bar * (-wvl / (n_post * n_post))))
+    n_post_bar = float(np.sum(da_bar * (-1.0 / (n_post * n_post))))
 
     # --- G_tan = G - G_dot_n n_hat
     dG_bar = G_tan_bar.copy()

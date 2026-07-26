@@ -207,6 +207,108 @@ def writable_shape_or_raise(shape_kind, is_eval, writer):
     )
 
 
+def aperture_export_radii(aperture, *, allow_annular):
+    """Return strict `(outer, inner)` clip radii for a supported aperture."""
+    from ..aperture import AnnularClip, CircularClip
+    clip = aperture.clip
+    if clip is None:
+        if (aperture.extent is not None or aperture.substrate is not None
+                or aperture.features):
+            raise ValueError('cosmetic extent/substrate/features are unsupported')
+        return None, None
+    if isinstance(clip, CircularClip):
+        if clip.x0 != 0.0 or clip.y0 != 0.0:
+            raise ValueError('decentered circular clips are unsupported')
+        inner = None
+        outer = clip.radius
+    elif isinstance(clip, AnnularClip) and allow_annular:
+        if clip.x0 != 0.0 or clip.y0 != 0.0:
+            raise ValueError('decentered annular clips are unsupported')
+        inner = clip.inner_radius
+        outer = clip.outer_radius
+    else:
+        raise ValueError(
+            f'{type(clip).__name__} clips are unsupported by this writer')
+    if aperture.substrate is not None or aperture.features:
+        raise ValueError('substrate and edge features are unsupported')
+    extent = aperture.extent
+    if extent is not None:
+        if (float(extent.outer_radius) != float(outer)
+                or float(extent.inner_radius) != float(inner or 0.0)):
+            raise ValueError('drawn extent differs from the exported clip')
+    return float(outer), None if inner is None else float(inner)
+
+
+def preflight_export(system, writer):
+    """Aggregate every semantic feature a strict writer cannot represent."""
+    from ..lensdata import CoordBreak, SurfaceRow
+    from ..spencer_and_murty import STYPE_REFLECT, _is_measurement_surf
+    from ..surfaces import Conic, Plane, Sphere, _map_stype
+    from ... import materials
+
+    if writer not in ('write_zmx', 'write_seq'):
+        raise ValueError(f'unknown writer {writer!r}')
+    allow_annular = writer == 'write_seq'
+    problems = []
+    lens = getattr(system, 'lens', system)
+    rows = getattr(lens, 'rows', None)
+    if rows is None:
+        raise TypeError(f'{writer} requires LensData or OpticalSystem')
+
+    for row_index, row in enumerate(rows):
+        if isinstance(row, CoordBreak):
+            allowed = ('basic',) if writer == 'write_zmx' else ('basic', 'dar')
+            if row.kind not in allowed:
+                problems.append(
+                    f'row {row_index}: CoordBreak kind {row.kind!r}')
+            if row.ret_target is not None:
+                problems.append(f'row {row_index}: CoordBreak ret_target')
+            continue
+        if not isinstance(row, SurfaceRow):
+            problems.append(f'row {row_index}: unknown row type')
+            continue
+        stype = _map_stype(row.typ)
+        if (not _is_measurement_surf(stype)
+                and row.shape_kind not in (Conic, Plane, Sphere)):
+            problems.append(
+                f'row {row_index}: shape {row.shape_kind.__name__}')
+        if row.grating is not None:
+            problems.append(f'row {row_index}: OPLFunc/grating')
+        if row.coating is not None:
+            problems.append(f'row {row_index}: coating stack')
+        try:
+            aperture_export_radii(row.aperture,
+                                  allow_annular=allow_annular)
+        except ValueError as exc:
+            problems.append(f'row {row_index}: aperture ({exc})')
+        if stype != STYPE_REFLECT and row.material not in (
+                None, materials.air, materials.vacuum):
+            page = getattr(row.material, 'page_info', None)
+            if not page or not page.get('page'):
+                problems.append(
+                    f'row {row_index}: material has no external catalog name')
+
+    aperture = getattr(system, 'aperture', None)
+    if aperture is not None and getattr(aperture, 'mode', None) != 'EPD':
+        problems.append(
+            f'system aperture mode {getattr(aperture, "mode", None)!r}')
+    fields = list(getattr(system, 'fields', ()) or ())
+    for i, field in enumerate(fields):
+        if field.kind == 'angle' and field.unit != 'deg':
+            problems.append(f'field {i}: angular unit {field.unit!r}')
+        if writer == 'write_seq' and field.kind != 'angle':
+            problems.append(f'field {i}: object-height field')
+        if writer == 'write_zmx' and field.vignetting is not None:
+            problems.append(f'field {i}: vignetting factors')
+    extras = getattr(system, 'extras', None) or {}
+    unsupported_extras = sorted(set(extras) - {'VERS', 'MODE'})
+    if unsupported_extras:
+        problems.append('system extras: ' + ', '.join(unsupported_extras))
+    if problems:
+        raise NotImplementedError(
+            f'{writer} cannot losslessly export: ' + '; '.join(problems))
+
+
 def parse_float(token):
     """Parse a numeric token from a prescription file.
 

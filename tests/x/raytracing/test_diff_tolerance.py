@@ -6,8 +6,8 @@ from prysm.x import materials
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
-from prysm.x.raytracing.surfaces import Conic, Plane
-from prysm.x.raytracing.spencer_and_murty import _is_measurement_surf, raytrace
+from prysm.x.raytracing.surfaces import Conic
+from prysm.x.raytracing.spencer_and_murty import _is_measurement_surf
 from prysm.x.raytracing.paraxial import paraxial_image_distance
 from prysm.x.raytracing.design import WavefrontRMS
 from prysm.x.raytracing.tolerance import (
@@ -89,7 +89,7 @@ def fd_rms_sensitivities(ld, P, S, perturbations):
     op = WavefrontRMS()
 
     def merit(prescription):
-        return float(op.value(raytrace(prescription, P, S, WVL),
+        return float(op.value(prescription.trace(P, S, WVL),
                               prescription, WVL))
 
     table = sensitivity_table(ld, perturbations, merit)
@@ -188,21 +188,29 @@ def test_shape_seed_resolves_surface_index_past_coordbreak():
     ld = singlet_cb()
     seed = seed_from_perturbation(
         Perturbation.normal(ld, 'curvature', 3, 1e-6, name='c2'))
-    assert seed.shape == (2, 'c')
+    assert seed.shapes == ((2, 'c', 1.0),)
 
 
 def test_conic_seed_names_k_dof():
     ld = singlet()
     seed = seed_from_perturbation(
         Perturbation.normal(ld, 'conic', 1, 1e-5, name='k2'))
-    assert seed.shape == (1, 'k')
+    assert seed.shapes == ((1, 'k', 1.0),)
+
+
+def test_shape_seed_expands_through_pickup_dependency():
+    ld = singlet()
+    ld.opt.pickup('curvature', 2, from_surface=1, scale=-1.0)
+    seed = seed_from_perturbation(
+        Perturbation.normal(ld, 'curvature', 1, 1e-6, name='c1'))
+    assert seed.shapes == ((1, 'c', 1.0), (2, 'c', -1.0))
 
 
 def test_pose_perturbation_has_no_shape_activation():
     ld = singlet()
     seed = seed_from_perturbation(
         Perturbation.normal(ld, 'thickness', 1, 1e-5, name='t0'))
-    assert seed.shape is None
+    assert seed.shapes == ()
     assert seed.pose  # fans out to downstream surfaces
 
 

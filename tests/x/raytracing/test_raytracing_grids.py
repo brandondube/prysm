@@ -39,6 +39,8 @@ def test_ray_fans_shape_and_indexing():
     assert npup == grid.pupil_x.shape[-1] == 21
     assert grid.pupil_x.shape == grid.pupil_y.shape == (nf, npup)
     assert grid.y.shape == grid.x.shape
+    assert grid.unit == 'mm'
+    assert grid.reference == 'chief'
     # omitting fields/wavelengths pulls them from the OpticalSystem
     np.testing.assert_allclose(sorted(grid.wavelengths),
                                sorted([0.4861, 0.5876, 0.6563]))
@@ -104,6 +106,8 @@ def test_opd_fans_shape_and_chief_zero():
     grid = opd_fans(sys, nrays=21)
     assert isinstance(grid, OPDFanGrid)
     assert grid.x.shape == (2, 3, 21)
+    assert grid.unit == 'waves'
+    assert grid.reference == 'chief'
     # OPD is chief-referenced: the central ray is ~0 in every panel
     ci = int(np.argmin(np.abs(grid.pupil_x[0])))
     assert np.nanmax(np.abs(grid.x[:, :, ci])) < 1e-9
@@ -119,7 +123,9 @@ def test_spot_diagrams_shape_and_validity():
     nf, nw, n = grid.x.shape
     assert (nf, nw) == (2, 3)
     assert grid.valid.shape == grid.x.shape
-    assert grid.reference.shape == (2, 3, 2)
+    assert grid.reference_xy.shape == (2, 3, 2)
+    assert grid.reference == 'centroid'
+    assert grid.unit == 'mm'
     assert grid.valid.all()
 
 
@@ -128,7 +134,7 @@ def test_spot_reference_recovers_absolute_landing():
     sys = _singlet_system()
     grid = spot_diagrams(sys, sampling=Sampling.hex(nrings=3),
                          reference='centroid')
-    absolute = grid.x[..., :] + grid.reference[..., 0:1]
+    absolute = grid.x[..., :] + grid.reference_xy[..., 0:1]
     assert np.isfinite(absolute).all()
 
 

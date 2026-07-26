@@ -22,7 +22,7 @@ from prysm.x.raytracing.spencer_and_murty import (
     STATUS_CLIP, STATUS_MISS,
 )
 from prysm.x.raytracing.paraxial import paraxial_image_distance
-from prysm.x.raytracing.auto import rc_prescription_from_efl_bfl_sep
+from prysm.x.raytracing.auto import RitcheyChretien
 
 
 # ---------- aim_rays: single-ray (1-row bundle) ----------
@@ -323,7 +323,10 @@ def test_rc_prescription_paraxial_image_at_bfl():
     """The paraxial image of an RC built from (efl, bfl, sep) lies at
     sm_vertex + bfl on the optical axis."""
     efl, bfl, sep = 1500.0, 250.0, 400.0
-    c1, c2, k1, k2 = rc_prescription_from_efl_bfl_sep(efl, bfl, sep)
+    design = RitcheyChretien(efl=efl, bfl=bfl, separation=sep)
+    p = design.prescription()
+    c1, c2 = p.primary_curvature, p.secondary_curvature
+    k1, k2 = p.primary_conic, p.secondary_conic
     P_pm = np.array([0.0, 0.0, 0.0])
     P_sm = np.array([0.0, 0.0, -sep])
     P_img = np.array([0.0, 0.0, bfl - sep])  # bfl measured from SM

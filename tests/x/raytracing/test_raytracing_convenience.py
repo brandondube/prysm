@@ -178,7 +178,7 @@ def test_curve_convenience_data_cached_and_matches_explicit():
 
 # ---------- the fingerprint trace cache -------------------------------------
 
-def test_reset_raytrace_cache_clears_caches_and_resets_version():
+def test_reset_raytrace_cache_clears_values_without_rewinding_generation():
     sys = _doublet()
     wvl = sys.wavelength()
     grid_kw = dict(fields=None, wavelengths=None, nrays=11, epd=None,
@@ -193,10 +193,11 @@ def test_reset_raytrace_cache_clears_caches_and_resets_version():
 
     sys.lens.rows[1].thickness = 6.5
     assert sys.lens._version > 0
+    generation = sys.lens._version
 
     out = sys.reset_raytrace_cache()
     assert out is sys
-    assert sys.lens._version == 0
+    assert sys.lens._version == generation
     assert sys.lens._surfaces_cache is None
     assert sys._derived == {}
     assert sys._trace_cache == {}

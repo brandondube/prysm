@@ -12,6 +12,8 @@ from prysm.x.raytracing import (
     Field,
     LensData,
     raytrace,
+    LinearGrating,
+    SurfaceRow,
 )
 from prysm.x import materials
 from prysm.x.raytracing.raygen import generate_collimated_ray_fan
@@ -83,7 +85,7 @@ def test_axial_trace_bit_identical_to_hand_built():
     hand = make_singlet_hand()
     P0, S0 = generate_collimated_ray_fan(21, maxr=9.0, z=-50.0)
     wvl = FRAUNHOFER_LINES_UM['d']
-    ra = raytrace(ld, P0, S0, wvl=wvl)
+    ra = raytrace(ld.to_surfaces(), P0, S0, wvl=wvl)
     rb = raytrace(hand, P0, S0, wvl=wvl)
     np.testing.assert_array_equal(ra.P, rb.P)
     np.testing.assert_array_equal(ra.S, rb.S)
@@ -153,6 +155,63 @@ def test_add_rejects_bare_material_forms():
             LensData().add(Conic(0.0, 0.0), thickness=1.0, material=bad)
 
 
+def test_material_mirror_infers_reflection_and_contradictions_raise():
+    from prysm.x.materials import MIRROR
+    from prysm.x.raytracing.spencer_and_murty import STYPE_REFLECT
+
+    ld = LensData().add(Plane(), material=MIRROR, thickness=5.0)
+    assert ld.to_surfaces()[1].typ == STYPE_REFLECT
+    with pytest.raises(ValueError, match='MIRROR'):
+        LensData().add(Plane(), material=MIRROR, typ='refr')
+    with pytest.raises(ValueError, match='require a material'):
+        LensData().add(Plane(), typ='refr')
+
+
+def test_unknown_integer_surface_type_rejected():
+    with pytest.raises(ValueError, match='unknown surface type integer'):
+        LensData().add(Plane(), typ=12345, material=materials.air)
+
+
+def test_controlled_rows_preserve_endpoints_and_row_ownership():
+    left = LensData()
+    right = LensData()
+    row = SurfaceRow(Plane(), material=materials.air)
+    left.rows.insert(-1, row)
+    assert row._owner is left
+    with pytest.raises(ValueError, match='another LensData'):
+        right.rows.insert(-1, row)
+    with pytest.raises(ValueError, match='OBJECT'):
+        del left.rows[0]
+    with pytest.raises(ValueError, match='IMAGE'):
+        left.rows.append(SurfaceRow(Plane(), material=materials.air))
+    with pytest.raises(TypeError, match='SurfaceRow or CoordBreak'):
+        left.rows.insert(-1, object())
+    removed = left.rows.pop(1)
+    assert removed is row
+    assert row._owner is None
+
+
+def test_controlled_rows_endpoint_types_cannot_be_mutated():
+    ld = LensData()
+    with pytest.raises(ValueError, match='OBJECT'):
+        ld.object_row.typ = 'refr'
+    with pytest.raises(ValueError, match='IMAGE'):
+        ld.image_row.typ = 'eval'
+
+
+def test_lens_copy_deepcopies_parameters_but_shares_material_engine():
+    ld = make_singlet_lensdata()
+    ld.rows[1].grating = LinearGrating(0.01, (1, 0))
+    clone = ld.copy()
+    assert clone.rows[1].material is ld.rows[1].material
+    assert clone.rows[1].grating is not ld.rows[1].grating
+    assert clone.rows[1].aperture is not ld.rows[1].aperture
+    clone.rows[1].params[0] *= 2
+    clone.rows[1].grating.period *= 2
+    assert clone.rows[1].params[0] != ld.rows[1].params[0]
+    assert clone.rows[1].grating.period != ld.rows[1].grating.period
+
+
 # ---------------------------------------------------------------------------
 # thickness slide
 # ---------------------------------------------------------------------------
@@ -207,7 +266,7 @@ def test_mirror_fold_trace_matches_hand_built():
                 material=materials.air),
     ]
     P0, S0 = generate_collimated_ray_fan(11, maxr=20.0, z=-200.0)
-    ra = raytrace(ld, P0, S0, wvl=0.55)
+    ra = raytrace(ld.to_surfaces(), P0, S0, wvl=0.55)
     rb = raytrace(hand, P0, S0, wvl=0.55)
     np.testing.assert_array_equal(ra.P, rb.P)
     np.testing.assert_array_equal(ra.status, rb.status)
@@ -268,7 +327,7 @@ def test_update_round_trips_pack():
 
 def test_update_rejects_wrong_length():
     ld = OpticalSystem(make_singlet_lensdata())
-    ld.opt.vary('curvature', surfaces=0)
+    ld.opt.vary('curvature', surfaces=1)
     with pytest.raises(ValueError):
         ld.opt.update(np.array([1.0, 2.0]))
 
@@ -298,11 +357,12 @@ def test_metadata_absorbed_and_resolved():
 
 
 def test_extras_and_provenance_fields_round_trip():
-    ld = OpticalSystem(LensData(), source_path='/tmp/x.seq', source_format='codev',
-                  stop_index=2, extras={'note': 'hi'})
+    lens = LensData().add(Plane(), typ='eval')
+    ld = OpticalSystem(lens, source_path='/tmp/x.seq', source_format='codev',
+                       stop_index=1, extras={'note': 'hi'})
     assert ld.source_path == '/tmp/x.seq'
     assert ld.source_format == 'codev'
-    assert ld.stop_index == 2
+    assert ld.stop_index == 1
     assert ld.extras['note'] == 'hi'
 
 
@@ -331,7 +391,10 @@ def test_coating_round_trips_onto_compiled_surface_and_listing():
     assert ld.rows[1].coating is ar
     assert ld.surfaces[1].coating is ar
     assert ld.surfaces[2].coating is None            # bare image plane
-    assert ld.copy().rows[1].coating is ar
+    copied_coating = ld.copy().rows[1].coating
+    assert copied_coating is not ar
+    np.testing.assert_array_equal(copied_coating.indices, ar.indices)
+    np.testing.assert_array_equal(copied_coating.thicknesses, ar.thicknesses)
     records = surface_table(ld).records
     assert records[1]['coating'] is True
     assert records[2]['coating'] is False

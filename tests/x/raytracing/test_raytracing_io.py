@@ -253,6 +253,30 @@ def test_zmx_image_height_fields_are_explicitly_unsupported():
         read_zmx(_ZMX_IMAGE_HEIGHT_FIELD, _is_text=True)
 
 
+_ZMX_OBJECT_HEIGHT_FIELD = """\
+VERS 100000 0
+MODE SEQ
+UNIT MM
+FTYP 1 0 0 0
+XFLN 0.0
+YFLN 2.0
+SURF 0
+  TYPE STANDARD
+  DISZ 100.0
+SURF 1
+  TYPE STANDARD
+  CURV 0.0
+  DISZ 0.0
+"""
+
+
+def test_zmx_object_height_field_lies_on_object_endpoint():
+    sys = read_zmx(_ZMX_OBJECT_HEIGHT_FIELD, _is_text=True)
+    field = sys.field(0)
+    assert field.object_z == pytest.approx(sys.to_surfaces()[0].P[2])
+    assert sys.to_surfaces()[1].P[2] - field.object_z == pytest.approx(100.0)
+
+
 def test_zmx_singlet_round_trips_through_raytrace(refractiveindex_database):
     """Read singlet and run an on-axis collimated trace."""
     pf = read_zmx(_ZMX_SINGLET, _is_text=True, database=refractiveindex_database)

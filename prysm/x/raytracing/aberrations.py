@@ -11,6 +11,7 @@ from .paraxial import (
     local_vertex_curvatures,
 )
 from ._resolve import compiled_surfaces, trace_context
+from ._meta import object_space_index
 
 # microns of wavelength per one system length unit, used to express the
 # wavefront coefficients in waves.  Unknown units fall back to mm (prysm's
@@ -433,8 +434,10 @@ def seidel_aberrations(system, field=None, wvl=None, *,
     if have_color:
         wl_sorted = sorted(float(w) for w in wavelengths)
         wl_short, wl_long = wl_sorted[0], wl_sorted[-1]
-        nb_s, na_s = _signed_indices(surfaces, wl_short, n_object)
-        nb_l, na_l = _signed_indices(surfaces, wl_long, n_object)
+        n_object_short = object_space_index(surfaces, wl_short)
+        n_object_long = object_space_index(surfaces, wl_long)
+        nb_s, na_s = _signed_indices(surfaces, wl_short, n_object_short)
+        nb_l, na_l = _signed_indices(surfaces, wl_long, n_object_long)
         CI = np.zeros(nsurf, dtype=config.precision)
         CII = np.zeros(nsurf, dtype=config.precision)
     else:

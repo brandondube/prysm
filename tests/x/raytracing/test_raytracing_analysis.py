@@ -213,7 +213,7 @@ def test_resolve_exit_pupil_decentered_system_stop_falls_back_to_axis_route():
     # fail; with an explicit axis supplied resolve_exit_pupil falls back to the
     # geometric route using this bundle's own chief (as wavefront callers pass)
     # and still returns a finite P_xp that wavefront accepts.
-    tr = raytrace(sys, P, S, 0.55)
+    tr = sys.trace(P, S, 0.55)
     P_xp = resolve_exit_pupil(sys, 0.55, chief=(tr.P[-1, 0], tr.S[-1, 0]),
                               axis_point=(0, 0, 0), axis_dir=(0, 0, 1))
     assert np.all(np.isfinite(np.asarray(P_xp, dtype=float)))
@@ -371,6 +371,8 @@ def test_distortion_zero_for_on_axis_field():
     )
     np.testing.assert_allclose(result.real_xy[0], 0.0, atol=1e-12)
     assert result.percent[0] == 0.0
+    assert result.unit == 'percent'
+    assert result.reference == 'paraxial:f-tan'
 
 
 def test_distortion_returns_per_field_arrays():
@@ -408,6 +410,25 @@ def test_distortion_linear_angle_matches_f_tan_at_small_field():
     np.testing.assert_allclose(lin.percent, ftan.percent, atol=1e-4)
 
 
+def test_distortion_paraxial_map_retains_cross_axis_coupling():
+    angle = np.radians(45.0)
+    rotation = np.array([
+        [np.cos(angle), -np.sin(angle), 0.0],
+        [np.sin(angle), np.cos(angle), 0.0],
+        [0.0, 0.0, 1.0],
+    ])
+    presc = [
+        plane('eval', [0, 0, 0]),
+        biconic(1 / 40.0, 1 / 80.0, 0.0, 0.0, 'refr', [0, 0, 10],
+                material=materials.ConstantMaterial(1.5), R=rotation),
+        plane('eval', [0, 0, 80.0]),
+    ]
+    result = distortion(
+        presc, [Field(1.0, 0.0, unit='deg')], 0.55, epd=4.0,
+    )
+    assert abs(float(result.paraxial_xy[0, 1])) > 1e-3
+
+
 def test_distortion_sign_distinguishes_barrel_and_pincushion():
     # a positive singlet with the stop in front of the lens gives barrel
     # (negative) distortion; with the stop behind it gives pincushion
@@ -429,6 +450,8 @@ def test_field_curvature_on_axis_sag_equals_tan():
     presc = _spherical_singlet()
     result = field_curvature(presc, [Field(0., 0., unit='deg')], 0.55)
     np.testing.assert_allclose(result.x_fan_z, result.y_fan_z, atol=1e-9)
+    assert result.unit == 'mm'
+    assert result.reference == 'global_z'
 
 
 def test_field_curvature_returns_arrays_of_correct_shape():
@@ -631,6 +654,8 @@ def test_curve_analyses_default_to_dense_sweep():
 def test_full_field_rms_spot_grid_geometry():
     sys = _doublet_system()
     g = full_field(sys, 'rms spot', samples=7)
+    assert g.data_unit == 'mm'
+    assert g.reference == 'centroid'
     assert g.metric == 'rms spot'
     assert g.kind == 'angle' and g.unit == 'deg'
     assert g.hx.shape == g.hy.shape == g.data.shape == (7, 7)

@@ -12,7 +12,7 @@ from prysm.x.raytracing.paraxial import (
     effective_focal_length,
     paraxial_image_distance,
 )
-from prysm.x.raytracing.surfaces import Conic, EvenAsphere, Plane
+from prysm.x.raytracing.surfaces import Conic, EvenAsphere
 
 
 n_bk7 = materials.ConstantMaterial(1.5168, name='N-BK7')
@@ -85,6 +85,35 @@ def test_coef_symmetry_pickup_elementwise():
     np.testing.assert_allclose(
         np.asarray(ld.surfaces[2].params['coefs']),
         [-1e-4, 2e-6, -3e-9])
+
+
+def test_pickup_chain_resolution_is_declaration_order_independent():
+    ld = make_singlet(c1=0.0)
+    ld.lens.add(Conic(0.0, 0.0), thickness=1.0,
+                material=materials.air, aperture=10.0)
+    # Declare the downstream edge first.  Resolution must use graph order,
+    # rather than the public declaration order.
+    ld.opt.pickup('curvature', 3, from_surface=2, scale=2.0)
+    ld.opt.pickup('curvature', 2, from_surface=1, scale=-1.0)
+    surfaces = ld.surfaces
+    assert surfaces[2].params['c'] == pytest.approx(
+        -surfaces[1].params['c'])
+    assert surfaces[3].params['c'] == pytest.approx(
+        -2.0 * surfaces[1].params['c'])
+
+
+def test_pickup_cycle_is_rejected_when_declared():
+    ld = make_singlet(c1=0.0)
+    ld.opt.pickup('curvature', 2, from_surface=1)
+    with pytest.raises(ValueError, match='cycle'):
+        ld.opt.pickup('curvature', 1, from_surface=2)
+
+
+def test_pickup_target_cannot_have_multiple_drivers():
+    ld = make_singlet(c1=0.0)
+    ld.opt.pickup('curvature', 2, from_surface=1)
+    with pytest.raises(ValueError, match='already has a driver'):
+        ld.opt.pickup('curvature', 2, from_surface=1, scale=-1.0)
 
 
 # ---------------------------------------------------------------------------

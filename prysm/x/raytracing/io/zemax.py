@@ -15,11 +15,17 @@ from ._common import (
     length_scale_to_mm,
     scale_length_to_mm,
     aperture_kwargs_from_radii,
+    aperture_export_radii,
+    preflight_export,
     parse_float,
 )
 from ..lensdata import LensData
 from ..system import OpticalSystem, ApertureSpec
-from ._surface_spec import build_shape, surface_spec_factory
+from ._surface_spec import (
+    build_shape,
+    surface_spec_factory,
+    surface_spec_from_row,
+)
 
 
 # ---------- low-level tokenizer ---------------------------------------------
@@ -108,6 +114,9 @@ def _parse_header(lines):
     into extras."""
     out = {
         'wavelengths': [],
+        'weights': [],
+        'reference': None,
+        'title': None,
         'epd': None,
         'stop_index_zemax': None,  # 1-based Zemax index, translated later
         'unit': None,
@@ -130,8 +139,17 @@ def _parse_header(lines):
             if len(tokens) >= 2:
                 try:
                     out['wavelengths'].append(float(tokens[1]))
+                    out['weights'].append(
+                        float(tokens[2]) if len(tokens) >= 3 else 1.0)
                 except ValueError:
                     pass
+        elif d == 'PWAV':
+            try:
+                out['reference'] = int(rest.split()[0]) - 1
+            except (IndexError, ValueError):
+                pass
+        elif d == 'NAME':
+            out['title'] = rest.strip().strip('"')
         elif d == 'ENPD':
             try:
                 out['epd'] = float(rest.split()[0])
@@ -157,11 +175,11 @@ def _parse_header(lines):
             # represents object height, not image height.
             tokens = rest.split()
             if tokens:
-                out['extras']['FTYP'] = int(tokens[0])
+                out['field_type'] = int(tokens[0])
         else:
             out['extras'].setdefault(d, []).append(rest)
     # build Field objects from XFLN/YFLN if present
-    ftype = out['extras'].get('FTYP', 0)
+    ftype = out.get('field_type', 0)
     out['field_values'] = (xfln, yfln, ftype)
     if xfln or yfln:
         if ftype == 0:
@@ -381,6 +399,7 @@ def write_zmx(system):
     unit, and wavelengths are then simply omitted from the output.
 
     """
+    preflight_export(system, 'write_zmx')
     from ..lensdata import CoordBreak
     from ..listings import surface_row_mappings
     from ..spencer_and_murty import (
@@ -388,6 +407,9 @@ def write_zmx(system):
     from ..surfaces import _map_stype
 
     lines = ['VERS 100000 0', 'MODE SEQ']
+    title = getattr(system, 'title', None)
+    if title:
+        lines.append(f'NAME "{title}"')
     unit = getattr(system, 'unit', None)
     if unit:
         lines.append(f'UNIT {unit.upper()}')
@@ -407,9 +429,21 @@ def write_zmx(system):
                 'surface'
             )
         lines.append(f'STOP {stop_surface}')
-    wvls = getattr(system, 'wavelengths', None)
-    for w in ([] if wvls is None else wvls):
-        lines.append(f'WAVL {float(w):g}')
+    raw_wvls = getattr(system, 'wavelengths', None)
+    raw_weights = getattr(system, 'weights', None)
+    wvls = [] if raw_wvls is None else list(raw_wvls)
+    weights = [] if raw_weights is None else list(raw_weights)
+    for i, w in enumerate(wvls):
+        weight = weights[i] if i < len(weights) else 1.0
+        lines.append(f'WAVM {i + 1} {float(w):g} {float(weight):g}')
+    if wvls:
+        lines.append(f'PWAV {int(getattr(system, "reference", 0)) + 1}')
+    fields = list(getattr(system, 'fields', ()) or ())
+    if fields:
+        ftype = 0 if fields[0].kind == 'angle' else 1
+        lines.append(f'FTYP {ftype}')
+        lines.append('XFLN ' + ' '.join(f'{f.hx:g}' for f in fields))
+        lines.append('YFLN ' + ' '.join(f'{f.hy:g}' for f in fields))
 
     obj_row = next((r for r in system.rows
                     if not isinstance(r, CoordBreak)
@@ -421,6 +455,10 @@ def write_zmx(system):
         glas = _glas_line(obj_row.material)
         if glas:
             surf0.append(glas)
+        outer, _ = aperture_export_radii(
+            obj_row.aperture, allow_annular=False)
+        if outer is not None:
+            surf0.append(f'  DIAM {outer:g}')
     lines += surf0
 
     surf_no = 0
@@ -442,18 +480,22 @@ def write_zmx(system):
             continue
         is_eval = _is_measurement_surf(_map_stype(row.typ))
         writable_shape_or_raise(row.shape_kind, is_eval, 'write_zmx')
-        shape = row.build_shape()
-        params = shape.params or {}
+        spec = surface_spec_from_row(row)
+        params = spec.params
         is_refl = _map_stype(row.typ) == STYPE_REFLECT
         if is_refl:
             n_refl += 1
         sign = fold_sign(n_refl)
-        disz = sign * float(row.thickness)
+        disz = sign * spec.thickness
         block = [f'SURF {surf_no}', '  TYPE STANDARD',
                  f'  CURV {params.get("c", 0.0):g}']
         if params.get('k', 0.0):
             block.append(f'  CONI {params["k"]:g}')
         block.append(f'  DISZ {disz:g}')
+        outer, _ = aperture_export_radii(
+            row.aperture, allow_annular=False)
+        if outer is not None:
+            block.append(f'  DIAM {outer:g}')
         if is_refl:
             block.append('  GLAS MIRROR')
         elif not is_eval:
@@ -515,8 +557,11 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
                 'Zemax object-height fields require a finite object distance on '
                 'SURF 0 DISZ'
             )
+        # OBJECT is now a real compiled endpoint at z=0; SURF 0 DISZ advances
+        # from that plane to the first optical surface.  Reusing the historical
+        # -gap launch coordinate would count the object distance twice.
         fields = fields_from_xy(xfln, yfln, kind='height',
-                                object_z=-raw_object_gap,
+                                object_z=0.0,
                                 length_scale=unit_scale)
     elif (xfln or yfln) and ftype in (2, 3):
         raise NotImplementedError(
@@ -536,6 +581,8 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
                   if header['epd'] is not None else None),
         fields=fields,
         wavelengths=header['wavelengths'],
+        weights=header['weights'] or None,
+        reference=header['reference'], title=header['title'],
         source_path=path_for_meta, source_format='zemax',
         extras=header['extras'],
     )
@@ -560,6 +607,8 @@ def read_zmx(path_or_text, *, _is_text=False, database=None):
                 ld.object_row.thickness = obj_thi
             if obj_spec.n is not None:
                 ld.object_row.material = obj_spec.n
+            for key, val in _semidiameter(blk).items():
+                setattr(ld.object_row, key, val)
             continue
         surf_type = blk.get('type', 'STANDARD')
         if surf_type == 'COORDBRK':

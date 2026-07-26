@@ -92,7 +92,7 @@ def test_rms_spot_operand_matches_direct():
     samp = Sampling.fan(n=11)
     op = RmsSpotRadius(wavelength=0.55e-3, sampling=samp, epd=6.0)
     P, S = launch(ld, Field(), 0.55e-3, samp, epd=6.0)
-    direct = raytrace(ld, P, S, 0.55e-3)
+    direct = ld.trace(P, S, 0.55e-3)
     np.testing.assert_allclose(
         op(ld, _TraceCache(ld)),
         rms_spot_radius(direct.P[-1], status=direct.status),

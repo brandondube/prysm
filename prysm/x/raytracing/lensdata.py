@@ -1,7 +1,11 @@
 """Editable LensData rows and surface compilation."""
 
+import copy
 import math
+import numbers
 import warnings
+import weakref
+from collections.abc import MutableSequence
 
 from prysm.conf import config
 from prysm.mathops import np, array_to_true_numpy
@@ -9,24 +13,13 @@ from prysm.mathops import np, array_to_true_numpy
 from ..materials import MIRROR, air
 from .aperture import as_aperture
 from .surfaces import (
-    Biconic,
-    Chebyshev,
-    Conic,
-    EvenAsphere,
-    Jacobi,
-    OffAxisConic,
     Plane,
-    Q2D,
-    Sphere,
     Surface,
-    Toroid,
-    XY,
-    Zernike,
     _map_stype,
 )
 from .paraxial import paraxial_image_distance
 from .spencer_and_murty import (
-    STYPE_IMG, STYPE_REFLECT, STYPE_REFRACT,
+    STYPE_IMG, STYPE_OBJ, STYPE_REFLECT, STYPE_REFRACT,
     _is_measurement_surf)
 
 
@@ -238,6 +231,25 @@ def _validate_material(material):
     return material
 
 
+def _normalize_interaction_material(typ, material):
+    """Resolve inference and validate a SurfaceRow interaction/material pair."""
+    if typ is None:
+        typ = 'refl' if material is MIRROR else 'refr'
+    mapped = _map_stype(typ)
+    if mapped == STYPE_REFLECT:
+        if material is not None and material is not MIRROR:
+            raise ValueError(
+                'reflective surfaces take material=MIRROR or material=None; '
+                f'got {material!r}'
+            )
+        return typ, material
+    if material is MIRROR:
+        raise ValueError('material=MIRROR requires a reflective surface type')
+    if mapped == STYPE_REFRACT and material is None:
+        raise ValueError('refractive surfaces require a material')
+    return typ, material
+
+
 class _InvalidatingArray(np.ndarray):
     """ndarray view that clears a row owner's surface cache when edited."""
 
@@ -329,62 +341,84 @@ def _invalidating_dict(value, row):
     return _InvalidatingDict(value, row=row)
 
 
-class _RowList(list):
-    """Owned row container that invalidates LensData on structural edits."""
+class ControlledRows(MutableSequence):
+    """Endpoint-preserving, invalidating sequence of owned lens rows."""
 
-    def __init__(self, owner, rows=()):
+    def __init__(self, owner, rows):
         self._owner = owner
-        super().__init__()
-        self.extend(rows)
+        self._rows = []
+        self._replace(list(rows), invalidate=False)
 
-    def _own(self, row):
-        if hasattr(row, '_owner'):
-            object.__setattr__(row, '_owner', self._owner)
-        return row
+    def __len__(self):
+        return len(self._rows)
 
-    def _invalidate(self):
-        self._owner._invalidate()
+    def __getitem__(self, item):
+        return self._rows[item]
 
-    def append(self, row):
-        super().append(self._own(row))
-        self._invalidate()
+    def _validate_row(self, row):
+        if not isinstance(row, (SurfaceRow, CoordBreak)):
+            raise TypeError(
+                'LensData rows must be SurfaceRow or CoordBreak instances; '
+                f'got {type(row).__name__}'
+            )
+        current_owner = getattr(row, '_owner', None)
+        if current_owner is not None and current_owner is not self._owner:
+            raise ValueError('row is already attached to another LensData')
 
-    def extend(self, rows):
-        changed = False
+    def _validate_candidate(self, rows):
+        if len(rows) < 2:
+            raise ValueError('LensData must retain OBJECT and IMAGE endpoints')
         for row in rows:
-            super().append(self._own(row))
-            changed = True
-        if changed:
-            self._invalidate()
+            self._validate_row(row)
+        if len({id(row) for row in rows}) != len(rows):
+            raise ValueError('the same row object cannot appear more than once')
+        first, last = rows[0], rows[-1]
+        if (not isinstance(first, SurfaceRow)
+                or _map_stype(first.typ) != STYPE_OBJ):
+            raise ValueError('row 0 must remain the OBJECT endpoint')
+        if (not isinstance(last, SurfaceRow)
+                or _map_stype(last.typ) != STYPE_IMG):
+            raise ValueError('the final row must remain the IMAGE endpoint')
+        for row in rows[1:-1]:
+            if (isinstance(row, SurfaceRow)
+                    and _map_stype(row.typ) in (STYPE_OBJ, STYPE_IMG)):
+                raise ValueError('OBJECT and IMAGE rows may only be endpoints')
 
-    def insert(self, index, row):
-        super().insert(index, self._own(row))
-        self._invalidate()
+    def _replace(self, rows, *, invalidate=True):
+        self._validate_candidate(rows)
+        old = self._rows
+        old_ids = {id(row) for row in old}
+        new_ids = {id(row) for row in rows}
+        for row in old:
+            if id(row) not in new_ids:
+                object.__setattr__(row, '_owner', None)
+        for row in rows:
+            if id(row) not in old_ids:
+                object.__setattr__(row, '_owner', self._owner)
+        self._rows = rows
+        if invalidate:
+            self._owner._invalidate()
 
     def __setitem__(self, item, value):
+        candidate = list(self._rows)
         if isinstance(item, slice):
-            value = [self._own(row) for row in value]
+            candidate[item] = list(value)
         else:
-            value = self._own(value)
-        super().__setitem__(item, value)
-        self._invalidate()
+            candidate[item] = value
+        self._replace(candidate)
 
     def __delitem__(self, item):
-        super().__delitem__(item)
-        self._invalidate()
+        candidate = list(self._rows)
+        del candidate[item]
+        self._replace(candidate)
 
-    def clear(self):
-        super().clear()
-        self._invalidate()
+    def insert(self, index, value):
+        candidate = list(self._rows)
+        candidate.insert(index, value)
+        self._replace(candidate)
 
-    def pop(self, index=-1):
-        value = super().pop(index)
-        self._invalidate()
-        return value
-
-    def remove(self, value):
-        super().remove(value)
-        self._invalidate()
+    def __repr__(self):
+        return repr(self._rows)
 
 
 # ---------------------------------------------------------------------------
@@ -400,6 +434,21 @@ class SurfaceRow:
     }
 
     def __setattr__(self, name, value):
+        if name == 'typ':
+            owner = getattr(self, '_owner', None)
+            if owner is not None:
+                index = next(i for i, row in enumerate(owner.rows)
+                             if row is self)
+                mapped = _map_stype(value)
+                if index == 0 and mapped != STYPE_OBJ:
+                    raise ValueError('row 0 must remain the OBJECT endpoint')
+                if index == len(owner.rows) - 1 and mapped != STYPE_IMG:
+                    raise ValueError(
+                        'the final row must remain the IMAGE endpoint')
+                if 0 < index < len(owner.rows) - 1 \
+                        and mapped in (STYPE_OBJ, STYPE_IMG):
+                    raise ValueError(
+                        'OBJECT and IMAGE rows may only be endpoints')
         if name == 'params':
             value = _invalidating_array(value, self, dtype=config.precision)
         elif name == 'meta':
@@ -412,9 +461,10 @@ class SurfaceRow:
         if name in self._INVALIDATING_ATTRS:
             _invalidate_row_owner(self)
 
-    def __init__(self, shape, *, thickness=0.0, material=None, typ='refr',
+    def __init__(self, shape, *, thickness=0.0, material=None, typ=None,
                  aperture=None, grating=None, coating=None):
         """Initialize a surface row from a shape."""
+        typ, material = _normalize_interaction_material(typ, material)
         object.__setattr__(self, '_owner', None)
         adapter = _adapter_for(shape)
         params = []
@@ -483,14 +533,14 @@ class SurfaceRow:
         new.adapter = self.adapter
         new.params = np.array(self.params, copy=True)
         new.key_offsets = dict(self.key_offsets)
-        new.meta = dict(self.meta)
+        new.meta = copy.deepcopy(dict(self.meta))
         new.categories = {k: list(v) for k, v in self.categories.items()}
         new.thickness = self.thickness
         new.material = self.material
         new.typ = self.typ
-        new.aperture = self.aperture.copy()
-        new.grating = self.grating
-        new.coating = self.coating
+        new.aperture = copy.deepcopy(self.aperture)
+        new.grating = copy.deepcopy(self.grating)
+        new.coating = copy.deepcopy(self.coating)
         return new
 
 
@@ -611,16 +661,38 @@ class LensData:
 
     def __init__(self):
         """Initialize a lens with OBJECT and IMAGE endpoint rows."""
-        self.rows = _RowList(self)
         self._surfaces_cache = None
         self._version = 0  # bumped on every edit; keys system-side derived caches
         self._resolving = False  # True while solves/pickups write derived DOFs
+        self._system_owner_ref = None
         # DesignState installs this hook to apply dependent DOFs at compile time.
         self._resolve_hook = None
         # Seed the OBJECT...IMAGE endpoints (infinite conjugate by default).
-        self.rows.append(SurfaceRow(
-            Plane(), thickness=float('inf'), material=air, typ='object'))
-        self.rows.append(SurfaceRow(Plane(), thickness=0.0, typ='image'))
+        object_row = SurfaceRow(
+            Plane(), thickness=float('inf'), material=air, typ='object')
+        image_row = SurfaceRow(Plane(), thickness=0.0, typ='image')
+        self._rows = ControlledRows(self, (object_row, image_row))
+
+    @property
+    def rows(self):
+        """Controlled mutable sequence retaining OBJECT/IMAGE invariants."""
+        return self._rows
+
+    @property
+    def system_owner(self):
+        """The attached OpticalSystem, or None when this lens is unattached."""
+        if self._system_owner_ref is None:
+            return None
+        return self._system_owner_ref()
+
+    def _attach_system(self, system):
+        owner = self.system_owner
+        if owner is not None and owner is not system:
+            raise ValueError(
+                'LensData is already attached to an OpticalSystem; copy the '
+                'lens before constructing another system'
+            )
+        self._system_owner_ref = weakref.ref(system)
 
     # -- construction --
     @property
@@ -633,7 +705,7 @@ class LensData:
         """The IMAGE endpoint row (last row)."""
         return self.rows[-1]
 
-    def add(self, shape, *, thickness=0.0, material=None, typ='refr',
+    def add(self, shape, *, thickness=0.0, material=None, typ=None,
             aperture=None, grating=None, coating=None):
         """Insert a surface row before the IMAGE endpoint and return self."""
         self.rows.insert(len(self.rows) - 1, SurfaceRow(
@@ -867,12 +939,28 @@ class LensData:
             return list(range(n))
         if isinstance(surfaces, slice):
             return list(range(*surfaces.indices(n)))
-        if isinstance(surfaces, int):
-            return [surfaces % n]
-        return [int(s) % n for s in surfaces]
+        if isinstance(surfaces, numbers.Integral):
+            surfaces = [int(surfaces)]
+        out = []
+        for selector in surfaces:
+            if not isinstance(selector, numbers.Integral):
+                raise TypeError('surface selectors must be integer indices')
+            index = int(selector)
+            if index < 0:
+                index += n
+            if index < 0 or index >= n:
+                raise IndexError(f'surface row index {selector} is out of range')
+            out.append(index)
+        return out
 
     def _category_slots(self, category, surfaces):
         """Return all slots selected by a category and row selector."""
+        known = {'thickness', 'tilt', 'decenter'}
+        for row in self.rows:
+            if isinstance(row, SurfaceRow):
+                known.update(row.categories)
+        if category not in known:
+            raise KeyError(f'unknown design category {category!r}')
         slots = []
         for r in self._select_rows(surfaces):
             row = self.rows[r]
@@ -886,6 +974,10 @@ class LensData:
                 if isinstance(row, SurfaceRow):
                     for off in row.categories.get(category, ()):
                         slots.append(('shape', r, off))
+        if not slots:
+            raise ValueError(
+                f'category {category!r} has no DOFs on the selected rows'
+            )
         return slots
 
     # -- listings (tabular inspection of the rows) --
@@ -908,7 +1000,7 @@ class LensData:
     def copy(self):
         """Return a structural copy with cloned rows."""
         new = LensData()
-        new.rows = _RowList(new, [row.copy() for row in self.rows])
+        new._rows = ControlledRows(new, [row.copy() for row in self.rows])
         return new
 
     def __repr__(self):
@@ -1035,7 +1127,7 @@ class DesignState:
         """
         if relative is None and lo is None and hi is None:
             raise ValueError('constrain needs lo/hi (absolute) or relative')
-        is_radius = category == 'radius'
+        is_radius = category in ('radius', 'radius_x', 'radius_y')
         for slot in self.lens._category_slots(category, surfaces):
             nominal = float(self.lens._slot_value(slot))
             bounds = _bounds_for_dof(nominal, lo, hi, relative, is_radius)
@@ -1062,10 +1154,26 @@ class DesignState:
                 f'pickup target ({len(targets)} DOFs) and source '
                 f'({len(sources)} DOFs) must have equal length'
             )
+        existing_targets = self._pickup_target_slots()
+        overlap = existing_targets.intersection(targets)
+        if overlap:
+            raise ValueError(
+                f'pickup target {next(iter(overlap))!r} already has a driver'
+            )
+        if self._image_solve is not None:
+            solve_slot = ('thickness', self._image_solve[0], 0)
+            if solve_slot in targets:
+                raise ValueError(
+                    f'pickup target {solve_slot!r} is driven by the active '
+                    'image-distance solve'
+                )
+        candidate = [*self._pickups,
+                     (targets, sources, float(scale), float(offset))]
+        self._topological_pickup_edges(candidate)
         for t in targets:
             self._free.pop(t, None)
             self._dependent.add(t)
-        self._pickups.append((targets, sources, float(scale), float(offset)))
+        self._pickups = candidate
         self.lens._invalidate()
         return self
 
@@ -1086,9 +1194,18 @@ class DesignState:
                 raise ValueError('no powered surface precedes the image plane')
             surface = max(powered)
         else:
-            surface = surface % len(lens.rows)
-        self._image_solve = (surface, wavelength)
+            selected = lens._select_rows(surface)
+            surface = selected[0]
+        if not isinstance(lens.rows[surface], SurfaceRow):
+            raise ValueError(
+                'image-distance solve target must be a surface row')
         slot = ('thickness', surface, 0)
+        if slot in self._pickup_target_slots():
+            raise ValueError(
+                f'image-distance solve target {slot!r} already has a pickup '
+                'driver'
+            )
+        self._image_solve = (surface, wavelength)
         self._free.pop(slot, None)
         self._dependent.add(slot)
         lens._invalidate()
@@ -1113,6 +1230,42 @@ class DesignState:
             out.update(targets)
         return out
 
+    def pickup_expansion(self, source_slot):
+        """Slot tangents induced by one independent source-slot tangent."""
+        tangents = {source_slot: 1.0}
+        for target, source, scale, _ in self._topological_pickup_edges(
+                self._pickups):
+            if source in tangents:
+                tangents[target] = scale * tangents[source]
+        return tangents
+
+    @staticmethod
+    def _topological_pickup_edges(pickups):
+        """Flatten pickup blocks in dependency order, rejecting cycles."""
+        edges = []
+        drivers = {}
+        for targets, sources, scale, offset in pickups:
+            for target, source in zip(targets, sources):
+                if target in drivers:
+                    raise ValueError(
+                        f'pickup target {target!r} has multiple drivers')
+                edge = (target, source, scale, offset)
+                drivers[target] = edge
+                edges.append(edge)
+
+        ordered = []
+        remaining = dict(drivers)
+        while remaining:
+            ready = [edge for edge in remaining.values()
+                     if edge[1] not in remaining]
+            if not ready:
+                cycle = ', '.join(repr(slot) for slot in remaining)
+                raise ValueError(f'pickup dependency cycle: {cycle}')
+            for edge in ready:
+                ordered.append(edge)
+                remaining.pop(edge[0])
+        return ordered
+
     def _clear_image_distance_solve_if_selected(self, slots):
         """Clear the image-distance solve when its thickness is selected."""
         if self._image_solve is None:
@@ -1126,21 +1279,18 @@ class DesignState:
         lens = self.lens
         lens._resolving = True
         try:
-            for targets, sources, scale, offset in self._pickups:
-                for t, s in zip(targets, sources):
-                    lens._set_slot_value(
-                        t, scale * lens._slot_value(s) + offset)
+            for target, source, scale, offset in \
+                    self._topological_pickup_edges(self._pickups):
+                lens._set_slot_value(
+                    target, scale * lens._slot_value(source) + offset)
             if self._image_solve is not None:
                 surf_idx, wvl = self._image_solve
                 surfaces = lens._compile_surfaces()
-                surface_rows = [i for i, row in enumerate(lens.rows)
-                                if isinstance(row, SurfaceRow)]
-                try:
-                    solved_surface = surface_rows.index(surf_idx)
-                except ValueError as e:
-                    raise ValueError(
-                        'image-distance solve target must be a surface row'
-                    ) from e
+                from ._surface_map import SurfaceMap
+                mapping = SurfaceMap(lens)
+                solved_surface = mapping.surface_for_row(surf_idx)
+                surface_rows = [mapping.row_for_surface(i)
+                                for i in range(len(surfaces))]
                 image_surface = solved_surface + 1
                 if image_surface >= len(surface_rows):
                     raise ValueError(

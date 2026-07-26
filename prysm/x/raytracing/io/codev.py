@@ -18,7 +18,11 @@ from ._common import (
 from ..lensdata import LensData
 from ..system import OpticalSystem, ApertureSpec, FieldSet
 from ..paraxial import effective_focal_length
-from ._surface_spec import build_shape, surface_spec_factory
+from ._surface_spec import (
+    build_shape,
+    surface_spec_factory,
+    surface_spec_from_row,
+)
 
 
 # Code V represents an infinite object conjugate with a large finite thickness
@@ -726,12 +730,19 @@ def write_seq(system):
     wavelengths are then simply omitted from the output.
 
     """
+    from ._common import aperture_export_radii, preflight_export
+    from .._surface_map import SurfaceMap
+    preflight_export(system, 'write_seq')
     from ..lensdata import CoordBreak
     lines = ['LEN', 'CUM', 'DIM M']
+    title = getattr(system, 'title', None)
+    if title:
+        lines.append(f'TITLE "{title}"')
     wvls = getattr(system, 'wavelengths', None)
     wvls = [] if wvls is None else [float(w) for w in wvls]
     if wvls:
         lines.append('WL ' + ' '.join(f'{w * 1000.0:g}' for w in wvls))
+        lines.append(f'REF {int(getattr(system, "reference", 0)) + 1}')
     weights = getattr(system, 'weights', None)
     weights = [] if weights is None else [float(w) for w in weights]
     if weights and len(weights) == len(wvls) and any(w != 1.0 for w in weights):
@@ -741,7 +752,14 @@ def write_seq(system):
         lines.append(f'EPD {epd:g}')
     fields = getattr(system, 'fields', None) or []
     if fields:
+        lines.append('XAN ' + ' '.join(f'{f.hx:g}' for f in fields))
         lines.append('YAN ' + ' '.join(f'{f.hy:g}' for f in fields))
+        for key in ('vux', 'vlx', 'vuy', 'vly'):
+            values = [0.0 if f.vignetting is None
+                      else float(f.vignetting.get(key, 0.0)) for f in fields]
+            if any(value != 0.0 for value in values):
+                lines.append(
+                    key.upper() + ' ' + ' '.join(f'{v:g}' for v in values))
 
     from ..spencer_and_murty import STYPE_OBJ, _is_measurement_surf
     from ..surfaces import _map_stype
@@ -756,11 +774,19 @@ def write_seq(system):
         glass = _glass_name(obj_row.material, obj_row.typ)
         if glass:
             so_line += f' ; GLA {glass}'
+        outer, inner = aperture_export_radii(
+            obj_row.aperture, allow_annular=True)
+        if outer is not None:
+            so_line += f' ; CAO {outer:g}'
+        if inner is not None:
+            so_line += f' ; CAI {inner:g}'
     lines.append(so_line)
 
     n_refl = 0
     pending_coordbreak = None
-    for row in system.rows:
+    mapping = SurfaceMap(system)
+    stop_index = getattr(system, 'stop_index', None)
+    for row_index, row in enumerate(system.rows):
         if isinstance(row, CoordBreak):
             if pending_coordbreak is not None:
                 raise NotImplementedError(
@@ -775,15 +801,24 @@ def write_seq(system):
             continue
         is_eval = _is_measurement_surf(stype)
         writable_shape_or_raise(row.shape_kind, is_eval, 'write_seq')
-        shape = row.build_shape()
-        params = shape.params or {}
+        spec = surface_spec_from_row(row)
+        params = spec.params
         is_refl = _glass_name(row.material, row.typ) == 'REFL'
         if is_refl:
             n_refl += 1
         sign = fold_sign(n_refl)
-        thi = sign * float(row.thickness)
+        thi = sign * spec.thickness
         if is_eval:
-            lines.append('SI')
+            parts = ['SI']
+            outer, inner = aperture_export_radii(
+                row.aperture, allow_annular=True)
+            if outer is not None:
+                parts.append(f'CAO {outer:g}')
+            if inner is not None:
+                parts.append(f'CAI {inner:g}')
+            lines.append(' ; '.join(parts))
+            if mapping.surface_for_row(row_index) == stop_index:
+                lines.append('STO')
             if pending_coordbreak is not None:
                 lines.extend(_coordbreak_seq_lines(pending_coordbreak))
                 pending_coordbreak = None
@@ -794,7 +829,15 @@ def write_seq(system):
         glass = _glass_name(row.material, row.typ)
         if glass:
             parts.append(f'GLA {glass}')
+        outer, inner = aperture_export_radii(
+            row.aperture, allow_annular=True)
+        if outer is not None:
+            parts.append(f'CAO {outer:g}')
+        if inner is not None:
+            parts.append(f'CAI {inner:g}')
         lines.append(' ; '.join(parts))
+        if mapping.surface_for_row(row_index) == stop_index:
+            lines.append('STO')
         if pending_coordbreak is not None:
             lines.extend(_coordbreak_seq_lines(pending_coordbreak))
             pending_coordbreak = None

@@ -9,7 +9,9 @@ import numpy as np
 from numpy.polynomial import polynomial as npoly
 
 from prysm.x.raytracing.surfaces import EvenAsphere, Sphere, Zernike, Surface
-from prysm.x.raytracing.aperture import Aperture, CircularExtent
+from prysm.x.raytracing.aperture import (
+    Aperture, CircularExtent, circular_aperture,
+)
 from prysm.x.raytracing.intersections import (
     bracketed_newton_solve_s,
     newton_raphson_solve_s,
@@ -49,7 +51,9 @@ def gull_wing_surface(outer_radius=30.0):
         # this surface legitimately trips the multiple-crossing setup warning
         warnings.simplefilter('ignore')
         surf = Surface(shape=shape, interaction='refl', P=[0, 0, 0],
-                       aperture=Aperture(extent=CircularExtent(outer_radius)))
+                       aperture=Aperture(
+                           clip=circular_aperture(outer_radius),
+                           extent=CircularExtent(outer_radius)))
         surf.departure_band()
     return surf
 
@@ -65,7 +69,9 @@ def in_domain_fold_surface():
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         surf = Surface(shape=shape, interaction='refl', P=[0, 0, 0],
-                       aperture=Aperture(extent=CircularExtent(FOLD_R)))
+                       aperture=Aperture(
+                           clip=circular_aperture(FOLD_R),
+                           extent=CircularExtent(FOLD_R)))
         surf.departure_band()
     return surf
 
@@ -129,7 +135,8 @@ def test_mild_asphere_roots_unchanged_by_guard():
     """The acceptance band is transparent on well-behaved surfaces."""
     shape = EvenAsphere(c=1 / 50.0, k=0.0, coefs=(1e-7, 1e-10))
     surf = Surface(shape=shape, interaction='refl', P=[0, 0, 0],
-                   aperture=Aperture(extent=CircularExtent(15.0)))
+                   aperture=Aperture(clip=circular_aperture(15.0),
+                                     extent=CircularExtent(15.0)))
     h = np.linspace(-14, 14, 23)
     P = np.zeros((h.size, 3))
     P[:, 1] = h
@@ -196,7 +203,8 @@ def test_forward_only_rejects_root_behind_ray():
     """A surface behind the ray is a virtual intersection at reflect/refract."""
     shape = EvenAsphere(c=1 / 50.0, k=0.0, coefs=(1e-7,))
     surf = Surface(shape=shape, interaction='refl', P=[0, 0, 0],
-                   aperture=Aperture(extent=CircularExtent(15.0)))
+                   aperture=Aperture(clip=circular_aperture(15.0),
+                                     extent=CircularExtent(15.0)))
     # ray starts past the surface travelling away from it
     P = np.array([[0.0, 2.0, 5.0]])
     S = np.array([[0.0, 0.0, 1.0]])
@@ -212,7 +220,8 @@ def test_first_segment_exempt_from_forward_acceptance():
     # concave asphere: marginal rays at the vertex plane sit past the surface
     shape = EvenAsphere(c=-1 / 40.0, k=0.0, coefs=(1e-8,))
     surf = Surface(shape=shape, interaction='refl', P=[0, 0, 0],
-                   aperture=Aperture(extent=CircularExtent(12.0)))
+                   aperture=Aperture(clip=circular_aperture(12.0),
+                                     extent=CircularExtent(12.0)))
     h = np.linspace(-10, 10, 11)
     P = np.zeros((h.size, 3))
     P[:, 1] = h
@@ -238,10 +247,11 @@ def test_first_segment_exempt_from_forward_acceptance():
 
 
 def test_departure_band_domain_resolution():
-    """Domain radius: bounding, else normalization radius, else conic limit."""
+    """Domain radius: clip, else normalization radius, else conic limit."""
     asph = EvenAsphere(c=1 / 50.0, k=0.0, coefs=(1e-7,))
     s = Surface(shape=asph, interaction='refl', P=[0, 0, 0],
-                aperture=Aperture(extent=CircularExtent(9.0)))
+                aperture=Aperture(clip=circular_aperture(9.0),
+                                  extent=CircularExtent(12.0)))
     band = s.departure_band()
     assert band.bounded
     assert band.domain_radius == 9.0
@@ -271,14 +281,16 @@ def test_multiple_crossing_setup_warning():
     """Surfaces whose departure slope admits several crossings warn at setup."""
     shape = EvenAsphere(c=GULL_C, k=-1.0, coefs=GULL_COEFS)
     surf = Surface(shape=shape, interaction='refl', P=[0, 0, 0],
-                   aperture=Aperture(extent=CircularExtent(30.0)))
+                   aperture=Aperture(clip=circular_aperture(30.0),
+                                     extent=CircularExtent(30.0)))
     with pytest.warns(UserWarning, match='multiple ray crossings'):
         surf.departure_band()
 
     # mild surfaces stay silent
     mild = EvenAsphere(c=1 / 50.0, k=0.0, coefs=(1e-8,))
     surf = Surface(shape=mild, interaction='refl', P=[0, 0, 0],
-                   aperture=Aperture(extent=CircularExtent(10.0)))
+                   aperture=Aperture(clip=circular_aperture(10.0),
+                                     extent=CircularExtent(10.0)))
     with warnings.catch_warnings():
         warnings.simplefilter('error')
         surf.departure_band()

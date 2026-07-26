@@ -58,6 +58,8 @@ def test_perturbation_uniform_half_width():
     p = Perturbation.uniform(ld, 'conic', 1, half_width=0.05, name='k1')
     assert p.step == 0.05
     assert p.nominal == 0.0
+    assert p.distribution == 'uniform'
+    assert p.variance == pytest.approx(0.05 ** 2 / 3.0)
 
 
 def test_perturbation_triangular_uses_nominal_as_peak():
@@ -68,6 +70,7 @@ def test_perturbation_triangular_uses_nominal_as_peak():
     np.testing.assert_allclose(samples.mean(), 0.0, atol=2e-3)
     assert float(samples.min()) >= -0.1
     assert float(samples.max()) <= 0.1
+    assert p.variance == pytest.approx(0.1 ** 2 / 6.0)
 
 
 def test_perturbation_sample_normal_centers_on_nominal():

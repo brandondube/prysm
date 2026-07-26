@@ -1,5 +1,6 @@
 """System-level metadata wrapper for LensData."""
 
+import copy
 import math
 import numbers
 import warnings
@@ -14,7 +15,7 @@ from .paraxial import (
 )
 from .spencer_and_murty import _is_measurement_surf
 from .lensdata import DesignState
-from ._cache import StateCache
+from ._cache import StateCache, structural_key
 from ._namespaces import (
     _AnalysisNamespace,
     _OptNamespace,
@@ -93,6 +94,8 @@ class ApertureSpec:
             )
         self.mode = mode
         self.value = float(value)
+        if not math.isfinite(self.value) or self.value <= 0.0:
+            raise ValueError('aperture value must be finite and positive')
 
     @classmethod
     def epd(cls, value):
@@ -208,6 +211,19 @@ class FieldSet:
     def __init__(self, fields=None):
         """Initialize a field set."""
         self.fields = _coerce_fields(fields)
+        self._validate_homogeneous()
+
+    def _validate_homogeneous(self):
+        if not self.fields:
+            return
+        first = self.fields[0]
+        for field in self.fields[1:]:
+            if field.kind != first.kind:
+                raise ValueError('a FieldSet must use one field kind')
+            if first.kind == 'angle' and field.unit != first.unit:
+                raise ValueError('an angular FieldSet must use one angular unit')
+            if first.kind == 'height' and field.object_z != first.object_z:
+                raise ValueError('a height FieldSet must use one object plane')
 
     def __len__(self):
         return len(self.fields)
@@ -241,18 +257,26 @@ class FieldSet:
 class OpticalSystem:
     """System metadata around a LensData surface spine."""
 
-    __slots__ = ('lens', 'aperture', 'fields', 'wavelengths', 'weights',
+    __slots__ = ('_lens', 'aperture', 'fields', 'wavelengths', 'weights',
                  'reference', 'title', 'stop_index',
                  'ray_aiming', 'source_path', 'source_format', 'extras',
-                 '_design', '_derived', '_trace_cache')
+                 '_design', '_derived', '_trace_cache', '_cache_generation',
+                 '__weakref__')
 
     def __init__(self, lens, *, aperture=None, fields=None, wavelengths=None,
                  weights=None, reference=None, title=None,
                  stop_index=None, ray_aiming='paraxial', source_path=None,
                  source_format=None, extras=None):
         """Initialize a system over a lens."""
-        self.lens = lens
-        self._design = DesignState(lens)
+        from .lensdata import LensData
+        if not isinstance(lens, LensData):
+            raise TypeError('OpticalSystem requires a LensData instance')
+        if lens.system_owner is not None:
+            raise ValueError(
+                'LensData is already attached to an OpticalSystem; copy the '
+                'lens before constructing another system'
+            )
+        self._lens = lens
         if aperture is not None and not isinstance(aperture, ApertureSpec):
             aperture = ApertureSpec.epd(aperture)
         self.aperture = aperture
@@ -266,8 +290,22 @@ class OpticalSystem:
                 'nanometers',
                 stacklevel=2,
             )
+        if reference is not None and not isinstance(reference, numbers.Integral):
+            raise TypeError('reference must be an integer index or None')
         self.reference = 0 if reference is None else int(reference)
+        if self.reference < 0 or (len(self.wavelengths)
+                                  and self.reference >= len(self.wavelengths)):
+            raise IndexError('reference wavelength index is out of range')
+        if not len(self.wavelengths) and self.reference != 0:
+            raise IndexError('an empty wavelength set only permits reference=0')
         self.title = title
+        if stop_index is not None:
+            if not isinstance(stop_index, numbers.Integral):
+                raise TypeError('stop_index must be an integer or None')
+            stop_index = int(stop_index)
+            surfaces = lens.to_surfaces()
+            if stop_index < 0 or stop_index >= len(surfaces):
+                raise IndexError('stop_index is out of range')
         self.stop_index = stop_index
         ray_aiming = str(ray_aiming).lower()
         if ray_aiming not in ('paraxial', 'real'):
@@ -277,15 +315,33 @@ class OpticalSystem:
         self.source_path = source_path
         self.source_format = source_format
         self.extras = dict(extras) if extras else {}
+        lens._attach_system(self)
+        self._design = DesignState(lens)
         # Version-keyed derived quantities.
         self._derived = StateCache()
         # Analysis grids for convenience plot methods.
         self._trace_cache = StateCache()
+        self._cache_generation = lens._version
+
+    @property
+    def lens(self):
+        """The exclusively attached LensData owner."""
+        return self._lens
 
     # -- surface-sequence delegation (duck-type as the compiled surfaces) --
     def to_surfaces(self):
         """Compiled surface list of the underlying lens."""
         return self.lens.to_surfaces()
+
+    def trace(self, P, S, wavelength=None, **kwargs):
+        """Trace a fixed launch bundle through this system.
+
+        Resolves the wavelength and compiled surfaces, then delegates to the
+        pure `raytrace` primitive.
+        """
+        from .spencer_and_murty import raytrace
+        wvl = self.wavelength(wavelength)
+        return raytrace(self.to_surfaces(), P, S, wvl, **kwargs)
 
     @property
     def surfaces(self):
@@ -368,6 +424,7 @@ class OpticalSystem:
 
     def entrance_pupil_diameter(self, wvl=None):
         """Equivalent entrance-pupil diameter at wvl, cached on the system."""
+        self._sync_cache_generation()
         if self.aperture is None:
             return None
         wvl = self.wavelength(wvl)
@@ -395,6 +452,7 @@ class OpticalSystem:
     def first_order(self, field=0, wavelength=None, *, epd=None,
                     stop_index=None, force_sym=False):
         """Cached parabasal first-order properties about a chief ray."""
+        self._sync_cache_generation()
         from .parabasal import first_order, _resolve_field
         wvl = self.wavelength(wavelength)
         resolved_stop = stop_index if stop_index is not None else self.stop_index
@@ -407,6 +465,7 @@ class OpticalSystem:
 
     def _ynu_first_order(self, wvl=None, *, epd=None, stop_index=None):
         """Internal YNU first-order properties, cached on the system."""
+        self._sync_cache_generation()
         from .paraxial import ynu_first_order
         wvl = self.wavelength(wvl)
         resolved_stop = stop_index if stop_index is not None else self.stop_index
@@ -419,6 +478,7 @@ class OpticalSystem:
 
     def entrance_pupil_z(self, wvl=None, stop_index=None):
         """Lab-frame z of the paraxial entrance pupil, cached on the system."""
+        self._sync_cache_generation()
         from .paraxial import entrance_pupil_z
         wvl = self.wavelength(wvl)
         resolved_stop = stop_index if stop_index is not None else self.stop_index
@@ -431,6 +491,7 @@ class OpticalSystem:
     def exit_pupil(self, wvl=None, field=None, *, stop_index=None, epd=None,
                    axis_point=None, axis_dir=None):
         """Resolved exit-pupil reference point P_xp, cached on the system."""
+        self._sync_cache_generation()
         from .analysis import resolve_exit_pupil
         wvl = self.wavelength(wvl)
         resolved_stop = stop_index if stop_index is not None else self.stop_index
@@ -447,12 +508,20 @@ class OpticalSystem:
                 axis_point=axis_point, axis_dir=axis_dir))
 
     def reset_raytrace_cache(self):
-        """Clear cached raytrace data and reset the lens edit version."""
+        """Clear cached values without rewinding the lens generation."""
         self._trace_cache.clear()
         self._derived.clear()
         self.lens._surfaces_cache = None
-        self.lens._version = 0
+        self._cache_generation = self.lens._version
         return self
+
+    def _sync_cache_generation(self):
+        """Drop prior-generation values before serving a live-system cache."""
+        generation = self.lens._version
+        if generation != self._cache_generation:
+            self._trace_cache.clear()
+            self._derived.clear()
+            self._cache_generation = generation
 
     # -- convenience plotting (cached grids; rendered via sys.plot) --
     def _fingerprint(self):
@@ -473,7 +542,8 @@ class OpticalSystem:
         """Return fn(self, **kwargs), memoized on the live fingerprint."""
         # Settle lazy lens dependencies before fingerprinting.
         self.lens.to_surfaces()
-        key = (self._fingerprint(), kind, repr(tuple(sorted(kwargs.items()))))
+        self._sync_cache_generation()
+        key = (self._fingerprint(), kind, structural_key(kwargs))
         return self._trace_cache.get_or_compute(key, lambda: fn(self, **kwargs))
 
     # -- listings delegate to the lens --
@@ -493,13 +563,14 @@ class OpticalSystem:
     def copy(self):
         """Return a copy: lens, design state, and metadata containers copied."""
         new = OpticalSystem(
-            self.lens.copy(), aperture=self.aperture,
-            fields=list(self.fields), wavelengths=self.wavelengths,
-            weights=self.weights, reference=self.reference,
+            self.lens.copy(), aperture=copy.deepcopy(self.aperture),
+            fields=copy.deepcopy(list(self.fields)),
+            wavelengths=np.array(self.wavelengths, copy=True),
+            weights=np.array(self.weights, copy=True), reference=self.reference,
             title=self.title, stop_index=self.stop_index,
             ray_aiming=self.ray_aiming,
             source_path=self.source_path, source_format=self.source_format,
-            extras=dict(self.extras),
+            extras=copy.deepcopy(self.extras),
         )
         # Carry the DOF registry, pickups, and solves onto the copied lens.
         new._design = self._design.copy(new.lens)
@@ -556,7 +627,11 @@ def _coerce_wavelengths(wavelengths):
             'pass e.g. list(FRAUNHOFER_LINES_UM.values()) and select the '
             'reference by integer index'
         )
-    return np.asarray([float(w) for w in wavelengths], dtype=config.precision)
+    out = np.asarray([float(w) for w in wavelengths], dtype=config.precision)
+    if len(out) and (not bool(np.all(np.isfinite(out)))
+                     or bool(np.any(out <= 0.0))):
+        raise ValueError('wavelengths must be finite and positive')
+    return out
 
 
 def _coerce_weights(weights, wavelengths):
@@ -575,6 +650,11 @@ def _coerce_weights(weights, wavelengths):
             f'weights length {len(weights)} does not match the {n} '
             'wavelengths'
         )
+    if len(weights) and (not bool(np.all(np.isfinite(weights)))
+                         or bool(np.any(weights < 0.0))):
+        raise ValueError('weights must be finite and nonnegative')
+    if len(weights) and not bool(np.any(weights > 0.0)):
+        raise ValueError('at least one wavelength weight must be positive')
     return weights
 
 

@@ -128,7 +128,7 @@ def test_grid_cell_matches_open_coded_launch_and_trace():
     sampling = Sampling.fan(n=11, axis='y')
     epd = _require_epd(sys, None, wvl)
     P_ref, S_ref = launch(sys, field, wvl, sampling, epd=epd)
-    tr_ref = raytrace(sys, P_ref, S_ref, wvl)
+    tr_ref = sys.trace(P_ref, S_ref, wvl)
 
     r = next(iter_trace_grid(sys, [field], [wvl], sampling))
     np.testing.assert_array_equal(r.P, P_ref)
@@ -151,9 +151,9 @@ def test_trace_cell_custom_trace_fn_is_used():
     sys = _singlet_system()
     calls = {'n': 0}
 
-    def counting_trace(presc, P, S, wvl):
+    def counting_trace(surfaces, P, S, wvl):
         calls['n'] += 1
-        return raytrace(presc, P, S, wvl)
+        return raytrace(surfaces, P, S, wvl)
 
     trace_cell(sys, Field(0, 0), 0.5876, Sampling.chief(),
                trace_fn=counting_trace)

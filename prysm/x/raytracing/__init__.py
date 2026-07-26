@@ -131,6 +131,8 @@ from .field import (
     surface_normals_from_trace,
     unpolarized_amplitude,
 )
+from .opl import OPLFunc, LinearGrating, CallableOPL
+from .auto import RitcheyChretien, RCPrescription
 
 FRAUNHOFER_LINES_UM = {
     'C': 0.6562725,
@@ -195,6 +197,7 @@ __all__ = [
     'ParabasalFirstOrder',
     'TraceRecord',
     'iter_trace_grid',
+    'field_sweep',
     'transverse_ray_aberration',
     'xp_reference_sphere',
     'locate_ep',
@@ -205,6 +208,7 @@ __all__ = [
     'field_curvature',
     'chromatic_focal_shift',
     'lateral_color',
+    'full_field',
     'ray_aberration_fans',
     'opd_fans',
     'spot_diagrams',
@@ -215,6 +219,7 @@ __all__ = [
     'RayFanGrid',
     'OPDFanGrid',
     'SpotGrid',
+    'FullFieldGrid',
     'spot_centroid',
     'rms_spot_radius',
     'geometric_psf_histogram',
@@ -231,6 +236,11 @@ __all__ = [
     'interface_coefficients',
     'surface_normals_from_trace',
     'unpolarized_amplitude',
+    'OPLFunc',
+    'LinearGrating',
+    'CallableOPL',
+    'RitcheyChretien',
+    'RCPrescription',
     'RayTraceResult',
     'RayStatus',
     'decode_status',

@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from prysm.x.raytracing import OpticalSystem, sample_rx
-from prysm.x.raytracing.spencer_and_murty import raytrace, valid_mask
+from prysm.x.raytracing.spencer_and_murty import valid_mask
 from prysm.x.raytracing.launch import Field, Sampling, launch
 from prysm.x.raytracing.opt import _pupil_center_chief_index
 from prysm.x.raytracing.analysis import (
@@ -31,7 +31,7 @@ def _traced_bundle(sys, field, sampling=None):
     if sampling is None:
         sampling = Sampling.fan(n=21, axis='y')
     P, S = launch(sys, field, WVL, sampling, epd=sys.epd)
-    trace = raytrace(sys, P, S, WVL)
+    trace = sys.trace(P, S, WVL)
     return P, S, trace
 
 
@@ -65,7 +65,7 @@ def test_close_wavefront_telecentric_resolves_kappa_zero():
     wvl = sys.wavelength()
     fld = Field(3.0, 0.0)
     P, S = launch(sys, fld, wvl, Sampling.fan(n=21, axis='y'), epd=sys.epd)
-    trace = raytrace(sys, P, S, wvl)
+    trace = sys.trace(P, S, wvl)
     chief = _pupil_center_chief_index(P)
     wc = close_wavefront(sys, trace, wvl, chief)
     assert wc.P_xp is None

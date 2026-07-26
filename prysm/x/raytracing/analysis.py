@@ -38,6 +38,8 @@ class DistortionResult:
     paraxial_xy: object
     percent: object
     fields: object = None
+    unit: str = 'percent'
+    reference: str = 'paraxial'
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,12 +49,26 @@ class FieldCurvatureResult:
     fields: object = None
     labels: object = None
     image_z: object = None
+    unit: str = 'mm'
+    reference: str = 'global_z'
 
 
-RayFanGrid = namedtuple('RayFanGrid', ['fields', 'wavelengths', 'pupil_x', 'pupil_y', 'x', 'y'])
-OPDFanGrid = namedtuple('OPDFanGrid', ['fields', 'wavelengths', 'pupil_x', 'pupil_y', 'x', 'y'])
-SpotGrid = namedtuple('SpotGrid', ['fields', 'wavelengths', 'x', 'y', 'valid', 'reference'])
-FullFieldGrid = namedtuple('FullFieldGrid', ['hx', 'hy', 'data', 'metric', 'kind', 'unit'])
+RayFanGrid = namedtuple(
+    'RayFanGrid',
+    ['fields', 'wavelengths', 'pupil_x', 'pupil_y', 'x', 'y',
+     'unit', 'reference'])
+OPDFanGrid = namedtuple(
+    'OPDFanGrid',
+    ['fields', 'wavelengths', 'pupil_x', 'pupil_y', 'x', 'y',
+     'unit', 'reference'])
+SpotGrid = namedtuple(
+    'SpotGrid',
+    ['fields', 'wavelengths', 'x', 'y', 'valid', 'reference_xy',
+     'unit', 'reference'])
+FullFieldGrid = namedtuple(
+    'FullFieldGrid',
+    ['hx', 'hy', 'data', 'metric', 'kind', 'unit', 'data_unit',
+     'reference'])
 
 
 def _axis_index(axis):
@@ -309,13 +325,16 @@ class ReferenceSphereClosing:
 
 
 def close_on_reference_sphere(trace, valid, chief_index, *, center, P_xp,
-                              n_image):
+                              n_image, curvature=None):
     """Close a traced bundle onto the chief-image reference sphere.
 
     P_xp may be None for the telecentric kappa = 0 limit.
     """
     center = np.asarray(center)
-    curvature = reference_sphere_curvature(P_xp, center)
+    if curvature is None:
+        curvature = reference_sphere_curvature(P_xp, center)
+    else:
+        curvature = float(curvature)
     if P_xp is None:
         delta = None
         R = np.inf
@@ -467,7 +486,7 @@ def _apply_field_and_output(opd, x_pupil, y_pupil, field, output, wavelength):
     return opd * scale, scale
 
 
-def wavefront(system, P, S, wavelength, *,
+def wavefront(system, P, S, wavelength=None, *,
               P_xp=None,
               chief_index=None,
               pupil_coords=None, field=None, output='length',
@@ -510,7 +529,8 @@ def wavefront(system, P, S, wavelength, *,
     """
     if reference not in ('chief', 'centroid'):
         raise ValueError(f"reference must be 'chief' or 'centroid', got {reference!r}")
-    trace = raytrace(system, P, S, wavelength)
+    wavelength = resolve_wavelength(system, wavelength)
+    trace = raytrace(compiled_surfaces(system), P, S, wavelength)
     opd, x_pupil, y_pupil, _ = _wavefront_from_trace(
         system, P, wavelength, trace, P_xp=P_xp,
         chief_index=chief_index, pupil_coords=pupil_coords, field=field,
@@ -616,55 +636,73 @@ def distortion(system, fields=None, wavelength=None, *, epd=None,
     wavelength = resolve_wavelength(system, wavelength)
     epd = _require_epd(system, epd, wavelength)
     fields = field_sweep(system, fields, samples)
+    if distortion_type not in ('f-tan', 'linear-angle'):
+        raise ValueError(
+            "distortion_type must be 'f-tan' or 'linear-angle', got "
+            f"{distortion_type!r}"
+        )
+    if paraxial_fraction <= 0:
+        raise ValueError('paraxial_fraction must be positive')
+
     n = len(fields)
     real_xy = np.zeros((n, 2), dtype=config.precision)
     paraxial_xy = np.zeros((n, 2), dtype=config.precision)
     percent = np.zeros(n, dtype=config.precision)
     chief = Sampling.chief()
 
-    # Compare the real chief ray to a tiny-field paraxial proxy.
+    # Recover the complete first-order field-to-image map.  Two independent
+    # basis launches retain anamorphic scale and x/y coupling; componentwise
+    # scaling cannot represent a rotated or otherwise non-separable system.
+    origin_field = Field(0.0, 0.0, kind='angle', unit='rad')
+    origin = trace_cell(system, origin_field, wavelength, chief,
+                        epd=epd, pupil_z=pupil_z)
+    origin_xy = origin.trace.P[-1, 0, :2]
+    image_map = np.zeros((2, 2), dtype=config.precision)
+    for axis in range(2):
+        plus_angles = [0.0, 0.0]
+        minus_angles = [0.0, 0.0]
+        plus_angles[axis] = float(paraxial_fraction)
+        minus_angles[axis] = -float(paraxial_fraction)
+        plus = trace_cell(
+            system, Field(*plus_angles, kind='angle', unit='rad'),
+            wavelength, chief, epd=epd, pupil_z=pupil_z,
+        )
+        minus = trace_cell(
+            system, Field(*minus_angles, kind='angle', unit='rad'),
+            wavelength, chief, epd=epd, pupil_z=pupil_z,
+        )
+        image_map[:, axis] = (
+            plus.trace.P[-1, 0, :2] - minus.trace.P[-1, 0, :2]
+        ) / (2.0 * float(paraxial_fraction))
+
+    # Compare each real chief ray to the generalized paraxial map.
     for i, field in enumerate(fields):
         ax, ay = field.angle_radians()
-        proxy_field = Field(float(np.degrees(ax * paraxial_fraction)),
-                            float(np.degrees(ay * paraxial_fraction)),
-                            kind='angle', unit='deg')
         real = trace_cell(system, field, wavelength, chief,
                           epd=epd, pupil_z=pupil_z)
-        proxy = trace_cell(system, proxy_field, wavelength, chief,
-                           epd=epd, pupil_z=pupil_z)
         real_xy[i] = real.trace.P[-1, 0, :2]
-        proxy_xy = proxy.trace.P[-1, 0, :2]
-
         if distortion_type == 'linear-angle':
-            paraxial_xy[i] = proxy_xy / paraxial_fraction
-        elif distortion_type == 'f-tan':
-            small_slopes = np.array([
-                np.tan(ax * paraxial_fraction),
-                np.tan(ay * paraxial_fraction),
-            ], dtype=config.precision)
-            field_slopes = np.array([np.tan(ax), np.tan(ay)],
-                                    dtype=config.precision)
-            focal_scale = np.zeros(2, dtype=config.precision)
-            nonzero = np.abs(small_slopes) > 0.0
-            focal_scale[nonzero] = proxy_xy[nonzero] / small_slopes[nonzero]
-            paraxial_xy[i] = focal_scale * field_slopes
+            field_coordinate = np.array([ax, ay], dtype=config.precision)
         else:
-            raise ValueError(
-                "distortion_type must be 'f-tan' or 'linear-angle', got "
-                f"{distortion_type!r}"
-            )
+            field_coordinate = np.array([np.tan(ax), np.tan(ay)],
+                                        dtype=config.precision)
+        paraxial_xy[i] = origin_xy + image_map @ field_coordinate
 
-        denom = float(np.hypot(*paraxial_xy[i]))
+        ideal_delta = paraxial_xy[i] - origin_xy
+        real_delta = real_xy[i] - origin_xy
+        denom = float(np.hypot(*ideal_delta))
         if denom > 0.0:
             # signed distortion: project the real chief-ray landing onto the
             # ideal (paraxial) image-height direction so the sign survives.  A
             # real height longer than ideal is pincushion (positive); shorter
             # is barrel (negative).  Taking |real - paraxial| would collapse
             # both to a positive magnitude and make them indistinguishable.
-            real_height = float(np.dot(real_xy[i], paraxial_xy[i])) / denom
+            real_height = float(np.dot(real_delta, ideal_delta)) / denom
             percent[i] = 100.0 * (real_height - denom) / denom
 
-    return DistortionResult(real_xy, paraxial_xy, percent, tuple(fields))
+    return DistortionResult(
+        real_xy, paraxial_xy, percent, tuple(fields),
+        unit='percent', reference=f'paraxial:{distortion_type}')
 
 
 # ---------- field curvature -------------------------------------------------
@@ -738,8 +776,10 @@ def field_curvature(system, fields=None, wavelength=None, *,
         x_fan_z[i], y_fan_z[i] = parabasal_foci(system, field,
                                                 wavelength)
     labels, _ = _field_curvature_labels(ctx.surfaces, fields)
-    return FieldCurvatureResult(x_fan_z, y_fan_z, tuple(fields), labels,
-                                float(ctx.surfaces[-1].P[2]))
+    return FieldCurvatureResult(
+        x_fan_z, y_fan_z, tuple(fields), labels,
+        float(ctx.surfaces[-1].P[2]),
+        unit=getattr(system, 'unit', None) or 'mm', reference='global_z')
 
 
 # ---------- color -----------------------------------------------------------
@@ -983,9 +1023,10 @@ def ray_aberration_fans(system, fields=None, wavelengths=None, *,
     Returns
     -------
     RayFanGrid
-        namedtuple (fields, wavelengths, pupil_x, pupil_y, x, y); the pupil
-        abscissas are per-field, normalized to the nominal pupil, and span
-        only the vignetted extent for a field with vignetting factors.
+        namedtuple (fields, wavelengths, pupil_x, pupil_y, x, y, unit,
+        reference); the pupil abscissas are per-field, normalized to the
+        nominal pupil, and span only the vignetted extent for a field with
+        vignetting factors.
 
     """
     fields, wavelengths, x_fan, y_fan, pupil_x, pupil_y, x, y = _fan_grid_setup(
@@ -997,9 +1038,10 @@ def ray_aberration_fans(system, fields=None, wavelengths=None, *,
             iter_trace_grid(system, fields, wavelengths, y_fan, epd=epd)):
         x[xr.i, xr.j] = _fan_image_error(xr, 'x', reference)
         y[yr.i, yr.j] = _fan_image_error(yr, 'y', reference)
-    return RayFanGrid(tuple(fields),
-                      np.asarray(wavelengths, dtype=config.precision),
-                      pupil_x, pupil_y, x, y)
+    return RayFanGrid(
+        tuple(fields), np.asarray(wavelengths, dtype=config.precision),
+        pupil_x, pupil_y, x, y,
+        getattr(system, 'unit', None) or 'mm', reference)
 
 
 def _exit_pupil_for(system, wavelength, *, field=None, stop_index=None,
@@ -1054,8 +1096,8 @@ def opd_fans(system, fields=None, wavelengths=None, *, nrays=21,
     Returns
     -------
     OPDFanGrid
-        namedtuple (fields, wavelengths, pupil_x, pupil_y, x, y); see
-        ray_aberration_fans for the pupil abscissa convention.
+        namedtuple (fields, wavelengths, pupil_x, pupil_y, x, y, unit,
+        reference); see ray_aberration_fans for the pupil convention.
 
     """
     fields, wavelengths, x_fan, y_fan, pupil_x, pupil_y, x, y = _fan_grid_setup(
@@ -1076,9 +1118,11 @@ def opd_fans(system, fields=None, wavelengths=None, *, nrays=21,
                                  n_pupil)
         y[yr.i, yr.j] = _opd_fan(system, yr, tilt_field, P_xp, output,
                                  n_pupil)
-    return OPDFanGrid(tuple(fields),
-                      np.asarray(wavelengths, dtype=config.precision),
-                      pupil_x, pupil_y, x, y)
+    unit = 'waves' if output == 'waves' else (
+        getattr(system, 'unit', None) or 'mm')
+    return OPDFanGrid(
+        tuple(fields), np.asarray(wavelengths, dtype=config.precision),
+        pupil_x, pupil_y, x, y, unit, 'chief')
 
 
 def spot_diagrams(system, fields=None, wavelengths=None, *,
@@ -1104,7 +1148,8 @@ def spot_diagrams(system, fields=None, wavelengths=None, *,
     Returns
     -------
     SpotGrid
-        namedtuple (fields, wavelengths, x, y, valid, reference).
+        namedtuple (fields, wavelengths, x, y, valid, reference_xy, unit,
+        reference).
 
     """
     fields = _resolve_fields(system, fields)
@@ -1134,9 +1179,10 @@ def spot_diagrams(system, fields=None, wavelengths=None, *,
         y[r.i, r.j] = centered[:, 1]
         valid[r.i, r.j] = v
         reference_xy[r.i, r.j] = ref
-    return SpotGrid(tuple(fields),
-                    np.asarray(wavelengths, dtype=config.precision),
-                    x, y, valid, reference_xy)
+    return SpotGrid(
+        tuple(fields), np.asarray(wavelengths, dtype=config.precision),
+        x, y, valid, reference_xy,
+        getattr(system, 'unit', None) or 'mm', reference)
 
 
 def spot_rms_radius(spot_grid):
@@ -1311,8 +1357,10 @@ def full_field(system, metric='rms spot', *, samples=15, max_field=None,
     Returns
     -------
     FullFieldGrid
-        namedtuple (hx, hy, data, metric, kind, unit); hx, hy, and data are
-        (samples, samples) arrays, with data NaN outside the field disc.
+        namedtuple (hx, hy, data, metric, kind, unit, data_unit, reference);
+        hx, hy, and data are (samples, samples) arrays, with data NaN outside
+        the field disc.  unit describes field coordinates; data_unit and
+        reference describe the metric values.
 
     """
     kind, unit, object_z, radius = _full_field_template(system, max_field)
@@ -1329,14 +1377,20 @@ def full_field(system, metric='rms spot', *, samples=15, max_field=None,
     if key == 'rms spot':
         values = _full_field_rms_spot(system, flat_fields, wavelengths,
                                       sampling, epd)
+        data_unit = getattr(system, 'unit', None) or 'mm'
+        reference = 'centroid'
     elif key == 'rms wfe':
         wvl = resolve_wavelength(
             system, None if wavelengths is None else wavelengths[0])
         values = _full_field_rms_wfe(system, flat_fields, wvl, sampling,
                                      epd, stop_index)
+        data_unit = 'waves'
+        reference = 'piston'
     elif key == 'distortion':
         wvl = None if wavelengths is None else wavelengths[0]
         values = distortion(system, flat_fields, wvl, epd=epd).percent
+        data_unit = 'percent'
+        reference = 'paraxial:f-tan'
     elif key == 'lateral color':
         wvls = _resolve_wavelengths(system, wavelengths)
         if len(wvls) < 2:
@@ -1347,6 +1401,8 @@ def full_field(system, metric='rms spot', *, samples=15, max_field=None,
         d = (landing[:, int(np.argmax(wvls))]
              - landing[:, int(np.argmin(wvls))])
         values = np.hypot(d[:, 0], d[:, 1])
+        data_unit = getattr(system, 'unit', None) or 'mm'
+        reference = 'spectral-extremes'
     else:
         raise ValueError(
             "metric must be 'rms spot', 'rms wfe', 'distortion', or "
@@ -1354,4 +1410,6 @@ def full_field(system, metric='rms spot', *, samples=15, max_field=None,
         )
     data = np.full(hx.size, np.nan, dtype=config.precision)
     data[idx] = np.asarray(values, dtype=config.precision)
-    return FullFieldGrid(hx, hy, data.reshape(hx.shape), key, kind, unit)
+    return FullFieldGrid(
+        hx, hy, data.reshape(hx.shape), key, kind, unit, data_unit,
+        reference)

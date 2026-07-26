@@ -141,6 +141,19 @@ def test_chromatic_terms_nonzero_for_real_glass():
     assert abs(res.sums['CII']) > 0
 
 
+def test_chromatic_terms_include_dispersive_object_medium():
+    """Object-space dispersion participates in the signed-index delta."""
+    object_medium = materials.FormulaMaterial(
+        'dispersive object medium',
+        lambda wvl: 1.2 + 0.05 * float(wvl),
+    )
+    ld = _singlet(material=_n_const(1.5168), dispersive=True)
+    ld.lens.object_row.material = object_medium
+    res = seidel_aberrations(ld, field=Field(0.0, 2.0, kind='angle'))
+    assert abs(res.sums['CI']) > 0
+    assert abs(res.sums['CII']) > 0
+
+
 def test_wavefront_coefficients_apply_classical_factors():
     """W040 = SI/8, W131 = SII/2, W222 = SIII/2, W220 = (SIII + SIV)/4,
     W311 = SV/2, all divided by wavelength in length units."""

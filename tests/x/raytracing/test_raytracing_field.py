@@ -302,19 +302,19 @@ def test_pupil_field_coating_is_amplitude_only():
     from prysm.x.raytracing.analysis import wavefront
     presc = _fast_singlet()
     wvl = 0.5
-    P, S = launch(presc, Field(0., 0.), wvl, Sampling.rect(n=64),
+    P, S = launch(presc, Field(0., 0.), wvl, Sampling.rect(n=65),
                   epd=8.0, pupil_z=-20.0)
     # phase-only wavefront over the same inscribed circular pupil
     opd_ref, xr, yr = wavefront(presc, P, S, wvl, P_xp=(0, 0, 0))
     circ = np.hypot(xr, yr) <= 4.0 * (1.0 + 1e-9)
-    pf = field.pupil_field(presc, Field(0., 0.), wvl, epd=8.0, npupil=64,
+    pf = field.pupil_field(presc, Field(0., 0.), wvl, epd=8.0, npupil=65,
                            P_xp=(0, 0, 0), pupil_z=-20.0)
     # amplitude carries Fresnel loss
     assert float(np.max(pf.amplitude)) < 1.0
     assert float(np.ptp(pf.amplitude)) > 0.0
     # OPD agrees with the phase-only wavefront
     assert np.nanmax(np.abs(opd_ref[circ])) == pytest.approx(
-        np.nanmax(np.abs(pf.opd)), rel=1e-6)
+        np.nanmax(np.abs(pf.opd)) * 1e-3, rel=1e-6)
 
 
 def test_fast_singlet_is_spherical_aberration_not_airy():
@@ -323,7 +323,7 @@ def test_fast_singlet_is_spherical_aberration_not_airy():
     wvl = 0.5
     pf = field.pupil_field(presc, Field(0., 0.), wvl, epd=8.0, npupil=64,
                            P_xp=(0, 0, 0), pupil_z=-20.0)
-    ptv_waves = float(np.ptp(pf.opd)) * 1e3 / wvl   # length(mm)->um->waves
+    ptv_waves = float(np.ptp(pf.waves()))
     assert ptv_waves > 1.0   # many waves of aberration
 
 
@@ -375,17 +375,37 @@ def test_pupil_field_uses_vignetted_pupil_coordinates_for_opd_tilt():
     fld = Field(0.0, 8.0, kind='angle', vignetting={'vuy': 0.5})
     sampling = Sampling.rect(n=npupil)
     P, S = launch(presc, fld, wvl, sampling, epd=epd, pupil_z=-5.0)
-    opd_ref, _, _ = wavefront(presc, P, S, wvl, P_xp=(0, 0, 0),
-                              field=fld)
+    opd_ref, _, _ = wavefront(
+        presc, P, S, wvl, P_xp=(0, 0, 0), field=fld,
+        chief_index=sampling.chief_index)
     nominal = sampling.build(0.5 * epd)
-    chief = _pupil_center_chief_index(P)
+    chief = sampling.chief_index
     circ = (np.hypot(nominal[:, 0] - nominal[chief, 0],
                      nominal[:, 1] - nominal[chief, 1])
             <= 0.5 * epd * (1 + 1e-9))
 
     pf = field.pupil_field(presc, fld, wvl, epd=epd, npupil=npupil,
                            P_xp=(0, 0, 0), pupil_z=-5.0)
-    np.testing.assert_allclose(pf.opd, opd_ref[circ], atol=1e-10)
+    np.testing.assert_allclose(pf.opd, opd_ref[circ] * 1e3, atol=1e-7)
+
+
+def test_even_rect_grid_uses_exact_internal_chief_without_extra_sample():
+    presc = _flat_refractor()
+    pf = field.pupil_field(
+        presc, Field(0, 2), 0.5, epd=4.0, npupil=16,
+        P_xp=(0, 0, 0), pupil_z=-5.0,
+    )
+    assert len(pf.X) <= 16 * 16
+    P, S = launch(
+        presc, Field(0, 2), 0.5, Sampling.chief(), epd=4.0, pupil_z=-5.0)
+    chief = raytrace(presc, P, S, 0.5)
+    np.testing.assert_allclose(pf.P_img, chief.P[-1, 0])
+
+
+def test_sampling_exposes_exact_chief_metadata():
+    assert Sampling.rect(15).chief_index == 15 * 15 // 2
+    assert Sampling.rect(16).chief_index is None
+    assert Sampling.chief().chief_index == 0
 
 
 # ---------- Phase 3: polarization ray tracing ------------------------------

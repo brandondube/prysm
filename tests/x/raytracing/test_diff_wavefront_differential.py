@@ -6,8 +6,8 @@ from prysm.x import materials
 from prysm.x.raytracing import OpticalSystem
 from prysm.x.raytracing import LensData
 from prysm.x.raytracing.launch import Field, Sampling, launch
-from prysm.x.raytracing.surfaces import Conic, Plane
-from prysm.x.raytracing.spencer_and_murty import _is_measurement_surf, raytrace
+from prysm.x.raytracing.surfaces import Conic
+from prysm.x.raytracing.spencer_and_murty import _is_measurement_surf
 from prysm.x.raytracing.paraxial import paraxial_image_distance
 from prysm.x.raytracing.design import WavefrontRMS
 from prysm.x.raytracing.tolerance import (
@@ -75,7 +75,7 @@ def merit_of(ld, P, S):
     op = WavefrontRMS()
 
     def merit(prescription):
-        return float(op.value(raytrace(prescription, P, S, WVL),
+        return float(op.value(prescription.trace(P, S, WVL),
                               prescription, WVL))
 
     return merit
@@ -89,6 +89,16 @@ def test_nominal_rms_matches_wavefrontrms():
     wd = wavefront_differential(ld, basic_perts(ld), P, S, WVL)
     m_nom = merit_of(ld, P, S)(ld)
     np.testing.assert_allclose(wd.rms_nominal, m_nom, rtol=1e-10)
+
+
+def test_piston_reference_is_explicit_and_removes_mean():
+    ld = singlet()
+    P, S = bundle(ld)
+    wd = wavefront_differential(
+        ld, basic_perts(ld), P, S, WVL, rms_reference='piston')
+    assert wd.reference == 'piston'
+    np.testing.assert_allclose(np.mean(wd.W0), 0.0, atol=1e-15)
+    np.testing.assert_allclose(np.mean(wd.dW, axis=0), 0.0, atol=2e-15)
 
 
 def test_wavefront_differential_resolves_system_wavelength():
@@ -118,6 +128,19 @@ def test_sensitivity_matches_fd_sensitivity_table():
     ld = singlet()
     P, S = bundle(ld)
     perts = basic_perts(ld)
+    wd = wavefront_differential(ld, perts, P, S, WVL)
+    fd = sensitivity_table(ld, perts, merit_of(ld, P, S)).sensitivities()
+    np.testing.assert_allclose(wd.sensitivity(), fd, rtol=3e-3, atol=1e-9)
+
+
+def test_stop_derived_exit_pupil_and_tangent_match_fd():
+    ld = singlet()
+    ld.stop_index = 1
+    P, S = bundle(ld)
+    perts = [
+        Perturbation.normal(ld, 'curvature', 1, 1e-5, name='c1'),
+        Perturbation.normal(ld, 'thickness', 1, 5e-4, name='t0'),
+    ]
     wd = wavefront_differential(ld, perts, P, S, WVL)
     fd = sensitivity_table(ld, perts, merit_of(ld, P, S)).sensitivities()
     np.testing.assert_allclose(wd.sensitivity(), fd, rtol=3e-3, atol=1e-9)

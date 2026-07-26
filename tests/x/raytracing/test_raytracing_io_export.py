@@ -4,11 +4,21 @@ rotationally symmetric subset, including the post-mirror sign convention."""
 import numpy as np
 import pytest
 
-from prysm.x.raytracing import OpticalSystem
-from prysm.x.raytracing import LensData
+from prysm.x.raytracing import (
+    ApertureSpec,
+    Field,
+    LensData,
+    LinearGrating,
+    OpticalSystem,
+)
 from prysm.x import materials
 from prysm.x.raytracing.io import read_seq, write_seq, read_zmx, write_zmx
 from prysm.x.raytracing.surfaces import Conic, EvenAsphere, Plane
+
+
+class _UnnamedMaterial:
+    def n(self, wavelength):
+        return 1.5
 
 
 def make_refractive():
@@ -69,7 +79,8 @@ GO
 
 
 def test_seq_export_rejects_unsupported_shape_without_loss():
-    ld = LensData().add(EvenAsphere(0.01, 0.0, (1e-4,)), thickness=1.0)
+    ld = LensData().add(EvenAsphere(0.01, 0.0, (1e-4,)), thickness=1.0,
+                        material=materials.air)
     with pytest.raises(NotImplementedError, match='EvenAsphere'):
         write_seq(ld)
 
@@ -109,7 +120,8 @@ def test_zmx_export_maps_stop_index_past_coordbreak():
 
 
 def test_zmx_export_rejects_unsupported_shape_without_loss():
-    ld = LensData().add(EvenAsphere(0.01, 0.0, (1e-4,)), thickness=1.0)
+    ld = LensData().add(EvenAsphere(0.01, 0.0, (1e-4,)), thickness=1.0,
+                        material=materials.air)
     with pytest.raises(NotImplementedError, match='EvenAsphere'):
         write_zmx(ld)
 
@@ -135,6 +147,57 @@ def _finite_conjugate_system(object_medium=None):
     (lens.add(Conic(1 / 50.0, 0.0), thickness=5.0, material=materials.air)
          .add(Conic(-1 / 50.0, -0.5), thickness=95.0, material=materials.air))
     return OpticalSystem(lens, aperture=10.0, wavelengths=[0.55])
+
+
+def _semantic_export_system():
+    lens = LensData()
+    (lens.add(Conic(1 / 50.0, 0.0), thickness=5.0,
+              material=materials.air, aperture=8.0)
+         .add(Conic(-1 / 50.0, -0.5), thickness=95.0,
+              material=materials.air, aperture=7.0))
+    return OpticalSystem(
+        lens, aperture=10.0,
+        fields=[Field(0.0, 0.0), Field(1.5, 3.0)],
+        wavelengths=[0.4861, 0.5876, 0.6563],
+        weights=[0.25, 1.0, 0.5], reference=1, stop_index=1,
+        title='semantic round trip')
+
+
+@pytest.mark.parametrize(
+    ('writer', 'reader'), ((write_zmx, read_zmx), (write_seq, read_seq)))
+def test_semantic_metadata_round_trip(writer, reader):
+    original = _semantic_export_system()
+    back = reader(writer(original), _is_text=True)
+    _assert_geometry_round_trips(original, back)
+    assert back.title == original.title
+    np.testing.assert_allclose(back.wavelengths, original.wavelengths)
+    np.testing.assert_allclose(back.weights, original.weights)
+    assert back.reference == original.reference
+    assert back.stop_index == original.stop_index
+    assert [(f.hx, f.hy, f.kind, f.unit) for f in back.fields] == [
+        (f.hx, f.hy, f.kind, f.unit) for f in original.fields]
+    assert back.rows[1].aperture.clip.radius == pytest.approx(8.0)
+    assert back.rows[2].aperture.clip.radius == pytest.approx(7.0)
+
+
+@pytest.mark.parametrize('writer', (write_zmx, write_seq))
+def test_strict_export_reports_all_unsupported_semantics(writer):
+    lens = LensData().add(
+        EvenAsphere(0.01, 0.0, (1e-4,)), thickness=1.0,
+        material=_UnnamedMaterial(),
+        grating=LinearGrating(0.01), coating=object())
+    sys = OpticalSystem(
+        lens, aperture=ApertureSpec.fno(4.0),
+        fields=[Field(0.0, 0.1, unit='rad')], wavelengths=[0.55],
+        extras={'UNSUPPORTED': ['value']})
+    with pytest.raises(NotImplementedError) as exc:
+        writer(sys)
+    message = str(exc.value)
+    for expected in (
+            'shape EvenAsphere', 'OPLFunc/grating', 'coating stack',
+            'material has no external catalog name', 'aperture mode',
+            'angular unit', 'system extras'):
+        assert expected in message
 
 
 def test_zmx_round_trip_finite_object_conjugate():

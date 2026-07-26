@@ -139,11 +139,11 @@ def d_reflect(S_loc, n_hat, S_locdot, dn_hat):
     return Sprime, dSprime
 
 
-def d_diffract(S_specular, n_hat, n_post, wvl, grad, hess,
+def d_diffract(S_specular, n_hat, n_post, grad, hess,
                dPj, dS_specular, dn_hat, n_post_dot):
     """Differential of the diffractive bend.
 
-    Includes phase-gradient motion through the supplied Hessian.
+    Includes OPL-gradient motion through the supplied Hessian.
 
     Parameters
     ----------
@@ -151,12 +151,10 @@ def d_diffract(S_specular, n_hat, n_post, wvl, grad, hess,
         nominal specular direction and unit normal.
     n_post : float
         following index (the kick divides by it).
-    wvl : float
-        wavelength.
     grad : tuple of ndarray
-        (gx, gy) nominal in-plane phase gradient at the intersection, each (N,).
+        (gx, gy) nominal in-plane OPL gradient at the intersection, each (N,).
     hess : tuple of ndarray
-        (gxx, gxy, gyy) nominal phase Hessian, each (N,).
+        (gxx, gxy, gyy) nominal OPL Hessian, each (N,).
     dPj : ndarray, (N, 3, P)
         tangent of the local intersection point (supplies dX, dY).
     dS_specular, dn_hat : ndarray, (N, 3, P)
@@ -181,8 +179,8 @@ def d_diffract(S_specular, n_hat, n_post, wvl, grad, hess,
     dgy = gxy[:, None] * dX + gyy[:, None] * dY
     dG = np.stack([dgx, dgy, np.zeros_like(dgx)], axis=1)        # (N, 3, P)
 
-    a = wvl / n_post
-    da = (-wvl / (n_post * n_post)) * n_post_dot                 # (P,)
+    a = 1.0 / n_post
+    da = (-1.0 / (n_post * n_post)) * n_post_dot                 # (P,)
 
     s_dot_n = row_dot(S_specular, n_hat)                         # (N,)
     s_specular_tan = S_specular - s_dot_n[:, None] * n_hat
@@ -261,8 +259,8 @@ class DiffSeed:
     ----------
     pose : dict
         {surface_index: (Qdot, Rdot)} vertex and rotation tangents.
-    shape : tuple or None
-        (surface_index, name) of a shape DOF.
+    shapes : sequence
+        `(surface_index, name, scale)` shape-DOF tangents.
     sag_partials : tuple or None
         (surface_index, fn) for explicit sag/sag-gradient partials.
     index : tuple or None
@@ -272,12 +270,12 @@ class DiffSeed:
 
     """
 
-    __slots__ = ('pose', 'shape', 'sag_partials', 'index', 'name')
+    __slots__ = ('pose', 'shapes', 'sag_partials', 'index', 'name')
 
-    def __init__(self, pose=None, shape=None, sag_partials=None, index=None,
+    def __init__(self, pose=None, shapes=None, sag_partials=None, index=None,
                  name=''):
         self.pose = dict(pose) if pose else {}
-        self.shape = shape
+        self.shapes = tuple(shapes) if shapes else ()
         self.sag_partials = sag_partials
         self.index = index
         self.name = str(name)
@@ -288,17 +286,18 @@ class DiffSeed:
 
 def seed_curvature(surface, name='c'):
     """Seed for a curvature (DLR) tolerance on a surface's shape DOF 'c'."""
-    return DiffSeed(shape=(surface, 'c'), name=name)
+    return DiffSeed(shapes=[(surface, 'c', 1.0)], name=name)
 
 
 def seed_conic(surface, name='k'):
     """Seed for a conic-constant tolerance on a surface's shape DOF 'k'."""
-    return DiffSeed(shape=(surface, 'k'), name=name)
+    return DiffSeed(shapes=[(surface, 'k', 1.0)], name=name)
 
 
 def seed_shape_param(surface, param_name, name=None):
     """Seed for an arbitrary scalar shape DOF (freeform coefficient, etc.)."""
-    return DiffSeed(shape=(surface, param_name), name=name or param_name)
+    return DiffSeed(shapes=[(surface, param_name, 1.0)],
+                    name=name or param_name)
 
 
 def seed_irregularity(surface, n, m, normalization_radius, *, norm=True,
@@ -352,30 +351,6 @@ def seed_index(surface, name='index'):
 
 
 # ---------- map tolerance.Perturbation -> DiffSeed --------------------------
-
-def _is_surface_row(row):
-    """True for a SurfaceRow (emits a Surface); False for a CoordBreak."""
-    return hasattr(row, 'build_shape')
-
-
-def _row_to_surface_index(rows, row_idx):
-    """Compiled-surface index of the SurfaceRow at rows[row_idx].
-
-    CoordBreak rows emit no Surface, so a surface row's index in the compiled
-    list is the count of surface rows preceding it.
-    """
-    count = 0
-    for i, row in enumerate(rows):
-        if i == row_idx:
-            if not _is_surface_row(row):
-                raise ValueError(
-                    f'row {row_idx} is a coordinate break, not a surface, and '
-                    'has no shape DOF to differentiate')
-            return count
-        if _is_surface_row(row):
-            count += 1
-    raise IndexError(f'row index {row_idx} out of range ({len(rows)} rows)')
-
 
 def _shape_dof_name(row, off):
     """Resolve a shape-DOF offset to its parameter name on a SurfaceRow."""
@@ -433,13 +408,24 @@ def seed_from_perturbation(perturbation, *, pose_step=1e-6):
     ld = perturbation.lensdata
     name = perturbation.name or f'{group}{row_idx}'
 
-    shape = None
-    if group == 'shape':
-        surf_idx = _row_to_surface_index(ld.rows, row_idx)
-        shape = (surf_idx, _shape_dof_name(ld.rows[row_idx], off))
+    from ._surface_map import SurfaceMap
+    mapping = SurfaceMap(ld)
+    shapes = []
+    owner = getattr(ld, 'system_owner', None)
+    design = None if owner is None else owner._design
+    expansion = ({perturbation.slot: 1.0} if design is None
+                 else design.pickup_expansion(perturbation.slot))
+    for slot, scale in expansion.items():
+        dep_group, dep_row, dep_off = slot
+        if dep_group != 'shape' or scale == 0.0:
+            continue
+        surf_idx = mapping.surface_for_row(dep_row)
+        shapes.append((surf_idx,
+                       _shape_dof_name(ld.rows[dep_row], dep_off),
+                       float(scale)))
 
     pose = _pose_tangents_via_layout(perturbation, pose_step)
-    return DiffSeed(pose=pose, shape=shape, name=name)
+    return DiffSeed(pose=pose, shapes=shapes, name=name)
 
 
 def seeds_from_perturbations(perturbations, *, pose_step=1e-6):
@@ -466,9 +452,8 @@ def _assemble_seeds(n_surfaces, seeds, n_params):
             Qdot[sidx][:, p] = Qdot[sidx][:, p] + np.asarray(Qd, dtype=dt)
             if Rd is not None:
                 Rdot[sidx][:, :, p] = Rdot[sidx][:, :, p] + np.asarray(Rd, dtype=dt)
-        if seed.shape is not None:
-            sidx, pname = seed.shape
-            shape_params[sidx].append((p, pname))
+        for sidx, pname, scale in seed.shapes:
+            shape_params[sidx].append((p, pname, float(scale)))
         if seed.sag_partials is not None:
             sidx, fn = seed.sag_partials
             sag_partial_fns[sidx].append((p, fn))
@@ -564,9 +549,9 @@ def paraxial_exit_pupil_z_tangents(surfaces, wvl, seeds, *,
     zdot_s = np.array([Qdot[2] for Qdot in Qdot_s], dtype=config.precision)
     cdot_s = np.zeros((n_surfaces, n_params), dtype=config.precision)
     for sidx, entries in enumerate(shape_params):
-        for p, pname in entries:
+        for p, pname, scale in entries:
             if pname in ('c', 'c_y'):
-                cdot_s[sidx, p] = cdot_s[sidx, p] + 1.0
+                cdot_s[sidx, p] = cdot_s[sidx, p] + scale
 
     n_object = object_space_index(surfaces, wvl)
     ndot_object = np.zeros(n_params, dtype=config.precision)
@@ -589,6 +574,270 @@ def paraxial_exit_pupil_z_tangents(surfaces, wvl, seeds, *,
         + B * n_image * Ddot / (D * D)
     )
     return zdot_s[-1] + xp_distance_dot
+
+
+def _paraxial_seed_geometry(surfaces, seeds):
+    """Axial first-order seed arrays, or None for non-axial perturbations."""
+    seeds = list(seeds)
+    n_params = len(seeds)
+    Qdot_s, Rdot_s, nprimedot_s, shape_params, sag_partials = _assemble_seeds(
+        len(surfaces), seeds, n_params)
+    if any(sag_partials):
+        return None
+    for Qdot, Rdot in zip(Qdot_s, Rdot_s):
+        if bool(np.any(Qdot[:2])) or bool(np.any(Rdot)):
+            return None
+    zdot_s = np.stack([Qdot[2] for Qdot in Qdot_s], axis=0)
+    cdot_s = np.zeros((len(surfaces), n_params), dtype=config.precision)
+    for sidx, entries in enumerate(shape_params):
+        for p, pname, scale in entries:
+            if pname in ('c', 'c_y'):
+                cdot_s[sidx, p] = cdot_s[sidx, p] + scale
+            elif pname not in ('c_x', 'k', 'k_x', 'k_y'):
+                # A parameter whose first-order vertex-curvature tangent is
+                # unknown cannot use the analytic launch route.
+                return None
+    return zdot_s, cdot_s, nprimedot_s
+
+
+def paraxial_system_matrix_tangents(surfaces, wvl, seeds):
+    """System ABCD matrix and its per-seed tangent, or None if ineligible."""
+    from .paraxial import _first_order_surfaces
+
+    surfaces = _first_order_surfaces(surfaces)
+    data = _paraxial_seed_geometry(surfaces, seeds)
+    if data is None:
+        return None
+    zdot_s, cdot_s, nprimedot_s = data
+    n_params = len(seeds)
+    n_object = object_space_index(surfaces, wvl)
+    n_object_dot = np.zeros(n_params, dtype=config.precision)
+    return _paraxial_walk_matrix_tangent(
+        surfaces, wvl, n_object, n_object_dot,
+        zdot_s, cdot_s, nprimedot_s)
+
+
+def paraxial_entrance_pupil_z_tangents(surfaces, wvl, seeds, *,
+                                       stop_index=None):
+    """Entrance-pupil z tangent, or None for an ineligible/telecentric case."""
+    from .paraxial import _first_order_surfaces
+
+    seeds = list(seeds)
+    n_params = len(seeds)
+    if stop_index is None:
+        return np.zeros(n_params, dtype=config.precision)
+    surfaces = _first_order_surfaces(surfaces)
+    k = int(stop_index)
+    if k < 0 or k >= len(surfaces):
+        raise IndexError('stop_index is out of range')
+    data = _paraxial_seed_geometry(surfaces, seeds)
+    if data is None:
+        return None
+    zdot_s, cdot_s, nprimedot_s = data
+    n_object = object_space_index(surfaces, wvl)
+    n_object_dot = np.zeros(n_params, dtype=config.precision)
+    M, _, Mdot, _ = _paraxial_walk_matrix_tangent(
+        surfaces, wvl, n_object, n_object_dot,
+        zdot_s, cdot_s, nprimedot_s,
+        end_index=k, include_end_surface=False)
+    A = float(M[0, 0])
+    B = float(M[0, 1])
+    if abs(A) < 1e-30:
+        return None
+    Adot = Mdot[0, 0]
+    Bdot = Mdot[0, 1]
+    distance_dot = ((Bdot * n_object + B * n_object_dot) / A
+                    - B * n_object * Adot / (A * A))
+    return zdot_s[0] + distance_dot
+
+
+def _normalize_tangent(v, vdot):
+    """Tangent of vector normalization for v (3,) and vdot (3,P)."""
+    norm = float(np.sqrt(np.sum(v * v)))
+    unit = v / norm
+    return unit, (vdot - unit[:, None] * np.sum(
+        unit[:, None] * vdot, axis=0)[None, :]) / norm
+
+
+def image_index_tangents(surfaces, seeds):
+    """Physical image-medium index tangent after all refractive transitions."""
+    seeds = list(seeds)
+    _, _, nprimedot_s, _, _ = _assemble_seeds(
+        len(surfaces), seeds, len(seeds))
+    out = np.zeros(len(seeds), dtype=config.precision)
+    for j, surf in enumerate(surfaces):
+        if surf.typ == STYPE_REFRACT:
+            out = np.asarray(nprimedot_s[j], dtype=config.precision).copy()
+    return out
+
+
+def _perp_basis_tangents(w, wdot):
+    """Tangent of launch._perp_basis with its deterministic axial gauge."""
+    st = float(np.sqrt(w[0] * w[0] + w[1] * w[1]))
+    n_params = wdot.shape[1]
+    if st < 1e-12:
+        e1 = np.array([1.0, 0.0, 0.0], dtype=config.precision)
+        e1dot = np.zeros((3, n_params), dtype=config.precision)
+    else:
+        q = np.array([w[1], -w[0], 0.0], dtype=config.precision)
+        qdot = np.stack([wdot[1], -wdot[0], np.zeros(n_params)], axis=0)
+        e1, e1dot = _normalize_tangent(q, qdot)
+        if float(e1[0]) < 0.0 or (float(e1[0]) == 0.0
+                                  and float(e1[1]) < 0.0):
+            e1 = -e1
+            e1dot = -e1dot
+    e2 = np.cross(w, e1)
+    e2dot = np.stack([
+        np.cross(wdot[:, p], e1) + np.cross(w, e1dot[:, p])
+        for p in range(n_params)
+    ], axis=1)
+    return e1, e2, e1dot, e2dot
+
+
+def paraxial_launch_tangents(system, field, wavelength, sampling, seeds, *,
+                             epd=None, P=None, S=None):
+    """Complete analytic tangents of the paraxial launch recipe.
+
+    Returns `(Pdot0, Sdot0)` or None when the launch uses iterative aiming,
+    non-axial first-order dependencies, a random sampling, or a singular pupil.
+    """
+    from .launch import launch, _apply_vignetting
+    from ._resolve import compiled_surfaces
+
+    seeds = list(seeds)
+    n_params = len(seeds)
+    if str(getattr(system, 'ray_aiming', 'paraxial')).lower() != 'paraxial':
+        return None
+    if sampling.opts.get('distribution') == 'random':
+        return None
+    surfaces = compiled_surfaces(system)
+    data = _paraxial_seed_geometry(surfaces, seeds)
+    if data is None:
+        return None
+    zdot_s, _, _ = data
+    ep_z_dot = paraxial_entrance_pupil_z_tangents(
+        surfaces, wavelength, seeds,
+        stop_index=getattr(system, 'stop_index', None))
+    if ep_z_dot is None:
+        return None
+    if P is None or S is None:
+        P, S = launch(system, field, wavelength, sampling, epd=epd)
+    P = np.asarray(P, dtype=config.precision)
+    S = np.asarray(S, dtype=config.precision)
+    n_rays = P.shape[0]
+    Pdot = np.zeros((n_rays, 3, n_params), dtype=config.precision)
+    Sdot = np.zeros_like(Pdot)
+
+    aperture = getattr(system, 'aperture', None)
+    object_mode = False
+    bc = None
+    if epd is None and aperture is not None:
+        bc = aperture.resolve(system, wavelength)
+        object_mode = bc[0] in ('NA_OBJECT', 'FNO_OBJECT')
+
+    if object_mode:
+        na = bc[1] if bc[0] == 'NA_OBJECT' else 1.0 / (2.0 * bc[1])
+        n_obj = object_space_index(surfaces, wavelength)
+        sin_u = float(na) / float(n_obj)
+        rho = _apply_vignetting(sampling.build(1.0), field)
+        obj = np.array([field.hx, field.hy, field.object_z],
+                       dtype=config.precision)
+        ep_z = system.entrance_pupil_z(wavelength)
+        if ep_z is None:
+            chief = np.array([0.0, 0.0, 1.0], dtype=config.precision)
+            chief_dot = np.zeros((3, n_params), dtype=config.precision)
+        else:
+            axis_delta = np.array(
+                [-obj[0], -obj[1], float(ep_z) - obj[2]],
+                dtype=config.precision)
+            axis_delta_dot = np.zeros((3, n_params), dtype=config.precision)
+            axis_delta_dot[2] = ep_z_dot
+            chief, chief_dot = _normalize_tangent(
+                axis_delta, axis_delta_dot)
+        e1, e2, e1dot, e2dot = _perp_basis_tangents(chief, chief_dot)
+        axial = np.sqrt(np.clip(
+            1.0 - sin_u * sin_u * np.sum(rho * rho, axis=1), 0.0, None))
+        for ray in range(n_rays):
+            Sdot[ray] = (
+                axial[ray] * chief_dot
+                + sin_u * (rho[ray, 0] * e1dot
+                           + rho[ray, 1] * e2dot)
+            )
+        return Pdot, Sdot
+
+    # Image/object-space aperture metadata controls the sampled extent.
+    if epd is not None:
+        extent = float(epd) / 2.0
+        extent_dot = np.zeros(n_params, dtype=config.precision)
+    elif sampling.kind == 'chief':
+        extent = 0.0
+        extent_dot = np.zeros(n_params, dtype=config.precision)
+    else:
+        epd_value = float(system.entrance_pupil_diameter(wavelength))
+        extent = epd_value / 2.0
+        extent_dot = np.zeros(n_params, dtype=config.precision)
+        mode = aperture.mode
+        if mode != 'EPD':
+            matrix_result = paraxial_system_matrix_tangents(
+                surfaces, wavelength, seeds)
+            if matrix_result is None:
+                return None
+            M, _, Mdot, _ = matrix_result
+            C = float(M[1, 0])
+            Cdot = Mdot[1, 0]
+            if abs(C) < 1e-30:
+                return None
+            if mode == 'FNO_IMAGE':
+                n_obj = object_space_index(surfaces, wavelength)
+                efl = -float(n_obj) / C
+                efl_dot = float(n_obj) * Cdot / (C * C)
+                extent_dot = (np.sign(efl) * efl_dot
+                              / aperture.value) / 2.0
+            elif mode == 'NA_IMAGE':
+                extent_dot = (-aperture.value * np.sign(C) * Cdot
+                              / (abs(C) ** 2))
+            else:
+                return None
+
+    pupil_xy = _apply_vignetting(sampling.build(extent), field)
+    if sampling.kind == 'hex' and sampling.opts.get('spacing') is not None:
+        pupil_xy_dot = np.zeros((n_rays, 2, n_params),
+                               dtype=config.precision)
+    elif extent > 0.0:
+        pupil_xy_dot = (pupil_xy[:, :, None] / extent
+                        * extent_dot[None, None, :])
+    else:
+        pupil_xy_dot = np.zeros((n_rays, 2, n_params),
+                               dtype=config.precision)
+
+    pupil_z = float(surfaces[0].P[2])
+    pupil_z_dot = zdot_s[0]
+    ep_z = (None if getattr(system, 'stop_index', None) is None
+            else float(system.entrance_pupil_z(wavelength)))
+    if field.kind == 'angle':
+        Pdot[:, :2] = pupil_xy_dot
+        Pdot[:, 2] = pupil_z_dot[None, :]
+        if ep_z is not None:
+            shift_dot = (pupil_z_dot - ep_z_dot) / float(S[0, 2])
+            Pdot[:, 0] = Pdot[:, 0] + S[0, 0] * shift_dot[None, :]
+            Pdot[:, 1] = Pdot[:, 1] + S[0, 1] * shift_dot[None, :]
+        return Pdot, Sdot
+
+    target_z = pupil_z if ep_z is None else ep_z
+    target_z_dot = pupil_z_dot if ep_z is None else ep_z_dot
+    obj = np.array([field.hx, field.hy, field.object_z],
+                   dtype=config.precision)
+    for ray in range(n_rays):
+        direction = np.array([
+            pupil_xy[ray, 0] - obj[0],
+            pupil_xy[ray, 1] - obj[1],
+            target_z - obj[2],
+        ], dtype=config.precision)
+        direction_dot = np.zeros((3, n_params), dtype=config.precision)
+        direction_dot[:2] = pupil_xy_dot[ray]
+        direction_dot[2] = target_z_dot
+        _, Sdot[ray] = _normalize_tangent(direction, direction_dot)
+    return Pdot, Sdot
 
 
 # ---------- the differential trace ------------------------------------------
@@ -734,11 +983,11 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None,
         dsag_param = np.zeros((n_rays, n_params), dtype=config.precision)
         dgx_param = np.zeros((n_rays, n_params), dtype=config.precision)
         dgy_param = np.zeros((n_rays, n_params), dtype=config.precision)
-        for p, pname in shape_params[j]:
+        for p, pname, scale in shape_params[j]:
             sag_t, gx_t, gy_t = surf.shape.sag_param_partials(Xj, Yj, pname)
-            dsag_param[:, p] = sag_t
-            dgx_param[:, p] = gx_t
-            dgy_param[:, p] = gy_t
+            dsag_param[:, p] = dsag_param[:, p] + scale * sag_t
+            dgx_param[:, p] = dgx_param[:, p] + scale * gx_t
+            dgy_param[:, p] = dgy_param[:, p] + scale * gy_t
         # explicit (non-DOF) sag partials, e.g. a Zernike irregularity term
         for p, fn in sag_partial_fns[j]:
             sag_t, gx_t, gy_t = fn(Xj, Yj)
@@ -770,12 +1019,12 @@ def raytrace_with_tangents(surfaces, P, S, wvl, seeds, tol_sag=None,
             # the forward trace already evaluated the gradient (captured on the
             # interaction); only the Hessian is new here.
             gx, gy = inter.grating_grad
-            hess = surf.grating.phase_hessian(Xj, Yj)
-            Sprime, dSprime = d_diffract(Sprime, n_hat, n_post, wvl,
-                                         (gx, gy), hess, dPj, dSprime, dn_hat,
-                                         n_post_dot)
-            grating_Ldot = wvl * (gx[:, None] * dPj[:, 0, :]
-                                  + gy[:, None] * dPj[:, 1, :])
+            hess = surf.grating.opl_hessian(Xj, Yj, wvl)
+            Sprime, dSprime = d_diffract(
+                Sprime, n_hat, n_post, (gx, gy), hess,
+                dPj, dSprime, dn_hat, n_post_dot)
+            grating_Ldot = (gx[:, None] * dPj[:, 0, :]
+                            + gy[:, None] * dPj[:, 1, :])
 
         # Step IV: to global
         dPjp1, dSjp1 = d_transform_global(Reff, Q, Q_loc, Sprime,
@@ -868,7 +1117,10 @@ def d_eic_closing(P, S, Pdot, Sdot, C, Cdot, kappa, kappa_dot):
 def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
                             chief_index=None,
                             axis_point=None, axis_dir=None, P_xp=None,
-                            field=None, output='length'):
+                            P_xp_dot=None, reference_curvature=None,
+                            reference_curvature_dot=None,
+                            field=None, output='length',
+                            Pdot0=None, Sdot0=None):
     """OPD and per-seed OPD tangents on the chief reference sphere.
 
     Returns
@@ -883,7 +1135,8 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
     """
     P = np.asarray(P).astype(config.precision)
     S = np.asarray(S).astype(config.precision)
-    res = raytrace_with_tangents(surfaces, P, S, wavelength, seeds)
+    res = raytrace_with_tangents(
+        surfaces, P, S, wavelength, seeds, Pdot0=Pdot0, Sdot0=Sdot0)
     trace = res.trace
 
     if chief_index is None:
@@ -898,7 +1151,20 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
 
     C = P_chief_final
     Cdot = Pdot_chief
-    if P_xp is None:
+    if reference_curvature is not None:
+        if P_xp is not None or P_xp_dot is not None:
+            raise ValueError(
+                'reference_curvature is mutually exclusive with P_xp/P_xp_dot')
+        kappa = float(reference_curvature)
+        if reference_curvature_dot is None:
+            kappa_dot = np.zeros(res.n_params, dtype=config.precision)
+        else:
+            kappa_dot = np.asarray(reference_curvature_dot,
+                                   dtype=config.precision)
+            if kappa_dot.shape != (res.n_params,):
+                raise ValueError(
+                    'reference_curvature_dot must have shape (n_params,)')
+    elif P_xp is None:
         if axis_point is None:
             axis_point = np.zeros(3, dtype=config.precision)
         if axis_dir is None:
@@ -911,25 +1177,35 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
         P_xp, P_xp_dot = d_closest_point_on_axis(
             P_chief_final, S_chief_final, Pdot_chief, Sdot_chief,
             axis_point, axis_dir)
-    else:
+    if reference_curvature is None and P_xp is not None:
         P_xp = np.asarray(P_xp, dtype=config.precision)
-        P_xp_dot = np.zeros((3, res.n_params), dtype=config.precision)
-    delta = P_xp - C
-    delta_dot = P_xp_dot - Cdot
-    R = float(np.sqrt(np.sum(delta * delta)))
-    if R <= 1e-12:
-        raise ValueError(
-            'reference-sphere radius is degenerate; pass a nondegenerate P_xp'
-        )
-    Rdot = _dot_vt(delta, delta_dot) / R
-    # reference-sphere curvature kappa = 1/R is the closing's determinate handle
-    kappa = 1.0 / R
-    kappa_dot = -Rdot / (R * R)
+        if P_xp_dot is None:
+            P_xp_dot = np.zeros((3, res.n_params), dtype=config.precision)
+        else:
+            P_xp_dot = np.asarray(P_xp_dot, dtype=config.precision)
+            if P_xp_dot.shape != (3, res.n_params):
+                raise ValueError(
+                    'P_xp_dot must have shape (3, n_params)')
+    if reference_curvature is None:
+        delta = P_xp - C
+        delta_dot = P_xp_dot - Cdot
+        R = float(np.sqrt(np.sum(delta * delta)))
+        if R <= 1e-12:
+            raise ValueError(
+                'reference-sphere radius is degenerate; pass a '
+                'nondegenerate P_xp')
+        Rdot = _dot_vt(delta, delta_dot) / R
+        # reference-sphere curvature kappa = 1/R is the closing's
+        # determinate handle.
+        kappa = 1.0 / R
+        kappa_dot = -Rdot / (R * R)
 
     _, n_image = object_image_indices(surfaces, wavelength)
+    n_image_dot = image_index_tangents(surfaces, seeds)
     # Same closing kernel as analysis.wavefront; tangent carries kappa_dot.
-    closing = close_on_reference_sphere(trace, valid, chief_index,
-                                        center=C, P_xp=P_xp, n_image=n_image)
+    closing = close_on_reference_sphere(
+        trace, valid, chief_index, center=C, P_xp=P_xp,
+        n_image=n_image, curvature=reference_curvature)
     opd = closing.opd
     filtered_chief = closing.filtered_chief
 
@@ -942,13 +1218,28 @@ def wavefront_with_tangents(surfaces, P, S, wavelength, seeds, *,
     sdot = d_eic_closing(P_last_f, S_last_f,
                          Pdot_last_f, Sdot_last_f,
                          C, Cdot, kappa, kappa_dot)
-    opl_total_dot = Ldot_total_f + n_image * sdot
+    r = P_last_f - C
+    b = np.sum(S_last_f * r, axis=1)
+    m = b * b - np.sum(r * r, axis=1)
+    disc = 1.0 + kappa * kappa * m
+    s_closing = -b - kappa * m / (1.0 + np.sqrt(disc))
+    opl_total_dot = (Ldot_total_f + n_image * sdot
+                     + s_closing[:, None] * n_image_dot[None, :])
     opd_dot = opl_total_dot - opl_total_dot[filtered_chief][None, :]
 
     x_pupil = P[valid, 0] - P[chief_index, 0]
     y_pupil = P[valid, 1] - P[chief_index, 1]
 
-    # Field tilt and unit scaling are tau-independent.
+    # Field tilt is evaluated in launch coordinates, which move when the
+    # paraxial launch recipe depends on the design.
+    if field is not None:
+        ax, ay = field.angle_radians()
+        xdot = (res.Pdot[0][valid, 0]
+                - res.Pdot[0][chief_index, 0][None, :])
+        ydot = (res.Pdot[0][valid, 1]
+                - res.Pdot[0][chief_index, 1][None, :])
+        opd_dot = opd_dot + np.sin(ax) * xdot + np.sin(ay) * ydot
+
     opd, scale = _apply_field_and_output(opd, x_pupil, y_pupil, field, output,
                                          wavelength)
     dW = opd_dot * scale

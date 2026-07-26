@@ -5,16 +5,20 @@ import numpy as np
 import pytest
 
 from prysm.x import materials
-from prysm.x.raytracing import LensData, OpticalSystem
-from prysm.x.raytracing.surfaces import Conic, Plane, EvenAsphere
+from prysm.x.raytracing import LensData, OpticalSystem, ApertureSpec
+from prysm.x.raytracing.surfaces import Conic, EvenAsphere
 from prysm.x.raytracing.launch import Field, Sampling
 from prysm.x.raytracing.design import (
     Problem, RmsSpotRadius, WavefrontRMS, RayHeightAt,
 )
 
 
-def _singlet(c1=1 / 50.0, c2=-1 / 50.0, gap=5.0, back=100.0, shape=Conic):
+def _singlet(c1=1 / 50.0, c2=-1 / 50.0, gap=5.0, back=100.0, shape=Conic,
+             aperture=4.0, stop_index=None, finite_object=False,
+             ray_aiming='paraxial'):
     lens = LensData()
+    if finite_object:
+        lens.object_row.thickness = 50.0
     if shape is Conic:
         front = Conic(c1, 0.0)
     else:
@@ -23,7 +27,8 @@ def _singlet(c1=1 / 50.0, c2=-1 / 50.0, gap=5.0, back=100.0, shape=Conic):
               thickness=gap)
          .add(Conic(c2, 0.0), typ='refr', material=materials.air,
               thickness=back))
-    return OpticalSystem(lens, aperture=4.0, wavelengths=[0.55])
+    return OpticalSystem(lens, aperture=aperture, wavelengths=[0.55],
+                         stop_index=stop_index, ray_aiming=ray_aiming)
 
 
 def _two_bundle_problem(sys_, **prob_kwargs):
@@ -60,6 +65,72 @@ def test_residual_jacobian_matches_fd_mixed_dofs_and_bundles():
     assert J.shape == (3, 3)
     Jfd = _fd_jacobian(prob, x)
     np.testing.assert_allclose(J, Jfd, rtol=5e-5, atol=1e-10)
+
+
+def test_piston_referenced_wavefront_rms_gradient_matches_fd():
+    sys_ = _singlet()
+    sys_.opt.vary('curvature', surfaces=1)
+    op = WavefrontRMS(
+        Field(), 0.55, Sampling.fan(n=9), P_xp=(0., 0., 80.),
+        reference='piston',
+    )
+    prob = Problem(sys_, [op])
+    x = prob.x0()
+    np.testing.assert_allclose(
+        prob.residual_jacobian(x), _fd_jacobian(prob, x),
+        rtol=5e-5, atol=1e-10,
+    )
+
+
+def test_stop_derived_wavefront_exit_pupil_gradient_matches_fd():
+    sys_ = _singlet(aperture=ApertureSpec.epd(4.0), stop_index=2)
+    sys_.opt.vary('curvature', surfaces=1)
+    sys_.opt.vary('thickness', surfaces=1)
+    op = WavefrontRMS(Field(0.0, 3.0), 0.55, Sampling.fan(n=9))
+    prob = Problem(sys_, [op])
+    x = prob.x0()
+    analytic = prob.residual_jacobian(x)
+    assert analytic is not None
+    np.testing.assert_allclose(
+        analytic, _fd_jacobian(prob, x, step=1e-6),
+        rtol=2e-4, atol=2e-9)
+
+
+@pytest.mark.parametrize('system, field', [
+    (_singlet(aperture=ApertureSpec.epd(4.0), stop_index=2),
+     Field(0.0, 3.0)),
+    (_singlet(aperture=ApertureSpec.fno(5.0), stop_index=2),
+     Field(0.0, 3.0)),
+    (_singlet(aperture=ApertureSpec.na(0.1), stop_index=2),
+     Field(0.0, 3.0)),
+    (_singlet(aperture=ApertureSpec.epd(4.0), stop_index=2,
+              finite_object=True),
+     Field(0.0, 2.0, kind='height', object_z=0.0)),
+    (_singlet(aperture=ApertureSpec.na(0.04, object_space=True),
+              stop_index=2, finite_object=True),
+     Field(0.0, 2.0, kind='height', object_z=0.0)),
+    (_singlet(aperture=ApertureSpec.fno(12.5, object_space=True),
+              stop_index=2, finite_object=True),
+     Field(0.0, 2.0, kind='height', object_z=0.0)),
+])
+def test_paraxial_launch_derivatives_match_relaunch_fd(system, field):
+    system.opt.vary('curvature', surfaces=1)
+    system.opt.vary('thickness', surfaces=1)
+    op = RmsSpotRadius(field, 0.55, Sampling.fan(n=9))
+    prob = Problem(system, [op])
+    x = prob.x0()
+    analytic = prob.residual_jacobian(x)
+    assert analytic is not None
+    np.testing.assert_allclose(
+        analytic, _fd_jacobian(prob, x), rtol=2e-4, atol=2e-9)
+
+
+def test_real_iterative_aiming_routes_gradient_to_fd():
+    system = _singlet(stop_index=2, ray_aiming='real')
+    system.opt.vary('curvature', surfaces=1)
+    prob = Problem(system, [
+        RmsSpotRadius(Field(0, 2), 0.55, Sampling.fan(n=7))])
+    assert prob.residual_jacobian(prob.x0()) is None
 
 
 def test_residual_jacobian_declines_on_unseedable_operand():

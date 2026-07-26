@@ -75,7 +75,7 @@ def test_entrance_pupil_z_at_first_surface_when_stop_is_first():
 
 def _y_at_stop(sys, field):
     P, S = launch(sys, field, WVL, Sampling.fan(n=11, axis='y'))
-    tr = raytrace(sys, P, S, WVL)
+    tr = sys.trace(P, S, WVL)
     return tr.P[STOP_INDEX + 1, :, 1]
 
 
@@ -198,7 +198,7 @@ def test_ladder_holds_chief_on_stop_center_at_wide_field():
     sys = fisheye(6.0)
     P, S = launch(sys, Field(0.0, 50.0, unit='deg'), WVL,
                   Sampling.fan(n=15, axis='y'))
-    y = raytrace(sys, P, S, WVL).P[_FISHEYE_STOP + 1, :, 1]
+    y = sys.trace(P, S, WVL).P[_FISHEYE_STOP + 1, :, 1]
     assert abs(y[7]) < 1e-9                       # center sample == chief (n=15)
 
 
@@ -349,7 +349,7 @@ def test_binding_stop_clip_bounds_the_aimed_pupil():
     epd = 8.0                       # axial marginal at the stop > the 6.0 clip
     sys = fisheye(epd)
     P, S = launch(sys, Field(0.0, 0.0), WVL, Sampling.fan(n=15, axis='y'))
-    y = raytrace(sys, P, S, WVL).P[_FISHEYE_STOP + 1, :, 1]
+    y = sys.trace(P, S, WVL).P[_FISHEYE_STOP + 1, :, 1]
     assert np.isfinite(y).all()                   # rim rays are NOT clipped
     assert np.nanmax(np.abs(y)) == pytest.approx(6.0, rel=1e-6)
 
@@ -367,12 +367,12 @@ def test_real_aiming_preserves_anamorphic_axial_pupil_map():
     points = Sampling.points(_STOP_RIM_XY)
 
     P0, S0 = launch(sys, Field(0.0, 0.0), WVL, points)
-    expected = raytrace(sys, P0, S0, WVL).P[3, :, :2]
+    expected = sys.trace(P0, S0, WVL).P[3, :, :2]
     assert not np.isclose(abs(expected[0, 0]), abs(expected[2, 1]))
 
     sys.ray_aiming = 'real'
     P, S = launch(sys, Field(0.0, 0.0), WVL, points)
-    actual = raytrace(sys, P, S, WVL).P[3, :, :2]
+    actual = sys.trace(P, S, WVL).P[3, :, :2]
     np.testing.assert_allclose(actual, expected, atol=1e-9)
 
 
@@ -385,7 +385,7 @@ def test_real_aiming_uses_shifted_clip_center():
 
     P, S = launch(sys, Field(0.0, 0.0), WVL,
                   Sampling.fan(n=5, axis='x'))
-    tr = raytrace(sys, P, S, WVL)
+    tr = sys.trace(P, S, WVL)
     assert np.isfinite(tr.P[-1]).all()
     from prysm.x.raytracing.spencer_and_murty import transform_to_local_coords
     loc, _ = transform_to_local_coords(tr.P[STOP_INDEX + 1], stop.P,
@@ -401,7 +401,7 @@ def test_routed_chief_passes_through_stop_center_paraxially():
     """At a tiny field the routed chief lands on the stop center."""
     ld = cooke()
     P, S = launch(ld, Field(0.0, 1e-3, unit='deg'), WVL, Sampling.chief())
-    tr = raytrace(ld, P, S, WVL)
+    tr = raytrace(ld.to_surfaces(), P, S, WVL)
     # P history: row k+1 is the intersection at surface index k
     xy_at_stop = tr.P[STOP_INDEX + 1, 0, :2]
     np.testing.assert_allclose(xy_at_stop, 0.0, atol=1e-5)

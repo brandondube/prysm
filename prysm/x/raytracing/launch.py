@@ -11,7 +11,7 @@ from .opt import aim_rays, declipped
 from .paraxial import entrance_pupil_z, NonAxialSystemError
 from .spencer_and_murty import (
     raytrace, valid_mask, transform_to_local_coords)
-from ._resolve import trace_context
+from ._resolve import compiled_surfaces, trace_context
 
 
 def _entrance_pupil_z(system, wavelength):
@@ -132,12 +132,13 @@ class Sampling:
 
     """
 
-    __slots__ = ('kind', 'opts')
+    __slots__ = ('kind', 'opts', 'chief_index')
 
-    def __init__(self, kind, **opts):
+    def __init__(self, kind, *, chief_index=None, **opts):
         """Initialize a pupil sampling pattern."""
         self.kind = kind
         self.opts = opts
+        self.chief_index = chief_index
 
     def build(self, extent):
         """Pupil sample coordinates scaled to the given extent."""
@@ -193,12 +194,15 @@ class Sampling:
     @classmethod
     def chief(cls):
         """A single chief ray at the pupil origin."""
-        return cls('chief')
+        return cls('chief', chief_index=0)
 
     @classmethod
     def points(cls, xy):
         """Explicit normalized pupil samples."""
-        return cls('points', xy=xy)
+        xy = np.asarray(xy)
+        at_origin = np.nonzero(np.all(xy == 0, axis=1))[0]
+        chief_index = int(at_origin[0]) if len(at_origin) else None
+        return cls('points', xy=xy, chief_index=chief_index)
 
     @classmethod
     def fan(cls, n=11, axis='y', distribution='uniform', obscuration=None):
@@ -209,26 +213,33 @@ class Sampling:
             azi = 0
         else:
             raise ValueError(f"axis must be 'x' or 'y', got {axis!r}")
-        return cls('fan', n=int(n), azimuth=azi, distribution=distribution,
-                   obscuration=obscuration)
+        n = int(n)
+        return cls('fan', n=n, azimuth=azi, distribution=distribution,
+                   obscuration=obscuration,
+                   chief_index=(n // 2 if n % 2 and not obscuration else None))
 
     @classmethod
     def cross(cls, n=11, distribution='uniform', obscuration=None):
         """An x and y fan, 2*n rays total."""
-        return cls('cross', n=int(n), distribution=distribution,
-                   obscuration=obscuration)
+        n = int(n)
+        return cls('cross', n=n, distribution=distribution,
+                   obscuration=obscuration,
+                   chief_index=(n // 2 if n % 2 and not obscuration else None))
 
     @classmethod
     def rect(cls, n=21, distribution='uniform', obscuration=None):
         """A rectangular n by n grid of rays."""
-        return cls('rect', n=int(n), distribution=distribution,
-                   obscuration=obscuration)
+        n = int(n)
+        return cls('rect', n=n, distribution=distribution,
+                   obscuration=obscuration,
+                   chief_index=(n * n // 2 if n % 2 and not obscuration else None))
 
     @classmethod
     def hex(cls, nrings=5, spacing=None, obscuration=None):
         """A hexapolar grid of nrings concentric rings."""
         return cls('hex', nrings=int(nrings), spacing=spacing,
-                   obscuration=obscuration)
+                   obscuration=obscuration,
+                   chief_index=(0 if not obscuration else None))
 
     @classmethod
     def spiral(cls, nrings=5, samples_per_ring=None,
@@ -239,7 +250,9 @@ class Sampling:
                    samples_per_ring=samples_per_ring,
                    radial_distribution=radial_distribution,
                    include_center=bool(include_center),
-                   obscuration=obscuration)
+                   obscuration=obscuration,
+                   chief_index=(0 if include_center and not obscuration
+                                else None))
 
     def __repr__(self):
         opts = ', '.join(f'{k}={v!r}' for k, v in self.opts.items())
@@ -837,8 +850,8 @@ def solve_apertures(system, *, fields=None, wavelength=None, oversize=1.05,
     from .lensdata import SurfaceRow
     lens = system.lens
     wvl = wavelength if wavelength is not None else system.wavelength()
-    if fields is None:
-        fields = system.fields
+    from ._trace_grid import _resolve_fields
+    fields = _resolve_fields(system, fields)
     if sampling is None:
         sampling = Sampling.hex(nrings=6)
     surfaces = system.to_surfaces()
@@ -874,8 +887,11 @@ def solve_vignetting(system, fields=None, wavelength=None, *, tol=1e-3,
     Writes field.vignetting on each resolved Field and returns the system.
     """
     wvl = system.wavelength(wavelength)
-    if fields is None:
-        fields = system.fields
+    from ._trace_grid import _resolve_fields
+    fields = _resolve_fields(system, fields)
+    if len(system.fields) == 0:
+        from .system import FieldSet
+        system.fields = FieldSet(fields)
     for field in fields:
         # route through the field owner: handles an int/Integral index
         # (numpy ints included), a (hx, hy) tuple, or a Field passthrough
@@ -908,7 +924,7 @@ def _solve_vignetting_factors(system, field, wavelength, *, tol=1e-3,
         # Probe the rim; keep best-effort un-aimed rays for the solve.
         P, S = launch(system, bare, wavelength, Sampling.points(xy),
                       drop_unaimed=False)
-        result = raytrace(system, P, S, wavelength)
+        result = raytrace(compiled_surfaces(system), P, S, wavelength)
         return array_to_true_numpy(valid_mask(result.status))
 
     valid = transmits([1.0] * 4)

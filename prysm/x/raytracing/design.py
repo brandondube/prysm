@@ -26,7 +26,7 @@ from .paraxial import (
 )
 from . import analysis as _analysis
 from ._resolve import compiled_surfaces, trace_context
-from ._cache import StateCache
+from ._cache import StateCache, structural_key
 
 
 # ---------- Trace cache ------------------------------------------------------
@@ -69,7 +69,8 @@ class _TraceCache:
 
         def _compute():
             self._n_traces += 1
-            return raytrace(self._system, P, S, wavelength)
+            return raytrace(compiled_surfaces(self._system), P, S,
+                            wavelength)
 
         return self._cache.get_or_compute(key, _compute)
 
@@ -78,7 +79,8 @@ class _TraceCache:
         """Exit-pupil reference point for an operand bundle, resolved once."""
         if P_xp is not None:
             return np.asarray(P_xp)
-        key = (id(P), id(S), float(wavelength), stop_index)
+        key = (id(P), id(S), float(wavelength), chief_index, stop_index, epd,
+               structural_key(axis_point), structural_key(axis_dir))
 
         def _compute():
             resolved_stop = (stop_index if stop_index is not None
@@ -397,7 +399,7 @@ class WavefrontRMS(_RayMerit):
                  target=None, weight=1.0, min=None, max=None,
                  chief_index=None,
                  axis_point=None, axis_dir=None, P_xp=None,
-                 epd=None, stop_index=None):
+                 epd=None, stop_index=None, reference='chief'):
         super().__init__(field, wavelength, sampling, target=target,
                          weight=weight, min=min, max=max, epd=epd)
         self.chief_index = chief_index
@@ -405,6 +407,9 @@ class WavefrontRMS(_RayMerit):
         self.axis_dir = axis_dir
         self.P_xp = P_xp
         self.stop_index = stop_index
+        if reference not in ('chief', 'piston'):
+            raise ValueError("reference must be 'chief' or 'piston'")
+        self.reference = reference
 
     def _geometry(self, trace, system, wavelength, *, P_xp_override=None,
                   ctx=None):
@@ -418,9 +423,14 @@ class WavefrontRMS(_RayMerit):
             stop_index=self.stop_index, epd=self.epd,
             axis_point=self.axis_point, axis_dir=self.axis_dir, ctx=ctx)
 
-    @staticmethod
-    def _rms(closing):
+    def _referenced_opd(self, closing):
         opd = closing.opd
+        if self.reference == 'piston':
+            opd = opd - np.mean(opd)
+        return opd
+
+    def _rms(self, closing):
+        opd = self._referenced_opd(closing)
         return float(np.sqrt(np.mean(opd * opd)))
 
     def __call__(self, system, cache, *, return_seed=False):
@@ -462,7 +472,7 @@ class WavefrontRMS(_RayMerit):
         curvature = g.curvature
         delta = g.delta
         xp_mode = g.xp_mode
-        opd = g.opd
+        opd = self._referenced_opd(g)
         rms = self._rms(g)
         n_image = g.n_image
         P_last = trace.P[-1]
@@ -470,7 +480,8 @@ class WavefrontRMS(_RayMerit):
 
         P_bar, S_bar, L_bar = _zeros_like_trace_state(trace)
         if rms <= 1e-300:
-            return P_bar, S_bar, L_bar, np.zeros(3, dtype=config.precision)
+            return (P_bar, S_bar, L_bar,
+                    np.zeros(3, dtype=config.precision), 0.0)
 
         nv = opd.shape[0]
         opd_bar = opd / (nv * rms)
@@ -478,6 +489,14 @@ class WavefrontRMS(_RayMerit):
         opl_total_bar[chief_v] = opl_total_bar[chief_v] - opd_bar.sum()
         L_bar[valid] = opl_total_bar
         s_bar = n_image * opl_total_bar
+        r_closing = P_last[valid] - C
+        b_closing = np.sum(S_last[valid] * r_closing, axis=1)
+        m_closing = (b_closing * b_closing
+                     - np.sum(r_closing * r_closing, axis=1))
+        s_closing = (-b_closing - curvature * m_closing
+                     / (1.0 + np.sqrt(
+                         1.0 + curvature * curvature * m_closing)))
+        n_image_bar = float(np.sum(opl_total_bar * s_closing))
 
         P_rs, S_rs, C_bar, kappa_bar = adj_eic_closing_full(
             P_last[valid], S_last[valid], C, curvature, s_bar)
@@ -504,30 +523,34 @@ class WavefrontRMS(_RayMerit):
                 C, S_last[chief], axis_point, axis_dir, P_xp_bar)
             P_bar[chief] = P_bar[chief] + P_c_bar
             S_bar[chief] = S_bar[chief] + S_c_bar
-        return P_bar, S_bar, L_bar, P_xp_bar
+        return P_bar, S_bar, L_bar, P_xp_bar, n_image_bar
 
     def _seed_from_geometry(self, trace, g):
         return self._seed_components_from_geometry(trace, g)[:3]
 
     def direct_gradient(self, trace, system, wavelength, seeds):
+        from ._diff_raytrace import image_index_tangents
+        g = self._geometry(trace, system, wavelength)
+        _, _, _, P_xp_bar, n_image_bar = \
+            self._seed_components_from_geometry(trace, g)
+        surfaces = compiled_surfaces(system)
+        grad = n_image_bar * image_index_tangents(surfaces, seeds)
         if self.P_xp is not None:
-            return None
+            return grad
         resolved_stop = (self.stop_index if self.stop_index is not None
                          else getattr(system, 'stop_index', None))
         if resolved_stop is None:
-            return None
-        g = self._geometry(trace, system, wavelength)
+            return grad
         if g.xp_mode != 'paraxial':
-            return None
-        _, _, _, P_xp_bar = self._seed_components_from_geometry(trace, g)
+            return grad
         if P_xp_bar[2] == 0.0:
-            return np.zeros(len(seeds), dtype=config.precision)
+            return grad
         from ._diff_raytrace import paraxial_exit_pupil_z_tangents
 
         xp_z_dot = paraxial_exit_pupil_z_tangents(
-            compiled_surfaces(system), wavelength, seeds,
+            surfaces, wavelength, seeds,
             stop_index=resolved_stop)
-        return P_xp_bar[2] * xp_z_dot
+        return grad + P_xp_bar[2] * xp_z_dot
 
 
 class ZernikeCoefficient(_RayMerit):
@@ -569,13 +592,15 @@ class ZernikeCoefficient(_RayMerit):
 
     def __call__(self, system, cache):
         P, S, wvl = self._bundle(system, cache)
+        trace = cache.trace(P, S, wvl)
         P_xp = cache.exit_pupil(
             P, S, wvl, P_xp=self.P_xp,
             chief_index=self.chief_index, stop_index=self.stop_index,
             epd=self.epd, axis_point=self.axis_point, axis_dir=self.axis_dir)
-        opd, x_pup, y_pup = _analysis.wavefront(
-            system, P, S, wvl,
+        opd, x_pup, y_pup, _ = _analysis._wavefront_from_trace(
+            system, P, wvl, trace,
             chief_index=self.chief_index, P_xp=P_xp,
+            field=self.field,
         )
         coefs, _ = _analysis.wavefront_zernike_fit(
             opd, x_pup, y_pup, self.nms_basis,
@@ -780,7 +805,8 @@ class Problem:
             group, r, off = slot
             nominal = float(lens._slot_value(slot))
             perturbations.append(Perturbation(
-                lens, slot, None, nominal, step=0.0, name=f'{group}{r}.{off}'))
+                lens, slot, None, nominal, step=0.0, variance=0.0,
+                distribution='deterministic', name=f'{group}{r}.{off}'))
         return seeds_from_perturbations(perturbations)
 
     def residual_jacobian(self, x):
@@ -822,9 +848,20 @@ class Problem:
         J = np.zeros((len(ops), len(seeds)), dtype=config.precision)
         for idxs in groups.values():
             P, S, wvl = bundles[idxs[0]]
+            op0 = ops[idxs[0]]
+            field = Field() if op0.field is None else op0.field
+            sampling = (Sampling.hex(nrings=4) if op0.sampling is None
+                        else op0.sampling)
+            from ._diff_raytrace import paraxial_launch_tangents
+            launch_tangents = paraxial_launch_tangents(
+                self.system, field, wvl, sampling, seeds,
+                epd=op0.epd, P=P, S=S)
+            if launch_tangents is None:
+                return None
             result = multi_objective_sensitivity(
                 self.system, P, S, wvl,
-                seeds, [ops[i] for i in idxs])
+                seeds, [ops[i] for i in idxs],
+                launch_tangents=launch_tangents)
             for row, i in zip(result.jacobian, idxs):
                 J[i] = ops[i].weight * row
         # a vignetted/NaN ray makes the adjoint sweep non-finite; decline to FD

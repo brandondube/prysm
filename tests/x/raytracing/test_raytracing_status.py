@@ -44,6 +44,18 @@ def test_raytrace_result_has_named_attributes():
                                   result.status.imag.astype(int))
 
 
+def test_integer_launch_arrays_promote_to_config_precision():
+    from prysm.conf import config
+
+    pres = [plane('eval', P=np.array([0.0, 0.0, 2.0]))]
+    result = raytrace(pres, [[0, 0, 0]], [[0, 0, 1]], wvl=0.55)
+    assert result.P.dtype == config.precision
+    assert result.S.dtype == config.precision
+    assert result.OPL.dtype == config.precision
+    np.testing.assert_allclose(result.P[-1, 0], [0.0, 0.0, 2.0])
+    np.testing.assert_allclose(result.OPL[-1, 0], 2.0)
+
+
 # ---------- valid ray status ----------
 
 def test_collimated_through_parabola_all_valid():

@@ -1,5 +1,6 @@
 """Surface containers, shape objects, and calculus for raytracing."""
 
+import numbers
 import warnings
 
 from prysm.conf import config
@@ -52,7 +53,7 @@ from .aperture import (
     as_aperture,
     circular_aperture,
 )
-from .phase import PhaseFunction
+from .opl import OPLFunc
 from .sags import (
     Q2d_and_der,
     Q2d_sag,
@@ -133,8 +134,15 @@ class DepartureBand:
 
 def _map_stype(typ):
     """Map a surface interaction name or integer to an STYPE constant."""
-    if isinstance(typ, int):
-        return typ
+    if isinstance(typ, numbers.Integral):
+        value = int(typ)
+        known = (STYPE_REFLECT, STYPE_REFRACT, STYPE_EVAL, STYPE_OBJ, STYPE_IMG)
+        if value not in known:
+            raise ValueError(
+                f'unknown surface type integer {value!r}; expected one of '
+                f'{known!r}'
+            )
+        return value
     typ_lc = typ.lower()
     if typ_lc in ('refl', 'reflect'):
         return STYPE_REFLECT
@@ -148,8 +156,8 @@ def _map_stype(typ):
         return STYPE_IMG
     raise ValueError(
         f'unknown surface type {typ!r}; expected one of '
-        "'refl'/'reflect', 'refr'/'refract', 'eval', 'object', 'image', or an "
-        'STYPE_* int.'
+        "'refl'/'reflect', 'refr'/'refract', 'eval', 'object', 'image', or a "
+        'known STYPE_* integer.'
     )
 
 
@@ -1002,7 +1010,10 @@ class Toroid(ConicSeedMixin, Shape):
     SCALAR_DOFS = ('c_x', 'c_y', 'k_y')
     VECTOR_DOFS = ('coefs_y',)
     META_KEYS = ()
-    CATEGORIES = {'curvature': ['c_x', 'c_y'], 'conic': ['k_y'],
+    CATEGORIES = {'curvature': ['c_x', 'c_y'],
+                  'radius': ['c_x', 'c_y'],
+                  'radius_x': ['c_x'], 'radius_y': ['c_y'],
+                  'conic': ['k_y'],
                   'coefs': ['coefs_y']}
 
     from_params = classmethod(_shape_from_params)
@@ -1068,7 +1079,10 @@ class Biconic(ConicSeedMixin, Shape):
     SCALAR_DOFS = ('c_x', 'c_y', 'k_x', 'k_y')
     VECTOR_DOFS = ()
     META_KEYS = ()
-    CATEGORIES = {'curvature': ['c_x', 'c_y'], 'conic': ['k_x', 'k_y']}
+    CATEGORIES = {'curvature': ['c_x', 'c_y'],
+                  'radius': ['c_x', 'c_y'],
+                  'radius_x': ['c_x'], 'radius_y': ['c_y'],
+                  'conic': ['k_x', 'k_y']}
 
     from_params = classmethod(_shape_from_params)
 
@@ -1171,9 +1185,8 @@ class Surface:
             None for reflective / eval surfaces.
         aperture : Aperture, float, callable, or None, optional
             surface aperture.  A float is a circular clip; None is auto.
-        grating : PhaseFunction or tuple, optional
-            Diffractive phase function on the surface; None for a plain surface.
-            Legacy (period, grating_vector, order) tuples are accepted.
+        grating : OPLFunc, optional
+            Wavelength-aware optical-path modifier; None for a plain surface.
         P : array_like, optional
             Surface vertex position.
         R : array_like, optional
@@ -1235,15 +1248,14 @@ class Surface:
 
     @property
     def grating(self):
-        """Diffractive phase function on this surface (None for a plain surface)."""
+        """Optical-path modifier on this surface, or None."""
         return self._grating
 
     @grating.setter
     def grating(self, value):
-        # PhaseFunction or None; no legacy tuple coercion.
-        if value is not None and not isinstance(value, PhaseFunction):
+        if value is not None and not isinstance(value, OPLFunc):
             raise TypeError(
-                'grating must be a PhaseFunction (LinearGrating, CallablePhase) '
+                'grating must be an OPLFunc (LinearGrating, CallableOPL) '
                 f'or None; got {value!r}')
         self._grating = value
 
@@ -1262,10 +1274,10 @@ class Surface:
         if not hasattr(shape, 'seed_conic'):
             return DepartureBand.unbounded()
         c, k, dx, dy = shape.seed_conic()
-        # Bound the characterized domain by drawn extent, else clip radius.
+        # Characterize only a physical clip or the shape's intrinsic domain.
+        # Drawn extent is cosmetic and must never change intersection physics.
         ap = self.aperture
-        R = ap.extent.outer_radius if ap.extent is not None \
-            else ap.limiting_radius()
+        R = ap.limiting_radius()
         if R is None:
             p = shape.params or {}
             R = p.get('normalization_radius')
@@ -1326,8 +1338,8 @@ class Surface:
                              domain_radius=R, gradient_bound=1.1 * G,
                              lipschitz=1.1 * L)
 
-    def diffract(self, S_specular, n_hat, n_post, wvl, Q_loc, grad=None):
-        """Apply the diffractive bend from the surface phase function.
+    def diffract(self, S_specular, n_hat, n_post, Q_loc, wavelength, grad=None):
+        """Apply the tangential momentum kick from the surface OPL function.
 
         Parameters
         ----------
@@ -1337,14 +1349,12 @@ class Surface:
             Unit surface normals at the intersection.
         n_post : float or ndarray
             Refractive index after the surface.
-        wvl : float
-            Wavelength in the same units as the phase coordinates.
         Q_loc : ndarray
-            Local intersection points, last axis xyz; where the phase gradient
-            is evaluated.
+            Local intersection points, last axis xyz.
+        wavelength : float
+            Wavelength in microns, passed to the OPLFunc.
         grad : tuple of ndarray, optional
-            precomputed (gx, gy) in-plane phase gradient at Q_loc; evaluated
-            from the phase function when None.
+            Precomputed (gx, gy) in-plane OPL gradient at Q_loc.
 
         Returns
         -------
@@ -1358,8 +1368,8 @@ class Surface:
         if self.grating is None:
             return S_specular, np.ones(S_specular.shape[:-1], dtype=bool)
         if grad is None:
-            _, gx, gy = self.grating.phase_and_gradient(Q_loc[..., 0],
-                                                        Q_loc[..., 1])
+            _, gx, gy = self.grating.opl_and_gradient(
+                Q_loc[..., 0], Q_loc[..., 1], wavelength)
         else:
             gx, gy = grad
         G = np.stack([gx, gy, np.zeros_like(gx)], axis=-1)
@@ -1367,7 +1377,7 @@ class Surface:
         G_tan = G - G_dot_n * n_hat
         s_dot_n = (S_specular * n_hat).sum(-1, keepdims=True)
         s_specular_tan = S_specular - s_dot_n * n_hat
-        s_diff_tan = s_specular_tan + (wvl / n_post) * G_tan
+        s_diff_tan = s_specular_tan + G_tan / n_post
         tan_sq = (s_diff_tan * s_diff_tan).sum(-1)
         valid = tan_sq <= 1.0
         normal_mag = np.sqrt(np.where(valid, 1.0 - tan_sq, 0.0))
@@ -1376,15 +1386,15 @@ class Surface:
         S_diff[~valid] = S_specular[~valid]
         return S_diff, valid
 
-    def grating_phase(self, Q_loc, wvl):
-        """OPL added by the diffractive phase at local intersection points.
+    def grating_opl(self, Q_loc, wavelength):
+        """OPL added by the surface modifier at local intersection points.
 
         Parameters
         ----------
         Q_loc : ndarray
             intersection points in the surface local frame, last axis xyz.
-        wvl : float
-            wavelength, same length units as the phase coordinates.
+        wavelength : float
+            Wavelength in microns.
 
         Returns
         -------
@@ -1392,7 +1402,7 @@ class Surface:
             per-ray OPL contribution, shape Q_loc.shape[:-1].
 
         """
-        return wvl * self.grating.phase(Q_loc[..., 0], Q_loc[..., 1])
+        return self.grating.opl(Q_loc[..., 0], Q_loc[..., 1], wavelength)
 
     def interact(self, P_in, S_in, n_pre, wvl, tol_sag=None,
                  first_segment=False):
@@ -1449,15 +1459,14 @@ class Surface:
         opl_grating = None
         grating_grad = None
         if self.grating is not None and self.typ in (STYPE_REFLECT, STYPE_REFRACT):
-            # One phase evaluation feeds the bend, the OPL term, and the AD
-            # capture (phase_and_gradient returns both at once).
-            gphase, gx, gy = self.grating.phase_and_gradient(Q_loc[..., 0],
-                                                             Q_loc[..., 1])
+            # One OPL evaluation feeds the bend, path term, and AD capture.
+            opl_func, gx, gy = self.grating.opl_and_gradient(
+                Q_loc[..., 0], Q_loc[..., 1], wvl)
             grating_grad = (gx, gy)
-            Sprime, valid_diff = self.diffract(Sprime, n_hat, n_post, wvl,
-                                               Q_loc, grad=grating_grad)
+            Sprime, valid_diff = self.diffract(
+                Sprime, n_hat, n_post, Q_loc, wvl, grad=grating_grad)
             code[(code == STATUS_OK) & ~valid_diff] = STATUS_EVANESCENT
-            opl_grating = wvl * gphase
+            opl_grating = opl_func
 
         P_out, S_out = transform_to_global_coords(Q_loc, self.P, Sprime, self.R)
 

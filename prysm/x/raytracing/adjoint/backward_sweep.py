@@ -135,15 +135,15 @@ def _forward_with_intermediates(surfaces, P, S, wvl, tol_sag=None):
         seg = _sanitize_vec(seg, valid, _DUMMY_DIR)
         hessian = tuple(_sanitize_scalar(h, valid) for h in hessian)
 
-        # Phase gradient (reused from the forward interaction) and Hessian at
+        # OPL gradient (reused from the forward interaction) and Hessian at
         # the sanitized intersection.
         grad = hess = None
         if surf.grating is not None and surf.typ in (STYPE_REFRACT, STYPE_REFLECT):
             gx, gy = step.grating_grad
             grad = (_sanitize_scalar(gx, valid), _sanitize_scalar(gy, valid))
             hess = tuple(_sanitize_scalar(h, valid)
-                         for h in surf.grating.phase_hessian(Q_loc[..., 0],
-                                                             Q_loc[..., 1]))
+                         for h in surf.grating.opl_hessian(
+                             Q_loc[..., 0], Q_loc[..., 1], wvl))
 
         inters.append(SurfaceIntermediate(
             Reff, Q, P_in, S_in, P0, S_loc, Q_loc, n_hat, Sprime, hessian,
@@ -177,10 +177,11 @@ def _precompute_shape_partials(surfaces, intermediates, shape_params,
         if shape_params[j] or sag_partial_fns[j]:
             Xj = surf_inters[j].Q_loc[..., 0]
             Yj = surf_inters[j].Q_loc[..., 1]
-            for p, pname in shape_params[j]:
+            for p, pname, scale in shape_params[j]:
                 sag_t, gx_t, gy_t = surfaces[j].shape.sag_param_partials(
                     Xj, Yj, pname)
-                entries.append((p, sag_t, gx_t, gy_t))
+                entries.append((p, scale * sag_t, scale * gx_t,
+                                scale * gy_t))
             for p, fn in sag_partial_fns[j]:
                 sag_t, gx_t, gy_t = fn(Xj, Yj)
                 entries.append((p, sag_t, gx_t, gy_t))
@@ -190,7 +191,8 @@ def _precompute_shape_partials(surfaces, intermediates, shape_params,
 
 def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
                     nprimedot_s, shape_params, sag_partial_fns,
-                    cotangent_seed, shape_partials=None):
+                    cotangent_seed, shape_partials=None,
+                    launch_tangents=None):
     """One reverse sweep: cotangent seed -> gradient (P,) over all parameters.
 
     cotangent_seed is (P_bar, S_bar, L_bar): the merit's cotangent on the
@@ -241,12 +243,12 @@ def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
             n_post_diff = si.nprime if si.typ == STYPE_REFRACT else si.n_pre
             (dSprime_bar, dn_hat_bar_diff, Q_bar_diff,
              grating_n_post_bar) = adj_diffract(
-                si.S_specular, si.n_hat, n_post_diff, intermediates.wvl,
+                si.S_specular, si.n_hat, n_post_diff,
                 si.grad, si.hess, dSprime_bar)
-            # Phase Hessian and phase OPL both land on Q_loc.
+            # OPL Hessian and OPL value both land on Q_loc.
             dPj_bar = dPj_bar + Q_bar_diff
-            dPj_bar[:, 0] = dPj_bar[:, 0] + L_bar * intermediates.wvl * gx
-            dPj_bar[:, 1] = dPj_bar[:, 1] + L_bar * intermediates.wvl * gy
+            dPj_bar[:, 0] = dPj_bar[:, 0] + L_bar * gx
+            dPj_bar[:, 1] = dPj_bar[:, 1] + L_bar * gy
 
         # --- Step III adjoint: bend
         ndot_pre_bar = 0.0
@@ -296,11 +298,11 @@ def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
         elif shape_params[j] or sag_partial_fns[j]:
             Xj = si.Q_loc[..., 0]
             Yj = si.Q_loc[..., 1]
-            for p, pname in shape_params[j]:
+            for p, pname, scale in shape_params[j]:
                 sag_t, gx_t, gy_t = surfaces[j].shape.sag_param_partials(
                     Xj, Yj, pname)
-                grad[p] = grad[p] + np.sum(dsag_bar * sag_t + dgx_bar * gx_t
-                                           + dgy_bar * gy_t)
+                grad[p] = grad[p] + scale * np.sum(
+                    dsag_bar * sag_t + dgx_bar * gx_t + dgy_bar * gy_t)
             for p, fn in sag_partial_fns[j]:
                 sag_t, gx_t, gy_t = fn(Xj, Yj)
                 grad[p] = grad[p] + np.sum(dsag_bar * sag_t + dgx_bar * gx_t
@@ -316,10 +318,17 @@ def _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
         # carry cotangent to the upstream surface's outgoing ray
         P_bar, S_bar = Pdot_bar, Sdot_bar
 
+    if launch_tangents is not None:
+        Pdot0, Sdot0 = launch_tangents
+        grad = grad + np.tensordot(
+            P_bar, Pdot0, axes=([0, 1], [0, 1]))
+        grad = grad + np.tensordot(
+            S_bar, Sdot0, axes=([0, 1], [0, 1]))
     return grad
 
 
-def adjoint_gradient(surfaces, P, S, wvl, seeds, head, *, tol_sag=None):
+def adjoint_gradient(surfaces, P, S, wvl, seeds, head, *, tol_sag=None,
+                     launch_tangents=None):
     """Gradient of a scalar merit (given by head) w.r.t. every seed parameter.
 
     One forward-with-intermediates pass and one backward sweep.
@@ -352,7 +361,7 @@ def adjoint_gradient(surfaces, P, S, wvl, seeds, head, *, tol_sag=None):
     cotangent_seed = head.seed(trace, surfaces, wvl)
     grad = _backward_sweep(surfaces, trace, intermediates, Qdot_s, Rdot_s,
                            nprimedot_s, shape_params, sag_partial_fns,
-                           cotangent_seed)
+                           cotangent_seed, launch_tangents=launch_tangents)
     direct = getattr(head, 'direct_gradient', None)
     if direct is not None:
         extra = direct(trace, surfaces, wvl, seeds)

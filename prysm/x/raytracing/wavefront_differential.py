@@ -3,8 +3,13 @@
 from prysm.conf import config
 from prysm.mathops import np
 
-from ._diff_raytrace import seeds_from_perturbations, wavefront_with_tangents
+from ._diff_raytrace import (
+    paraxial_exit_pupil_z_tangents,
+    seeds_from_perturbations,
+    wavefront_with_tangents,
+)
 from .analysis import wavefront_zernike_fit
+from .analysis import resolve_exit_pupil
 from ._resolve import resolve_wavelength
 from .tolerance import MonteCarloResult
 
@@ -14,7 +19,8 @@ def wavefront_differential(lensdata, perturbations, P, S, wavelength, *,
                            compensators=None, comp_rcond=1e-9,
                            chief_index=None,
                            axis_point=None, axis_dir=None, P_xp=None,
-                           field=None, pose_step=1e-6):
+                           field=None, pose_step=1e-6,
+                           rms_reference='chief'):
     """Build a wavefront-differential model from one nominal trace.
 
     Parameters
@@ -57,11 +63,41 @@ def wavefront_differential(lensdata, perturbations, P, S, wavelength, *,
     seeds = (seeds_from_perturbations(perturbations, pose_step=pose_step)
              + extra_seeds
              + seeds_from_perturbations(compensators, pose_step=pose_step))
+    surfaces = lensdata.to_surfaces()
+    P_xp_dot = None
+    reference_curvature = None
+    reference_curvature_dot = None
+    if P_xp is None and getattr(lensdata, 'stop_index', None) is not None:
+        P_xp, xp_mode = resolve_exit_pupil(
+            lensdata, wavelength, field=field, return_mode=True)
+        if xp_mode == 'paraxial':
+            xp_z_dot = paraxial_exit_pupil_z_tangents(
+                surfaces, wavelength, seeds,
+                stop_index=lensdata.stop_index)
+            if P_xp is None:
+                # At the telecentric limit kappa behaves as |D| and has no
+                # two-sided derivative.  The symmetric/central derivative is
+                # zero, which is the stable convention used by the FD adapter.
+                reference_curvature = 0.0
+                reference_curvature_dot = np.zeros(
+                    len(seeds), dtype=config.precision)
+            else:
+                P_xp_dot = np.zeros((3, len(seeds)),
+                                    dtype=config.precision)
+                P_xp_dot[2] = xp_z_dot
     opd, x_pupil, y_pupil, dW = wavefront_with_tangents(
-        lensdata.to_surfaces(), P, S, wavelength, seeds,
+        surfaces, P, S, wavelength, seeds,
         chief_index=chief_index,
         axis_point=axis_point, axis_dir=axis_dir, P_xp=P_xp,
+        P_xp_dot=P_xp_dot,
+        reference_curvature=reference_curvature,
+        reference_curvature_dot=reference_curvature_dot,
         field=field, output='length')
+    if rms_reference not in ('chief', 'piston'):
+        raise ValueError("rms_reference must be 'chief' or 'piston'")
+    if rms_reference == 'piston':
+        opd = opd - np.mean(opd)
+        dW = dW - np.mean(dW, axis=0, keepdims=True)
     if extra_names is None:
         extra_names = [s.name or f'extra{i}' for i, s in enumerate(extra_seeds)]
     else:
@@ -71,10 +107,14 @@ def wavefront_differential(lensdata, perturbations, P, S, wavelength, *,
     names = ([p.name or f'tol{i}' for i, p in enumerate(perturbations)]
              + extra_names)
     steps = [p.step for p in perturbations] + list(extra_steps)
+    variances = ([p.variance for p in perturbations]
+                 + [float(step) ** 2 for step in extra_steps])
 
     tol_maps = dW[:, :n_tol]
     if not compensators:
         return WavefrontDifferential(opd, tol_maps, names=names, steps=steps,
+                                     variances=variances,
+                                     reference=rms_reference,
                                      x_pupil=x_pupil, y_pupil=y_pupil)
 
     comp_maps = dW[:, n_tol:]
@@ -83,6 +123,8 @@ def wavefront_differential(lensdata, perturbations, P, S, wavelength, *,
     # compensator motion rates dc/dtau = -M+ D use the UNprojected tol maps
     motions = -(np.linalg.pinv(comp_maps, rcond=comp_rcond) @ tol_maps)
     return WavefrontDifferential(opd_c, tol_c, names=names, steps=steps,
+                                 variances=variances,
+                                 reference=rms_reference,
                                  x_pupil=x_pupil, y_pupil=y_pupil,
                                  comp_names=comp_names, comp_maps=comp_maps,
                                  comp_motions=motions)
@@ -124,11 +166,13 @@ def compensate(opd, tol_maps, comp_maps, *, rcond=1e-9):
 class WavefrontDifferential:
     """Wavefront-error quadratic for one launch bundle and tolerance set."""
 
-    __slots__ = ('W0', 'dW', 'names', 'steps', 'x_pupil', 'y_pupil',
+    __slots__ = ('W0', 'dW', 'names', 'steps', 'variances',
+                 'x_pupil', 'y_pupil',
                  'n_samples', 'n_params', 'C', 'B', 'G', 'A', 'rms_nominal',
-                 'comp_names', 'comp_maps', 'comp_motions')
+                 'comp_names', 'comp_maps', 'comp_motions', 'reference')
 
-    def __init__(self, opd, dW, *, names=None, steps=None,
+    def __init__(self, opd, dW, *, names=None, steps=None, variances=None,
+                 reference='chief',
                  x_pupil=None, y_pupil=None, comp_names=None, comp_maps=None,
                  comp_motions=None):
         dt = config.precision
@@ -143,6 +187,13 @@ class WavefrontDifferential:
                       else [f'tol{i}' for i in range(self.n_params)])
         self.steps = (np.asarray(steps, dtype=dt) if steps is not None
                       else np.ones(self.n_params, dtype=dt))
+        self.variances = (
+            np.asarray(variances, dtype=dt) if variances is not None
+            else self.steps * self.steps
+        )
+        if reference not in ('chief', 'piston'):
+            raise ValueError("reference must be 'chief' or 'piston'")
+        self.reference = reference
         self.x_pupil = None if x_pupil is None else np.asarray(x_pupil)
         self.y_pupil = None if y_pupil is None else np.asarray(y_pupil)
         # compensator metadata (None unless this is a compensated model)
@@ -267,22 +318,20 @@ class WavefrontDifferential:
             scales = np.full(self.n_params, float(scales), dtype=config.precision)
         return scales
 
-    def expected_rms_sq(self, scales=None, *, cross_terms=False):
-        """E[RMS^2] for independent zero-mean tolerances of std `scales`.
+    def expected_rms_sq(self, scales=None):
+        """E[RMS^2] for independent zero-mean tolerances.
 
-        scales defaults to the perturbations' .step (one sigma / half-width).
+        The default uses each perturbation's actual distribution variance.
+        Explicit scales are interpreted as standard deviations.
         """
-        s = self._scales(scales)
-        if cross_terms:
-            extra = float(s @ self.G @ s)
-        else:
-            extra = float(np.sum(s * s * self.A))
+        variance = (self.variances if scales is None
+                    else self._scales(scales) ** 2)
+        extra = float(np.sum(variance * self.A))
         return self.C + extra
 
-    def expected_rms(self, scales=None, *, cross_terms=False):
+    def expected_rms(self, scales=None):
         """sqrt(expected_rms_sq) -- the RSS-rolled-up predicted RMS."""
-        return float(np.sqrt(max(self.expected_rms_sq(
-            scales, cross_terms=cross_terms), 0.0)))
+        return float(np.sqrt(max(self.expected_rms_sq(scales), 0.0)))
 
     def rms_change_per_tolerance(self, scales=None):
         """Per-tolerance RMS minus nominal at tau_p = +scale_p."""
