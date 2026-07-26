@@ -1,4 +1,5 @@
 """Basic operations for bayer data."""
+from .conf import config
 from .mathops import np, ndimage, fft
 
 top_left = (slice(0, None, 2), slice(0, None, 2))
@@ -26,8 +27,13 @@ def wb_prescale(mosaic, wr, wg1, wg2, wb, cfa='rggb', safe=False, saturation=Non
         blue white balance prescalar
     cfa : str, optional, {'rggb', 'bggr'}
         color filter arrangement
+    safe : bool, optional
+        if True, reduce all gains to avoid saturation
+    saturation : float or iterable, optional
+        per-plane saturation level used when safe is True
 
     """
+    cfa = cfa.lower()
     if safe:
         if saturation is None:
             raise ValueError('When doing safe WB prescaling, saturation must be not-none')
@@ -35,12 +41,18 @@ def wb_prescale(mosaic, wr, wg1, wg2, wb, cfa='rggb', safe=False, saturation=Non
         if not hasattr(saturation, '__iter__'):
             # common to all four channels
             saturation = [saturation]*4
+        else:
+            saturation = list(saturation)
+            if len(saturation) != 4:
+                raise ValueError('saturation must be scalar or contain four values')
+        if any(s <= 0 for s in saturation):
+            raise ValueError('saturation must be positive')
 
         planes = decomposite_bayer(mosaic, cfa)
+        gains = (wr, wg1, wg2, wb)
         ratio = 1  # descaling ratio
-        for plane, sat in zip(planes, saturation):
-            mx = plane.max()
-            rat = mx / sat
+        for plane, gain, sat in zip(planes, gains, saturation):
+            rat = plane.max() * gain / sat
             if rat > 1 and rat > ratio:
                 ratio = rat
 
@@ -49,8 +61,6 @@ def wb_prescale(mosaic, wr, wg1, wg2, wb, cfa='rggb', safe=False, saturation=Non
         wg2 = wg2 / ratio
         wb = wb / ratio
 
-        # make sure
-    cfa = cfa.lower()
     if cfa == 'rggb':
         mosaic[top_left] *= wr
         mosaic[top_right] *= wg1
@@ -92,13 +102,19 @@ def wb_postscale(rgb, wr, wg, wb, safe=False, saturation=None):
         if not hasattr(saturation, '__iter__'):
             # common to all four channels
             saturation = [saturation]*3
+        else:
+            saturation = list(saturation)
+            if len(saturation) != 3:
+                raise ValueError('saturation must be scalar or contain three values')
+        if any(s <= 0 for s in saturation):
+            raise ValueError('saturation must be positive')
 
+        gains = (wr, wg, wb)
         ratio = 1  # descaling ratio
-        for i in range(2):
+        for i in range(3):
             plane = rgb[..., i]
             sat = saturation[i]
-            mx = plane.max()
-            rat = mx / sat
+            rat = plane.max() * gains[i] / sat
             if rat > 1 and rat > ratio:
                 ratio = rat
 
@@ -177,6 +193,7 @@ def decomposite_bayer(img, cfa='rggb'):
         ndarray of shape (m//2, n//2)
 
     """
+    cfa = cfa.lower()
     if cfa == 'rggb':
         r = img[top_left]
         g1 = img[top_right]
@@ -373,11 +390,13 @@ def demosaic_malvar(img, cfa='rggb'):
     -------
     ndarray
         ndarray of shape (m, n, 3) that has been demosaiced.  Final dimension
-        is ordered R, G, B.  Is of the same dtype as img and has the same energy
-        content and sense of z scaling
+        is ordered R, G, B. Integer input is promoted to configured floating
+        precision so negative filter lobes do not wrap.
 
     """
     cfa = cfa.lower()
+    if img.dtype.kind not in 'fc':
+        img = img.astype(config.precision)
     # create all of our convolution kernels (FIR filters)
     # division by 8 is to make the kernel sum to 1
     # (preserve energy)
