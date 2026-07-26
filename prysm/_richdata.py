@@ -60,11 +60,25 @@ class RichData:
             the instance
 
         """
-        self.data = data
         self.dx = dx
         self.wavelength = wavelength
         self.interpf_x, self.interpf_y, self.interpf_2d = None, None, None
         self._x, self._y, self._r, self._t = None, None, None, None
+        self._data = None
+        self.data = data
+
+    @property
+    def data(self):
+        """Sampled data."""
+        return self._data
+
+    @data.setter
+    def data(self, data):
+        old_shape = None if self._data is None else self._data.shape
+        self._data = data
+        self.interpf_x = self.interpf_y = self.interpf_2d = None
+        if old_shape is not None and old_shape != data.shape:
+            self._x = self._y = self._r = self._t = None
 
     @property
     def shape(self):
@@ -88,6 +102,8 @@ class RichData:
     def x(self, x):
         """Set a new value for the X array."""
         self._x = x
+        self._r = self._t = None
+        self.interpf_x = self.interpf_y = self.interpf_2d = None
 
     @property
     def y(self):
@@ -101,10 +117,12 @@ class RichData:
     def y(self, y):
         """Set a new value for the Y array."""
         self._y = y
+        self._r = self._t = None
+        self.interpf_x = self.interpf_y = self.interpf_2d = None
 
     @property
     def r(self):
-        """r coordinate axis, 2D."""
+        """R coordinate axis, 2D."""
         if self._r is None:
             self._r, self._t = cart_to_polar(self.x, self.y)
 
@@ -116,7 +134,7 @@ class RichData:
 
     @property
     def t(self):
-        """t coordinate axis, 2D."""
+        """T coordinate axis, 2D."""
         if self._t is None:
             self._r, self._t = cart_to_polar(self.x, self.y)
 
@@ -325,6 +343,8 @@ class RichData:
             https://matplotlib.org/stable/tutorials/colors/colorbar_only.html
         axis_labels : iterable of str,
             (x, y) axis labels.  If None, not drawn
+        zorder : int, optional
+            Matplotlib stacking order
         fig : matplotlib.figure.Figure
             Figure containing the plot
         ax : matplotlib.axes.Axis
