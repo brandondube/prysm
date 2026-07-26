@@ -106,6 +106,8 @@ class Detector:
 
         """
         electrons = aerial_img * self.exposure_time
+        if self.prnu is not None:
+            electrons = electrons * self.prnu
         dark = self.dark_current * self.exposure_time
         # if the dark is not uniform, scale by nonuniformity
         if self.dcnu is not None:
@@ -115,9 +117,6 @@ class Detector:
         electrons = (electrons + dark).ravel()
         shot_noise = np.random.poisson(electrons, (frames, electrons.size))
 
-        if self.prnu is not None:
-            shot_noise = shot_noise * self.prnu
-
         # 0 is zero mean
         read_noise = np.random.normal(0, self.read_noise, shot_noise.shape)
 
@@ -126,7 +125,7 @@ class Detector:
         input_to_adc = (shot_noise + read_noise + self.bias)
         input_to_adc[input_to_adc > self.fwc] = self.fwc
         output = input_to_adc * scaling
-        adc_cap = 2 ** self.bits
+        adc_cap = 2 ** self.bits - 1
         output[output < 0] = 0
         output[output > adc_cap] = adc_cap
         # output will be of type int64, only good for 63 unsigned bits
@@ -141,7 +140,7 @@ class Detector:
 
         output = output.reshape((frames, *aerial_img.shape))
         if frames == 1:
-            output = output[0, :, :]
+            output = output[0]
 
         if self.lut is not None:
             output = apply_lut(output, self.lut)
