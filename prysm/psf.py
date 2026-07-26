@@ -54,39 +54,40 @@ def estimate_size(data, metric, dx=None, x=None, y=None, criteria='last'):
 
     """
     criteria = criteria.lower()
-    metric = metric.lower()
+    metric_name = metric.lower() if isinstance(metric, str) else None
 
     if x is None and y is None:
         y, x = (fftrange(s, dtype=data.dtype)*dx for s in data.shape)
 
     r, p, polar = uniform_cart_to_polar(x, y, data)
     max_ = polar.max()
-    if metric == 'fwhm':
+    if metric_name == 'fwhm':
         hm = max_ / 2
-    elif metric == '1/e':
+    elif metric_name == '1/e':
         hm = 1 / np.e * max_
-    elif metric == '1/e^2':
+    elif metric_name == '1/e^2':
         hm = 1 / (np.e ** 2) * max_
     elif isinstance(metric, numbers.Number):
         hm = metric
     else:
         raise ValueError('unknown metric, use fwhm, 1/e, or 1/e^2')
 
-    mask = polar > hm
-
-    if criteria == 'first':
-        meanidx = np.argmax(mask, axis=1).mean()
-        lowidx, remainder = divmod(meanidx, 1)
-    elif criteria == 'last':
-        meanidx = np.argmax(mask[:, ::-1], axis=1).mean()
-        meanidx = mask.shape[1] - meanidx
-        lowidx, remainder = divmod(meanidx, 1)
-        remainder *= -1  # remainder goes the other way in this case
-    else:
+    if criteria not in ('first', 'last'):
         raise ValueError('unknown criteria, use first or last')
 
-    lowidx = int(lowidx)
-    return r[lowidx] + remainder * r[1]  # subpixel calculation of r
+    above = polar > hm
+    crossings = []
+    for row, mask in zip(polar, above):
+        idx = np.flatnonzero(mask[:-1] != mask[1:])
+        if idx.size == 0:
+            continue
+        i = int(idx[0] if criteria == 'first' else idx[-1])
+        y0, y1 = row[i], row[i+1]
+        frac = 0 if y1 == y0 else (hm - y0) / (y1 - y0)
+        crossings.append(r[i] + frac * (r[i+1] - r[i]))
+    if not crossings:
+        raise ValueError('metric does not cross the sampled data')
+    return np.mean(np.asarray(crossings))
 
 
 def fwhm(data, dx=None, x=None, y=None, criteria='last'):
@@ -191,7 +192,7 @@ def centroid(data, dx=None, unit='spatial'):
         if unit == spatial, referenced to the origin
 
     """
-    center = (int(np.ceil(c/2)) for c in data.shape)
+    center = (c//2 for c in data.shape)
     com = ndimage.center_of_mass(data)
     if unit != 'spatial':
         return com
@@ -225,6 +226,14 @@ def autocrop(data, px):
     aoi_y_h = aoi_y_l + px
     aoi_x_l = cx - w
     aoi_x_h = aoi_x_l + px
+    pad_y = (max(0, -aoi_y_l), max(0, aoi_y_h-data.shape[0]))
+    pad_x = (max(0, -aoi_x_l), max(0, aoi_x_h-data.shape[1]))
+    if any(pad_y) or any(pad_x):
+        data = np.pad(data, (pad_y, pad_x))
+        aoi_y_l += pad_y[0]
+        aoi_y_h += pad_y[0]
+        aoi_x_l += pad_x[0]
+        aoi_x_h += pad_x[0]
     return data[aoi_y_l:aoi_y_h, aoi_x_l:aoi_x_h]
 
 
