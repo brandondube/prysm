@@ -55,6 +55,29 @@ def test_centroid_correct(tpsf_dense):
     assert cx == pytest.approx(tx, .1)
 
 
+def test_centered_odd_array_has_zero_spatial_centroid():
+    data = np.zeros((5, 5))
+    data[2, 2] = 1
+    assert psf.centroid(data, dx=1) == pytest.approx((0, 0))
+
+
+def test_estimate_size_accepts_numeric_metric_and_first_crossing():
+    x, y = make_xy_grid(65, dx=0.1)
+    data = np.exp(-(x*x + y*y))
+
+    numeric = psf.estimate_size(data, 0.5, dx=0.1, criteria='first')
+    named = psf.estimate_size(data, 'fwhm', dx=0.1, criteria='first')
+
+    assert numeric == pytest.approx(named)
+
+
+def test_autocrop_pads_near_array_boundary():
+    data = np.zeros((5, 5))
+    data[0, 0] = 1
+    out = psf.autocrop(data, 4)
+    assert out.shape == (4, 4)
+
+
 def test_autocrop_returns_requested_centered_window(tpsf):
     tpsf, _ = tpsf
 

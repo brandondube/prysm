@@ -30,7 +30,7 @@ def test_summary_stats_are_correct(sample_i):
     assert 44.591 == pytest.approx(sample_i.rms, abs=1e-2)
     assert 44.591 == pytest.approx(sample_i.std, abs=1e-2)
     assert 29.552 == pytest.approx(sample_i.Sa, abs=1e-2)
-    assert 0.938 == pytest.approx(sample_i.strehl, abs=1e-3)
+    assert 0.822 == pytest.approx(sample_i.strehl, abs=1e-3)
 
 
 def test_doublecrop_has_no_effect(sample_i_mutate):
@@ -50,7 +50,7 @@ def test_descale_latcal_ok(sample_i_mutate):
 
 
 def test_make_window_passes_array():
-    win = signal = np.empty((2, 2))
+    win = signal = np.ones((2, 2))
     win2 = make_window(signal, 1, win)
     assert (win == win2).all()
 
@@ -156,10 +156,17 @@ def test_crop_mask_reduces_array_size():
     i = Interferogram(z, dx=1)
 
     i.mask(circle(5, i.r))
-    i.crop()
+    returned = i.crop()
 
     assert i.shape[0] < z.shape[0]
     assert i.shape[1] < z.shape[1]
+    assert returned is i
+
+
+def test_render_from_psd_default_circle_masks_corners():
+    i = Interferogram.render_from_psd(10, 16, a=1e4, b=1/10, c=2)
+    assert np.isnan(i.data[0, 0])
+    assert np.isfinite(i.data[8, 8])
 
 
 def test_random_subaperture_mask_works():

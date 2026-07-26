@@ -86,6 +86,12 @@ def test_image_distance_epd_to_fno_matches_na_conversion():
     assert fno == pytest.approx(thinlens.na_to_fno(na))
 
 
+def test_image_distance_epd_to_na_returns_numerical_aperture():
+    result = thinlens.image_dist_epd_to_na(10, 5)
+    expected = np.sin(np.arctan2(2.5, 10))
+    assert result == pytest.approx(expected)
+
+
 def test_image_displacement_to_defocus_all_cases():
     displacement = np.array([-50, 0, 5, 50])
     fno, wvl = 4, 0.55

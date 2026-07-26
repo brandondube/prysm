@@ -51,6 +51,24 @@ def test_detector_expose_applies_lut_after_adc():
     np.testing.assert_array_equal(img, 13)
 
 
+def test_detector_saturation_uses_largest_representable_code():
+    d = detector.Detector(0, 0, 0, 1e9, 1, 8, 1)
+
+    img = d.expose(np.full((2, 2), 1e6))
+
+    np.testing.assert_array_equal(img, 255)
+
+
+def test_detector_prnu_map_broadcasts_across_frames_before_poisson():
+    d = detector.Detector(0, 0, 0, 1e9, 1, 12, 1,
+                          prnu=np.zeros((2, 3)))
+
+    img = d.expose(np.ones((2, 3)), frames=4)
+
+    assert img.shape == (4, 2, 3)
+    np.testing.assert_array_equal(img, 0)
+
+
 def test_bindown_tile_reciprocate():
     d = np.random.rand(16, 16)
     binned = detector.bindown(d, 4, 'sum')

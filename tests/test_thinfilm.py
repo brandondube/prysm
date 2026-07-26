@@ -108,5 +108,5 @@ def test_brewsters_accuracy():
 
 
 def test_critical_accuracy():
-    ang = thinfilm.critical_angle(1, 1.5, deg=True)
+    ang = thinfilm.critical_angle(1.5, 1, deg=True)
     assert ang == pytest.approx(41.8, abs=0.02)

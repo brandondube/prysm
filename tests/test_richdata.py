@@ -41,6 +41,18 @@ def test_exact_functional():
         assert pt.ndim == 0
 
 
+def test_coordinate_setters_invalidate_interpolation_and_polar_caches():
+    rd = rdata.RichData(np.arange(25, dtype=float).reshape(5, 5), 1, None)
+    rd.exact_xy(0, 0)
+    _ = rd.r
+    x = rd.x + 1
+
+    rd.x = x
+
+    assert rd.interpf_2d is None
+    assert rd._r is None
+
+
 def test_xyrt_synthesis_for_no_xytr_as_expected():
     data = np.random.rand(10, 10)
     dx = 1.234

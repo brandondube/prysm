@@ -50,10 +50,37 @@ def test_wb_prescale_safe_desaturates_all_channels_by_largest_ratio():
 
     bayer.wb_prescale(mosaic, 2, 4, 6, 8, cfa='rggb', safe=True, saturation=6)
 
-    np.testing.assert_allclose(mosaic[bayer.top_left], 12)
-    np.testing.assert_allclose(mosaic[bayer.top_right], 2)
-    np.testing.assert_allclose(mosaic[bayer.bottom_left], 3)
-    np.testing.assert_allclose(mosaic[bayer.bottom_right], 4)
+    np.testing.assert_allclose(mosaic[bayer.top_left], 6)
+    np.testing.assert_allclose(mosaic[bayer.top_right], 1)
+    np.testing.assert_allclose(mosaic[bayer.bottom_left], 1.5)
+    np.testing.assert_allclose(mosaic[bayer.bottom_right], 2)
+
+
+def test_wb_postscale_safe_includes_blue_and_gain():
+    rgb = np.ones((2, 2, 3), dtype=float)
+    rgb[..., 2] = 100
+
+    bayer.wb_postscale(rgb, 2, 3, 5, safe=True, saturation=10)
+
+    assert rgb.max() <= 10
+
+
+def test_demosaic_malvar_promotes_unsigned_input_before_filtering():
+    raw = np.arange(64, dtype=np.uint16).reshape(8, 8)
+
+    actual = bayer.demosaic_malvar(raw)
+    expected = bayer.demosaic_malvar(raw.astype(float))
+
+    assert actual.dtype.kind == 'f'
+    np.testing.assert_allclose(actual, expected)
+
+
+def test_decomposite_cfa_is_case_insensitive():
+    raw = np.arange(16).reshape(4, 4)
+    lower = bayer.decomposite_bayer(raw, 'rggb')
+    upper = bayer.decomposite_bayer(raw, 'RGGB')
+    for a, b in zip(lower, upper):
+        np.testing.assert_array_equal(a, b)
 
 
 def test_wb_postscale_applies_rgb_gains_in_place():

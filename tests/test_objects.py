@@ -3,7 +3,7 @@ import pytest
 
 import numpy as np
 
-from prysm import coordinates, objects
+from prysm import coordinates, fttools, objects
 
 
 @pytest.fixture
@@ -29,12 +29,33 @@ def test_slit_widths_select_expected_axes(xy):
     np.testing.assert_array_equal(crossed, vertical | horizontal)
 
 
-def test_slit_ft_selects_sinc_axis():
-    fx = np.asarray([0, 0.25, 0.5])
-    fy = np.asarray([0, 0.5, 1.0])
+def test_slit_ft_matches_rasterization():
+    N = 256
+    dx = 1 / 64
+    x, y = coordinates.make_xy_grid(N, dx=dx)
+    fx = fttools.forward_ft_unit(dx, N)
+    fy = fttools.forward_ft_unit(dx, N)
 
-    np.testing.assert_allclose(objects.slit_ft(2, None, fx, fy), np.sinc(2 * fx))
-    np.testing.assert_allclose(objects.slit_ft(None, 3, fx, fy), np.sinc(3 * fy))
+    for wx, wy in ((0.5, None), (None, 0.5), (0.5, 1.0)):
+        mask = objects.slit(x, y, wx, wy)
+        # effective rasterized widths; edge rows/cols avoid the crossing band
+        wx_eff = mask[0, :].sum() * dx if wx is not None else None
+        wy_eff = mask[:, 0].sum() * dx if wy is not None else None
+
+        F = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(mask)))
+        F = (F / F[N//2, N//2]).real
+        an = objects.slit_ft(wx_eff, wy_eff, fx, fy)
+        # analytic sinc vs discrete Dirichlet kernel; compare the central half band
+        sl = slice(N//2 - N//4, N//2 + N//4)
+        np.testing.assert_allclose(an[sl, sl], F[sl, sl], atol=5e-3)
+
+
+def test_slit_ft_zero_and_none_equivalent():
+    fx = fttools.forward_ft_unit(1/32, 32)
+    fy = fttools.forward_ft_unit(1/32, 32)
+
+    np.testing.assert_array_equal(objects.slit_ft(2, 0, fx, fy),
+                                  objects.slit_ft(2, None, fx, fy))
 
 
 def test_pinhole_masks_by_radius(rt):

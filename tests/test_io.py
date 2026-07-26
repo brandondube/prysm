@@ -31,7 +31,17 @@ def test_write_zygodat_roundtrips_phase_and_lateral_resolution(tmp_path):
         dct['meta']['lateral_resolution'] * 1e-3
     )
     assert reread['phase'].shape == dct['phase'].shape
-#     assert 'lateral_resolution' in result['meta']
+    np.testing.assert_allclose(reread['phase'], dct['phase'], atol=0.02,
+                               equal_nan=True)
+
+
+def test_write_zygodat_does_not_close_caller_owned_file():
+    from io import BytesIO
+
+    fid = BytesIO()
+    io.write_zygo_dat(fid, np.zeros((2, 3)), dx=1)
+
+    assert not fid.closed
 
 
 def test_codev_gridint_roundtrip():

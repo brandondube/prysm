@@ -190,6 +190,8 @@ def promote_3d_point(P, dtype=None):
         dtype = config.precision
     if not hasattr(P, '__iter__'):
         return np.array([0, 0, P], dtype=dtype)
+    if not 1 <= len(P) <= 3:
+        raise ValueError('P must contain one to three coordinates')
     out = np.zeros(3, dtype=dtype)
     out[-len(P):] = P
     return out
@@ -532,7 +534,8 @@ def pack_xy_to_homographic_points(x, y):
         3xN array (x, y, w)
 
     """
-    out = np.empty((3, x.size), dtype=x.dtype)
+    dtype = np.result_type(x.dtype, y.dtype, config.precision)
+    out = np.empty((3, x.size), dtype=dtype)
     out[0, :] = x.ravel()
     out[1, :] = y.ravel()
     out[2, :] = 1
@@ -559,8 +562,8 @@ def apply_homography(M, x, y):
     """
     points = pack_xy_to_homographic_points(x, y)
     xp, yp, w = M @ points
-    xp /= w
-    yp /= w
+    xp = xp / w
+    yp = yp / w
     if x.ndim > 1:
         xp = np.reshape(xp, x.shape)
         yp = np.reshape(yp, x.shape)
@@ -583,10 +586,34 @@ def solve_for_planar_homography(src, dst):
         3x3 array containing the planar homography such that H * src = dst
 
     """
-    x1, y1 = src.T
+    src = np.asarray(src, dtype=config.precision)
+    dst = np.asarray(dst, dtype=config.precision)
+    if src.shape != dst.shape or src.ndim != 2 or src.shape[1] != 2:
+        raise ValueError('src and dst must have matching shape (N, 2)')
+    if len(src) < 4:
+        raise ValueError('at least four point pairs are required')
+
+    def normalize(points):
+        center = points.mean(axis=0)
+        shifted = points - center
+        mean_distance = np.hypot(shifted[:, 0], shifted[:, 1]).mean()
+        if mean_distance == 0:
+            raise ValueError('points must not all coincide')
+        scale = np.sqrt(2) / mean_distance
+        T = np.asarray([
+            [scale, 0, -scale * center[0]],
+            [0, scale, -scale * center[1]],
+            [0, 0, 1],
+        ], dtype=config.precision)
+        homogeneous = np.column_stack((points, np.ones(len(points))))
+        normalized = homogeneous @ T.T
+        return normalized[:, :2], T
+
+    srcn, Tsrc = normalize(src)
+    dstn, Tdst = normalize(dst)
+    x1, y1 = srcn.T
     N = len(x1)
-    x2, y2 = dst.T
-    # TODO: sensitive to numerical precision?
+    x2, y2 = dstn.T
     A = np.zeros((2*N, 9), dtype=config.precision)
     A[0::2, 0] = -x1
     A[0::2, 1] = -y1
@@ -602,9 +629,16 @@ def solve_for_planar_homography(src, dst):
     A[1::2, 7] = y2 * y1
     A[1::2, 8] = y2
 
-    ATA = A.T@A
-    U, sigma, Vt = np.linalg.svd(ATA)
-    return Vt[-1].reshape((3, 3))
+    if np.linalg.matrix_rank(A) < 8:
+        raise ValueError('point configuration is degenerate')
+    _, _, Vt = np.linalg.svd(A)
+    Hn = Vt[-1].reshape((3, 3))
+    H = np.linalg.inv(Tdst) @ Hn @ Tsrc
+    if abs(H[2, 2]) > np.finfo(H.dtype).eps:
+        H = H / H[2, 2]
+    else:
+        H = H / np.linalg.norm(H)
+    return H
 
 
 def warp(img, xnew, ynew):

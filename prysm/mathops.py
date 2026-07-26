@@ -11,9 +11,11 @@ from scipy.special import j1 as _besselj1
 class BackendShim:
     """A shim that allows a backend to be swapped at runtime."""
     def __init__(self, src):
+        """Wrap a source module."""
         self._srcmodule = src
 
     def __getattr__(self, key):
+        """Forward attribute access to the source module."""
         if key == '_srcmodule':
             return self._srcmodule
 
@@ -123,7 +125,8 @@ def array_to_true_numpy(*args):
 
     Parameters
     ----------
-    args : any number of arrays, of any dimension and dtype
+    *args : ndarray
+        Arrays of any dimension and dtype.
 
     Returns
     -------

@@ -2,8 +2,9 @@
 from functools import partial
 
 import numpy as np
+import pytest
 
-from prysm import convolution, degredations
+from prysm import convolution, degradations
 
 
 def test_conv_with_centered_delta_psf_is_identity():
@@ -38,9 +39,38 @@ def test_apply_transfer_functions_with_shift_preserves_identity_tf():
     np.testing.assert_allclose(out, obj, atol=1e-12)
 
 
+def test_apply_transfer_functions_without_shift_preserves_identity_tf():
+    obj = np.arange(16, dtype=float).reshape(4, 4)
+
+    out = convolution.apply_transfer_functions(obj, 1, [np.ones_like(obj)])
+
+    np.testing.assert_allclose(out, obj, atol=1e-12)
+
+
+def test_convolution_preserves_complex_input_dtype():
+    obj = np.arange(25).reshape(5, 5) * (1 + 1j)
+    psf = np.zeros_like(obj)
+    psf[2, 2] = 1
+
+    out = convolution.conv(obj, psf)
+
+    assert np.iscomplexobj(out)
+    np.testing.assert_allclose(out, obj, atol=1e-12)
+
+
+def test_apply_transfer_functions_rejects_callable_with_no_recognized_params():
+    obj = np.arange(16, dtype=float).reshape(4, 4)
+
+    def not_a_transfer_function(wavelength):
+        return np.ones_like(obj)
+
+    with pytest.raises(ValueError):
+        convolution.apply_transfer_functions(obj, 1, [not_a_transfer_function])
+
+
 def test_apply_transfer_functions_composes_smear_and_jitter():
-    sm = partial(degredations.smear_ft, width=1, height=1)
-    ji = partial(degredations.jitter_ft, scale=1)
+    sm = partial(degradations.smear_ft, width=1, height=1)
+    ji = partial(degradations.jitter_ft, scale=1)
     obj = np.ones((8, 8), dtype=float)
 
     out = convolution.apply_transfer_functions(obj, 1, [sm, ji])

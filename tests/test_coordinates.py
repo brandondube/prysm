@@ -54,6 +54,8 @@ def test_promote_3d_point_scalar_and_trailing_values():
     np.testing.assert_allclose(coordinates.promote_3d_point(5), [0, 0, 5])
     np.testing.assert_allclose(coordinates.promote_3d_point([2, 5]), [0, 2, 5])
     np.testing.assert_allclose(coordinates.promote_3d_point([1, 2, 5]), [1, 2, 5])
+    with pytest.raises(ValueError):
+        coordinates.promote_3d_point([1, 2, 3, 4])
 
 
 def test_uniform_cart_to_polar_preserves_constant_field():
@@ -107,6 +109,25 @@ def test_solve_for_planar_homography_maps_source_to_destination():
     mapped = mapped[:, :2] / mapped[:, 2:]
 
     np.testing.assert_allclose(mapped, dst, atol=1e-12)
+
+
+def test_homography_is_stable_for_large_coordinates():
+    src = np.asarray([[0, 0], [1, 0], [0, 1], [1, 1], [.25, .75]]) * 1e9
+    dst = src @ np.asarray([[1.2, -.1], [.1, 1.1]]).T + [.1, -.2]
+
+    H = coordinates.solve_for_planar_homography(src, dst)
+    mapped = np.column_stack((src, np.ones(len(src)))) @ H.T
+    mapped = mapped[:, :2] / mapped[:, 2:]
+
+    np.testing.assert_allclose(mapped, dst, rtol=1e-12, atol=1e-5)
+
+
+def test_apply_integer_homography_to_integer_points():
+    x = np.asarray([0, 1], dtype=int)
+    y = np.asarray([0, 1], dtype=int)
+    xp, yp = coordinates.apply_homography(np.eye(3, dtype=int), x, y)
+    np.testing.assert_array_equal(xp, x)
+    np.testing.assert_array_equal(yp, y)
 
 
 def test_distort_annular_grid_maps_obscuration_to_zero_and_outer_radius_to_one():

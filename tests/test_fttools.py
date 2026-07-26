@@ -5,7 +5,7 @@ import pytest
 import numpy as np
 
 from prysm import fttools
-from prysm.fttools import MDFT, CZT, fftrange
+from prysm.fttools import MDFT, CZT, FFTDFT, fftrange
 
 ARRAY_SIZES = (8, 64, 512)
 
@@ -153,3 +153,92 @@ def test_czt_matches_mdft_for_shifted_uniform_grids(sign):
     mdft = MDFT(x, y, fx, fy, sign=sign)
     czt = CZT(x, y, fx, fy, sign=sign)
     np.testing.assert_allclose(czt(inp), mdft(inp), rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.parametrize('sign', (-1, 1))
+@pytest.mark.parametrize(
+    'input_shape,output_shape,fft_shape',
+    [
+        ((7, 9), (5, 6), (12, 16)),
+        ((5, 6), (7, 9), (12, 16)),
+    ],
+)
+def test_fftdft_matches_mdft_for_shifted_rectangular_grids(
+        sign, input_shape, output_shape, fft_shape):
+    rng = np.random.default_rng(123)
+    ny, nx = input_shape
+    my, mx = output_shape
+    ky, kx = fft_shape
+    dx = 0.2
+    dy = -0.17  # exercise the inverse-FFT path on one axis
+    x = fftrange(nx).astype(float) * dx + 0.33
+    y = fftrange(ny).astype(float) * dy - 0.41
+    fx = (fftrange(mx).astype(float) + 0.25) / (kx * dx)
+    fy = (fftrange(my).astype(float) - 0.5) / (ky * abs(dy))
+    inp = rng.normal(size=input_shape) + 1j * rng.normal(size=input_shape)
+
+    mdft = MDFT(x, y, fx, fy, sign=sign, norm=0.3)
+    fftdft = FFTDFT(x, y, fx, fy, sign=sign, norm=0.3)
+    np.testing.assert_allclose(fftdft(inp), mdft(inp), rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.parametrize('sign', (-1, 1))
+@pytest.mark.parametrize(
+    'input_shape,output_shape,fft_shape',
+    [
+        ((7, 9), (5, 6), (12, 16)),
+        ((5, 6), (7, 9), (12, 16)),
+    ],
+)
+def test_fftdft_adjoint_is_adjoint(sign, input_shape, output_shape, fft_shape):
+    rng = np.random.default_rng(456)
+    ny, nx = input_shape
+    my, mx = output_shape
+    ky, kx = fft_shape
+    dx, dy = 0.2, 0.17
+    x = fftrange(nx).astype(float) * dx + 0.33
+    y = fftrange(ny).astype(float) * dy - 0.41
+    fx = (fftrange(mx).astype(float) + 0.25) / (kx * dx)
+    fy = (fftrange(my).astype(float) - 0.5) / (ky * dy)
+    op = FFTDFT(x, y, fx, fy, sign=sign, norm=0.3)
+    inp = rng.normal(size=input_shape) + 1j * rng.normal(size=input_shape)
+    grad = rng.normal(size=output_shape) + 1j * rng.normal(size=output_shape)
+
+    lhs = np.vdot(op(inp), grad)
+    rhs = np.vdot(inp, op.adjoint(grad))
+    np.testing.assert_allclose(lhs, rhs, rtol=1e-12, atol=1e-12)
+
+
+def test_fftdft_rejects_incompatible_or_nonuniform_grids():
+    x, y, fx, fy = _fft_equivalent_coords(8)
+    bad_fx = fx.copy()
+    bad_fx[-1] += 0.01
+    with pytest.raises(ValueError, match='uniformly spaced'):
+        FFTDFT(x, y, bad_fx, fy)
+
+    with pytest.raises(ValueError, match='not FFT-compatible'):
+        FFTDFT(x, y, fx * 1.1, fy)
+
+
+def test_fftdft_nbytes_reports_phase_vectors():
+    x, y, fx, fy = _fft_equivalent_coords(8)
+    op = FFTDFT(x, y, fx, fy)
+    assert op.nbytes() == 4 * 8 * 16
+
+
+@pytest.mark.parametrize('zoom', [0.5, 2, (2, 3)])
+def test_fourier_resample_preserves_constant_field(zoom):
+    data = np.ones((8, 8))
+
+    out = fttools.fourier_resample(data, zoom)
+
+    np.testing.assert_allclose(out, 1, atol=1e-12)
+
+
+def test_fourier_resample_preserves_complex_data():
+    data = np.ones((8, 8), dtype=complex) * (1 + 2j)
+
+    out = fttools.fourier_resample(data, 2)
+
+    assert np.iscomplexobj(out)
+    np.testing.assert_allclose(out, 1 + 2j, atol=1e-12)

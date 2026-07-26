@@ -2,9 +2,7 @@
 import warnings
 import inspect
 import random
-import math
 
-from .conf import config
 from ._richdata import RichData
 from .mathops import np, fft, jinc, optimize
 from .io import (
@@ -417,6 +415,11 @@ def render_synthetic_surface(size, samples, rms=None, mask=None, psd_fcn=abc_psd
     x, y, z = synthesize_surface_from_psd(psd, nu_x, nu_y)
 
     # mask
+    if isinstance(mask, str):
+        if mask.lower() != 'circle':
+            raise ValueError("mask must be an array, None, or 'circle'")
+        gx, gy = make_xy_grid(samples, diameter=size)
+        mask = np.hypot(gx, gy) <= size / 2
     if mask is not None:
         z[mask == 0] = np.nan
 
@@ -647,12 +650,12 @@ def make_random_subaperture_mask(shape, mask):
 
     """
     max_shift = [(s1-s2) for s1, s2 in zip(shape, mask.shape)]
+    if any(s < 0 for s in max_shift):
+        raise ValueError('mask must fit inside shape')
 
     # get random offsets
-    rng_y = random.random()
-    rng_x = random.random()
-    dy = math.floor(rng_y * max_shift[0])
-    dx = math.floor(rng_x * max_shift[1])
+    dy = random.randrange(max_shift[0] + 1)
+    dx = random.randrange(max_shift[1] + 1)
 
     high_y = mask.shape[0] + dy
     high_x = mask.shape[1] + dx
@@ -729,9 +732,8 @@ class Interferogram(RichData):
 
         # 1e3 um => nm, all units same
         wvl = self.wavelength * 1e3
-        prefix = (4 * np.pi / wvl**2)
-        coef = std(self.data) ** 2
-        return 1 - prefix * coef
+        phase_variance = (2 * np.pi * std(self.data) / wvl) ** 2
+        return np.exp(-phase_variance)
 
     @property
     def std(self):
@@ -839,15 +841,14 @@ class Interferogram(RichData):
         else:
             tb = slice(top, -bottom)
 
+        xy = None if self._x is None else (self.x[lr, tb], self.y[lr, tb])
+        rt = None if self._r is None else (self.r[lr, tb], self.t[lr, tb])
         self.data = self.data[lr, tb]
-        # now cropped data, need to adjust coords
-        # do nothing if they have not been computed
-        if self._x is not None:
-            self.x = self.x[lr, tb]
-            self.y = self.y[lr, tb]
-        if self._r is not None:
-            self.r = self.r[lr, tb]
-            self.t = self.t[lr, tb]
+        if xy is not None:
+            self.x, self.y = xy
+        if rt is not None:
+            self.r, self.t = rt
+        return self
 
     def recenter(self):
         """Adjust the x and y coordinates so the data is centered on 0,0 in the FFT sense (contains a zero sample)."""
@@ -1014,6 +1015,7 @@ class Interferogram(RichData):
         Dprime = D * H
         dprime = fft.ifft2(Dprime)
         self.data = dprime.real
+        return self
 
     def bandlimited_rms(self, wllow=None, wlhigh=None, flow=None, fhigh=None):
         """Calculate the bandlimited RMS of a signal from its PSD.
@@ -1059,7 +1061,7 @@ class Interferogram(RichData):
         # 1000/L vs 1/L, um to mm
         upper_limit = 1000 / wavelength
         kernel = 4 * np.pi * np.cos(np.radians(incident_angle))
-        kernel *= self.bandlimited_rms(upper_limit, None) / wavelength
+        kernel *= self.bandlimited_rms(fhigh=upper_limit) / wavelength
         return 1 - np.exp(-kernel**2)
 
     def slope(self):
@@ -1104,7 +1106,7 @@ class Interferogram(RichData):
         xramp = np.linspace(-1, 1, data.shape[1]) * (tilt_waves[0] / 2)
         yramp = np.broadcast_to(yramp, reversed(data.shape)).T
         xramp = np.broadcast_to(xramp, data.shape)
-        phase = self.data / 1e3 * self.wavelength  # 1e3 = nm to um
+        phase = self.data / (1e3 * self.wavelength)  # nm to waves
         phase = phase + (xramp + yramp)
         fig, ax = share_fig_ax(fig, ax)
         plotdata = visibility * np.cos(2 * np.pi * passes * phase)
@@ -1172,7 +1174,7 @@ class Interferogram(RichData):
             new Interferogram instance
 
         """
-        if str(path).endswith('datx'):
+        if str(path).lower().endswith('datx'):
             # datx file, use datx reader
             zydat = read_zygo_datx(path)
             res = zydat['meta']['Lateral Resolution']
