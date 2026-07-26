@@ -13,12 +13,14 @@ from .fft import (
     pupil_sample_to_psf_sample, psf_sample_to_pupil_sample,
 )
 from .dft import (
-    prepare_executor,
+    prepare_executor, prepare_multiresolution,
     focus_dft, focus_dft_adjoint, unfocus_dft, unfocus_dft_adjoint,
 )
 from .angular_spectrum import angular_spectrum, angular_spectrum_adjoint
 from .coronagraph import (
-    to_fpm_and_back, to_fpm_and_back_adjoint, babinet, babinet_adjoint,
+    to_fpm_and_back, to_fpm_and_back_adjoint,
+    to_fpm_and_back_multiresolution, to_fpm_and_back_multiresolution_adjoint,
+    babinet, babinet_adjoint,
 )
 from ..fttools import pad2d, crop_center
 
@@ -355,21 +357,22 @@ class Wavefront:
         out = Wavefront(cropped, self.wavelength, self.dx, self.space)
         return out
 
-    def __numerical_operation__(self, other, op):
+    def __numerical_operation__(self, other, op, reverse=False):
         """Apply an operation to this wavefront with another piece of data."""
         func = getattr(operator, op)
         if isinstance(other, Wavefront):
             criteria = [
                 abs(self.dx - other.dx) / self.dx * 100 < 0.1,  # must match to 0.1% (generous, for fp32 compat)
                 self.data.shape == other.data.shape,
-                self.wavelength == other.wavelength
+                self.wavelength == other.wavelength,
+                self.space == other.space,
             ]
             if not all(criteria):
-                raise ValueError('all physicality criteria not met: sample spacing, shape, or wavelength different.')
+                raise ValueError('all physicality criteria not met: sample spacing, shape, wavelength, or space different.')
 
-            data = func(self.data, other.data)
+            data = func(other.data, self.data) if reverse else func(self.data, other.data)
         elif type(other) == type(self.data) or isinstance(other, numbers.Number):  # NOQA
-            data = func(self.data, other)
+            data = func(other, self.data) if reverse else func(self.data, other)
         else:
             raise TypeError(f'unsupported operand type(s) for {op}: \'Wavefront\' and {type(other)}')
 
@@ -379,17 +382,33 @@ class Wavefront:
         """Multiply this wavefront by something compatible."""
         return self.__numerical_operation__(other, 'mul')
 
+    def __rmul__(self, other):
+        """Multiply something compatible by this wavefront."""
+        return self.__numerical_operation__(other, 'mul', reverse=True)
+
     def __truediv__(self, other):
         """Divide this wavefront by something compatible."""
         return self.__numerical_operation__(other, 'truediv')
+
+    def __rtruediv__(self, other):
+        """Divide something compatible by this wavefront."""
+        return self.__numerical_operation__(other, 'truediv', reverse=True)
 
     def __add__(self, other):
         """Perform elementwise addition with other, e1+e2."""
         return self.__numerical_operation__(other, 'add')
 
+    def __radd__(self, other):
+        """Add something compatible to this wavefront."""
+        return self.__numerical_operation__(other, 'add', reverse=True)
+
     def __sub__(self, other):
         """Perform elementwise subtraction with other, e1-e2."""
         return self.__numerical_operation__(other, 'sub')
+
+    def __rsub__(self, other):
+        """Subtract this wavefront from something compatible."""
+        return self.__numerical_operation__(other, 'sub', reverse=True)
 
     def free_space(self, dz=np.nan, Q=1, tf=None):
         """Perform a plane-to-plane free space propagation.
@@ -569,7 +588,7 @@ class Wavefront:
         return Wavefront(data, self.wavelength, dx, space='psf')
 
     def prepare_executor(self, efl, dx, samples, shift=(0, 0), kind='mdft'):
-        """Build a reusable MDFT/CZT focus executor for this wavefront.
+        """Build a reusable MDFT, CZT, or FFTDFT focus executor.
 
         Wraps prepare_executor (which itself wraps
         coordinates_for_focus and the executor constructor). The
@@ -596,12 +615,13 @@ class Wavefront:
             sample count of the other plane
         shift : (float, float)
             (x, y) translation of the focal grid, microns
-        kind : {'mdft', 'czt'}, optional
-            executor type to build. Default 'mdft'.
+        kind : {'mdft', 'czt', 'fftdft'}, optional
+            executor type to build. ``fftdft`` requires FFT-compatible pupil
+            and focal sample spacings. Default 'mdft'.
 
         Returns
         -------
-        MDFT or CZT
+        MDFT, CZT, or FFTDFT
 
         """
         if isinstance(samples, int):
@@ -620,12 +640,48 @@ class Wavefront:
             )
         raise ValueError(f"unknown space {self.space!r}")
 
+    def prepare_multiresolution(self, efl, focal_dx, focal_samples, num_levels,
+                                scaling=4.0, fine_samples=None, window=(0.2, 0.7),
+                                kind='mdft'):
+        """Build a MultiResolutionExecutor for this wavefront.
+
+        Wraps prepare_multiresolution with this wavefront's pupil-side
+        geometry; unit_cell_focal_grid computes a (focal_dx, focal_samples)
+        pair that spans the full field of view.
+
+        Parameters
+        ----------
+        efl : float
+            focal length, mm
+        focal_dx : float
+            coarsest-level focal sample spacing, microns
+        focal_samples : int or (int, int)
+            coarsest-level focal sample count
+        num_levels : int
+            number of resolution levels
+        scaling, fine_samples, window, kind
+            see prepare_multiresolution.
+
+        Returns
+        -------
+        MultiResolutionExecutor
+
+        """
+        if self.space != 'pupil':
+            raise ValueError('multiresolution propagation begins at a pupil plane')
+        return prepare_multiresolution(
+            pupil_dx=self.dx, pupil_samples=self.data.shape,
+            focal_dx=focal_dx, focal_samples=focal_samples,
+            wavelength=self.wavelength, efl=efl, num_levels=num_levels,
+            scaling=scaling, fine_samples=fine_samples, window=window, kind=kind,
+        )
+
     def focus_dft(self, executor):
         """Pupil → PSF propagation via a precomputed executor.
 
         Parameters
         ----------
-        executor : MDFT or CZT
+        executor : MDFT, CZT, or FFTDFT
             (semi-)arbitrary sampling fourier transform executor
 
         Returns
@@ -647,7 +703,7 @@ class Wavefront:
 
         Parameters
         ----------
-        executor : MDFT or CZT
+        executor : MDFT, CZT, or FFTDFT
             (semi-)arbitrary sampling fourier transform executor
 
         Returns
@@ -666,7 +722,7 @@ class Wavefront:
 
         Parameters
         ----------
-        executor : MDFT or CZT
+        executor : MDFT, CZT, or FFTDFT
             (semi-)arbitrary sampling fourier transform executor
 
         Returns
@@ -685,7 +741,7 @@ class Wavefront:
 
         Parameters
         ----------
-        executor : MDFT or CZT
+        executor : MDFT, CZT, or FFTDFT
             (semi-)arbitrary sampling fourier transform executor
 
         Returns
@@ -706,7 +762,7 @@ class Wavefront:
         ----------
         fpm : Wavefront or ndarray
             the focal plane mask
-        executor : MDFT or CZT
+        executor : MDFT, CZT, or FFTDFT
             (semi-)arbitrary sampling fourier transform executor
         return_more : bool, optional
             if True, return (new_wavefront, field_at_fpm, field_after_fpm)
@@ -786,6 +842,100 @@ class Wavefront:
         else:
             return Wavefront(pak, self.wavelength, self.dx, self.space)
 
+    def to_fpm_and_back_multiresolution(self, fpm, executor, return_more=False):
+        """Propagate to a focal plane mask and back at multiple resolutions.
+
+        Parameters
+        ----------
+        fpm : callable
+            fpm(xf, yf) -> ndarray, the focal plane mask evaluated on
+            focal-plane coordinate grids (microns). See vortex_phase_mask.
+        executor : MultiResolutionExecutor
+            stack of executors and hand-off windows from prepare_multiresolution
+        return_more : bool, optional
+            if True, return (new_wavefront, fields_at_fpm, fields_after_fpm)
+            with per-level lists of Wavefronts, else return new_wavefront
+
+        Returns
+        -------
+        Wavefront, [list of Wavefront, list of Wavefront]
+            next pupil; optionally also per-level fields at and after the fpm
+
+        """
+        if self.space != 'pupil':
+            raise ValueError('can only propagate from a pupil to psf plane')
+        pak = to_fpm_and_back_multiresolution(self.data, fpm, executor,
+                                              return_more=return_more)
+        if not return_more:
+            return Wavefront(pak, self.wavelength, self.dx, self.space)
+
+        out, at_fpm, after_fpm = pak
+        out = Wavefront(out, self.wavelength, self.dx, self.space)
+        at_fpm = [Wavefront(f, self.wavelength, ex.focal_dx, 'psf')
+                  for f, ex in zip(at_fpm, executor.executors)]
+        after_fpm = [Wavefront(f, self.wavelength, ex.focal_dx, 'psf')
+                     for f, ex in zip(after_fpm, executor.executors)]
+        return out, at_fpm, after_fpm
+
+    def to_fpm_and_back_multiresolution_adjoint(self, fpm, executor, return_more=False,
+                                                return_fpm_grad=False, field_at_fpm=None):
+        """Apply the adjoint of to_fpm_and_back_multiresolution.
+
+        self carries the gradient at the next pupil; the returned Wavefront
+        carries the gradient at the original input pupil.
+
+        Parameters
+        ----------
+        fpm : callable
+            the focal plane mask callable used in the forward propagation
+        executor : MultiResolutionExecutor
+            stack of executors and hand-off windows from prepare_multiresolution
+        return_more : bool, optional
+            if True, return (Eabar, Ebbars, intermediates) with per-level
+            lists of Wavefronts, else return Eabar
+        return_fpm_grad : bool, optional
+            if True, also return the per-level gradients with respect to the
+            mask samples. Requires field_at_fpm from the matching forward
+            propagation.
+        field_at_fpm : list of Wavefront or ndarray, optional
+            per-level focal-plane fields before the fpm from the forward
+            propagation with return_more=True
+
+        Returns
+        -------
+        Wavefront or tuple
+            gradient at the input pupil; optionally also the per-level
+            intermediate gradients and/or mask gradients
+
+        """
+        if field_at_fpm is not None:
+            field_at_fpm = [_field_data(f) for f in field_at_fpm]
+        pak = to_fpm_and_back_multiresolution_adjoint(
+            self.data, fpm, executor, return_more=return_more,
+            return_fpm_grad=return_fpm_grad, field_at_fpm=field_at_fpm,
+        )
+
+        def _psf_wrap(fields):
+            return [Wavefront(f, self.wavelength, ex.focal_dx, 'psf')
+                    for f, ex in zip(fields, executor.executors)]
+
+        if return_more:
+            if return_fpm_grad:
+                Eabar, Ebbars, intermediates, fpm_bars = pak
+            else:
+                Eabar, Ebbars, intermediates = pak
+            Eabar = Wavefront(Eabar, self.wavelength, self.dx, self.space)
+            Ebbars = _psf_wrap(Ebbars)
+            intermediates = _psf_wrap(intermediates)
+            if return_fpm_grad:
+                return Eabar, Ebbars, intermediates, _psf_wrap(fpm_bars)
+            return Eabar, Ebbars, intermediates
+        elif return_fpm_grad:
+            Eabar, fpm_bars = pak
+            Eabar = Wavefront(Eabar, self.wavelength, self.dx, self.space)
+            return Eabar, _psf_wrap(fpm_bars)
+        return Wavefront(pak, self.wavelength, self.dx, self.space)
+
     def babinet(self, lyot, fpm, executor, return_more=False):
         """Propagate through a Lyot-style coronagraph using Babinet's principle.
 
@@ -794,8 +944,9 @@ class Wavefront:
         lyot : Wavefront or ndarray
             the Lyot stop; if None, equivalent to ones_like(self.data)
         fpm : Wavefront or ndarray
-            the focal plane mask (1 inside the spot); the Babinet complement
-            1 - fpm is formed internally (see Soummer et al 2007)
+            focal plane mask transmission; 0 inside an opaque occulter and 1
+            far from the axis, so the Babinet complement 1 - fpm formed
+            internally is compactly supported (see Soummer et al 2007)
         executor : MDFT
             bidirectional transform operator.
         return_more : bool
@@ -804,21 +955,15 @@ class Wavefront:
 
         Notes
         -----
-        if the substrate's reflectivity or transmissivity is not unity, and/or
-        the mask's density is not infinity, babinet's principle works as follows:
+        fpm must approach 1 at the edge of the focal window; a background
+        folded into it directly (e.g. 0.9 outside the spot) breaks the compact
+        support of 1 - fpm and silently corrupts the result.  For a mask of
+        transmission tmask on a substrate of transmission tau, factor the
+        background out:
 
-        suppose we're modeling a Lyot focal plane mask;
-        rr = radial coordinates of the image plane, in lambda/d units
-        mask = rr < 5  # 1 inside FPM, 0 outside (babinet-style)
-
-        now create some scalars for background transmission and mask transmission
-
-        tau = 0.9 # background
-        tmask = 0.1 # mask
-
-        mask = tau - tau*mask + rmask*mask
-
-        the mask variable now contains 0.9 outside the spot, and 0.1 inside
+        spot = rr < 5  # 1 inside the occulting spot
+        fpm = 1 - (1 - tmask/tau)*spot  # tmask/tau inside, 1 outside
+        field = wf.babinet(tau*lyot, fpm, executor)
 
         Returns
         -------
@@ -850,7 +995,7 @@ class Wavefront:
             the Lyot stop; if None, equivalent to ones_like(self.data)
         fpm : Wavefront or ndarray
             the focal plane mask used in the forward propagation
-        executor : MDFT or CZT
+        executor : MDFT, CZT, or FFTDFT
             (semi-)arbitrary sampling fourier transform executor
         field_at_fpm : Wavefront or ndarray, optional
             focal-plane field before the FPM from the matching forward call.

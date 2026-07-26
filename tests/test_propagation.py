@@ -6,6 +6,7 @@ import pytest
 import numpy as np
 
 from prysm import propagation, coordinates, geometry, polynomials
+from prysm.fttools import FFTDFT
 from prysm.wavelengths import HeNe
 
 
@@ -114,6 +115,64 @@ def test_focus_fft_mdft_equivalent_Wavefront():
     focus_mdft = wf.focus_dft(mdft)
 
     assert np.allclose(focus_fft.data, focus_mdft.data)
+
+
+def test_prepare_executor_builds_fftdft_and_matches_mdft():
+    rng = np.random.default_rng(2468)
+    pupil_dx = 0.1
+    pupil_shape = (32, 40)
+    focal_shape = (48, 64)
+    efl = 10.0
+    fft_samples = 64
+    focal_dx = HeNe * efl / (pupil_dx * fft_samples)
+    focal_shift = (0.25 * focal_dx, -0.5 * focal_dx)
+
+    fftdft = propagation.prepare_executor(
+        pupil_dx, pupil_shape, focal_dx, focal_shape, HeNe, efl,
+        focal_shift=focal_shift, kind='fftdft',
+    )
+    mdft = propagation.prepare_executor(
+        pupil_dx, pupil_shape, focal_dx, focal_shape, HeNe, efl,
+        focal_shift=focal_shift, kind='mdft',
+    )
+    pupil = (rng.normal(size=pupil_shape)
+             + 1j * rng.normal(size=pupil_shape))
+
+    assert isinstance(fftdft, FFTDFT)
+    assert fftdft.pupil_dx == pupil_dx
+    assert fftdft.focal_dx == focal_dx
+    np.testing.assert_allclose(fftdft(pupil), mdft(pupil), rtol=1e-12, atol=1e-12)
+
+
+def test_wavefront_prepare_executor_builds_fftdft():
+    pupil_dx = 0.1
+    samples = 32
+    efl = 10.0
+    focal_dx = HeNe * efl / (pupil_dx * samples)
+    wf = propagation.Wavefront(
+        dx=pupil_dx, cmplx_field=np.ones((samples, samples)),
+        wavelength=HeNe, space='pupil',
+    )
+
+    executor = wf.prepare_executor(
+        efl, focal_dx, samples, kind='fftdft',
+    )
+
+    assert isinstance(executor, FFTDFT)
+    np.testing.assert_allclose(
+        wf.focus_dft(executor).data,
+        wf.focus_dft(wf.prepare_executor(efl, focal_dx, samples)).data,
+        rtol=1e-12, atol=1e-12,
+    )
+
+
+def test_prepare_executor_fftdft_rejects_incompatible_sampling():
+    with pytest.raises(ValueError, match='not FFT-compatible'):
+        propagation.prepare_executor(
+            pupil_dx=0.1, pupil_samples=32,
+            focal_dx=1.0, focal_samples=32,
+            wavelength=HeNe, efl=10.0, kind='fftdft',
+        )
 
 
 def test_focus_dft_adjoint_is_adjoint():
@@ -237,6 +296,23 @@ def test_wavefront_scalar_arithmetic_operand_order():
     wf = propagation.Wavefront(cmplx_field=data, dx=1, wavelength=.6328)
     assert np.allclose((wf - 1.0).data, data - 1.0)
     assert np.allclose((wf / 2.0).data, data / 2.0)
+
+
+def test_wavefront_reverse_scalar_arithmetic():
+    data = (np.random.rand(2, 2) + 1).astype(np.complex128)
+    wf = propagation.Wavefront(cmplx_field=data, dx=1, wavelength=.6328)
+    np.testing.assert_allclose((2 * wf).data, 2 * data)
+    np.testing.assert_allclose((2 + wf).data, 2 + data)
+    np.testing.assert_allclose((2 - wf).data, 2 - data)
+    np.testing.assert_allclose((2 / wf).data, 2 / data)
+
+
+def test_wavefront_arithmetic_rejects_different_spaces():
+    data = np.ones((2, 2), dtype=complex)
+    pupil = propagation.Wavefront(data, .6328, 1, 'pupil')
+    psf = propagation.Wavefront(data, .6328, 1, 'psf')
+    with pytest.raises(ValueError, match='space'):
+        pupil + psf
 
 
 def test_to_fpm_and_back_adjoint_accepts_wavefront_fpm():
@@ -480,6 +556,91 @@ def test_multiresolution_to_fpm_and_back_adjoint_is_adjoint(kind):
     rhs = np.vdot(x, propagation.to_fpm_and_back_multiresolution_adjoint(y, fpm, executor))
 
     np.testing.assert_allclose(lhs, rhs, rtol=1e-10)
+
+
+def test_vortex_phase_mask_rejects_non_integer_charge():
+    with pytest.raises(TypeError):
+        propagation.vortex_phase_mask(2.5)
+    propagation.vortex_phase_mask(np.int64(2))  # numpy integers are fine
+
+
+def test_unit_cell_focal_grid_roundtrip_is_unitary():
+    pupil_dx, npup, efl = 0.1, 64, 50.0
+    x, y = coordinates.make_xy_grid(npup, dx=pupil_dx)
+    pupil = geometry.circle(2.4, np.hypot(x, y)).astype(complex)
+    fdx, nf = propagation.unit_cell_focal_grid(pupil_dx, 4.8, HeNe, efl)
+    ex = propagation.prepare_executor(pupil_dx, npup, fdx, nf, HeNe, efl)
+    rt = propagation.unfocus_dft(propagation.focus_dft(pupil, ex), ex)
+    assert np.abs(rt - pupil).max() < 1e-12
+
+
+def test_prepare_multiresolution_accepts_tuple_samples():
+    executor = propagation.prepare_multiresolution(
+        pupil_dx=0.1, pupil_samples=32, focal_dx=2.0, focal_samples=(24, 40),
+        wavelength=HeNe, efl=10.0, num_levels=2, fine_samples=16,
+    )
+    assert executor.xf[0].shape == (24, 40)
+    fpm = propagation.vortex_phase_mask(2)
+    x = np.random.rand(32, 32).astype(complex)
+    out = propagation.to_fpm_and_back_multiresolution(x, fpm, executor)
+    assert out.shape == x.shape
+
+
+def test_multiresolution_return_more_and_fpm_grad_matches_fd():
+    rng = np.random.default_rng(20260704)
+    npup = 16
+    executor = propagation.prepare_multiresolution(
+        pupil_dx=0.25, pupil_samples=npup, focal_dx=4.0, focal_samples=16,
+        wavelength=HeNe, efl=10.0, num_levels=2, fine_samples=12,
+    )
+    fpm = propagation.vortex_phase_mask(2)
+    x = rng.standard_normal((npup, npup)) + 1j * rng.standard_normal((npup, npup))
+    out, at_fpm, after_fpm = propagation.to_fpm_and_back_multiresolution(
+        x, fpm, executor, return_more=True)
+    assert len(at_fpm) == len(after_fpm) == len(executor)
+    np.testing.assert_allclose(out, propagation.to_fpm_and_back_multiresolution(x, fpm, executor))
+
+    ybar = rng.standard_normal(out.shape) + 1j * rng.standard_normal(out.shape)
+    _, fpm_bars = propagation.to_fpm_and_back_multiresolution_adjoint(
+        ybar, fpm, executor, return_fpm_grad=True, field_at_fpm=at_fpm)
+
+    # central difference of J = Re<ybar, forward> for a real bump of the mask
+    # at a single grid point of level k
+    k, iy, ix = 1, 3, 5
+    x0 = float(executor.xf[k][iy, ix])
+    y0 = float(executor.yf[k][iy, ix])
+    eps = 1e-6
+
+    def bumped(sign):
+        def f(xf, yf):
+            return fpm(xf, yf) + sign * eps * ((xf == x0) & (yf == y0))
+        return f
+
+    j_plus = _real_vdot(ybar, propagation.to_fpm_and_back_multiresolution(x, bumped(+1), executor))
+    j_minus = _real_vdot(ybar, propagation.to_fpm_and_back_multiresolution(x, bumped(-1), executor))
+    fd = (j_plus - j_minus) / (2 * eps)
+    assert np.real(fpm_bars[k][iy, ix]) == pytest.approx(fd, rel=1e-6, abs=1e-8)
+
+
+def test_wavefront_multiresolution_wrappers():
+    rng = np.random.default_rng(11)
+    npup, dx = 16, 0.25
+    z = rng.standard_normal((npup, npup)) + 1j * rng.standard_normal((npup, npup))
+    wf = propagation.Wavefront(cmplx_field=z, dx=dx, wavelength=HeNe, space='pupil')
+    executor = wf.prepare_multiresolution(efl=10.0, focal_dx=4.0, focal_samples=16,
+                                          num_levels=2, fine_samples=12)
+    fpm = propagation.vortex_phase_mask(2)
+
+    out, at_fpm, after_fpm = wf.to_fpm_and_back_multiresolution(fpm, executor, return_more=True)
+    assert out.dx == wf.dx and out.space == 'pupil'
+    assert at_fpm[1].dx == executor.executors[1].focal_dx and at_fpm[1].space == 'psf'
+    np.testing.assert_allclose(
+        out.data, propagation.to_fpm_and_back_multiresolution(z, fpm, executor))
+
+    grad, fpm_bars = out.to_fpm_and_back_multiresolution_adjoint(
+        fpm, executor, return_fpm_grad=True, field_at_fpm=at_fpm)
+    assert grad.data.shape == z.shape and grad.space == 'pupil'
+    assert len(fpm_bars) == len(executor)
 
 
 def test_prepare_measured_fpm_interpolates_and_fills():

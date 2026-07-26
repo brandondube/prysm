@@ -2,6 +2,8 @@
 
 Can be expanded to add vortex, too.
 """
+import numbers
+
 from ..mathops import np, ndimage
 from ._kernels import _adjoint_multiply
 from .dft import focus_dft, focus_dft_adjoint, unfocus_dft, unfocus_dft_adjoint
@@ -21,7 +23,7 @@ def to_fpm_and_back(wavefunction, fpm, executor, return_more=False):
         complex pupil-plane field to propagate
     fpm : ndarray
         the focal plane mask
-    executor : MDFT or CZT
+    executor : MDFT, CZT, or FFTDFT
         (semi-)arbitrary sampling fourier transform executor
     return_more : bool, optional
         if True, return (new_wavefront, field_at_fpm, field_after_fpm)
@@ -52,7 +54,7 @@ def to_fpm_and_back_adjoint(wavefunction, fpm, executor, return_more=False,
         gradient at the next pupil plane (output of the forward call)
     fpm : ndarray
         the focal plane mask used in the forward propagation
-    executor : MDFT or CZT
+    executor : MDFT, CZT, or FFTDFT
         (semi-)arbitrary sampling fourier transform executor
     return_more : bool, optional
         if True, return (Eabar, Ebbar, intermediate)
@@ -98,7 +100,8 @@ def vortex_phase_mask(charge):
     The returned callable evaluates exp(i * charge * theta), the azimuthal phase
     ramp of a vortex coronagraph, on focal-plane coordinate grids. Pass it to
     to_fpm_and_back_multiresolution, whose per-level grids resolve the on-axis
-    phase singularity.
+    phase singularity. The pupil sets the contrast floor: use an anti-aliased
+    (gray-edge) aperture from antialias of a signed distance, not a binary one.
 
     Parameters
     ----------
@@ -112,6 +115,9 @@ def vortex_phase_mask(charge):
         fpm(xf, yf) -> ndarray, with xf and yf focal-plane coordinate grids
 
     """
+    if not isinstance(charge, numbers.Integral):
+        raise TypeError(f'charge must be an integer, got {charge!r}; non-integer charge has a branch cut at theta=pi')
+
     def fpm(xf, yf):
         return np.exp((1j * charge) * np.arctan2(yf, xf))
 
@@ -194,7 +200,7 @@ def prepare_measured_fpm(measurement, dx, center=(0, 0), charge=None,
     return fpm
 
 
-def to_fpm_and_back_multiresolution(wavefunction, fpm, executor):
+def to_fpm_and_back_multiresolution(wavefunction, fpm, executor, return_more=False):
     """Propagate to a focal plane mask and back at multiple resolutions.
 
     The multi-resolution analogue of to_fpm_and_back. Each level of executor
@@ -212,24 +218,36 @@ def to_fpm_and_back_multiresolution(wavefunction, fpm, executor):
         coordinate grids (microns). See vortex_phase_mask.
     executor : MultiResolutionExecutor
         stack of executors and hand-off windows from prepare_multiresolution
+    return_more : bool, optional
+        if True, return (new_wavefront, fields_at_fpm, fields_after_fpm) with
+        per-level lists, else return new_wavefront
 
     Returns
     -------
-    ndarray
-        field at the next pupil (Lyot) plane
+    ndarray, [list of ndarray, list of ndarray]
+        next pupil; optionally also per-level fields at and after the fpm
 
     """
     out = None
+    fields_at_fpm = []
+    fields_after_fpm = []
     for ex, win, xf, yf in zip(executor.executors, executor.windows,
                                executor.xf, executor.yf):
         field_at_fpm = focus_dft(wavefunction, ex)
         field_after_fpm = field_at_fpm * fpm(xf, yf) * win
         contribution = unfocus_dft(field_after_fpm, ex)
         out = contribution if out is None else out + contribution
+        if return_more:
+            fields_at_fpm.append(field_at_fpm)
+            fields_after_fpm.append(field_after_fpm)
+
+    if return_more:
+        return out, fields_at_fpm, fields_after_fpm
     return out
 
 
-def to_fpm_and_back_multiresolution_adjoint(wavefunction, fpm, executor):
+def to_fpm_and_back_multiresolution_adjoint(wavefunction, fpm, executor, return_more=False,
+                                            return_fpm_grad=False, field_at_fpm=None):
     """Apply the adjoint of to_fpm_and_back_multiresolution.
 
     Parameters
@@ -240,20 +258,50 @@ def to_fpm_and_back_multiresolution_adjoint(wavefunction, fpm, executor):
         the focal plane mask callable used in the forward propagation
     executor : MultiResolutionExecutor
         stack of executors and hand-off windows from prepare_multiresolution
+    return_more : bool, optional
+        if True, return (Eabar, Ebbars, intermediates) with per-level lists,
+        else return Eabar
+    return_fpm_grad : bool, optional
+        if True, also return the per-level gradients with respect to the mask
+        samples. Requires field_at_fpm from the matching forward propagation.
+    field_at_fpm : list of ndarray, optional
+        per-level focal-plane fields before the fpm from the forward
+        propagation with return_more=True
 
     Returns
     -------
-    ndarray
-        gradient at the input pupil plane
+    ndarray or tuple
+        gradient at the input pupil; optionally also the per-level intermediate
+        gradients and/or the per-level gradients with respect to the mask
 
     """
+    if return_fpm_grad and field_at_fpm is None:
+        raise ValueError('return_fpm_grad=True requires field_at_fpm from the forward propagation')
+
     out = None
-    for ex, win, xf, yf in zip(executor.executors, executor.windows,
-                               executor.xf, executor.yf):
+    Ebbars = []
+    intermediates = []
+    fpm_bars = []
+    levels = zip(executor.executors, executor.windows, executor.xf, executor.yf)
+    for k, (ex, win, xf, yf) in enumerate(levels):
+        m = fpm(xf, yf)
         Ebbar = unfocus_dft_adjoint(wavefunction, ex)
-        intermediate = _adjoint_multiply(Ebbar, fpm(xf, yf) * win)
+        intermediate = _adjoint_multiply(Ebbar, m * win)
         contribution = focus_dft_adjoint(intermediate, ex)
         out = contribution if out is None else out + contribution
+        if return_more:
+            Ebbars.append(Ebbar)
+            intermediates.append(intermediate)
+        if return_fpm_grad:
+            fpm_bars.append(_adjoint_multiply(Ebbar, field_at_fpm[k] * win,
+                                              real=not np.iscomplexobj(m)))
+
+    if return_more:
+        if return_fpm_grad:
+            return out, Ebbars, intermediates, fpm_bars
+        return out, Ebbars, intermediates
+    elif return_fpm_grad:
+        return out, fpm_bars
     return out
 
 
@@ -267,9 +315,10 @@ def babinet(wavefunction, lyot, fpm, executor, return_more=False):
     lyot : ndarray or None
         the Lyot stop; if None, equivalent to ones_like(wavefunction)
     fpm : ndarray
-        the focal plane mask (1 inside the spot); the Babinet complement
-        1 - fpm is formed internally (see Soummer et al 2007)
-    executor : MDFT or CZT
+        focal plane mask transmission; 0 inside an opaque occulter and 1 far
+        from the axis, so the Babinet complement 1 - fpm formed internally is
+        compactly supported (see Soummer et al 2007)
+    executor : MDFT, CZT, or FFTDFT
         (semi-)arbitrary sampling fourier transform executor
     return_more : bool
         if True, return each plane in the propagation
@@ -277,21 +326,14 @@ def babinet(wavefunction, lyot, fpm, executor, return_more=False):
 
     Notes
     -----
-    if the substrate's reflectivity or transmissivity is not unity, and/or
-    the mask's density is not infinity, babinet's principle works as follows:
+    fpm must approach 1 at the edge of the focal window; a background folded
+    into it directly (e.g. 0.9 outside the spot) breaks the compact support of
+    1 - fpm and silently corrupts the result.  For a mask of transmission
+    tmask on a substrate of transmission tau, factor the background out:
 
-    suppose we're modeling a Lyot focal plane mask;
-    rr = radial coordinates of the image plane, in lambda/d units
-    mask = rr < 5  # 1 inside FPM, 0 outside (babinet-style)
-
-    now create some scalars for background transmission and mask transmission
-
-    tau = 0.9 # background
-    tmask = 0.1 # mask
-
-    mask = tau - tau*mask + rmask*mask
-
-    the mask variable now contains 0.9 outside the spot, and 0.1 inside
+    spot = rr < 5  # 1 inside the occulting spot
+    fpm = 1 - (1 - tmask/tau)*spot  # tmask/tau inside, 1 outside
+    field = babinet(wavefunction, tau*lyot, fpm, executor)
 
     Returns
     -------
@@ -330,7 +372,7 @@ def babinet_adjoint(wavefunction, lyot, fpm, executor, field_at_fpm=None,
         the Lyot stop; if None, equivalent to ones_like(wavefunction)
     fpm : ndarray
         the focal plane mask used in the forward propagation
-    executor : MDFT or CZT
+    executor : MDFT, CZT, or FFTDFT
         (semi-)arbitrary sampling fourier transform executor
     field_at_fpm : ndarray, optional
         focal-plane field before the FPM from the matching forward call.

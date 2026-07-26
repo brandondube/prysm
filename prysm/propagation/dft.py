@@ -1,10 +1,12 @@
 """Matrix-DFT / chirp-Z based pupil <-> focal propagation with arbitrary sampling.
 """
+import math
+
 from collections.abc import Iterable
 
 from ..mathops import np
 from ..conf import config
-from ..fttools import fftrange, MDFT, CZT
+from ..fttools import fftrange, MDFT, CZT, FFTDFT
 
 
 def coordinates_for_focus(pupil_dx, pupil_samples, focal_dx, focal_samples,
@@ -66,7 +68,7 @@ def coordinates_for_focus(pupil_dx, pupil_samples, focal_dx, focal_samples,
 
 def prepare_executor(pupil_dx, pupil_samples, focal_dx, focal_samples,
                      wavelength, efl, focal_shift=(0, 0), kind='mdft'):
-    """Build a reusable MDFT or CZT operator for a pupil ↔ focal propagation.
+    """Build a reusable MDFT, CZT, or FFTDFT pupil ↔ focal operator.
 
     Wraps coordinates_for_focus and the executor constructor in one
     call. The optical normalization scalar
@@ -85,12 +87,13 @@ def prepare_executor(pupil_dx, pupil_samples, focal_dx, focal_samples,
     ----------
     pupil_dx, pupil_samples, focal_dx, focal_samples, wavelength, efl, focal_shift
         See coordinates_for_focus.
-    kind : {'mdft', 'czt'}, optional
-        Executor type to build. Default 'mdft'.
+    kind : {'mdft', 'czt', 'fftdft'}, optional
+        Executor type to build. ``fftdft`` requires FFT-compatible pupil and
+        focal sample spacings. Default 'mdft'.
 
     Returns
     -------
-    MDFT or CZT
+    MDFT, CZT, or FFTDFT
         operator suitable for passing to focus_dft, unfocus_dft, etc.
 
     """
@@ -103,11 +106,50 @@ def prepare_executor(pupil_dx, pupil_samples, focal_dx, focal_samples,
         op = MDFT(x, y, fx, fy, sign=-1, norm=norm)
     elif kind == 'czt':
         op = CZT(x, y, fx, fy, sign=-1, norm=norm)
+    elif kind == 'fftdft':
+        op = FFTDFT(x, y, fx, fy, sign=-1, norm=norm)
     else:
-        raise ValueError(f"kind must be 'mdft' or 'czt', got {kind!r}")
+        raise ValueError(
+            f"kind must be 'mdft', 'czt', or 'fftdft', got {kind!r}",
+        )
     op.pupil_dx = pupil_dx
     op.focal_dx = focal_dx
     return op
+
+
+def unit_cell_focal_grid(pupil_dx, pupil_diameter, wavelength, efl, Q=2):
+    """Focal grid (focal_dx, focal_samples) spanning the full DFT unit cell.
+
+    An MDFT round trip is unitary only when the focal window spans
+    wavelength * efl / pupil_dx; a smaller window silently discards the
+    energy outside it. This returns the sampling for that full window, for
+    use as the coarsest level of prepare_multiresolution or anywhere no
+    spatial frequency may be truncated.
+
+    Parameters
+    ----------
+    pupil_dx : float
+        pupil-plane sample spacing, mm
+    pupil_diameter : float
+        beam diameter at the pupil, mm
+    wavelength : float
+        wavelength of light, microns
+    efl : float
+        effective focal length, mm
+    Q : float, optional
+        samples per lambda/D; 2 (default) is Nyquist
+
+    Returns
+    -------
+    focal_dx : float
+        focal-plane sample spacing, microns
+    focal_samples : int
+        samples across the full unit cell
+
+    """
+    focal_samples = math.ceil(Q * pupil_diameter / pupil_dx)
+    focal_dx = wavelength * efl / pupil_dx / focal_samples
+    return focal_dx, focal_samples
 
 
 def _smootherstep(t):
@@ -142,7 +184,7 @@ class MultiResolutionExecutor:
 
     Attributes
     ----------
-    executors : list of MDFT or CZT
+    executors : list of MDFT, CZT, or FFTDFT
         per-level pupil to focal operators, coarsest first
     windows : list of ndarray
         per-level real partition-of-unity windows, summing to one over the
@@ -156,12 +198,14 @@ class MultiResolutionExecutor:
     __slots__ = ('executors', 'windows', 'xf', 'yf')
 
     def __init__(self, executors, windows, xf, yf):
+        """Store per-level executors, windows, and grids."""
         self.executors = executors
         self.windows = windows
         self.xf = xf
         self.yf = yf
 
     def __len__(self):
+        """Return the number of resolution levels."""
         return len(self.executors)
 
 
@@ -173,8 +217,14 @@ def prepare_multiresolution(pupil_dx, pupil_samples, focal_dx, focal_samples,
     The coarsest level is specified exactly as for prepare_executor and should
     span the full field of view (focal_dx * focal_samples large enough to reach
     the edge of the propagated field) at or above Nyquist, so no spatial
-    frequencies are truncated. Each finer level divides the sample spacing and
-    the field of view by scaling, zooming into the singular core of the mask.
+    frequencies are truncated; unit_cell_focal_grid computes such a pair.
+    Each finer level divides the sample spacing and the field of view by
+    scaling, zooming into the singular core of the mask.
+
+    Every level's focal grid is shifted by half a sample in x and y so a mask
+    singularity at the origin is never sampled exactly; a one-level stack
+    therefore differs from prepare_executor, whose focal_shift defaults to
+    zero, by that half sample.
 
     Parameters
     ----------
@@ -187,7 +237,7 @@ def prepare_multiresolution(pupil_dx, pupil_samples, focal_dx, focal_samples,
     scaling : float, optional
         ratio of consecutive levels' sample spacings and fields of view.
         Default 4.
-    fine_samples : int, optional
+    fine_samples : int or (int, int), optional
         focal_samples for every level past the coarsest. Their field of view
         shrinks with scaling, so fewer samples than the coarsest level still
         oversample. Defaults to focal_samples.
@@ -195,7 +245,7 @@ def prepare_multiresolution(pupil_dx, pupil_samples, focal_dx, focal_samples,
         inner and outer radii of the hand-off transition, as fractions of each
         level's focal-plane half-width. The transition tapers from one to zero
         across this annulus. Default (0.2, 0.7).
-    kind : {'mdft', 'czt'}, optional
+    kind : {'mdft', 'czt', 'fftdft'}, optional
         executor type. Default 'mdft'.
 
     Returns
@@ -214,17 +264,21 @@ def prepare_multiresolution(pupil_dx, pupil_samples, focal_dx, focal_samples,
     halves = []
     for k in range(num_levels):
         nf = focal_samples if k == 0 else fine_samples
+        if not isinstance(nf, Iterable):
+            nf = (nf, nf)
+        nfy, nfx = nf
         fdx = focal_dx / scaling**k
         shift = fdx / 2.0  # half-pixel: keep the singular origin off-grid
         ex = prepare_executor(pupil_dx, pupil_samples, fdx, nf,
                               wavelength, efl, focal_shift=(shift, shift), kind=kind)
-        line = fftrange(nf, dtype=config.precision) * fdx + shift
-        xf, yf = np.meshgrid(line, line)
+        xline = fftrange(nfx, dtype=config.precision) * fdx + shift
+        yline = fftrange(nfy, dtype=config.precision) * fdx + shift
+        xf, yf = np.meshgrid(xline, yline)
         executors.append(ex)
         xfs.append(xf)
         yfs.append(yf)
         radii.append(np.hypot(xf, yf))
-        halves.append(nf / 2.0 * fdx)
+        halves.append(min(nfy, nfx) / 2.0 * fdx)
 
     # each level owns the annulus between its own hand-off (to the finer level
     # inside it) and the coarser level's hand-off (outside it).  The coarsest
@@ -247,7 +301,7 @@ def focus_dft(wavefunction, executor):
     ----------
     wavefunction : ndarray
         the pupil-plane field; shape must match what the executor was built for.
-    executor : MDFT or CZT
+    executor : MDFT, CZT, or FFTDFT
         (semi-)arbitrary sampling fourier transform executor
 
     Returns
@@ -266,7 +320,7 @@ def focus_dft_adjoint(wavefunction, executor):
     ----------
     wavefunction : ndarray
         gradient at the PSF plane
-    executor : MDFT or CZT
+    executor : MDFT, CZT, or FFTDFT
         (semi-)arbitrary sampling fourier transform executor
 
     Returns
@@ -285,7 +339,7 @@ def unfocus_dft(wavefunction, executor):
     ----------
     wavefunction : ndarray
         the focal-plane field
-    executor : MDFT or CZT
+    executor : MDFT, CZT, or FFTDFT
         (semi-)arbitrary sampling fourier transform executor
 
     Returns
@@ -304,7 +358,7 @@ def unfocus_dft_adjoint(wavefunction, executor):
     ----------
     wavefunction : ndarray
         gradient at the pupil plane
-    executor : MDFT or CZT
+    executor : MDFT, CZT, or FFTDFT
         (semi-)arbitrary sampling fourier transform executor
 
     Returns

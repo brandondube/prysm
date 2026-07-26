@@ -289,36 +289,72 @@ class CZT:
         self._Mx, self._My = Mx, My
         self._Kx, self._Ky = Kx, Ky
         self._sx, self._sy = Nx - 1, Ny - 1
+        x_first_cost = Ny * Kx * math.log2(Kx) + Mx * Ky * math.log2(Ky)
+        y_first_cost = Nx * Ky * math.log2(Ky) + My * Kx * math.log2(Kx)
+        self._x_first = x_first_cost <= y_first_cost
 
     def __call__(self, ary):
         """Apply the CZT to `ary`."""
-        gb = ary * self._bcol
-        gb *= self._brow
-        GB = fft.fft2(gb, (self._Ky, self._Kx))
-        GB *= self._Hcol
-        GB *= self._Hrow
-        out = fft.ifft2(GB)
-        out = out[self._sy:self._sy+self._My, self._sx:self._sx+self._Mx] * self._acol
-        out *= self._arow
-        out *= self._x_phase
-        out *= self._y_phase
+        out = ary * self._bcol
+        out *= self._brow
+        if self._x_first:
+            out = fft.fft(out, self._Kx, axis=1)
+            out *= self._Hcol
+            out = fft.ifft(out, axis=1)
+            out = out[:, self._sx:self._sx+self._Mx] * self._acol
+            out *= self._x_phase
+
+            out = fft.fft(out, self._Ky, axis=0)
+            out *= self._Hrow
+            out = fft.ifft(out, axis=0)
+            out = out[self._sy:self._sy+self._My] * self._arow
+            out *= self._y_phase
+        else:
+            out = fft.fft(out, self._Ky, axis=0)
+            out *= self._Hrow
+            out = fft.ifft(out, axis=0)
+            out = out[self._sy:self._sy+self._My] * self._arow
+            out *= self._y_phase
+
+            out = fft.fft(out, self._Kx, axis=1)
+            out *= self._Hcol
+            out = fft.ifft(out, axis=1)
+            out = out[:, self._sx:self._sx+self._Mx] * self._acol
+            out *= self._x_phase
         out *= self.norm
         return out
 
     def adjoint(self, grad):
         """Apply the adjoint (conjugate transpose) of the forward CZT."""
-        tmp = np.zeros((self._Ky, self._Kx), dtype=config.precision_complex)
-        tmp[self._sy:self._sy+self._My, self._sx:self._sx+self._Mx] = (
-            grad * self._x_phase.conj() * self._y_phase.conj()
-            * self._acol.conj() * self._arow.conj()
-        )
+        out = (grad * self._x_phase.conj() * self._y_phase.conj()
+               * self._acol.conj() * self._arow.conj())
 
-        K = self._Ky * self._Kx
-        tmp = fft.fft2(tmp) / K
-        tmp *= self._Hcol.conj()
-        tmp *= self._Hrow.conj()
-        out = fft.ifft2(tmp) * K
-        out = out[:self._Ny, :self._Nx] * self._bcol.conj()
+        if self._x_first:
+            tmp = np.zeros((self._Ky, self._Mx), dtype=out.dtype)
+            tmp[self._sy:self._sy+self._My] = out
+            out = fft.fft(tmp, axis=0)
+            out *= self._Hrow.conj()
+            out = fft.ifft(out, axis=0)[:self._Ny]
+
+            tmp = np.zeros((self._Ny, self._Kx), dtype=out.dtype)
+            tmp[:, self._sx:self._sx+self._Mx] = out
+            out = fft.fft(tmp, axis=1)
+            out *= self._Hcol.conj()
+            out = fft.ifft(out, axis=1)[:, :self._Nx]
+        else:
+            tmp = np.zeros((self._My, self._Kx), dtype=out.dtype)
+            tmp[:, self._sx:self._sx+self._Mx] = out
+            out = fft.fft(tmp, axis=1)
+            out *= self._Hcol.conj()
+            out = fft.ifft(out, axis=1)[:, :self._Nx]
+
+            tmp = np.zeros((self._Ky, self._Nx), dtype=out.dtype)
+            tmp[self._sy:self._sy+self._My] = out
+            out = fft.fft(tmp, axis=0)
+            out *= self._Hrow.conj()
+            out = fft.ifft(out, axis=0)[:self._Ny]
+
+        out *= self._bcol.conj()
         out *= self._brow.conj()
 
         out *= self.norm
@@ -328,7 +364,7 @@ class CZT:
         """Total size in memory of the cached components, bytes."""
         total = 0
         for arr in (self._brow, self._bcol, self._Hrow, self._Hcol,
-                    self._arow, self._acol):
+                    self._arow, self._acol, self._x_phase, self._y_phase):
             total += arr.nbytes
         return total
 
@@ -351,6 +387,152 @@ def _prepare_czt_basis(N, M, K, shift, alpha, dtype, sign=-1):
     H = fft.fft(h)
 
     return H, b, a
+
+
+class FFTDFT:
+    """DFT accelerated by FFTs for compatible uniform coordinate grids.
+
+    This class has the same external API as :class:`MDFT`, but requires the
+    product of the input-coordinate and output-frequency spacings on each
+    axis to be ``+/- 1/L`` for an integer transform length ``L``.  Both the
+    input and output lengths must be no greater than ``L``.  This includes
+    ordinary DFTs, zero-padded/oversampled DFTs, and crops of either.
+
+    Unlike :class:`CZT`, this factorization needs only one FFT per axis.  It
+    performs the axis that produces the smaller intermediate first, so an
+    output crop is applied before transforming the other axis.
+
+    Parameters are the same as :class:`MDFT`.
+
+    """
+
+    def __init__(self, x, y, fx, fy, sign=-1, norm=1.0):
+        """Precompute phase vectors and validate FFT compatibility."""
+        if sign not in (-1, 1):
+            raise ValueError(f'sign must be -1 or +1, got {sign}')
+
+        Nx, Ny = len(x), len(y)
+        Mx, My = len(fx), len(fy)
+        dx = _uniform_spacing(x, 'x')
+        dy = _uniform_spacing(y, 'y')
+        dfx = _uniform_spacing(fx, 'fx')
+        dfy = _uniform_spacing(fy, 'fy')
+        Kx = _fft_compatible_length(dx * dfx, Nx, Mx, 'x/fx')
+        Ky = _fft_compatible_length(dy * dfy, Ny, My, 'y/fy')
+
+        prefix = sign * 2j * np.pi
+        nx = np.arange(Nx, dtype=config.precision)
+        ny = np.arange(Ny, dtype=config.precision)
+        self._pre_x = np.exp(prefix * nx * dx * float(fx[0]))
+        self._pre_y = np.exp(prefix * ny * dy * float(fy[0]))[:, np.newaxis]
+        self._post_x = np.exp(prefix * float(x[0]) * fx)
+        self._post_y = np.exp(prefix * float(y[0]) * fy)[:, np.newaxis]
+
+        self._Nx, self._Ny = Nx, Ny
+        self._Mx, self._My = Mx, My
+        self._Kx, self._Ky = Kx, Ky
+        self._x_direction = sign if dx * dfx > 0 else -sign
+        self._y_direction = sign if dy * dfy > 0 else -sign
+        self.norm = norm
+
+        x_first_cost = Ny * Kx * math.log2(Kx) + Mx * Ky * math.log2(Ky)
+        y_first_cost = Nx * Ky * math.log2(Ky) + My * Kx * math.log2(Kx)
+        self._x_first = x_first_cost <= y_first_cost
+
+    def __call__(self, ary):
+        """Apply the FFT-factored DFT to `ary`."""
+        out = ary * self._pre_x
+        out *= self._pre_y
+        if self._x_first:
+            out = _fft_forward_axis(out, self._Kx, 1, self._x_direction)
+            out = out[:, :self._Mx]
+            out = _fft_forward_axis(out, self._Ky, 0, self._y_direction)
+            out = out[:self._My]
+        else:
+            out = _fft_forward_axis(out, self._Ky, 0, self._y_direction)
+            out = out[:self._My]
+            out = _fft_forward_axis(out, self._Kx, 1, self._x_direction)
+            out = out[:, :self._Mx]
+
+        out *= self._post_x
+        out *= self._post_y
+        out *= self.norm
+        return out
+
+    def adjoint(self, grad):
+        """Apply the adjoint (conjugate transpose) of the FFT DFT."""
+        out = grad * self._post_x.conj() * self._post_y.conj()
+        if self._x_first:
+            out = _fft_adjoint_axis(out, self._Ky, self._Ny, 0, self._y_direction)
+            out = _fft_adjoint_axis(out, self._Kx, self._Nx, 1, self._x_direction)
+        else:
+            out = _fft_adjoint_axis(out, self._Kx, self._Nx, 1, self._x_direction)
+            out = _fft_adjoint_axis(out, self._Ky, self._Ny, 0, self._y_direction)
+
+        out *= self._pre_x.conj()
+        out *= self._pre_y.conj()
+        out *= self.norm
+        return out
+
+    def nbytes(self):
+        """Total size in memory of the cached phase vectors, bytes."""
+        return sum(arr.nbytes for arr in (
+            self._pre_x, self._pre_y, self._post_x, self._post_y,
+        ))
+
+
+def _uniform_spacing(values, name):
+    if len(values) < 2:
+        raise ValueError(f'{name} must contain at least two samples')
+    spacing = float(values[1] - values[0])
+    if spacing == 0:
+        raise ValueError(f'{name} must have nonzero spacing')
+
+    tolerance = 32 * truenp.finfo(config.precision).eps
+    scale = max(1.0, abs(float(values[0])), abs(float(values[-1])),
+                abs(spacing))
+    if not bool(np.allclose(np.diff(values), spacing,
+                            rtol=tolerance, atol=tolerance * scale)):
+        raise ValueError(f'{name} must be uniformly spaced')
+    return spacing
+
+
+def _fft_compatible_length(alpha, N, M, name):
+    inv_alpha = 1 / abs(alpha)
+    K = round(inv_alpha)
+    tolerance = 32 * truenp.finfo(config.precision).eps
+    if not math.isclose(inv_alpha, K, rel_tol=tolerance, abs_tol=tolerance):
+        raise ValueError(
+            f'{name} spacings are not FFT-compatible: '
+            'abs(input spacing * output spacing) must be 1/integer',
+        )
+    if K < max(N, M):
+        raise ValueError(
+            f'{name} requires FFT length {K}, smaller than input/output '
+            f'length {max(N, M)}',
+        )
+    return K
+
+
+def _fft_forward_axis(ary, K, axis, direction):
+    if direction == -1:
+        return fft.fft(ary, K, axis=axis)
+    return fft.ifft(ary, K, axis=axis) * K
+
+
+def _fft_adjoint_axis(ary, K, N, axis, direction):
+    shape = list(ary.shape)
+    shape[axis] = K
+    tmp = np.zeros(shape, dtype=ary.dtype)
+    slc = [slice(None)] * ary.ndim
+    slc[axis] = slice(0, ary.shape[axis])
+    tmp[tuple(slc)] = ary
+    if direction == -1:
+        out = fft.ifft(tmp, axis=axis) * K
+    else:
+        out = fft.fft(tmp, axis=axis)
+    slc[axis] = slice(0, N)
+    return out[tuple(slc)]
 
 
 def fourier_resample(f, zoom):
@@ -384,10 +566,14 @@ def fourier_resample(f, zoom):
         zoom = (zoom, zoom)
     elif not isinstance(zoom, tuple):
         zoom = tuple(float(z) for z in zoom)
+    if len(zoom) != 2 or any(z <= 0 for z in zoom):
+        raise ValueError('zoom must contain two positive values')
 
     m, n = f.shape
     M = int(m*zoom[0])
     N = int(n*zoom[1])
+    if M < 1 or N < 1:
+        raise ValueError('zoom produces an empty output')
 
     F = fft.fftshift(fft.fft2(fft.ifftshift(f)))
 
@@ -400,9 +586,8 @@ def fourier_resample(f, zoom):
     fx = fftrange(N, dtype=config.precision) * (1.0/zoom[1]/n)
     fy = fftrange(M, dtype=config.precision) * (1.0/zoom[0]/m)
 
-    fprime = MDFT(x, y, fx, fy, sign=+1)(F).real
-    # match the prior implementation, which combined the executor's internal
-    # sqrt(1/(m*n*zoom[0]*zoom[1])) normalization with an external
-    # (zoom[0]*zoom[1])/sqrt(m*n) scaling — the net is sqrt(zoom)/(m*n).
-    fprime *= math.sqrt(zoom[0]*zoom[1]) / (m*n)
+    fprime = MDFT(x, y, fx, fy, sign=+1)(F)
+    fprime *= 1 / (m*n)
+    if not np.iscomplexobj(f):
+        fprime = fprime.real
     return fprime
