@@ -1,4 +1,6 @@
 """Coordinate conversions."""
+from itertools import islice
+
 # truenp: host-side construction of small Euler-angle rotation matrices
 #         used as reference orientations; never participates in GPU traces.
 import numpy as truenp
@@ -170,7 +172,7 @@ def promote_3d_point(P, dtype=None):
 
     Scalars are interpreted as a z coordinate and return [0, 0, P].
     Iterables are right-aligned, so [z], [y, z], and [x, y, z] are all
-    accepted.
+    accepted.  Iterators are consumed up to four values to validate their length.
 
     Parameters
     ----------
@@ -190,6 +192,8 @@ def promote_3d_point(P, dtype=None):
         dtype = config.precision
     if not hasattr(P, '__iter__'):
         return np.array([0, 0, P], dtype=dtype)
+    if not hasattr(P, '__len__'):
+        P = tuple(islice(P, 4))
     if not 1 <= len(P) <= 3:
         raise ValueError('P must contain one to three coordinates')
     out = np.zeros(3, dtype=dtype)

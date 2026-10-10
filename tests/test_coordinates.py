@@ -1,4 +1,6 @@
 """Tests for coordinate conversion."""
+from itertools import count
+
 import pytest
 
 import numpy as np
@@ -56,6 +58,34 @@ def test_promote_3d_point_scalar_and_trailing_values():
     np.testing.assert_allclose(coordinates.promote_3d_point([1, 2, 5]), [1, 2, 5])
     with pytest.raises(ValueError):
         coordinates.promote_3d_point([1, 2, 3, 4])
+
+
+@pytest.mark.parametrize('values, expected', [
+    ([5], [0, 0, 5]),
+    ([2, 5], [0, 2, 5]),
+    ([1, 2, 5], [1, 2, 5]),
+])
+@pytest.mark.parametrize('dtype', [np.float32, np.float64])
+def test_promote_3d_point_accepts_iterators(values, expected, dtype):
+    point = coordinates.promote_3d_point((value for value in values), dtype=dtype)
+
+    np.testing.assert_array_equal(point, expected)
+    assert point.dtype == dtype
+
+
+@pytest.mark.parametrize('values', [[], [1, 2, 3, 4]])
+def test_promote_3d_point_rejects_invalid_length_iterators(values):
+    with pytest.raises(ValueError, match='one to three coordinates'):
+        coordinates.promote_3d_point(iter(values))
+
+
+def test_promote_3d_point_bounds_iterator_consumption():
+    values = count()
+
+    with pytest.raises(ValueError, match='one to three coordinates'):
+        coordinates.promote_3d_point(values)
+
+    assert next(values) == 4
 
 
 def test_uniform_cart_to_polar_preserves_constant_field():
